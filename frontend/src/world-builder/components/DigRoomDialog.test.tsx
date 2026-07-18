@@ -52,3 +52,20 @@ describe('DigRoomDialog', () => {
     });
   });
 });
+
+describe('DigRoomDialog with palette="story"', () => {
+  it('hides the fixture-key field and dispatches story_dig_room', async () => {
+    const { runAction } = renderDialog({ palette: 'story' });
+
+    expect(screen.queryByLabelText('Fixture key (optional)')).not.toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Room name'), 'Hidden Alcove');
+    await userEvent.click(screen.getByTestId('dig-room-submit'));
+
+    expect(runAction).toHaveBeenCalledWith('story_dig_room', {
+      area_id: 1,
+      name: 'Hidden Alcove',
+      floor: 0,
+    });
+  });
+});

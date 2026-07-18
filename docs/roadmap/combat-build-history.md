@@ -717,8 +717,11 @@ guard wired into `resolve_round`/`declare_action`; duel-state serializers.
 clamps soulfray below any death-risk stage, and never fires a `character_loss` consequence.
 
 **Actions (telnet + web):** `challenge` (social-consent-gated) / `accept` / `decline` /
-`withdraw` / `yield` / `acknowledge_risk`. **Frontend:** `combat/duels/DuelChallengeControls`
-(+ yield / acknowledge controls), reusing the existing combat round UI + dispatch. **Telnet:**
+`withdraw` / `yield` / `acknowledge_risk`. **Frontend (at ship):**
+`combat/duels/DuelChallengeControls` (+ yield / acknowledge controls), reusing the existing
+combat round UI + dispatch — the Accept/Decline prompt for an incoming challenge later moved
+to `DuelChallengeNotifier`'s toast (#2157); the standalone in-panel prompt was superseded and
+deleted, leaving `DuelChallengeControls` scoped to yield/acknowledge-risk only (#2423). **Telnet:**
 the `duel <subverb>` namespace (`CmdDuel`, #1492) routes challenge/accept/decline/withdraw/risk
 through the same `dispatch_player_action` REGISTRY seam; `yield` stays on `combat yield` (#1453).
 

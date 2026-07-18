@@ -34,6 +34,7 @@ function makeDistinction(
     rank: 2,
     notes: 'Forged in the siege of Whitehold.',
     is_secret: false,
+    is_from_glimpse: false,
     ...overrides,
   };
 }

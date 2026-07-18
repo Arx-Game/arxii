@@ -30,6 +30,7 @@ import type {
   GenderOption,
   GiftDetail,
   GiftListItem,
+  GlimpseTagOption,
   HeightBand,
   NamingRitualConfig,
   Path,
@@ -380,6 +381,18 @@ export async function getCGTechniqueOptions(
   );
   if (!res.ok) {
     throw new Error('Failed to load technique options');
+  }
+  return res.json();
+}
+
+// =============================================================================
+// Glimpse Tag Catalog API (guided Glimpse flow, #2427)
+// =============================================================================
+
+export async function getGlimpseTags(): Promise<GlimpseTagOption[]> {
+  const res = await apiFetch(`${BASE_URL}/glimpse-tags/`);
+  if (!res.ok) {
+    throw new Error('Failed to load glimpse tags');
   }
   return res.json();
 }

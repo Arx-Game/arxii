@@ -15,14 +15,17 @@
  * raw celestial/primal/abyssal percentages.
  */
 
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import type { CharacterSheetAura } from '@/character_sheets/api';
 import { MotifStylePanel } from './MotifStylePanel';
+import { GlimpseEditorDialog } from './glimpse/GlimpseEditorDialog';
 
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk). */
@@ -46,6 +49,7 @@ function dominantAffinityLabel(aura: CharacterSheetAura): string {
 
 export function SpellbookTab({ characterId, isMyCharacter }: Props) {
   const { data: payload, isLoading } = useCharacterSheetQuery(characterId);
+  const [glimpseDialogOpen, setGlimpseDialogOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -148,12 +152,49 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
               <Badge variant="outline">{dominantAffinityLabel(magic.aura)}</Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-2">
+            {magic.aura.glimpse_tags.length > 0 && (
+              <div className="flex flex-wrap gap-1" data-testid="spellbook-glimpse-tags">
+                {magic.aura.glimpse_tags.map((tag) => (
+                  <Badge key={tag.id} variant="secondary">
+                    {tag.name}
+                  </Badge>
+                ))}
+              </div>
+            )}
             {magic.aura.glimpse_story && (
               <p className="text-sm text-muted-foreground">{magic.aura.glimpse_story}</p>
             )}
+            {isMyCharacter && magic.aura.can_finish_glimpse && (
+              <div className="space-y-2 pt-1">
+                {magic.aura.glimpse_state === 'TAGS_ONLY' && (
+                  <p className="text-sm text-muted-foreground">
+                    You&rsquo;ve chosen the shape of it — write the story when ready.
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setGlimpseDialogOpen(true)}
+                  data-testid="finish-glimpse-button"
+                >
+                  Finish your Glimpse
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
+      )}
+
+      {isMyCharacter && magic?.aura && (
+        <GlimpseEditorDialog
+          open={glimpseDialogOpen}
+          onOpenChange={setGlimpseDialogOpen}
+          characterId={characterId}
+          aura={magic.aura}
+          distinctions={payload?.distinctions ?? []}
+        />
       )}
 
       {isMyCharacter && (

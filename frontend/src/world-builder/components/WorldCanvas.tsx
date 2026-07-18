@@ -28,7 +28,7 @@ import type { GhostCell } from '@/map-canvas/ghosts';
 import { MapCanvasShell } from '@/map-canvas/MapCanvasShell';
 import { useGridCanvasNodes, type PlaceRoomArgs } from '@/map-canvas/useGridCanvasNodes';
 
-import type { WorldBuilderActionKey, WorldBuilderAreaManager, WorldBuilderRoom } from '../types';
+import type { WorldBuilderAreaManager, WorldBuilderRoom } from '../types';
 import { WorldRoomNode } from './WorldRoomNode';
 
 const nodeTypes = { room: WorldRoomNode, ghost: GhostNode };
@@ -45,7 +45,10 @@ export interface WorldCanvasProps {
   onDigAt?: (ghost: GhostCell) => void;
   /** Click on an exit edge — surface rename/unlink for the pair. */
   onExitClick?: (edge: ExitEdge) => void;
-  runAction: (key: WorldBuilderActionKey, kwargs: Record<string, unknown>) => void;
+  /** Keyed generically (not `WorldBuilderActionKey`) so the story palette's own action-key union type-checks too (#2450). */
+  runAction: (key: string, kwargs: Record<string, unknown>) => void;
+  /** `'story'` (#2450) dispatches `story_place_room` instead of `staff_place_room`. Defaults to `'staff'`. */
+  palette?: 'staff' | 'story';
 }
 
 export function WorldCanvas({
@@ -56,6 +59,7 @@ export function WorldCanvas({
   onDigAt,
   onExitClick,
   runAction,
+  palette = 'staff',
 }: WorldCanvasProps) {
   // Cross-area exits (`to_room_id === null`) render on the far side's own
   // canvas — see module doc. Narrow to the shared `ExitRecord` shape (every
@@ -75,9 +79,14 @@ export function WorldCanvas({
 
   const onPlaceRoom = useCallback(
     ({ roomId, grid_x, grid_y, floor: placedFloor }: PlaceRoomArgs) => {
-      runAction('staff_place_room', { room_id: roomId, grid_x, grid_y, floor: placedFloor });
+      runAction(palette === 'story' ? 'story_place_room' : 'staff_place_room', {
+        room_id: roomId,
+        grid_x,
+        grid_y,
+        floor: placedFloor,
+      });
     },
-    [runAction]
+    [runAction, palette]
   );
 
   const { nodes, edges, onNodesChange, onNodeDragStop, onEdgeClick } = useGridCanvasNodes({

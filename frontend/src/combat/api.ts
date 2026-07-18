@@ -32,14 +32,10 @@ export type DuelChallengeRole = 'incoming' | 'outgoing';
 
 /**
  * A single row in the outcome_display roulette wheel.
- * The backend serializes OutcomeDisplay dataclass as plain dicts.
+ * The backend annotates get_outcome_display with @extend_schema_field
+ * (OutcomeDisplayRowSerializer), so this is a direct re-export (#2423).
  */
-export interface OutcomeDisplayRow {
-  label: string;
-  tier_name: string;
-  weight: number;
-  is_selected: boolean;
-}
+export type OutcomeDisplayRow = components['schemas']['OutcomeDisplayRow'];
 
 // ---------------------------------------------------------------------------
 // Encounter

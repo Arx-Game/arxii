@@ -111,7 +111,7 @@ still live for non-distinction sources (facet/mantle/motif-coherence passive bon
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `intensity`, `control`, `anima_cost`, `creator`, `target_type`, `reach` |
+| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `intensity`, `control`, `anima_cost`, `creator`, `target_type`, `reach`. Natural key `(gift, name)`, backed by `unique_technique_gift_name` (#2474 — `name` alone is not globally unique; lore reuse or a player-crafted technique can share a name across gifts). Unique per `(gift, name)` |
 
 Key fields: `intensity` (base power), `control` (base safety/precision), `level` (progression
 gate, derives tier), `target_type` (per-technique cardinality — see below).
@@ -185,18 +185,168 @@ so that web case calls `author_staff_technique()` directly.)
 
 **Exposure:** staff/GM-only. Player self-service is a deferred `needs-design` follow-up.
 
-### CG Starter Gift/Technique Catalog (#2426)
+### CG Starter Gift/Technique Catalog (#2426, content pipeline #2474)
 
 The CG magic stage picks a staff-authored catalog `Gift` + `Technique`s directly
 (`get_gift_options`/`get_technique_options`, `world/magic/services/cg_catalog.py`),
 and `finalize_magic_data` only *links* them
 (`world/character_creation/services.py:_finalize_gift_and_techniques`) — no `Gift`
-or `Technique` row is created at CG time. See `world/magic/CLAUDE.md`'s "Starter
-Gift Catalog (CG Technique Picks, #2426)" section for the seeded catalog shape.
+or `Technique` row is created at CG time.
+
+**The catalog is content, not seed data (#2474).** `Resonance`, `Gift`, `Technique`,
+`PathGiftGrant`, and `TraditionGiftGrant` all carry natural keys (`magic.gift`,
+`magic.pathgiftgrant`, etc. in `CONTENT_MODELS`, `core_management/content_export.py`)
+and ship as arx2-lore fixtures, loaded by `core_management.content_fixtures
+.load_world_content()` — the same pipeline that loads every other authored-content
+model, not a bespoke seed function. `Technique`'s natural key is `(gift, name)`
+(`unique_technique_gift_name`), since `name` alone is not globally unique across
+gifts. The formerly-in-repo `seed_starter_gift_catalog()` /
+`StarterGiftCatalogResult` (#2426 Task 7) are retired; a fresh dev database now
+requires `CONTENT_REPO_PATH` to seed at all (`ContentError` if unset/missing — see
+"Content-vs-config boundary" below and ADR-0142). Tests that need a catalog without
+a real content-repo checkout use `MagicContent.create_starter_gift_catalog()`
+(`world/seeds/game_content/magic.py`, a synthetic factory-built stand-in) or the
+enriched `stub_content_root()` fixture (`world/seeds/tests/content_stub.py`).
 
 The pre-#2426 design used a staff-curated `Cantrip` starter-technique-template
 model that CG finalization minted into a new `Technique`; that model and its API
 plumbing were fully removed in #2426 Task 8.
+
+### Guided Glimpse Story (#2427) [BUILT & WIRED]
+
+The Glimpse is the narrative of a character's first magical awakening
+(`CharacterAura.glimpse_story`, prose). #2427 replaced the old always-visible
+freeform textarea with a guided, tag-driven flow: pick authored tags across
+four narrative axes, then write (or keep writing) the prose, with curated
+distinction suggestions surfaced along the way.
+
+**Models** (`models/glimpse.py`):
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `GlimpseTag` | Authored catalog choice, one per axis. Content model — `CONTENT_MODELS` (`magic.glimpsetag`), lore-repo authored, no factory-seeded catalog | `axis` (`GlimpseTagAxis`), `name`, `slug` (natural key), `description`, `example`, `sort_order`, `is_active` |
+| `CharacterGlimpseTag` | A character's chosen tag. Instance data — never exported | `aura` FK (`CharacterAura`, `related_name="glimpse_tags"`), `tag` FK (PROTECT); unique per `(aura, tag)` |
+| `GlimpseTagDistinctionSuggestion` | Curated tag→distinction suggestion. Content model (`magic.glimpsetagdistinctionsuggestion`) — grants nothing, purely a CG-flow suggestion surface. FK points *into* `distinctions.Distinction` (specific→general, ADR-0010) | `tag` FK (CASCADE), `distinction` FK (CASCADE), `sort_order`; unique per `(tag, distinction)` |
+
+**Enums + config** (`constants.py`):
+
+- `GlimpseTagAxis` — the four guided steps: `TONE` (single-select), `CONSEQUENCE`
+  (multi-select), `WITNESS` (Witness & Secrecy, multi-select), `SENSORY`
+  (Sensory & Discovery, multi-select, renders as prose prompts rather than hard
+  tags in the writing step — authored SENSORY tags remain possible).
+- `GlimpseState` — `NOT_STARTED` / `TAGS_ONLY` (tags chosen, story unwritten) /
+  `COMPLETE`. A cache of prose+tag truth, never written directly.
+- `GLIMPSE_AXIS_CONFIG: dict[GlimpseTagAxis, GlimpseAxisRule]` — per-axis
+  `multi`/`prose_prompt` rendering rule, keyed by `GlimpseTagAxis`.
+
+**`CharacterAura.glimpse_state`** (`models/aura.py`) — a `GlimpseState` CharField,
+default `NOT_STARTED`. A service-maintained cache of the prose+tag rows (mirrors
+the `CharacterDistinction.secret` FK-presence precedent): never written directly
+outside `world.magic.services.glimpse`.
+
+**`CharacterDistinction.from_glimpse`** (`world/distinctions/models.py`) —
+nullable FK to `CharacterAura`, `SET_NULL`. The FK's presence IS the
+provenance state (mirrors `CharacterDistinction.secret`): when set, the
+distinction was born in the character's Glimpse. Deleting the aura simply
+drops the provenance, never the distinction.
+
+**Services** (`services/glimpse.py`) — the single write path; every mutation
+recomputes `glimpse_state` so it never drifts from the prose+tag truth:
+
+- `refresh_glimpse_state(aura: CharacterAura) -> GlimpseState` — recomputes and
+  persists `glimpse_state` from prose + tag rows (COMPLETE if prose is
+  non-blank, else TAGS_ONLY if any tag row exists, else NOT_STARTED).
+- `set_glimpse_tags(aura, tags: Sequence[GlimpseTag], *, axis: GlimpseTagAxis) -> None`
+  — replaces the character's chosen tags for one axis (transactional). Enforces
+  the axis's select-arity (`GLIMPSE_AXIS_CONFIG`) and that every tag belongs to
+  `axis`; an empty `tags` clears the axis. Calls `refresh_glimpse_state`.
+- `set_glimpse_prose(aura, text: str) -> None` — writes `glimpse_story` and
+  calls `refresh_glimpse_state`.
+- `link_distinction_to_glimpse(character_distinction: CharacterDistinction, aura: CharacterAura) -> None`
+  — sets `from_glimpse`; raises `ValidationError` if the distinction and aura
+  belong to different characters.
+- `unlink_distinction_from_glimpse(character_distinction: CharacterDistinction) -> None`
+  — clears `from_glimpse`.
+
+**CG finalize wiring** (`world/character_creation/services.py`,
+`finalize_magic_data`) — after creating `CharacterAura`, three `draft_data`
+keys are consumed through
+the glimpse services above (never written directly to the aura/tag rows):
+`glimpse_tag_ids` (list of `GlimpseTag` ids, grouped by axis and passed to
+`set_glimpse_tags` per axis), `glimpse_story` (passed to `set_glimpse_prose`,
+defaults to `""`), `glimpse_linked_distinction_ids` (catalog `Distinction`
+ids — resolved to the character's own `CharacterDistinction` rows by
+`distinction_id__in=`, then passed to `link_distinction_to_glimpse`).
+
+**API surfaces:**
+
+- **CG catalog** — `GET /api/character-creation/glimpse-tags/`
+  (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=`).
+  Global authored catalog, not draft-dependent, so the same endpoint also
+  backs the post-CG "finish your glimpse later" surface. Each row embeds its
+  `suggested_distinctions` (prefetched `GlimpseTagDistinctionSuggestion` rows,
+  ordered) via `CGGlimpseTagSerializer`.
+- **Aura actions** — four `@action`s on `CharacterAuraViewSet`
+  (`world/magic/views.py`): `POST .../set-glimpse-tags/` (body
+  `{axis, tag_ids[]}`, validates tags exist/are active before calling
+  `set_glimpse_tags`), `POST .../set-glimpse-prose/` (body `{text}`),
+  `POST .../link-glimpse-distinction/` and `POST .../unlink-glimpse-distinction/`
+  (body `{character_distinction_id}`, scoped to the aura's own character).
+  All four return the updated `CharacterAuraSerializer` payload; validation
+  errors surface as HTTP 400 detail, never raw `str(exc)`.
+
+**Sheet payload** (`world/character_sheets/`) — `AuraData` (`types.py`) gained
+`glimpse_story`, `glimpse_state`, `glimpse_tags: list[GlimpseTagEntry]`, and
+`can_finish_glimpse` (privileged-only — the "finish later" affordance, True
+when the requester may edit this aura and `glimpse_state != COMPLETE`).
+`DistinctionEntry` gained `is_from_glimpse` (`from_glimpse_id is not None`) so
+the sheet can badge/link distinctions born in the Glimpse.
+
+**Frontend** — one shared, purely presentational guided flow with two mounts
+(see `frontend/src/magic/CLAUDE.md` for the full contract):
+
+- `GlimpseFlow` (`frontend/src/magic/components/glimpse/GlimpseFlow.tsx` +
+  `glimpseTypes.ts`) — accordion of axis steps (TONE single-select,
+  CONSEQUENCE/WITNESS multi-select; axes with zero catalog tags don't render a
+  step), SENSORY as toggle chips inside the always-visible story textarea, a
+  deduped suggestion panel, and a manual distinction-link fallback. No
+  queries/mutations inside — purely props-in/callbacks-out.
+- `GlimpseSection` (`frontend/src/character-creation/components/gift/GlimpseSection.tsx`)
+  — the CG mount, binding `GlimpseFlow` to `draft_data.glimpse_tag_ids` /
+  `glimpse_linked_distinction_ids` (prose stays on `GiftStage`'s
+  `register('glimpse_story')`).
+- `GlimpseEditorDialog` (`frontend/src/magic/components/glimpse/GlimpseEditorDialog.tsx`)
+  — the "finish later" editor on the own-character sheet, opened from
+  `SpellbookTab`'s aura card, gated on `isMyCharacter && aura.can_finish_glimpse`.
+  Writes through the four aura actions above.
+
+**Out of scope (verified against code, not deferred by accident):** no
+mechanics hooks off tag picks, no LLM involvement anywhere in the flow, no new
+privacy axis beyond the existing WITNESS tags, and no authored `GlimpseTag`/
+`GlimpseTagDistinctionSuggestion` rows ship with this repo (lore-repo content,
+authored later) — the flow renders gracefully with an empty catalog (axes with
+no tags simply don't render a step).
+
+### Content-vs-config boundary in the dev seed (#2474, ADR-0142)
+
+`seed_dev_database()` (`world/seeds/database.py`) now sequences: (1) resolve
+`CONTENT_REPO_PATH` via `core_management.content_repo.resolve_content_root()` —
+raises `ContentError` immediately if unset/missing, before anything else runs; (2)
+seed config prerequisites the content fixtures FK by natural key — currently just
+`world.magic.seeds_cast.ensure_technique_cast_content()`, since lore-repo
+`Technique` fixtures FK the shared "Technique Cast" `ActionTemplate` and the
+content load's own deferred-retry loop can't conjure a config row the content/grid
+load itself never creates; (3) `load_world_content()`; (4) the `CLUSTER_SEEDERS`
+loop. NPC trainer seeds (`world/npc_services/seeds.py`) resolve their starter
+technique picks as `(gift_name, technique_name)` pairs scoped by gift
+(`Technique.objects.filter(gift__name=..., name=...)`, never a bare `name__in=`
+lookup — see `Technique`'s natural key above) and raise `ContentError` when none of
+the pairs resolve, so a missing/stale catalog fails loudly rather than silently
+seeding an empty trainer. The admin seed view (`web/admin/seed_views.py`) catches
+`ContentError` and surfaces it as a normal form error; the CLI (`arx manage seed`,
+`core_management/management/commands/seed.py`) lets it traceback loudly by
+design — no silent skip, no synthetic in-repo fallback catalog. See ADR-0142 for
+the rationale and the rejected alternative.
 
 ### Standalone Casting — Shared Template + Per-Character Check (#1306) [BUILT & WIRED]
 
@@ -1535,6 +1685,38 @@ Cached accessors (never query directly):
 
 ---
 
+### Content pipeline — magic catalog export/import (#2486)
+
+The full magic catalog is lore-repo-authorable content, not admin-only data: `Affinity`,
+`Resonance`, `Facet`, `Gift`, `Tradition`, `IntensityTier`, `Technique` + its payload rows
+(`TechniqueCapabilityGrant`/`TechniqueCapabilityRequirement`/`TechniqueDamageProfile`/
+`TechniqueOutcomeModifier`/`TechniqueAppliedCondition`/`TechniqueRemovedCondition`),
+`TechniqueStyle`, `Restriction`, `EffectType`, `PortalAnchorKind`, `PathGiftGrant`,
+`TraditionGiftGrant`, plus `species.SpeciesGiftGrant` — all listed in `CONTENT_MODELS`
+(`core_management/content_export.py`) and exported/imported by the shared
+`content_export.py`/`content_fixtures.py` pipeline (see `docs/systems/INDEX.md`'s
+"Content-repo load" entry for the driver). Every model's natural key is its
+`NaturalKeyConfig.fields`: `Technique` is keyed `(gift, name)` (the `unique_technique_gift_name`
+`UniqueConstraint` backs it — authoring a second technique with the same name under the
+same gift raises `DuplicateTechniqueName`, a clean 400, not an `IntegrityError`); the grant
+tables (`PathGiftGrant`, `TraditionGiftGrant`, `SpeciesGiftGrant`) key on their FK pairs
+(`(path, gift)`, `(tradition, gift)`, `(species, gift)`); the other payload rows key on their
+owning technique plus their own unique-constraint fields, except `TechniqueOutcomeModifier`,
+a global outcome-tier table with no technique FK — it's a `OneToOneField` to
+`traits.CheckOutcome` and keys on `outcome` alone; `PortalAnchorKind` keys on `name`
+(`achievements.Achievement` also gained a name natural key this branch but is not itself
+in `CONTENT_MODELS`). `load_entries` (`core_management/content_fixtures.py`) upserts by
+natural key. There is no in-repo seed catalog to fall back on: the lore repo is the
+single source (`seed_starter_gift_catalog()` was retired by #2474 — see "CG Starter
+Gift/Technique Catalog" and "Content-vs-config boundary in the dev seed" above for the
+seed-vs-content sequencing, which seeds the "Technique Cast" `ActionTemplate` config
+prerequisite before `load_world_content()` runs, and ADR-0142 for the rationale).
+The deferred-retry loop resolves load-order gaps *within* the content/grid load; it
+cannot conjure a config row the load itself never creates — which is why the config
+prerequisites run first in that sequence.
+
+---
+
 ## Key Methods and Properties
 
 ### CharacterAura
@@ -1924,6 +2106,20 @@ No `DELETE` — tags are immutable provenance records.
 
 Telnet parity: `moment suggestions` / `moment confirm <id>` / `moment dismiss <id>` (`CmdMoment`).
 
+### Guided Glimpse Story (#2427)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/character-creation/glimpse-tags/` | GET | Active glimpse tag catalog (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=`); each row embeds `suggested_distinctions`. Serves both the CG guided flow and the post-CG "finish later" surface |
+| `/character-auras/{id}/set-glimpse-tags/` | POST | Body `{axis, tag_ids[]}`; replaces the aura's chosen tags for one axis |
+| `/character-auras/{id}/set-glimpse-prose/` | POST | Body `{text}`; writes `glimpse_story` |
+| `/character-auras/{id}/link-glimpse-distinction/` | POST | Body `{character_distinction_id}`; marks a distinction as born in the Glimpse |
+| `/character-auras/{id}/unlink-glimpse-distinction/` | POST | Body `{character_distinction_id}`; clears the Glimpse provenance |
+
+All four `CharacterAuraViewSet` actions return the updated `CharacterAuraSerializer`
+payload; validation errors (unknown/inactive tag, cross-character link, wrong-axis
+tag, arity violation) surface as HTTP 400 detail.
+
 ---
 
 ## Frontend Integration
@@ -1952,6 +2148,14 @@ const { data: ritualTypes } = useAnimaRitualTypes();
 
 ### Components
 - `MagicStage.tsx` - Character creation magic selection UI
+
+### Guided Glimpse Story (#2427)
+- `GlimpseFlow` (`frontend/src/magic/components/glimpse/GlimpseFlow.tsx`) — shared,
+  purely presentational guided flow; two mounts:
+  - `GlimpseSection` (`frontend/src/character-creation/components/gift/GlimpseSection.tsx`)
+    — CG mount inside `GiftStage`
+  - `GlimpseEditorDialog` (`frontend/src/magic/components/glimpse/GlimpseEditorDialog.tsx`)
+    — "finish later" dialog on the own-character sheet, mounted from `SpellbookTab`
 
 ---
 

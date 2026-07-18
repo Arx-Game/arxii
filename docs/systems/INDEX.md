@@ -306,6 +306,36 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     teaching structure; `Tradition.society` (no live consumer) was dropped. The `Cantrip`
     model + its full API/admin/frontend stack were removed. See `docs/systems/magic.md`
     and `docs/systems/character_creation.md` for the CG stage/endpoint detail.
+  - **Guided Glimpse Story (#2427):** `GlimpseTag` (`models/glimpse.py`, content model —
+    `CONTENT_MODELS` `magic.glimpsetag` — `axis` (`GlimpseTagAxis`), `name`, `slug`
+    natural key, `description`, `example`, `sort_order`, `is_active`),
+    `CharacterGlimpseTag` (instance data, never exported; `aura` FK
+    `related_name="glimpse_tags"`, `tag` FK PROTECT, unique per `(aura, tag)`),
+    `GlimpseTagDistinctionSuggestion` (content model — `magic.glimpsetagdistinctionsuggestion`
+    — `tag`/`distinction` FKs, specific→general per ADR-0010, grants nothing, purely a
+    suggestion surface). `GlimpseTagAxis`/`GlimpseState`/`GLIMPSE_AXIS_CONFIG`
+    (`constants.py`) — four axes (TONE single-select; CONSEQUENCE, WITNESS, SENSORY
+    multi-select, SENSORY renders as prose prompts) and the NOT_STARTED/TAGS_ONLY/
+    COMPLETE deferral cache. `CharacterAura.glimpse_state` (cache maintained
+    exclusively by `world.magic.services.glimpse`, mirrors the `is_secret`
+    FK-presence precedent) + `world.distinctions.models.CharacterDistinction
+    .from_glimpse` (nullable FK → `CharacterAura`, SET_NULL — provenance, mirrors
+    `CharacterDistinction.secret`). Services (`services/glimpse.py`):
+    `refresh_glimpse_state(aura) -> GlimpseState`, `set_glimpse_tags(aura, tags, *,
+    axis)`, `set_glimpse_prose(aura, text)`, `link_distinction_to_glimpse(character_distinction,
+    aura)` / `unlink_distinction_from_glimpse(character_distinction)`. CG finalize
+    (`world.character_creation.services.finalize_magic_data`) consumes
+    `draft_data["glimpse_tag_ids"/"glimpse_story"/"glimpse_linked_distinction_ids"]`
+    through these services. API: CG catalog `GET
+    /api/character-creation/glimpse-tags/` (`CGGlimpseTagViewSet`, embeds
+    `suggested_distinctions`) + four `CharacterAuraViewSet` actions
+    (`set-glimpse-tags` / `set-glimpse-prose` / `link-glimpse-distinction` /
+    `unlink-glimpse-distinction`). Sheet payload: `AuraData.glimpse_story` /
+    `.glimpse_state` / `.glimpse_tags` / `.can_finish_glimpse` (privileged-only);
+    `DistinctionEntry.is_from_glimpse`. Frontend: `GlimpseFlow` (shared,
+    presentational), mounted by CG's `GlimpseSection` and the character sheet's
+    `GlimpseEditorDialog` ("finish later"). See `docs/systems/magic.md`'s "Guided
+    Glimpse Story (#2427)" section for the full detail.
   - Soul Tether config: `get_soul_tether_config() -> SoulTetherConfig` (lazy pk=1 singleton)
   - Soul Tether events: `SOUL_TETHER_DISSOLVED` emitted by `dissolve_soul_tether`
   - Soul Tether strain: `CharacterSheet.get_tether_strain_stage() -> int` (current Sineater
@@ -482,6 +512,16 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     pending entry-flourish offer inbox (#1140)
   - `POST /api/magic/entry-flourish/respond/` — body `{offer_id, resonance_id}`; resolves
     offer via `resolve_entry_flourish_offer` and fires the self-grant (#1140)
+- **API endpoints (guided Glimpse story — #2427):**
+  - `GET /api/character-creation/glimpse-tags/` — active `GlimpseTag` catalog
+    (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=`); embeds
+    `suggested_distinctions` per tag. Shared by CG and the post-CG "finish later" surface
+  - `POST /api/magic/character-auras/{id}/set-glimpse-tags/` — body `{axis, tag_ids[]}`
+  - `POST /api/magic/character-auras/{id}/set-glimpse-prose/` — body `{text}`
+  - `POST /api/magic/character-auras/{id}/link-glimpse-distinction/` — body
+    `{character_distinction_id}`
+  - `POST /api/magic/character-auras/{id}/unlink-glimpse-distinction/` — body
+    `{character_distinction_id}`
 - **Portal travel (#2222, ADR-0121):** `PortalAnchorKind` (staff-authored anchor medium
   catalog — arrival/departure verbs) + `PortalAnchor` (stackable per-room install, FK
   `room_profile`, PROTECT FK `kind`, soft-deleted via `dissolved_at`, partial-unique per
@@ -551,6 +591,9 @@ allocations that convert AP to development points.
 Character advantages and disadvantages (CG Stage 6: Traits).
 
 - **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`, `CharacterDistinction`
+  (`from_glimpse` nullable FK → `magic.CharacterAura`, SET_NULL, #2427 — FK presence is
+  the Glimpse-provenance state, mirroring `.secret`; set via
+  `world.magic.services.glimpse.link_distinction_to_glimpse`/`unlink_distinction_from_glimpse`)
 - **Key Methods:** `Distinction.calculate_total_cost()`, `Distinction.get_mutually_exclusive()`
 - **Enums:** `DistinctionOrigin` (`CHARACTER_CREATION`, `GAMEPLAY` vestigial, `GM_AWARD`,
   `ACHIEVEMENT_AUTO_GRANT`, `CONSEQUENCE_POOL`, `ENDORSEMENT_THRESHOLD`), `OtherStatus`
@@ -796,7 +839,10 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
   extracted so buildings, battles, and the new `world-builder/` app
   (`/staff/world-builder`, linked from the profile dropdown + Game Setup hub) render
   off one canvas shell instead of three parallel ones. Not built this slice:
-  `edit_area` UI, GM story areas (#2450), clue/portal layers (#2451).
+  `edit_area` UI, clue/portal layers (#2451). **GM story areas (#2450, epic #2436
+  slice 3) BUILT** — a GM's own build-and-run space on the same substrate, gated by
+  GM trust rather than the staff flag; see the GM system's "Story areas & story
+  rooms" entry above for the full model/service/action/API/telnet rundown.
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
@@ -1183,6 +1229,34 @@ most-specific-wins up the `Area` tree; knowledge propagation is the accrual engi
 reading to the enforcing society's dominion (ADR-0080 — sanctuary and cross-border
 immunity are the same mismatch rule). Masks (TEMPORARY personas) deliberately soak
 heat; identity-association copies it (`associate_heat` — the #1334 outing seam).
+Lifecycle (#1826, `justice/lifecycle.py`): **lie low** (`LieLowState` — declared
+go-to-ground: ×`LIE_LOW_DECAY_MULT` decay in the area + CRIME_KICKUP collection
+malus for member orgs; broken by any IC action there — interaction or fresh heat);
+**bribe** (`attempt_bribe` — coin sink scaled by heat, `perform_check`-banded;
+botch mints a `bribery` crime); **pardon** (`pardon_persona` — magistrate office
+or org leadership of the enforcing society; `PardonGrant` audit + public feed
+item); **wanted visibility** (`wanted_rows_for_area` — at/above
+`WANTED_VALUE_FLOOR` the warrant flips public: tier + presented name + crime
+kinds, never numbers; `GET /api/justice/wanted/` also carries the area's
+awaiting-trial `held` list — public record, the help-the-accused discovery
+seam — and `viewer_can_pardon` for the lord's-grant control gate; the room
+hub payload (`_get_hub`, flows room_state serializer) exposes `area_id` so
+the frontend `WantedBoard` renders at notice boards/criers, and `CrimeTab`
+shows the captive's own case + stand-trial control via `GET
+/api/justice/my-case/`).
+Pipeline (#2378, `justice/pipeline.py`): guard pressure is **event-driven rolls
+against active public play** — the trigger ladder (`maybe_guard_encounter`) fires
+on NPC transactions at wanted, any public interaction at hunted, room arrival at
+max (hooks: `dispatch_offer_effect`, the interaction seam, `Character.at_post_move`;
+never offline, never private rooms). Evasion check → escape / seen (+heat) /
+captured (`resolve_guard_encounter`); capture brigs via captivity and opens a
+`JusticeCase`. **The trial waits on the captive** (`initiate_trial` — argument
+checks by accused + helpers, nobody prosecutes); helpers can only help
+(`submit_exculpatory` — threshold releases outright; manufactured evidence
+exposed backfires on the SUBMITTER). Sentences scale with prosecution weight
+(fine/brig/humiliation/exile); **the lethal wall holds** (ADR-0023):
+`PlayerData.lethal_consequences_opt_in` + an exhausted case (`failed_outs`)
+gate PC execution — NPCs may hang.
 
 - **Models:** `CrimeKind` (normalized vocabulary; **content rule: no sexual crimes,
   ever**), `AreaLaw` (`heat_weight` posture + `exempts`), `DeedCrimeTag`
@@ -1456,6 +1530,16 @@ Character lifecycle management with web-first applications and player anonymity.
   account identifiers. Frontend: in-scene quick-compose (`SendLetterDialog` pre-filling
   `ComposeMailForm`) from the character card, an `UnreadMailBadge` in the header, and a
   mark-read-on-open flow in `ReceivedMailList`. No telnet mail command exists or is planned.
+- **Game invites (#2483):** `GameInvite` model + `GameInviteViewSet` for
+  player-to-friend contextual invites. Trust-gated via `PlayerTrust` (new
+  `INVITE` `TrustCategory`, `BASIC` minimum, seeded via the Big Button
+  "roster" cluster). Token-in-URL flow: inviter creates invite with a message
+  → friend registers via `/register?invite=TOKEN` → claims on first login
+  → invite annotates their first `DraftApplication.invited_via` FK → inviter
+  gets a websocket push on submission. Services use the `game_invite` prefix
+  (`create_game_invite`/`claim_game_invite`/`revoke_game_invite`) to avoid
+  collision with `world/gm/services.py`'s `GMRosterInvite` functions. See
+  ADR-0141.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)
@@ -1606,6 +1690,74 @@ GM at a given level may author (#2000, ADR-0097).
   `RenownRisk` tier) seeded idempotently by `world.gm.factories
   .seed_catalog_starter_content`, composed into the `"gm"` cluster seeder
   alongside `seed_default_gm_level_caps`.
+- **Story areas & story rooms (#2450, epic #2436 slice 3, ADR-0141):** a GM's own
+  build-and-run space, layered on the #2436/#2449 grid substrate. Models:
+  `StoryArea` (sidecar per ADR-0010 — `gm.StoryArea.area` OneToOne to a
+  `GridOrigin.STORY` `Area`, `gm` FK; row survives a staff promotion to AUTHORED as
+  provenance, but cap counting filters `area__origin=STORY` so a promoted area stops
+  counting), `StoryRoomGrant` (consent-first join grant: `room`
+  (`evennia_extensions.RoomProfile`) + `character` + `granted_by`, unique
+  `(room, character)`; `return_location` captured at join, cleared on leave — gates
+  the JOIN only, walking inside rides ordinary exits, ADR-0141), `GMLevelCap
+  .max_story_areas`/`max_story_rooms_per_area` (per-level caps, #2450),
+  `instances.InstancedRoom.gm_owner` (nullable FK — a temp scene room a GM spun up
+  rather than a mission/player instance). `world.instances.services
+  .spawn_instanced_room` gained a `gm_owner` kwarg and now always forces
+  `RoomProfile.is_public=False` regardless of the model default, so no instanced
+  room (GM scene room, mission room, captivity cell) can leak into public listings.
+  **Services (`world.gm.story_services`):** `create_story_area`/`remove_story_area`
+  (cap-checked create, empty-only remove), `story_room_cap_check` (raises before a
+  dig would exceed `max_story_rooms_per_area`), `grant_story_room`/
+  `revoke_story_room` (idempotent grant create; revoke returns an in-room character
+  first, via `_return_character`, then deletes the row), `join_story_room`/
+  `leave_story_room` (the character's own move, captures/consumes
+  `return_location`), `spin_up_scene_room`/`close_scene_room` (temp-room lifecycle
+  over `world.instances.services`; `close_scene_room` is deliberately
+  non-atomic and retryable — `move_to` has non-DB side effects a DB rollback can't
+  undo, so a blocked return leaves the grant/instance alone rather than faking
+  atomicity). **Actions (`actions/definitions/story_builder.py`, 15 REGISTRY
+  keys):** category `story_builder` (GM-authored, `MinimumGMLevelPrerequisite
+  (STARTING)`, staff bypass) — `create_story_area`/`edit_story_area`/
+  `remove_story_area`, `story_dig_room`/`story_edit_room`/`story_remove_room`,
+  `story_link_rooms`/`story_unlink_rooms`/`story_place_room`,
+  `grant_story_room`/`revoke_story_room` (resolves either a story-area room or an
+  active GM-owned temp room), `spin_up_scene_room`/`close_scene_room`; category
+  `story_rooms` (player-side, no GM standing required — authorization is the grant
+  itself) — `join_story_room`/`leave_story_room`. Story rooms dug via
+  `story_dig_room` are always `origin=STORY`, `is_public=False`, and never carry a
+  `fixture_key`. `world.areas.grid_services` gained two public helpers
+  (`has_character_occupants`/`has_non_exit_contents`) so the story-builder module's
+  stranding/occupancy guards don't reach into private members. **Telnet**
+  (`commands/story_rooms.py`, play verbs only — canvas authoring stays web-only per
+  epic Decision 2): `sceneroom <name> = <description>` / `sceneroom close <#id>`
+  (GM lifecycle, thin over `SpinUpSceneRoomAction`/`CloseSceneRoomAction`),
+  `joinroom [<#id>|<name>]` (bare form lists the caller's own grants),
+  `leaveroom`. **API:** `StoryBuilderViewSet` (`/api/gm/story-areas/`,
+  `IsGMOrStaff`, read-only — mutations go through action dispatch) reuses
+  `world.areas.builder_views.area_manager_payload` (extracted from
+  `WorldBuilderViewSet.manager`, #2449) for `GET .../<id>/manager/`, attaching
+  per-room `grants` (granted character names); `GET .../instances/` lists the
+  caller's active GM-owned temp scene rooms (staff: all), unpaginated. STORY-origin
+  areas/rooms are excluded from `AreaViewSet`/`RoomProfileViewSet` (the
+  player-facing grid API) even when `is_public=True` on the room —
+  `evennia_extensions.models.room_is_publicly_listed` treats any
+  `GridOrigin.STORY` room as never publicly listed, defense in depth alongside the
+  area-level exclusion. Frontend: `/gm/story-builder`
+  (`frontend/src/story-builder/`) on the shared `map-canvas/` + world-builder
+  components, with a story-specific tool palette. **Player web join surface
+  (#2450 spec Decision 1 fix):** `MyStoryGrantsViewSet`
+  (`/api/gm/my-story-grants/`, `IsAuthenticated`, read-only, paginated
+  `LargeResultsSetPagination`) lists the requesting account's own
+  `StoryRoomGrant`s (`character__character__db_account=request.user`) with
+  `room_id`/`room_name`/`character_id`/`character_name`/`is_inside`/
+  `created_at`; `character_id` matters because `join_story_room`/
+  `leave_story_room` resolve their actor from `actor.sheet_data` with no
+  target-character kwarg, so the frontend must dispatch each row against the
+  exact character the grant names. Frontend: `/story-rooms`
+  (`frontend/src/story-rooms/`) — a Join/Leave button per grant row,
+  dispatching the same `join_story_room`/`leave_story_room` REGISTRY actions
+  telnet's `joinroom`/`leaveroom` already used; linked from
+  `ProfileDropdown`'s general (non-staff) menu section.
 - **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates;
   `GroupStoryRequest.claimed_by` → `GMProfile`, #2119 — claiming creates the GROUP
   Story and seats the covenant via `join_table`; `world.stories.services.gm_rewards`
@@ -1624,12 +1776,17 @@ GM at a given level may author (#2000, ADR-0097).
   (`FindSituationAction` → `mechanics.SituationTemplate`, text-search only, no FK),
   actions (`ConsequencePoolGuide.pool` → `actions.ConsequencePool`, advisory only),
   player_submissions/staff_inbox (`CatalogSuggestion` → `SubmissionCategory
-  .CATALOG_SUGGESTION`)
+  .CATALOG_SUGGESTION`), areas (`StoryArea.area` → a `GridOrigin.STORY` `Area`;
+  `world.areas.grid_services` for room/exit CRUD, #2450), evennia_extensions
+  (`StoryRoomGrant.room` → `RoomProfile`), instances (`InstancedRoom.gm_owner` →
+  `GMProfile`; `spawn_instanced_room`/`complete_instanced_room` back
+  `spin_up_scene_room`/`close_scene_room`, #2450)
 - **Source:** `src/world/gm/`
 - **Glossary:** `src/world/gm/AGENT_GLOSSARY.md`
 - **Details:** [../roadmap/gm-system.md](../roadmap/gm-system.md),
   [../adr/0110-gm-content-is-catalog-and-adaptation-never-invention.md](../adr/0110-gm-content-is-catalog-and-adaptation-never-invention.md),
-  [../adr/0097-gm-trust-is-gmprofile-level.md](../adr/0097-gm-trust-is-gmprofile-level.md)
+  [../adr/0097-gm-trust-is-gmprofile-level.md](../adr/0097-gm-trust-is-gmprofile-level.md),
+  [../adr/0141-story-room-access-is-player-side-join.md](../adr/0141-story-room-access-is-player-side-join.md)
 
 ### Scenes
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social
@@ -3347,6 +3504,21 @@ material `lore_value` → suggested worth, surfaced as the read-only
 `create_solo_deed`, from `run_crafting_recipe`). Mint self-provenance now stamps
 `designer_*` too (#2066/#2243). Magnitudes PLACEHOLDER.
 
+**Theft reclamation (#2368):** `ReclamationClaim` (claimant/original-claimant sheets —
+the immunity anchor never moves on assignment; `estate_claim` bridge FK; `acquired_from`
+lineage) + `ClaimTraceStep` (one revealed hop per row). Services
+(`world.items.services.reclamation`): `file_theft_claim` (provenance-victim gate),
+`open_trace_for_estate_claim`, `assign_claim`, `advance_trace` (check-banded, one hop
+per success, botch chills `TRACE_CHILL_HOURS`), `file_reclamation_accusation` (lawful
+route — mints receiving-stolen-goods heat on the holder),
+`execute_lawful_seizure` / `record_steal_back` (both `_return_item` → RECOVERED
+provenance event clears the hot flag), `has_reclamation_standing`. API:
+`/api/items/reclamation-claims/` (list/file/claimable/advance/report/take-back,
+self-scoped; `claimable` lists the viewer's unfiled thefts — the filing seam). Web:
+`/reclamation` (`ReclamationPage` — file at discovery, follow the trail hop by hop,
+then choose lawful seizure vs steal-back; linked from the inventory sidebar). The
+holder is never notified a claim exists.
+
 - **Models:**
   - `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`,
     `TemplateInteraction`, `EquippedItem`, `OwnershipEvent`, `CurrencyBalance`
@@ -4930,7 +5102,30 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `character_creation.startingarea`, `evennia_extensions.roomsizetier`, and
   `weather.climate` (#2436/#2448) now that all three carry `NaturalKeyMixin`, plus
   `character_creation.beginnings` and `character_creation.cgexplanation` (Arx
-  beginnings content; canonical prose lives in the lore repo's `beginnings/arx.md`).
+  beginnings content; canonical prose lives in the lore repo's `beginnings/arx.md`),
+  and — #2474 — `magic.resonance`/`magic.gift`/`magic.technique`/
+  `magic.pathgiftgrant`/`magic.traditiongiftgrant` (the CG starter-catalog models;
+  `Technique`'s natural key is `(gift, name)`, `unique_technique_gift_name`, since
+  `name` alone collides across gifts). `core_management.content_fixtures.load_entries`
+  gained M2M natural-key resolution and stale-field tolerance (an object referencing
+  a field the current model no longer has is skipped with a warning, not a crash) to
+  carry this content across schema drift. `world.seeds.database.seed_dev_database()`
+  now loads content BEFORE any `CLUSTER_SEEDERS` entry runs (previously content load
+  had no home in the dev-seed flow at all) and raises `ContentError` if
+  `CONTENT_REPO_PATH` is unset/invalid, before writing anything — no silent skip, no
+  synthetic in-repo catalog fallback (ADR-0142). See `docs/systems/magic.md`'s "CG
+  Starter Gift/Technique Catalog" section for the full seed-ordering/error-handling
+  detail; the retired `seed_starter_gift_catalog()` is replaced by
+  `MagicContent.create_starter_gift_catalog()` (test-only factory stand-in) for
+  suites without a real content-repo checkout.
+  #2486 extends that catalog allowlist further: `Technique`'s payload rows
+  (`TechniqueDamageProfile`, `TechniqueAppliedCondition`/`RemovedCondition`,
+  `TechniqueCapabilityGrant`/`Requirement`, plus the global `TechniqueOutcomeModifier`,
+  keyed on `outcome` alone), `magic.restriction`, `magic.portalanchorkind`, and
+  `species.speciesgiftgrant` — see `docs/systems/magic.md`'s "Content pipeline"
+  section for the full model list and natural keys. M2M resolution happens BEFORE the
+  `update_or_create` write, so an unresolvable M2M target defers or skips the whole
+  entry rather than leaving a half-loaded row with an empty M2M set.
 - **Grid content export/import (#2436/#2448):** rooms/areas are no longer deferred —
   `Area`/`RoomProfile` gained permanent identity keys (`slug`/`fixture_key`) and a
   `GridOrigin` export gate (see the Areas section above). `core_management.grid_export.
@@ -4945,12 +5140,17 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   so `core_management.content_fixtures.load_world_content(content_root) ->
   WorldLoadResult` sequences (1) content fixtures with `load_entries(...,
   defer_unresolved=True)` — an unresolved natural-key FK is queued, not fatal — (2)
-  `load_grid_bundles()`, (3) a retry of the deferred queue with deferral off. Both
-  `tools/build_content_fixtures.py --load` and the admin Load view call this driver,
-  not a bare `load_entries`. `core_management.content_repo` (`resolve_content_root()`/
-  `load_dotenv_content_path()`) is the one canonical content-repo path resolver every
-  export/push/load call site uses. See ADR-0140 (bundle format + rejected
-  alternatives) and `docs/evennia-quirks.md`'s #946 entry (why upsert, not `loaddata`).
+  `load_grid_bundles()`, (3) `_retry_deferred()` (#2486): repeated deferral-on passes
+  until a pass resolves nothing new (a fixpoint, not a single retry) — needed because
+  catalog fixtures can chain ≥2 levels deep against alphabetical load order (e.g.
+  grant→technique→gift→resonance, where a one-shot retry only settles the first
+  level) — followed by one final deferral-off pass so a genuine gap still lands in
+  `skipped`. Both `tools/build_content_fixtures.py --load` and the admin Load view
+  call this driver, not a bare `load_entries`. `core_management.content_repo`
+  (`resolve_content_root()`/`load_dotenv_content_path()`) is the one canonical
+  content-repo path resolver every export/push/load call site uses. See ADR-0140
+  (bundle format + rejected alternatives) and `docs/evennia-quirks.md`'s #946 entry
+  (why upsert, not `loaddata`).
   Invariant (#2448 review fix): an AUTHORED room's `area` must itself be AUTHORED (never
   NULL or GM/player-owned) — `export_grid_bundles()` only walks rooms reachable through an
   AUTHORED area, so an unhoused AUTHORED room is silently unexportable otherwise;

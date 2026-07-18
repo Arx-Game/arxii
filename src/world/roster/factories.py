@@ -11,6 +11,8 @@ from evennia_extensions.models import Artist, PlayerData, PlayerMedia
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.models import (
     Family,
+    GameInvite,
+    InviteStatus,
     PlayerMail,
     Roster,
     RosterApplication,
@@ -237,3 +239,15 @@ class ArtistFactory(factory_django.DjangoModelFactory):
     description = ""
     commission_notes = ""
     accepting_commissions = True
+
+
+class GameInviteFactory(factory_django.DjangoModelFactory):
+    """Factory for GameInvite instances (#2483)."""
+
+    class Meta:
+        model = GameInvite
+
+    inviter = factory.SubFactory(PlayerDataFactory)
+    token = factory.Sequence(lambda n: f"test-token-{n:048d}")
+    message = factory.Faker("sentence")
+    status = InviteStatus.PENDING

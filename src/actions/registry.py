@@ -383,6 +383,23 @@ from actions.definitions.speaker_queue import (
     OpenSpeakerQueueAction,
     SkipSpeakerAction,
 )
+from actions.definitions.story_builder import (
+    CloseSceneRoomAction,
+    CreateStoryAreaAction,
+    EditStoryAreaAction,
+    GrantStoryRoomAccessAction,
+    JoinStoryRoomAction,
+    LeaveStoryRoomAction,
+    RemoveStoryAreaAction,
+    RevokeStoryRoomAccessAction,
+    SpinUpSceneRoomAction,
+    StoryDigRoomAction,
+    StoryEditRoomAction,
+    StoryLinkRoomsAction,
+    StoryPlaceRoomAction,
+    StoryRemoveRoomAction,
+    StoryUnlinkRoomsAction,
+)
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
 from actions.definitions.traps import DisarmTrapAction
@@ -791,6 +808,22 @@ _ALL_ACTIONS: list[Action] = [
     StaffRemoveRoomAction(),
     PromoteRoomAction(),
     PromoteAreaAction(),
+    # #2450 — GM story builder: create/edit/remove story areas + dig/edit story rooms.
+    CreateStoryAreaAction(),
+    EditStoryAreaAction(),
+    RemoveStoryAreaAction(),
+    StoryDigRoomAction(),
+    StoryEditRoomAction(),
+    StoryLinkRoomsAction(),
+    StoryUnlinkRoomsAction(),
+    StoryPlaceRoomAction(),
+    StoryRemoveRoomAction(),
+    GrantStoryRoomAccessAction(),
+    RevokeStoryRoomAccessAction(),
+    JoinStoryRoomAction(),
+    LeaveStoryRoomAction(),
+    SpinUpSceneRoomAction(),
+    CloseSceneRoomAction(),
 ]
 
 # Lookup by key

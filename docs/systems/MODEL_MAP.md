@@ -404,6 +404,7 @@
   - crafting_service_offers <- items.CraftingServiceOffer
   - events <- events.Event
   - ceremonies <- ceremonies.Ceremony
+  - story_grants <- gm.StoryRoomGrant
   - functionaries <- npc_services.Functionary
   - npc_assignments <- npc_services.NPCAssignment
   - entry_for_buildings <- buildings.Building
@@ -624,6 +625,10 @@
   - cleanup_projects <- areas.CleanupProjectDetails
   - laws <- justice.AreaLaw
   - heat_rows <- justice.PersonaHeat
+  - lie_low_states <- justice.LieLowState
+  - pardons <- justice.PardonGrant
+  - guard_encounters <- justice.GuardEncounter
+  - justice_cases <- justice.JusticeCase
   - stat_overrides <- locations.LocationValueOverride
   - stat_modifiers <- locations.LocationValueModifier
   - ownership_records <- locations.LocationOwnership
@@ -632,6 +637,7 @@
   - market_squares <- items.MarketSquare
   - battles <- battles.Battle
   - city_defense_projects <- battles.CityDefenseDetails
+  - story_ownership <- gm.StoryArea
   - default_permits_offered <- npc_services.PermitOfferDetails
   - building_profile <- buildings.Building
   - building_permits_valid_in <- buildings.BuildingPermitDetails
@@ -1248,6 +1254,7 @@
   - rescue_template -> missions.MissionTemplate [FK] (nullable)
 **Pointed to by:**
   - rescue_clues <- clues.Clue
+  - justice_cases <- justice.JusticeCase
 
 ### CaptivityConfig
 **Foreign Keys:**
@@ -1262,7 +1269,7 @@
 - `rescue_captive(captive: 'CharacterSheet') -> 'bool' — Free a captive via rescue (#931 Phase 4) — a rescue run's terminal verb.`
 - `resolve_captivity(captivity: 'Captivity', *, status: 'str') -> 'None' — End a captivity and free the captive.`
 - `resolve_capture_setup(*, captive_template: 'MissionTemplate | None' = None, rescue_template: 'MissionTemplate | None' = None, cell_name: 'str' = '', cell_description: 'str' = '', clue_name: 'str' = '', clue_description: 'str' = '', clue_detect_difficulty: 'int | None' = None) -> 'CaptureSetup' — Resolve one capture's loops + cell flavor: per-capture override, else default.`
-- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '') -> evennia.objects.models.ObjectDB — Create a temporary instanced room and its lifecycle record.`
+- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None) -> evennia.objects.models.ObjectDB — Create a temporary instanced room, its RoomProfile, and lifecycle record.`
 
 
 ## world.ceremonies
@@ -1568,6 +1575,7 @@
   - commanded_military_units <- military.MilitaryUnit
   - summoned_military_units <- military.MilitaryUnit
   - commanded_armies <- military.Army
+  - story_room_grants <- gm.StoryRoomGrant
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
   - conjured_hazards <- room_features.Trap
   - detected_traps <- room_features.Trap
@@ -3409,9 +3417,12 @@
   - crossover_invites_sent <- stories.CrossoverInvite
   - stake_outcomes <- stories.StakeOutcome
   - custody_requests <- stories.CustodyClearance
+  - owned_instances <- instances.InstancedRoom
   - tables <- gm.GMTable
   - invites_created <- gm.GMRosterInvite
   - level_changes <- gm.GMLevelChange
+  - story_areas <- gm.StoryArea
+  - story_grants_issued <- gm.StoryRoomGrant
   - weekly_reward_tracker <- gm.GMWeeklyRewardTracker
   - summonses_created <- npc_services.OfferSummons
 
@@ -3451,6 +3462,18 @@
 **Foreign Keys:**
   - profile -> gm.GMProfile [FK]
   - changed_by -> accounts.AccountDB [FK]
+
+### StoryArea
+**Foreign Keys:**
+  - gm -> gm.GMProfile [FK]
+  - area -> areas.Area [OneToOne]
+
+### StoryRoomGrant
+**Foreign Keys:**
+  - room -> evennia_extensions.RoomProfile [FK]
+  - character -> character_sheets.CharacterSheet [FK]
+  - granted_by -> gm.GMProfile [FK]
+  - return_location -> objects.ObjectDB [FK] (nullable)
 
 ### SituationKind
 **Pointed to by:**
@@ -4367,6 +4390,9 @@
 ### CharacterAura
 **Foreign Keys:**
   - character -> objects.ObjectDB [OneToOne]
+**Pointed to by:**
+  - glimpse_tags <- magic.CharacterGlimpseTag
+  - glimpse_born_distinctions <- distinctions.CharacterDistinction
 
 ### CharacterResonance
 **Foreign Keys:**
@@ -4529,6 +4555,21 @@
   - technique -> magic.Technique [FK]
 
 ### GiftAcquisitionConfig
+
+### GlimpseTag
+**Pointed to by:**
+  - character_rows <- magic.CharacterGlimpseTag
+  - distinction_suggestions <- magic.GlimpseTagDistinctionSuggestion
+
+### CharacterGlimpseTag
+**Foreign Keys:**
+  - aura -> magic.CharacterAura [FK]
+  - tag -> magic.GlimpseTag [FK]
+
+### GlimpseTagDistinctionSuggestion
+**Foreign Keys:**
+  - tag -> magic.GlimpseTag [FK]
+  - distinction -> distinctions.Distinction [FK]
 
 ### ResonanceGrant
 **Foreign Keys:**
@@ -6746,6 +6787,12 @@
   - authored_secrets <- secrets.Secret
   - secret_victimhoods <- secrets.SecretVictim
   - heat_rows <- justice.PersonaHeat
+  - lie_low_states <- justice.LieLowState
+  - pardons_granted <- justice.PardonGrant
+  - pardons_received <- justice.PardonGrant
+  - guard_encounters <- justice.GuardEncounter
+  - justice_cases <- justice.JusticeCase
+  - exculpatory_submissions <- justice.ExculpatoryEvidence
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - trendsetter_crownings <- items.Trendsetter
@@ -7259,6 +7306,8 @@
   - exposed_secrets <- secrets.Secret
   - dominant_areas <- areas.Area
   - heat_rows <- justice.PersonaHeat
+  - pardons <- justice.PardonGrant
+  - justice_cases <- justice.JusticeCase
   - fashion_presentations <- items.FashionPresentation
   - facet_momentum <- items.FacetVogueMomentum
   - trendsetters <- items.Trendsetter

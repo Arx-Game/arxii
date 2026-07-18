@@ -316,6 +316,14 @@ class GMLevelCap(SharedMemoryModel):
             "stories without a manual CanonReview (#2003)."
         ),
     )
+    max_story_areas = models.PositiveIntegerField(
+        default=0,
+        help_text="Concurrent STORY-origin areas a GM at this level may own (#2450).",
+    )
+    max_story_rooms_per_area = models.PositiveIntegerField(
+        default=0,
+        help_text="Rooms a GM at this level may dig into one story area (#2450).",
+    )
 
     class Meta:
         verbose_name = "GM Level Cap"
@@ -355,6 +363,93 @@ class GMLevelChange(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"GMLevelChange({self.profile.account.username}, {self.old_level}→{self.new_level})"
+
+
+class StoryArea(SharedMemoryModel):
+    """A GM's ownership claim on a STORY-origin Area (#2450, epic #2436 slice 3).
+
+    Sidecar per ADR-0010 — ``areas`` stays dependency-free; the specific system
+    (gm) points at the general primitive (Area). The row is kept after a staff
+    promotion flips the area to AUTHORED (provenance); cap counting filters on
+    ``area__origin=STORY`` so promoted areas stop counting automatically.
+    """
+
+    gm = models.ForeignKey(
+        "gm.GMProfile",
+        on_delete=models.PROTECT,
+        related_name="story_areas",
+    )
+    area = models.OneToOneField(
+        "areas.Area",
+        on_delete=models.CASCADE,
+        related_name="story_ownership",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Story Area"
+        verbose_name_plural = "Story Areas"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"StoryArea({self.area.name}, gm={self.gm.account.username})"
+
+
+class StoryRoomGrant(SharedMemoryModel):
+    """Access grant letting a character join a GM's story room (#2450).
+
+    Gates the JOIN action only — once inside, movement rides ordinary exits.
+    ``return_location`` is captured at join time and cleared on leave. Revoke
+    = row delete (a grant is not story-significant data). Works for both
+    story-area rooms and temp scene rooms — both carry a RoomProfile.
+    """
+
+    room = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        on_delete=models.CASCADE,
+        related_name="story_grants",
+    )
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="story_room_grants",
+    )
+    granted_by = models.ForeignKey(
+        "gm.GMProfile",
+        on_delete=models.PROTECT,
+        related_name="story_grants_issued",
+    )
+    return_location = models.ForeignKey(
+        "objects.ObjectDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Where the character was when they joined; cleared on leave.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Story Room Grant"
+        verbose_name_plural = "Story Room Grants"
+        constraints = [
+            UniqueConstraint(fields=["room", "character"], name="unique_story_room_grant"),
+        ]
+
+    def clean(self) -> None:
+        if self.return_location_id is not None:
+            loc = self.return_location
+            if loc is None or not loc.is_typeclass("typeclasses.rooms.Room", exact=False):
+                msg = "return_location must be a Room typeclass."
+                raise ValidationError({"return_location": msg})
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """full_clean() on save so direct ORM writes can't bypass clean()."""
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"StoryRoomGrant({self.character}, room={self.room_id})"
 
 
 # --- GM scenario catalog (#2127, ADR-0110) ---------------------------------

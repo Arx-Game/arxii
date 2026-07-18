@@ -10,6 +10,7 @@ from django.test import TestCase
 from core_management.content_fixtures import (
     TRAIT_CATEGORIES,
     TRAIT_TYPES,
+    BuildResult,
     ContentError,
     _resolve_natural_key_fields,
     build_all,
@@ -529,6 +530,50 @@ class FixtureJsonLoadTests(TestCase):
         created, updated = load_entries(build_all(self.root))
         assert (created, updated) == (1, 0)
 
+    def test_stale_fixture_field_skips_row_without_crashing_the_load(self) -> None:
+        """A fixture field no longer on the model must skip-and-continue (#2474 review).
+
+        ``_pop_m2m_fields`` (added #2474 for m2m natural-key handling) calls
+        ``model._meta.get_field(field_name)`` over every remaining fixture field
+        BEFORE the guarded try/except in ``_upsert_fixture_object`` — a stale
+        field name (removed/renamed model field left in an old fixture) raised
+        ``FieldDoesNotExist``, which escaped everything and crashed the entire
+        ``load_entries`` run for every object, not just the offending row. Two
+        objects in one file: the first carries a stale field, the second is
+        good — the fix must skip only the first and still load the second.
+        """
+        _write(
+            self.root,
+            "fixtures/magic/effects.json",
+            json.dumps(
+                [
+                    {
+                        "model": "magic.effecttype",
+                        "fields": {
+                            "name": "Bad Field Effect",
+                            "no_longer_on_model": "stale value",
+                        },
+                    },
+                    {
+                        "model": "magic.effecttype",
+                        "fields": {
+                            "name": "Good Effect",
+                            "description": "This one is fine.",
+                        },
+                    },
+                ]
+            ),
+        )
+        result = build_all(self.root)
+        created, updated = load_entries(result)
+        assert (created, updated) == (1, 0)
+        assert any("no_longer_on_model" in s or "Bad Field Effect" in s for s in result.skipped)
+
+        from world.magic.models import EffectType
+
+        assert EffectType.objects.filter(name="Good Effect").exists()
+        assert not EffectType.objects.filter(name="Bad Field Effect").exists()
+
     def test_stale_model_label_skipped_with_warning(self) -> None:
         """A fixture referencing a renamed/removed model is skipped, not fatal."""
         _write(
@@ -652,3 +697,104 @@ class FixtureJsonLoadTests(TestCase):
         # Both load
         created, _updated = load_entries(result)
         assert created >= 2  # 1 trait + 1 effect type
+
+
+class LoadEntriesM2MTest(TestCase):
+    """M2M natural-key values in fixture objects (#2486)."""
+
+    def _result_with(self, objects: list[dict]) -> BuildResult:
+        key = "fixtures/magic/technique.json"
+        path = Path(key)
+        result = BuildResult()
+        result.fixtures[key] = objects
+        result.source_paths[key] = [path] * len(objects)
+        return result
+
+    def _technique_obj(self, *, restrictions: list) -> dict:
+        return {
+            "model": "magic.technique",
+            "fields": {
+                "name": "M2M Trip",
+                "gift": ["M2M Gift"],
+                "style": [self.style.name],
+                "effect_type": [self.effect.name],
+                "anima_cost": 5,
+                "restrictions": restrictions,
+            },
+        }
+
+    def test_m2m_values_resolve_and_set(self) -> None:
+        from world.magic.factories import (
+            EffectTypeFactory,
+            GiftFactory,
+            RestrictionFactory,
+            TechniqueStyleFactory,
+        )
+
+        GiftFactory(name="M2M Gift")
+        self.style = TechniqueStyleFactory()
+        self.effect = EffectTypeFactory()
+        restriction = RestrictionFactory(name="Touch Range")
+        result = self._result_with([self._technique_obj(restrictions=[[restriction.name]])])
+        created, _updated = load_entries(result)
+        assert created == 1, result.skipped
+        from world.magic.models import Technique
+
+        technique = Technique.objects.get(name="M2M Trip")
+        assert list(technique.restrictions.all()) == [restriction]
+
+    def test_m2m_set_is_authoritative_replace(self) -> None:
+        """Re-loading with a different M2M list removes stale links."""
+        from world.magic.factories import (
+            EffectTypeFactory,
+            GiftFactory,
+            RestrictionFactory,
+            TechniqueStyleFactory,
+        )
+        from world.magic.models import Technique
+
+        GiftFactory(name="M2M Gift")
+        self.style = TechniqueStyleFactory()
+        self.effect = EffectTypeFactory()
+        restriction_a = RestrictionFactory(name="Restriction A")
+        restriction_b = RestrictionFactory(name="Restriction B")
+
+        result = self._result_with([self._technique_obj(restrictions=[[restriction_a.name]])])
+        created, _updated = load_entries(result)
+        assert created == 1, result.skipped
+        technique = Technique.objects.get(name="M2M Trip")
+        assert list(technique.restrictions.all()) == [restriction_a]
+
+        result = self._result_with([self._technique_obj(restrictions=[[restriction_b.name]])])
+        created, updated = load_entries(result)
+        assert (created, updated) == (0, 1)
+        technique.refresh_from_db()
+        assert list(technique.restrictions.all()) == [restriction_b]
+
+    def test_missing_m2m_target_defers_and_writes_nothing(self) -> None:
+        from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueStyleFactory
+        from world.magic.models import Technique
+
+        GiftFactory(name="M2M Gift")
+        self.style = TechniqueStyleFactory()
+        self.effect = EffectTypeFactory()
+        result = self._result_with([self._technique_obj(restrictions=[["No Such Restriction"]])])
+        created, updated, deferred = load_entries(result, defer_unresolved=True)
+        assert (created, updated) == (0, 0)
+        assert len(deferred) == 1
+        # resolve-before-write: a deferred M2M target must not leave a
+        # partially-written row behind.
+        assert not Technique.objects.filter(name="M2M Trip").exists()
+
+    def test_missing_m2m_target_skips_when_not_deferring(self) -> None:
+        from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueStyleFactory
+        from world.magic.models import Technique
+
+        GiftFactory(name="M2M Gift")
+        self.style = TechniqueStyleFactory()
+        self.effect = EffectTypeFactory()
+        result = self._result_with([self._technique_obj(restrictions=[["No Such Restriction"]])])
+        created, updated = load_entries(result)
+        assert (created, updated) == (0, 0)
+        assert len(result.skipped) == 1
+        assert not Technique.objects.filter(name="M2M Trip").exists()

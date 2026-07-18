@@ -6,11 +6,14 @@ seed rows — the content a fresh DB needs to actually run ``finalize_character`
 Create-if-missing; never overwrites; never deletes (the #651 invariant).
 
 Child of #651 / epic #1220 (Phase A). Registered in ``CLUSTER_SEEDERS`` after
-``magic`` because ``finalize_character`` picks the magic-seeded catalog
-``Gift``/``Technique`` + ``Resonance``/``TechniqueStyle`` at finalize time (#2426),
-and ``seed_beginning_traditions`` (below) links every seeded ``Beginnings`` to the
-magic-seeded Unbound ``Tradition`` — NOT because ``Beginnings`` FKs into magic (it
-FKs ``starting_area`` -> ``Realm`` and an M2M ``allowed_species`` -> ``Species``).
+``magic`` because ``finalize_character`` picks catalog ``Gift``/``Technique`` +
+``Resonance``/``TechniqueStyle`` rows at finalize time (#2426), and
+``seed_beginning_traditions`` (below) links every seeded ``Beginnings`` to the
+Unbound ``Tradition`` — NOT because ``Beginnings`` FKs into magic (it FKs
+``starting_area`` -> ``Realm`` and an M2M ``allowed_species`` -> ``Species``).
+Since #2474 those catalog rows are lore-repo content loaded by
+``load_world_content`` before any cluster seeder runs (ADR-0142), not
+magic-cluster-seeded.
 """
 
 from __future__ import annotations
@@ -309,9 +312,11 @@ def ensure_tradition_training_distinction() -> None:
 
 
 #: Canonical name: ``world.character_creation.constants.UNBOUND_TRADITION_NAME``
-#: (#2428 Task 3). The row itself is created by
-#: ``world.seeds.game_content.magic.seed_starter_gift_catalog`` (the "magic"
-#: cluster seeder) — this module only looks it up by name.
+#: (#2428 Task 3). The row itself is real lore-repo content, loaded via
+#: ``core_management.content_fixtures.load_world_content()`` ahead of every
+#: cluster seeder (formerly created here-adjacent by the now-retired
+#: ``world.seeds.game_content.magic.seed_starter_gift_catalog``, #2474) —
+#: this module only looks it up by name.
 _UNBOUND_TRADITION_NAME = UNBOUND_TRADITION_NAME
 
 #: Slug for the "Orphaned Tradition" drawback distinction (#2428 Task 5). Local
@@ -452,11 +457,13 @@ def seed_beginning_traditions() -> None:
     uncompletable, even the tradition-agnostic Unbound path (#2426 whole-branch
     review finding).
 
-    The Unbound ``Tradition`` row itself is seeded by
-    ``world.seeds.game_content.magic.seed_starter_gift_catalog`` (the "magic"
-    cluster), which runs BEFORE "character_creation" in cluster order
-    (``world.seeds.clusters``) precisely so both sides of this join exist by the
-    time this function runs. ``required_distinction=<Unbound drawback>`` (#2442,
+    The Unbound ``Tradition`` row itself is real lore-repo content, loaded via
+    ``core_management.content_fixtures.load_world_content()`` — which
+    ``world.seeds.database.seed_dev_database()`` runs BEFORE any cluster
+    seeder (formerly seeded here-adjacent by the now-retired "magic" cluster
+    helper ``seed_starter_gift_catalog``, #2474), precisely so both sides of
+    this join exist by the time this function runs.
+    ``required_distinction=<Unbound drawback>`` (#2442,
     was ``None`` pre-#2442) — selecting Unbound now requires the draft already
     hold the "Unbound" drawback distinction, exactly the same gate shape
     ``seed_metallic_order_tradition`` uses for its orphaned-tradition example
@@ -593,10 +600,10 @@ def seed_metallic_order_tradition():
     - A ``Tradition`` row (get_or_create by name; PLACEHOLDER description,
       content-overridable — real Metallic Order lore is a lore-repo authoring
       pass per the #2428 vision).
-    - ``TraditionGiftGrant`` rows granting it the same 5 starter Gifts Unbound
-      grants (mirrors ``seed_starter_gift_catalog``'s Unbound grants rather than
-      hardcoding gift names — reads Unbound's own grant rows so this stays in
-      sync with the starter catalog).
+    - ``TraditionGiftGrant`` rows granting it the same starter Gifts Unbound
+      grants — reads Unbound's own ``TraditionGiftGrant`` rows (real lore-repo
+      content, loaded via ``load_world_content()``) rather than hardcoding gift
+      names, so this stays in sync with the starter catalog automatically.
     - ``BeginningTradition`` rows for every Arx-realm ``Beginnings`` (``starting_
       area__realm__name="Arx"`` — the #2428 vision names Arx as the realm with
       "many orphans" and ancient traditions like this one), each carrying
@@ -606,10 +613,10 @@ def seed_metallic_order_tradition():
       and CG reflects the change automatically — no code change needed.
 
     Skips (logged) if the Unbound tradition or its starter gift grants aren't
-    seeded yet — mirrors ``seed_beginning_traditions``'s defensive skip; cluster
-    ordering (``magic`` before ``character_creation``) guarantees this can't
-    happen via the Big Button. Idempotent throughout via get_or_create; never
-    overwrites a staff-adjusted row.
+    seeded yet — mirrors ``seed_beginning_traditions``'s defensive skip;
+    content-repo load running before any cluster seeder (#2474 Decision 5)
+    guarantees this can't happen via the Big Button. Idempotent throughout via
+    get_or_create; never overwrites a staff-adjusted row.
     """
     from world.character_creation.models import BeginningTradition  # noqa: PLC0415
     from world.magic.models import Tradition  # noqa: PLC0415

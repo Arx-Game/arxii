@@ -20,10 +20,14 @@ class InstancedRoom(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="owned_instances",
     )
-    # TODO: Add GM owner FK when GM/storyteller system is designed.
-    # GM-created instances (story scenes, event rooms) will need a
-    # separate FK to the GM model. Query pattern: "all active instances
-    # owned by this GM" for their management dashboard.
+    gm_owner = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="owned_instances",
+        help_text="GM who spun this instance up (story scene rooms, #2450).",
+    )
     return_location = models.ForeignKey(
         "objects.ObjectDB",
         null=True,

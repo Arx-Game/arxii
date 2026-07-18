@@ -66,7 +66,7 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
       },
     ],
     current_round_actions: [],
-    clashes: clashes as unknown as EncounterDetail['clashes'],
+    clashes,
     engagement_locks: [],
     created_at: '2026-01-01T00:00:00Z',
     outcome: '',

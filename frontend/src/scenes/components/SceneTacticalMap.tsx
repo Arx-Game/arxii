@@ -10,14 +10,16 @@
  */
 
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction } from '@/combat/queries';
+import { isDispatchFailure } from '@/combat/types';
 import { TacticalMap } from '@/areas/components/TacticalMap';
 import type { OccupantSummary } from '@/areas/components/PositionMapNode';
 import { fetchScene, sceneKeys } from '../queries';
-import { fetchAvailableActions } from '../actionQueries';
+import { useAvailableActionsQuery } from '../actionQueries';
 import type { SceneDetail } from '../types';
 import type { PlayerAction } from '../actionTypes';
 
@@ -47,10 +49,8 @@ export function SceneTacticalMap({ sceneId }: Props) {
   // ---------------------------------------------------------------------------
   // Available actions — move_to_position/take_position + set_the_stage
   // ---------------------------------------------------------------------------
-  const { data: actionsData } = useQuery({
-    queryKey: ['available-actions', characterId],
-    queryFn: () => fetchAvailableActions(characterId!),
-    enabled: characterId !== null,
+  const { data: actionsData } = useAvailableActionsQuery(characterId, {
+    refetchInterval: 10_000,
   });
 
   const availableActions: PlayerAction[] = actionsData?.results ?? [];
@@ -70,6 +70,7 @@ export function SceneTacticalMap({ sceneId }: Props) {
   // Dispatch
   // ---------------------------------------------------------------------------
   const { mutateAsync: dispatchAction, isPending } = useDispatchPlayerAction(characterId ?? 0);
+  const queryClient = useQueryClient();
 
   // ---------------------------------------------------------------------------
   // Derived data — build memos before any conditional return (rules of hooks)
@@ -102,7 +103,17 @@ export function SceneTacticalMap({ sceneId }: Props) {
   if (!scene || positionNodes.length === 0) return null;
 
   const handleDispatchMove = (action: PlayerAction) => {
-    dispatchAction({ ref: action.ref, kwargs: {} }).catch(() => {});
+    dispatchAction({ ref: action.ref, kwargs: {} })
+      .then((result) => {
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'Move rejected.');
+          return;
+        }
+        queryClient.invalidateQueries({ queryKey: sceneKeys.detail(sceneId) }).catch(() => {});
+      })
+      .catch((err: unknown) => {
+        toast.error(err instanceof Error ? err.message : 'Move failed.');
+      });
   };
 
   // ---------------------------------------------------------------------------
@@ -128,7 +139,19 @@ export function SceneTacticalMap({ sceneId }: Props) {
           type="button"
           data-testid="set-the-stage-btn"
           onClick={() => {
-            dispatchAction({ ref: setTheStageAction.ref, kwargs: {} }).catch(() => {});
+            dispatchAction({ ref: setTheStageAction.ref, kwargs: {} })
+              .then((result) => {
+                if (isDispatchFailure(result)) {
+                  toast.error(result.message ?? 'Could not set the stage.');
+                  return;
+                }
+                queryClient
+                  .invalidateQueries({ queryKey: sceneKeys.detail(sceneId) })
+                  .catch(() => {});
+              })
+              .catch((err: unknown) => {
+                toast.error(err instanceof Error ? err.message : 'Failed to set the stage.');
+              });
           }}
           disabled={isPending}
           className="w-full rounded border border-blue-500/40 bg-blue-500/5 px-3 py-1.5 text-left text-xs font-medium text-blue-300 transition-colors hover:bg-blue-500/10 disabled:cursor-not-allowed disabled:opacity-50"

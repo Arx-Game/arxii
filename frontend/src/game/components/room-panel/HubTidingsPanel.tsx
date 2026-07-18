@@ -1,12 +1,15 @@
 import { Megaphone, ScrollText } from 'lucide-react';
 import type { HubTidings } from '@/hooks/types';
+import { WantedBoard } from '@/justice/components/WantedBoard';
 
 interface HubTidingsPanelProps {
   hub: HubTidings;
+  /** The viewer's active RosterEntry pk; null when unknown (wanted board stays read-only). */
+  viewerEntryId?: number | null;
 }
 
 /** The room's civic-hub tidings: what the notice board carries or the crier calls (#1450). */
-export function HubTidingsPanel({ hub }: HubTidingsPanelProps) {
+export function HubTidingsPanel({ hub, viewerEntryId = null }: HubTidingsPanelProps) {
   const isCrier = hub.kind === 'TOWN_CRIER';
   const Icon = isCrier ? Megaphone : ScrollText;
 
@@ -36,6 +39,7 @@ export function HubTidingsPanel({ hub }: HubTidingsPanelProps) {
           ))}
         </ul>
       )}
+      {hub.area_id != null && <WantedBoard areaId={hub.area_id} viewerEntryId={viewerEntryId} />}
     </div>
   );
 }

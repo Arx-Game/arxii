@@ -28,7 +28,6 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { closeDeepLink } from '@/store/deepLinkModalSlice';
 import { useCombatEncounter } from '@/combat/queries';
 import { ClashCard } from '@/combat/sections/ActiveState';
-import type { ClashState } from '@/combat/types';
 import { ConditionDetailModal } from './ConditionDetailModal';
 
 export interface DeepLinkModalHostProps {
@@ -89,9 +88,9 @@ function renderContent(
       return <ConditionDetailModal id={id} />;
 
     case 'clash': {
-      // EncounterDetail.clashes is typed opaquely in the generated schema —
-      // cast to the concrete ClashState[] (same as ActiveState does).
-      const clashes = (encounter?.clashes ?? []) as unknown as ClashState[];
+      // clashes is correctly typed in the generated schema (get_clashes is
+      // annotated with @extend_schema_field(ClashStateSerializer), #2423).
+      const clashes = encounter?.clashes ?? [];
       const clash = clashes.find((c) => c.id === id);
       if (!clash) return <UnavailableContent label={`Clash #${id}`} />;
       const opponentName = encounter?.opponents.find((o) => o.id === clash.npc_opponent)?.name;

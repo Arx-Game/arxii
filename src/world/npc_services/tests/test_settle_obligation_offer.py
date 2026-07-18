@@ -21,6 +21,7 @@ from world.npc_services.effects import OFFER_EFFECT_HANDLERS, run_settle_obligat
 from world.npc_services.factories import NPCRoleFactory, NPCServiceOfferFactory
 from world.npc_services.services import resolve_offer, start_interaction
 from world.scenes.factories import PersonaFactory
+from world.seeds.tests.content_stub import stub_content_root
 from world.societies.constants import ObligationState
 from world.societies.factories import OrganizationFactory, OrganizationObligationFactory
 
@@ -123,6 +124,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
     Hare, settle at the Registrar, and the training door that was refused while
     OWED now opens."""
 
+    @stub_content_root()
     def test_settle_at_registrar_unblocks_train_offer(self) -> None:  # noqa: PLR0915
         from evennia.accounts.models import AccountDB
 
@@ -143,6 +145,14 @@ class SettleObligationLoopEndToEndTests(TestCase):
         from world.tarot.models import TarotCard
         from world.traits.models import Trait, TraitType
 
+        # The starter Gift/Technique/PathGiftGrant/Tradition catalog is real
+        # lore-repo content, loaded via load_world_content() — the enriched
+        # stub content root (#2474 review fix,
+        # world.seeds.tests.content_stub.stub_content_root) carries it, five
+        # starter techniques per gift, so CG has a genuinely different
+        # technique to pick from the one the generalist trainer's TRAIN offer
+        # teaches (below) — the post-settle TRAIN attempt would otherwise
+        # refuse as "you already know this" rather than proving a new grant.
         seed_dev_database()
         academy = ensure_shroudwatch_academy()
 

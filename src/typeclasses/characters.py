@@ -381,6 +381,10 @@ class Character(ObjectParent, DefaultCharacter):
         if relief:
             self.msg(relief)
 
+        # #2378 — at max heat, merely arriving in a public room rolls guard
+        # pressure (event-driven; never offline, never in private rooms).
+        self._maybe_justice_room_arrival()
+
         # Reconcile presence-tied ALIGNED resonance buff for arrival location.
         # Guard mirrors at_post_puppet: some Character-typeclass objects have no sheet.
         with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):
@@ -468,6 +472,34 @@ class Character(ObjectParent, DefaultCharacter):
                 lambda: cancel_servant_fetch(self),
                 actor=self,
             )
+
+    def _maybe_justice_room_arrival(self):
+        """Max-tier guard pressure on public-room arrival (#2378)."""
+        from world.justice.constants import GuardTrigger
+        from world.justice.pipeline import (
+            maybe_guard_encounter,
+            public_room_profile,
+            resolve_guard_encounter,
+        )
+        from world.justice.services import area_for_room
+        from world.scenes.services import active_persona_for_sheet
+
+        location = self.location
+        if public_room_profile(location) is None:
+            return
+        try:
+            sheet = self.sheet_data
+        except (RosterEntry.DoesNotExist, ObjectDoesNotExist, AttributeError):
+            return
+        persona = active_persona_for_sheet(sheet) if sheet else None
+        if persona is None:
+            return
+        encounter = maybe_guard_encounter(
+            persona, area_for_room(location), GuardTrigger.ROOM_ARRIVAL
+        )
+        if encounter is not None:
+            resolved = resolve_guard_encounter(encounter)
+            self.msg(_guard_encounter_line(resolved))
 
     def at_attacked(self, attacker, weapon, damage_result, action) -> None:
         """Called by combat after damage calc, before damage apply.
@@ -578,3 +610,14 @@ class Character(ObjectParent, DefaultCharacter):
                 maybe_pause_encounter_for_disconnect(sheet)
                 maybe_pause_battle_for_disconnect(sheet)
                 maybe_pause_mission_for_disconnect(sheet)
+
+
+def _guard_encounter_line(encounter) -> str:
+    """PLACEHOLDER prose for a resolved guard encounter (#2378)."""
+    from world.justice.constants import EncounterOutcome
+
+    if encounter.outcome == EncounterOutcome.CAPTURED:
+        return "|rGuards close in — you are taken into custody.|n"
+    if encounter.outcome == EncounterOutcome.ESCAPED_SEEN:
+        return "|yGuards give chase! You slip away, but you were seen.|n"
+    return "|gYou spot the watch first and melt into the crowd.|n"

@@ -1,9 +1,11 @@
 from django.test import TestCase
 
 from world.seeds.database import seed_dev_database
+from world.seeds.tests.content_stub import stub_content_root
 
 
 class TestSeedIdempotency(TestCase):
+    @stub_content_root()
     def test_second_run_creates_nothing(self) -> None:
         first = seed_dev_database()
         self.assertGreater(first.created_total, 0)
@@ -35,6 +37,7 @@ class TestSeedIdempotency(TestCase):
                 f"Model {name} gained {after - before} rows on second seed run",
             )
 
+    @stub_content_root()
     def test_edit_survives_reseed(self) -> None:
         from world.magic.models import Resonance
 
@@ -47,6 +50,7 @@ class TestSeedIdempotency(TestCase):
         res.refresh_from_db()
         self.assertEqual(res.description, "STAFF-EDITED — must survive re-seed")
 
+    @stub_content_root()
     def test_edited_cg_row_survives_reseed(self) -> None:
         """The #651 non-overwrite gate for the character_creation cluster."""
         from world.species.models import Species

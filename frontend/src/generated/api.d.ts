@@ -413,7 +413,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Browse the area hierarchy for room selection. */
+    /**
+     * @description Browse the area hierarchy for room selection.
+     *
+     *     STORY-origin areas are excluded — those are a GM's own scratch space
+     *     (world.gm.story_views.StoryBuilderViewSet), not part of the canonical
+     *     world an ordinary player browses (#2450).
+     */
     get: operations['areas_list'];
     put?: never;
     post?: never;
@@ -430,7 +436,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Browse the area hierarchy for room selection. */
+    /**
+     * @description Browse the area hierarchy for room selection.
+     *
+     *     STORY-origin areas are excluded — those are a GM's own scratch space
+     *     (world.gm.story_views.StoryBuilderViewSet), not part of the canonical
+     *     world an ordinary player browses (#2450).
+     */
     get: operations['areas_retrieve'];
     put?: never;
     post?: never;
@@ -470,7 +482,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Browse public rooms, filterable by area (includes descendant areas). */
+    /**
+     * @description Browse public rooms, filterable by area (includes descendant areas).
+     *
+     *     STORY-origin rooms are excluded even when ``is_public=True`` — defense in
+     *     depth alongside the STORY area exclusion above, since a room's own
+     *     ``is_public`` flag says nothing about its area's origin (#2450).
+     */
     get: operations['areas_rooms_list'];
     put?: never;
     post?: never;
@@ -487,7 +505,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Browse public rooms, filterable by area (includes descendant areas). */
+    /**
+     * @description Browse public rooms, filterable by area (includes descendant areas).
+     *
+     *     STORY-origin rooms are excluded even when ``is_public=True`` — defense in
+     *     depth alongside the STORY area exclusion above, since a room's own
+     *     ``is_public`` flag says nothing about its area's origin (#2450).
+     */
     get: operations['areas_rooms_retrieve'];
     put?: never;
     post?: never;
@@ -2506,6 +2530,50 @@ export interface paths {
      *     signature) techniques for this path is excluded.
      */
     get: operations['character_creation_gifts_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/glimpse-tags/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List active glimpse tags for the CG guided glimpse flow (#2427).
+     *
+     *     Global authored catalog — not draft-dependent, so it also serves the
+     *     post-CG "finish your glimpse later" surface on the character sheet.
+     */
+    get: operations['character_creation_glimpse_tags_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/glimpse-tags/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List active glimpse tags for the CG guided glimpse flow (#2427).
+     *
+     *     Global authored catalog — not draft-dependent, so it also serves the
+     *     post-CG "finish your glimpse later" surface on the character sheet.
+     */
+    get: operations['character_creation_glimpse_tags_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -7309,6 +7377,58 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/my-story-grants/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+     *
+     *     Read-only listing backing the player-facing Story Rooms page (frontend
+     *     ``frontend/src/story-rooms/``). Joining/leaving still go through the
+     *     ``join_story_room``/``leave_story_room`` REGISTRY actions
+     *     (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+     *     ``actions/definitions/story_builder.py``), dispatched via the generic
+     *     action-dispatch endpoint — this ViewSet never mutates.
+     */
+    get: operations['gm_my_story_grants_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/my-story-grants/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+     *
+     *     Read-only listing backing the player-facing Story Rooms page (frontend
+     *     ``frontend/src/story-rooms/``). Joining/leaving still go through the
+     *     ``join_story_room``/``leave_story_room`` REGISTRY actions
+     *     (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+     *     ``actions/definitions/story_builder.py``), dispatched via the generic
+     *     action-dispatch endpoint — this ViewSet never mutates.
+     */
+    get: operations['gm_my_story_grants_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/profiles/': {
     parameters: {
       query?: never;
@@ -7425,6 +7545,81 @@ export interface paths {
      *     URL path: /api/gm/queue/<id>/<action>/ where action is 'approve' or 'deny'.
      */
     post: operations['gm_queue_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/story-areas/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A GM's own story areas (staff: all story areas). Reads only. */
+    get: operations['gm_story_areas_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/story-areas/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A GM's own story areas (staff: all story areas). Reads only. */
+    get: operations['gm_story_areas_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/story-areas/{id}/manager/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A GM's own story areas (staff: all story areas). Reads only. */
+    get: operations['gm_story_areas_manager_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/story-areas/instances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A bare array, not paginated — ``pagination_class=None`` makes the schema say so.
+     *
+     *     The view never calls ``self.paginate_queryset()`` (a GM has at most a
+     *     handful of active temp rooms), so without this the ViewSet-level
+     *     ``pagination_class`` made drf-spectacular wrongly advertise
+     *     ``PaginatedStoryInstanceList`` for a response that was always a flat list.
+     */
+    get: operations['gm_story_areas_instances_list'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -8765,6 +8960,139 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/reclamation-claims/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Theft reclamation (#2368): the claimant's own claims + trace + routes.
+     *
+     *     Self-only: scoped to the requesting account's characters' sheets. The
+     *     holder is never notified a claim exists.
+     */
+    get: operations['items_reclamation_claims_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/reclamation-claims/{id}/advance/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Theft reclamation (#2368): the claimant's own claims + trace + routes.
+     *
+     *     Self-only: scoped to the requesting account's characters' sheets. The
+     *     holder is never notified a claim exists.
+     */
+    post: operations['items_reclamation_claims_advance_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/reclamation-claims/{id}/report/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Theft reclamation (#2368): the claimant's own claims + trace + routes.
+     *
+     *     Self-only: scoped to the requesting account's characters' sheets. The
+     *     holder is never notified a claim exists.
+     */
+    post: operations['items_reclamation_claims_report_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/reclamation-claims/{id}/take-back/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Theft reclamation (#2368): the claimant's own claims + trace + routes.
+     *
+     *     Self-only: scoped to the requesting account's characters' sheets. The
+     *     holder is never notified a claim exists.
+     */
+    post: operations['items_reclamation_claims_take_back_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/reclamation-claims/claimable/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Items stolen from the viewer's characters with no open claim yet (#2368).
+     *
+     *     The filing seam: the victim discovers the theft here and mints the claim.
+     *     Self-scoped and tiny (a player's own unresolved thefts), so the per-item
+     *     provenance check stays a simple loop.
+     */
+    get: operations['items_reclamation_claims_claimable_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/reclamation-claims/file/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Theft reclamation (#2368): the claimant's own claims + trace + routes.
+     *
+     *     Self-only: scoped to the requesting account's characters' sheets. The
+     *     holder is never notified a claim exists.
+     */
+    post: operations['items_reclamation_claims_file_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/service-offers/': {
     parameters: {
       query?: never;
@@ -8990,6 +9318,57 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/justice/bribe/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/justice/bribe/ — bribe the hunters in an area (#1826). */
+    post: operations['justice_bribe_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/cases/evidence/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/justice/cases/evidence/ — help the accused; never hurt (#2378). */
+    post: operations['justice_cases_evidence_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/cases/trial/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/justice/cases/trial/ — the captive calls their moment (#2378). */
+    post: operations['justice_cases_trial_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/justice/heat/': {
     parameters: {
       query?: never;
@@ -9016,6 +9395,83 @@ export interface paths {
     };
     /** @description The viewer's own pursuit picture — where they're wanted, and for what. */
     get: operations['justice_heat_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/lie-low/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/justice/lie-low/ — declare or end going to ground (#1826). */
+    post: operations['justice_lie_low_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/my-case/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/justice/my-case/?viewer= — the captive's own case picture (#2378). */
+    get: operations['justice_my_case_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/pardon/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/justice/pardon/ — a lord's grant (#1826). */
+    post: operations['justice_pardon_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/wanted/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/justice/wanted/?area=<id> — the public wanted board (#1826).
+     *
+     *     Deliberately public-to-authenticated: crossing the wanted floor ends
+     *     self-only visibility for those tiers. Tier + presented name + crime kinds;
+     *     never raw values. An optional ``viewer`` adds two viewer-facing extras:
+     *     ``viewer_can_pardon`` (the lord's-grant control gate, #1826) and the
+     *     ``held`` list of awaiting-trial captives here (being held for trial is a
+     *     public record — the discovery seam for the help-the-accused loop, #2378).
+     */
+    get: operations['justice_wanted_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -9377,6 +9833,74 @@ export interface paths {
      *     to disambiguate when the user has alts.
      */
     patch: operations['magic_character_auras_partial_update'];
+    trace?: never;
+  };
+  '/api/magic/character-auras/{id}/link-glimpse-distinction/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Mark one of the character's distinctions as born in the Glimpse (#2427). */
+    post: operations['magic_character_auras_link_glimpse_distinction_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/character-auras/{id}/set-glimpse-prose/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Write the aura's glimpse story prose (#2427). */
+    post: operations['magic_character_auras_set_glimpse_prose_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/character-auras/{id}/set-glimpse-tags/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Replace the aura's glimpse tags for one axis (#2427). */
+    post: operations['magic_character_auras_set_glimpse_tags_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/character-auras/{id}/unlink-glimpse-distinction/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Clear a distinction's Glimpse provenance (#2427). */
+    post: operations['magic_character_auras_unlink_glimpse_distinction_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/magic/character-gifts/': {
@@ -15573,6 +16097,113 @@ export interface paths {
     patch: operations['roster_galleries_partial_update'];
     trace?: never;
   };
+  '/api/roster/invites/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Viewset for game invites.
+     *
+     *     - Create: auth + trust-gated (service validates trust)
+     *     - List: auth, returns only the inviter's own invites
+     *     - Resolve: AllowAny, returns display-safe context for registration page
+     *     - Claim: auth, links invite to the authenticated account
+     *     - Revoke: auth, inviter or staff only
+     */
+    get: operations['roster_invites_list'];
+    put?: never;
+    /** @description Create a new game invite. */
+    post: operations['roster_invites_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/invites/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Viewset for game invites.
+     *
+     *     - Create: auth + trust-gated (service validates trust)
+     *     - List: auth, returns only the inviter's own invites
+     *     - Resolve: AllowAny, returns display-safe context for registration page
+     *     - Claim: auth, links invite to the authenticated account
+     *     - Revoke: auth, inviter or staff only
+     */
+    get: operations['roster_invites_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/invites/{id}/revoke/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Revoke an invite (inviter or staff only). */
+    post: operations['roster_invites_revoke_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/invites/claim/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Claim an invite token (first-login flow). */
+    post: operations['roster_invites_claim_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/invites/resolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Resolve a token to display-safe invite context (for registration page).
+     *
+     *     AllowAny — this is called before the user has an account. Returns only
+     *     the inviter's display name and message, never account info.
+     */
+    get: operations['roster_invites_resolve_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/mail/': {
     parameters: {
       query?: never;
@@ -19291,6 +19922,14 @@ export interface components {
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
     };
     /**
+     * @description * `TONE` - Tone
+     *     * `CONSEQUENCE` - Consequence
+     *     * `WITNESS` - Witness & Secrecy
+     *     * `SENSORY` - Sensory & Discovery
+     * @enum {string}
+     */
+    AxisEnum: 'TONE' | 'CONSEQUENCE' | 'WITNESS' | 'SENSORY';
+    /**
      * @description * `standing` - Standing (unit or banner — can rise again)
      *     * `campaign` - Campaign (one-time event — dissolves when done)
      * @enum {string}
@@ -20033,6 +20672,42 @@ export interface components {
      * @enum {string}
      */
     CGGiftOptionKindEnum: 'MAJOR' | 'MINOR';
+    /**
+     * @description Glimpse tag row for the CG guided flow (#2427).
+     *
+     *     Backs ``GET /api/character-creation/glimpse-tags/``. Curated distinction
+     *     suggestions are embedded per tag (prefetched); the client dedupes across
+     *     the chosen tag set.
+     */
+    CGGlimpseTag: {
+      readonly id: number;
+      /**
+       * @description Which guided step this tag belongs to.
+       *
+       *     * `TONE` - Tone
+       *     * `CONSEQUENCE` - Consequence
+       *     * `WITNESS` - Witness & Secrecy
+       *     * `SENSORY` - Sensory & Discovery
+       */
+      readonly axis: components['schemas']['AxisEnum'];
+      /** @description Player-facing tag name. */
+      readonly name: string;
+      /** @description Natural key. */
+      readonly slug: string;
+      /** @description What choosing this tag says about the glimpse. */
+      readonly description: string;
+      /** @description Short illustrative sentence shown in the guided step. */
+      readonly example: string;
+      /** @description Display order within the axis. */
+      readonly sort_order: number;
+      readonly suggested_distinctions: components['schemas']['CGGlimpseTagSuggestedDistinction'][];
+    };
+    /** @description Distinction stub embedded in a glimpse tag's suggestion list (#2427). */
+    CGGlimpseTagSuggestedDistinction: {
+      readonly id: number;
+      /** @description Display name for this distinction. */
+      readonly name: string;
+    };
     /** @description Serializer for CG point budget configuration. */
     CGPointBudget: {
       readonly id: number;
@@ -20058,7 +20733,7 @@ export interface components {
      */
     CGTechniqueOption: {
       readonly id: number;
-      /** @description Name of the technique (not unique - different characters can have same name). */
+      /** @description Name of the technique (unique within its gift). */
       readonly name: string;
       /** @description Description of what this technique does. */
       readonly description: string;
@@ -20469,6 +21144,14 @@ export interface components {
       readonly dominant_affinity: string;
       /** @description Return the display label for the dominant affinity. */
       readonly dominant_affinity_display: string;
+      /**
+       * @description Deferral/progress state of the Glimpse (#2427). Cache of prose+tag truth — maintained by world.magic.services.glimpse, never written directly.
+       *
+       *     * `NOT_STARTED` - Not started
+       *     * `TAGS_ONLY` - Tags chosen, story unwritten
+       *     * `COMPLETE` - Complete
+       */
+      readonly glimpse_state: components['schemas']['GlimpseStateEnum'];
       /** Format: date-time */
       readonly updated_at: string;
     };
@@ -20906,6 +21589,53 @@ export interface components {
       readonly seat_domain_name: string;
       readonly templates: components['schemas']['HouseTemplateOption'][];
     };
+    /**
+     * @description Schema-only shape of get_contributors rows on ClashStateSerializer.
+     *
+     *     Never instantiated for serialization — exists so drf-spectacular emits a
+     *     concrete component instead of {[key: string]: unknown} (#2423). Mirrors
+     *     the frontend ``ClashContributor`` interface (combat/types.ts).
+     */
+    ClashContributor: {
+      character_id: number | null;
+      character_name: string;
+      action_slot: string;
+      progress_delta: number;
+      anima: number;
+    };
+    /**
+     * @description Compact read serializer for an active Clash, surfaced on EncounterDetail.
+     *
+     *     Exposes the fields needed by the frontend ActiveState rail section:
+     *     - id, flavor, status, progress, pc_win_threshold, npc_win_threshold
+     *     - npc_opponent_id (for labelling the clash target)
+     *     - contributors: per-PC contribution rollup (latest round)
+     *     - side_favored: "PC" / "NPC" / "EVEN" computed from progress vs thresholds.
+     */
+    ClashState: {
+      readonly id: number;
+      flavor: components['schemas']['FlavorEnum'];
+      status: components['schemas']['ClashStateStatusEnum'];
+      progress: number;
+      pc_win_threshold: number;
+      /** @description Set iff flavor=CLASH; null otherwise. */
+      npc_win_threshold: number | null;
+      npc_opponent: number;
+      readonly contributors: components['schemas']['ClashContributor'][];
+      /**
+       * @description PC / NPC / EVEN — computed from current progress vs thresholds.
+       *
+       *     Heuristic: a side is "favored" when progress is past 75% of that side's
+       *     win threshold. Else "EVEN."
+       */
+      readonly side_favored: string;
+    };
+    /**
+     * @description * `ACTIVE` - Active
+     *     * `RESOLVED` - Resolved
+     * @enum {string}
+     */
+    ClashStateStatusEnum: 'ACTIVE' | 'RESOLVED';
     /** @description Request serializer for staff clock adjustment. */
     ClockAdjustRequest: {
       /** Format: date-time */
@@ -21277,26 +22007,7 @@ export interface components {
       readonly selected_consequence: number | null;
       readonly modifier_total: number;
       readonly summary: string;
-      /**
-       * @description Recompute the roulette from pool + selected_consequence on read.
-       *
-       *     When pool is not None, reads pool entries and parent entries from the
-       *     prefetch cache (populated by the ViewSet's _POOL_ENTRIES_PREFETCH /
-       *     _PARENT_ENTRIES_PREFETCH Prefetch objects) so no additional queries are
-       *     issued per row.  Mirrors the pool-walk logic of
-       *     resolve_pool_consequences() but operates on already-fetched data.
-       *
-       *     When pool is None (challenge-based resolution), reconstructs the
-       *     consequence list from the authored ApproachConsequence and
-       *     ChallengeTemplateConsequence links via the challenge_record.  Uses
-       *     prefetch caches populated by the ViewSet's challenge-link Prefetch
-       *     objects.
-       *
-       *     Returns a list of plain dicts matching OutcomeDisplay's fields.
-       */
-      readonly outcome_display: {
-        [key: string]: unknown;
-      }[];
+      readonly outcome_display: components['schemas']['OutcomeDisplayRow'][];
       readonly modifiers: components['schemas']['ConsequenceOutcomeModifier'][];
       readonly combat_interaction_id: number;
       readonly challenge_record_id: number;
@@ -22444,21 +23155,7 @@ export interface components {
       readonly is_participant: boolean;
       /** @description Check whether the requesting user is GM of the linked scene. */
       readonly is_gm: boolean;
-      /**
-       * @description Return active Clash records for this encounter.
-       *
-       *     Phase 8, Task 8.4 — exposes clash state to the frontend ActiveState
-       *     rail section. Returns only ACTIVE clashes so resolved ones don't litter
-       *     the UI after the clash is done.
-       *
-       *     Uses the ``clashes_cached`` prefetch-to-attr set on the viewset's
-       *     ``_base_queryset`` so no extra query fires during detail serialization.
-       *     Falls back to a direct filter for callers that don't use the viewset
-       *     (e.g. unit tests that call the serializer directly).
-       */
-      readonly clashes: {
-        [key: string]: unknown;
-      }[];
+      readonly clashes: components['schemas']['ClashState'][];
       /**
        * @description Return active EngagementLock records for this encounter (#2020).
        *
@@ -23245,6 +23942,14 @@ export interface components {
       amenity: number;
       affinities: components['schemas']['FixtureAffinity'][];
     };
+    /**
+     * @description * `CLASH` - Clash
+     *     * `LOCK` - Lock
+     *     * `WARD` - Ward
+     *     * `BREAK` - Break
+     * @enum {string}
+     */
+    FlavorEnum: 'CLASH' | 'LOCK' | 'WARD' | 'BREAK';
     /** @description Cheap RoomPanel resolver: which building, and what the viewer may do. */
     ForRoomResult: {
       building_id: number | null;
@@ -23529,6 +24234,48 @@ export interface components {
      * @enum {string}
      */
     GMTableStatusEnum: 'active' | 'archived';
+    /**
+     * @description Serializer for listing/viewing game invites.
+     *
+     *     Shows the inviter's display name (not account username) to preserve
+     *     player anonymity. The token is included so the inviter can share the link.
+     */
+    GameInvite: {
+      readonly id: number;
+      readonly inviter_display: string;
+      /** @description URL-safe random token (secrets.token_urlsafe(48)) */
+      readonly token: string;
+      /** @description The inviter's contextual note to the friend (why they're invited). */
+      message: string;
+      readonly status: components['schemas']['GameInviteStatusEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly claimed_at: string | null;
+      /**
+       * Format: date-time
+       * @description Optional expiry; null = no expiry.
+       */
+      readonly expires_at: string | null;
+    };
+    /**
+     * @description Serializer for listing/viewing game invites.
+     *
+     *     Shows the inviter's display name (not account username) to preserve
+     *     player anonymity. The token is included so the inviter can share the link.
+     */
+    GameInviteRequest: {
+      /** @description The inviter's contextual note to the friend (why they're invited). */
+      message: string;
+    };
+    /**
+     * @description * `pending` - Pending
+     *     * `claimed` - Claimed
+     *     * `expired` - Expired
+     *     * `revoked` - Revoked
+     * @enum {string}
+     */
+    GameInviteStatusEnum: 'pending' | 'claimed' | 'expired' | 'revoked';
     /** @description Read-only serializer for GearArchetypeCompatibility join rows. */
     GearArchetypeCompatibility: {
       readonly id: number;
@@ -23714,6 +24461,26 @@ export interface components {
      * @enum {string}
      */
     GiverKindEnum: 'environmental_detail' | 'room_trigger' | 'board';
+    /** @description Input for CharacterAuraViewSet.link/unlink_glimpse_distinction (#2427). */
+    GlimpseDistinctionLinkRequest: {
+      character_distinction_id: number;
+    };
+    /** @description Input for CharacterAuraViewSet.set_glimpse_prose (#2427). */
+    GlimpseSetProseRequest: {
+      text: string;
+    };
+    /** @description Input for CharacterAuraViewSet.set_glimpse_tags (#2427). */
+    GlimpseSetTagsRequest: {
+      axis: components['schemas']['AxisEnum'];
+      tag_ids: number[];
+    };
+    /**
+     * @description * `NOT_STARTED` - Not started
+     *     * `TAGS_ONLY` - Tags chosen, story unwritten
+     *     * `COMPLETE` - Complete
+     * @enum {string}
+     */
+    GlimpseStateEnum: 'NOT_STARTED' | 'TAGS_ONLY' | 'COMPLETE';
     /** @description Serializer for GlobalStoryProgress — singleton metaplot progress pointer. */
     GlobalStoryProgress: {
       readonly id: number;
@@ -25835,6 +26602,44 @@ export interface components {
        */
       readonly active_persona_id: number | null;
     };
+    /**
+     * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+     *
+     *     Backs ``GET /api/gm/my-story-grants/``, the read side of the player-facing
+     *     Story Rooms page. Read-only: joining/leaving still go through the
+     *     ``join_story_room``/``leave_story_room`` REGISTRY actions
+     *     (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+     *     ``actions/definitions/story_builder.py``), dispatched via the generic
+     *     action-dispatch endpoint — never a DRF write here.
+     *
+     *     ``character_id`` is included even though it isn't shown in the UI: those
+     *     two actions resolve their actor from ``actor.sheet_data`` (no target-character
+     *     kwarg) and ``join_story_room``/``leave_story_room`` 404 with "no invitation"
+     *     unless the dispatching character is exactly the one the grant was issued to
+     *     — so the frontend must dispatch each row's join/leave against *this*
+     *     character, not whichever character happens to be active. Since
+     *     ``CharacterSheet.character`` is a primary_key OneToOneField, this FK's attname
+     *     (``StoryRoomGrant.character_id``) already equals the character's ObjectDB pk,
+     *     the id the generic dispatch endpoint (``/api/actions/characters/<id>/dispatch/``)
+     *     expects.
+     */
+    MyStoryGrant: {
+      readonly id: number;
+      readonly room_id: number;
+      readonly room_name: string;
+      readonly character_id: number;
+      readonly character_name: string;
+      /**
+       * @description True when the granted character is currently located inside the room.
+       *
+       *     Compares ObjectDB pks directly — ``room_id`` is the same value as the
+       *     room's ObjectDB pk (``RoomProfile.objectdb`` is its primary key), so no
+       *     extra query is needed beyond the character's own location.
+       */
+      readonly is_inside: boolean;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
     NPCAsset: {
       readonly id: number;
       readonly asset_persona_name: string;
@@ -26545,6 +27350,18 @@ export interface components {
       strain_committed?: number | null;
       power?: number | null;
       progress_delta?: number | null;
+    };
+    /**
+     * @description Schema-only shape of get_outcome_display rows (world.checks.types.OutcomeDisplay).
+     *
+     *     Never instantiated for serialization — exists so drf-spectacular emits a
+     *     concrete component instead of {[key: string]: unknown} (#2423).
+     */
+    OutcomeDisplayRow: {
+      label: string;
+      tier_name: string;
+      weight: number;
+      is_selected: boolean;
     };
     /** @description Read serializer for Outfit — nests slot rows. */
     OutfitRead: {
@@ -27463,6 +28280,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['GMTableMembership'][];
     };
+    PaginatedGameInviteList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['GameInvite'][];
+    };
     PaginatedGemitList: {
       /** @example 123 */
       count: number;
@@ -27814,6 +28646,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Mute'][];
+    };
+    PaginatedMyStoryGrantList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['MyStoryGrant'][];
     };
     PaginatedNPCAssetList: {
       /** @example 123 */
@@ -30505,7 +31352,7 @@ export interface components {
     };
     /** @description Serializer for Technique records with intensity and control stats. */
     PatchedTechniqueRequest: {
-      /** @description Name of the technique (not unique - different characters can have same name). */
+      /** @description Name of the technique (unique within its gift). */
       name?: string;
       /** @description The gift this technique belongs to. */
       gift?: number;
@@ -31087,6 +31934,7 @@ export interface components {
      */
     PersonaHeat: {
       readonly id: number;
+      area: number;
       readonly area_name: string;
       society: number;
       readonly society_name: string;
@@ -34259,6 +35107,12 @@ export interface components {
      * @enum {string}
      */
     StatusF08Enum: 'active' | 'inactive' | 'completed' | 'cancelled';
+    /** @description The story-builder area-manager payload: area header + rooms (with grants) + exits. */
+    StoryAreaManager: {
+      area: components['schemas']['WorldBuilderArea'];
+      rooms: components['schemas']['StoryRoom'][];
+      exits: components['schemas']['WorldBuilderExit'][];
+    };
     /** @description Serializer for creating stories */
     StoryCreate: {
       title: string;
@@ -34434,6 +35288,30 @@ export interface components {
       /** Format: date-time */
       readonly updated_at: string;
     };
+    /** @description A GM-owned temp scene room row for the story-builder dashboard (#2450). */
+    StoryInstance: {
+      readonly id: number;
+      readonly room_id: number;
+      readonly name: string;
+      status?: components['schemas']['StoryInstanceStatusEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * @description Character names granted access, from the view's batched lookup.
+       *
+       *     Populated via serializer ``context["grants_by_room"]`` (keyed by
+       *     ``RoomProfile``/``ObjectDB`` pk, which are the same value —
+       *     ``RoomProfile.objectdb`` is its primary key) so the whole list of
+       *     instances costs one extra query, not one per row.
+       */
+      readonly grants: string[];
+    };
+    /**
+     * @description * `active` - Active
+     *     * `completed` - Completed
+     * @enum {string}
+     */
+    StoryInstanceStatusEnum: 'active' | 'completed';
     /** @description Lightweight serializer for story list views */
     StoryList: {
       readonly id: number;
@@ -34566,6 +35444,31 @@ export interface components {
       is_active?: boolean;
       /** @description GM notes on why this subject is critical. GM-only; never serialized to outsiders. */
       notes?: string;
+    };
+    /**
+     * @description One RoomProfile in the story-builder manager payload (#2450).
+     *
+     *     Extends the staff-only ``WorldBuilderRoomSerializer`` with ``grants`` — the
+     *     names of characters currently granted access to join this room. Kept as a
+     *     subclass (not a change to the shared serializer) so the staff world-builder
+     *     manager payload shape is untouched.
+     */
+    StoryRoom: {
+      id: number;
+      name: string;
+      description: string;
+      is_public: boolean;
+      is_social_hub: boolean;
+      is_outdoor: boolean;
+      enclosure: string;
+      size_name: string | null;
+      grid_x: number | null;
+      grid_y: number | null;
+      floor: number;
+      fixture_key: string | null;
+      origin: string;
+      occupant_count: number;
+      grants: string[];
     };
     /** @description Read-only serializer for StrainAvailability — per-character strain cap snapshot. */
     StrainAvailability: {
@@ -34830,7 +35733,7 @@ export interface components {
     /** @description Serializer for Technique records with intensity and control stats. */
     Technique: {
       readonly id: number;
-      /** @description Name of the technique (not unique - different characters can have same name). */
+      /** @description Name of the technique (unique within its gift). */
       name: string;
       /** @description The gift this technique belongs to. */
       gift: number;
@@ -34897,7 +35800,7 @@ export interface components {
     TechniqueReachEnum: 'same' | 'adjacent' | 'any' | 'reach_n';
     /** @description Serializer for Technique records with intensity and control stats. */
     TechniqueRequest: {
-      /** @description Name of the technique (not unique - different characters can have same name). */
+      /** @description Name of the technique (unique within its gift). */
       name: string;
       /** @description The gift this technique belongs to. */
       gift: number;
@@ -39606,6 +40509,57 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CGGiftOption'];
+        };
+      };
+    };
+  };
+  character_creation_glimpse_tags_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description Which guided step this tag belongs to.
+         *
+         *     * `TONE` - Tone
+         *     * `CONSEQUENCE` - Consequence
+         *     * `WITNESS` - Witness & Secrecy
+         *     * `SENSORY` - Sensory & Discovery
+         */
+        axis?: 'CONSEQUENCE' | 'SENSORY' | 'TONE' | 'WITNESS';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGGlimpseTag'][];
+        };
+      };
+    };
+  };
+  character_creation_glimpse_tags_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Glimpse Tag. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGGlimpseTag'];
         };
       };
     };
@@ -46235,6 +47189,51 @@ export interface operations {
       };
     };
   };
+  gm_my_story_grants_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMyStoryGrantList'];
+        };
+      };
+    };
+  };
+  gm_my_story_grants_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MyStoryGrant'];
+        };
+      };
+    };
+  };
   gm_profiles_list: {
     parameters: {
       query?: {
@@ -46373,6 +47372,91 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  gm_story_areas_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedWorldBuilderAreaList'];
+        };
+      };
+    };
+  };
+  gm_story_areas_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorldBuilderArea'];
+        };
+      };
+    };
+  };
+  gm_story_areas_manager_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryAreaManager'];
+        };
+      };
+    };
+  };
+  gm_story_areas_instances_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryInstance'][];
+        };
       };
     };
   };
@@ -48170,6 +49254,120 @@ export interface operations {
       };
     };
   };
+  items_reclamation_claims_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_reclamation_claims_advance_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_reclamation_claims_report_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_reclamation_claims_take_back_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_reclamation_claims_claimable_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_reclamation_claims_file_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   items_service_offers_list: {
     parameters: {
       query?: {
@@ -48460,6 +49658,60 @@ export interface operations {
       };
     };
   };
+  justice_bribe_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  justice_cases_evidence_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  justice_cases_trial_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   justice_heat_list: {
     parameters: {
       query?: {
@@ -48502,6 +49754,78 @@ export interface operations {
         content: {
           'application/json': components['schemas']['PersonaHeat'];
         };
+      };
+    };
+  };
+  justice_lie_low_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  justice_my_case_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  justice_pardon_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  justice_wanted_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -48965,6 +50289,106 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedCharacterAuraRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterAura'];
+        };
+      };
+    };
+  };
+  magic_character_auras_link_glimpse_distinction_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GlimpseDistinctionLinkRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterAura'];
+        };
+      };
+    };
+  };
+  magic_character_auras_set_glimpse_prose_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GlimpseSetProseRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterAura'];
+        };
+      };
+    };
+  };
+  magic_character_auras_set_glimpse_tags_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GlimpseSetTagsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterAura'];
+        };
+      };
+    };
+  };
+  magic_character_auras_unlink_glimpse_distinction_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GlimpseDistinctionLinkRequest'];
       };
     };
     responses: {
@@ -58178,6 +59602,143 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['TenureGallery'];
+        };
+      };
+    };
+  };
+  roster_invites_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGameInviteList'];
+        };
+      };
+    };
+  };
+  roster_invites_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GameInviteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameInvite'];
+        };
+      };
+    };
+  };
+  roster_invites_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Game Invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameInvite'];
+        };
+      };
+    };
+  };
+  roster_invites_revoke_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Game Invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GameInviteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameInvite'];
+        };
+      };
+    };
+  };
+  roster_invites_claim_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GameInviteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameInvite'];
+        };
+      };
+    };
+  };
+  roster_invites_resolve_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameInvite'];
         };
       };
     };

@@ -114,9 +114,9 @@ function SurgeBeats({ encounter }: { encounter: EncounterDetail }) {
   }
   return (
     <div className="space-y-1" data-testid="surge-beats">
-      {beats.map((beat, index) => (
+      {beats.map((beat) => (
         <p
-          key={index}
+          key={beat.id}
           className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs font-semibold italic text-rose-300"
           data-testid="surge-beat-line"
         >

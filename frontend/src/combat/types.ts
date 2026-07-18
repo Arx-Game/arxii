@@ -43,6 +43,8 @@ export type RoundAction = Record<string, unknown>;
 export type SurgeBeat = Record<string, unknown>;
 
 export interface SurgeBeatTyped extends SurgeBeat {
+  /** DramaticSurgeRecord pk — the stable list key (#2423). */
+  id: number;
   narration: string;
   trigger_kind?: string;
   amount?: number;
@@ -66,34 +68,17 @@ export interface RoundActionTyped extends RoundAction {
 }
 
 // ---------------------------------------------------------------------------
-// Local type for ClashState (from ClashStateSerializer, Phase 8)
+// ClashState (from ClashStateSerializer, Phase 8)
 //
-// EncounterDetail.clashes is typed as {[key: string]: unknown}[] in the
-// generated schema because ClashStateSerializer is a SerializerMethodField
-// result. We declare the concrete shape here.
+// clashes is now correctly typed in the generated schema (the backend
+// annotates get_clashes with @extend_schema_field, and get_contributors
+// with its own ClashContributorSerializer), so these are direct re-exports
+// of the generated components (#2423).
 // ---------------------------------------------------------------------------
 
-export interface ClashContributor {
-  character_id: number | null;
-  character_name: string;
-  action_slot: string;
-  progress_delta: number;
-  anima: number;
-}
+export type ClashContributor = components['schemas']['ClashContributor'];
 
-export interface ClashState {
-  id: number;
-  flavor: 'CLASH' | 'LOCK' | 'WARD' | 'BREAK';
-  status: 'ACTIVE' | 'RESOLVED';
-  progress: number;
-  pc_win_threshold: number;
-  npc_win_threshold: number | null;
-  npc_opponent: number;
-  /** Per-PC contribution rollup (Phase 7). */
-  contributors: ClashContributor[];
-  /** "PC" / "NPC" / "EVEN" — Phase 7. */
-  side_favored: 'PC' | 'NPC' | 'EVEN';
-}
+export type ClashState = components['schemas']['ClashState'];
 
 // ---------------------------------------------------------------------------
 // Local types for available-combos
@@ -158,4 +143,14 @@ export interface DispatchResult {
    * the dispatch was deferred.
    */
   data?: Record<string, unknown> | null;
+}
+
+/**
+ * `result.success === false` is the honest-failure wire signal (#2010 review):
+ * the dispatch endpoint always resolves HTTP 200 for a business-rule rejection
+ * (only a structural ref error is a 400), so every write path must check this
+ * before flipping confirmed local state (#2423).
+ */
+export function isDispatchFailure(result: Pick<DispatchResult, 'success'>): boolean {
+  return result.success === false;
 }

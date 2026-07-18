@@ -20,6 +20,7 @@ from world.missions.constants import GiverKind
 from world.missions.models import MissionGiver, MissionNode, MissionTemplate
 from world.missions.services.opportunities import opportunities_for_character
 from world.seeds.database import seed_dev_database
+from world.seeds.tests.content_stub import stub_content_root
 from world.traits.models import CheckOutcome
 
 
@@ -36,6 +37,7 @@ class SeedMissionsDevTests(TestCase):
         {"The Lost Ledger", "Whispers at the Gate", "The Merchant's Debt"}
     )
 
+    @stub_content_root()
     def test_seeds_one_board_giver_and_three_open_templates(self) -> None:
         seed_dev_database()
 
@@ -67,6 +69,7 @@ class SeedMissionsDevTests(TestCase):
                 },
             )
 
+    @stub_content_root()
     def test_rerun_is_idempotent_no_op(self) -> None:
         seed_dev_database()
         giver_count = MissionGiver.objects.count()
@@ -79,6 +82,7 @@ class SeedMissionsDevTests(TestCase):
         self.assertEqual(MissionTemplate.objects.count(), template_count)
         self.assertEqual(MissionNode.objects.count(), node_count)
 
+    @stub_content_root()
     def test_rerun_preserves_staff_edit_to_template(self) -> None:
         seed_dev_database()
         template = MissionTemplate.objects.first()
@@ -94,6 +98,7 @@ class SeedMissionsDevTests(TestCase):
 class MissionOpportunitiesFromSeededStartingRoomTests(TestCase):
     """The symptom fix: `mission opportunities` shows content from spawn (#2121)."""
 
+    @stub_content_root()
     def test_here_group_non_empty_at_the_seeded_starting_room(self) -> None:
         from world.seeds.character_creation import ensure_canonical_fallback_room
 

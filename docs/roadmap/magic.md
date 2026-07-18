@@ -281,6 +281,43 @@ never overwrite a staff-adjusted row.
   `docs/systems/magic.md`, `docs/systems/societies.md`, `docs/systems/INDEX.md`
   ("NPC Services", "Currency", "Societies" entries).
 
+## CG starter catalog rides the content pipeline, not a seed function (#2474 — BUILT, 2026-07-18)
+
+The CG starter Gift/Technique catalog (`Resonance`/`Gift`/`Technique`/`PathGiftGrant`/
+`TraditionGiftGrant`, including the "Unbound" `Tradition` itself) is now real
+lore-repo content, not synthetic in-repo seed data — closing the gap left when
+#2426 built the catalog *shape* but authored it via a temporary in-repo
+`seed_starter_gift_catalog()` seed function.
+
+- All five models gained `NaturalKeyMixin` and joined `CONTENT_MODELS`
+  (`core_management/content_export.py`); `Technique`'s natural key is
+  `(gift, name)` (`unique_technique_gift_name` — `name` alone collides across
+  gifts, e.g. lore reuse or a player-crafted technique).
+- `core_management.content_fixtures.load_entries` gained M2M natural-key
+  resolution, stale-field tolerance (a fixture field naming a removed/renamed
+  model field is skipped with a warning, not a crash), and fixed-point deferred
+  retry (multiple passes until a pass makes no further progress — a multi-hop
+  chain like a `Technique` naming a still-deferred `Gift` needs more than one
+  retry).
+- `world.seeds.database.seed_dev_database()` now sequences: resolve
+  `CONTENT_REPO_PATH` (raise `ContentError` immediately if unset/missing) →
+  seed config prerequisites the content fixtures FK by natural key
+  (`ensure_technique_cast_content()`, since lore-repo `Technique` rows FK the
+  shared "Technique Cast" `ActionTemplate`) → `load_world_content()` → the
+  `CLUSTER_SEEDERS` loop. No cluster seeder authors catalog content anymore.
+- The retired `seed_starter_gift_catalog()` + `StarterGiftCatalogResult` are
+  replaced, for tests, by `MagicContent.create_starter_gift_catalog()`
+  (`world/seeds/game_content/magic.py`, a synthetic factory-built stand-in) and
+  an enriched `stub_content_root()` (`world/seeds/tests/content_stub.py`).
+  NPC trainer seeds (`world/npc_services/seeds.py`) resolve their starter
+  technique picks as gift-scoped `(gift_name, technique_name)` pairs and raise
+  `ContentError` when none resolve — a missing/stale catalog fails loudly
+  rather than silently seeding an empty trainer.
+- Rationale + rejected alternative (a synthetic sample-content fallback baked
+  into arxii seeds): ADR-0142. Full detail: `docs/systems/magic.md`'s "CG
+  Starter Gift/Technique Catalog" + "Content-vs-config boundary" sections,
+  `docs/systems/INDEX.md`'s "Content-repo load" entry.
+
 ---
 
 ## Deeper design & history

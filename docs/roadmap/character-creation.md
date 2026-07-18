@@ -1,5 +1,68 @@
 # Character Creation & Identity
 
+## Built (2026-07-18, #2474 — CG magic catalog is lore-repo content, not seed data)
+
+The Gift-stage catalog CG's magic funnel picks from (Path → Tradition → Gift →
+Technique, #2426) previously existed only as synthetic in-repo seed data
+(`seed_starter_gift_catalog()`). It's now real lore-repo content: `Resonance`,
+`Gift`, `Technique` (natural key `(gift, name)`), `PathGiftGrant`, and
+`TraditionGiftGrant` — including the "Unbound" `Tradition` itself — all gained
+natural keys and ride the ordinary `CONTENT_MODELS` → arx2-lore fixtures →
+`load_world_content()` pipeline. `world.seeds.database.seed_dev_database()` now
+loads content (raising `ContentError` loudly if `CONTENT_REPO_PATH` is
+unset/missing) BEFORE any `CLUSTER_SEEDERS` entry runs, and seeds one narrow
+config prerequisite first (`ensure_technique_cast_content()` — the shared
+"Technique Cast" `ActionTemplate` the lore-repo `Technique` fixtures FK by
+natural key) so a fresh database's very first content load can resolve every
+row. `seed_character_creation_dev()`'s `seed_beginning_traditions()` /
+`seed_metallic_order_tradition()` (this file's own cluster) look up the Unbound
+`Tradition` by name exactly as before — only its origin changed. Test suites
+without a real content-repo checkout use `MagicContent
+.create_starter_gift_catalog()` or the enriched `stub_content_root()` in place
+of the retired seed function. Rationale + rejected alternative: ADR-0142. Full
+detail: `docs/systems/magic.md`, `docs/systems/character_creation.md`,
+`docs/roadmap/magic.md`.
+
+## Built (2026-07-17, #2427 — guided, tag-driven Glimpse story)
+
+The Gift stage's always-visible Glimpse textarea (the character's first-magical-awakening
+narrative, `CharacterAura.glimpse_story`) is replaced by a guided flow: pick authored
+`GlimpseTag` catalog rows across four narrative axes (Tone, Consequence, Witness & Secrecy,
+Sensory & Discovery — `GlimpseTagAxis`/`GLIMPSE_AXIS_CONFIG`), then write the prose, with
+curated tag→distinction suggestions surfaced alongside a manual link fallback. One shared,
+presentational `GlimpseFlow` component (`frontend/src/magic/components/glimpse/`) backs two
+mounts: CG's `GlimpseSection` (inside `GiftStage`) and the character sheet's
+`GlimpseEditorDialog` ("finish your Glimpse later" — the flow renders gracefully with an
+empty catalog, so this stage is exercisable before any lore-repo content is authored).
+
+- **Models** (`world/magic/models/glimpse.py`): `GlimpseTag` (content model, lore-repo
+  authored, no factory-seeded catalog) + `CharacterGlimpseTag` (instance data, never
+  exported) + `GlimpseTagDistinctionSuggestion` (content model, grants nothing — a
+  suggestion surface only). `CharacterAura.glimpse_state` (`GlimpseState`:
+  NOT_STARTED/TAGS_ONLY/COMPLETE) is a cache maintained exclusively by
+  `world.magic.services.glimpse`; `CharacterDistinction.from_glimpse` (nullable FK,
+  SET_NULL) records provenance — both mirror the `.secret` FK-presence-is-state pattern.
+- **Finalize wiring:** `finalize_magic_data` consumes three new `draft_data` keys
+  (`glimpse_tag_ids`, `glimpse_story`, `glimpse_linked_distinction_ids`) through the
+  glimpse services, so `glimpse_state` is always consistent post-CG.
+- **APIs:** CG catalog `GET /api/character-creation/glimpse-tags/`
+  (`CGGlimpseTagViewSet`, embeds `suggested_distinctions`) + four
+  `CharacterAuraViewSet` actions (`set-glimpse-tags` / `set-glimpse-prose` /
+  `link-glimpse-distinction` / `unlink-glimpse-distinction`) that also power the
+  post-CG editor. Sheet payload: `AuraData.glimpse_story`/`.glimpse_state`/
+  `.glimpse_tags`/`.can_finish_glimpse` (privileged-only) and
+  `DistinctionEntry.is_from_glimpse`.
+- **Deviation from spec (no behavior change):** distinction suggestions are embedded
+  directly on the catalog endpoint rather than a separate
+  `suggested_distinctions_for` live endpoint — same information, one fewer round-trip;
+  the standalone endpoint/service was dropped as it would have had no caller.
+- **Out of scope, verified against code:** no mechanics hooks off tag picks, no LLM
+  anywhere in the flow, no new privacy axis beyond the existing Witness tags, and no
+  authored `GlimpseTag`/`GlimpseTagDistinctionSuggestion` rows ship with this repo
+  (lore-repo content, authored later).
+- See `docs/systems/magic.md`'s "Guided Glimpse Story (#2427)" section for full
+  model/service/endpoint detail.
+
 ## Built (2026-07-17 — Arx beginnings authored as lore-repo content; content-only-in-lore-repo ruling)
 
 - The three Arx `Beginnings` (Caretaker / Sleeper / Misbegotten) are now real

@@ -13,6 +13,7 @@ import dataclasses
 from dataclasses import asdict
 from typing import cast
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Count, Prefetch
 from django.http import Http404
 from django.shortcuts import get_object_or_404
@@ -32,6 +33,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from world.character_sheets.models import CharacterSheet
+from world.distinctions.models import CharacterDistinction
 from world.magic.constants import (
     PendingAlterationStatus,
     RitualExecutionKind,
@@ -63,6 +65,7 @@ from world.magic.models import (
     EffectType,
     Facet,
     Gift,
+    GlimpseTag,
     PendingAlteration,
     PoseEndorsement,
     Resonance,
@@ -115,6 +118,9 @@ from world.magic.serializers import (
     GiftCreateSerializer,
     GiftListSerializer,
     GiftSerializer,
+    GlimpseDistinctionLinkSerializer,
+    GlimpseSetProseSerializer,
+    GlimpseSetTagsSerializer,
     LibraryEntrySerializer,
     PendingAlterationSerializer,
     PoseEndorsementSerializer,
@@ -150,6 +156,7 @@ from world.magic.serializers import (
 )
 from world.magic.services import (
     get_library_entries,
+    glimpse as glimpse_services,
     preview_resonance_pull,
 )
 from world.magic.services.auth import _resolve_actor_sheet, _resolve_endorser_sheet
@@ -523,6 +530,80 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
             return CharacterAura.objects.all()
         character_ids = RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids()
         return CharacterAura.objects.filter(character_id__in=character_ids)
+
+    @extend_schema(request=GlimpseSetTagsSerializer, responses={200: CharacterAuraSerializer})
+    @action(detail=True, methods=["post"], url_path="set-glimpse-tags")
+    def set_glimpse_tags(self, request: Request, pk: int | None = None) -> Response:
+        """Replace the aura's glimpse tags for one axis (#2427)."""
+        serializer = GlimpseSetTagsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        aura = self.get_object()
+        tags = list(
+            GlimpseTag.objects.filter(pk__in=serializer.validated_data["tag_ids"], is_active=True)
+        )
+        if len(tags) != len(set(serializer.validated_data["tag_ids"])):
+            return Response(
+                {"detail": "Unknown or inactive glimpse tag."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            glimpse_services.set_glimpse_tags(aura, tags, axis=serializer.validated_data["axis"])
+        except DjangoValidationError as exc:
+            return Response(
+                {"detail": exc.messages[0] if exc.messages else "Invalid tag selection."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(CharacterAuraSerializer(aura).data)
+
+    @extend_schema(request=GlimpseSetProseSerializer, responses={200: CharacterAuraSerializer})
+    @action(detail=True, methods=["post"], url_path="set-glimpse-prose")
+    def set_glimpse_prose(self, request: Request, pk: int | None = None) -> Response:
+        """Write the aura's glimpse story prose (#2427)."""
+        serializer = GlimpseSetProseSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        aura = self.get_object()
+        glimpse_services.set_glimpse_prose(aura, serializer.validated_data["text"])
+        return Response(CharacterAuraSerializer(aura).data)
+
+    @extend_schema(
+        request=GlimpseDistinctionLinkSerializer, responses={200: CharacterAuraSerializer}
+    )
+    @action(detail=True, methods=["post"], url_path="link-glimpse-distinction")
+    def link_glimpse_distinction(self, request: Request, pk: int | None = None) -> Response:
+        """Mark one of the character's distinctions as born in the Glimpse (#2427)."""
+        serializer = GlimpseDistinctionLinkSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        aura = self.get_object()
+        character_distinction = get_object_or_404(
+            CharacterDistinction,
+            pk=serializer.validated_data["character_distinction_id"],
+            character=aura.character,
+        )
+        try:
+            glimpse_services.link_distinction_to_glimpse(character_distinction, aura)
+        except DjangoValidationError as exc:
+            return Response(
+                {"detail": exc.messages[0] if exc.messages else "Cannot link."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(CharacterAuraSerializer(aura).data)
+
+    @extend_schema(
+        request=GlimpseDistinctionLinkSerializer, responses={200: CharacterAuraSerializer}
+    )
+    @action(detail=True, methods=["post"], url_path="unlink-glimpse-distinction")
+    def unlink_glimpse_distinction(self, request: Request, pk: int | None = None) -> Response:
+        """Clear a distinction's Glimpse provenance (#2427)."""
+        serializer = GlimpseDistinctionLinkSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        aura = self.get_object()
+        character_distinction = get_object_or_404(
+            CharacterDistinction,
+            pk=serializer.validated_data["character_distinction_id"],
+            character=aura.character,
+        )
+        glimpse_services.unlink_distinction_from_glimpse(character_distinction)
+        return Response(CharacterAuraSerializer(aura).data)
 
 
 class CharacterResonanceViewSet(viewsets.ModelViewSet):

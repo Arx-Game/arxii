@@ -39,6 +39,7 @@ import { EventCreatePage } from '@/events/pages/EventCreatePage';
 import { EventEditPage } from '@/events/pages/EventEditPage';
 import { CodexPage } from './codex/pages/CodexPage';
 import { WardrobePage } from './inventory/pages/WardrobePage';
+import { ReclamationPage } from './reclamation/pages/ReclamationPage';
 import { MarketPage } from './market/MarketPage';
 import { FeedbackPage } from './submissions/pages/FeedbackPage';
 import { BugReportPage } from './submissions/pages/BugReportPage';
@@ -84,6 +85,16 @@ const TriggerGiversPage = lazy(() =>
 const WorldBuilderPage = lazy(() =>
   import('@/world-builder/pages/WorldBuilderPage').then((m) => ({
     default: m.WorldBuilderPage,
+  }))
+);
+const StoryBuilderPage = lazy(() =>
+  import('@/story-builder/pages/StoryBuilderPage').then((m) => ({
+    default: m.StoryBuilderPage,
+  }))
+);
+const StoryRoomsPage = lazy(() =>
+  import('@/story-rooms/pages/StoryRoomsPage').then((m) => ({
+    default: m.StoryRoomsPage,
   }))
 );
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
@@ -420,6 +431,16 @@ function App() {
             }
           />
           <Route
+            path="/story-rooms"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <StoryRoomsPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
             path="/feedback"
             element={
               <ProtectedRoute>
@@ -466,6 +487,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <WardrobePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reclamation"
+            element={
+              <ProtectedRoute>
+                <ReclamationPage />
               </ProtectedRoute>
             }
           />
@@ -729,6 +758,16 @@ function App() {
               <Suspense fallback={<PageLoadingFallback />}>
                 <ProtectedRoute>
                   <GMDashboardPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/gm/story-builder"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <StoryBuilderPage />
                 </ProtectedRoute>
               </Suspense>
             }

@@ -19,8 +19,7 @@
  */
 
 import { cn } from '@/lib/utils';
-import type { EncounterDetail } from '../types';
-import type { ClashState } from '../types';
+import type { ClashState, EncounterDetail } from '../types';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -157,10 +156,9 @@ export function ClashCard({ clash, opponentName }: ClashCardProps) {
 // ---------------------------------------------------------------------------
 
 export function ActiveState({ encounter, collapsed = false, onToggleCollapse }: ActiveStateProps) {
-  // The generated schema types clashes as {[key: string]: unknown}[] —
-  // we cast to our local ClashState[] since ClashStateSerializer produces
-  // exactly that shape.
-  const clashes = encounter.clashes as unknown as ClashState[];
+  // clashes is correctly typed in the generated schema (get_clashes is
+  // annotated with @extend_schema_field(ClashStateSerializer), #2423).
+  const clashes = encounter.clashes;
 
   // Build a quick opponent lookup by id.
   const opponentById = new Map(encounter.opponents.map((o) => [o.id, o.name]));

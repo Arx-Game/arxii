@@ -290,7 +290,7 @@ describe('SurgeBeats', () => {
   it('renders a surge beat narration line', () => {
     const encounter = makeEncounter([], [], 1, {
       escalation_curve_name: 'Standard Dramatic Escalation',
-      surge_beats: [{ narration: "Kira's power surges with sudden, dramatic force." }],
+      surge_beats: [{ id: 1, narration: "Kira's power surges with sudden, dramatic force." }],
     });
     mockedUseEndEncounter.mockReturnValue({ mutate: vi.fn(), isPending: false });
 

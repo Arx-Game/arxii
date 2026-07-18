@@ -25,6 +25,10 @@ if TYPE_CHECKING:
     from world.areas.models import Area
 
 
+_EXIT_TYPECLASS = "typeclasses.exits.Exit"
+_CHARACTER_TYPECLASS = "typeclasses.characters.Character"
+
+
 class GridServiceError(Exception):
     """A grid-service operation was refused; carries ``user_message``.
 
@@ -198,6 +202,19 @@ def stranded_rooms(
                 seen.add(neighbor)
                 frontier.append(neighbor)
     return room_ids - seen
+
+
+def has_character_occupants(room: ObjectDB) -> bool:
+    return any(obj.is_typeclass(_CHARACTER_TYPECLASS, exact=False) for obj in room.contents)
+
+
+def has_non_exit_contents(room: ObjectDB) -> bool:
+    """Any character or item still in ``room`` — exits don't count.
+
+    Exits are cleaned up as part of removal itself (see ``StaffRemoveRoomAction``),
+    so they're not "contents" blocking it; a character or a stray item is.
+    """
+    return any(not obj.is_typeclass(_EXIT_TYPECLASS, exact=False) for obj in room.contents)
 
 
 def place_room_on_grid(*, profile: RoomProfile, grid_x: int, grid_y: int, floor: int) -> None:

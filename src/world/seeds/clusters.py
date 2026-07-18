@@ -310,6 +310,12 @@ def _seed_project_resonance() -> None:
     ensure_project_kind_resonance_awards()
 
 
+def _seed_roster() -> None:
+    from world.roster.seeds import seed_invite_trust_category  # noqa: PLC0415
+
+    seed_invite_trust_category()
+
+
 def _seed_traits() -> None:
     """No-op cluster (#2266): Trait rows are created by other clusters already —
 
@@ -387,13 +393,17 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # PROSPECT path, at the canonical starting room, so the first-ever Ritual
     # of the Durance is conductible without a live higher-level PC (#2121).
     # After "character_creation" (the room) and "magic" (the Ritual of the
-    # Durance row + the 5 PROSPECT Path rows, both seeded by seed_magic_dev).
+    # Durance row). The PROSPECT Path rows themselves are real lore-repo
+    # content, loaded via load_world_content() ahead of every cluster (#2474)
+    # — no longer seeded here by seed_magic_dev().
     "progression": _seed_progression,
     # NPC services: the Great Archive Librarian role + self-study TRAIN offers
     # (#2440 ruling 5), gated by a PLACEHOLDER quest-completion Achievement.
     # After "progression" (itself after "character_creation" for the
-    # Shroudwatch Academy org and "magic" for the starter Gift/Technique
-    # catalog the self-study offers reference).
+    # Shroudwatch Academy org). The starter Gift/Technique catalog the
+    # self-study offers reference is real lore-repo content, loaded via
+    # load_world_content() before any cluster runs (#2474) — not seeded by
+    # the "magic" cluster.
     "npc_services": _seed_npc_services,
     # Justice: the starter CrimeKind vocabulary (#1765). Laws are world data, not seeds.
     "justice": _seed_justice,
@@ -469,6 +479,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # PROJECT_CONTRIBUTION GainSource (#2038 — "projects to add gifts to
     # organizations"). No dependencies on any other cluster.
     "project_resonance": _seed_project_resonance,
+    # Roster: the INVITE TrustCategory for game-invite eligibility (#2483).
+    # No dependencies on any other cluster.
+    "roster": _seed_roster,
     # Traits: no-op — see _seed_traits docstring. Registered so the Game Setup
     # inventory can show a Trait row count for the #944 content-pipeline domain,
     # which had zero inventory visibility before #2266.
@@ -543,7 +556,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     )
     from world.relationships.models import RelationshipCondition, RelationshipTier  # noqa: PLC0415
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
-    from world.roster.models import Kinsperson  # noqa: PLC0415
+    from world.roster.models import GameInvite, Kinsperson  # noqa: PLC0415
     from world.scenes.models import ReactionEmoji  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
     from world.societies.houses.models import Title  # noqa: PLC0415
@@ -672,6 +685,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Project-kind resonance payout: the ORGANIZATION_CAPABILITY opt-in row
         # (#2038).
         "project_resonance": [ProjectKindResonanceAward],
+        # Roster: the INVITE TrustCategory for game-invite eligibility (#2483).
+        "roster": [GameInvite],
         # Agriculture: Field + Granary RoomFeatureKinds + starter CropTypes (#1864).
         "agriculture": [CropType, RoomFeatureKind],
         # Traits: no-op seeder — see _seed_traits (#2266). Row count for the #944

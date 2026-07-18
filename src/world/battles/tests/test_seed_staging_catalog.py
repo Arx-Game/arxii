@@ -21,11 +21,13 @@ from world.battles.models import (
     BlueprintFortification,
 )
 from world.seeds.database import seed_dev_database
+from world.seeds.tests.content_stub import stub_content_root
 
 
 class SeedBattleStagingCatalogTests(TestCase):
     """The "battles" cluster's starter staging catalog row shape."""
 
+    @stub_content_root()
     def test_seeds_river_crossing_blueprint(self) -> None:
         seed_dev_database()
 
@@ -42,6 +44,7 @@ class SeedBattleStagingCatalogTests(TestCase):
         self.assertFalse(places["West Bank"].fortifications.exists())
         self.assertFalse(places["The Ford"].fortifications.exists())
 
+    @stub_content_root()
     def test_seeds_city_gates_blueprint(self) -> None:
         seed_dev_database()
 
@@ -58,6 +61,7 @@ class SeedBattleStagingCatalogTests(TestCase):
         self.assertFalse(places["Gate Approach"].fortifications.exists())
         self.assertFalse(places["Inner Court"].fortifications.exists())
 
+    @stub_content_root()
     def test_seeds_three_unit_templates_with_distinct_quality(self) -> None:
         seed_dev_database()
 
@@ -81,6 +85,7 @@ class SeedBattleStagingCatalogTests(TestCase):
                 f"{template.name} must carry at least 1 capability value",
             )
 
+    @stub_content_root()
     def test_rerun_is_idempotent_no_op(self) -> None:
         seed_dev_database()
         blueprint_count = BattleMapBlueprint.objects.count()
@@ -95,6 +100,7 @@ class SeedBattleStagingCatalogTests(TestCase):
         self.assertEqual(BlueprintFortification.objects.count(), fortification_count)
         self.assertEqual(BattleUnitTemplate.objects.count(), template_count)
 
+    @stub_content_root()
     def test_rerun_preserves_staff_edit_to_template_strength(self) -> None:
         seed_dev_database()
         template = BattleUnitTemplate.objects.get(name="Levy Spears")
@@ -106,6 +112,7 @@ class SeedBattleStagingCatalogTests(TestCase):
         template.refresh_from_db()
         self.assertEqual(template.strength, 999)
 
+    @stub_content_root()
     def test_rerun_preserves_staff_edit_to_blueprint_description(self) -> None:
         seed_dev_database()
         blueprint = BattleMapBlueprint.objects.get(name="River Crossing")

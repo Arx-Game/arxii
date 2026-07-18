@@ -17,6 +17,8 @@ from django.core.validators import MaxValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+
 # App-qualified model path repeated across FK references; centralized for dedup.
 _DISTINCTION_MODEL = "distinctions.Distinction"
 
@@ -81,7 +83,7 @@ class PathRitualGrant(models.Model):  # noqa: SHARED_MEMORY
 
 # Idmapper metaclass sets attrs["path"] which shadows the "path" FK.
 # Same pattern as PathRitualGrant above / PathCodexGrant in world.codex.models.
-class PathGiftGrant(models.Model):  # noqa: SHARED_MEMORY
+class PathGiftGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
     """Gift + curated starter technique set available to a Path.
 
     The (Path x Gift) -> technique-set leg of ADR-0055 (#1579): the same authored
@@ -110,6 +112,12 @@ class PathGiftGrant(models.Model):  # noqa: SHARED_MEMORY
         help_text=("Curated subset of this gift's techniques minted on crossing into this path."),
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["path", "gift"]
+        dependencies = ["classes.Path", "magic.Gift"]
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -137,7 +145,7 @@ class PathGiftGrant(models.Model):  # noqa: SHARED_MEMORY
                 )
 
 
-class TraditionGiftGrant(SharedMemoryModel):
+class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
     """Gift + curated signature technique set available to a Tradition (#2426).
 
     The (Tradition x Gift) sibling of ``PathGiftGrant`` above — the CG-availability
@@ -166,6 +174,12 @@ class TraditionGiftGrant(SharedMemoryModel):
             "picking this gift under this tradition."
         ),
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["tradition", "gift"]
+        dependencies = ["magic.Tradition", "magic.Gift"]
 
     class Meta:
         constraints = [

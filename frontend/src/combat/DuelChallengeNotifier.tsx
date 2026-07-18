@@ -8,11 +8,13 @@
  * buttons — the first time a new challenge id appears in the poll. A `Set` of
  * already-toasted ids prevents the 15s poll from re-firing the same toast.
  *
- * Accept/Decline await the dispatch (mirroring DuelChallengeControls' mutateAsync
- * + try/catch pattern) — the toast only dismisses on success; on failure it stays
- * open with an inline error and the buttons remain clickable to retry, so a failed
- * dispatch is never silently lost (the id was already added to toastedIds when the
- * toast first fired, so a dismissed-on-error toast would otherwise never resurface).
+ * Accept/Decline await the dispatch (mutateAsync + try/catch, plus an
+ * `isDispatchFailure(result)` check since the endpoint resolves HTTP 200 with
+ * `success: false` for a business-rule rejection — #2423) — the toast only
+ * dismisses on a genuine success; on failure it stays open with an inline error
+ * and the buttons remain clickable to retry, so a failed dispatch is never
+ * silently lost (the id was already added to toastedIds when the toast first
+ * fired, so a dismissed-on-error toast would otherwise never resurface).
  *
  * Right-character dispatch (#2166): `useDuelChallengeInbox` is already account-wide
  * (server-scoped to `request.user.played_character_sheet_ids`, not the active
@@ -39,6 +41,7 @@ import type { MyRosterEntry } from '@/roster/types';
 import { useDuelChallengeInbox, useDispatchPlayerAction } from './queries';
 import type { DuelChallenge } from './api';
 import { registryRef } from './duels/DuelChallengeControls';
+import { isDispatchFailure } from '@/combat/types';
 
 interface ToastBodyProps {
   toastId: string | number;
@@ -62,7 +65,11 @@ function DuelChallengeToastBody({
     setIsPending(true);
     setError(null);
     try {
-      await mutateAsync(registryRef(action, { challenge_id: challenge.id }));
+      const result = await mutateAsync(registryRef(action, { challenge_id: challenge.id }));
+      if (isDispatchFailure(result)) {
+        setError(result.message ?? 'Failed to respond to the challenge');
+        return;
+      }
       toast.dismiss(toastId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to respond to the challenge');

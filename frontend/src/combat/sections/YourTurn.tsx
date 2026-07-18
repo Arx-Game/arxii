@@ -12,7 +12,9 @@
  * Phase 7 of the unified-combat-ui plan.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { SetStateAction } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
 import type {
@@ -36,6 +38,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  combatKeys,
+  invalidateConsequenceOutcomes,
   useAvailableCombos,
   useCoverMutation,
   useDispatchPlayerAction,
@@ -43,9 +47,11 @@ import {
   useGuardMutation,
   useUpgradeCombo,
 } from '../queries';
+import { isDispatchFailure } from '../types';
 import type {
   AvailableCombo,
   DispatchActionRequest,
+  DispatchResult,
   EncounterDetail,
   Participant,
   PositionNode,
@@ -174,12 +180,65 @@ function initialContext(slot: ActionSlot): ActionContext {
 }
 
 // ---------------------------------------------------------------------------
+// Round-scoped state (#2423 finding 4) — consolidated into one object so a
+// round advance resets it WHOLESALE, making "forgot to reset one atom" bugs
+// structurally impossible (previously selectedClashRef/strainByClash/
+// focusedContext/passiveContexts/submitError survived a round advance and
+// leaked a stale clash selection into the next round's submit).
+// ---------------------------------------------------------------------------
+
+interface RoundScopedState {
+  focusedContext: ActionContext;
+  passiveContexts: Partial<Record<ActionSlot, ActionContext>>;
+  selectedClashRef: PlayerAction['ref'] | null;
+  strainByClash: Record<number, number>;
+  submitted: boolean;
+  submitError: string | null;
+  pullDialogOpen: boolean;
+  selectedPull: PullSelection | null;
+  soulfrayAccepted: boolean;
+  furyTierId: number | null;
+  furyAnchorId: number | null;
+  coverAllyId: string;
+  maneuverError: string | null;
+  guardAllyId: string;
+  guardTechniqueId: string;
+  guardDestination: string;
+}
+
+/** Everything a new round must wipe — reset WHOLESALE so a missed atom is impossible (#2423). */
+function initialRoundState(): RoundScopedState {
+  return {
+    focusedContext: initialContext('focused'),
+    passiveContexts: {
+      'passive-physical': initialContext('passive-physical'),
+      'passive-social': initialContext('passive-social'),
+      'passive-mental': initialContext('passive-mental'),
+    },
+    selectedClashRef: null,
+    strainByClash: {},
+    submitted: false,
+    submitError: null,
+    pullDialogOpen: false,
+    selectedPull: null,
+    soulfrayAccepted: false,
+    furyTierId: null,
+    furyAnchorId: null,
+    coverAllyId: '',
+    maneuverError: null,
+    guardAllyId: GUARD_ANYONE_VALUE,
+    guardTechniqueId: GUARD_NO_TECHNIQUE_VALUE,
+    guardDestination: GUARD_DESTINATION_AWAY,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Dispatch-job builders (extracted from handleSubmit to flatten its branching)
 // ---------------------------------------------------------------------------
 
-type DispatchFn = (params: DispatchActionRequest) => Promise<unknown>;
+type DispatchFn = (params: DispatchActionRequest) => Promise<DispatchResult>;
 
-type DispatchJob = () => Promise<unknown>;
+type DispatchJob = () => Promise<DispatchResult>;
 
 /**
  * Build the focused-slot dispatch job (if a technique is selected). Threads the
@@ -463,64 +522,75 @@ export function YourTurn({
   onPositionShapeChange,
 }: YourTurnProps) {
   const strainMax = availableStrain ?? 10;
+  const queryClient = useQueryClient();
   // ---------------------------------------------------------------------------
-  // Slot state
-  // ---------------------------------------------------------------------------
-
-  const [focusedContext, setFocusedContext] = useState<ActionContext>(() =>
-    initialContext('focused')
-  );
-  const [passiveContexts, setPassiveContexts] = useState<
-    Partial<Record<ActionSlot, ActionContext>>
-  >(() => ({
-    'passive-physical': initialContext('passive-physical'),
-    'passive-social': initialContext('passive-social'),
-    'passive-mental': initialContext('passive-mental'),
-  }));
-
-  // ---------------------------------------------------------------------------
-  // Clash selection state
+  // Round-scoped state (#2423 finding 4) — consolidated into one object,
+  // reset WHOLESALE on round advance (see initialRoundState above).
   // ---------------------------------------------------------------------------
 
-  // Currently-selected clash ref (for the focused slot target).
-  const [selectedClashRef, setSelectedClashRef] = useState<PlayerAction['ref'] | null>(null);
-  // Per-clash strain commitment. Keyed on clash_id.
-  const [strainByClash, setStrainByClash] = useState<Record<number, number>>({});
+  const [roundState, setRoundState] = useState<RoundScopedState>(initialRoundState);
+  const {
+    focusedContext,
+    passiveContexts,
+    selectedClashRef,
+    strainByClash,
+    submitted,
+    submitError,
+    pullDialogOpen,
+    selectedPull,
+    soulfrayAccepted,
+    furyTierId,
+    furyAnchorId,
+    coverAllyId,
+    maneuverError,
+    guardAllyId,
+    guardTechniqueId,
+    guardDestination,
+  } = roundState;
 
-  // ---------------------------------------------------------------------------
-  // Submit state
-  // ---------------------------------------------------------------------------
-
-  const [submitted, setSubmitted] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [pullDialogOpen, setPullDialogOpen] = useState(false);
-  // Inline pull selection — populated when the player selects a pull via the
-  // ThreadPullDialog. Sent in kwargs of the focused/clash dispatch on submit.
-  const [selectedPull, setSelectedPull] = useState<PullSelection | null>(null);
-
-  // Soulfray + fury declaration state for combat-cast focused actions (#1543).
-  const [soulfrayAccepted, setSoulfrayAccepted] = useState(false);
-  const [furyTierId, setFuryTierId] = useState<number | null>(null);
-  const [furyAnchorId, setFuryAnchorId] = useState<number | null>(null);
-
-  // Cover picker state — selected ally participant PK (string for Select compatibility).
-  const [coverAllyId, setCoverAllyId] = useState<string>('');
-  const [maneuverError, setManeuverError] = useState<string | null>(null);
-
-  // Guard (Interpose) picker state (#2207) — ward defaults to "anyone hit this
-  // round"; protective technique defaults to "none" (mundane interpose).
-  const [guardAllyId, setGuardAllyId] = useState<string>(GUARD_ANYONE_VALUE);
-  const [guardTechniqueId, setGuardTechniqueId] = useState<string>(GUARD_NO_TECHNIQUE_VALUE);
-  // Redirect destination picker state (#2210) — only shown/consulted when the
-  // selected guard technique is REDIRECT-flavored; "away" is the default and
-  // universal fallback (same default the backend applies when the kwargs are
-  // omitted entirely).
-  const [guardDestination, setGuardDestination] = useState<string>(GUARD_DESTINATION_AWAY);
+  // Per-field setter preserving React.SetStateAction semantics so every
+  // existing call site (~60 across this file and child-component props)
+  // compiles unchanged. Defined inside the component (not module level) so it
+  // closes over `setRoundState`; `setRoundState` from `useState` is stable, so
+  // the `useMemo([])` deps below are correct. `makeFieldSetter` itself is a
+  // fresh function object every render, but that's harmless: it's a pure
+  // factory (no closure over per-render values besides the stable
+  // `setRoundState`) and nothing holds a reference to it by identity across
+  // renders — only the memoized setters it returns are read, and those never
+  // need to change.
+  function makeFieldSetter<K extends keyof RoundScopedState>(key: K) {
+    return (value: SetStateAction<RoundScopedState[K]>) => {
+      setRoundState((prev) => ({
+        ...prev,
+        [key]:
+          typeof value === 'function'
+            ? (value as (p: RoundScopedState[K]) => RoundScopedState[K])(prev[key])
+            : value,
+      }));
+    };
+  }
+  const setFocusedContext = useMemo(() => makeFieldSetter('focusedContext'), []);
+  const setPassiveContexts = useMemo(() => makeFieldSetter('passiveContexts'), []);
+  const setSelectedClashRef = useMemo(() => makeFieldSetter('selectedClashRef'), []);
+  const setStrainByClash = useMemo(() => makeFieldSetter('strainByClash'), []);
+  const setSubmitted = useMemo(() => makeFieldSetter('submitted'), []);
+  const setSubmitError = useMemo(() => makeFieldSetter('submitError'), []);
+  const setPullDialogOpen = useMemo(() => makeFieldSetter('pullDialogOpen'), []);
+  const setSelectedPull = useMemo(() => makeFieldSetter('selectedPull'), []);
+  const setSoulfrayAccepted = useMemo(() => makeFieldSetter('soulfrayAccepted'), []);
+  const setFuryTierId = useMemo(() => makeFieldSetter('furyTierId'), []);
+  const setFuryAnchorId = useMemo(() => makeFieldSetter('furyAnchorId'), []);
+  const setCoverAllyId = useMemo(() => makeFieldSetter('coverAllyId'), []);
+  const setManeuverError = useMemo(() => makeFieldSetter('maneuverError'), []);
+  const setGuardAllyId = useMemo(() => makeFieldSetter('guardAllyId'), []);
+  const setGuardTechniqueId = useMemo(() => makeFieldSetter('guardTechniqueId'), []);
+  const setGuardDestination = useMemo(() => makeFieldSetter('guardDestination'), []);
 
   // Cast-time position selection for the focused technique (#2206). Controlled
   // by the caller when castPositionProp/onCastPositionChangeProp are supplied
   // (CombatRail lifts this above the rail tabs so the tactical-map tab
   // shares it); falls back to local state otherwise (e.g. standalone tests).
+  // NOT part of RoundScopedState — stays lifted/controlled exactly as before.
   const [localCastPosition, setLocalCastPosition] = useState<CastPosition>({});
   const castPosition = castPositionProp ?? localCastPosition;
   const setCastPosition = onCastPositionChangeProp ?? setLocalCastPosition;
@@ -536,23 +606,15 @@ export function YourTurn({
   const roundResetMounted = useRef(false);
   const techniqueResetMounted = useRef(false);
 
-  // Reset submitted, pull selection, and pull dialog when round advances.
+  // Reset every round-scoped atom WHOLESALE when round advances (#2423) — a
+  // single `setRoundState(initialRoundState())` makes "forgot to reset one
+  // field" bugs structurally impossible.
   useEffect(() => {
     if (!roundResetMounted.current) {
       roundResetMounted.current = true;
       return;
     }
-    setSubmitted(false);
-    setPullDialogOpen(false);
-    setSelectedPull(null);
-    setSoulfrayAccepted(false);
-    setFuryTierId(null);
-    setFuryAnchorId(null);
-    setCoverAllyId('');
-    setGuardAllyId(GUARD_ANYONE_VALUE);
-    setGuardTechniqueId(GUARD_NO_TECHNIQUE_VALUE);
-    setGuardDestination(GUARD_DESTINATION_AWAY);
-    setManeuverError(null);
+    setRoundState(initialRoundState());
     setCastPosition({});
   }, [roundNumber, setCastPosition]);
 
@@ -636,6 +698,13 @@ export function YourTurn({
     );
     return (match as RoundActionTyped) ?? null;
   })();
+
+  // Server-derived ready lock (#2423): CombatRail's Radix tabs unmount inactive
+  // TabsContent, so switching to the Map tab and back remounts this component
+  // and resets local `submitted` to false — even though the server already has
+  // this participant's round action marked ready. Deriving the lock from
+  // ownRoundAction.is_ready (not just local state) survives that remount.
+  const serverReady = ownRoundAction?.is_ready === true;
 
   const participants: Participant[] = encounter?.participants ?? [];
 
@@ -772,7 +841,7 @@ export function YourTurn({
   // ---------------------------------------------------------------------------
 
   async function handleSubmit() {
-    if (submitted || dispatchPending) return;
+    if (submitted || serverReady || dispatchPending) return;
 
     setSubmitError(null);
 
@@ -832,9 +901,23 @@ export function YourTurn({
 
     try {
       for (const job of dispatchJobs) {
-        await job();
+        const result = await job();
+        // The dispatch endpoint always resolves 200 for a business-rule
+        // rejection (only a structural ref error is a 400) — success:false
+        // must be checked explicitly, or an honest-failure job would silently
+        // flip the local `submitted`/ready state (#2423).
+        if (isDispatchFailure(result)) {
+          setSubmitError(result.message ?? 'Submit failed. Try again.');
+          return;
+        }
       }
       setSubmitted(true);
+      // Refresh the encounter (carries the server's is_ready) and the "Last
+      // Outcome" panel now that every declared job succeeded (#2423).
+      queryClient
+        .invalidateQueries({ queryKey: combatKeys.encounter(encounterId) })
+        .catch(() => {});
+      invalidateConsequenceOutcomes(queryClient);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Submit failed. Try again.';
       setSubmitError(message);
@@ -907,12 +990,12 @@ export function YourTurn({
   // Render
   // ---------------------------------------------------------------------------
 
-  const isLocked = readOnly || submitted;
+  const isLocked = readOnly || submitted || serverReady;
 
   return (
     <div className="space-y-4" data-testid="your-turn-section">
       {/* Submitted / ready badge */}
-      {submitted && (
+      {(submitted || serverReady) && (
         <div
           className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-center text-sm font-medium text-emerald-300"
           data-testid="ready-badge"
@@ -1009,7 +1092,16 @@ export function YourTurn({
       )}
 
       {/* Move-to-position actions (#532) — shown when adjacent open positions exist */}
-      <MovementActions actions={moveActions} isLocked={isLocked} dispatchAction={dispatchAction} />
+      <MovementActions
+        actions={moveActions}
+        isLocked={isLocked}
+        dispatchAction={dispatchAction}
+        onDispatched={() => {
+          queryClient
+            .invalidateQueries({ queryKey: combatKeys.encounter(encounterId) })
+            .catch(() => {});
+        }}
+      />
 
       {/* Passive slots — only non-focused-category slots */}
       {visiblePassiveSlots.length > 0 && (

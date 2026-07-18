@@ -239,19 +239,29 @@ class IntensityTier(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.name} (threshold: {self.threshold})"
 
 
-class Technique(DiscoverableContent, SharedMemoryModel):
+class TechniqueManager(NaturalKeyManager):
+    """Manager for Technique with natural key support (#2474/#2486).
+
+    Keyed ``(gift, name)`` rather than ``name`` alone: ``name`` is not unique
+    on its own (different gifts can reuse a technique name). Within one Gift
+    the pair is DB-unique (``unique_technique_gift_name``).
+    """
+
+
+class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
     """
     A specific magical ability within a Gift.
 
     Techniques represent magical abilities with intensity (raw power) and control
     (safety/precision). When intensity exceeds control at runtime, effects become
     unpredictable and anima cost can spike. Level gates progression and derives tier.
-    Unlike lookup tables, techniques are unique per character and not shared.
+    A staff-authored catalog table (post-#2426): techniques belong to a Gift, not to
+    an individual character, and are shared across every character who knows the Gift.
     """
 
     name = models.CharField(
         max_length=200,
-        help_text="Name of the technique (not unique - different characters can have same name).",
+        help_text="Name of the technique (unique within its gift).",
     )
     gift = models.ForeignKey(
         Gift,
@@ -454,9 +464,21 @@ class Technique(DiscoverableContent, SharedMemoryModel):
         help_text="Lore entry this technique is bound to, if any.",
     )
 
+    objects = TechniqueManager()
+
+    class NaturalKeyConfig:
+        fields = ["gift", "name"]
+        dependencies = ["magic.Gift"]
+
     class Meta:
         verbose_name = "Technique"
         verbose_name_plural = "Techniques"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gift", "name"],
+                name="unique_technique_gift_name",
+            ),
+        ]
 
     def clean(self) -> None:
         """Validate reach_hops is meaningful when reach=REACH_N."""
@@ -747,7 +769,7 @@ class AbstractDamageProfile(SharedMemoryModel):
         abstract = True
 
 
-class TechniqueCapabilityGrant(AbstractCapabilityGrant):
+class TechniqueCapabilityGrant(NaturalKeyMixin, AbstractCapabilityGrant):
     """
     A Capability granted by a Technique, with value derived from intensity.
 
@@ -769,6 +791,12 @@ class TechniqueCapabilityGrant(AbstractCapabilityGrant):
         related_name="technique_grants",
         help_text="Source-specific prerequisite, checked in addition to Capability-level ones.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["technique", "capability"]
+        dependencies = ["magic.Technique", "conditions.CapabilityType"]
 
     class Meta:
         constraints = [
@@ -796,7 +824,7 @@ class TechniqueCapabilityGrant(AbstractCapabilityGrant):
         return int(self.base_value + (self.intensity_multiplier * Decimal(power)))
 
 
-class TechniqueCapabilityRequirement(SharedMemoryModel):
+class TechniqueCapabilityRequirement(NaturalKeyMixin, SharedMemoryModel):
     """A capability a character must possess (at >= minimum_value) to perform
     this Technique. Evaluated against get_effective_capability_value. Example:
     a two-handed strike requires limb_use >= 2; nearly all techniques require
@@ -817,6 +845,12 @@ class TechniqueCapabilityRequirement(SharedMemoryModel):
         default=1,
         help_text="Minimum effective capability value required. 1 = presence.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["technique", "capability"]
+        dependencies = ["magic.Technique", "conditions.CapabilityType"]
 
     class Meta:
         constraints = [
@@ -888,7 +922,7 @@ class CharacterTechnique(SharedMemoryModel):
         return f"{self.technique} on {self.character}"
 
 
-class TechniqueOutcomeModifier(SharedMemoryModel):
+class TechniqueOutcomeModifier(NaturalKeyMixin, SharedMemoryModel):
     """Maps technique check outcome tiers to signed modifiers for the Soulfray resilience check.
 
     When a character uses a technique while in Soulfray, the technique's check outcome
@@ -904,6 +938,12 @@ class TechniqueOutcomeModifier(SharedMemoryModel):
     modifier_value = models.IntegerField(
         help_text="Signed modifier applied to the Soulfray resilience check. Negative = penalty.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["outcome"]
+        dependencies = ["traits.CheckOutcome"]
 
     class Meta:
         verbose_name = "Technique Outcome Modifier"
@@ -928,7 +968,7 @@ def _scale_by_power_and_sl(  # noqa: PLR0913
     return base + power_contribution + per_extra_sl * sl_above
 
 
-class TechniqueAppliedCondition(AbstractAppliedCondition):
+class TechniqueAppliedCondition(NaturalKeyMixin, AbstractAppliedCondition):
     """Authored row binding a Technique to a ConditionTemplate with formula-based
     severity / duration scaling. One Technique may have many of these.
 
@@ -948,6 +988,12 @@ class TechniqueAppliedCondition(AbstractAppliedCondition):
         related_name="condition_applications",
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["technique", "condition", "target_kind"]
+        dependencies = ["magic.Technique", "conditions.ConditionTemplate"]
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -962,7 +1008,7 @@ class TechniqueAppliedCondition(AbstractAppliedCondition):
         return f"{self.technique.name} → {self.condition.name} ({self.target_kind})"
 
 
-class TechniqueRemovedCondition(AbstractAppliedCondition):
+class TechniqueRemovedCondition(NaturalKeyMixin, AbstractAppliedCondition):
     """Authored row binding a Technique to a ConditionTemplate it *removes* on cast.
 
     Mirrors ``TechniqueAppliedCondition`` but for dispel/cleanse: when the technique
@@ -989,6 +1035,12 @@ class TechniqueRemovedCondition(AbstractAppliedCondition):
             "stack is decremented (the condition persists with stacks - 1)."
         ),
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["technique", "condition", "target_kind"]
+        dependencies = ["magic.Technique", "conditions.ConditionTemplate"]
 
     class Meta:
         constraints = [
@@ -1029,7 +1081,7 @@ class TechniqueRemovedCondition(AbstractAppliedCondition):
                 raise ValidationError({field_name: message})
 
 
-class TechniqueDamageProfile(AbstractDamageProfile):
+class TechniqueDamageProfile(NaturalKeyMixin, AbstractDamageProfile):
     """One damage component a technique deals when used in combat.
 
     A technique can have multiple rows for multi-component damage
@@ -1043,6 +1095,12 @@ class TechniqueDamageProfile(AbstractDamageProfile):
         on_delete=models.CASCADE,
         related_name="damage_profiles",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["technique", "damage_type"]
+        dependencies = ["magic.Technique", "conditions.DamageType"]
 
     class Meta:
         constraints = [

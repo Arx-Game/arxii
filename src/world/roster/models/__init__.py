@@ -33,6 +33,7 @@ from world.roster.models.families import (
     Union,
     UnionKind,
 )
+from world.roster.models.invites import GameInvite, InviteStatus
 from world.roster.models.mail import PlayerMail
 from world.roster.models.roster_core import Roster, RosterEntry
 from world.roster.models.settings import (
@@ -48,6 +49,8 @@ __all__ = [
     "ApprovalScope",
     "Family",
     "FamilyMembership",
+    "GameInvite",
+    "InviteStatus",
     "KinSlotPool",
     "Kinsperson",
     "ParentageEdge",

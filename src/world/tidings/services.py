@@ -123,9 +123,38 @@ def public_feed_for_societies(
         .order_by("-updated_date")
         .distinct()[:limit]
     )
-    items = [_deed_item(entry) for entry in deeds] + [_scandal_item(secret) for secret in scandals]
+    pardons = _pardon_items(society_ids, limit=limit)
+    items = (
+        [_deed_item(entry) for entry in deeds]
+        + [_scandal_item(secret) for secret in scandals]
+        + pardons
+    )
     items.sort(key=lambda item: item.occurred_at, reverse=True)
     return items[:limit]
+
+
+def _pardon_items(society_ids: set[int], *, limit: int) -> list[PublicFeedItem]:
+    """A lord's pardons (#1826) — public acts, surfaced to the enforcing scope."""
+    from world.justice.models import PardonGrant  # noqa: PLC0415
+
+    grants = (
+        PardonGrant.objects.filter(society_id__in=society_ids)
+        .select_related("target_persona", "granter_persona", "area")
+        .order_by("-created_date")[:limit]
+    )
+    return [
+        PublicFeedItem(
+            kind="pardon",
+            headline=(
+                f"{grant.granter_persona.name} pardons {grant.target_persona.name} "
+                f"in {grant.area.name}"
+            ),
+            subject=grant.target_persona.name,
+            occurred_at=grant.created_date,
+            category="pardon",
+        )
+        for grant in grants
+    ]
 
 
 def public_feed_for(persona: Persona, *, limit: int = _DEFAULT_LIMIT) -> list[PublicFeedItem]:

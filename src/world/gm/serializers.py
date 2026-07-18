@@ -9,6 +9,7 @@ from rest_framework import serializers
 if TYPE_CHECKING:
     from world.projects.models import Project
 
+from world.areas.serializers import WorldBuilderAreaManagerSerializer, WorldBuilderRoomSerializer
 from world.gm.constants import GMApplicationStatus, GMLevel, GMTableViewerRole
 from world.gm.models import (
     CatalogSuggestion,
@@ -18,7 +19,9 @@ from world.gm.models import (
     GMRosterInvite,
     GMTable,
     GMTableMembership,
+    StoryRoomGrant,
 )
+from world.instances.models import InstancedRoom
 from world.roster.models.applications import RosterApplication
 
 
@@ -583,3 +586,95 @@ class DemandRansomSerializer(serializers.Serializer):
             )
         except CaptivityError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
+
+
+class StoryInstanceSerializer(serializers.ModelSerializer):
+    """A GM-owned temp scene room row for the story-builder dashboard (#2450)."""
+
+    room_id = serializers.IntegerField(source="room.pk", read_only=True)
+    name = serializers.CharField(source="room.db_key", read_only=True)
+    grants = serializers.SerializerMethodField()
+
+    class Meta:
+        model = InstancedRoom
+        fields = ["id", "room_id", "name", "status", "created_at", "grants"]
+
+    def get_grants(self, obj: InstancedRoom) -> list[str]:
+        """Character names granted access, from the view's batched lookup.
+
+        Populated via serializer ``context["grants_by_room"]`` (keyed by
+        ``RoomProfile``/``ObjectDB`` pk, which are the same value —
+        ``RoomProfile.objectdb`` is its primary key) so the whole list of
+        instances costs one extra query, not one per row.
+        """
+        grants_by_room: dict[int, list[str]] = self.context.get("grants_by_room", {})
+        return grants_by_room.get(obj.room_id, [])
+
+
+class StoryRoomSerializer(WorldBuilderRoomSerializer):
+    """One RoomProfile in the story-builder manager payload (#2450).
+
+    Extends the staff-only ``WorldBuilderRoomSerializer`` with ``grants`` — the
+    names of characters currently granted access to join this room. Kept as a
+    subclass (not a change to the shared serializer) so the staff world-builder
+    manager payload shape is untouched.
+    """
+
+    grants = serializers.ListField(child=serializers.CharField())
+
+
+class StoryAreaManagerSerializer(WorldBuilderAreaManagerSerializer):
+    """The story-builder area-manager payload: area header + rooms (with grants) + exits."""
+
+    rooms = StoryRoomSerializer(many=True)
+
+
+class MyStoryGrantSerializer(serializers.ModelSerializer):
+    """A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+
+    Backs ``GET /api/gm/my-story-grants/``, the read side of the player-facing
+    Story Rooms page. Read-only: joining/leaving still go through the
+    ``join_story_room``/``leave_story_room`` REGISTRY actions
+    (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+    ``actions/definitions/story_builder.py``), dispatched via the generic
+    action-dispatch endpoint — never a DRF write here.
+
+    ``character_id`` is included even though it isn't shown in the UI: those
+    two actions resolve their actor from ``actor.sheet_data`` (no target-character
+    kwarg) and ``join_story_room``/``leave_story_room`` 404 with "no invitation"
+    unless the dispatching character is exactly the one the grant was issued to
+    — so the frontend must dispatch each row's join/leave against *this*
+    character, not whichever character happens to be active. Since
+    ``CharacterSheet.character`` is a primary_key OneToOneField, this FK's attname
+    (``StoryRoomGrant.character_id``) already equals the character's ObjectDB pk,
+    the id the generic dispatch endpoint (``/api/actions/characters/<id>/dispatch/``)
+    expects.
+    """
+
+    room_id = serializers.IntegerField(read_only=True)
+    room_name = serializers.CharField(source="room.objectdb.db_key", read_only=True)
+    character_id = serializers.IntegerField(read_only=True)
+    character_name = serializers.CharField(source="character.character.db_key", read_only=True)
+    is_inside = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StoryRoomGrant
+        fields = [
+            "id",
+            "room_id",
+            "room_name",
+            "character_id",
+            "character_name",
+            "is_inside",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_is_inside(self, obj: StoryRoomGrant) -> bool:
+        """True when the granted character is currently located inside the room.
+
+        Compares ObjectDB pks directly — ``room_id`` is the same value as the
+        room's ObjectDB pk (``RoomProfile.objectdb`` is its primary key), so no
+        extra query is needed beyond the character's own location.
+        """
+        return obj.character.character.db_location_id == obj.room_id

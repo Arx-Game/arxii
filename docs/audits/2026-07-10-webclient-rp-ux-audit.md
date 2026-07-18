@@ -193,8 +193,10 @@ Resolving this split is **#2156**, the structural core of the slate.
 - Typed verbs silently become prose: the composer's `KNOWN_COMMANDS` whitelist
   (pose/say/emit/whisper/tt) absorbs `intimidate Bob` into pose text with no signal.
 - `PersonaContextMenu` silently omits prerequisite-unmet actions (panel shows reason
-  tooltips) and reads available-actions from cache only — empty menu until the action panel
-  has been opened once.
+  tooltips). [FIXED prior to #2423] It used to read available-actions from cache only
+  (empty menu until the action panel had been opened once) — it now fetches directly via
+  its own query (#2158, landed in #2215), and #2423 repointed that fetch onto the shared
+  `useAvailableActionsQuery` hook without reintroducing the cache-only gap.
 - Non-GM participants have no round-state visibility in structured scenes (`active_round`
   consumed only by the GM-gated `RoundSettingsDialog`).
 - Parity: Seduce is web-only (no telnet command; #1697 asymmetry).

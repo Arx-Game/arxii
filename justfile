@@ -426,6 +426,13 @@ dc-build:
 dc-shell:
     devcontainer exec --workspace-folder . bash
 
+# Reattaches to <name> if it exists, creates it otherwise. Detach on purpose
+# with Ctrl-o d; agents inside keep running. See docs/devcontainer-setup.md
+# "Persistent sessions".
+# Like dc-shell, but in a persistent zellij session that survives disconnects
+dc-attach name="main":
+    devcontainer exec --workspace-folder . zellij attach --create {{name}}
+
 # Re-copy polytoken-compatible skills (compatibility: polytoken or
 # polytoken-only) into .polytoken/skills/ after editing a bridged skill.
 # post-create.sh runs this at container creation; this recipe is for picking up

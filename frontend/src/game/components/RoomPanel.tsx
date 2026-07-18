@@ -47,6 +47,8 @@ interface RoomPanelProps {
   hasActiveEncounter?: boolean;
   /** True when the scene's room has an active Battle (#2157). */
   hasActiveBattle?: boolean;
+  /** The viewer's active RosterEntry pk — threads to the hub wanted board (#1826). */
+  viewerEntryId?: number | null;
 }
 
 export function RoomPanel({
@@ -57,6 +59,7 @@ export function RoomPanel({
   onCharacterClick,
   hasActiveEncounter = false,
   hasActiveBattle = false,
+  viewerEntryId = null,
 }: RoomPanelProps) {
   const { send } = useGameSocket();
   const dispatch = useAppDispatch();
@@ -203,7 +206,7 @@ export function RoomPanel({
 
       {room.description && <RoomDescription description={room.description} />}
 
-      {room.hub && <HubTidingsPanel hub={room.hub} />}
+      {room.hub && <HubTidingsPanel hub={room.hub} viewerEntryId={viewerEntryId} />}
 
       {scene && <SceneHighlightsPanel sceneId={scene.id} />}
 

@@ -21,7 +21,7 @@ from world.combat.factories import (
     CombatParticipantFactory,
     EscalationCurveFactory,
 )
-from world.combat.models import CombatParticipant
+from world.combat.models import CombatParticipant, DramaticSurgeRecord
 from world.combat.serializers import ParticipantSerializer
 from world.mechanics.constants import EngagementType
 from world.mechanics.services import begin_engagement, end_engagement
@@ -286,6 +286,10 @@ class SurgeBeatsSerializerFieldTests(TestCase):
             amount=4,
             trigger_kind=SurgeTriggerKind.HIGH_STAKES,
         )
+        self.surge_record = DramaticSurgeRecord.objects.get(
+            encounter=self.encounter,
+            participant=self.participant,
+        )
 
     def _get_detail(self, account: object) -> dict:
         client = APIClient()
@@ -297,6 +301,7 @@ class SurgeBeatsSerializerFieldTests(TestCase):
     def test_owner_sees_full_provenance(self) -> None:
         data = self._get_detail(self.account)
         beat = data["surge_beats"][0]
+        self.assertEqual(beat["id"], self.surge_record.pk)
         self.assertEqual(beat["narration"], f"{self.character.db_key}'s power surges.")
         self.assertEqual(beat["trigger_kind"], SurgeTriggerKind.HIGH_STAKES)
         self.assertEqual(beat["amount"], 4)
@@ -304,6 +309,7 @@ class SurgeBeatsSerializerFieldTests(TestCase):
     def test_other_viewer_sees_only_generic_line(self) -> None:
         data = self._get_detail(self.other_account)
         beat = data["surge_beats"][0]
+        self.assertEqual(beat["id"], self.surge_record.pk)
         self.assertIn("narration", beat)
         self.assertNotIn("trigger_kind", beat)
         self.assertNotIn("amount", beat)

@@ -176,4 +176,19 @@ describe('DuelChallengeNotifier', () => {
     expect(toastDismissMock).not.toHaveBeenCalled();
     expect(getByTestId('duel-toast-accept-btn')).not.toBeDisabled();
   });
+
+  it('shows an inline error and does not dismiss the toast when the dispatch resolves success:false (#2423)', async () => {
+    mockUseDuelChallengeInbox.mockReturnValue({ data: [challenge(5)], isLoading: false });
+    mockMutateAsync.mockResolvedValue({ success: false, message: 'Challenge already expired.' });
+    render(<DuelChallengeNotifier />);
+
+    const renderFn = toastCustomMock.mock.calls[0][0] as (id: string | number) => JSX.Element;
+    const { getByTestId } = render(renderFn('toast-1'));
+    fireEvent.click(getByTestId('duel-toast-accept-btn'));
+
+    await waitFor(() => {
+      expect(getByTestId('duel-toast-error')).toHaveTextContent('Challenge already expired.');
+    });
+    expect(toastDismissMock).not.toHaveBeenCalled();
+  });
 });

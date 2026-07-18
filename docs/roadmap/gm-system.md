@@ -301,6 +301,46 @@ Deferred (premises verified in the #2127 spec's anti-reinvention pass):
 - `ChallengeTemplate.severity` guidance (Decision 6 — different scale, guides a
   content author rather than a live GM).
 
+### Phase 7 — Story Areas & Story Rooms ✅ (#2450, epic #2436 slice 3, ADR-0141)
+A GM's own build-and-run space, layered on the #2436/#2449 staff world-builder grid
+substrate but gated by GM trust instead of the staff flag. A GM can author a private
+STORY-origin area, dig rooms into it, and grant specific characters consent-first
+access to join — or spin up a disposable temp scene room for a one-off beat and
+close it out when done, returning everyone who joined.
+
+Delivered this slice:
+- **Models**: `StoryArea` (GM ownership sidecar on a `GridOrigin.STORY` `Area`),
+  `StoryRoomGrant` (per-character join grant, `return_location` captured at join),
+  `GMLevelCap.max_story_areas`/`max_story_rooms_per_area` (per-level caps, staff
+  seeds/tunes), `InstancedRoom.gm_owner` (a temp scene room a GM spun up).
+- **Services** (`world.gm.story_services`): cap-checked area/room create, grant/
+  revoke, join/leave (the player's own move, with a safety net when `move_to` is
+  blocked), and the spin-up/close-out lifecycle for temp scene rooms.
+- **Actions**: 13 GM-authored REGISTRY actions (`category="story_builder"`) mirroring
+  the staff canvas's dig/link/place/remove verbs scoped to the GM's own STORY areas,
+  plus 2 player-side actions (`category="story_rooms"`, no GM standing —
+  authorization is the grant) for `join_story_room`/`leave_story_room`.
+- **Telnet play verbs** (`commands/story_rooms.py`): `sceneroom`/`joinroom`/
+  `leaveroom` — canvas authoring stays web-only (epic Decision 2), matching the
+  "no telnet for staff authoring tools" split.
+- **API**: `StoryBuilderViewSet` (`/api/gm/story-areas/`, `IsGMOrStaff`, read-only).
+  Story areas/rooms are excluded from the player-facing `AreaViewSet`/
+  `RoomProfileViewSet` and never publicly listed, regardless of a room's own
+  `is_public` flag.
+- **Frontend**: `/gm/story-builder` on the shared `map-canvas/`/world-builder
+  components, with a story-specific tool palette.
+- **Player web join surface (fix round)**: the spec's Decision 1 promised players
+  a web button in addition to the telnet `joinroom`/`leaveroom` verbs; that
+  surface shipped after the initial slice as `MyStoryGrantsViewSet`
+  (`/api/gm/my-story-grants/`, `IsAuthenticated`, read-only) plus a
+  `/story-rooms` page (`frontend/src/story-rooms/`) with a Join/Leave button per
+  grant, dispatching the same `join_story_room`/`leave_story_room` REGISTRY
+  actions telnet uses.
+
+See `docs/systems/INDEX.md`'s GM section ("Story areas & story rooms") for the full
+model/service/action/API rundown, and ADR-0141 for why access is a consent-first
+player-side join rather than a GM summon.
+
 ## Cross-System Dependencies
 
 - **Stories app** — needs GM role relations and permission checks added as it grows

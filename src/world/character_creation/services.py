@@ -1138,14 +1138,40 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     # 3b. Apply path codex grants (teaches which magic milestones exist)
     _finalize_path_codex_grants(draft, sheet)
 
-    # 4. Create CharacterAura with defaults
-    glimpse_story = draft.draft_data.get("glimpse_story", "")
-    aura = CharacterAura(
-        character=sheet.character,
-        glimpse_story=glimpse_story,
+    # 4. Create CharacterAura, then persist the guided Glimpse picks (#2427)
+    #    through the glimpse services so glimpse_state stays consistent.
+    from world.magic.services.glimpse import (  # noqa: PLC0415
+        link_distinction_to_glimpse,
+        set_glimpse_prose,
+        set_glimpse_tags,
     )
+
+    aura = CharacterAura(character=sheet.character)
     aura.full_clean()
     aura.save()
+
+    tag_ids = draft.draft_data.get("glimpse_tag_ids", [])
+    if tag_ids:
+        from world.magic.constants import GlimpseTagAxis  # noqa: PLC0415
+        from world.magic.models import GlimpseTag  # noqa: PLC0415
+
+        tags = list(GlimpseTag.objects.filter(pk__in=tag_ids, is_active=True))
+        for axis in GlimpseTagAxis:
+            axis_tags = [tag for tag in tags if tag.axis == axis]
+            if axis_tags:
+                set_glimpse_tags(aura, axis_tags, axis=axis)
+
+    set_glimpse_prose(aura, draft.draft_data.get("glimpse_story", ""))
+
+    linked_ids = draft.draft_data.get("glimpse_linked_distinction_ids", [])
+    if linked_ids:
+        from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+
+        linked = CharacterDistinction.objects.filter(
+            character=sheet.character, distinction_id__in=linked_ids
+        )
+        for character_distinction in linked:
+            link_distinction_to_glimpse(character_distinction, aura)
 
     # 4b. Recompute aura now that CharacterAura exists. _apply_character_mechanics
     # (distinctions, via reconcile_distinction_resonance_grants) runs earlier in
@@ -1293,6 +1319,22 @@ def submit_draft_for_review(
         text="Application submitted for review.",
         comment_type=CommentType.STATUS_CHANGE,
     )
+
+    # Attach invite context if the submitting account arrived via an invite (#2483)
+    try:
+        from world.roster.services.invite_notifications import (  # noqa: PLC0415
+            notify_inviter_of_submission,
+        )
+        from world.roster.services.invite_services import annotate_application  # noqa: PLC0415
+
+        invite = annotate_application(application, application.player_account)
+        if invite is not None:
+            notify_inviter_of_submission(invite, application)
+    except Exception:
+        logger.exception(
+            "Failed to annotate/notify invite for application %s",
+            application.pk,
+        )
 
     from world.character_creation.email_service import CGEmailService  # noqa: PLC0415
 

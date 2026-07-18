@@ -5,10 +5,25 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { PlayerActionsResponse } from '../actionTypes';
 
-vi.mock('../actionQueries', () => ({
-  fetchAvailableActions: vi.fn(),
-  createActionRequest: vi.fn(),
-}));
+vi.mock('../actionQueries', async () => {
+  const { useQuery } = await import('@tanstack/react-query');
+  const fetchAvailableActions = vi.fn();
+  return {
+    fetchAvailableActions,
+    createActionRequest: vi.fn(),
+    useAvailableActionsQuery: (
+      characterId: number | null,
+      options: { enabled?: boolean; staleTime?: number; refetchInterval?: number } = {}
+    ) =>
+      useQuery({
+        queryKey: ['available-actions', characterId ?? 0],
+        queryFn: () => fetchAvailableActions(characterId),
+        enabled: (options.enabled ?? true) && characterId !== null && characterId > 0,
+        staleTime: options.staleTime ?? 10_000,
+        refetchInterval: options.refetchInterval,
+      }),
+  };
+});
 
 // Mock the roster query — component resolves active character → characterId
 vi.mock('@/roster/queries', () => ({
@@ -51,7 +66,8 @@ vi.mock('sonner', () => ({
 
 import { PersonaContextMenu } from './PersonaContextMenu';
 import { createActionRequest, fetchAvailableActions } from '../actionQueries';
-import { useDispatchPlayerAction } from '@/combat/queries';
+import { useDispatchPlayerAction, combatKeys } from '@/combat/queries';
+import { toast } from 'sonner';
 
 function makeAction(
   overrides: Partial<PlayerActionsResponse['results'][0]> = {}
@@ -310,6 +326,51 @@ describe('PersonaContextMenu', () => {
     expect(mockMutateAsync).toHaveBeenCalledWith({
       ref: { backend: 'registry', registry_key: 'challenge' },
       kwargs: { target: 10 },
+    });
+  });
+
+  // #2423: the dispatch endpoint resolves HTTP 200 + success:false for a
+  // business-rule rejection — a resolved promise is not itself proof of success.
+  it('toasts and skips duel-challenge invalidation on success:false', async () => {
+    const user = userEvent.setup();
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, success: false, message: 'No.' })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    queryClient.setQueryData(['available-actions', 42], MOCK_ACTIONS);
+    queryClient.setQueryData(['scene', '1'], {
+      id: 1,
+      personas: [{ id: 10, name: 'Alice', character_sheet: 99 }],
+    });
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
+        <span>Alice</span>
+      </PersonaContextMenu>,
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        ),
+      }
+    );
+
+    await user.click(screen.getByRole('button'));
+    const challengeItem = await screen.findByTestId('challenge-to-duel-item');
+    await user.click(challengeItem);
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('No.');
+    });
+    expect(invalidateSpy).not.toHaveBeenCalledWith({
+      queryKey: combatKeys.duelChallengesAll(),
     });
   });
 
