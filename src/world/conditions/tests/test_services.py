@@ -750,6 +750,51 @@ class GetAllCapabilityValuesTest(TestCase):
         # -3 floored to 0
         assert result == {self.movement.id: 0}
 
+    def test_technique_grant_included_with_no_active_conditions(self):
+        """(f, #2504) A known technique's grant surfaces even with zero active conditions."""
+        from world.magic.factories import (
+            CharacterTechniqueFactory,
+            TechniqueCapabilityGrantFactory,
+            TechniqueFactory,
+        )
+
+        technique_only_cap = CapabilityTypeFactory(name="technique_only")
+        technique = TechniqueFactory(intensity=1)
+        grant = TechniqueCapabilityGrantFactory(
+            technique=technique,
+            capability=technique_only_cap,
+            base_value=5,
+            intensity_multiplier=0,
+        )
+        CharacterTechniqueFactory(character=self.target.sheet_data, technique=technique)
+
+        result = get_all_capability_values(self.target.sheet_data)
+        assert result == {technique_only_cap.id: grant.calculate_value()}
+
+    def test_technique_grant_merges_as_max_with_condition_total(self):
+        """(f, #2504) Technique term merges into an existing condition total via max, not sum."""
+        from world.magic.factories import (
+            CharacterTechniqueFactory,
+            TechniqueCapabilityGrantFactory,
+            TechniqueFactory,
+        )
+
+        # hasted (class-level) grants movement=10 while active.
+        ConditionInstanceFactory(target=self.target, condition=self.hasted)
+
+        weaker_technique = TechniqueFactory(intensity=1)
+        TechniqueCapabilityGrantFactory(
+            technique=weaker_technique,
+            capability=self.movement,
+            base_value=3,
+            intensity_multiplier=0,
+        )
+        CharacterTechniqueFactory(character=self.target.sheet_data, technique=weaker_technique)
+
+        result = get_all_capability_values(self.target.sheet_data)
+        # condition contributes 10, weaker technique grant (3) does not sum on top
+        assert result == {self.movement.id: 10}
+
 
 class GetCheckModifierTest(TestCase):
     """Tests for get_check_modifier service function."""

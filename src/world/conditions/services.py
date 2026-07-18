@@ -1426,6 +1426,45 @@ def _passive_capability_grants(character_sheet: "CharacterSheet") -> set[int]:
     return handler.passive_capability_grants()
 
 
+def _technique_capability_values(character_sheet: "CharacterSheet") -> dict[int, int]:
+    """Best (max) technique-granted value per CapabilityType, for the agency oracle (#2504).
+
+    One query over ``TechniqueCapabilityGrant`` restricted to the character's KNOWN
+    techniques (``technique__character_grants__character=character_sheet``), and further
+    restricted to ``prerequisite__isnull=True`` — a source-level prerequisite is
+    contextual to a target and stays availability-only (see
+    ``get_capability_sources_for_character`` in world.mechanics.services, which reads
+    ALL grants including prerequisite-gated ones for that purpose). Reuses
+    ``TechniqueCapabilityGrant.calculate_value()`` — never re-derives the
+    base + intensity formula. Grants with ``calculate_value() <= 0`` are skipped.
+    When multiple known techniques grant the same capability, the fold is MAX, not
+    sum (ADR-0034 individuation) — stacking many techniques must not inflate an
+    unrelated capability. Magic is imported locally to avoid a circular import at
+    module load, mirroring ``_passive_capability_grants`` above.
+
+    Args:
+        character_sheet: The character's CharacterSheet.
+
+    Returns:
+        Dict mapping CapabilityType PK to the best positive technique-granted value.
+    """
+    from world.magic.models.techniques import TechniqueCapabilityGrant  # noqa: PLC0415
+
+    grants = TechniqueCapabilityGrant.objects.filter(
+        technique__character_grants__character=character_sheet,
+        prerequisite__isnull=True,
+    ).select_related("technique")
+
+    totals: dict[int, int] = {}
+    for grant in grants:
+        value = grant.calculate_value()
+        if value <= 0:
+            continue
+        cap_id = grant.capability_id
+        totals[cap_id] = max(totals.get(cap_id, 0), value)
+    return totals
+
+
 def get_capability_status(
     character_sheet: "CharacterSheet",
     capability: CapabilityType,
@@ -1564,10 +1603,20 @@ def get_effective_capability_value(
 ) -> int:
     """Effective capability value = innate baseline + CharacterModifier contributions
     (distinctions/species/equipment via ModifierTarget.target_capability) + raw
-    condition contributions, floored at 0.
+    condition contributions + the best (max) known-technique grant, floored at 0.
 
     Distinct from get_capability_value (condition-only): this is the agency/requirement
     value — intrinsic capacity (identity) impaired by transient state.
+
+    **One-oracle merge (#2504):** this is the single "what can this character do"
+    answer — technique-granted capabilities (via ``TechniqueCapabilityGrant``,
+    prerequisite-null grants only) now satisfy requirement/gate checks the same
+    way an innate baseline or condition would, not just the availability oracle
+    (``get_capability_sources_for_character``, world.mechanics.services). Multiple
+    known techniques granting the same capability contribute their MAX, not a sum
+    (ADR-0034 individuation) — see ``_technique_capability_values``.
+    ``TraitCapabilityDerivation`` deliberately does NOT fold in here (ruled
+    availability-only) — that asymmetry is intentional, not an oversight.
 
     Args:
         character_sheet: The character's CharacterSheet.
@@ -1596,7 +1645,8 @@ def get_effective_capability_value(
     # read, not a loop, so the cost is acceptable.
     granted = _passive_capability_grants(character_sheet)
     grant_floor = 1 if capability.pk in granted else 0
-    return max(0, baseline + modifier_total + condition_total + grant_floor)
+    technique_value = _technique_capability_values(character_sheet).get(capability.pk, 0)
+    return max(0, baseline + modifier_total + condition_total + grant_floor + technique_value)
 
 
 def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, int]:
@@ -1606,6 +1656,13 @@ def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, in
     Batch-queries all ConditionCapabilityEffect rows for active conditions
     and aggregates per capability. Used by the obstacle system and
     capability source aggregation.
+
+    **One-oracle merge (#2504):** also folds in the best (max) known-technique
+    grant per capability (``_technique_capability_values``, prerequisite-null
+    grants only) — the bulk sibling of the per-capability merge in
+    ``get_effective_capability_value``. Multiple known techniques (or a
+    technique alongside condition contributions) never sum for the same
+    capability; the higher value wins (ADR-0034 individuation).
 
     Args:
         target: The ObjectDB instance
@@ -1659,6 +1716,12 @@ def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, in
     granted = _passive_capability_grants(character_sheet)
     for cap_id in granted:
         totals[cap_id] = totals.get(cap_id, 0) + 1
+
+    # Technique-granted capabilities (#2504 one-oracle merge): fold in the best
+    # (max) known-technique grant per capability, mirroring
+    # get_effective_capability_value — max, not sum (ADR-0034 individuation).
+    for cap_id, technique_value in _technique_capability_values(character_sheet).items():
+        totals[cap_id] = max(totals.get(cap_id, 0), technique_value)
 
     # Floor at 0
     return {cap_id: max(0, val) for cap_id, val in totals.items()}
