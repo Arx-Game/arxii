@@ -257,7 +257,10 @@ class CreateStoryAreaAction(_StoryBuilderAction):
             return ActionResult(success=False, message="Name the area.")
         try:
             story = create_story_area(
-                gm=profile, name=area_name, description=kwargs.get("description") or ""
+                gm=profile,
+                name=area_name,
+                description=kwargs.get("description") or "",
+                skip_cap=_is_staff(actor),
             )
         except StoryServiceError as exc:
             return ActionResult(success=False, message=exc.user_message)

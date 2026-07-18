@@ -38,18 +38,28 @@ def _cap_for(gm: GMProfile) -> GMLevelCap:
     return cap
 
 
-def create_story_area(*, gm: GMProfile, name: str, description: str = "") -> StoryArea:
-    """Create a flat STORY-origin area owned by ``gm``, enforcing max_story_areas."""
+def create_story_area(
+    *, gm: GMProfile, name: str, description: str = "", skip_cap: bool = False
+) -> StoryArea:
+    """Create a flat STORY-origin area owned by ``gm``, enforcing max_story_areas.
+
+    ``skip_cap`` mirrors ``story_room_cap_check``'s staff bypass (see
+    ``StoryDigRoomAction``) — the staff canvas is uncapped everywhere else in
+    this slice, so a staff member holding a GMProfile must not be refused at
+    the area cap. A plain GM is always cap-checked; only pass ``skip_cap=True``
+    from a caller that has already verified staff standing.
+    """
     from world.areas.models import Area  # noqa: PLC0415
 
-    cap = _cap_for(gm)
-    live = StoryArea.objects.filter(gm=gm, area__origin=GridOrigin.STORY).count()
-    if live >= cap.max_story_areas:
-        msg = (
-            f"You already have {live} story area(s) — your level allows "
-            f"{cap.max_story_areas}. Remove one first, or ask staff."
-        )
-        raise StoryServiceError(msg)
+    if not skip_cap:
+        cap = _cap_for(gm)
+        live = StoryArea.objects.filter(gm=gm, area__origin=GridOrigin.STORY).count()
+        if live >= cap.max_story_areas:
+            msg = (
+                f"You already have {live} story area(s) — your level allows "
+                f"{cap.max_story_areas}. Remove one first, or ask staff."
+            )
+            raise StoryServiceError(msg)
     area = Area(
         name=name.strip(),
         level=AreaLevel.BUILDING,

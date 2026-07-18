@@ -68,6 +68,25 @@ def _gm_actor(db_key: str) -> tuple[ObjectDB, GMProfile]:
     return char, profile
 
 
+def _staff_gm_actor(db_key: str) -> tuple[ObjectDB, GMProfile]:
+    """A Character whose account is BOTH staff AND a STARTING-level GM.
+
+    Same roster-tenure wiring as ``_gm_actor`` (required for ``active_account``
+    to resolve the GMProfile), plus ``char.db_account`` set directly to that
+    same account (the ``_staff_actor`` shortcut ``is_staff_observer``/``_is_staff``
+    reads — see the ``_gm_actor`` docstring: roster-tenure wiring alone does
+    NOT populate ``db_account``) and ``account.is_staff = True`` — the "staff
+    member holding a GMProfile" case the area-cap staff bypass exists for.
+    """
+    char, profile = _gm_actor(db_key)
+    account = profile.account
+    account.is_staff = True
+    account.save()
+    char.db_account = account
+    char.save()
+    return char, profile
+
+
 class CreateStoryAreaActionTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
@@ -103,6 +122,23 @@ class CreateStoryAreaActionTests(TestCase):
         result = CreateStoryAreaAction().run(self.gm_actor, name="Second Area")
         assert not result.success
         assert not Area.objects.filter(name="Second Area").exists()
+
+    def test_staff_gm_can_create_story_area_past_cap(self) -> None:
+        """Staff is uncapped everywhere else in this slice (mirrors StoryDigRoomAction).
+
+        A staff member holding a GMProfile already at the STARTING cap (1
+        story area) must still be able to create another — the cap only
+        binds a plain GM.
+        """
+        from actions.definitions.story_builder import CreateStoryAreaAction
+
+        staff_actor, staff_profile = _staff_gm_actor("CreateStoryAreaStaffGM")
+        StoryAreaFactory(gm=staff_profile)
+        result = CreateStoryAreaAction().run(staff_actor, name="Second Area")
+        assert result.success
+        area = Area.objects.get(name="Second Area")
+        assert area.origin == GridOrigin.STORY
+        assert StoryArea.objects.filter(area=area, gm=staff_profile).exists()
 
 
 class EditStoryAreaActionTests(TestCase):

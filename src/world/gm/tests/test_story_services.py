@@ -74,6 +74,21 @@ class CreateStoryAreaTests(TestCase):
         with self.assertRaises(StoryServiceError):
             create_story_area(gm=gm, name="First")
 
+    def test_skip_cap_bypasses_cap_refusal(self) -> None:
+        """The staff-canvas bypass (#2450 final-review fix) — mirrors story_room_cap_check."""
+        gm = GMProfileFactory(level=GMLevel.STARTING)
+        create_story_area(gm=gm, name="First")
+        second = create_story_area(gm=gm, name="Second", skip_cap=True)
+        assert second.gm == gm
+        assert StoryArea.objects.filter(gm=gm, area__origin=GridOrigin.STORY).count() == 2
+
+    def test_skip_cap_also_bypasses_missing_cap_config(self) -> None:
+        """skip_cap=True never touches GMLevelCap — mirrors StoryDigRoomAction's staff branch."""
+        GMLevelCap.objects.all().delete()
+        gm = GMProfileFactory(level=GMLevel.STARTING)
+        story = create_story_area(gm=gm, name="First", skip_cap=True)
+        assert story.gm == gm
+
 
 class RemoveStoryAreaTests(TestCase):
     def test_refuses_when_rooms_exist(self) -> None:
