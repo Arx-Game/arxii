@@ -174,6 +174,22 @@ class RecipeNotKnown(ItemError):
         super().__init__(self.user_message)
 
 
+class CategoryRequirementsNotQuotable(ItemError):
+    """Raised by build_crafting_quote for a recipe with material-category requirements.
+
+    Crafting *execution* (stage_and_assert_affordable) already supports category
+    requirements. The read-only quote preview cannot yet represent a material class
+    (no single template) in its per-row API shape; that lands with the quote-surface
+    work. No seeded recipe uses category requirements today, so this is a forward
+    guard, not a live path.
+    """
+
+    user_message = "A materials preview isn't available for this recipe yet."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"A materials preview isn't available for this recipe yet."},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Inventory action errors (pick_up, drop, give, equip, etc.)
 # ---------------------------------------------------------------------------
