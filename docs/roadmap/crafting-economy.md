@@ -62,6 +62,15 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   Crafting execution honors category requirements end-to-end; the quote preview is guarded
   (`CategoryRequirementsNotQuotable`) until the quote surface lands.
 
+- **Gem value model (Build 0b, slice 1) — DONE.** Gem *types* are `ItemTemplate` rows + a
+  `GemDetails` sidecar (`quality_level` 1–15; tier = `MaterialCategory`; motif reuses
+  `tied_resonance`); a cut gem *instance* is an `ItemInstance` + `GemInstanceDetails` carrying
+  size/purity/cut `GemGrade`s (multiplier floor 1.0). Worth = `type_base × size × purity × cut`,
+  folded into the wired `appraise()`. Remaining 0b slices: **mining/distribution** (common
+  aggregate + Rare-Find rolls), **adornment** (worth-only attachment), the **cut recipe** (risky
+  value-add), and the **value-denominated / bucket** bulk path. Design capture + verify-against-code
+  review in the lore repo.
+
 - **Handler registry** (`CraftingHandler` ABC + `FacetAttachHandler` / `StyleAttachHandler`).
   New kinds (alchemy, wand-crafting, etc.) plug in by authoring a `CraftingRecipe` row +
   registering a thin handler — no schema change required.

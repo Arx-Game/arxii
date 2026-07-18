@@ -3555,6 +3555,16 @@ holder is never notified a claim exists.
     ("N value of a tier") are Build 0b, gated on the gemstone-value ladder. Crafting
     *execution* honors category requirements; the read-only quote preview raises
     `CategoryRequirementsNotQuotable` until the quote surface lands.
+  - **Gem value model** (`world.items.gems`, Build 0b slice 1) — gem *types* are ordinary
+    `ItemTemplate` rows decorated by a `GemDetails` sidecar (`quality_level` 1–15; tier =
+    `MaterialCategory`; motif reuses `tied_resonance`), so they stay requirable/consumable like
+    any material. A cut gem *instance* is an `ItemInstance` decorated by `GemInstanceDetails`
+    carrying its size/purity/cut `GemGrade`s (one axis-discriminated lookup, `multiplier` floor
+    1.0). Worth = `template.value × size × purity × cut` via `world.items.gems.services
+    .compute_gem_worth`, folded into the wired `appraise()` (`services/pricing.py` → `suggested_value`).
+    Accessors: `ItemTemplate.gem_type_or_none`, `ItemInstance.gem_or_none`. No standalone gem
+    roster (would orphan the consumption stack); `quality_level` is a plain int, not new
+    `QualityTier` rows. Mining / adornment / cut-recipe are later 0b slices.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)

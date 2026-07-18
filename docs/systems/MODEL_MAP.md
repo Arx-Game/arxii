@@ -3034,6 +3034,7 @@
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - species_gift_drawbacks <- species.SpeciesGiftGrant
+  - glimpse_tag_suggestions <- magic.GlimpseTagDistinctionSuggestion
   - ritual_grants <- magic.DistinctionRitualGrant
   - resonance_grants <- magic.DistinctionResonanceGrant
   - resonance_rank_thresholds <- magic.DistinctionResonanceRankThreshold
@@ -3065,6 +3066,7 @@
   - character -> objects.ObjectDB [FK]
   - distinction -> distinctions.Distinction [FK]
   - secret -> secrets.Secret [OneToOne] (nullable)
+  - from_glimpse -> magic.CharacterAura [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
   - modifier_sources <- mechanics.ModifierSource
@@ -3132,6 +3134,8 @@
   - item -> items.ItemInstance [FK]
   - claimant_persona -> scenes.Persona [FK] (nullable)
   - claimant_organization -> societies.Organization [FK] (nullable)
+**Pointed to by:**
+  - reclamation_claims <- items.ReclamationClaim
 
 ### EstateConfig
 
@@ -3529,6 +3533,7 @@
 - `leave_table(membership: 'GMTableMembership') -> 'None' — Soft-leave a membership. No-op if already left.`
 - `promote_gm(profile: 'GMProfile', new_level: 'str', *, changed_by: 'AccountDB', reason: 'str') -> 'GMLevelChange' — Set profile.level (promotion OR demotion), writing the audit row.`
 - `revoke_invite(invite: 'GMRosterInvite') -> 'None' — Revoke an invite by setting expires_at to now.`
+- `set_looking_for_table(player_data: 'PlayerData', looking: 'bool') -> 'None' — Set or clear the looking-for-table flag on a player's profile (#2431).`
 - `soft_leave_memberships_for_retired_persona(persona: 'Persona') -> 'int' — Future integration hook: called when a persona is retired.`
 - `submit_catalog_suggestion(account: 'AccountDB', *, proposal_kind: 'str', proposal_text: 'str', situation_kind: 'SituationKind | None' = None) -> 'CatalogSuggestion' — Create a ``CatalogSuggestion`` row, routed to the staff inbox (#2127).`
 - `surrender_character_story(gm: 'GMProfile', story: 'Story') -> 'None' — GM surrenders oversight of a story.`
@@ -3579,13 +3584,14 @@
 **Foreign Keys:**
   - room -> objects.ObjectDB [OneToOne]
   - owner -> character_sheets.CharacterSheet [FK] (nullable)
+  - gm_owner -> gm.GMProfile [FK] (nullable)
   - return_location -> objects.ObjectDB [FK] (nullable)
 **Pointed to by:**
   - captivities <- captivity.Captivity
 
 ### Service Functions
 - `complete_instanced_room(room: evennia.objects.models.ObjectDB) -> None — Mark room completed, relocate occupants, delete if no history.`
-- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '') -> evennia.objects.models.ObjectDB — Create a temporary instanced room and its lifecycle record.`
+- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None) -> evennia.objects.models.ObjectDB — Create a temporary instanced room, its RoomProfile, and lifecycle record.`
 
 
 ## world.items
@@ -3631,6 +3637,7 @@
   - disguise_kit_effects <- items.DisguiseKitEffect
   - check_modifiers <- items.ItemCheckModifier
   - garment_mitigations <- items.GarmentMitigation
+  - gem_details <- items.GemDetails
   - stock_listings <- items.StockListing
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
@@ -3668,6 +3675,7 @@
   - outfit_slots <- items.OutfitSlot
   - mantle <- items.Mantle
   - crafted_recipes <- items.CraftedItemRecipe
+  - gem_instance_details <- items.GemInstanceDetails
   - ware_listing <- items.WareListing
   - market_sales <- items.MarketSale
   - reclamation_claims <- items.ReclamationClaim
@@ -3864,6 +3872,19 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - recipe -> items.CraftingRecipe [FK]
 
+### GemGrade
+
+### GemDetails
+**Foreign Keys:**
+  - item_template -> items.ItemTemplate [OneToOne]
+
+### GemInstanceDetails
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [OneToOne]
+  - size_grade -> items.GemGrade [FK]
+  - purity_grade -> items.GemGrade [FK]
+  - cut_grade -> items.GemGrade [FK]
+
 ### MarketSquare
 **Foreign Keys:**
   - area -> areas.Area [FK]
@@ -4028,6 +4049,37 @@
   - item_instance -> items.ItemInstance [OneToOne] (nullable)
 **Pointed to by:**
   - frame_jobs <- justice.FrameJobDetails
+
+### LieLowState
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - area -> areas.Area [FK]
+
+### PardonGrant
+**Foreign Keys:**
+  - granter_persona -> scenes.Persona [FK]
+  - target_persona -> scenes.Persona [FK]
+  - area -> areas.Area [FK]
+  - society -> societies.Society [FK]
+
+### GuardEncounter
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - area -> areas.Area [FK]
+
+### JusticeCase
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - area -> areas.Area [FK]
+  - society -> societies.Society [FK]
+  - captivity -> captivity.Captivity [FK] (nullable)
+**Pointed to by:**
+  - exculpatory_evidence <- justice.ExculpatoryEvidence
+
+### ExculpatoryEvidence
+**Foreign Keys:**
+  - case -> justice.JusticeCase [FK]
+  - submitter_persona -> scenes.Persona [FK]
 
 ### Service Functions
 - `accrue_accusation_heat(*, secret: 'Secret', area: 'Area | None', scale: 'int' = 1) -> 'PersonaHeat | None' — Mint pursuit heat on an accusation's subject, where the allegation landed.`
@@ -6505,8 +6557,8 @@
 - `handle_training_room_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — TRAINING_ROOM strategy (#675): row-only install/level.`
 - `handle_workshop_of_iniquity_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — WORKSHOP_OF_INIQUITY strategy (#1825): row-only install/level.`
 - `react_to_unauthorized_entry(actor, room) -> 'None' — React to `actor` entering `room` when an active ward/alarm is present`
-- `register_room_feature_strategy(strategy_key: 'str', handler: 'RoomFeatureStrategyHandler') -> 'None' — Register/override the strategy handler for ``strategy_key``.`
-- `reset_room_feature_strategies() -> 'None' — Restore the empty baseline. Test-only escape hatch.`
+- `register_room_feature_strategy(strategy_key: 'str', handler: 'RoomFeatureStrategyHandler', *, as_default: 'bool' = False) -> 'None' — Register/override the strategy handler for ``strategy_key``.`
+- `reset_room_feature_strategies() -> 'None' — Restore the at-ready baseline registrations. Test-only escape hatch.`
 - `room_ward_upkeep_tick() -> 'None' — Drain each active ward's resonance_reserve; lapse it if depleted (#2177).`
 - `sync_social_hub_traffic(room_profile: 'RoomProfile') -> 'None' — Reconcile the room's crowd-draw TRAFFIC modifier to its hub's current level.`
 
