@@ -15,14 +15,19 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.clues.constants import ClueResolution, ClueTargetKind
 
 
-class Clue(DiscriminatorMixin, SharedMemoryModel):
+class Clue(NaturalKeyMixin, DiscriminatorMixin, SharedMemoryModel):
     """A pointer to one discoverable target. Always points at something (invariant).
 
     Add a new target kind by adding the value to ``ClueTargetKind``, a nullable
     per-kind FK below, and a ``DISCRIMINATOR_MAP`` entry (SCANDAL planned, #1143).
+
+    Carries a natural key (``slug``, #2451) so grid bundles can reference a clue
+    by stable name when authoring a ``RoomClue``/``ClueTrigger`` placement —
+    mirrors ``PortalAnchorKind``'s ``name``-keyed natural key.
     """
 
     DISCRIMINATOR_FIELD = "target_kind"
@@ -38,6 +43,14 @@ class Clue(DiscriminatorMixin, SharedMemoryModel):
         # DiscriminatorMixin's own multi-discriminator override guidance.
         ClueTargetKind.PERSONA_LINK: "target_persona",
     }
+
+    slug = models.SlugField(
+        max_length=200,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Stable content-pipeline identifier (#2451). NULL for ad hoc/test clues.",
+    )
 
     target_kind = models.CharField(
         max_length=20,
@@ -118,6 +131,11 @@ class Clue(DiscriminatorMixin, SharedMemoryModel):
         default=ClueResolution.AUTOMATIC,
         help_text="How holding this clue becomes having the target.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["slug"]
 
     class Meta:
         ordering = ["name"]

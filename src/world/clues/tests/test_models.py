@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
+from core.natural_keys import NaturalKeyMixin
 from world.clues.constants import ClueTargetKind
 from world.clues.factories import ClueFactory, ClueTriggerFactory, RoomClueFactory
 from world.clues.models import Clue
@@ -108,3 +109,20 @@ class ClueTriggerFixtureKeyTests(TestCase):
         ClueTriggerFactory(fixture_key="arx-city/golden-hart-taproom/whisper")
         with self.assertRaises(IntegrityError), transaction.atomic():
             ClueTriggerFactory(fixture_key="arx-city/golden-hart-taproom/whisper")
+
+
+class ClueNaturalKeyTests(TestCase):
+    def test_clue_is_a_natural_key_mixin(self) -> None:
+        self.assertTrue(issubclass(Clue, NaturalKeyMixin))
+
+    def test_slug_defaults_to_none_and_is_unique(self) -> None:
+        clue = ClueFactory(slug=None)
+        self.assertIsNone(clue.slug)
+        ClueFactory(slug="torn-letter")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ClueFactory(slug="torn-letter")
+
+    def test_natural_key_round_trip(self) -> None:
+        clue = ClueFactory(slug="torn-letter")
+        self.assertEqual(clue.natural_key(), ("torn-letter",))
+        self.assertEqual(Clue.objects.get_by_natural_key("torn-letter"), clue)

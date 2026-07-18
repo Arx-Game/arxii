@@ -50,6 +50,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "classes.aspect",
         "classes.path",
         "classes.pathaspect",
+        # clues
+        "clues.clue",
         # codex
         "codex.codexcategory",
         "codex.codexentry",

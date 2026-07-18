@@ -155,6 +155,10 @@ class ContentExportTests(TestCase):
         assert "staff-art" in exported
         assert '"slug": null' not in exported
 
+    def test_clue_is_a_content_model(self) -> None:
+        """Clue became exportable content once it carried a natural key (#2451)."""
+        assert "clues.clue" in CONTENT_MODELS
+
     def test_content_models_all_have_natural_key(self) -> None:
         """Every model in the allowlist must have NaturalKeyMixin."""
         from django.apps import apps
