@@ -53,6 +53,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "codex.codexentry",
         "codex.codexsubject",
         "codex.traditioncodexgrant",
+        "codex.beginningscodexgrant",
+        "codex.distinctioncodexgrant",
+        "codex.pathcodexgrant",
         # conditions
         "conditions.capabilitytype",
         "conditions.conditioncapabilityeffect",
