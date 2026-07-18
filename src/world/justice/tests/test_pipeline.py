@@ -41,9 +41,7 @@ class _NeverRng:
 
 
 def _heat(persona, area, society, value):
-    return PersonaHeat.objects.create(
-        persona=persona, area=area, society=society, value=value
-    )
+    return PersonaHeat.objects.create(persona=persona, area=area, society=society, value=value)
 
 
 class TriggerLadderTests(JusticeFixtureMixin, TestCase):
@@ -100,18 +98,14 @@ class TriggerLadderTests(JusticeFixtureMixin, TestCase):
 
     def test_open_encounter_and_case_suppress(self):
         _heat(self.persona, self.kingdom, self.crown, MAX_VALUE_FLOOR)
-        maybe_guard_encounter(
-            self.persona, self.kingdom, GuardTrigger.ROOM_ARRIVAL, rng=_FireRng()
-        )
+        maybe_guard_encounter(self.persona, self.kingdom, GuardTrigger.ROOM_ARRIVAL, rng=_FireRng())
         self.assertIsNone(
             maybe_guard_encounter(
                 self.persona, self.kingdom, GuardTrigger.ROOM_ARRIVAL, rng=_FireRng()
             )
         )
         GuardEncounter.objects.all().delete()
-        JusticeCase.objects.create(
-            persona=self.persona, area=self.kingdom, society=self.crown
-        )
+        JusticeCase.objects.create(persona=self.persona, area=self.kingdom, society=self.crown)
         self.assertIsNone(
             maybe_guard_encounter(
                 self.persona, self.kingdom, GuardTrigger.ROOM_ARRIVAL, rng=_FireRng()
@@ -141,9 +135,7 @@ class EvasionTests(JusticeFixtureMixin, TestCase):
 
     def test_botch_captures_and_opens_case(self):
         enc = self._encounter()
-        with patch(
-            "world.captivity.services.capture_character", return_value=None
-        ):
+        with patch("world.captivity.services.capture_character", return_value=None):
             resolve_guard_encounter(enc, check_level=-3)
         case = JusticeCase.objects.get()
         self.assertEqual(case.persona, self.persona)
@@ -287,9 +279,7 @@ class LethalWallTests(JusticeFixtureMixin, TestCase):
 
     def test_pc_opt_in_and_exhausted_reaches_execution(self):
         persona = self._pc_persona(opt_in=True)
-        case = self._catastrophic_case(
-            persona, failed_outs=EXECUTION_MIN_FAILED_OUTS
-        )
+        case = self._catastrophic_case(persona, failed_outs=EXECUTION_MIN_FAILED_OUTS)
         initiate_trial(case, persona, check_levels=[-3])
         case.refresh_from_db()
         self.assertEqual(case.sentence_kind, SentenceKind.EXECUTION)

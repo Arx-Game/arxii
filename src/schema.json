@@ -15354,8 +15354,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Consequence Pool.
+          type: string
         required: true
       tags:
       - magic
@@ -15414,7 +15413,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this Consequence Pool.
         required: true
       tags:
       - magic

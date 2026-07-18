@@ -537,9 +537,7 @@ class JusticeCase(SharedMemoryModel):
     persona = models.ForeignKey(
         "scenes.Persona", on_delete=models.CASCADE, related_name="justice_cases"
     )
-    area = models.ForeignKey(
-        "areas.Area", on_delete=models.CASCADE, related_name="justice_cases"
-    )
+    area = models.ForeignKey("areas.Area", on_delete=models.CASCADE, related_name="justice_cases")
     society = models.ForeignKey(
         "societies.Society", on_delete=models.CASCADE, related_name="justice_cases"
     )

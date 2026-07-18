@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("evennia_extensions", "0010_roomprofile_fixture_key_roomprofile_origin"),
     ]

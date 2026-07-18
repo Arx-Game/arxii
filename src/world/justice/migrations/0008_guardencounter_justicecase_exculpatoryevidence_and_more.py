@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("areas", "0020_area_origin_area_slug"),
         ("captivity", "0007_captivity_holding_room_captivity_return_location_and_more"),
