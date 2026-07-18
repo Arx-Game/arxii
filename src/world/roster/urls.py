@@ -5,6 +5,7 @@ URL patterns for the roster system API.
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
+from world.gm.views import LookingForTableToggleView
 from world.roster.views import (
     FamilyViewSet,
     GameInviteViewSet,
@@ -34,6 +35,11 @@ urlpatterns = [
         "visibility-settings/",
         VisibilitySettingsView.as_view(),
         name="visibility-settings",
+    ),
+    path(
+        "looking-for-table/",
+        LookingForTableToggleView.as_view(),
+        name="looking-for-table-toggle",
     ),
     *router.urls,
 ]

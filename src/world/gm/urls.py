@@ -16,6 +16,7 @@ from world.gm.views import (
     GMRosterInviteViewSet,
     GMTableMembershipViewSet,
     GMTableViewSet,
+    LookingForTableBrowseView,
 )
 
 app_name = "gm"
@@ -46,4 +47,9 @@ urlpatterns = [
     ),
     path("demand-ransom/", DemandRansomView.as_view(), name="gm-demand-ransom"),
     path("dashboard/", GMDashboardView.as_view(), name="gm-dashboard"),
+    path(
+        "looking-for-table/",
+        LookingForTableBrowseView.as_view(),
+        name="gm-looking-for-table",
+    ),
 ]
