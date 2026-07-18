@@ -18,6 +18,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
+from world.justice.constants import CaseStatus
 from world.justice.models import PersonaHeat
 from world.justice.serializers import PersonaHeatSerializer
 from world.roster.models import RosterEntry
@@ -175,27 +176,38 @@ class PardonView(_ViewerActionView):
         return Response({"heat_cleared": grant.heat_cleared}, status=201)
 
 
-class WantedListView(APIView):
+class WantedListView(_ViewerActionView):
     """GET /api/justice/wanted/?area=<id> — the public wanted board (#1826).
 
     Deliberately public-to-authenticated: crossing the wanted floor ends
     self-only visibility for those tiers. Tier + presented name + crime kinds;
-    never raw values.
+    never raw values. An optional ``viewer`` adds two viewer-facing extras:
+    ``viewer_can_pardon`` (the lord's-grant control gate, #1826) and the
+    ``held`` list of awaiting-trial captives here (being held for trial is a
+    public record — the discovery seam for the help-the-accused loop, #2378).
     """
 
-    permission_classes = [IsAuthenticated]
-
     def get(self, request):
-        from world.areas.models import Area  # noqa: PLC0415
-        from world.justice.lifecycle import wanted_rows_for_area  # noqa: PLC0415
+        from world.justice.lifecycle import can_pardon, wanted_rows_for_area  # noqa: PLC0415
+        from world.justice.models import JusticeCase  # noqa: PLC0415
 
-        raw = request.query_params.get("area")  # noqa: USE_FILTERSET — single lookup param
-        if raw is None or not str(raw).isdigit():
-            return Response({"detail": "Unknown area."}, status=400)
-        area = Area.objects.filter(pk=int(raw)).first()
+        area = self._area(request.query_params.get("area"))  # noqa: USE_FILTERSET — single lookup param
         if area is None:
             return Response({"detail": "Unknown area."}, status=400)
-        return Response({"wanted": wanted_rows_for_area(area)})
+        viewer = self._viewer_persona(request)
+        held = [
+            {"case_id": case.pk, "persona_name": case.persona.name}
+            for case in JusticeCase.objects.filter(
+                area=area, status=CaseStatus.AWAITING_TRIAL
+            ).select_related("persona")
+        ]
+        return Response(
+            {
+                "wanted": wanted_rows_for_area(area),
+                "held": held,
+                "viewer_can_pardon": viewer is not None and can_pardon(viewer, area),
+            }
+        )
 
 
 class MyCaseView(_ViewerActionView):

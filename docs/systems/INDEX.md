@@ -1191,7 +1191,13 @@ botch mints a `bribery` crime); **pardon** (`pardon_persona` — magistrate offi
 or org leadership of the enforcing society; `PardonGrant` audit + public feed
 item); **wanted visibility** (`wanted_rows_for_area` — at/above
 `WANTED_VALUE_FLOOR` the warrant flips public: tier + presented name + crime
-kinds, never numbers; `GET /api/justice/wanted/`).
+kinds, never numbers; `GET /api/justice/wanted/` also carries the area's
+awaiting-trial `held` list — public record, the help-the-accused discovery
+seam — and `viewer_can_pardon` for the lord's-grant control gate; the room
+hub payload (`_get_hub`, flows room_state serializer) exposes `area_id` so
+the frontend `WantedBoard` renders at notice boards/criers, and `CrimeTab`
+shows the captive's own case + stand-trial control via `GET
+/api/justice/my-case/`).
 Pipeline (#2378, `justice/pipeline.py`): guard pressure is **event-driven rolls
 against active public play** — the trigger ladder (`maybe_guard_encounter`) fires
 on NPC transactions at wanted, any public interaction at hunted, room arrival at

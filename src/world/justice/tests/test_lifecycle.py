@@ -200,3 +200,63 @@ class WantedVisibilityTests(JusticeFixtureMixin, TestCase):
         self.assertEqual(rows[0]["persona_name"], self.persona.name)
         self.assertIn(rows[0]["tier"], (HeatTier.HEAT_IS_ON, HeatTier.EXTREME_HEAT))
         self.assertNotIn("value", rows[0])
+
+
+class WantedBoardApiTests(JusticeFixtureMixin, TestCase):
+    """GET /api/justice/wanted/ — wanted rows, held captives, pardon gate (#1826/#2378)."""
+
+    def _pc_entry(self):
+        from world.roster.factories import RosterTenureFactory
+
+        tenure = RosterTenureFactory()
+        entry = tenure.roster_entry
+        return tenure.player_data.account, entry
+
+    def _get(self, account, **params):
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.force_authenticate(user=account)
+        query = "&".join(f"{k}={v}" for k, v in params.items())
+        return client.get(f"/api/justice/wanted/?{query}")
+
+    def test_board_carries_rows_held_and_gate(self):
+        from world.justice.models import JusticeCase
+
+        account, entry = self._pc_entry()
+        _heat(self.persona, self.kingdom, self.crown, WANTED_VALUE_FLOOR)
+        captive = PersonaFactory()
+        case = JusticeCase.objects.create(
+            persona=captive, area=self.kingdom, society=self.crown, prosecution_weight=30
+        )
+        response = self._get(account, area=self.kingdom.pk, viewer=entry.pk)
+        self.assertEqual(response.status_code, 200)
+        row = response.data["wanted"][0]
+        self.assertEqual(row["persona_id"], self.persona.pk)
+        self.assertEqual(row["tier_label"], HeatTier(row["tier"]).label)
+        self.assertEqual(
+            response.data["held"],
+            [{"case_id": case.pk, "persona_name": captive.name}],
+        )
+        self.assertFalse(response.data["viewer_can_pardon"])
+
+    def test_magistrate_viewer_sees_pardon_gate_open(self):
+        from world.justice.constants import MAGISTRATE_OFFICE
+        from world.societies.factories import OrganizationFactory
+        from world.societies.office_services import appoint_office
+
+        account, entry = self._pc_entry()
+        org = OrganizationFactory(society=self.crown)
+        appoint_office(
+            organization=org,
+            slug=MAGISTRATE_OFFICE,
+            holder=entry.character_sheet.primary_persona,
+        )
+        response = self._get(account, area=self.kingdom.pk, viewer=entry.pk)
+        self.assertTrue(response.data["viewer_can_pardon"])
+
+    def test_no_viewer_defaults_to_read_only(self):
+        account, _ = self._pc_entry()
+        response = self._get(account, area=self.kingdom.pk)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["viewer_can_pardon"])

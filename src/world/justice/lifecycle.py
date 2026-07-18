@@ -249,10 +249,13 @@ def wanted_rows_for_area(area: Area) -> list[dict]:
             .values_list("name", flat=True)
             .distinct()
         )
+        tier = tier_for_value(row.value)
         out.append(
             {
+                "persona_id": row.persona_id,
                 "persona_name": row.persona.name,
-                "tier": tier_for_value(row.value),
+                "tier": tier,
+                "tier_label": tier.label,
                 "society_name": row.society.name,
                 "crimes": crime_names,
             }

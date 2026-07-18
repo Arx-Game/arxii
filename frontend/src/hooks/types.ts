@@ -117,6 +117,8 @@ export interface HubTidings {
   kind: string;
   /** The feature kind's display name ("Notice Board", "Town Crier"). */
   name: string;
+  /** The hub's area pk — anchors the public wanted board (#1826); null when unareaed. */
+  area_id?: number | null;
   items: HubTidingsItem[];
 }
 

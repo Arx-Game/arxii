@@ -9138,7 +9138,10 @@ export interface paths {
      *
      *     Deliberately public-to-authenticated: crossing the wanted floor ends
      *     self-only visibility for those tiers. Tier + presented name + crime kinds;
-     *     never raw values.
+     *     never raw values. An optional ``viewer`` adds two viewer-facing extras:
+     *     ``viewer_can_pardon`` (the lord's-grant control gate, #1826) and the
+     *     ``held`` list of awaiting-trial captives here (being held for trial is a
+     *     public record — the discovery seam for the help-the-accused loop, #2378).
      */
     get: operations['justice_wanted_retrieve'];
     put?: never;
