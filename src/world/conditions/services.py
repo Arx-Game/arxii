@@ -1654,15 +1654,22 @@ def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, in
     Get all capability values for a character.
 
     Batch-queries all ConditionCapabilityEffect rows for active conditions
-    and aggregates per capability. Used by the obstacle system and
-    capability source aggregation.
+    and aggregates per capability. This is condition/baseline aggregation for
+    *source enumeration* — its sole real consumer is the availability oracle
+    (``world.mechanics.services._get_condition_sources``), which enumerates
+    per-source ``CapabilitySource`` rows for action discovery.
 
-    **One-oracle merge (#2504):** also folds in the best (max) known-technique
-    grant per capability (``_technique_capability_values``, prerequisite-null
-    grants only) — the bulk sibling of the per-capability merge in
-    ``get_effective_capability_value``. Multiple known techniques (or a
-    technique alongside condition contributions) never sum for the same
-    capability; the higher value wins (ADR-0034 individuation).
+    **One-oracle merge (#2504) boundary:** technique grants are deliberately
+    NOT folded in here. They already enter the availability oracle via its own
+    dedicated channel — ``world.mechanics.services._get_technique_sources``,
+    which emits one properly-attributed TECHNIQUE-type ``CapabilitySource`` per
+    grant (source_name, prerequisite, effect_property_ids intact). Folding
+    technique values into this bulk dict as well would double-count them as a
+    second, poorly-specified CONDITION-type source and duplicate actions in
+    ``get_available_actions`` (regression caught in
+    ``test_pipeline_integration.ChallengePathTests``). The agency oracle
+    (``get_effective_capability_value``, single-capability gate/requirement
+    checks) is where technique grants fold in — see ``_technique_capability_values``.
 
     Args:
         target: The ObjectDB instance
@@ -1716,12 +1723,6 @@ def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, in
     granted = _passive_capability_grants(character_sheet)
     for cap_id in granted:
         totals[cap_id] = totals.get(cap_id, 0) + 1
-
-    # Technique-granted capabilities (#2504 one-oracle merge): fold in the best
-    # (max) known-technique grant per capability, mirroring
-    # get_effective_capability_value — max, not sum (ADR-0034 individuation).
-    for cap_id, technique_value in _technique_capability_values(character_sheet).items():
-        totals[cap_id] = max(totals.get(cap_id, 0), technique_value)
 
     # Floor at 0
     return {cap_id: max(0, val) for cap_id, val in totals.items()}

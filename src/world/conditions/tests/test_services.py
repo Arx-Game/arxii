@@ -750,17 +750,31 @@ class GetAllCapabilityValuesTest(TestCase):
         # -3 floored to 0
         assert result == {self.movement.id: 0}
 
-    def test_technique_grant_included_with_no_active_conditions(self):
-        """(f, #2504) A known technique's grant surfaces even with zero active conditions."""
+    def test_technique_grant_not_folded_in(self):
+        """(f, #2504 CI fix) Technique grants deliberately do NOT surface here.
+
+        ``get_all_capability_values`` is the availability oracle's bulk
+        condition/baseline aggregation (consumed by
+        ``world.mechanics.services._get_condition_sources``). Technique grants
+        already enter the availability oracle via their own dedicated channel
+        (``_get_technique_sources``, one attributed TECHNIQUE-type
+        CapabilitySource per grant). Folding them in here too double-counted
+        them as a second, unattributed CONDITION-type source and duplicated
+        actions in ``get_available_actions`` — regression caught by
+        ``test_pipeline_integration.ChallengePathTests`` in CI. The agency
+        oracle (``get_effective_capability_value``) is where technique grants
+        fold in for single-capability gate/requirement checks.
+        """
         from world.magic.factories import (
             CharacterTechniqueFactory,
             TechniqueCapabilityGrantFactory,
             TechniqueFactory,
         )
 
+        # Case 1: technique-only capability with zero active conditions.
         technique_only_cap = CapabilityTypeFactory(name="technique_only")
         technique = TechniqueFactory(intensity=1)
-        grant = TechniqueCapabilityGrantFactory(
+        TechniqueCapabilityGrantFactory(
             technique=technique,
             capability=technique_only_cap,
             base_value=5,
@@ -769,17 +783,10 @@ class GetAllCapabilityValuesTest(TestCase):
         CharacterTechniqueFactory(character=self.target.sheet_data, technique=technique)
 
         result = get_all_capability_values(self.target.sheet_data)
-        assert result == {technique_only_cap.id: grant.calculate_value()}
+        assert technique_only_cap.id not in result
 
-    def test_technique_grant_merges_as_max_with_condition_total(self):
-        """(f, #2504) Technique term merges into an existing condition total via max, not sum."""
-        from world.magic.factories import (
-            CharacterTechniqueFactory,
-            TechniqueCapabilityGrantFactory,
-            TechniqueFactory,
-        )
-
-        # hasted (class-level) grants movement=10 while active.
+        # Case 2: technique grant alongside an existing condition total for the
+        # same capability — the condition total must stand alone, unmodified.
         ConditionInstanceFactory(target=self.target, condition=self.hasted)
 
         weaker_technique = TechniqueFactory(intensity=1)
@@ -792,7 +799,6 @@ class GetAllCapabilityValuesTest(TestCase):
         CharacterTechniqueFactory(character=self.target.sheet_data, technique=weaker_technique)
 
         result = get_all_capability_values(self.target.sheet_data)
-        # condition contributes 10, weaker technique grant (3) does not sum on top
         assert result == {self.movement.id: 10}
 
 
