@@ -10,10 +10,12 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from actions.models.action_templates import ActionTemplate
     from world.checks.models import CheckType, Consequence
     from world.checks.types import CheckResult
-    from world.mechanics.models import ChallengeApproach, ChallengeInstance
+    from world.mechanics.models import ChallengeApproach, ChallengeInstance, ChallengeTemplate
 
 from world.checks.types import OutcomeDisplay
 from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
@@ -102,12 +104,23 @@ class AvailableAction:
     directly to build ``PlayerAction`` descriptors.  ``check_type_name`` is kept
     as the wire-safe string representation for any consumer that reads the dataclass
     without going through the unified adapter.
+
+    Bare-object affordances (#2503): when an ``Application`` with a
+    ``default_template`` matches an ``ObjectProperty`` on an object at the
+    location (rather than an authored, already-placed ``ChallengeInstance``),
+    ``challenge_instance_id``/``resolved_challenge_instance`` are ``None`` —
+    no instance exists yet — and ``target_object``/``resolved_default_template``
+    carry what dispatch needs to mint one: ``instantiate_challenge(
+    resolved_default_template, location, target_object)``. ``resolved_challenge_approach``
+    is still populated (the default template's own matching approach), so
+    check_type/consequences resolve identically whether or not an instance
+    exists yet.
     """
 
     application_id: int
     application_name: str
     capability_source: CapabilitySource
-    challenge_instance_id: int
+    challenge_instance_id: int | None
     challenge_name: str
     approach_id: int | None
     check_type_name: str
@@ -124,6 +137,11 @@ class AvailableAction:
     # data in _match_approaches (no additional query).  Excluded from wire serialization.
     resolved_challenge_instance: ChallengeInstance | None = field(default=None)
     resolved_challenge_approach: ChallengeApproach | None = field(default=None)
+    # Bare-object affordance fields (#2503) — populated instead of
+    # resolved_challenge_instance when the action is synthesized from an
+    # ObjectProperty match rather than an authored ChallengeInstance.
+    target_object: ObjectDB | None = field(default=None)  # noqa: OBJECTDB_PARAM
+    resolved_default_template: ChallengeTemplate | None = field(default=None)
 
 
 @dataclass
