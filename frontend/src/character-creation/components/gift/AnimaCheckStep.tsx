@@ -20,6 +20,7 @@ import {
 import { useMemo } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import {
+  useCGExplanations,
   usePathSkillSuggestions,
   useSkills,
   useStatDefinitions,
@@ -36,6 +37,7 @@ interface AnimaCheckStepProps {
 
 export function AnimaCheckStep({ draft, ritualNameField }: AnimaCheckStepProps) {
   const updateDraft = useUpdateDraft();
+  const { data: copy } = useCGExplanations();
   const { data: statDefinitions } = useStatDefinitions();
   const { data: skills } = useSkills();
   const { data: pathSuggestions } = usePathSkillSuggestions(draft.selected_path?.id);
@@ -98,10 +100,13 @@ export function AnimaCheckStep({ draft, ritualNameField }: AnimaCheckStepProps) 
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        How does your magic move through you? The stat and skill you choose here are what every cast
-        rolls — and how your casting looks and feels in a scene is always yours to describe.
-      </p>
+      <div className="space-y-2">
+        <h3 className="text-lg font-semibold">{copy?.anima_check_heading ?? 'Anima Check'}</h3>
+        <p className="text-sm text-muted-foreground">
+          {copy?.anima_check_intro ??
+            'How does your magic move through you? The stat and skill you choose here are what every cast rolls — and how your casting looks and feels in a scene is always yours to describe.'}
+        </p>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">

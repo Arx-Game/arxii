@@ -1033,6 +1033,125 @@ def _finalize_path_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) ->
         )
 
 
+def _finalize_beginnings_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Apply Beginnings codex grants. No-op without a selected beginnings.
+
+    Mirrors _finalize_tradition_codex_grants: the chosen Beginnings teaches the
+    character lore about their origin. Idempotent via get_or_create.
+    """
+    if not draft.selected_beginnings:
+        return
+
+    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
+    from world.codex.models import (  # noqa: PLC0415
+        BeginningsCodexGrant,
+        CharacterCodexKnowledge,
+    )
+
+    grant_entry_ids = list(
+        BeginningsCodexGrant.objects.filter(beginnings=draft.selected_beginnings).values_list(
+            "entry_id", flat=True
+        )
+    )
+    if not grant_entry_ids:
+        return
+
+    roster_entry = sheet.roster_entry
+    for entry_id in grant_entry_ids:
+        CharacterCodexKnowledge.objects.get_or_create(
+            roster_entry=roster_entry,
+            entry_id=entry_id,
+            defaults={"status": CodexKnowledgeStatus.KNOWN},
+        )
+
+
+def _finalize_distinction_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Apply Distinction codex grants for all selected distinctions.
+
+    Mirrors _finalize_tradition_codex_grants. Idempotent via get_or_create.
+    """
+    distinctions_data = draft.draft_data.get("distinctions", [])
+    if not distinctions_data:
+        return
+
+    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
+    from world.codex.models import (  # noqa: PLC0415
+        CharacterCodexKnowledge,
+        DistinctionCodexGrant,
+    )
+
+    distinction_ids = {
+        d["distinction_id"]  # noqa: STRING_LITERAL
+        for d in distinctions_data
+        if "distinction_id" in d  # noqa: STRING_LITERAL
+    }
+    if not distinction_ids:
+        return
+
+    grant_entry_ids = list(
+        DistinctionCodexGrant.objects.filter(distinction_id__in=distinction_ids).values_list(
+            "entry_id", flat=True
+        )
+    )
+    if not grant_entry_ids:
+        return
+
+    roster_entry = sheet.roster_entry
+    for entry_id in grant_entry_ids:
+        CharacterCodexKnowledge.objects.get_or_create(
+            roster_entry=roster_entry,
+            entry_id=entry_id,
+            defaults={"status": CodexKnowledgeStatus.KNOWN},
+        )
+
+
+def _finalize_species_codex(sheet: CharacterSheet) -> None:
+    """Grant the species's codex entry, if any. Idempotent via get_or_create."""
+    try:
+        species = sheet.species
+    except AttributeError:
+        return
+    if species is None or species.codex_entry_id is None:
+        return
+
+    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
+    from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+
+    CharacterCodexKnowledge.objects.get_or_create(
+        roster_entry=sheet.roster_entry,
+        entry_id=species.codex_entry_id,
+        defaults={"status": CodexKnowledgeStatus.KNOWN},
+    )
+
+
+def _finalize_resonance_codex(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Grant the selected gift resonance's codex entry, if any.
+
+    The resonance is stored in draft_data['selected_gift_resonance_id'].
+    Idempotent via get_or_create.
+    """
+    resonance_id = draft.draft_data.get("selected_gift_resonance_id")
+    if not resonance_id:
+        return
+
+    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
+    from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+    from world.magic.models import Resonance  # noqa: PLC0415
+
+    try:
+        resonance = Resonance.objects.get(pk=resonance_id)
+    except Resonance.DoesNotExist:
+        return
+    if resonance.codex_entry_id is None:
+        return
+
+    CharacterCodexKnowledge.objects.get_or_create(
+        roster_entry=sheet.roster_entry,
+        entry_id=resonance.codex_entry_id,
+        defaults={"status": CodexKnowledgeStatus.KNOWN},
+    )
+
+
 def _finalize_anima_ritual(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Step 5: create player anima Ritual + sidecar + CharacterRitualKnowledge.
 
@@ -1138,6 +1257,11 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     # 3b. Apply path codex grants (teaches which magic milestones exist)
     _finalize_path_codex_grants(draft, sheet)
 
+    # 3c. Apply beginnings/distinction/species codex grants
+    _finalize_beginnings_codex_grants(draft, sheet)
+    _finalize_distinction_codex_grants(draft, sheet)
+    _finalize_species_codex(sheet)
+
     # 4. Create CharacterAura, then persist the guided Glimpse picks (#2427)
     #    through the glimpse services so glimpse_state stays consistent.
     from world.magic.services.glimpse import (  # noqa: PLC0415
@@ -1192,6 +1316,9 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
 
     # 6. Create player anima Ritual + sidecar + CharacterRitualKnowledge.
     _finalize_anima_ritual(draft, sheet)
+
+    # 7. Grant the selected gift resonance's codex entry.
+    _finalize_resonance_codex(draft, sheet)
 
 
 def _finalize_academy_entrance_obligation(draft: CharacterDraft, sheet: CharacterSheet) -> None:

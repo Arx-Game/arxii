@@ -20402,6 +20402,8 @@ export interface components {
       cg_point_cost?: number;
       /** @description Check if the requesting user can access this option. */
       readonly is_accessible: boolean;
+      /** @description Get codex entry IDs granted by this beginnings choice. */
+      readonly codex_entry_ids: number[];
     };
     /** @description Serializer for Beginnings options. */
     BeginningsRequest: {
@@ -22777,6 +22779,8 @@ export interface components {
         | null;
       /** @description Return a human-readable description of prerequisites. */
       readonly prerequisite_description: string | null;
+      /** @description Get codex entry IDs granted by this distinction. */
+      readonly codex_entry_ids: number[];
     };
     /** @description Serializer for DistinctionEffect records. */
     DistinctionEffect: {
@@ -22791,8 +22795,6 @@ export interface components {
       readonly scaling_values: unknown;
       /** @description Description of what this effect does. */
       readonly description: string;
-      /** @description Return the Codex entry ID if the target modifier type has one. */
-      readonly codex_entry_id: number | null;
     };
     /** @description Lightweight serializer for Distinction list views. */
     DistinctionList: {
@@ -22816,8 +22818,7 @@ export interface components {
       /**
        * @description Return a list of effect summaries for this distinction.
        *
-       *     Each effect includes its description (or auto-generated text)
-       *     and optional codex_entry_id for linkable terms in the UI.
+       *     Each effect includes its description (or auto-generated text).
        */
       readonly effects_summary: {
         [key: string]: unknown;
@@ -22826,6 +22827,8 @@ export interface components {
       readonly is_locked: boolean;
       /** @description Return the reason this distinction is locked, if any. */
       readonly lock_reason: string | null;
+      /** @description Get codex entry IDs granted by this distinction. */
+      readonly codex_entry_ids: number[];
     };
     /** @description Serializer for DistinctionTag lookup records. */
     DistinctionTag: {
@@ -26580,6 +26583,14 @@ export interface components {
       display_order?: number;
       /** @description Whether this modifier target is currently active in the game */
       is_active?: boolean;
+      /**
+       * @description Return the Codex entry ID if this target's resonance has one.
+       *
+       *     The GiftStage resonance picker reads ModifierTarget rows (category=resonance).
+       *     Each has a ``target_resonance`` OneToOne → ``magic.Resonance``, which now
+       *     carries a ``codex_entry`` FK.
+       */
+      readonly codex_entry_id: number | null;
     };
     /** @description A mute the requesting player owns. */
     Mute: {
@@ -31648,6 +31659,12 @@ export interface components {
        *     to invalidate when needed.
        */
       readonly aspects: string[];
+      /**
+       * @description Get codex entry IDs granted by this path.
+       *
+       *     Read from ``cached_codex_grants`` populated by the ViewSet prefetch.
+       */
+      readonly codex_entry_ids: number[];
     };
     /** @description Lighter serializer for path lists without nested aspects. */
     PathList: {
@@ -33116,7 +33133,6 @@ export interface components {
       readonly affinity_name: string;
       /** @description Description of this resonance. */
       readonly description: string;
-      /** @description Return the Codex entry ID if this resonance's modifier_target has one. */
       readonly codex_entry_id: number | null;
     };
     /** @description Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25). */
@@ -34588,6 +34604,7 @@ export interface components {
       readonly stat_bonuses: {
         [key: string]: number;
       };
+      readonly codex_entry_id: number | null;
     };
     /** @description ModelSerializer for Species model. */
     SpeciesRequest: {

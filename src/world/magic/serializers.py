@@ -104,23 +104,12 @@ class ResonanceSerializer(serializers.ModelSerializer):
     """Serializer for Resonance records."""
 
     affinity_name = serializers.CharField(source="affinity.name", read_only=True)
-    codex_entry_id = serializers.SerializerMethodField()
+    codex_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = Resonance
         fields = ["id", "name", "affinity", "affinity_name", "description", "codex_entry_id"]
         read_only_fields = fields
-
-    def get_codex_entry_id(self, obj: Resonance) -> int | None:
-        """Return the Codex entry ID if this resonance's modifier_target has one."""
-        if (
-            hasattr(obj, "modifier_target")
-            and obj.modifier_target is not None
-            and hasattr(obj.modifier_target, "codex_entry")
-            and obj.modifier_target.codex_entry
-        ):
-            return obj.modifier_target.codex_entry.id
-        return None
 
 
 class TechniqueStyleSerializer(serializers.ModelSerializer):

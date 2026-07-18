@@ -57,6 +57,14 @@ class Species(NaturalKeyMixin, SharedMemoryModel):
         related_name="native_species",
         help_text="Racial languages known by this species",
     )
+    codex_entry = models.ForeignKey(
+        "codex.CodexEntry",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="species",
+        help_text="Lore entry this species is bound to, if any.",
+    )
 
     objects = NaturalKeyManager()
 

@@ -286,6 +286,14 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
         """
         return list(self.mutually_exclusive_with.only("id", "name"))
 
+    @cached_property
+    def cached_codex_grants(self) -> list:
+        """Codex grants — the Prefetch/query shared interface (#2386).
+
+        Authored content: negligible staleness on the identity-mapped row.
+        """
+        return list(self.codex_grants.all())
+
     def calculate_total_cost(self, rank: int) -> int:
         """
         Calculate total cost for a given rank.

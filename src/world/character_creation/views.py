@@ -81,6 +81,7 @@ from world.character_creation.services import (
 )
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathAspect, PathStage
+from world.codex.models import BeginningsCodexGrant, PathCodexGrant
 from world.forms.services import get_cg_form_options
 from world.magic.models import (
     Gift,
@@ -143,6 +144,11 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
                     queryset=Language.objects.all(),
                     to_attr="cached_starting_languages",
                 ),
+                Prefetch(
+                    "codex_grants",
+                    queryset=BeginningsCodexGrant.objects.only("beginnings_id", "entry_id"),
+                    to_attr="cached_codex_grants",
+                ),
             )
         )
 
@@ -168,7 +174,7 @@ class SpeciesViewSet(viewsets.ReadOnlyModelViewSet):
 
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
-    queryset = Species.objects.select_related("parent").prefetch_related(
+    queryset = Species.objects.select_related("parent", "codex_entry").prefetch_related(
         Prefetch(
             "stat_bonuses",
             queryset=SpeciesStatBonus.objects.all(),
@@ -262,9 +268,14 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
             queryset=PathAspect.objects.select_related("aspect"),
             to_attr="cached_path_aspects",
         )
+        codex_grants_prefetch = Prefetch(
+            "codex_grants",
+            queryset=PathCodexGrant.objects.only("path_id", "entry_id"),
+            to_attr="cached_codex_grants",
+        )
         return (
             Path.objects.filter(stage=PathStage.PROSPECT, is_active=True)
-            .prefetch_related(path_aspects_prefetch)
+            .prefetch_related(path_aspects_prefetch, codex_grants_prefetch)
             .order_by("sort_order", "name")
         )
 
