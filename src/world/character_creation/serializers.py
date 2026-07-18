@@ -19,6 +19,8 @@ from world.character_creation.models import (
     CharacterDraft,
     DraftApplication,
     DraftApplicationComment,
+    OriginTemplate,
+    OriginTemplateSlot,
     StartingArea,
 )
 from world.character_creation.types import StageValidationErrors
@@ -363,6 +365,37 @@ class CGGlimpseTagSerializer(serializers.ModelSerializer):
         return CGGlimpseTagSuggestedDistinctionSerializer(
             [row.distinction for row in rows], many=True
         ).data
+
+
+class OriginTemplateSlotSerializer(serializers.ModelSerializer):
+    """Slot prompt within an origin template (#2478)."""
+
+    class Meta:
+        model = OriginTemplateSlot
+        fields = ["id", "name", "prompt", "example", "sort_order", "is_required"]
+        read_only_fields = fields
+
+
+class CGOriginTemplateSerializer(serializers.ModelSerializer):
+    """Origin template for the CG guided flow (#2478).
+
+    Backs ``GET /api/character-creation/origin-templates/``.
+    """
+
+    slots = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OriginTemplate
+        fields = ["id", "name", "frame_narrative", "is_active", "sort_order", "slots"]
+        read_only_fields = fields
+
+    @extend_schema_field(OriginTemplateSlotSerializer(many=True))
+    def get_slots(self, obj: OriginTemplate) -> list[dict]:
+        """Return nested slots, preferring the prefetched ``cached_slots`` attr."""
+        slots = (
+            obj.cached_slots if hasattr(obj, "cached_slots") else obj.slots.order_by("sort_order")
+        )
+        return OriginTemplateSlotSerializer(slots, many=True).data
 
 
 class CharacterDraftSerializer(serializers.ModelSerializer):
