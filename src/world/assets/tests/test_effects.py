@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from evennia.utils.test_resources import EvenniaTestCase
 
 from world.assets.constants import AssetRoleContext
 from world.assets.models import NPCAsset
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeCapabilityModifierFactory
 from world.checks.models import CheckCategory, CheckType
 from world.checks.test_helpers import force_check_outcome
+from world.conditions.factories import CapabilityTypeFactory
 from world.npc_services.constants import OfferKind
 from world.npc_services.effects import dispatch_offer_effect
 from world.npc_services.factories import FunctionaryFactory, NPCServiceOfferFactory
 from world.npc_services.functionaries import functionaries_in_room
 from world.scenes.services import persona_for_character
 from world.traits.factories import CheckOutcomeFactory
+from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
 
 
 class PromoteFunctionaryEffectTests(EvenniaTestCase):
@@ -155,3 +160,116 @@ class PromoteFunctionaryEffectTests(EvenniaTestCase):
             dispatch_offer_effect(offer, self.persona)
         asset = NPCAsset.objects.get(promoter_persona=self.persona)
         self.assertEqual(asset.role_context, AssetRoleContext.MINOR_ALLY)
+
+
+class PromotionCapabilityModifierEffectTests(EvenniaTestCase):
+    """E2E: an authored CheckTypeCapabilityModifier row moves the real promotion roll (#2505).
+
+    ``_promote_functionary`` calls the real ``perform_check`` (no forced-outcome rig —
+    that would fake the outcome without the capability arithmetic ever running). To get
+    a roll-independent flip, this builds a dedicated two-rank/two-chart pipeline where
+    EVERY roll (1-100) on the "below target" chart (rank_difference=-1) resolves to
+    failure and EVERY roll on the "at target" chart (rank_difference=0) resolves to
+    success — so the outcome is decided entirely by which rank the capability points
+    push the roller into, never by the dice.
+
+    The character's capability value (innate_baseline=5) is held constant across both
+    test methods; only whether the check_type has an authored CheckTypeCapabilityModifier
+    row linking it to that capability differs. That isolates both load-bearing claims:
+    the authored row moves the promotion outcome, and the identical capability value
+    moves nothing without it (curated gate, #2505).
+    """
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        from world.areas.services import get_room_profile
+
+        self.room = create_object("typeclasses.rooms.Room", key="Capability Cultivation Room")
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        self.character.location = self.room
+        self.character.save()
+        self.persona = persona_for_character(self.character)
+        self.room_profile = get_room_profile(self.room)
+
+        # Rank 0 (0+ pts) vs rank 1 (10+ pts, exactly what the authored row's
+        # weight * innate_baseline contributes below). Target difficulty is
+        # pinned at rank 1's threshold, so: capability_points=0 -> rank 0 ->
+        # rank_difference -1 -> guaranteed-failure chart; capability_points=10
+        # -> rank 1 -> rank_difference 0 -> guaranteed-success chart.
+        CheckRank.objects.get_or_create(
+            rank=0, defaults={"min_points": 0, "name": "AssetPromoCapabilityNone"}
+        )
+        CheckRank.objects.get_or_create(
+            rank=1, defaults={"min_points": 10, "name": "AssetPromoCapabilityReady"}
+        )
+        failure_outcome = CheckOutcomeFactory(name="Capability Promo Failure", success_level=-1)
+        success_outcome = CheckOutcomeFactory(name="Capability Promo Success", success_level=1)
+        below_chart, _ = ResultChart.objects.get_or_create(
+            rank_difference=-1, defaults={"name": "AssetPromoBelowTarget"}
+        )
+        at_chart, _ = ResultChart.objects.get_or_create(
+            rank_difference=0, defaults={"name": "AssetPromoAtTarget"}
+        )
+        ResultChartOutcome.objects.get_or_create(
+            chart=below_chart,
+            min_roll=1,
+            defaults={"max_roll": 100, "outcome": failure_outcome},
+        )
+        ResultChartOutcome.objects.get_or_create(
+            chart=at_chart,
+            min_roll=1,
+            defaults={"max_roll": 100, "outcome": success_outcome},
+        )
+        ResultChart.clear_cache()
+
+        category, _ = CheckCategory.objects.get_or_create(
+            name="Test Capability Category", defaults={"display_order": 0}
+        )
+        self.capability = CapabilityTypeFactory(name="test_promo_charm", innate_baseline=5)
+
+        self.gated_check_type, _ = CheckType.objects.get_or_create(
+            name="Capability Gated Cultivation Check",
+            category=category,
+            defaults={"is_active": True},
+        )
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.gated_check_type,
+            capability=self.capability,
+            weight=Decimal("2.0"),
+        )
+
+        # Same character, same capability value, but NO CheckTypeCapabilityModifier
+        # row links self.capability to this check_type -- the curated-gate side
+        # of the comparison.
+        self.ungated_check_type, _ = CheckType.objects.get_or_create(
+            name="Capability Ungated Cultivation Check",
+            category=category,
+            defaults={"is_active": True},
+        )
+
+    def test_authored_row_flips_promotion_to_success(self) -> None:
+        functionary = FunctionaryFactory(room=self.room_profile)
+        offer = NPCServiceOfferFactory(
+            role=functionary.role,
+            kind=OfferKind.INFORMANT,
+            check_type=self.gated_check_type,
+            check_difficulty=10,
+        )
+        result = dispatch_offer_effect(offer, self.persona)
+        asset = NPCAsset.objects.get(promoter_persona=self.persona)
+        self.assertEqual(asset.source_functionary, functionary)
+        self.assertIn("agrees to work", result.message.lower())
+
+    def test_same_capability_value_without_authored_row_still_fails(self) -> None:
+        functionary = FunctionaryFactory(room=self.room_profile)
+        offer = NPCServiceOfferFactory(
+            role=functionary.role,
+            kind=OfferKind.INFORMANT,
+            check_type=self.ungated_check_type,
+            check_difficulty=10,
+        )
+        result = dispatch_offer_effect(offer, self.persona)
+        self.assertFalse(NPCAsset.objects.filter(promoter_persona=self.persona).exists())
+        self.assertIn("not ready", result.message.lower())
