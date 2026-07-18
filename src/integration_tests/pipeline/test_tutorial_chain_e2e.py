@@ -109,6 +109,7 @@ from world.npc_services.summons import respond_to_summons
 from world.seeds.character_creation import ensure_canonical_fallback_room
 from world.seeds.database import seed_dev_database
 from world.seeds.game_content.tutorial import seed_tutorial_dev
+from world.seeds.tests.content_stub import stub_content_root
 from world.traits.factories import TraitFactory
 
 
@@ -134,6 +135,7 @@ def _said(caller: object) -> str:
 class TutorialChainJourneyE2ETests(TestCase):
     """Walk the seeded T1-T7 tutorial chain end to end over the telnet seam."""
 
+    @stub_content_root()
     def setUp(self) -> None:
         idmapper_models.flush_cache()
         # The Big Button: T4 reuses seed_missions_dev()'s board giver, whose

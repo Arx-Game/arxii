@@ -12,11 +12,13 @@ from django.test import TestCase
 from world.projects.constants import ProjectKind
 from world.projects.models import ContributionMethod
 from world.seeds.database import seed_dev_database
+from world.seeds.tests.content_stub import stub_content_root
 
 
 class SeedWarFundingContributionMethodsTests(TestCase):
     """The WAR_FUNDING ContributionMethod seed row shape and idempotency."""
 
+    @stub_content_root()
     def test_seeds_three_methods(self) -> None:
         seed_dev_database()
 
@@ -35,6 +37,7 @@ class SeedWarFundingContributionMethodsTests(TestCase):
             self.assertEqual(method.progress_on_success, 10)
             self.assertTrue(method.is_active)
 
+    @stub_content_root()
     def test_seed_is_idempotent(self) -> None:
         seed_dev_database()
         seed_dev_database()

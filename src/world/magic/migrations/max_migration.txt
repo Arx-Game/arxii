@@ -1,1 +1,1 @@
-0110_glimpsetag_characteraura_glimpse_state_and_more
+0111_technique_unique_technique_gift_name

@@ -15,6 +15,7 @@ from world.achievements.models import Achievement, CharacterAchievement
 from world.npc_services.constants import OfferKind
 from world.npc_services.models import NPCRole, NPCServiceOffer, TrainOfferDetails
 from world.npc_services.seeds import (
+    _SELF_STUDY_STARTER_TECHNIQUES,
     GREAT_ARCHIVE_LIBRARIAN_ROLE_NAME,
     GREAT_ARCHIVE_SELF_STUDY_ACHIEVEMENT_SLUG,
     ensure_great_archive_librarian_role,
@@ -22,9 +23,31 @@ from world.npc_services.seeds import (
 )
 from world.npc_services.services import available_offers, start_interaction
 from world.scenes.factories import PersonaFactory
+from world.seeds.game_content.magic import MagicContent
+
+
+def _build_self_study_catalog():
+    """Factory-build a synthetic Path/Gift/Technique catalog for the Great
+    Archive self-study tests (#2474) — one (Path, Gift) pair per hardcoded
+    (gift, technique) pair ``ensure_great_archive_librarian_role`` looks up,
+    using the SAME gift names the production lookup scopes by
+    (``_SELF_STUDY_STARTER_TECHNIQUES``), so its gift-scoped ORM lookup
+    (``Technique.objects.filter(gift__name=..., name=...)``, #2474 review fix)
+    finds real rows instead of a catalog seeded by the now-retired
+    ``seed_starter_gift_catalog()``.
+    """
+    specs = [
+        (f"Test Path {i}", gift_name, technique_name)
+        for i, (gift_name, technique_name) in enumerate(_SELF_STUDY_STARTER_TECHNIQUES, start=1)
+    ]
+    return MagicContent.create_starter_gift_catalog(specs)
 
 
 class EnsureGreatArchiveLibrarianRoleTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.catalog = _build_self_study_catalog()
+
     def test_creates_role_offers_and_achievement(self) -> None:
         role = ensure_great_archive_librarian_role()
 
@@ -79,6 +102,7 @@ class GreatArchiveSelfStudyGateTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        _build_self_study_catalog()
         cls.role = ensure_great_archive_librarian_role()
         cls.achievement = ensure_great_archive_self_study_achievement()
 

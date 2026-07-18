@@ -8,11 +8,19 @@ Exports:
 - ``seed_canonical_rituals()`` — Task 1.2 — Rite of Imbuing + Rite of Atonement +
   Ritual of the Durance (#2121)
 - ``seed_thread_pull_catalog()`` — Task 1.3 — ThreadPullCost + ThreadPullEffect catalog
-- ``seed_starter_gift_catalog()`` — Task 7 (#2426) — 5 style-linked starter Gifts ×
-  5 authored Techniques each, PathGiftGrant per (path, gift), the Unbound Tradition
-  + its TraditionGiftGrant rows. Supersedes the retired starter-catalog seed that
-  minted the now-removed template model (#2426 Task 8).
 - ``MagicContent`` — static factory helpers for integration-test technique wiring
+
+Note: the starter Gift/Technique/PathGiftGrant/Tradition catalog formerly seeded
+here by ``seed_starter_gift_catalog()`` is retired (#2474) — that catalog is now
+real lore-repo content, loaded via ``load_world_content()``. Consumers
+(``world.npc_services.seeds``'s Academy trainer roles) read the loaded catalog
+via ORM lookups (``Gift.objects`` / ``Technique.objects`` /
+``PathGiftGrant.objects`` / ``Tradition.objects``) and log a loud warning
+pointing at the content repo / Big Button when it's absent — never falling
+back to seeding a synthetic arxii-resident catalog. A hard raise isn't used
+here: this lookup runs inside ``seed_dev_database()``'s cluster loop alongside
+many unrelated clusters, and every existing content-repo-less test in the repo
+would otherwise abort the entire Big Button run over this one seed's slice.
 """
 
 from __future__ import annotations
@@ -21,9 +29,6 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from actions.constants import ActionCategory
-from world.character_creation.constants import UNBOUND_TRADITION_NAME
-from world.magic.constants import TechniqueCategory
 from world.magic.seeds_checks import MagicCheckContentResult
 
 if TYPE_CHECKING:
@@ -38,7 +43,6 @@ if TYPE_CHECKING:
     from world.magic.models import (
         Affinity,
         AnimaConfig,
-        EffectType,
         Gift,
         IntensityTier,
         MagicalAlterationTemplate,
@@ -49,7 +53,6 @@ if TYPE_CHECKING:
         SoulfrayConfig,
         Technique,
         TechniqueCapabilityGrant,
-        TechniqueStyle,
         Tradition,
     )
     from world.magic.models.corruption_config import CorruptionConfig
@@ -131,8 +134,96 @@ class AlterationContentResult:
     soulfray_stage: ConditionStage  # stage whose consequence_pool fires MAGICAL_SCARS
 
 
+@dataclass
+class StarterCatalogFixtureResult:
+    """Returned by MagicContent.create_starter_gift_catalog() (test-only, #2474).
+
+    Synthetic stand-in for the retired ``seed_starter_gift_catalog()`` (#2426)
+    — arxii holds no catalog content (that is real lore-repo content, loaded
+    via ``load_world_content()``); this builds an equivalent-shaped fixture via
+    factories for tests exercising CG / NPC-trainer code paths that read the
+    loaded catalog through the ORM (``Gift.objects`` / ``Technique.objects`` /
+    ``PathGiftGrant.objects`` / ``TraditionGiftGrant.objects``) on a
+    content-repo-less test database.
+    """
+
+    tradition: Tradition
+    paths: dict[str, Path]  # path_name → Path
+    gifts: dict[str, Gift]  # path_name → Gift (one MAJOR gift per path)
+    techniques: dict[str, Technique]  # technique_name → Technique
+    path_gift_grants: dict[str, PathGiftGrant]  # path_name → PathGiftGrant
+    tradition_gift_grants: dict[str, TraditionGiftGrant]  # path_name → TraditionGiftGrant
+
+
 class MagicContent:
     """Creates techniques and ActionEnhancement records for social action integration tests."""
+
+    @staticmethod
+    def create_starter_gift_catalog(
+        specs: list[tuple[str, str, str]],
+        *,
+        tradition_name: str = "Unbound",
+    ) -> StarterCatalogFixtureResult:
+        """Factory-build a synthetic starter Gift/Technique/PathGiftGrant/Tradition pool.
+
+        Test-only replacement for the retired ``seed_starter_gift_catalog()``
+        (#2474) — see ``StarterCatalogFixtureResult``. Builds one PROSPECT
+        ``Path`` + MAJOR ``Gift`` + ``Technique`` + ``PathGiftGrant`` per
+        ``(path_name, gift_name, technique_name)`` triple in ``specs``, plus a
+        shared ``Tradition`` (get_or_create by name — defaults to "Unbound" so
+        tests can look it up the same way production code does) with a
+        ``TraditionGiftGrant`` for every Gift created.
+
+        Args:
+            specs: one ``(path_name, gift_name, technique_name)`` triple per
+                (Path, Gift) pair to create. Each Gift gets exactly one
+                Technique (set as that Gift's sole ``starter_techniques``
+                entry) — callers needing more than one Technique per Gift
+                should call ``TechniqueFactory`` directly for the extras.
+            tradition_name: ``Tradition.name`` to get-or-create.
+
+        Returns:
+            StarterCatalogFixtureResult keyed by ``path_name`` throughout
+            (except ``techniques``, keyed by ``technique_name``).
+        """
+        from world.classes.factories import PathFactory  # noqa: PLC0415
+        from world.magic.factories import (  # noqa: PLC0415
+            GiftFactory,
+            PathGiftGrantFactory,
+            TechniqueFactory,
+            TraditionFactory,
+            TraditionGiftGrantFactory,
+        )
+
+        tradition = TraditionFactory(name=tradition_name)
+
+        paths: dict[str, Path] = {}
+        gifts: dict[str, Gift] = {}
+        techniques: dict[str, Technique] = {}
+        path_gift_grants: dict[str, PathGiftGrant] = {}
+        tradition_gift_grants: dict[str, TraditionGiftGrant] = {}
+        for path_name, gift_name, technique_name in specs:
+            path = PathFactory(name=path_name)
+            gift = GiftFactory(name=gift_name)
+            technique = TechniqueFactory(name=technique_name, gift=gift)
+            grant = PathGiftGrantFactory(path=path, gift=gift)
+            grant.starter_techniques.set([technique])
+            tradition_grant = TraditionGiftGrantFactory(tradition=tradition, gift=gift)
+
+            paths[path_name] = path
+            gifts[path_name] = gift
+            techniques[technique_name] = technique
+            path_gift_grants[path_name] = grant
+            tradition_gift_grants[path_name] = tradition_grant
+
+        return StarterCatalogFixtureResult(
+            tradition=tradition,
+            paths=paths,
+            gifts=gifts,
+            techniques=techniques,
+            path_gift_grants=path_gift_grants,
+            tradition_gift_grants=tradition_gift_grants,
+        )
 
     @staticmethod
     def seed_magic_checks() -> MagicCheckContentResult:
@@ -1960,374 +2051,6 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
     )
 
 
-# ---------------------------------------------------------------------------
-# Task 7 (#2426) — seed_starter_gift_catalog()
-# ---------------------------------------------------------------------------
-#
-# 5×5 grid: 5 TechniqueCategory values × 5 TechniqueStyle names = 25 authored
-# Techniques, grouped 5-per-style into one starter Gift per style/path pair.
-# Formerly a 5×5 template grid that minted the now-removed starter-technique
-# template model (retired in Task 8, #2426).
-#
-# Style → PROSPECT Path mapping (per CLAUDE.md / magic CLAUDE.md):
-#   Manifestation → Path of Steel
-#   Subtle        → Path of Whispers
-#   Performance   → Path of Voice
-#   Prayer        → Path of the Chosen
-#   Incantation   → Path of Tomes
-#
-# TechniqueCategory → EffectType mapping:
-#   ATTACK  → Ranged Attack  (for Manifestation/Performance/Incantation)
-#             Weapon Enhancement (for Subtle/Prayer)
-#   DEFENSE → Defense
-#   BUFF    → Buff
-#   DEBUFF  → Debuff
-#   UTILITY → Utility
-#
-# Each (category, style) pair maps to exactly one authored Technique with an
-# evocative name (unchanged from the retired template grid's naming).
-#
-
-#: 5 canonical PROSPECT paths, each with minimal required fields.
-#: (name, description)
-_PROSPECT_PATHS: list[tuple[str, str]] = [
-    ("Path of Steel", "Warriors who temper themselves through hardship and direct action."),
-    ("Path of Whispers", "Those who move unseen, trading in secrets and subtle influence."),
-    ("Path of Voice", "Performers whose magic resonates through song, story, and presence."),
-    ("Path of the Chosen", "Devotees bound to a higher power whose prayers shape reality."),
-    ("Path of Tomes", "Scholars who unlock magic through careful study and written lore."),
-]
-
-#: 5 canonical TechniqueStyle definitions (name, description) and their linked path name.
-_TECHNIQUE_STYLES: list[tuple[str, str, str]] = [
-    (
-        "Manifestation",
-        "Magic made tangible — raw elemental force given shape and weight.",
-        "Path of Steel",
-    ),
-    (
-        "Subtle",
-        "Magic woven into the fabric of things — invisible until it strikes.",
-        "Path of Whispers",
-    ),
-    (
-        "Performance",
-        "Magic amplified through art — voice, gesture, and presence as conduit.",
-        "Path of Voice",
-    ),
-    (
-        "Prayer",
-        "Magic granted by devotion — the higher power answers through the faithful.",
-        "Path of the Chosen",
-    ),
-    (
-        "Incantation",
-        "Magic encoded in language — formulae, glyphs, and spoken true names.",
-        "Path of Tomes",
-    ),
-]
-
-#: Path.action_category per PROSPECT path (#2426) — drives the action_category
-#: stamped on every Technique authored under that path's starter Gift. Each of
-#: these 5 paths was created without this field (added later, #1995); this is
-#: the one seed-time authoring point for it. Never overwrites a staff-set value
-#: (see the None-guard in seed_starter_gift_catalog()).  Rationale, from each
-#: path's own flavor: Steel (direct-action warriors) -> PHYSICAL; Whispers
-#: (secrets, subtle influence) & Voice (performers, presence) -> SOCIAL;
-#: Chosen (devotion) & Tomes (scholarship) -> MENTAL.
-_PATH_ACTION_CATEGORIES: dict[str, str] = {
-    "Path of Steel": ActionCategory.PHYSICAL,
-    "Path of Whispers": ActionCategory.SOCIAL,
-    "Path of Voice": ActionCategory.SOCIAL,
-    "Path of the Chosen": ActionCategory.MENTAL,
-    "Path of Tomes": ActionCategory.MENTAL,
-}
-
-#: One starter Gift per TechniqueStyle (name, description) — the umbrella MAJOR
-#: Gift whose 5 Techniques are drawn from that style's column of
-#: _STARTER_GIFT_CATALOG below. Keyed by style name (matches _TECHNIQUE_STYLES).
-_STARTER_GIFTS_BY_STYLE: dict[str, tuple[str, str]] = {
-    "Manifestation": (
-        "Emberwork",
-        "Raw elemental force given shape and weight, wielded by main force.",
-    ),
-    "Subtle": (
-        "Shadowcraft",
-        "Magic that hides in plain sight, striking from an unseen angle.",
-    ),
-    "Performance": (
-        "Resonant Chorus",
-        "Magic amplified through voice, gesture, and presence.",
-    ),
-    "Prayer": (
-        "Sacred Communion",
-        "Magic granted through devotion, channeling a higher power's favor.",
-    ),
-    "Incantation": (
-        "Glyphwork",
-        "Magic encoded in inscribed formulae and spoken true names.",
-    ),
-}
-
-#: 6 canonical EffectType definitions (name, description, base_power, base_anima_cost,
-#: category). ``category`` (#2426) is the player-facing TechniqueCategory grouping —
-#: Weapon Enhancement and Buff both land on BUFF (a weapon-enhancement effect buffs the
-#: wielded weapon rather than attacking directly); Ranged Attack -> ATTACK; Debuff ->
-#: DEBUFF; Defense -> DEFENSE; Utility -> UTILITY.
-_EFFECT_TYPES: list[tuple[str, str, int | None, int, str]] = [
-    (
-        _WEAPON_ENHANCEMENT,
-        "Imbues a held weapon with magical force.",
-        10,
-        3,
-        TechniqueCategory.BUFF,
-    ),
-    (
-        _RANGED_ATTACK,
-        "Projects destructive energy at a distant target.",
-        10,
-        3,
-        TechniqueCategory.ATTACK,
-    ),
-    (
-        "Buff",
-        "Enhances the caster or an ally with a temporary magical boon.",
-        None,
-        2,
-        TechniqueCategory.BUFF,
-    ),
-    (
-        "Debuff",
-        "Weakens or hampers a target with a magical affliction.",
-        None,
-        2,
-        TechniqueCategory.DEBUFF,
-    ),
-    (
-        "Defense",
-        "Interposes magical protection between the caster and harm.",
-        8,
-        3,
-        TechniqueCategory.DEFENSE,
-    ),
-    (
-        "Utility",
-        "Produces a practical magical effect with no direct combat role.",
-        None,
-        2,
-        TechniqueCategory.UTILITY,
-    ),
-]
-
-# Mapping: (archetype_value, style_name) → (technique_name, description, effect_type_name)
-# 25 entries covering all 5×5 combinations. Renamed from the old template-grid constant
-# (#2426) — the grid itself is unchanged; its rows now author Technique rows grouped by
-# style into starter Gifts instead of standalone template rows.
-_STARTER_GIFT_CATALOG: list[tuple[str, str, str, str, str]] = [
-    # (archetype, style, technique_name, description, effect_type)
-    # --- ATTACK ---
-    (
-        "attack",
-        "Manifestation",
-        "Burning Strike",
-        "A lance of raw fire conjured from personal will and hurled at the enemy.",
-        _RANGED_ATTACK,
-    ),
-    (
-        "attack",
-        "Subtle",
-        "Shadow Blade",
-        "A blade wreathed in shadow strikes from an unexpected angle.",
-        _WEAPON_ENHANCEMENT,
-    ),
-    (
-        "attack",
-        "Performance",
-        "Shattering Chorus",
-        "A keening note tears through armor and resolve alike.",
-        _RANGED_ATTACK,
-    ),
-    (
-        "attack",
-        "Prayer",
-        "Smiting Light",
-        "Holy radiance descends on the unworthy, burning like judgment.",
-        _WEAPON_ENHANCEMENT,
-    ),
-    (
-        "attack",
-        "Incantation",
-        "Force Sigil",
-        "A rune of impact is inscribed mid-air, detonating on contact.",
-        _RANGED_ATTACK,
-    ),
-    # --- DEFENSE ---
-    (
-        "defense",
-        "Manifestation",
-        "Iron Skin",
-        "The caster's flesh hardens momentarily into something like cooled metal.",
-        "Defense",
-    ),
-    (
-        "defense",
-        "Subtle",
-        "Blur Step",
-        "Subtle distortions make the caster hard to track — blows glance aside.",
-        "Defense",
-    ),
-    (
-        "defense",
-        "Performance",
-        "Resonant Ward",
-        "A harmonious tone creates a shimmering barrier that absorbs incoming force.",
-        "Defense",
-    ),
-    (
-        "defense",
-        "Prayer",
-        "Sacred Ward",
-        "The devout invoke their patron's shelter; harm slides off like rain.",
-        "Defense",
-    ),
-    (
-        "defense",
-        "Incantation",
-        "Arcane Barrier",
-        "An inscribed ward springs up and deflects the next magical blow.",
-        "Defense",
-    ),
-    # --- BUFF ---
-    (
-        "buff",
-        "Manifestation",
-        "Surge",
-        "Raw vitality floods the target's limbs, sharpening reflexes for a moment.",
-        "Buff",
-    ),
-    (
-        "buff",
-        "Subtle",
-        "Unseen Edge",
-        "Whispered magic gifts the target preternatural awareness of threats.",
-        "Buff",
-    ),
-    (
-        "buff",
-        "Performance",
-        "Inspiring Refrain",
-        "A rousing melody lifts allies' spirits and sharpens their focus.",
-        "Buff",
-    ),
-    (
-        "buff",
-        "Prayer",
-        "Blessing of Strength",
-        "A murmured prayer calls down divine favor onto a willing recipient.",
-        "Buff",
-    ),
-    (
-        "buff",
-        "Incantation",
-        "Empowering Glyph",
-        "A brief formula inscribed on the target's skin grants temporary potency.",
-        "Buff",
-    ),
-    # --- DEBUFF ---
-    (
-        "debuff",
-        "Manifestation",
-        "Leaden Aura",
-        "Palpable magical weight presses down on the target, slowing movement.",
-        "Debuff",
-    ),
-    (
-        "debuff",
-        "Subtle",
-        "Doubt's Touch",
-        "A whisper in the mind erodes the target's certainty at a critical moment.",
-        "Debuff",
-    ),
-    (
-        "debuff",
-        "Performance",
-        "Discordant Note",
-        "A jarring sound disrupts the target's concentration and coordination.",
-        "Debuff",
-    ),
-    (
-        "debuff",
-        "Prayer",
-        "Mark of Penitence",
-        "The caster's deity marks the target, making all blows against them more telling.",
-        "Debuff",
-    ),
-    (
-        "debuff",
-        "Incantation",
-        "Unraveling Hex",
-        "A compact curse formula frays the target's magical and physical defenses.",
-        "Debuff",
-    ),
-    # --- UTILITY ---
-    (
-        "utility",
-        "Manifestation",
-        "Mending Touch",
-        "Elemental force knits broken objects or calms a raging fire with a touch.",
-        "Utility",
-    ),
-    (
-        "utility",
-        "Subtle",
-        "Silent Passage",
-        "The caster's presence dampens sound and scent — ideal for moving unseen.",
-        "Utility",
-    ),
-    (
-        "utility",
-        "Performance",
-        "Lullaby",
-        "A soft melody coaxes fatigue into the listener, easing them toward sleep.",
-        "Utility",
-    ),
-    (
-        "utility",
-        "Prayer",
-        "Gentle Mending",
-        "A prayer of restoration closes minor wounds and soothes pain.",
-        "Utility",
-    ),
-    (
-        "utility",
-        "Incantation",
-        "Light Script",
-        "A luminous glyph provides clean magical light until dismissed.",
-        "Utility",
-    ),
-]
-
-
-@dataclass
-class StarterGiftCatalogResult:
-    """Returned by seed_starter_gift_catalog() (#2426).
-
-    Covers the 5×5 grid of TechniqueCategory × style, grouped into 5 starter
-    Gifts (one per style/path pair), plus the Unbound Tradition's grants. All
-    rows are lazy-created via get_or_create so re-running on a populated DB is
-    a no-op; staff edits survive.
-    """
-
-    styles: dict[str, TechniqueStyle]  # style_name → TechniqueStyle
-    effect_types: dict[str, EffectType]  # effect_type_name → EffectType
-    paths: dict[str, Path]  # path_name → Path (the 5 PROSPECT paths)
-    gifts: dict[str, Gift]  # gift_name → Gift (the 5 starter Gifts)
-    techniques: dict[str, Technique]  # technique_name → Technique (25 total)
-    path_gift_grants: dict[str, PathGiftGrant]  # gift_name → PathGiftGrant
-    tradition: Tradition  # Unbound
-    tradition_gift_grants: dict[str, TraditionGiftGrant]  # gift_name → TraditionGiftGrant
-
-
 def ensure_relationship_pull_content() -> None:
     """Seed RELATIONSHIP_TRACK ThreadPullEffect rows with a survivability skew (#2021).
 
@@ -2604,193 +2327,6 @@ def ensure_portal_travel_content() -> None:
         _ensure_mirror_anchor(mirror_kind, room, anchor_name)
 
 
-# Canonical name: world.character_creation.constants.UNBOUND_TRADITION_NAME (#2428).
-_UNBOUND_TRADITION_NAME = UNBOUND_TRADITION_NAME
-_UNBOUND_TRADITION_DESCRIPTION = (
-    "PLACEHOLDER: The tradition-less path — practitioners who answer to no school, "
-    "carrying whatever techniques their Path opens to them. A richer authored "
-    "tradition catalog (unbound_tradition.json and beyond) lives in the private "
-    "lore repo and upserts over this row (#2426)."
-)
-
-
-def seed_starter_gift_catalog() -> StarterGiftCatalogResult:
-    """Lazy-create the starter Gift/Technique catalog + the Unbound Tradition (#2426).
-
-    Supersedes the retired starter-catalog seed — the CG magic stage now picks a
-    catalog ``Gift`` + authored ``Technique`` rows instead of a template row (the
-    old template model was removed in Task 8, #2426). All writes use
-    ``get_or_create`` so re-running on a
-    populated DB is a no-op; staff edits survive repeated calls — natural-keyed on
-    ``name`` throughout so richer lore-repo fixture content can upsert over these
-    rows later.
-
-    5×5 TechniqueCategory × style grid, grouped into one starter Gift per style
-    ─────────────────────────────────────────────────────────────────────────
-    Style         Path              Gift              Category coverage
-    ─────────────────────────────────────────────────────────────────────────
-    Manifestation Path of Steel     Emberwork         attack, defense, buff, debuff, utility
-    Subtle        Path of Whispers  Shadowcraft        attack, defense, buff, debuff, utility
-    Performance   Path of Voice     Resonant Chorus    attack, defense, buff, debuff, utility
-    Prayer        Path of Chosen    Sacred Communion   attack, defense, buff, debuff, utility
-    Incantation   Path of Tomes     Glyphwork          attack, defense, buff, debuff, utility
-    ─────────────────────────────────────────────────────────────────────────
-
-    Creates:
-    - 5 Path rows (PROSPECT stage) — one per style, idempotent on name. Also
-      backfills ``action_category`` (#1995) from ``_PATH_ACTION_CATEGORIES`` when
-      unset — never overwrites a staff-authored value.
-    - 5 TechniqueStyle rows — wired to their corresponding Path via allowed_paths M2M
-    - 6 EffectType rows — Weapon Enhancement, Ranged Attack, Buff, Debuff, Defense,
-      Utility — each stamped with its ``category`` (TechniqueCategory), both via
-      get_or_create defaults AND an explicit update for any pre-existing row (the
-      ``category`` column postdates these rows in some dev DBs; get_or_create alone
-      would never correct it).
-    - 5 MAJOR Gift rows — one per style, from ``_STARTER_GIFTS_BY_STYLE``.
-    - 25 Technique rows — 5 per Gift (one per TechniqueCategory), authored with
-      level=1/intensity=1/control=1/anima_cost=5, the style's Technique Cast
-      template, and ``action_category`` inherited from the linked Path.
-    - 5 PathGiftGrant rows — one per (path, gift), ``starter_techniques`` set to
-      all 5 of that gift's techniques.
-    - The "Unbound" Tradition (get_or_create by name — richer prose is lore-repo
-      fixture content) + 5 TraditionGiftGrant rows granting Unbound every starter
-      Gift, with no signature techniques (Unbound has no signature style; a
-      character picks purely from the Path's starter pool). Other traditions'
-      grants are lore-repo content, never hardcoded here.
-
-    Returns:
-        StarterGiftCatalogResult with all created/fetched instances.
-    """
-    from world.classes.models import Path, PathStage  # noqa: PLC0415
-    from world.magic.constants import GiftKind  # noqa: PLC0415
-    from world.magic.models import (  # noqa: PLC0415
-        EffectType,
-        Gift,
-        Technique,
-        TechniqueStyle,
-        Tradition,
-    )
-    from world.magic.models.grants import PathGiftGrant, TraditionGiftGrant  # noqa: PLC0415
-    from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
-
-    # --- PROSPECT Paths (idempotent on name) ---
-    paths: dict[str, Path] = {}
-    for path_name, path_description in _PROSPECT_PATHS:
-        path, _ = Path.objects.get_or_create(
-            name=path_name,
-            defaults={
-                "description": path_description,
-                "stage": PathStage.PROSPECT,
-                "minimum_level": 1,
-                "is_active": True,
-                "sort_order": 0,
-                "action_category": _PATH_ACTION_CATEGORIES[path_name],
-            },
-        )
-        if not path.action_category:
-            path.action_category = _PATH_ACTION_CATEGORIES[path_name]
-            path.save(update_fields=["action_category"])
-        paths[path_name] = path
-
-    # --- TechniqueStyle rows + M2M wiring (idempotent on name) ---
-    styles: dict[str, TechniqueStyle] = {}
-    for style_name, style_description, linked_path_name in _TECHNIQUE_STYLES:
-        style, _ = TechniqueStyle.objects.get_or_create(
-            name=style_name,
-            defaults={"description": style_description},
-        )
-        # Wire the path into allowed_paths if not already linked (M2M add is idempotent)
-        linked_path = paths[linked_path_name]
-        style.allowed_paths.add(linked_path)
-        styles[style_name] = style
-
-    # --- EffectType rows (idempotent on name; category force-corrected, #2426) ---
-    effect_types: dict[str, EffectType] = {}
-    for et_name, et_description, base_power, base_anima_cost, category in _EFFECT_TYPES:
-        has_scaling = base_power is not None
-        et, created = EffectType.objects.get_or_create(
-            name=et_name,
-            defaults={
-                "description": et_description,
-                "base_power": base_power,
-                "base_anima_cost": base_anima_cost,
-                "has_power_scaling": has_scaling,
-                "category": category,
-            },
-        )
-        if not created and et.category != category:
-            EffectType.objects.filter(pk=et.pk).update(category=category)
-            et.category = category
-        effect_types[et_name] = et
-
-    cast_template = get_standalone_cast_template()
-
-    # --- Gifts + their 5 Techniques each, grouped by style ---
-    gifts: dict[str, Gift] = {}
-    techniques: dict[str, Technique] = {}
-    path_gift_grants: dict[str, PathGiftGrant] = {}
-    for style_name, _style_description, linked_path_name in _TECHNIQUE_STYLES:
-        gift_name, gift_description = _STARTER_GIFTS_BY_STYLE[style_name]
-        gift, _ = Gift.objects.get_or_create(
-            name=gift_name,
-            defaults={"description": gift_description, "kind": GiftKind.MAJOR},
-        )
-        gifts[gift_name] = gift
-
-        path = paths[linked_path_name]
-        style_rows = [row for row in _STARTER_GIFT_CATALOG if row[1] == style_name]
-        gift_techniques: list[Technique] = []
-        for _category, _style, technique_name, description, et_name in style_rows:
-            technique, _ = Technique.objects.get_or_create(
-                name=technique_name,
-                gift=gift,
-                defaults={
-                    "description": description,
-                    "style": styles[style_name],
-                    "effect_type": effect_types[et_name],
-                    "level": 1,
-                    "intensity": 1,
-                    "control": 1,
-                    "anima_cost": 5,
-                    "action_category": path.action_category,
-                    "action_template": cast_template,
-                },
-            )
-            techniques[technique_name] = technique
-            gift_techniques.append(technique)
-
-        path_gift_grant, _ = PathGiftGrant.objects.get_or_create(path=path, gift=gift)
-        path_gift_grant.starter_techniques.set(gift_techniques)
-        path_gift_grants[gift_name] = path_gift_grant
-
-    # --- Unbound Tradition + its grants (every starter gift, no signatures) ---
-    tradition, _ = Tradition.objects.get_or_create(
-        name=_UNBOUND_TRADITION_NAME,
-        defaults={
-            "description": _UNBOUND_TRADITION_DESCRIPTION,
-            "is_active": True,
-            "sort_order": 0,
-        },
-    )
-    tradition_gift_grants: dict[str, TraditionGiftGrant] = {}
-    for gift_name, gift in gifts.items():
-        tradition_gift_grant, _ = TraditionGiftGrant.objects.get_or_create(
-            tradition=tradition, gift=gift
-        )
-        tradition_gift_grants[gift_name] = tradition_gift_grant
-
-    return StarterGiftCatalogResult(
-        styles=styles,
-        effect_types=effect_types,
-        paths=paths,
-        gifts=gifts,
-        techniques=techniques,
-        path_gift_grants=path_gift_grants,
-        tradition=tradition,
-        tradition_gift_grants=tradition_gift_grants,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Task 1.9 — seed_magic_dev()
 # ---------------------------------------------------------------------------
@@ -2845,7 +2381,6 @@ class MagicDevSeedResult:
     config: MagicConfigResult
     rituals: RitualSeedResult
     thread_pull_catalog: ThreadPullCatalogResult
-    starter_gift_catalog: StarterGiftCatalogResult
     magic_content: MagicContentResult
     facet_thread_unlock: FacetThreadUnlockResult
     penetration: PenetrationContestResult
@@ -2965,39 +2500,42 @@ def seed_magic_dev() -> MagicDevSeedResult:
     3. ``seed_thread_pull_catalog()`` — ThreadPullCost × 3, ThreadPullEffect × 4,
        canonical Tideborne resonance; then ``seed_thread_survivability_tuning()`` —
        ThreadSurvivabilityTuning × 2 (DR + MAX_HEALTH baseline tuning rows, #1175)
-    4. ``seed_starter_gift_catalog()`` — 5 PROSPECT Path, 5 TechniqueStyle,
-       6 EffectType, 5 MAJOR Gift, 25 Technique, 5 PathGiftGrant rows, plus the
-       Unbound Tradition + its 5 TraditionGiftGrant rows (#2426)
-    5. ``author_reference_corruption_content()`` — Wild Hunt (Primal) + Web of
+    4. ``author_reference_corruption_content()`` — Wild Hunt (Primal) + Web of
        Spiders (Abyssal) Corruption ConditionTemplates + CORRUPTION_TWIST entries
-    6. ``MagicContent.create_all()`` — 6 social action Techniques + 6
+    5. ``MagicContent.create_all()`` — 6 social action Techniques + 6
        ActionEnhancements
-    7. ``seed_facet_thread_unlock()`` — single global FACET ThreadWeavingUnlock
-    8. ``seed_starter_magic_story()`` — magic-story pipeline slice (Affinities,
+    6. ``seed_facet_thread_unlock()`` — single global FACET ThreadWeavingUnlock
+    7. ``seed_starter_magic_story()`` — magic-story pipeline slice (Affinities,
        Resonances, Hallowed Rejection conditions + triggers, Hallowed Threshold story)
-    9. ``seed_penetration_contest()`` — penetration CheckType + factor ladder +
+    8. ``seed_penetration_contest()`` — penetration CheckType + factor ladder +
        check-scoped ModifierTarget (#767)
-    10. ``seed_flee_check()`` — flee CheckType + ModifierTarget + FleeConfig
-        singleton + tier modifiers + starter consequence pool (#878)
-    11. ``seed_relationship_track_thread_unlock()`` — canonical "Devotion"
+    9. ``seed_flee_check()`` — flee CheckType + ModifierTarget + FleeConfig
+       singleton + tier modifiers + starter consequence pool (#878)
+    10. ``seed_relationship_track_thread_unlock()`` — canonical "Devotion"
         RelationshipTrack + its RELATIONSHIP_TRACK ThreadWeavingUnlock (#2027)
-    12. ``wire_soul_tether_content()`` — Soul Tether Rituals (accept_soul_tether,
+    11. ``wire_soul_tether_content()`` — Soul Tether Rituals (accept_soul_tether,
         soul_tether_rescue), Tether Strain / Soul Tether Active ConditionTemplates,
         and the two reactive TriggerDefinitions (#2027). Previously created only
         in tests/factories — Soul Tether was unreachable in a live game.
-    13. ``wire_covenant_lifecycle_rituals()`` — Covenant/org lifecycle Rituals
+    12. ``wire_covenant_lifecycle_rituals()`` — Covenant/org lifecycle Rituals
         (Covenant Formation, Covenant Induction, Call the Banners, Mentor's Vow,
         Renew the Oath, Organization Induction) + the MentorBondConfig singleton
         (#2114). Previously created only in tests/factories — the fully-built
         covenant session machinery was unreachable in a live game.
-    14. ``ensure_dramatic_entrance_content()`` — "Grand Entrance" DramaticMomentType,
+    13. ``ensure_dramatic_entrance_content()`` — "Grand Entrance" DramaticMomentType,
         flagged ``suggest_on_technique_entrance=True`` (#2183). Without this, the
         technique-entrance suggestion bridge has nothing authored to surface.
-    15. ``ensure_portal_travel_content()`` — "Mirror" PortalAnchorKind, the
+    14. ``ensure_portal_travel_content()`` — "Mirror" PortalAnchorKind, the
         "Mirrorwalking" MINOR Gift + "Mirrorwalk" Technique
         (``travel_anchor_kind=Mirror``), its GiftUnlock, and starter Mirror
         PortalAnchor rows in seeded public rooms (#2222). Without this, the
         portal-travel network has no reachable content in a live game.
+
+    The starter Gift/Technique/PathGiftGrant/Tradition catalog formerly seeded
+    here at this point (Task 7, #2426) is retired (#2474) — real starter-catalog
+    content is lore-repo content loaded via ``load_world_content()`` ahead of
+    this orchestrator in the dev-seed flow (``seed_dev_database()``); this
+    function no longer authors a synthetic one.
 
     All writes are idempotent (get_or_create throughout). Re-running on a
     populated database is a no-op; staff edits to existing rows are preserved
@@ -3023,7 +2561,6 @@ def seed_magic_dev() -> MagicDevSeedResult:
     rituals = seed_canonical_rituals()
     thread_pull_catalog = seed_thread_pull_catalog()
     seed_thread_survivability_tuning()
-    starter_gift_catalog = seed_starter_gift_catalog()
     author_reference_corruption_content()
     magic_content = MagicContent.create_all()
     facet_thread_unlock = seed_facet_thread_unlock()
@@ -3066,7 +2603,6 @@ def seed_magic_dev() -> MagicDevSeedResult:
         config=config,
         rituals=rituals,
         thread_pull_catalog=thread_pull_catalog,
-        starter_gift_catalog=starter_gift_catalog,
         magic_content=magic_content,
         facet_thread_unlock=facet_thread_unlock,
         penetration=penetration,

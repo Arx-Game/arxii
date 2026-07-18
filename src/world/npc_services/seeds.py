@@ -27,6 +27,7 @@ from world.npc_services.models import (
 if TYPE_CHECKING:
     from world.achievements.models import Achievement
     from world.buildings.models import BuildingKind
+    from world.magic.models import Technique
 
 BUILDERS_GUILD_CLERK_ROLE_NAME = "Builders Guild Clerk"
 
@@ -195,21 +196,73 @@ GREAT_ARCHIVE_LIBRARIAN_ROLE_NAME = "Great Archive Librarian"
 #: on "has this character earned X".
 GREAT_ARCHIVE_SELF_STUDY_ACHIEVEMENT_SLUG = "great-archive-self-study"
 
-#: One representative technique per starter Gift (the "attack" row of the
-#: 5x5 grid seeded by ``seed_starter_gift_catalog``) — a small, symmetric
-#: self-study sample so the TRAIN-offer-gated-by-achievement substrate is
-#: walkable on a fresh DB. Real Archive curriculum content (which/how many
-#: techniques) is a lore-repo authoring pass (#2440's spec, "Out of scope" —
-#: "trainer NPC content"); staff/content can add or replace offers freely,
-#: this seed never overwrites a staff-adjusted row (get_or_create) and only
-#: prunes labels it itself minted.
-_SELF_STUDY_TECHNIQUE_NAMES: tuple[str, ...] = (
-    "Burning Strike",
-    "Shadow Blade",
-    "Shattering Chorus",
-    "Smiting Light",
-    "Force Sigil",
+#: One representative (gift_name, technique_name) pair per starter Gift (the
+#: "attack" row of the starter Gift/Technique catalog — real lore-repo content,
+#: loaded via ``load_world_content()``; formerly a synthetic 5x5 grid seeded
+#: in-repo by the now-retired ``seed_starter_gift_catalog()``, #2474) — a
+#: small, symmetric self-study sample so the TRAIN-offer-gated-by-achievement
+#: substrate is walkable on a fresh DB. Real Archive curriculum content
+#: (which/how many techniques) is a lore-repo authoring pass (#2440's spec,
+#: "Out of scope" — "trainer NPC content"); staff/content can add or replace
+#: offers freely, this seed never overwrites a staff-adjusted row
+#: (get_or_create) and only prunes labels it itself minted.
+#:
+#: Paired with its Gift (not a bare technique-name tuple) per #2474 review
+#: fix: ``Technique.name`` is NOT globally unique (only ``(gift, name)`` is,
+#: per ``unique_technique_gift_name``) — lore reuse or a player-crafted
+#: technique (``Technique.creator``) could share one of these names on a
+#: DIFFERENT gift, and an unscoped ``name__in=`` lookup would silently pick
+#: whichever row the DB happened to return, mis-wiring
+#: ``TrainOfferDetails.technique`` to the wrong gift's technique.
+_SELF_STUDY_STARTER_TECHNIQUES: tuple[tuple[str, str], ...] = (
+    ("Emberwork", "Burning Strike"),
+    ("Shadowcraft", "Shadow Blade"),
+    ("Resonant Chorus", "Shattering Chorus"),
+    ("Sacred Communion", "Smiting Light"),
+    ("Glyphwork", "Force Sigil"),
 )
+
+
+def _resolve_starter_techniques(pairs: tuple[tuple[str, str], ...]) -> dict[str, Technique]:
+    """Look up starter Techniques by (gift_name, technique_name) pair (#2474).
+
+    The starter Gift/Technique catalog is real lore-repo content, loaded via
+    ``core_management.content_fixtures.load_world_content()`` — this seed no
+    longer authors it (the retired ``seed_starter_gift_catalog()`` used to).
+
+    Each pair is resolved with its Gift scoping the lookup
+    (``gift__name=gift_name, name=technique_name``) rather than a bare
+    ``name__in=`` filter — ``Technique.name`` is not globally unique, so an
+    unscoped lookup could silently alias onto a same-named technique on a
+    different gift (lore reuse, or a player-crafted row via
+    ``Technique.creator``) and mis-wire ``TrainOfferDetails.technique``.
+
+    Raises ``ContentError`` (Decision 5 on #2474: content-dependent seeding
+    fails loudly, no silent skips) when NONE of ``pairs`` resolve — that means
+    the content repo hasn't been loaded. Every ``seed_dev_database()`` test in
+    the repo that reaches this code path seeds its stub content root with the
+    real starter catalog (``world.seeds.tests.content_stub.stub_content_root``)
+    precisely so this raise is never hit outside a genuinely missing content
+    repo. Individual missing pairs (a partially-loaded or edited catalog) are
+    tolerated by the caller, which skips a pair it can't find.
+    """
+    from core_management.content_fixtures import ContentError  # noqa: PLC0415
+    from world.magic.models import Technique  # noqa: PLC0415
+
+    techniques: dict[str, Technique] = {}
+    for gift_name, technique_name in pairs:
+        technique = Technique.objects.filter(gift__name=gift_name, name=technique_name).first()
+        if technique is not None:
+            techniques[technique_name] = technique
+    if not techniques:
+        message = (
+            f"Starter Gift/Technique catalog not found (no rows matched {pairs!r}). "
+            "Content repo not loaded — run the Big Button (seed_dev_database()) / "
+            "load_world_content() to load the arx2-lore content repo before seeding NPC "
+            "roles that reference starter techniques."
+        )
+        raise ContentError(message)
+    return techniques
 
 
 def ensure_great_archive_self_study_achievement() -> Achievement:
@@ -268,10 +321,9 @@ def ensure_great_archive_librarian_role() -> NPCRole:
     ``teaches_tradition`` FK can't express — deferred, not this task's scope.
     """
     from world.seeds.character_creation import ensure_shroudwatch_academy  # noqa: PLC0415
-    from world.seeds.game_content.magic import seed_starter_gift_catalog  # noqa: PLC0415
 
     academy = ensure_shroudwatch_academy()
-    catalog = seed_starter_gift_catalog()
+    starter_techniques = _resolve_starter_techniques(_SELF_STUDY_STARTER_TECHNIQUES)
     achievement = ensure_great_archive_self_study_achievement()
 
     role, _ = NPCRole.objects.get_or_create(
@@ -294,8 +346,8 @@ def ensure_great_archive_librarian_role() -> NPCRole:
 
     eligibility_rule = {"leaf": "has_achievement", "params": {"slug": achievement.slug}}
     expected_labels: set[str] = set()
-    for technique_name in _SELF_STUDY_TECHNIQUE_NAMES:
-        technique = catalog.techniques.get(technique_name)
+    for _gift_name, technique_name in _SELF_STUDY_STARTER_TECHNIQUES:
+        technique = starter_techniques.get(technique_name)
         if technique is None:
             continue
         label = f"Self-study: {technique.name}"
@@ -405,7 +457,7 @@ def ensure_academy_registrar_role() -> NPCRole:
 ACADEMY_GENERALIST_TRAINER_ROLE_NAME = "Academy Trainer"
 
 #: Same one-per-starter-Gift sample as the Great Archive librarian's self-study
-#: list (``_SELF_STUDY_TECHNIQUE_NAMES``) — deliberately identical set: both
+#: list (``_SELF_STUDY_STARTER_TECHNIQUES``) — deliberately identical set: both
 #: seeds exist to prove the (Path x Gift) pool is reachable, this one just
 #: without the achievement gate, so a fresh-DB character can complete their
 #: starter pool without first doing the Archive's quest. Real Academy
@@ -413,7 +465,7 @@ ACADEMY_GENERALIST_TRAINER_ROLE_NAME = "Academy Trainer"
 #: scope") — staff/content can add or replace offers freely; this seed never
 #: overwrites a staff-adjusted row (get_or_create) and only prunes labels it
 #: itself minted.
-_GENERALIST_TRAINER_TECHNIQUE_NAMES: tuple[str, ...] = _SELF_STUDY_TECHNIQUE_NAMES
+_GENERALIST_TRAINER_STARTER_TECHNIQUES: tuple[tuple[str, str], ...] = _SELF_STUDY_STARTER_TECHNIQUES
 
 
 def ensure_academy_generalist_trainer_role() -> NPCRole:
@@ -439,10 +491,9 @@ def ensure_academy_generalist_trainer_role() -> NPCRole:
     cleanup), mirroring ``ensure_great_archive_librarian_role``.
     """
     from world.seeds.character_creation import ensure_shroudwatch_academy  # noqa: PLC0415
-    from world.seeds.game_content.magic import seed_starter_gift_catalog  # noqa: PLC0415
 
     academy = ensure_shroudwatch_academy()
-    catalog = seed_starter_gift_catalog()
+    starter_techniques = _resolve_starter_techniques(_GENERALIST_TRAINER_STARTER_TECHNIQUES)
 
     role, _ = NPCRole.objects.get_or_create(
         name=ACADEMY_GENERALIST_TRAINER_ROLE_NAME,
@@ -464,8 +515,8 @@ def ensure_academy_generalist_trainer_role() -> NPCRole:
     )
 
     expected_labels: set[str] = set()
-    for technique_name in _GENERALIST_TRAINER_TECHNIQUE_NAMES:
-        technique = catalog.techniques.get(technique_name)
+    for _gift_name, technique_name in _GENERALIST_TRAINER_STARTER_TECHNIQUES:
+        technique = starter_techniques.get(technique_name)
         if technique is None:
             continue
         label = f"Learn: {technique.name}"

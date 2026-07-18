@@ -239,7 +239,18 @@ class IntensityTier(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.name} (threshold: {self.threshold})"
 
 
-class Technique(DiscoverableContent, SharedMemoryModel):
+class TechniqueManager(NaturalKeyManager):
+    """Manager for Technique with natural key support (#2474).
+
+    Keyed ``(gift, name)`` rather than ``name`` alone: ``name`` is explicitly
+    NOT unique on its own (different characters/gifts can share a technique
+    name) — see the field's help_text. Within one Gift's authored catalog
+    entries (the content this natural key exists to round-trip), the pair is
+    unique in practice.
+    """
+
+
+class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
     """
     A specific magical ability within a Gift.
 
@@ -454,7 +465,19 @@ class Technique(DiscoverableContent, SharedMemoryModel):
         help_text="Lore entry this technique is bound to, if any.",
     )
 
+    objects = TechniqueManager()
+
+    class NaturalKeyConfig:
+        fields = ["gift", "name"]
+        dependencies = ["magic.Gift"]
+
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gift", "name"],
+                name="unique_technique_gift_name",
+            ),
+        ]
         verbose_name = "Technique"
         verbose_name_plural = "Techniques"
 

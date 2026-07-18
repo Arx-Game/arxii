@@ -160,9 +160,10 @@ _DURANCE_OFFICIANT_CLASS_NAME = "Adventurer"
 #: not the Durance). assert_can_officiate only requires officiant > target.
 _DURANCE_OFFICIANT_LEVEL = 5
 
-#: The 5 CG-selectable PROSPECT paths, seeded by
-#: world.seeds.game_content.magic.seed_starter_gift_catalog (#2426). One officiant
-#: per path — see world/progression/CLAUDE.md's PROSPECT/style mapping.
+#: The 5 CG-selectable PROSPECT paths — real lore-repo content, loaded via
+#: load_world_content() (formerly seeded in-repo by the now-retired
+#: world.seeds.game_content.magic.seed_starter_gift_catalog, #2426/#2474). One
+#: officiant per path — see world/progression/CLAUDE.md's PROSPECT/style mapping.
 _DURANCE_OFFICIANT_PATH_NAMES: tuple[str, ...] = (
     "Path of Steel",
     "Path of Whispers",
@@ -196,9 +197,9 @@ def seed_durance_officiants() -> list:
     ``CharacterClass``/``DuranceTrainingSite`` rows are ordinary
     ``get_or_create``.
 
-    Skips a path silently if the magic cluster hasn't seeded it yet — cluster
-    ordering (``world.seeds.clusters``, "progression" after "magic") guarantees
-    this can't happen via the Big Button; defensive only.
+    Skips a path silently if it hasn't been loaded yet — content-repo load
+    running before any cluster seeder (#2474 Decision 5) guarantees this can't
+    happen via the Big Button; defensive only.
 
     Returns:
         The list of DuranceTrainingSite rows (created or fetched), one per

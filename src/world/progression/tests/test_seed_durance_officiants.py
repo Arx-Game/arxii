@@ -30,6 +30,7 @@ from world.progression.seeds import (
 )
 from world.progression.services.advancement import convene_durance_at_site
 from world.seeds.database import seed_dev_database
+from world.seeds.tests.content_stub import stub_content_root
 
 _CHECK_PATH = "world.progression.services.spends.check_requirements_for_unlock"
 
@@ -37,10 +38,12 @@ _CHECK_PATH = "world.progression.services.spends.check_requirements_for_unlock"
 class SeedDurancePrerequisitesTests(TestCase):
     """seed_dev_database() (magic + progression clusters) content shape."""
 
+    @stub_content_root()
     def test_ritual_of_the_durance_is_seeded_by_name(self) -> None:
         seed_dev_database()
         self.assertTrue(Ritual.objects.filter(name="Ritual of the Durance").exists())
 
+    @stub_content_root()
     def test_one_training_site_per_prospect_path(self) -> None:
         seed_dev_database()
         sites = DuranceTrainingSite.objects.select_related("training_path")
@@ -55,6 +58,7 @@ class SeedDurancePrerequisitesTests(TestCase):
 class SeedDurationOfficiantsIdempotencyTests(TestCase):
     """Re-running seed_durance_officiants() is a no-op that preserves staff edits."""
 
+    @stub_content_root()
     def test_rerun_is_idempotent_no_op(self) -> None:
         seed_dev_database()
         site_count = DuranceTrainingSite.objects.count()
@@ -63,6 +67,7 @@ class SeedDurationOfficiantsIdempotencyTests(TestCase):
 
         self.assertEqual(DuranceTrainingSite.objects.count(), site_count)
 
+    @stub_content_root()
     def test_rerun_preserves_staff_edit_to_officiant_level(self) -> None:
         from world.classes.services import set_primary_class_level
 
@@ -80,6 +85,7 @@ class SeedDurationOfficiantsIdempotencyTests(TestCase):
 class FirstDuranceWithNoLiveOfficiantTests(TestCase):
     """The symptom fix: the first-ever Durance needs no live higher-level PC (#2121)."""
 
+    @stub_content_root()
     def setUp(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory
         from world.seeds.character_creation import ensure_canonical_fallback_room

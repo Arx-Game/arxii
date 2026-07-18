@@ -543,6 +543,84 @@ def _resolve_natural_key_fields(model, fields: dict, source_path: Path | None) -
             raise UnresolvedNaturalKeyError(msg) from None
 
 
+def _pop_m2m_fields(model, fields: dict) -> dict[str, list]:
+    """Pop many-to-many field values out of *fields*, keyed by field name.
+
+    A many-to-many field with natural keys serializes as a LIST OF natural-key
+    lists (e.g. ``"resonances": [["Insidia"], ["Ember"]]``, or ``[]`` when
+    empty — Django's own serializer always emits the key, even for an
+    untouched m2m). That value shape doesn't fit ``_resolve_natural_key_fields``,
+    which resolves exactly one related instance per field (a to-one FK's
+    natural key). Nor can it be passed through ``update_or_create``'s
+    ``defaults``: assigning a many-to-many field requires an already-saved
+    instance, so ``_upsert_fixture_object`` applies these via ``.set()`` after
+    the row is upserted (see ``_resolve_m2m_fields``). Checking
+    ``field.many_to_many`` (true only for ``ManyToManyField``, never for a
+    ``ForeignKey``) keeps this purely structural — no reliance on the value's
+    shape, unlike the FK-vs-non-relational check in
+    ``_resolve_natural_key_fields``.
+
+    Stale-field tolerance (#2474 review fix): a fixture field naming a
+    removed/renamed model field makes ``get_field`` raise
+    ``FieldDoesNotExist`` — NOT a ``FieldError`` subclass, so it would
+    otherwise escape this function uncaught and crash the entire
+    ``load_entries`` run for every object, not just the offending row (this
+    function is called before ``_upsert_fixture_object``'s guarded
+    try/except). A field that doesn't exist on the model definitely isn't an
+    m2m field, so it's simply left in *fields* untouched — the existing
+    schema-drift handling downstream (the ``FieldError``/``TypeError`` catch
+    in ``_upsert_fixture_object``) skips that row with a diagnostic exactly
+    as it already does for a stale field on a model with no m2m fields at
+    all.
+    """
+    from django.core.exceptions import FieldDoesNotExist  # noqa: PLC0415
+
+    m2m_fields: dict[str, list] = {}
+    for field_name in list(fields):
+        try:
+            field = model._meta.get_field(field_name)  # noqa: SLF001
+        except FieldDoesNotExist:
+            continue
+        if field.many_to_many:
+            m2m_fields[field_name] = fields.pop(field_name)
+    return m2m_fields
+
+
+def _resolve_m2m_fields(
+    model, m2m_fields: dict[str, list], source_path: Path | None
+) -> dict[str, list]:
+    """Resolve each m2m field's natural-key-list values into model instances.
+
+    Mirrors ``_resolve_natural_key_fields``'s not-found handling (raises
+    ``UnresolvedNaturalKeyError``, the one failure mode ``load_world_content``
+    defers) but resolves a LIST of related instances per field instead of one.
+    """
+    resolved: dict[str, list] = {}
+    for field_name, values in m2m_fields.items():
+        field = model._meta.get_field(field_name)  # noqa: SLF001
+        related_model = field.related_model
+        location = source_path if source_path is not None else model._meta.label  # noqa: SLF001
+        instances = []
+        for value in values:
+            from django.core.exceptions import (  # noqa: PLC0415
+                ObjectDoesNotExist as _ObjectDoesNotExist,
+            )
+
+            try:
+                instances.append(related_model.objects.get_by_natural_key(*value))
+            except related_model.DoesNotExist:
+                msg = f"{location}: {field_name!r} {related_model.__name__} {value!r} not found."
+                raise UnresolvedNaturalKeyError(msg) from None
+            except _ObjectDoesNotExist as exc:
+                msg = (
+                    f"{location}: {field_name!r} {related_model.__name__} "
+                    f"{value!r} not found (nested: {exc})."
+                )
+                raise UnresolvedNaturalKeyError(msg) from None
+        resolved[field_name] = instances
+    return resolved
+
+
 def _extract_natural_key(model, fields: dict, source_path: Path | None) -> dict:
     """Pop the natural-key fields from *fields* and return them as a lookup dict.
 
@@ -619,6 +697,11 @@ def _upsert_fixture_object(
         result.skipped.append(str(exc))
         return OUTCOME_SKIPPED
 
+    # Many-to-many values (#2474) can't be resolved/assigned the same way as a
+    # to-one FK's natural key — pulled out here so _resolve_natural_key_fields
+    # below never sees them, and applied via .set() after a successful upsert.
+    m2m_fields = _pop_m2m_fields(model, fields)
+
     # Resolve natural-key-list FK values in both the lookup (the natural-key
     # fields themselves) and the remaining defaults. Each except clause below
     # only sets skip_msg (never returns directly) so this function keeps a
@@ -628,10 +711,13 @@ def _upsert_fixture_object(
     # distinct outcome ("deferred") from every other skip.
     created = False
     skip_msg: str | None = None
+    instance = None
+    resolved_m2m: dict[str, list] = {}
     try:
         _resolve_natural_key_fields(model, lookup, source_path)
         _resolve_natural_key_fields(model, fields, source_path)
-        _, created = model.objects.update_or_create(**lookup, defaults=fields)
+        resolved_m2m = _resolve_m2m_fields(model, m2m_fields, source_path)
+        instance, created = model.objects.update_or_create(**lookup, defaults=fields)
     except UnresolvedNaturalKeyError as exc:
         # Must be caught before the broader ContentError clause below (it's a
         # subclass) — this is the ONLY failure mode ever deferred.
@@ -669,6 +755,8 @@ def _upsert_fixture_object(
     if skip_msg is not None:
         result.skipped.append(skip_msg)
         return OUTCOME_SKIPPED
+    for field_name, instances in resolved_m2m.items():
+        getattr(instance, field_name).set(instances)
     return OUTCOME_CREATED if created else OUTCOME_UPDATED
 
 
@@ -710,7 +798,11 @@ def load_entries(
     is false (the default) — this method's return shape and every skip
     message are otherwise byte-for-byte identical to before this flag
     existed. ``load_world_content`` is the only caller that sets it; it
-    retries the deferred pairs once the grid bundles have loaded.
+    retries the deferred pairs to a FIXED POINT after the grid bundles have
+    loaded — repeated passes until a pass makes no further progress (#2474
+    review fix), not just a single retry — since a deferred object can itself
+    depend on another deferred object (e.g. a ``Technique`` naming a ``Gift``
+    that was ALSO deferred).
 
     Requires Django to be configured; imports are deferred so the module
     stays import-safe for pure validation.
@@ -750,11 +842,12 @@ class WorldLoadResult:
     """Outcome of ``load_world_content``'s full content-fixtures + grid load (#2448).
 
     ``created``/``updated`` are the FINAL counts after the deferred-retry
-    pass — an object that resolved on retry counts as created/updated here,
-    not separately. ``deferred_resolved`` is how many of those came from the
-    retry (visibility into how much the content-then-grid ordering mattered
+    passes (plural — retried to a fixed point, #2474 review fix) — an object
+    that resolved on any retry pass counts as created/updated here, not
+    separately. ``deferred_resolved`` is how many of those came from a retry
+    pass (visibility into how much the content-then-grid ordering mattered
     this run). ``skipped`` is the terminal skip list: an object still
-    unresolved after the grid bundles loaded is a genuine gap, not a race.
+    unresolved after retrying stopped making progress is a genuine gap, not a race.
     """
 
     created: int
@@ -780,9 +873,19 @@ def load_world_content(content_root: Path) -> WorldLoadResult:
        instead of skipped.
     2. Loads the grid bundles (creating the rooms/areas/exits those FK
        targets may have named).
-    3. Retries every deferred object once, with deferral off — still
-       unresolved now is a genuine gap, and lands in ``skipped`` exactly as
-       an unresolved FK does on a normal ``load_entries`` call.
+    3. Retries the deferred set to a FIXED POINT (#2474 review fix), not just
+       once: a multi-hop chain (e.g. ``PathGiftGrant.starter_techniques`` names
+       a ``Technique``, which itself names a ``Gift`` that was ALSO deferred)
+       can need more than one retry pass to fully resolve, since alphabetical
+       file order can attempt the grant before the technique it depends on
+       even within the retry set. Each pass keeps ``defer_unresolved=True`` so
+       a still-blocked object stays queued rather than skipping early; the
+       pass loops while it makes progress (the deferred set shrinks — either
+       something resolved or a genuinely different failure permanently
+       skipped it). Once a pass resolves/skips nothing new, one final pass
+       runs with ``defer_unresolved=False`` so every object still stuck lands
+       in ``skipped`` with a diagnostic — exactly the same terminal shape as
+       today's single-pass skip, just reached only once retrying stops paying off.
 
     Requires Django to be configured (delegates to ``build_all``/
     ``load_entries``/``load_grid_bundles``, all of which need it); imports of
@@ -798,23 +901,47 @@ def load_world_content(content_root: Path) -> WorldLoadResult:
     grid = load_grid_bundles(content_root)
 
     deferred_resolved = 0
-    for obj, source_path in deferred:
-        app_label, model_name = obj["model"].split(".")
-        try:
-            model = apps.get_model(app_label, model_name)
-        except LookupError:
-            result.skipped.append(
-                f"{source_path}: stale model {obj['model']!r} (renamed or removed) — skipped."
+
+    def _retry_pass(
+        pending: list[tuple[dict, Path | None]], *, defer_unresolved: bool
+    ) -> list[tuple[dict, Path | None]]:
+        """One pass over *pending*; returns the objects still deferred."""
+        nonlocal created, updated, deferred_resolved
+        still_pending: list[tuple[dict, Path | None]] = []
+        for obj, source_path in pending:
+            app_label, model_name = obj["model"].split(".")
+            try:
+                model = apps.get_model(app_label, model_name)
+            except LookupError:
+                result.skipped.append(
+                    f"{source_path}: stale model {obj['model']!r} (renamed or removed) — skipped."
+                )
+                continue
+            outcome = _upsert_fixture_object(
+                model, obj, source_path, result, defer_unresolved=defer_unresolved
             )
-            continue
-        outcome = _upsert_fixture_object(model, obj, source_path, result, defer_unresolved=False)
-        if outcome == OUTCOME_CREATED:
-            created += 1
-            deferred_resolved += 1
-        elif outcome == OUTCOME_UPDATED:
-            updated += 1
-            deferred_resolved += 1
-        # "skipped" outcome already appended its message to result.skipped.
+            if outcome == OUTCOME_CREATED:
+                created += 1
+                deferred_resolved += 1
+            elif outcome == OUTCOME_UPDATED:
+                updated += 1
+                deferred_resolved += 1
+            elif outcome == OUTCOME_DEFERRED:
+                still_pending.append((obj, source_path))
+            # OUTCOME_SKIPPED: message already appended to result.skipped.
+        return still_pending
+
+    pending = deferred
+    while pending:
+        next_pending = _retry_pass(pending, defer_unresolved=True)
+        if len(next_pending) == len(pending):
+            # Fixed point: this pass resolved and skipped nothing — every
+            # remaining object is still blocked for the same reason. One
+            # last pass with deferral off turns each into a terminal,
+            # diagnosed skip instead of looping forever.
+            _retry_pass(next_pending, defer_unresolved=False)
+            break
+        pending = next_pending
 
     return WorldLoadResult(
         created=created,

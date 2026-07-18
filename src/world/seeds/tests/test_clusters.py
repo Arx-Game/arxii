@@ -2,6 +2,7 @@ from django.db.models import Model
 from django.test import TestCase
 
 from world.seeds.clusters import CLUSTER_SEEDERS, seeded_models
+from world.seeds.tests.content_stub import stub_content_root
 
 
 class TestClusterRegistry(TestCase):
@@ -64,6 +65,7 @@ class TestClusterRegistry(TestCase):
         self.assertTrue(models)
         self.assertTrue(all(issubclass(m, Model) for m in models))
 
+    @stub_content_root()
     def test_character_creation_cluster_is_idempotent_no_op_on_second_run(self) -> None:
         from world.seeds.database import seed_dev_database
 
@@ -106,13 +108,15 @@ class TestClusterRegistry(TestCase):
         exist on a fresh Big-Button-only DB, so the CG Tradition step is empty
         for every Beginning — CG is uncompletable. Runs the full Big Button
         (not just the ``character_creation`` cluster in isolation) since the
-        seeder depends on the "magic" cluster's Unbound Tradition row existing
-        first.
+        seeder depends on the "Unbound" Tradition row existing first — real
+        lore-repo content, loaded via ``load_world_content()`` (#2474); the
+        stub content root carries an equivalent-shaped stand-in.
         """
         from world.character_creation.models import Beginnings
         from world.seeds.database import seed_dev_database
 
-        seed_dev_database()
+        with stub_content_root():
+            seed_dev_database()
 
         beginnings = Beginnings.objects.filter(is_active=True)
         self.assertTrue(beginnings.exists(), "expected at least one active seeded Beginning")
