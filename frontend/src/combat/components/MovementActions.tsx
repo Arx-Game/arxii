@@ -15,7 +15,7 @@ import { isDispatchFailure, type DispatchActionRequest, type DispatchResult } fr
 export interface MovementActionsProps {
   actions: PlayerAction[];
   isLocked: boolean;
-  dispatchAction: (params: DispatchActionRequest) => Promise<unknown>;
+  dispatchAction: (params: DispatchActionRequest) => Promise<DispatchResult>;
   /** Fires after a successful move dispatch — callers invalidate the encounter so the
    *  move shows before the next poll. */
   onDispatched?: () => void;
@@ -43,8 +43,8 @@ export function MovementActions({
             onClick={() => {
               dispatchAction({ ref: action.ref, kwargs: {} })
                 .then((result) => {
-                  if (isDispatchFailure(result as DispatchResult)) {
-                    toast.error((result as DispatchResult).message ?? 'Move rejected.');
+                  if (isDispatchFailure(result)) {
+                    toast.error(result.message ?? 'Move rejected.');
                     return;
                   }
                   onDispatched?.();
