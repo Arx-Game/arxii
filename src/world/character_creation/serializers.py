@@ -49,6 +49,7 @@ class BeginningsSerializer(serializers.ModelSerializer):
 
     allowed_species_ids = serializers.SerializerMethodField()
     is_accessible = serializers.SerializerMethodField()
+    codex_entry_ids = serializers.SerializerMethodField()
 
     def get_allowed_species_ids(self, obj: Beginnings) -> list[int]:
         """
@@ -72,6 +73,7 @@ class BeginningsSerializer(serializers.ModelSerializer):
             "grants_species_languages",
             "cg_point_cost",
             "is_accessible",
+            "codex_entry_ids",
         ]
         # Note: social_rank intentionally NOT included (staff-only)
 
@@ -81,6 +83,10 @@ class BeginningsSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False
         return obj.is_accessible_by(request.user)
+
+    def get_codex_entry_ids(self, obj: Beginnings) -> list[int]:
+        """Get codex entry IDs granted by this beginnings choice."""
+        return [grant.entry_id for grant in obj.cached_codex_grants]
 
 
 class StartingAreaSerializer(serializers.ModelSerializer):
@@ -113,10 +119,19 @@ class SpeciesSerializer(serializers.ModelSerializer):
 
     parent_name = serializers.CharField(source="parent.name", read_only=True, allow_null=True)
     stat_bonuses = serializers.SerializerMethodField()
+    codex_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = Species
-        fields = ["id", "name", "description", "parent", "parent_name", "stat_bonuses"]
+        fields = [
+            "id",
+            "name",
+            "description",
+            "parent",
+            "parent_name",
+            "stat_bonuses",
+            "codex_entry_id",
+        ]
 
     def get_stat_bonuses(self, obj: Species) -> dict[str, int]:
         """Get stat bonuses as dictionary."""
@@ -160,6 +175,7 @@ class PathSerializer(serializers.ModelSerializer):
     """Serializer for Path in CG context."""
 
     aspects = serializers.SerializerMethodField()
+    codex_entry_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = Path
@@ -172,6 +188,7 @@ class PathSerializer(serializers.ModelSerializer):
             "icon_url",
             "icon_name",
             "aspects",
+            "codex_entry_ids",
         ]
 
     def get_aspects(self, obj: Path) -> list[str]:
@@ -184,6 +201,13 @@ class PathSerializer(serializers.ModelSerializer):
         to invalidate when needed.
         """
         return [pa.aspect.name for pa in obj.cached_path_aspects]
+
+    def get_codex_entry_ids(self, obj: Path) -> list[int]:
+        """Get codex entry IDs granted by this path.
+
+        Read from ``cached_codex_grants`` populated by the ViewSet prefetch.
+        """
+        return [grant.entry_id for grant in obj.cached_codex_grants]
 
 
 class TraditionSerializer(serializers.ModelSerializer):

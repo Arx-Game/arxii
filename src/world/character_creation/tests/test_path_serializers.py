@@ -45,6 +45,30 @@ class PathSerializerTest(TestCase):
         # Weight should NOT be exposed to players
         self.assertNotIn("weight", str(data))
 
+    def test_includes_codex_entry_ids(self):
+        """PathSerializer includes codex_entry_ids from PathCodexGrant."""
+        from world.codex.factories import CodexEntryFactory
+        from world.codex.models import PathCodexGrant
+
+        entry = CodexEntryFactory(name="Path Lore")
+        PathCodexGrant.objects.create(path=self.path, entry=entry)
+        # Trigger cached_property (simulates ViewSet prefetch fallback)
+        self.path.cached_codex_grants  # noqa: B018
+
+        serializer = PathSerializer(self.path)
+        data = serializer.data
+
+        self.assertIn("codex_entry_ids", data)
+        self.assertEqual(data["codex_entry_ids"], [entry.id])
+
+    def test_codex_entry_ids_empty_when_no_grants(self):
+        """PathSerializer returns empty list when no codex grants exist."""
+        serializer = PathSerializer(self.path)
+        data = serializer.data
+
+        self.assertIn("codex_entry_ids", data)
+        self.assertEqual(data["codex_entry_ids"], [])
+
 
 class CharacterDraftPathSerializerTest(TestCase):
     """Tests for CharacterDraft serializer with path."""
