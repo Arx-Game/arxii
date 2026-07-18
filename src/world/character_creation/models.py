@@ -385,6 +385,14 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
             .order_by("sort_order", "id")
         )
 
+    @cached_property
+    def cached_codex_grants(self) -> list:
+        """Codex grants — the Prefetch/query shared interface (#2386).
+
+        Authored content: negligible staleness on the identity-mapped row.
+        """
+        return list(self.codex_grants.all())
+
     def is_accessible_by(self, account: AccountDB) -> bool:
         """Check if an account can see/select this option."""
         if not self.is_active:
