@@ -27,16 +27,13 @@ export interface DistinctionEffect {
   value_per_rank: number | null;
   scaling_values: number[] | null;
   description: string;
-  codex_entry_id?: number | null;
 }
 
 /**
  * Effect summary returned in list view (lighter weight than full DistinctionEffect).
- * Includes text and optional codex_entry_id for linkable terms.
  */
 export interface EffectSummary {
   text: string;
-  codex_entry_id: number | null;
 }
 
 export interface Distinction {
@@ -53,6 +50,7 @@ export interface Distinction {
   effects_summary: EffectSummary[];
   is_locked: boolean;
   lock_reason: string | null;
+  codex_entry_ids: number[];
 }
 
 export interface DistinctionDetail extends Omit<Distinction, 'category_slug' | 'effects_summary'> {

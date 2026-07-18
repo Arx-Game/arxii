@@ -13,6 +13,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CodexTerm } from '@/codex/components/CodexTerm';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, CheckCircle2, ChevronLeft } from 'lucide-react';
@@ -200,7 +201,13 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
                         </div>
                       )}
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-base">{option.name}</CardTitle>
+                        <CardTitle className="text-base">
+                          {option.codex_entry_ids?.length > 0 ? (
+                            <CodexTerm entryId={option.codex_entry_ids[0]}>{option.name}</CodexTerm>
+                          ) : (
+                            option.name
+                          )}
+                        </CardTitle>
                         {option.cg_point_cost > 0 && (
                           <span className="text-xs text-amber-600">
                             +{option.cg_point_cost} CG Points
@@ -413,7 +420,13 @@ function SpeciesDetailPanel({ species }: { species: Species | null }) {
       >
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">{species.name}</CardTitle>
+            <CardTitle className="text-lg">
+              {species.codex_entry_id != null ? (
+                <CodexTerm entryId={species.codex_entry_id}>{species.name}</CodexTerm>
+              ) : (
+                species.name
+              )}
+            </CardTitle>
             {species.parent_name && <CardDescription>{species.parent_name}</CardDescription>}
           </CardHeader>
           <CardContent className="space-y-4">
@@ -501,7 +514,11 @@ function BeginningsDetailPanel({
           >
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
             <h3 className="theme-heading relative text-2xl font-bold text-white drop-shadow-lg">
-              {beginnings.name}
+              {beginnings.codex_entry_ids?.length > 0 ? (
+                <CodexTerm entryId={beginnings.codex_entry_ids[0]}>{beginnings.name}</CodexTerm>
+              ) : (
+                beginnings.name
+              )}
             </h3>
             {isSelected && (
               <CheckCircle2 className="relative ml-auto h-6 w-6 text-white drop-shadow-lg" />
