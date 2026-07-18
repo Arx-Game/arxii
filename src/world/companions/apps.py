@@ -14,4 +14,5 @@ class CompanionsConfig(AppConfig):
         register_room_feature_strategy(
             RoomFeatureServiceStrategy.STABLES,
             handle_stables_progression,
+            as_default=True,
         )

@@ -52,23 +52,36 @@ def _default_strategy_not_registered(
 
 ROOM_FEATURE_STRATEGIES: dict[str, RoomFeatureStrategyHandler] = {}
 
-# Snapshot of the default (empty) registry so tests can reset between
-# cases — mirrors npc_services.effects.reset_offer_effect_handlers.
-_DEFAULT_STRATEGIES: dict[str, RoomFeatureStrategyHandler] = dict(ROOM_FEATURE_STRATEGIES)
+# The at-ready baseline: registrations made with ``as_default=True`` (every
+# ``AppConfig.ready()`` call site) land here too, so ``reset`` restores the
+# fully-wired registry — never the empty import-time state (#2490: an
+# import-time snapshot let a tearDown reset wipe sanctum's registration for
+# the rest of the CI shard process).
+_DEFAULT_STRATEGIES: dict[str, RoomFeatureStrategyHandler] = {}
 
 
-def register_room_feature_strategy(strategy_key: str, handler: RoomFeatureStrategyHandler) -> None:
+def register_room_feature_strategy(
+    strategy_key: str,
+    handler: RoomFeatureStrategyHandler,
+    *,
+    as_default: bool = False,
+) -> None:
     """Register/override the strategy handler for ``strategy_key``.
 
-    Each feature's home app calls this at app-ready time. Sanctum's
+    Each feature's home app calls this at app-ready time with
+    ``as_default=True`` so the registration survives test resets. Sanctum's
     ``world.magic`` registers ``RoomFeatureServiceStrategy.SANCTUM`` →
-    ``world.magic.services.sanctum.handle_progression``.
+    ``world.magic.services.sanctum.handle_progression``. Tests wiring a mock
+    override omit ``as_default`` and pair with
+    :func:`reset_room_feature_strategies` in tearDown.
     """
     ROOM_FEATURE_STRATEGIES[strategy_key] = handler
+    if as_default:
+        _DEFAULT_STRATEGIES[strategy_key] = handler
 
 
 def reset_room_feature_strategies() -> None:
-    """Restore the empty baseline. Test-only escape hatch."""
+    """Restore the at-ready baseline registrations. Test-only escape hatch."""
     ROOM_FEATURE_STRATEGIES.clear()
     ROOM_FEATURE_STRATEGIES.update(_DEFAULT_STRATEGIES)
 
