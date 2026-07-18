@@ -3684,6 +3684,8 @@
   - mantle <- items.Mantle
   - crafted_recipes <- items.CraftedItemRecipe
   - gem_instance_details <- items.GemInstanceDetails
+  - adornments <- items.Adornment
+  - adorned_on <- items.Adornment
   - ware_listing <- items.WareListing
   - market_sales <- items.MarketSale
   - reclamation_claims <- items.ReclamationClaim
@@ -3892,6 +3894,12 @@
   - size_grade -> items.GemGrade [FK]
   - purity_grade -> items.GemGrade [FK]
   - cut_grade -> items.GemGrade [FK]
+
+### Adornment
+**Foreign Keys:**
+  - host_instance -> items.ItemInstance [FK]
+  - gem_instance -> items.ItemInstance [OneToOne]
+  - set_by_account -> accounts.AccountDB [FK] (nullable)
 
 ### MarketSquare
 **Foreign Keys:**

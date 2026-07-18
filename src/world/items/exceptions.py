@@ -190,6 +190,29 @@ class CategoryRequirementsNotQuotable(ItemError):
     )
 
 
+class AdornmentCapacityExceeded(ItemError):
+    """Raised when a host item is already at its template's adornment_capacity (Build 0b)."""
+
+    user_message = "There is no room to set another gem in this piece."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"There is no room to set another gem in this piece."},
+    )
+
+
+class NotAGem(ItemError):
+    """Raised when an item that is not a gem is offered for adornment (Build 0b)."""
+
+    user_message = "That is not a gem."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That is not a gem."})
+
+
+class GemAlreadyAdorned(ItemError):
+    """Raised when a gem already set in a piece is offered for adornment again (Build 0b)."""
+
+    user_message = "That gem is already set in a piece."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That gem is already set in a piece."})
+
+
 # ---------------------------------------------------------------------------
 # Inventory action errors (pick_up, drop, give, equip, etc.)
 # ---------------------------------------------------------------------------

@@ -1,1 +1,1 @@
-0039_gemdetails_gemgrade_geminstancedetails
+0040_itemtemplate_adornment_capacity_adornment

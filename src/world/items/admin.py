@@ -3,6 +3,7 @@
 from django.contrib import admin
 
 from world.items.models import (
+    Adornment,
     AudacityTuning,
     CurrencyBalance,
     DisguiseKitEffect,
@@ -51,6 +52,13 @@ class GemDetailsAdmin(admin.ModelAdmin):
 class GemInstanceDetailsAdmin(admin.ModelAdmin):
     list_display = ["item_instance", "size_grade", "purity_grade", "cut_grade"]
     raw_id_fields = ["item_instance"]
+
+
+@admin.register(Adornment)
+class AdornmentAdmin(admin.ModelAdmin):
+    list_display = ["host_instance", "gem_instance", "set_by_account", "set_at"]
+    # host_instance / gem_instance → large ItemInstance table; set_by_account → AccountDB.
+    raw_id_fields = ["host_instance", "gem_instance", "set_by_account"]
 
 
 @admin.register(QualityTier)

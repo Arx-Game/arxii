@@ -609,3 +609,15 @@ class GemInstanceDetailsFactory(factory.django.DjangoModelFactory):
     size_grade = factory.SubFactory(GemGradeFactory, axis=GemAxis.SIZE)
     purity_grade = factory.SubFactory(GemGradeFactory, axis=GemAxis.PURITY)
     cut_grade = factory.SubFactory(GemGradeFactory, axis=GemAxis.CUT)
+
+
+class AdornmentFactory(factory.django.DjangoModelFactory):
+    """Factory for Adornment — a gem set into a host item. Pass a gem instance for
+    ``gem_instance`` when exercising adorn_item; the default is a plain instance."""
+
+    class Meta:
+        model = "items.Adornment"
+
+    host_instance = factory.SubFactory(ItemInstanceFactory)
+    gem_instance = factory.SubFactory(ItemInstanceFactory)
+    narration = ""

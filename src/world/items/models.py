@@ -341,6 +341,13 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
             "Plain items = 0 or 1; fine items = 2-3; ceremonial = 4-5."
         ),
     )
+    adornment_capacity = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Number of gems that can be set into this template as adornment (Build 0b). "
+            "A ring holds 1-2; a gem-covered table holds many; plain items = 0."
+        ),
+    )
     gear_archetype = models.CharField(
         max_length=20,
         choices=GearArchetype.choices,
@@ -1854,6 +1861,7 @@ from world.items.crafting.models import (  # noqa: E402,F401
 # Gems submodule (Build 0b) — gem value model
 # ---------------------------------------------------------------------------
 from world.items.gems.models import (  # noqa: E402,F401
+    Adornment,
     GemDetails,
     GemGrade,
     GemInstanceDetails,

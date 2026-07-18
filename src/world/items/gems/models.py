@@ -144,3 +144,52 @@ class GemInstanceDetails(SharedMemoryModel):
                     for field in mismatches
                 }
             )
+
+
+class Adornment(SharedMemoryModel):
+    """A gem set into a host item — worth + narration + a structured material record.
+
+    Not a subclass of ``ItemAttachment``: that base requires a non-null
+    ``attachment_quality_tier`` (a ``QualityTier``), which is meaningless for a gem
+    whose quality lives in its size/purity/cut grades. So this carries its own
+    ``set_by_account`` / ``set_at`` provenance instead.
+
+    The gem's worth is added to the host's ``lore_value`` at adorn time (so the wired
+    ``appraise()`` reflects it with no extra query, per design Addendum F5). The
+    ``gem_instance`` FK keeps the stone's full identity/provenance inside the piece
+    and makes "what materials are on this item" queryable (the seam the magic app
+    reads for resonance matching).
+    """
+
+    host_instance = models.ForeignKey(
+        _ITEM_INSTANCE_FK,
+        on_delete=models.CASCADE,
+        related_name="adornments",
+        help_text="The piece this gem is set into.",
+    )
+    gem_instance = models.OneToOneField(
+        _ITEM_INSTANCE_FK,
+        on_delete=models.CASCADE,
+        related_name="adorned_on",
+        help_text="The embedded gem (a gem ItemInstance). A gem is set in at most one host.",
+    )
+    narration = models.TextField(
+        blank=True,
+        default="",
+        help_text="Player-authored description of this stone's place in the piece.",
+    )
+    set_by_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adornments_set",
+    )
+    set_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "items"
+        ordering = ["set_at"]
+
+    def __str__(self) -> str:
+        return f"gem {self.gem_instance_id} set in item {self.host_instance_id}"
