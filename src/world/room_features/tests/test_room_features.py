@@ -29,6 +29,7 @@ from world.room_features.models import (
 )
 from world.room_features.seeds import SANCTUM_KIND_NAME, ensure_sanctum_kind
 from world.room_features.services import (
+    ROOM_FEATURE_STRATEGIES,
     can_modify_room_features,
     complete_room_feature_progression,
     register_room_feature_strategy,
@@ -116,6 +117,9 @@ class StrategyRegistryTests(TestCase):
 
     def test_unregistered_strategy_raises(self) -> None:
         details = RoomFeatureProgressionDetailsFactory()
+        # Every enum member has an at-ready handler, so simulate a kind whose
+        # home app forgot to register; tearDown's reset restores the baseline.
+        ROOM_FEATURE_STRATEGIES.pop(details.target_feature_kind.service_strategy, None)
         with self.assertRaises(NotImplementedError):
             complete_room_feature_progression(details.project, outcome_tier=None)
 
@@ -124,16 +128,20 @@ class StrategyRegistryTests(TestCase):
         with self.assertRaises(RuntimeError):
             complete_room_feature_progression(project, outcome_tier=None)
 
-    def test_reset_clears_overrides(self) -> None:
-        register_room_feature_strategy(RoomFeatureServiceStrategy.SANCTUM, MagicMock())
+    def test_reset_restores_app_ready_baseline(self) -> None:
+        """#2490: reset drops test overrides but keeps at-ready registrations.
+
+        The old reset restored an import-time (empty) snapshot, so any
+        tearDown reset wiped sanctum's registration for the rest of the test
+        process and broke world.magic's registration test downstream in the
+        same CI shard.
+        """
+        override = MagicMock()
+        register_room_feature_strategy(RoomFeatureServiceStrategy.SANCTUM, override)
         reset_room_feature_strategies()
-        details = RoomFeatureProgressionDetailsFactory(
-            target_feature_kind=RoomFeatureKindFactory(
-                service_strategy=RoomFeatureServiceStrategy.SANCTUM
-            ),
-        )
-        with self.assertRaises(NotImplementedError):
-            complete_room_feature_progression(details.project, outcome_tier=None)
+        self.assertIn(RoomFeatureServiceStrategy.SANCTUM, ROOM_FEATURE_STRATEGIES)
+        self.assertIsNot(ROOM_FEATURE_STRATEGIES[RoomFeatureServiceStrategy.SANCTUM], override)
+        self.assertIn(RoomFeatureServiceStrategy.COMMAND_CENTER, ROOM_FEATURE_STRATEGIES)
 
 
 class PermissionGateTests(TestCase):

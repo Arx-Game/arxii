@@ -38,6 +38,7 @@ class RoomFeaturesConfig(AppConfig):
         register_room_feature_strategy(
             RoomFeatureServiceStrategy.COMMAND_CENTER,
             handle_command_center_progression,
+            as_default=True,
         )
 
         # Civic-hub readers (#1450) are likewise generic — home app is here.
@@ -49,10 +50,12 @@ class RoomFeaturesConfig(AppConfig):
         register_room_feature_strategy(
             RoomFeatureServiceStrategy.NOTICE_BOARD,
             handle_notice_board_progression,
+            as_default=True,
         )
         register_room_feature_strategy(
             RoomFeatureServiceStrategy.TOWN_CRIER,
             handle_town_crier_progression,
+            as_default=True,
         )
 
         # #675 feature kinds — generic; home app is here.
@@ -66,18 +69,22 @@ class RoomFeaturesConfig(AppConfig):
         register_room_feature_strategy(
             RoomFeatureServiceStrategy.LIBRARY,
             handle_library_progression,
+            as_default=True,
         )
         register_room_feature_strategy(
             RoomFeatureServiceStrategy.TRAINING_ROOM,
             handle_training_room_progression,
+            as_default=True,
         )
         register_room_feature_strategy(
             RoomFeatureServiceStrategy.SIEGE_DECK,
             handle_siege_deck_progression,
+            as_default=True,
         )
         register_room_feature_strategy(
             RoomFeatureServiceStrategy.CAPTAINS_QUARTERS,
             handle_captains_quarters_progression,
+            as_default=True,
         )
 
         # Owner-upgradeable social hub (#1694) — generic; home app is here.
@@ -88,6 +95,7 @@ class RoomFeaturesConfig(AppConfig):
         register_room_feature_strategy(
             RoomFeatureServiceStrategy.SOCIAL_HUB,
             handle_social_hub_progression,
+            as_default=True,
         )
 
         # #2179 — Vault room feature (secure storage + access list).
@@ -98,6 +106,7 @@ class RoomFeaturesConfig(AppConfig):
         register_room_feature_strategy(
             RoomFeatureServiceStrategy.VAULT,
             handle_vault_progression,
+            as_default=True,
         )
 
         # #1825 — Workshop of Iniquity (criminal-projects gate; frame jobs).
@@ -108,6 +117,7 @@ class RoomFeaturesConfig(AppConfig):
         register_room_feature_strategy(
             RoomFeatureServiceStrategy.WORKSHOP_OF_INIQUITY,
             handle_workshop_of_iniquity_progression,
+            as_default=True,
         )
 
         # #1862 — Brig room feature (ship holding cell for captured characters).
@@ -118,6 +128,7 @@ class RoomFeaturesConfig(AppConfig):
         register_room_feature_strategy(
             RoomFeatureServiceStrategy.BRIG,
             handle_brig_progression,
+            as_default=True,
         )
 
         # Installable exit/room defenses (#2177) -- independent of

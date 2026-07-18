@@ -23,6 +23,7 @@ class MagicConfig(AppConfig):
         register_room_feature_strategy(
             RoomFeatureServiceStrategy.SANCTUM,
             handle_progression,
+            as_default=True,
         )
 
         # Register Make an Entrance as a reaction-window kind (#904) —
