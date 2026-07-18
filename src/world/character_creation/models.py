@@ -1134,6 +1134,17 @@ class DraftApplication(SharedMemoryModel):
         blank=True,
         help_text="Set on deny/withdraw for soft-delete grace period.",
     )
+    invited_via = models.ForeignKey(
+        "roster.GameInvite",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="applications",
+        help_text=(
+            "If the applicant arrived via a game invite, the invite that "
+            "brought them. Set by annotate_application() during submission."
+        ),
+    )
 
     class Meta:
         verbose_name = "Draft Application"
