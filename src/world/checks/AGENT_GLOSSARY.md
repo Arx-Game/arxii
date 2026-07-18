@@ -27,3 +27,16 @@ _Avoid_: willpower check, resolve, resistance (for the named CheckType)
 **rollmod**:
 A flat per-character roll modifier summed from the character sheet's and the controlling account's `rollmod` values, added to the d100 before clamping to 1–100. A staff/debug lever, returning zero when the relations are absent.
 _Avoid_: luck, roll bonus, fudge
+
+**CheckTypeCapabilityModifier** (#2505):
+A curated, staff-authored `(check_type, capability, weight)` row — the only path by which a
+character's `conditions.CapabilityType` value reaches a check's point total. No row means the
+capability oracle is never even called for that check (curated gate, not a zero-weight default).
+Contribution is `weight * effective_capability_value`, summed across a check's rows and truncated
+toward zero once via `_capability_point_allocation`, shared by the roll path
+(`_calculate_capability_points`) and the provenance path (`_capability_contributions` in
+`collect_check_modifiers`) so the two can never drift apart. Author at most one channel per
+condition/check pair — see `docs/systems/checks.md`'s authoring guardrail — to avoid a condition
+double-counting through both a direct `ConditionCheckModifier` and an indirect
+`ConditionCapabilityEffect` routed through a weighted capability.
+_Avoid_: capability bonus, capability check link, inferred capability check

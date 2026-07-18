@@ -126,6 +126,7 @@
   - applications <- mechanics.Application
   - trait_derivations <- mechanics.TraitCapabilityDerivation
   - blocking_challenges <- mechanics.ChallengeTemplate
+  - check_type_modifiers <- checks.CheckTypeCapabilityModifier
   - granted_by_roles <- covenants.CovenantRole
   - combat_pull_grants <- combat.CombatPullResolvedEffect
   - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge
@@ -1643,6 +1644,7 @@
   - context_consequence_pools <- mechanics.ContextConsequencePool
   - consequence_outcomes <- checks.ConsequenceOutcome
   - traits <- checks.CheckTypeTrait
+  - capability_modifiers <- checks.CheckTypeCapabilityModifier
   - aspects <- checks.CheckTypeAspect
   - specializations <- checks.CheckTypeSpecialization
   - item_check_modifiers <- items.ItemCheckModifier
@@ -1659,6 +1661,11 @@
 **Foreign Keys:**
   - check_type -> checks.CheckType [FK]
   - trait -> traits.Trait [FK]
+
+### CheckTypeCapabilityModifier
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+  - capability -> conditions.CapabilityType [FK]
 
 ### CheckTypeAspect
 **Foreign Keys:**
@@ -2377,6 +2384,7 @@
   - applications <- mechanics.Application
   - trait_derivations <- mechanics.TraitCapabilityDerivation
   - blocking_challenges <- mechanics.ChallengeTemplate
+  - check_type_modifiers <- checks.CheckTypeCapabilityModifier
   - granted_by_roles <- covenants.CovenantRole
   - combat_pull_grants <- combat.CombatPullResolvedEffect
   - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge

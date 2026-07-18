@@ -42,6 +42,7 @@ from world.character_creation.models import (
     CGPointBudget,
     CharacterDraft,
     DraftApplication,
+    StartingArea,
 )
 from world.character_creation.serializers import (
     BeginningsSerializer,
@@ -104,6 +105,12 @@ class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for listing starting areas."""
 
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+
+    # Schema-introspection sentinel (drf-spectacular): with only a dynamic
+    # get_queryset, the id path-param type is inferred differently per
+    # environment (string locally vs integer in CI), so api-types-drift
+    # flapped. Runtime always uses get_queryset below.
+    queryset = StartingArea.objects.none()
 
     serializer_class = StartingAreaSerializer
     permission_classes = [IsAuthenticated]

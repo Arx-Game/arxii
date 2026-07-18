@@ -41,6 +41,7 @@ class CheckResult:
     aspect_bonus: int
     total_points: int
     specialization_points: int = 0  # #1688 — points from owned specializations (stat+skill+spec)
+    capability_points: int = 0  # #2505 — weighted authored CheckTypeCapabilityModifier points
 
     @property
     def outcome_name(self) -> str:

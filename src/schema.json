@@ -37672,6 +37672,7 @@ components:
       - affinity
       - pull
       - relationship
+      - capability
       type: string
       description: |-
         * `condition` - Condition
@@ -37686,6 +37687,7 @@ components:
         * `affinity` - Affinity
         * `pull` - Combat Pull
         * `relationship` - Relationship
+        * `capability` - Capability
     ConsequencePoolCatalog:
       type: object
       description: Read-only serializer for the curated technique-cast consequence-pool

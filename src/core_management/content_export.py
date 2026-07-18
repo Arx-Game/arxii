@@ -44,6 +44,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "character_creation.startingarea",
         # character_sheets
         "character_sheets.gender",
+        # checks
+        "checks.checktypecapabilitymodifier",
         # classes
         "classes.aspect",
         "classes.path",

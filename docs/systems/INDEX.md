@@ -621,12 +621,12 @@ Character advantages and disadvantages (CG Stage 6: Traits).
 ### Checks
 Check resolution engine — converts trait values to ranks and rolls against result charts.
 
-- **Models:** `CheckCategory`, `CheckType`, `CheckTypeTrait`, `CheckTypeAspect`
+- **Models:** `CheckCategory`, `CheckType`, `CheckTypeTrait`, `CheckTypeAspect`, `CheckTypeCapabilityModifier` (#2505 — curated authored `(check_type, capability)` weight, `related_name="capability_modifiers"`)
 - **Seeded check types:** `Composure` (willpower-weighted; resistance-specific — seeded via `create_resistance_check_types()` in `checks/factories.py`; used by `compute_resist_increment`)
 - **Key Functions:** `perform_check(character, check_type, target_difficulty, extra_modifiers) -> CheckResult`, `get_rollmod(character) -> int`, `compute_resist_increment(defender_character, resist_effort_level) -> int` (resolves the Composure CheckType to compute a numeric difficulty bonus for active defense)
-- **Key Types:** `CheckResult` (outcome, chart, roller_rank, target_rank, trait_points, aspect_bonus)
-- **Pipeline:** trait points (weighted via CheckTypeTrait) + aspect bonus (path level) + modifiers → CheckRank → ResultChart → roll+rollmod → outcome
-- **Integrates with:** traits (lookup tables), skills (check bonuses), conditions (check modifiers), goals (bonuses), scenes (active resistance via `compute_resist_increment`)
+- **Key Types:** `CheckResult` (outcome, chart, roller_rank, target_rank, trait_points, aspect_bonus, specialization_points, capability_points)
+- **Pipeline:** trait points (weighted via CheckTypeTrait) + aspect bonus (path level) + capability points (weighted via authored `CheckTypeCapabilityModifier`, curated gate — #2505) + modifiers → CheckRank → ResultChart → roll+rollmod → outcome
+- **Integrates with:** traits (lookup tables), skills (check bonuses), conditions (check modifiers + `get_effective_capability_value` agency oracle for authored capability points), goals (bonuses), scenes (active resistance via `compute_resist_increment`), mechanics (`resolve_challenge()` folds its `capability_source.value` into `extra_modifiers`)
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
