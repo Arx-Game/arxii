@@ -426,3 +426,73 @@ class CrimeEvidence(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"evidence for deed {self.deed_id} ({self.state})"
+
+
+class LieLowState(SharedMemoryModel):
+    """A persona's declared go-to-ground state in one area (#1826).
+
+    Declared, never automatic: the cost is muting their presence — extra heat
+    decay there, and their rackets miss them (CRIME_KICKUP collection malus).
+    Broken the moment they take IC action in the area (interaction or fresh
+    heat). Self-visible only — leaking it would defeat it.
+    """
+
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        related_name="lie_low_states",
+    )
+    area = models.ForeignKey(
+        "areas.Area",
+        on_delete=models.CASCADE,
+        related_name="lie_low_states",
+    )
+    declared_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-declared_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["persona", "area"],
+                condition=models.Q(ended_at__isnull=True),
+                name="one_active_lie_low_per_persona_area",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        state = "active" if self.ended_at is None else "ended"
+        return f"lie-low ({state}) persona {self.persona_id} in area {self.area_id}"
+
+
+class PardonGrant(SharedMemoryModel):
+    """Audit row for a lord's pardon (#1826) — a public act with a real holder."""
+
+    granter_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.PROTECT,
+        related_name="pardons_granted",
+    )
+    target_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        related_name="pardons_received",
+    )
+    area = models.ForeignKey(
+        "areas.Area",
+        on_delete=models.CASCADE,
+        related_name="pardons",
+    )
+    society = models.ForeignKey(
+        "societies.Society",
+        on_delete=models.CASCADE,
+        related_name="pardons",
+    )
+    heat_cleared = models.PositiveIntegerField(default=0)
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_date"]
+
+    def __str__(self) -> str:
+        return f"pardon of persona {self.target_persona_id} in area {self.area_id}"

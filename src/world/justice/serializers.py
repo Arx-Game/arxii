@@ -23,6 +23,7 @@ class PersonaHeatSerializer(serializers.ModelSerializer):
         model = PersonaHeat
         fields = (
             "id",
+            "area",
             "area_name",
             "society",
             "society_name",

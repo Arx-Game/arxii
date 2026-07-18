@@ -69,3 +69,28 @@ def tier_for_value(value: int) -> HeatTier:
         if value >= floor:
             return tier
     return HeatTier.SAFE
+
+
+# --- Heat lifecycle (#1826) — PLACEHOLDER magnitudes ---
+# Lying low: declared state; extra decay in the declared area while active,
+# and the persona's rackets miss them (CRIME_KICKUP gross malus at collection).
+LIE_LOW_DECAY_MULT = 3
+LIE_LOW_CRIME_MALUS_PCT = 25
+
+# Heat value at/above which a persona's warrant becomes publicly visible
+# (wanted posters). Maps to the top two tiers of HEAT_TIER_FLOORS.
+WANTED_VALUE_FLOOR = 60
+
+# Bribing the hunters: coin cost per point of current heat; cleared fraction
+# by check band; the botch band mints a bribery crime of its own.
+BRIBE_COST_PER_HEAT = 50
+BRIBE_CLEAR_PCT = 60
+BRIBE_PARTIAL_CLEAR_PCT = 30
+BRIBE_BOTCH_LEVEL = -2
+BRIBE_CHECK_TYPE_NAME = "Bribery Approach"
+BRIBERY_CRIME_SLUG = "bribery"
+BRIBERY_CRIME_SCALE = 2
+
+# OrganizationOffice slug whose holder (in an org of the enforcing society)
+# may pardon — the delegation payoff, mirroring domain-steward (#2239).
+MAGISTRATE_OFFICE = "magistrate"

@@ -10,8 +10,9 @@
 
 import { Loader2 } from 'lucide-react';
 
-import { usePersonaHeat } from '../queries';
+import { useBribeMutation, useLieLowMutation, usePersonaHeat } from '../queries';
 import type { PersonaHeatRow } from '../api';
+import { Button } from '@/components/ui/button';
 
 interface Props {
   /** The viewer's active RosterEntry pk; null when no character is active. */
@@ -39,6 +40,8 @@ function TierBadge({ row }: { row: PersonaHeatRow }) {
 
 export function CrimeTab({ viewerEntryId }: Props) {
   const { data: rows, isLoading } = usePersonaHeat(viewerEntryId);
+  const lieLow = useLieLowMutation(viewerEntryId);
+  const bribe = useBribeMutation(viewerEntryId);
 
   if (viewerEntryId === null) {
     return (
@@ -80,6 +83,34 @@ export function CrimeTab({ viewerEntryId }: Props) {
           {row.alleged_deeds.length > 0 && (
             <p className="mt-1 text-sm text-muted-foreground">
               Wanted for: {row.alleged_deeds.join(', ')}
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={lieLow.isPending}
+              onClick={() => lieLow.mutate({ areaId: row.area })}
+              title="Go to ground here: heat cools faster, but your rackets miss you. Any IC action here surfaces you."
+            >
+              Lie low
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={bribe.isPending}
+              onClick={() => bribe.mutate({ areaId: row.area })}
+              title="Approach the hunters with coin. Expensive; a botched approach is itself a crime."
+            >
+              Bribe the hunters
+            </Button>
+          </div>
+          {(lieLow.isError || bribe.isError) && (
+            <p className="mt-1 text-sm text-destructive">
+              {[lieLow.error, bribe.error]
+                .filter((e): e is Error => e instanceof Error)
+                .map((e) => e.message)
+                .join(' ')}
             </p>
           )}
         </li>

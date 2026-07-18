@@ -1183,6 +1183,15 @@ most-specific-wins up the `Area` tree; knowledge propagation is the accrual engi
 reading to the enforcing society's dominion (ADR-0080 — sanctuary and cross-border
 immunity are the same mismatch rule). Masks (TEMPORARY personas) deliberately soak
 heat; identity-association copies it (`associate_heat` — the #1334 outing seam).
+Lifecycle (#1826, `justice/lifecycle.py`): **lie low** (`LieLowState` — declared
+go-to-ground: ×`LIE_LOW_DECAY_MULT` decay in the area + CRIME_KICKUP collection
+malus for member orgs; broken by any IC action there — interaction or fresh heat);
+**bribe** (`attempt_bribe` — coin sink scaled by heat, `perform_check`-banded;
+botch mints a `bribery` crime); **pardon** (`pardon_persona` — magistrate office
+or org leadership of the enforcing society; `PardonGrant` audit + public feed
+item); **wanted visibility** (`wanted_rows_for_area` — at/above
+`WANTED_VALUE_FLOOR` the warrant flips public: tier + presented name + crime
+kinds, never numbers; `GET /api/justice/wanted/`).
 
 - **Models:** `CrimeKind` (normalized vocabulary; **content rule: no sexual crimes,
   ever**), `AreaLaw` (`heat_weight` posture + `exempts`), `DeedCrimeTag`

@@ -574,6 +574,8 @@
   - cleanup_projects <- areas.CleanupProjectDetails
   - laws <- justice.AreaLaw
   - heat_rows <- justice.PersonaHeat
+  - lie_low_states <- justice.LieLowState
+  - pardons <- justice.PardonGrant
   - stat_overrides <- locations.LocationValueOverride
   - stat_modifiers <- locations.LocationValueModifier
   - ownership_records <- locations.LocationOwnership
@@ -6061,6 +6063,9 @@
   - authored_secrets <- secrets.Secret
   - secret_victimhoods <- secrets.SecretVictim
   - heat_rows <- justice.PersonaHeat
+  - lie_low_states <- justice.LieLowState
+  - pardons_granted <- justice.PardonGrant
+  - pardons_received <- justice.PardonGrant
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - trendsetter_crownings <- items.Trendsetter
@@ -6574,6 +6579,7 @@
   - exposed_secrets <- secrets.Secret
   - dominant_areas <- areas.Area
   - heat_rows <- justice.PersonaHeat
+  - pardons <- justice.PardonGrant
   - fashion_presentations <- items.FashionPresentation
   - facet_momentum <- items.FacetVogueMomentum
   - trendsetters <- items.Trendsetter
@@ -7022,6 +7028,7 @@
 - `provision_species_gifts(sheet: 'CharacterSheet', *, resonance=None) -> 'list[CharacterGift]' — Mint the species' Minor Gift(s) + latent GIFT thread + any drawback. Idempotent.`
 - `reconcile_sunlight_exposure(character, room) -> 'None' — Apply or remove the Sunlight Exposure condition based on outdoor + day-phase + shelter`
 - `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True, include_suppressed: bool = False) -> bool — Remove a condition from a target.`
+- `total_species_gift_cost(species) -> 'int' — Total CG-point cost of a species' gift grants, summed over it and its ancestors.`
 
 
 ## world.stories
