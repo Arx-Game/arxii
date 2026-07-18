@@ -200,7 +200,7 @@ export function StaffInboxPage() {
           </div>
 
           {/* Pagination */}
-          {data.num_pages > 1 && (
+          {data && data.num_pages > 1 && (
             <div className="mt-6 flex items-center justify-center gap-4">
               <Button
                 variant="outline"
