@@ -7377,6 +7377,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/looking-for-table/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return looking-for-table players, sorted by most recently flagged. */
+    get: operations['gm_looking_for_table_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/my-story-grants/': {
     parameters: {
       query?: never;
@@ -16109,6 +16126,23 @@ export interface paths {
     get: operations['roster_invites_resolve_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/looking-for-table/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Set or clear the looking-for-table flag on the requesting user's PlayerData. */
+    post: operations['roster_looking_for_table_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -47057,6 +47091,24 @@ export interface operations {
       };
     };
   };
+  gm_looking_for_table_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   gm_my_story_grants_list: {
     parameters: {
       query?: {
@@ -59486,6 +59538,24 @@ export interface operations {
         content: {
           'application/json': components['schemas']['GameInvite'];
         };
+      };
+    };
+  };
+  roster_looking_for_table_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

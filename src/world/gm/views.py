@@ -56,6 +56,7 @@ from world.gm.services import (
     join_table,
     leave_table,
     promote_gm,
+    set_looking_for_table,
     transfer_ownership as transfer_ownership_service,
 )
 from world.player_submissions.constants import SubmissionStatus
@@ -563,3 +564,131 @@ class GMDashboardView(APIView):
                 },
             }
         )
+
+
+# --- Looking-for-table (#2431) -----------------------------------------------
+
+
+class LookingForTableToggleView(APIView):
+    """Player toggles their own looking-for-table flag.
+
+    POST /api/roster/looking-for-table/ with body {"looking": true/false}.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Set or clear the looking-for-table flag on the requesting user's PlayerData."""
+        looking = request.data.get("looking")
+        if looking is None:
+            return Response(
+                {"detail": "looking field is required (true or false)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not isinstance(looking, bool):
+            return Response(
+                {"detail": "looking must be a boolean."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            player_data = request.user.player_data
+        except AttributeError:
+            return Response(
+                {"detail": "Player data not found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        set_looking_for_table(player_data, looking=looking)
+        return Response(
+            {"looking_for_table": player_data.looking_for_table},
+            status=status.HTTP_200_OK,
+        )
+
+
+class LookingForTableEntrySerializer(serializers.Serializer):
+    """One entry in the GM's looking-for-table browse list."""
+
+    character_name = serializers.SerializerMethodField()
+    player_display = serializers.SerializerMethodField()
+    path_name = serializers.SerializerMethodField()
+    character_level = serializers.SerializerMethodField()
+    glimpse_story = serializers.SerializerMethodField()
+    flagged_at = serializers.SerializerMethodField()
+
+    def get_character_name(self, obj) -> str:
+        try:
+            return obj.character_sheet.character.name
+        except AttributeError:
+            return ""
+
+    def get_player_display(self, obj) -> str:
+        tenure = obj.current_tenure
+        if tenure and tenure.player_data:
+            return tenure.player_data.display_name
+        return ""
+
+    def get_path_name(self, obj) -> str:
+        try:
+            levels = obj.character_sheet.cached_character_class_levels
+            if levels:
+                path = levels[0].character_class.path
+                return path.name if path else ""
+        except Exception:  # noqa: BLE001, S110
+            pass
+        return ""
+
+    def get_character_level(self, obj) -> int:
+        try:
+            levels = obj.character_sheet.cached_character_class_levels
+            if levels:
+                return max(ccl.level for ccl in levels)
+        except Exception:  # noqa: BLE001, S110
+            pass
+        return 0
+
+    def get_glimpse_story(self, obj) -> str:
+        try:
+            aura = obj.character_sheet.character.aura
+            return aura.glimpse_story or ""
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def get_flagged_at(self, obj):
+        tenure = obj.current_tenure
+        if tenure and tenure.player_data:
+            return tenure.player_data.looking_for_table_set_at
+        return None
+
+
+class LookingForTableBrowseView(APIView):
+    """GM browses players looking for tables.
+
+    GET /api/gm/looking-for-table/ — returns a list of characters whose
+    PlayerData.looking_for_table is True, with rich context (path, level,
+    glimpse story) for tailoring invitations.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        """Return looking-for-table players, sorted by most recently flagged."""
+        # Only GMs (accounts with a GMProfile) can browse
+        if not hasattr(request.user, "gm_profile"):
+            return Response(
+                {"detail": "Only GMs can browse the looking-for-table list."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        from world.roster.models import RosterEntry  # noqa: PLC0415
+
+        entries = (
+            RosterEntry.objects.filter(
+                tenures__end_date__isnull=True,
+                tenures__player_data__looking_for_table=True,
+            )
+            .select_related("character_sheet__character")
+            .prefetch_related("tenures__player_data")  # noqa: PREFETCH_STRING
+            .distinct()
+            .order_by("-tenures__player_data__looking_for_table_set_at")
+        )
+        serializer = LookingForTableEntrySerializer(entries, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
