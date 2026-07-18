@@ -14,6 +14,8 @@ export function detailPath(item: InboxItem): string {
       return `/staff/gm-applications/${item.source_pk}`;
     case 'system_error':
       return `/staff/system-errors/${item.source_pk}`;
+    case 'petition':
+      return `/staff/petitions/${item.source_pk}`;
   }
 }
 

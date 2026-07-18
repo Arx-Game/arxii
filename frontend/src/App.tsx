@@ -42,6 +42,7 @@ import { WardrobePage } from './inventory/pages/WardrobePage';
 import { MarketPage } from './market/MarketPage';
 import { FeedbackPage } from './submissions/pages/FeedbackPage';
 import { BugReportPage } from './submissions/pages/BugReportPage';
+import { PetitionPage } from './submissions/pages/PetitionPage';
 import { PlayerReportPage } from './submissions/pages/PlayerReportPage';
 import { StaffHubPage } from './staff/pages/StaffHubPage';
 const MissionBrowserPage = lazy(() =>
@@ -95,6 +96,7 @@ import { StaffBugReportDetailPage } from './staff/pages/StaffBugReportDetailPage
 import { StaffPlayerReportsPage } from './staff/pages/StaffPlayerReportsPage';
 import { StaffPlayerReportDetailPage } from './staff/pages/StaffPlayerReportDetailPage';
 import { StaffSystemErrorsPage } from './staff/pages/StaffSystemErrorsPage';
+import { StaffPetitionDetailPage } from './staff/pages/StaffPetitionDetailPage';
 import { StaffSystemErrorDetailPage } from './staff/pages/StaffSystemErrorDetailPage';
 import { StaffAccountHistoryPage } from './staff/pages/StaffAccountHistoryPage';
 import { StaffGMApplicationsPage } from './staff/pages/StaffGMApplicationsPage';
@@ -441,6 +443,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/petition"
+            element={
+              <ProtectedRoute>
+                <PetitionPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/game" element={<GamePage />} />
           <Route path="/codex" element={<CodexPage />} />
           <Route
@@ -645,6 +655,14 @@ function App() {
             element={
               <StaffRoute>
                 <StaffSystemErrorDetailPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/petitions/:id"
+            element={
+              <StaffRoute>
+                <StaffPetitionDetailPage />
               </StaffRoute>
             }
           />

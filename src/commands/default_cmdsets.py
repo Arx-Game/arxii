@@ -20,6 +20,7 @@ from commands.account.account_info import CmdAccount, CmdRoster
 from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
+from commands.account.staff_contact import CmdPetition
 from commands.agriculture import CmdHarvest
 from commands.alterations import CmdMageScar
 from commands.assets import CmdIntroduce
@@ -463,6 +464,8 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         self.add(CmdPromptReply())
         # #2122 — own-status-only roster check (browsing stays web-first).
         self.add(CmdRoster())
+        # #2288 — staff-contact pointer (filing stays web-first).
+        self.add(CmdPetition())
 
 
 class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):

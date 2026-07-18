@@ -23235,6 +23235,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/Petition'
           description: ''
+  /api/player-submissions/petitions/{id}/ignore-sender/:
+    post:
+      operationId: player_submissions_petitions_ignore_sender_create
+      description: Flip the sender's silent perma-ignore bit (#2288). Never disclosed
+        to them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this petition.
+        required: true
+      tags:
+      - player-submissions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Petition'
+          description: ''
   /api/player-submissions/petitions/{id}/resolve/:
     post:
       operationId: player_submissions_petitions_resolve_create
@@ -55041,6 +55064,13 @@ components:
           format: date-time
           readOnly: true
           nullable: true
+        sender_context:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: Kudos + standing columns — staff-only (the ignore bit stays
+            silent).
+          readOnly: true
       required:
       - category
       - category_display
@@ -55049,6 +55079,7 @@ components:
       - id
       - resolved_at
       - scene
+      - sender_context
       - staff_notes
       - status
       - subject_character

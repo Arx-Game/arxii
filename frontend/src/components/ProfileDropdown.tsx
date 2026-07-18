@@ -12,7 +12,7 @@ import {
 } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { CharacterLink } from './character';
-import { Bug, Map, MessageSquare, PlusCircle, Shield, Sparkles } from 'lucide-react';
+import { Bug, Map, MessageSquare, PlusCircle, Shield, Sparkles, Siren } from 'lucide-react';
 
 interface ProfileDropdownProps {
   account: AccountData;
@@ -82,6 +82,12 @@ export function ProfileDropdown({ account }: ProfileDropdownProps) {
           <Link to="/bug-report" className="flex items-center gap-2">
             <Bug className="h-4 w-4" />
             Report a Bug
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/petition" className="flex items-center gap-2">
+            <Siren className="h-4 w-4" />
+            Petition Staff (Emergency)
           </Link>
         </DropdownMenuItem>
         {account.is_staff && (

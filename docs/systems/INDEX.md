@@ -4987,7 +4987,17 @@ Player-to-staff contact surfaces plus the unified staff triage inbox.
   `sender_context` (kudos + standing columns for triage).
 - **Endpoints:** `/api/player-submissions/` — `feedback/`, `bug-reports/`,
   `player-reports/`, `system-errors/`, `petitions/` (create/list/retrieve scoped
-  self-or-staff; staff `resolve` action validates REVIEWED/DISMISSED).
+  self-or-staff; staff `resolve` action validates REVIEWED/DISMISSED; staff
+  `ignore-sender` action flips the silent perma-ignore bit; `sender_context`
+  serializes staff-only so the ignore bit never leaks to the sender).
+- **Web:** player `/petition` page (`PetitionPage` — category picker with
+  per-category refs, one-open notice, own-petition history; linked from the
+  Profile menu beside feedback/bug-report); staff `StaffPetitionDetailPage`
+  (`/staff/petitions/:id` — resolve with notes, sender track record,
+  perma-ignore toggle); `StaffInboxPage` gains the Petitions category, sender
+  kudos/standing chips, a sender-kudos sort, and the show-ignored reveal.
+  Telnet: `petition` is a pointer + own-status check only
+  (`commands/account/staff_contact.py`), never a filing surface.
 - **Staff inbox** (`world.staff_inbox`): `get_staff_inbox(categories, include_ignored)`
   aggregates open items from every source into `InboxItem` rows (petition items carry
   `sender_context`; petitions from `is_ignored` senders are silently excluded unless

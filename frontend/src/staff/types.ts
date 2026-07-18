@@ -6,13 +6,24 @@ export interface InboxItem {
     | 'player_report'
     | 'character_application'
     | 'gm_application'
-    | 'system_error';
+    | 'system_error'
+    | 'petition';
   source_pk: number;
   title: string;
   reporter_summary: string;
   created_at: string;
   status: string;
   detail_url: string;
+  /** Kudos + standing columns for the sender (#2288); present on petition items. */
+  sender_context?: SenderContext | null;
+}
+
+/** The sender's staff-contact track record (#2288). */
+export interface SenderContext {
+  kudos_total: number;
+  actioned_count: number;
+  dismissed_count: number;
+  is_ignored: boolean;
 }
 
 // Paginated inbox response (extended pagination from staff_inbox)
@@ -152,4 +163,5 @@ export type SubmissionCategory =
   | 'player_report'
   | 'character_application'
   | 'gm_application'
-  | 'system_error';
+  | 'system_error'
+  | 'petition';

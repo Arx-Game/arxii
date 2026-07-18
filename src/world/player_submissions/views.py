@@ -290,7 +290,7 @@ class PetitionViewSet(
             )
         except StaffContactError as exc:
             return Response({"detail": exc.user_message}, status=400)
-        return Response(PetitionSerializer(petition).data, status=201)
+        return Response(self.get_serializer(petition).data, status=201)
 
     @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[IsAdminUser])
     def resolve(self, request: Request, pk: object = None) -> Response:
@@ -311,4 +311,18 @@ class PetitionViewSet(
             )
         except StaffContactError as exc:
             return Response({"detail": exc.user_message}, status=400)
-        return Response(PetitionSerializer(petition).data)
+        return Response(self.get_serializer(petition).data)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="ignore-sender",
+        permission_classes=[IsAdminUser],
+    )
+    def ignore_sender(self, request: Request, pk: object = None) -> Response:
+        """Flip the sender's silent perma-ignore bit (#2288). Never disclosed to them."""
+        from world.player_submissions.services import sender_context, set_ignored  # noqa: PLC0415
+
+        petition = self.get_object()
+        set_ignored(petition.account, ignored=bool(request.data.get("ignored", True)))
+        return Response({"sender_context": sender_context(petition.account)})

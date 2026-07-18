@@ -355,6 +355,7 @@ class PetitionSerializer(serializers.ModelSerializer):
     """Read serializer for petitions (#2288)."""
 
     category_display = serializers.CharField(source="get_category_display", read_only=True)
+    sender_context = serializers.SerializerMethodField()
 
     class Meta:
         model = Petition
@@ -369,8 +370,18 @@ class PetitionSerializer(serializers.ModelSerializer):
             "staff_notes",
             "created_at",
             "resolved_at",
+            "sender_context",
         )
         read_only_fields = fields
+
+    def get_sender_context(self, obj: Petition) -> dict | None:
+        """Kudos + standing columns — staff-only (the ignore bit stays silent)."""
+        request = self.context.get("request")
+        if request is None or not request.user.is_staff:
+            return None
+        from world.player_submissions.services import sender_context  # noqa: PLC0415
+
+        return sender_context(obj.account)
 
 
 class PetitionCreateSerializer(serializers.Serializer):

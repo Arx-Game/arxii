@@ -261,3 +261,49 @@ class FeedbackResolutionStampTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(standing_for(self.reporter).actioned_count, 1)
+
+
+class PetitionStaffContextTests(TestCase):
+    """Staff-only sender context + the silent perma-ignore action (#2288)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = AccountFactory(username="ctxplayer")
+        cls.staff = AccountFactory(username="ctxstaff", is_staff=True)
+        cls.petition = PetitionFactory(account=cls.player)
+
+    def _client(self, account) -> APIClient:
+        client = APIClient()
+        client.force_authenticate(user=account)
+        return client
+
+    def test_staff_detail_carries_sender_context(self) -> None:
+        response = self._client(self.staff).get(
+            f"/api/player-submissions/petitions/{self.petition.pk}/"
+        )
+        self.assertEqual(response.data["sender_context"]["kudos_total"], 0)
+
+    def test_owner_detail_hides_sender_context(self) -> None:
+        """The ignore bit must stay silent — owners never see their own standing."""
+        response = self._client(self.player).get(
+            f"/api/player-submissions/petitions/{self.petition.pk}/"
+        )
+        self.assertIsNone(response.data["sender_context"])
+
+    def test_ignore_sender_flips_and_reveals_nothing_to_player(self) -> None:
+        response = self._client(self.staff).post(
+            f"/api/player-submissions/petitions/{self.petition.pk}/ignore-sender/",
+            {"ignored": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["sender_context"]["is_ignored"])
+        self.assertTrue(SubmitterStanding.objects.get(account=self.player).is_ignored)
+
+    def test_ignore_sender_requires_staff(self) -> None:
+        response = self._client(self.player).post(
+            f"/api/player-submissions/petitions/{self.petition.pk}/ignore-sender/",
+            {"ignored": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
