@@ -37,6 +37,8 @@ export function useBattleDetailQuery(battleId: number | null | undefined) {
     queryKey: battleKeys.detail(battleId ?? 0),
     queryFn: () => fetchBattleDetail(battleId!),
     enabled: battleId != null,
+    // Staging is multi-GM: poll so another GM's changes appear without a reload (#2423).
+    refetchInterval: 10_000,
     staleTime: 15_000,
   });
 }
