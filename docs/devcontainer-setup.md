@@ -123,6 +123,42 @@ where you run Claude Code:
 claude --dangerously-skip-permissions
 ```
 
+### Persistent sessions (zellij)
+
+A plain `dc-shell` rides on `docker exec`, which has **no reattach mechanism**: if
+the PowerShell window closes or the connection drops, every TUI in that shell
+(Claude Code, polytoken) is permanently orphaned — still running, but with no way
+to see its screen again. Run agents inside a zellij session instead, and a dropped
+connection costs nothing:
+
+```powershell
+just dc-attach            # attach to (or create) the session named "main"
+just dc-attach lore       # separate named session per workstream
+```
+
+Inside the session, run `claude` as usual. The bindings that matter (the status
+bar at the bottom shows the rest):
+
+- `Ctrl-o d` — detach; everything keeps running. Reattach later with the same
+  `just dc-attach <name>`.
+- `Ctrl-t n` / `Ctrl-t 1..9` — new tab / switch tabs, for several agents in one
+  session.
+- `zellij ls` (from any container shell) — list sessions.
+
+Prefer one named session (or tab) per workstream — `just dc-attach 2450-maps` —
+so reattaching after a disconnect is self-describing.
+
+**Recovery ladder** when things die anyway: zellij survives a lost host
+connection; `claude --resume <session-id>` (run in a fresh shell) survives a dead
+zellij session; pushed branches and PRs survive a dead container. If a Claude
+process is orphaned outside zellij, confirm it is idle (no tests/subagents in
+flight), `kill` it, then resume it inside `just dc-attach`.
+
+`tmux` is also installed as a fallback multiplexer. Use one or the other for a
+given session, never nested. A TUI that dies mid-screen can leave the host
+terminal spewing mouse-escape garbage on every mouse move — that is cosmetic;
+fix it with `reset`, not by killing processes.
+
 **Run the test suite from the host (without entering the container):**
 
 ```powershell
