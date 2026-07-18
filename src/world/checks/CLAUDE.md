@@ -46,11 +46,19 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 Central aggregator (`services.py`) that gathers condition / rollmod / scene /
 equipment / CHARACTER / equipment-walk / **fashion** / **CAPABILITY** contributions
 into one `ModifierBreakdown`. The CAPABILITY block (#2505) emits one contribution
-per authored `CheckTypeCapabilityModifier` row with a non-zero weight x
-effective-capability-value product — it mirrors `_calculate_capability_points` (the
-rolled-total math in `_compute_check_breakdown`) so recorded provenance matches
-what actually moved `total_points`. Pass `scene=` to enable the **perception-relative fashion
-bonus**: `_character_and_equipment_contributions` resolves the perceiving
+per authored `CheckTypeCapabilityModifier` row. Both the roll path
+(`_calculate_capability_points`) and this provenance path (`_capability_contributions`)
+share one arithmetic helper, `_capability_point_allocation` — it computes the raw
+`weight x effective-capability-value` product per row, truncates the **summed**
+total toward zero ONCE (never per-row — per-row truncation before summing is what a
+prior version did and it could silently diverge from the roll path, e.g. two rows of
+weight 0.5/value 1 each: roll path truncates `1.0` once to `1`, but summing two
+per-row-truncated `int(0.5)==0`s gives `0`), then allocates that single truncated
+total back across rows by **largest remainder** (each row floored toward zero, the
+leftover units handed to the rows with the largest fractional remainder, tie-broken
+by capability name) so the recorded per-row contributions always sum EXACTLY to what
+moved `total_points`. Zero-value rows are dropped only after this allocation. Pass
+`scene=` to enable the **perception-relative fashion bonus**: `_character_and_equipment_contributions` resolves the perceiving
 societies via `world.areas.services.societies_for_scene(scene)`
 (`Area.dominant_society`, else all societies sharing the realm) and takes the
 **max** `fashion_outfit_bonus` across them. Society-blind callers pass no

@@ -119,7 +119,11 @@ rollmod = get_rollmod(character)
    capability_points = int(sum(
        row.weight * get_effective_capability_value(sheet, row.capability)
        for row in check_type.capability_modifiers.all()
-   ))  # truncated toward zero AFTER summing
+   ))  # truncated toward zero ONCE, after summing every row -- never per-row
+   # `_capability_point_allocation` is the ONE place this arithmetic is computed;
+   # collect_check_modifiers's CAPABILITY provenance calls the same helper and
+   # allocates the same truncated total back across rows by largest remainder,
+   # so recorded contributions always sum to exactly capability_points (#2505 fix).
 
 3. Total = trait_points + specialization_points + aspect_bonus + capability_points + extra_modifiers
 
@@ -155,6 +159,12 @@ _calculate_aspect_bonus(character, check_type, level) -> int
 # 0 with no authored rows (curated gate, never calls the capability oracle) or no sheet_data
 _calculate_capability_points(character, check_type) -> int
 
+# Shared arithmetic (#2505): raw per-row weight x value products, truncated-toward-zero
+# total, and largest-remainder allocation of that total back across rows. The ONE place
+# either _calculate_capability_points (roll path) or _capability_contributions (provenance
+# path, in collect_check_modifiers) computes this, so the two paths cannot drift.
+_capability_point_allocation(character_sheet, capability_modifiers) -> tuple[int, list[int]]
+
 # Get character's primary class level (or highest, or default 1)
 _get_character_level(character) -> int
 
@@ -188,9 +198,10 @@ All models registered with appropriate admin interfaces:
 - **Classes app**: Uses `Aspect` and `PathAspect` for aspect bonus calculation, `CharacterClassLevel` for character level
 - **Progression app**: Uses `CharacterPathHistory` for current path lookup
 - **Conditions app** (#2505): `get_effective_capability_value(sheet, capability)` (the agency oracle — innate
-  baseline + CharacterModifier + condition contributions + passive grants) is the sole source `_calculate_capability_points`
-  and `collect_check_modifiers`'s CAPABILITY contributions read; lazily imported to avoid a module cycle
-  (`world.conditions.services` already imports `world.checks.services` at module scope)
+  baseline + CharacterModifier + condition contributions + passive grants) is the sole source
+  `_capability_point_allocation` reads on behalf of both `_calculate_capability_points` (roll path) and
+  `collect_check_modifiers`'s CAPABILITY contributions (provenance path); lazily imported to avoid a module
+  cycle (`world.conditions.services` already imports `world.checks.services` at module scope)
 - **Attempts app**: Calls `perform_check()` for resolution; provides roulette display content via `ConsequenceDisplay`
 - **Callers** (goals, magic, combat, conditions, GM adjudication): Compute `extra_modifiers` before calling `perform_check()`
 - **Mechanics app**: `resolve_challenge()` folds its `capability_source.value` (a `CapabilitySource`, e.g. from a

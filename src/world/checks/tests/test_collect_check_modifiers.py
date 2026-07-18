@@ -290,3 +290,70 @@ class CapabilitySourceTests(TestCase):
             c for c in breakdown.contributions if c.source_kind == ModifierSourceKind.CAPABILITY
         ]
         assert capability_contribs == []
+
+    def test_two_fractional_rows_match_roll_path_total(self) -> None:
+        """Two 0.5-weight rows (value=1 each) must sum EXACTLY to the roll path's
+        capability_points (#2505 review fix).
+
+        Before the fix, each row truncated its own 0.5 product to 0 *before* summing
+        (``int(0.5)==0`` twice), silently zeroing the whole recorded provenance total
+        even though the roll path correctly truncated the *summed* 1.0 to 1. The
+        largest-remainder allocation now guarantees the per-row ints recorded here
+        sum to the same truncated total the roll path used.
+        """
+        from world.checks.services import _calculate_capability_points, collect_check_modifiers
+
+        capability_a = CapabilityTypeFactory(name="capability-alloc-aaa", innate_baseline=1)
+        capability_b = CapabilityTypeFactory(name="capability-alloc-zzz", innate_baseline=1)
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type, capability=capability_a, weight=Decimal("0.5")
+        )
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type, capability=capability_b, weight=Decimal("0.5")
+        )
+
+        roll_path_points = _calculate_capability_points(self.target, self.check_type)
+        assert roll_path_points == 1
+
+        breakdown = collect_check_modifiers(self.sheet, self.check_type)
+        capability_contribs = [
+            c for c in breakdown.contributions if c.source_kind == ModifierSourceKind.CAPABILITY
+        ]
+
+        # Largest-remainder allocation with a tied remainder (0.5 each) breaks the
+        # tie by capability name ascending: "aaa" wins the single truncated unit,
+        # "zzz" allocates to 0 and is dropped -- not both rows silently zeroed.
+        assert len(capability_contribs) == 1
+        assert capability_contribs[0].value == 1
+        assert capability_contribs[0].source_label == "Capability: capability-alloc-aaa"
+        assert breakdown.total == roll_path_points
+
+    def test_three_fractional_rows_sum_matches_roll_path_total(self) -> None:
+        """3-row fractional case: sum(contributions) == capability_points on the roll path."""
+        from world.checks.services import _calculate_capability_points, collect_check_modifiers
+
+        capability_a = CapabilityTypeFactory(name="capability-alloc3-a", innate_baseline=1)
+        capability_b = CapabilityTypeFactory(name="capability-alloc3-b", innate_baseline=1)
+        capability_c = CapabilityTypeFactory(name="capability-alloc3-c", innate_baseline=1)
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type, capability=capability_a, weight=Decimal("0.9")
+        )
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type, capability=capability_b, weight=Decimal("0.5")
+        )
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type, capability=capability_c, weight=Decimal("0.5")
+        )
+
+        # Raw products 0.9 + 0.5 + 0.5 == 1.9 -> truncated toward zero once == 1.
+        roll_path_points = _calculate_capability_points(self.target, self.check_type)
+        assert roll_path_points == 1
+
+        breakdown = collect_check_modifiers(self.sheet, self.check_type)
+        capability_contribs = [
+            c for c in breakdown.contributions if c.source_kind == ModifierSourceKind.CAPABILITY
+        ]
+        assert sum(c.value for c in capability_contribs) == roll_path_points
+        # Largest fractional remainder (0.9) wins the single truncated unit.
+        assert len(capability_contribs) == 1
+        assert capability_contribs[0].source_label == "Capability: capability-alloc3-a"
