@@ -16,6 +16,7 @@ from world.items.views import (
     OutfitSlotViewSet,
     OutfitViewSet,
     QualityTierViewSet,
+    ReclamationClaimViewSet,
     StyleViewSet,
     VisibleItemDetailViewSet,
     VisibleWornItemViewSet,
@@ -28,6 +29,7 @@ router.register("styles", StyleViewSet, basename="style")
 router.register("market-squares", MarketSquareViewSet, basename="market-square")
 router.register("service-offers", ServiceOfferViewSet, basename="service-offer")
 router.register("interaction-types", InteractionTypeViewSet, basename="interaction-type")
+router.register("reclamation-claims", ReclamationClaimViewSet, basename="reclamation-claim")
 router.register("templates", ItemTemplateViewSet, basename="item-template")
 router.register("item-facets", ItemFacetViewSet, basename="item-facet")
 router.register("item-styles", ItemStyleCraftViewSet, basename="item-style")

@@ -1820,3 +1820,94 @@ from world.items.market.models import (  # noqa: E402,F401
     StockListing,
     WareListing,
 )
+
+
+class ReclamationClaim(SharedMemoryModel):
+    """A wronged party's live claim on a stolen item (#2368).
+
+    The provenance ledger records the truth; the claim unlocks the trace over
+    it. ``original_claimant_sheet`` is the immunity anchor — reclamation
+    standing (steal it back, no crime) belongs to the wronged alone and never
+    transfers with the claim (assignment moves the trace + lawful route only).
+    The current holder is never notified a claim exists.
+    """
+
+    item_instance = models.ForeignKey(
+        ItemInstance, on_delete=models.CASCADE, related_name="reclamation_claims"
+    )
+    claimant_sheet = models.ForeignKey(
+        _CHARACTER_SHEET_FK, on_delete=models.CASCADE, related_name="reclamation_claims"
+    )
+    original_claimant_sheet = models.ForeignKey(
+        _CHARACTER_SHEET_FK,
+        on_delete=models.CASCADE,
+        related_name="original_reclamation_claims",
+        help_text="Set once at minting; the immunity anchor. Never reassigned.",
+    )
+    origin = models.CharField(max_length=30)
+    estate_claim = models.ForeignKey(
+        "estates.EstateClaim",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reclamation_claims",
+        help_text="The heir grievance this trace was opened from, when any.",
+    )
+    acquired_from = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="assignments",
+        help_text="Assignment lineage — a claim is a sellable document.",
+    )
+    status = models.CharField(max_length=30, default="open")
+    trace_position = models.PositiveSmallIntegerField(
+        default=0, help_text="Hops of the ownership chain revealed so far."
+    )
+    trace_chilled_until = models.DateTimeField(null=True, blank=True)
+    created_date = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_instance", "claimant_sheet"],
+                condition=models.Q(status="open"),
+                name="one_open_claim_per_item_claimant",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"claim ({self.status}) on item {self.item_instance_id}"
+
+
+class ClaimTraceStep(SharedMemoryModel):
+    """One earned hop of a claim's trace (#2368) — the claimant's mystery log.
+
+    Hops are revealed one at a time (never a free read of the full chain);
+    each step's prose names the transfer in-world terms. Authored mystery
+    content may layer via clue triggers; these rows are the procedural floor.
+    """
+
+    claim = models.ForeignKey(
+        ReclamationClaim, on_delete=models.CASCADE, related_name="trace_steps"
+    )
+    position = models.PositiveSmallIntegerField()
+    ownership_event = models.ForeignKey(
+        OwnershipEvent, on_delete=models.CASCADE, related_name="trace_steps"
+    )
+    revealed_text = models.TextField(blank=True)
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["claim", "position"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["claim", "position"], name="one_step_per_claim_position"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"trace step {self.position} of claim {self.claim_id}"
