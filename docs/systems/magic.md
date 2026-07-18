@@ -1650,6 +1650,39 @@ Cached accessors (never query directly):
 
 ---
 
+### Content pipeline — magic catalog export/import (#2486)
+
+The full magic catalog is lore-repo-authorable content, not admin-only data: `Affinity`,
+`Resonance`, `Facet`, `Gift`, `IntensityTier`, `Technique` + its payload rows
+(`TechniqueCapabilityGrant`/`TechniqueCapabilityRequirement`/`TechniqueDamageProfile`/
+`TechniqueOutcomeModifier`/`TechniqueAppliedCondition`/`TechniqueRemovedCondition`),
+`TechniqueStyle`, `Restriction`, `EffectType`, `PortalAnchorKind`, `PathGiftGrant`,
+`TraditionGiftGrant`, plus `species.SpeciesGiftGrant` — all listed in `CONTENT_MODELS`
+(`core_management/content_export.py`) and exported/imported by the shared
+`content_export.py`/`content_fixtures.py` pipeline (see `docs/systems/INDEX.md`'s
+"Content-repo load" entry for the driver). Every model's natural key is its
+`NaturalKeyConfig.fields`: `Technique` is keyed `(gift, name)` (a `unique_technique_name_per_gift`
+`UniqueConstraint` backs it — authoring a second technique with the same name under the
+same gift raises `DuplicateTechniqueName`, a clean 400, not an `IntegrityError`); the grant
+tables (`PathGiftGrant`, `TraditionGiftGrant`, `SpeciesGiftGrant`) key on their FK pairs
+(`(path, gift)`, `(tradition, gift)`, `(species, gift)`); payload rows key on their owning
+technique plus their own unique-constraint fields; `PortalAnchorKind` keys on `name`
+(`achievements.Achievement` also gained a name natural key this branch but is not itself
+in `CONTENT_MODELS`). `load_entries` (`core_management/content_fixtures.py`) upserts by natural key —
+**fixtures win over seeds**: `seed_starter_gift_catalog()` (`world/seeds/game_content/magic.py`)
+authors a baseline catalog keyed on the same names, and a later lore-repo fixture load
+`update_or_create`s over those rows rather than erroring on the name collision.
+**Operational order matters:** seeds ("Load sane defaults") must run before the first
+content load — technique fixtures reference the seeded shared "Technique Cast"
+`ActionTemplate` and `CheckOutcome` rows (`seeds_cast.ensure_technique_cast_content()`,
+the checks-cluster seed). `load_world_content`'s deferred-retry loop (see
+`docs/systems/INDEX.md`'s content-pipeline entry) papers over load-order gaps between
+content fixtures and the grid, but it cannot conjure a row seeding never created — a
+content load against an unseeded DB leaves those FK targets permanently unresolved
+(landing in the terminal `skipped` list) until "Load sane defaults" runs.
+
+---
+
 ## Key Methods and Properties
 
 ### CharacterAura

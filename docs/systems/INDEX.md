@@ -5103,6 +5103,15 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `weather.climate` (#2436/#2448) now that all three carry `NaturalKeyMixin`, plus
   `character_creation.beginnings` and `character_creation.cgexplanation` (Arx
   beginnings content; canonical prose lives in the lore repo's `beginnings/arx.md`).
+  The full magic catalog joined the allowlist in #2486 — `Gift`/`Technique` (keyed
+  `(gift, name)`, backed by a `unique_technique_name_per_gift` `UniqueConstraint`) +
+  their grant tables (`PathGiftGrant`/`TraditionGiftGrant`/`species.SpeciesGiftGrant`,
+  each keyed on its FK pair) + `Technique`'s payload rows, plus `PortalAnchorKind` —
+  see `docs/systems/magic.md`'s "Content pipeline" section for the full model list and
+  natural keys. `load_entries` now resolves M2M field values (e.g. a grant's
+  `starter_techniques`/`signature_techniques`) to real instances BEFORE the
+  `update_or_create` write, so an unresolvable M2M target defers or skips the whole
+  entry rather than leaving a half-loaded row with an empty M2M set.
 - **Grid content export/import (#2436/#2448):** rooms/areas are no longer deferred —
   `Area`/`RoomProfile` gained permanent identity keys (`slug`/`fixture_key`) and a
   `GridOrigin` export gate (see the Areas section above). `core_management.grid_export.
@@ -5117,12 +5126,17 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   so `core_management.content_fixtures.load_world_content(content_root) ->
   WorldLoadResult` sequences (1) content fixtures with `load_entries(...,
   defer_unresolved=True)` — an unresolved natural-key FK is queued, not fatal — (2)
-  `load_grid_bundles()`, (3) a retry of the deferred queue with deferral off. Both
-  `tools/build_content_fixtures.py --load` and the admin Load view call this driver,
-  not a bare `load_entries`. `core_management.content_repo` (`resolve_content_root()`/
-  `load_dotenv_content_path()`) is the one canonical content-repo path resolver every
-  export/push/load call site uses. See ADR-0140 (bundle format + rejected
-  alternatives) and `docs/evennia-quirks.md`'s #946 entry (why upsert, not `loaddata`).
+  `load_grid_bundles()`, (3) `_retry_deferred()` (#2486): repeated deferral-on passes
+  until a pass resolves nothing new (a fixpoint, not a single retry) — needed because
+  catalog fixtures can chain ≥2 levels deep against alphabetical load order (e.g.
+  grant→technique→gift→resonance, where a one-shot retry only settles the first
+  level) — followed by one final deferral-off pass so a genuine gap still lands in
+  `skipped`. Both `tools/build_content_fixtures.py --load` and the admin Load view
+  call this driver, not a bare `load_entries`. `core_management.content_repo`
+  (`resolve_content_root()`/`load_dotenv_content_path()`) is the one canonical
+  content-repo path resolver every export/push/load call site uses. See ADR-0140
+  (bundle format + rejected alternatives) and `docs/evennia-quirks.md`'s #946 entry
+  (why upsert, not `loaddata`).
   Invariant (#2448 review fix): an AUTHORED room's `area` must itself be AUTHORED (never
   NULL or GM/player-owned) — `export_grid_bundles()` only walks rooms reachable through an
   AUTHORED area, so an unhoused AUTHORED room is silently unexportable otherwise;

@@ -74,6 +74,15 @@ combined driver `core_management.content_fixtures.load_world_content()` loads
 content fixtures first with an unresolved-natural-key FK **deferred** (not
 fatal), then the grid bundles, then retries the deferred entries — see
 `docs/systems/INDEX.md`'s "Grid content export/import" entry and ADR-0140.
+**M2M fields ride the same upsert discipline (#2486):** `load_entries` pops any
+many-to-many field values (e.g. a grant row's `starter_techniques`) off a fixture
+object and resolves each natural-key item to a real instance BEFORE the
+`update_or_create` write — an unresolvable M2M target defers/skips the whole entry
+rather than committing a row with an empty M2M set. And because catalog fixtures
+can chain natural-key dependencies ≥2 levels deep (grant→technique→gift→resonance)
+against alphabetical load order, `load_world_content`'s retry step is a **fixpoint
+loop** (`_retry_deferred`) — repeated deferral-on passes until one resolves nothing
+new — not the single one-shot retry pass described above for the content/grid case.
 
 ### Migration-number collisions on sync-with-main
 
