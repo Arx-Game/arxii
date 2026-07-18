@@ -41,6 +41,14 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
     Replaces all ArxI attribute usage with proper model fields.
     """
 
+    lethal_consequences_opt_in = models.BooleanField(
+        default=False,
+        help_text=(
+            "OOC opt-in to lethal justice outcomes (#2378, ADR-0023). Without "
+            "it, a PC's sentence caps below execution regardless of the case."
+        ),
+    )
+
     account = models.OneToOneField(
         AccountDB,
         on_delete=models.CASCADE,

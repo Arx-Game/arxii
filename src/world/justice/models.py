@@ -496,3 +496,108 @@ class PardonGrant(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"pardon of persona {self.target_persona_id} in area {self.area_id}"
+
+
+class GuardEncounter(SharedMemoryModel):
+    """One guard-pressure event against a wanted persona (#2378).
+
+    Event-driven rolls, never patrol simulation: minted by the trigger ladder
+    (NPC transaction / public interaction / room arrival, by tier) and resolved
+    by an evasion check. Capture opens a JusticeCase.
+    """
+
+    persona = models.ForeignKey(
+        "scenes.Persona", on_delete=models.CASCADE, related_name="guard_encounters"
+    )
+    area = models.ForeignKey(
+        "areas.Area", on_delete=models.CASCADE, related_name="guard_encounters"
+    )
+    trigger = models.CharField(max_length=30)
+    outcome = models.CharField(max_length=20, blank=True, default="")
+    opened_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-opened_at"]
+
+    def __str__(self) -> str:
+        return f"guard encounter ({self.trigger}) persona {self.persona_id}"
+
+
+class JusticeCase(SharedMemoryModel):
+    """Custody state from arrest to release/trial (#2378).
+
+    The trial waits on the CAPTIVE to initiate — no forced trials, no
+    in-absentia verdicts. Helpers can only help: exculpatory submissions past
+    the threshold release outright. ``failed_outs`` counts spent chances (a
+    lost trial, an evidence push that fell short) — the exhaustion input to
+    the lethal wall.
+    """
+
+    persona = models.ForeignKey(
+        "scenes.Persona", on_delete=models.CASCADE, related_name="justice_cases"
+    )
+    area = models.ForeignKey(
+        "areas.Area", on_delete=models.CASCADE, related_name="justice_cases"
+    )
+    society = models.ForeignKey(
+        "societies.Society", on_delete=models.CASCADE, related_name="justice_cases"
+    )
+    captivity = models.ForeignKey(
+        "captivity.Captivity",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="justice_cases",
+    )
+    status = models.CharField(max_length=30, default="awaiting_trial")
+    prosecution_weight = models.PositiveIntegerField(
+        default=0, help_text="Snapshot of the heat behind the arrest."
+    )
+    failed_outs = models.PositiveSmallIntegerField(default=0)
+    verdict = models.CharField(max_length=20, blank=True, default="")
+    sentence_kind = models.CharField(max_length=20, blank=True, default="")
+    sentence_amount = models.PositiveIntegerField(
+        default=0, help_text="Fine coppers or brig days, per sentence_kind."
+    )
+    opened_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-opened_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["persona", "area"],
+                condition=models.Q(status="awaiting_trial"),
+                name="one_open_case_per_persona_area",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"case ({self.status}) persona {self.persona_id} in area {self.area_id}"
+
+
+class ExculpatoryEvidence(SharedMemoryModel):
+    """A helper's exculpatory submission on a case (#2378). Help-only by design.
+
+    Submissions can only LOWER a case's effective weight; there is no hostile
+    path. A manufactured submission later exposed backfires on the SUBMITTER
+    (an evidence-tampering crime), never on the accused.
+    """
+
+    case = models.ForeignKey(
+        JusticeCase, on_delete=models.CASCADE, related_name="exculpatory_evidence"
+    )
+    submitter_persona = models.ForeignKey(
+        "scenes.Persona", on_delete=models.CASCADE, related_name="exculpatory_submissions"
+    )
+    weight = models.PositiveIntegerField(default=0)
+    manufactured = models.BooleanField(default=False)
+    exposed = models.BooleanField(default=False)
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_date"]
+
+    def __str__(self) -> str:
+        return f"evidence (w{self.weight}) on case {self.case_id}"

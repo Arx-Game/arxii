@@ -94,3 +94,73 @@ BRIBERY_CRIME_SCALE = 2
 # OrganizationOffice slug whose holder (in an org of the enforcing society)
 # may pardon — the delegation payoff, mirroring domain-steward (#2239).
 MAGISTRATE_OFFICE = "magistrate"
+
+
+# --- Justice pipeline (#2378) — PLACEHOLDER magnitudes ---
+# Trigger ladder floors (reuse the tier ladder): below HUNTED, only direct NPC
+# transactions can trigger; at HUNTED any public NPC interaction; at MAX every
+# public room arrival rolls.
+HUNTED_VALUE_FLOOR = 100
+MAX_VALUE_FLOOR = 150
+
+# Encounter chance (percent) per trigger kind, rolled only during active play.
+GUARD_ENCOUNTER_PCT_NPC_TRANSACTION = 25
+GUARD_ENCOUNTER_PCT_PUBLIC_INTERACTION = 15
+GUARD_ENCOUNTER_PCT_ROOM_ARRIVAL = 10
+
+EVASION_CHECK_TYPE_NAME = "Guard Evasion"
+EVASION_BOTCH_LEVEL = -2
+EVASION_ESCAPE_HEAT_BUMP = 5
+
+ADVOCACY_CHECK_TYPE_NAME = "Court Advocacy"
+ADVOCACY_WEIGHT_PER_LEVEL = 5
+
+# Exculpatory evidence: real submissions carry fixed weight; manufactured ones
+# are check-banded. Release threshold scales with the case's prosecution weight.
+EVIDENCE_WEIGHT_REAL = 10
+EVIDENCE_WEIGHT_MANUFACTURED_MAX = 8
+RELEASE_THRESHOLD_FACTOR = 2  # threshold = prosecution_weight // FACTOR, min 10
+EVIDENCE_TAMPERING_CRIME_SLUG = "evidence-tampering"
+EVIDENCE_TAMPERING_SCALE = 2
+
+# Sentencing (verdict = defense-prosecution margin).
+VERDICT_ACQUIT_MARGIN = 0
+VERDICT_LESSER_MARGIN = -10
+FINE_COPPERS_PER_WEIGHT = 100
+BRIG_DAYS_PER_WEIGHT = 1
+# The lethal wall (ADR-0023): PC execution needs the target's OOC opt-in AND a
+# spectacularly-exhausted case — never a single roll.
+EXECUTION_MIN_FAILED_OUTS = 2
+
+
+class GuardTrigger(models.TextChoices):
+    NPC_TRANSACTION = "npc_transaction", "NPC Transaction"
+    PUBLIC_INTERACTION = "public_interaction", "Public Interaction"
+    ROOM_ARRIVAL = "room_arrival", "Room Arrival"
+
+
+class EncounterOutcome(models.TextChoices):
+    ESCAPED = "escaped", "Escaped Clean"
+    ESCAPED_SEEN = "escaped_seen", "Escaped, Seen"
+    CAPTURED = "captured", "Captured"
+
+
+class CaseStatus(models.TextChoices):
+    AWAITING_TRIAL = "awaiting_trial", "Awaiting Trial"
+    RELEASED_EVIDENCE = "released_evidence", "Released (Evidence)"
+    RELEASED_PARDON = "released_pardon", "Released (Pardon)"
+    TRIED = "tried", "Tried"
+
+
+class Verdict(models.TextChoices):
+    ACQUITTED = "acquitted", "Acquitted"
+    LESSER = "lesser", "Guilty (Lesser)"
+    FULL = "full", "Guilty"
+
+
+class SentenceKind(models.TextChoices):
+    FINE = "fine", "Fine"
+    BRIG_TERM = "brig_term", "Imprisonment"
+    HUMILIATION = "humiliation", "Public Humiliation"
+    EXILE = "exile", "Exile"
+    EXECUTION = "execution", "Execution"
