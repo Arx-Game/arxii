@@ -5178,6 +5178,46 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
 
 ---
 
+## Player Submissions & Staff Inbox
+
+Player-to-staff contact surfaces plus the unified staff triage inbox.
+
+- **Models** (`world.player_submissions.models`): `PlayerFeedback`, `BugReport` (optional
+  GitHub-issue mirror via `github_issues.py`), `PlayerReport` (conduct), `SystemErrorReport`
+  (auto-captured runtime errors, #1164 — deduplicated by `signature`, occurrence-counted),
+  `Petition` (#2288 — emergency-only structured staff contact: `PetitionCategory`
+  UNFAIR_DEATH / SCENE_CONDUCT_EMERGENCY / STUCK_UNPLAYABLE / OTHER_EMERGENCY, per-category
+  required refs, one OPEN petition per account via partial unique constraint),
+  `SubmitterStanding` (#2288 — per-account track record: `actioned_count` /
+  `dismissed_count` / `ignored_count` + `is_ignored` perma-ignore bit).
+- **Services** (`world.player_submissions.services`): `run_safely` / `report_error`
+  (the #1164 error-capture boundary — never silent-suppress), `submit_petition`
+  (one-open gate + category-ref validation), `resolve_petition` / `record_resolution`
+  (stamps `SubmitterStanding`; `PlayerFeedbackViewSet.perform_update` stamps the same
+  counters on feedback resolution), `set_ignored`, `kudos_total_for` /
+  `sender_context` (kudos + standing columns for triage).
+- **Endpoints:** `/api/player-submissions/` — `feedback/`, `bug-reports/`,
+  `player-reports/`, `system-errors/`, `petitions/` (create/list/retrieve scoped
+  self-or-staff; staff `resolve` action validates REVIEWED/DISMISSED; staff
+  `ignore-sender` action flips the silent perma-ignore bit; `sender_context`
+  serializes staff-only so the ignore bit never leaks to the sender).
+- **Web:** player `/petition` page (`PetitionPage` — category picker with
+  per-category refs, one-open notice, own-petition history; linked from the
+  Profile menu beside feedback/bug-report); staff `StaffPetitionDetailPage`
+  (`/staff/petitions/:id` — resolve with notes, sender track record,
+  perma-ignore toggle); `StaffInboxPage` gains the Petitions category, sender
+  kudos/standing chips, a sender-kudos sort, and the show-ignored reveal.
+  Telnet: `petition` is a pointer + own-status check only
+  (`commands/account/staff_contact.py`), never a filing surface.
+- **Staff inbox** (`world.staff_inbox`): `get_staff_inbox(categories, include_ignored)`
+  aggregates open items from every source into `InboxItem` rows (petition items carry
+  `sender_context`; petitions from `is_ignored` senders are silently excluded unless
+  `include_ignored=True`), `get_account_submission_history` for per-account drill-down.
+  Endpoint `/api/staff-inbox/` (`IsAdminUser`).
+- **Source:** `src/world/player_submissions/`, `src/world/staff_inbox/`
+
+---
+
 ## Frontend
 
 ### Character Creation UI

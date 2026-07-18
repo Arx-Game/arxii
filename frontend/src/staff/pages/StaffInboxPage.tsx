@@ -38,6 +38,11 @@ const CATEGORY_OPTIONS: { label: string; value: SubmissionCategory; color: strin
     value: 'system_error',
     color: 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200',
   },
+  {
+    label: 'Petitions',
+    value: 'petition',
+    color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+  },
 ];
 
 const STORAGE_KEY = 'staff-inbox-muted-categories';
@@ -81,6 +86,8 @@ export function StaffInboxPage() {
   const [mutedCategories, setMutedCategories] =
     useState<Set<SubmissionCategory>>(loadMutedCategories);
   const [page, setPage] = useState(1);
+  const [includeIgnored, setIncludeIgnored] = useState(false);
+  const [kudosSort, setKudosSort] = useState(false);
 
   const activeCategories = CATEGORY_OPTIONS.map((c) => c.value).filter(
     (c) => !mutedCategories.has(c)
@@ -88,8 +95,17 @@ export function StaffInboxPage() {
 
   const { data, isLoading } = useStaffInbox(
     activeCategories.length < CATEGORY_OPTIONS.length ? activeCategories : undefined,
-    page
+    page,
+    includeIgnored
   );
+
+  // Kudos sort (#2288): senders with a real contribution record float to the
+  // top of the current page; items without sender context keep recency order.
+  const items = kudosSort
+    ? [...(data?.results ?? [])].sort(
+        (a, b) => (b.sender_context?.kudos_total ?? -1) - (a.sender_context?.kudos_total ?? -1)
+      )
+    : (data?.results ?? []);
 
   function toggleCategory(category: SubmissionCategory) {
     setMutedCategories((prev) => {
@@ -121,17 +137,36 @@ export function StaffInboxPage() {
             {opt.label}
           </Button>
         ))}
+        <Button
+          variant={kudosSort ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setKudosSort((v) => !v)}
+          title="Float senders with the strongest contribution record to the top."
+        >
+          Sort by sender kudos
+        </Button>
+        <Button
+          variant={includeIgnored ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => {
+            setIncludeIgnored((v) => !v);
+            setPage(1);
+          }}
+          title="Reveal petitions from perma-ignored senders (hidden by default)."
+        >
+          Show ignored senders
+        </Button>
       </div>
 
       {/* Items list */}
       {isLoading ? (
         <p className="text-muted-foreground">Loading...</p>
-      ) : !data?.results.length ? (
+      ) : !items.length ? (
         <p className="text-muted-foreground">No open items.</p>
       ) : (
         <>
           <div className="space-y-3">
-            {data.results.map((item) => (
+            {items.map((item) => (
               <Link key={`${item.source_type}-${item.source_pk}`} to={detailPath(item)}>
                 <Card className="cursor-pointer transition-colors hover:bg-muted/50">
                   <CardContent className="flex items-center justify-between py-4">
@@ -145,6 +180,16 @@ export function StaffInboxPage() {
                         <p className="font-medium">{item.title}</p>
                         <p className="text-sm text-muted-foreground">
                           {item.reporter_summary} &middot; {timeAgo(item.created_at)}
+                          {item.sender_context && (
+                            <span className="ml-2 text-xs">
+                              kudos {item.sender_context.kudos_total} &middot; actioned{' '}
+                              {item.sender_context.actioned_count} &middot; dismissed{' '}
+                              {item.sender_context.dismissed_count}
+                              {item.sender_context.is_ignored && (
+                                <span className="ml-1 font-semibold text-destructive">ignored</span>
+                              )}
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -155,7 +200,7 @@ export function StaffInboxPage() {
           </div>
 
           {/* Pagination */}
-          {data.num_pages > 1 && (
+          {data && data.num_pages > 1 && (
             <div className="mt-6 flex items-center justify-center gap-4">
               <Button
                 variant="outline"

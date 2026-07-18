@@ -14545,6 +14545,95 @@ export interface paths {
     patch: operations['player_submissions_feedback_partial_update'];
     trace?: never;
   };
+  '/api/player-submissions/petitions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Emergency-only structured petitions (#2288). No free-form queue.
+     *
+     *     Players see their own petitions; staff see all (and resolve via the
+     *     ``resolve`` action, which stamps the submitter's track record).
+     */
+    get: operations['player_submissions_petitions_list'];
+    put?: never;
+    /**
+     * @description Emergency-only structured petitions (#2288). No free-form queue.
+     *
+     *     Players see their own petitions; staff see all (and resolve via the
+     *     ``resolve`` action, which stamps the submitter's track record).
+     */
+    post: operations['player_submissions_petitions_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/player-submissions/petitions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Emergency-only structured petitions (#2288). No free-form queue.
+     *
+     *     Players see their own petitions; staff see all (and resolve via the
+     *     ``resolve`` action, which stamps the submitter's track record).
+     */
+    get: operations['player_submissions_petitions_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/player-submissions/petitions/{id}/ignore-sender/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Flip the sender's silent perma-ignore bit (#2288). Never disclosed to them. */
+    post: operations['player_submissions_petitions_ignore_sender_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/player-submissions/petitions/{id}/resolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Emergency-only structured petitions (#2288). No free-form queue.
+     *
+     *     Players see their own petitions; staff see all (and resolve via the
+     *     ``resolve`` action, which stamps the submitter's track record).
+     */
+    post: operations['player_submissions_petitions_resolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/player-submissions/player-reports/': {
     parameters: {
       query?: never;
@@ -28953,6 +29042,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['Persona'][];
     };
+    PaginatedPetitionList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Petition'][];
+    };
     PaginatedPlaceList: {
       /** @example 123 */
       count: number;
@@ -31885,6 +31989,34 @@ export interface components {
      * @enum {string}
      */
     PersonaTypeEnum: 'primary' | 'established' | 'temporary' | 'alternate';
+    /** @description Read serializer for petitions (#2288). */
+    Petition: {
+      readonly id: number;
+      readonly category: components['schemas']['PetitionCategoryEnum'];
+      readonly category_display: string;
+      readonly scene: number | null;
+      readonly subject_character: number | null;
+      /** @description Short and specific — this is an emergency line. */
+      readonly description: string;
+      readonly status: components['schemas']['StatusD66Enum'];
+      readonly staff_notes: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly resolved_at: string | null;
+      /** @description Kudos + standing columns — staff-only (the ignore bit stays silent). */
+      readonly sender_context: {
+        [key: string]: unknown;
+      } | null;
+    };
+    /**
+     * @description * `unfair_death` - Unfair / Unjustified Death
+     *     * `scene_conduct` - Scene Turning OOC-Hostile
+     *     * `stuck_unplayable` - Character Stuck / Unplayable
+     *     * `other_emergency` - Other Emergency
+     * @enum {string}
+     */
+    PetitionCategoryEnum: 'unfair_death' | 'scene_conduct' | 'stuck_unplayable' | 'other_emergency';
     /**
      * @description * `dawn` - Dawn
      *     * `day` - Day
@@ -57240,6 +57372,128 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PlayerFeedbackDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_petitions_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description * `unfair_death` - Unfair / Unjustified Death
+         *     * `scene_conduct` - Scene Turning OOC-Hostile
+         *     * `stuck_unplayable` - Character Stuck / Unplayable
+         *     * `other_emergency` - Other Emergency
+         */
+        category?: 'other_emergency' | 'scene_conduct' | 'stuck_unplayable' | 'unfair_death';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `open` - Open
+         *     * `reviewed` - Reviewed
+         *     * `dismissed` - Dismissed
+         */
+        status?: 'dismissed' | 'open' | 'reviewed';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPetitionList'];
+        };
+      };
+    };
+  };
+  player_submissions_petitions_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Petition'];
+        };
+      };
+    };
+  };
+  player_submissions_petitions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this petition. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Petition'];
+        };
+      };
+    };
+  };
+  player_submissions_petitions_ignore_sender_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this petition. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Petition'];
+        };
+      };
+    };
+  };
+  player_submissions_petitions_resolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this petition. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Petition'];
         };
       };
     };

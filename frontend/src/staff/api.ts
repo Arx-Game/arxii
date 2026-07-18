@@ -29,13 +29,17 @@ const GM_URL = '/api/gm/applications';
 export async function getStaffInbox(
   categories?: SubmissionCategory[],
   page?: number,
-  pageSize?: number
+  pageSize?: number,
+  includeIgnored?: boolean
 ): Promise<InboxResponse> {
   const params = new URLSearchParams();
   if (categories) {
     for (const cat of categories) {
       params.append('categories', cat);
     }
+  }
+  if (includeIgnored) {
+    params.append('include_ignored', 'true');
   }
   if (page != null) {
     params.append('page', page.toString());

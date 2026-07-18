@@ -57,8 +57,8 @@ export const staffKeys = {
   applications: (status?: string) => [...staffKeys.all, 'applications', status] as const,
   application: (id: number) => [...staffKeys.all, 'application', id] as const,
   pendingCount: () => [...staffKeys.all, 'pending-count'] as const,
-  inbox: (categories?: SubmissionCategory[], page?: number) =>
-    [...staffKeys.all, 'inbox', categories, page] as const,
+  inbox: (categories?: SubmissionCategory[], page?: number, includeIgnored?: boolean) =>
+    [...staffKeys.all, 'inbox', categories, page, includeIgnored ?? false] as const,
   inboxCount: () => [...staffKeys.all, 'inbox-count'] as const,
   feedback: (status?: string, page?: number) =>
     [...staffKeys.all, 'feedback', status, page] as const,
@@ -158,10 +158,14 @@ export function useAddStaffComment() {
 // Staff Inbox Hooks
 // =============================================================================
 
-export function useStaffInbox(categories?: SubmissionCategory[], page?: number) {
+export function useStaffInbox(
+  categories?: SubmissionCategory[],
+  page?: number,
+  includeIgnored?: boolean
+) {
   return useQuery<InboxResponse>({
-    queryKey: staffKeys.inbox(categories, page),
-    queryFn: () => getStaffInbox(categories, page),
+    queryKey: staffKeys.inbox(categories, page, includeIgnored),
+    queryFn: () => getStaffInbox(categories, page, undefined, includeIgnored),
   });
 }
 

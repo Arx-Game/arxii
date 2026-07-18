@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import builtins
 from http import HTTPMethod
-from typing import Any
+from typing import Any, cast
 
+from django.db.models import QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
+from evennia.accounts.models import AccountDB
 from rest_framework import mixins, serializers, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -14,6 +16,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from world.player_submissions.constants import SubmissionStatus
 from world.player_submissions.filters import (
     BugReportFilter,
     PlayerFeedbackFilter,
@@ -23,6 +26,7 @@ from world.player_submissions.filters import (
 from world.player_submissions.github_issues import GitHubIssueError, file_issue_for_report
 from world.player_submissions.models import (
     BugReport,
+    Petition,
     PlayerFeedback,
     PlayerReport,
     SystemErrorReport,
@@ -31,6 +35,8 @@ from world.player_submissions.serializers import (
     BugReportCreateSerializer,
     BugReportDetailSerializer,
     FileIssueInputSerializer,
+    PetitionCreateSerializer,
+    PetitionSerializer,
     PlayerFeedbackCreateSerializer,
     PlayerFeedbackDetailSerializer,
     PlayerReportCreateSerializer,
@@ -129,6 +135,19 @@ class PlayerFeedbackViewSet(
             return PlayerFeedbackCreateSerializer
         return PlayerFeedbackDetailSerializer
 
+    def perform_update(self, serializer: serializers.BaseSerializer) -> None:
+        """Staff resolution stamps the submitter's track record (#2288)."""
+        instance = self.get_object()
+        old_status = instance.status
+        updated = serializer.save()
+        if old_status == SubmissionStatus.OPEN and updated.status in (
+            SubmissionStatus.REVIEWED,
+            SubmissionStatus.DISMISSED,
+        ):
+            from world.player_submissions.services import record_resolution  # noqa: PLC0415
+
+            record_resolution(updated.reporter_account, updated.status)
+
     def perform_create(self, serializer: serializers.BaseSerializer) -> None:
         persona = serializer.validated_data["reporter_persona"]
         location_id = _resolve_location_id(persona.character_sheet_id)
@@ -226,3 +245,84 @@ class PlayerReportViewSet(
             reporter_account=self.request.user,
             location_id=location_id,
         )
+
+
+class PetitionViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    GenericViewSet,
+):
+    """Emergency-only structured petitions (#2288). No free-form queue.
+
+    Players see their own petitions; staff see all (and resolve via the
+    ``resolve`` action, which stamps the submitter's track record).
+    """
+
+    queryset = Petition.objects.select_related("account", "scene").order_by("-created_at")
+    serializer_class = PetitionSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ("status", "category")
+
+    def get_queryset(self) -> QuerySet[Petition]:
+        qs = super().get_queryset()
+        if self.request.user.is_staff:
+            return qs
+        return qs.filter(account=self.request.user)
+
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        from world.player_submissions.services import (  # noqa: PLC0415
+            StaffContactError,
+            submit_petition,
+        )
+
+        serializer = PetitionCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            petition = submit_petition(
+                cast(AccountDB, request.user),
+                category=serializer.validated_data["category"],
+                description=serializer.validated_data["description"],
+                scene=serializer.validated_data.get("scene"),
+                subject_character=serializer.validated_data.get("subject_character"),
+            )
+        except StaffContactError as exc:
+            return Response({"detail": exc.user_message}, status=400)
+        return Response(self.get_serializer(petition).data, status=201)
+
+    @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[IsAdminUser])
+    def resolve(self, request: Request, pk: object = None) -> Response:
+        from world.player_submissions.services import (  # noqa: PLC0415
+            StaffContactError,
+            resolve_petition,
+        )
+
+        petition = self.get_object()
+        status_value = request.data.get("status", SubmissionStatus.REVIEWED)
+        if status_value not in (SubmissionStatus.REVIEWED, SubmissionStatus.DISMISSED):
+            return Response({"detail": "Unknown resolution."}, status=400)
+        try:
+            resolve_petition(
+                petition,
+                status=status_value,
+                staff_notes=str(request.data.get("staff_notes", "")),
+            )
+        except StaffContactError as exc:
+            return Response({"detail": exc.user_message}, status=400)
+        return Response(self.get_serializer(petition).data)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="ignore-sender",
+        permission_classes=[IsAdminUser],
+    )
+    def ignore_sender(self, request: Request, pk: object = None) -> Response:
+        """Flip the sender's silent perma-ignore bit (#2288). Never disclosed to them."""
+        from world.player_submissions.services import sender_context, set_ignored  # noqa: PLC0415
+
+        petition = self.get_object()
+        set_ignored(petition.account, ignored=bool(request.data.get("ignored", True)))
+        return Response({"sender_context": sender_context(petition.account)})

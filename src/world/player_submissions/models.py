@@ -5,7 +5,11 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.player_submissions.constants import ReportCategory, SubmissionStatus
+from world.player_submissions.constants import (
+    PetitionCategory,
+    ReportCategory,
+    SubmissionStatus,
+)
 
 
 class PlayerFeedback(SharedMemoryModel):
@@ -253,3 +257,75 @@ class SystemErrorReport(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.exception_type} in {self.label} (x{self.occurrence_count})"
+
+
+class Petition(SharedMemoryModel):
+    """Emergency-only structured staff petition (#2288). No free-form queue.
+
+    One OPEN petition per account — the structural rate-limit that keeps
+    "emergency" legible. Frivolous petitions feed the same resolution track
+    record as feedback (SubmitterStanding).
+    """
+
+    account = models.ForeignKey(
+        "accounts.AccountDB", on_delete=models.CASCADE, related_name="petitions"
+    )
+    category = models.CharField(max_length=30, choices=PetitionCategory.choices)
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="petitions",
+    )
+    subject_character = models.ForeignKey(
+        "objects.ObjectDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="petitions_about",
+    )
+    description = models.TextField(
+        max_length=1000, help_text="Short and specific — this is an emergency line."
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=SubmissionStatus.choices,
+        default=SubmissionStatus.OPEN,
+        db_index=True,
+    )
+    staff_notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["account"],
+                condition=models.Q(status="open"),
+                name="one_open_petition_per_account",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"petition ({self.category}) by account {self.account_id}"
+
+
+class SubmitterStanding(SharedMemoryModel):
+    """Per-account staff-contact track record (#2288).
+
+    Counters stamped when staff resolve feedback/petitions; ``is_ignored`` is
+    the perma-ignore bit — submissions persist but never surface (silently).
+    """
+
+    account = models.OneToOneField(
+        "accounts.AccountDB", on_delete=models.CASCADE, related_name="submitter_standing"
+    )
+    actioned_count = models.PositiveIntegerField(default=0)
+    dismissed_count = models.PositiveIntegerField(default=0)
+    ignored_count = models.PositiveIntegerField(default=0)
+    is_ignored = models.BooleanField(default=False)
+
+    def __str__(self) -> str:
+        return f"standing for account {self.account_id}"

@@ -22,3 +22,6 @@ class InboxItem:
     created_at: datetime
     status: str
     detail_url: str
+    # Kudos + standing columns for the sender (#2288). Populated for
+    # account-authored urgent items (petitions); None for other sources.
+    sender_context: dict | None = None

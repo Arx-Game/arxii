@@ -4,9 +4,10 @@ import factory
 from factory import django as factory_django
 
 from evennia_extensions.factories import AccountFactory
-from world.player_submissions.constants import SubmissionStatus
+from world.player_submissions.constants import PetitionCategory, SubmissionStatus
 from world.player_submissions.models import (
     BugReport,
+    Petition,
     PlayerFeedback,
     PlayerReport,
     SystemErrorReport,
@@ -57,3 +58,13 @@ class SystemErrorReportFactory(factory_django.DjangoModelFactory):
     exception_type = "ValueError"
     message = "boom"
     traceback = "Traceback (most recent call last): ..."
+
+
+class PetitionFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = Petition
+
+    account = factory.SubFactory(AccountFactory)
+    category = PetitionCategory.OTHER_EMERGENCY
+    description = factory.Faker("paragraph")
+    status = SubmissionStatus.OPEN

@@ -18,6 +18,10 @@ class StaffInboxFilterSerializer(serializers.Serializer):
         child=serializers.ChoiceField(choices=SubmissionCategory.choices),
         required=False,
     )
+    include_ignored = serializers.BooleanField(
+        required=False,
+        default=False,
+    )
     page = serializers.IntegerField(
         required=False,
         min_value=1,

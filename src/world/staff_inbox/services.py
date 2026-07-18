@@ -16,10 +16,12 @@ from world.gm.models import CatalogSuggestion, GMApplication
 from world.player_submissions.constants import SubmissionCategory, SubmissionStatus
 from world.player_submissions.models import (
     BugReport,
+    Petition,
     PlayerFeedback,
     PlayerReport,
     SystemErrorReport,
 )
+from world.player_submissions.services import sender_context
 from world.roster.models.applications import RosterApplication
 from world.roster.models.choices import ApplicationStatus
 from world.staff_inbox.types import InboxItem
@@ -138,6 +140,28 @@ def _gm_application_to_item(obj: GMApplication) -> InboxItem:
     )
 
 
+def _petition_to_item(obj: Petition) -> InboxItem:
+    return InboxItem(
+        source_type=SubmissionCategory.PETITION,
+        source_pk=obj.pk,
+        title=f"Petition ({obj.get_category_display()}): {obj.description[:60]}",
+        reporter_summary=f"Account {obj.account.username}",
+        created_at=obj.created_at,
+        status=obj.status,
+        detail_url=reverse("player_submissions:petition-detail", args=[obj.pk]),
+        sender_context=sender_context(obj.account),
+    )
+
+
+def _open_petition_items(*, include_ignored: bool) -> list[InboxItem]:
+    petition_qs = Petition.objects.filter(
+        status=SubmissionStatus.OPEN,
+    ).select_related("account")
+    if not include_ignored:
+        petition_qs = petition_qs.exclude(account__submitter_standing__is_ignored=True)
+    return [_petition_to_item(p) for p in petition_qs]
+
+
 def _catalog_suggestion_to_item(obj: CatalogSuggestion) -> InboxItem:
     return InboxItem(
         source_type=SubmissionCategory.CATALOG_SUGGESTION,
@@ -153,6 +177,7 @@ def _catalog_suggestion_to_item(obj: CatalogSuggestion) -> InboxItem:
 def get_staff_inbox(
     *,
     categories: list[str] | None = None,
+    include_ignored: bool = False,
 ) -> list[InboxItem]:
     """Aggregate open items from all submission sources.
 
@@ -160,6 +185,9 @@ def get_staff_inbox(
         categories: Optional list of source_type strings (matching
             SubmissionCategory values) to include. If None, all
             categories are included.
+        include_ignored: When True, petitions from perma-ignored senders
+            (SubmitterStanding.is_ignored) are revealed instead of being
+            silently excluded (#2288).
 
     Returns:
         List of InboxItem sorted by created_at descending.
@@ -216,6 +244,9 @@ def get_staff_inbox(
             status=GMApplicationStatus.PENDING,
         ).select_related("account")
         items.extend(_gm_application_to_item(app) for app in gm_app_qs)
+
+    if _include(SubmissionCategory.PETITION):
+        items.extend(_open_petition_items(include_ignored=include_ignored))
 
     if _include(SubmissionCategory.CATALOG_SUGGESTION):
         suggestion_qs = CatalogSuggestion.objects.filter(

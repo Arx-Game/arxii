@@ -557,6 +557,56 @@
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' — Increment a stat tracker (create if needed) and check for achievements.`
 
 
+## world.action_points
+
+### ActionPointConfig
+
+### ActionPointPool
+**Foreign Keys:**
+  - character -> objects.ObjectDB [OneToOne]
+
+
+## world.agriculture
+
+### CropType
+**Pointed to by:**
+  - fields <- agriculture.FieldDetails
+
+### FieldDetails
+**Foreign Keys:**
+  - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
+  - crop_type -> agriculture.CropType [FK]
+
+### GranaryDetails
+**Foreign Keys:**
+  - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
+
+### FoodStockpile
+**Foreign Keys:**
+  - domain -> societies.Domain [OneToOne]
+
+### FoodConfig
+
+### FoodTransfer
+**Foreign Keys:**
+  - source_domain -> societies.Domain [FK]
+  - target_domain -> societies.Domain [FK]
+  - acting_persona -> scenes.Persona [FK] (nullable)
+
+### Service Functions
+- `collect_field_food(character, field_instance) -> 'FoodCollectionResult' — One active collection dispatch from a Field's uncollected pool.`
+- `domain_consumption_tick() -> 'dict[str, int]' — Weekly cron: each domain's population consumes food from its stockpile.`
+- `field_production_tick() -> 'dict[str, int]' — Daily cron: accrue food into every active Field's uncollected pool.`
+- `get_food_config() -> 'FoodConfig' — Lazy-create and return the FoodConfig singleton (pk=1).`
+- `handle_field_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — FIELD strategy: install or level the feature instance + create FieldDetails.`
+- `handle_granary_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — GRANARY strategy: install or level the feature instance + create GranaryDetails.`
+- `max_food_capacity(domain: 'Domain') -> 'int' — Sum the capacity contribution of all active Granaries in the domain.`
+- `provision_army(covenant) -> 'float' — Compute and deduct army food provisioning at mobilization.`
+- `provision_ship_leg(voyage) -> 'float' — Compute and deduct ship crew food for one voyage leg.`
+- `resolve_domain_for_feature(room_feature_instance: 'RoomFeatureInstance') -> 'Domain | None' — Walk the Area parent chain to find the Domain for a room feature.`
+- `transfer_food(*, source_domain, target_domain, amount: 'int', acting_persona=None, character=None) -> 'FoodTransferResult' — Move food from source stockpile to target stockpile (#2219).`
+
+
 ## world.areas
 
 ### Area
@@ -1221,6 +1271,58 @@
 - `resolve_captivity(captivity: 'Captivity', *, status: 'str') -> 'None' — End a captivity and free the captive.`
 - `resolve_capture_setup(*, captive_template: 'MissionTemplate | None' = None, rescue_template: 'MissionTemplate | None' = None, cell_name: 'str' = '', cell_description: 'str' = '', clue_name: 'str' = '', clue_description: 'str' = '', clue_detect_difficulty: 'int | None' = None) -> 'CaptureSetup' — Resolve one capture's loops + cell flavor: per-capture override, else default.`
 - `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None) -> evennia.objects.models.ObjectDB — Create a temporary instanced room, its RoomProfile, and lifecycle record.`
+
+
+## world.ceremonies
+
+### CeremonyType
+**Pointed to by:**
+  - ceremonies <- ceremonies.Ceremony
+
+### Ceremony
+**Foreign Keys:**
+  - ceremony_type -> ceremonies.CeremonyType [FK]
+  - officiant -> scenes.Persona [FK]
+  - being -> worship.WorshippedBeing [FK]
+  - presented_being -> worship.WorshippedBeing [FK]
+  - location -> evennia_extensions.RoomProfile [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+  - event -> events.Event [FK] (nullable)
+**Pointed to by:**
+  - honorees <- ceremonies.CeremonyHonoree
+  - offerings <- ceremonies.CeremonyOffering
+  - speeches <- ceremonies.CeremonySpeech
+
+### CeremonyHonoree
+**Foreign Keys:**
+  - ceremony -> ceremonies.Ceremony [FK]
+  - honoree_sheet -> character_sheets.CharacterSheet [FK]
+**Pointed to by:**
+  - speeches <- ceremonies.CeremonySpeech
+
+### CeremonyOffering
+**Foreign Keys:**
+  - ceremony -> ceremonies.Ceremony [FK]
+  - worship_grant -> worship.WorshipGrant [FK] (nullable)
+  - offered_by -> scenes.Persona [FK]
+
+### CeremonySpeech
+**Foreign Keys:**
+  - ceremony -> ceremonies.Ceremony [FK]
+  - speaker -> scenes.Persona [FK]
+  - target_honoree -> ceremonies.CeremonyHonoree [FK] (nullable)
+
+### CeremonyConfig
+
+### Service Functions
+- `abandon_ceremony(*, ceremony: world.ceremonies.models.Ceremony) -> world.ceremonies.models.Ceremony — Decision 12: close the rite awarding nothing; frees the location + ghost window.`
+- `execute_will(character_sheet: 'CharacterSheet') -> None — Execute the deceased's estate — the funeral door of #1985.`
+- `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony) -> world.ceremonies.models.Ceremony — Close the rite: quality roll, renown tallies, worship, funeral effects.`
+- `get_ceremony_config() -> world.ceremonies.models.CeremonyConfig — Get-or-create the first CeremonyConfig row (singleton-by-convention).`
+- `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None) -> world.ceremonies.models.Ceremony — Open a ceremony at a location, recognizing zero or more honorees.`
+- `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None — The OPEN funeral honoring this character, if any (the ghost container).`
+- `record_offering(*, ceremony: world.ceremonies.models.Ceremony, item_instances: 'list[ItemInstance]') -> list[world.ceremonies.models.CeremonyOffering] — Sacrifice items: destroy them, feed the being's pool, log offerings.`
+- `record_speech(*, ceremony: world.ceremonies.models.Ceremony, speaker_persona: 'Persona', target_honoree: world.ceremonies.models.CeremonyHonoree | None = None) -> world.ceremonies.models.CeremonySpeech — Recognize a speaker; their Performance/Oratory roll shapes the tally.`
 
 
 ## world.character_creation
@@ -2912,6 +3014,213 @@
 - `work_chore(employment: 'CharacterEmployment', *, ap_spent: 'int') -> 'int' — Active on-grid chore work (#929): spend AP now, roll, earn up to 2×.`
 
 
+## world.distinctions
+
+### DistinctionCategory
+**Pointed to by:**
+  - distinctions <- distinctions.Distinction
+
+### DistinctionTag
+**Pointed to by:**
+  - distinctions <- distinctions.Distinction
+
+### Distinction
+**Foreign Keys:**
+  - category -> distinctions.DistinctionCategory [FK]
+  - parent_distinction -> distinctions.Distinction [FK] (nullable)
+  - trust_category -> stories.TrustCategory [FK] (nullable)
+  - mutually_exclusive_with -> distinctions.Distinction [M2M]
+  - tags -> distinctions.DistinctionTag [M2M]
+**Pointed to by:**
+  - action_enhancements <- actions.ActionEnhancement
+  - species_gift_drawbacks <- species.SpeciesGiftGrant
+  - ritual_grants <- magic.DistinctionRitualGrant
+  - resonance_grants <- magic.DistinctionResonanceGrant
+  - resonance_rank_thresholds <- magic.DistinctionResonanceRankThreshold
+  - variants <- distinctions.Distinction
+  - prerequisites <- distinctions.DistinctionPrerequisite
+  - effects <- distinctions.DistinctionEffect
+  - character_grants <- distinctions.CharacterDistinction
+  - other_entries <- distinctions.CharacterDistinctionOther
+  - mapped_from_other <- distinctions.CharacterDistinctionOther
+  - codex_grants <- codex.DistinctionCodexGrant
+  - asset_grants <- assets.DistinctionAssetGrant
+  - consequence_effects <- checks.ConsequenceEffect
+  - reward_definitions <- achievements.RewardDefinition
+  - npc_regard_seeds <- npc_services.DistinctionRegardSeed
+
+### DistinctionPrerequisite
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [FK]
+
+### DistinctionEffect
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [FK]
+  - target -> mechanics.ModifierTarget [FK]
+**Pointed to by:**
+  - modifier_sources <- mechanics.ModifierSource
+
+### CharacterDistinction
+**Foreign Keys:**
+  - character -> objects.ObjectDB [FK]
+  - distinction -> distinctions.Distinction [FK]
+  - secret -> secrets.Secret [OneToOne] (nullable)
+**Pointed to by:**
+  - resonance_grants <- magic.ResonanceGrant
+  - modifier_sources <- mechanics.ModifierSource
+
+### CharacterDistinctionOther
+**Foreign Keys:**
+  - character -> objects.ObjectDB [FK]
+  - parent_distinction -> distinctions.Distinction [FK]
+  - staff_mapped_distinction -> distinctions.Distinction [FK] (nullable)
+
+### Service Functions
+- `clear_distinction_secret(character_distinction: 'CharacterDistinction') -> 'None' — Make a relocated distinction public again by deleting its Secret (#1334).`
+- `grant_distinction(character: 'CharacterSheet', distinction: 'Distinction', *, origin: 'str', rank: 'int | None' = None, source_description: 'str' = '') -> 'CharacterDistinction' — Grant a Distinction, or rank one up, through the single acquisition seam (#2037).`
+- `mint_distinction_secret(character_distinction: 'CharacterDistinction', *, level: 'int | None' = None, provenance: 'str' = SecretProvenance.GM_AUTHORED, author_persona: 'Persona | None' = None, content: 'str' = '') -> 'Secret' — Relocate a distinction into a Secret, returning it (#1334).`
+
+
+## world.dreams
+
+### DreamReflection
+**Foreign Keys:**
+  - waking_room -> objects.ObjectDB [OneToOne]
+  - dream_room -> objects.ObjectDB [OneToOne]
+  - descent_target -> objects.ObjectDB [FK] (nullable)
+
+### DreamPerilConfig
+**Foreign Keys:**
+  - resist_check_type -> checks.CheckType [FK] (nullable)
+
+### Service Functions
+- `get_dream_space(*, room: 'ObjectDB') -> 'ObjectDB | None' — Return the dream room for a physical waking room.`
+
+
+## world.estates
+
+### Will
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [OneToOne]
+**Pointed to by:**
+  - executors <- estates.WillExecutor
+  - bequests <- estates.Bequest
+
+### WillExecutor
+**Foreign Keys:**
+  - will -> estates.Will [FK]
+  - persona -> scenes.Persona [FK]
+
+### Bequest
+**Foreign Keys:**
+  - will -> estates.Will [FK]
+  - item -> items.ItemInstance [FK] (nullable)
+  - building -> buildings.Building [FK] (nullable)
+  - business -> currency.Business [FK] (nullable)
+  - recipient_persona -> scenes.Persona [FK] (nullable)
+  - recipient_organization -> societies.Organization [FK] (nullable)
+
+### EstateSettlement
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [OneToOne]
+**Pointed to by:**
+  - claims <- estates.EstateClaim
+
+### EstateClaim
+**Foreign Keys:**
+  - settlement -> estates.EstateSettlement [FK]
+  - item -> items.ItemInstance [FK]
+  - claimant_persona -> scenes.Persona [FK] (nullable)
+  - claimant_organization -> societies.Organization [FK] (nullable)
+
+### EstateConfig
+
+### Service Functions
+- `execute_settlement(character_sheet: world.character_sheets.models.CharacterSheet, *, via: str) -> world.estates.models.EstateSettlement | None — The ONE execution path (spec Decision 2) — idempotent, first door wins.`
+- `get_estate_config() -> world.estates.models.EstateConfig — Get-or-create the first EstateConfig row (singleton-by-convention).`
+- `open_settlement(character_sheet: world.character_sheets.models.CharacterSheet) -> world.estates.models.EstateSettlement — Open the settlement window at death; idempotent per sheet.`
+- `resolve_escheat_org(character_sheet: world.character_sheets.models.CharacterSheet) — The regional controlling org: primary-home region's Domain owner, else`
+- `resolve_intestate_heir(character_sheet: world.character_sheets.models.CharacterSheet) — The Decision-6 cascade: family-org head, then public-record next of kin.`
+- `will_is_frozen(character_sheet: world.character_sheets.models.CharacterSheet) -> bool — True once a settlement window exists — the will can no longer be edited.`
+
+
+## world.events
+
+### Event
+**Foreign Keys:**
+  - location -> evennia_extensions.RoomProfile [FK]
+  - host_society -> societies.Society [FK] (nullable)
+**Pointed to by:**
+  - scenes <- scenes.Scene
+  - session_requests <- stories.SessionRequest
+  - crossover_invites <- stories.CrossoverInvite
+  - fashion_presentations <- items.FashionPresentation
+  - hosts <- events.EventHost
+  - invitations <- events.EventInvitation
+  - modification <- events.EventModification
+  - ceremonies <- ceremonies.Ceremony
+
+### EventHost
+**Foreign Keys:**
+  - event -> events.Event [FK]
+  - persona -> scenes.Persona [FK] (nullable)
+
+### EventInvitation
+**Foreign Keys:**
+  - event -> events.Event [FK]
+  - target_persona -> scenes.Persona [FK] (nullable)
+  - target_organization -> societies.Organization [FK] (nullable)
+  - target_society -> societies.Society [FK] (nullable)
+  - invited_by -> scenes.Persona [FK] (nullable)
+
+### EventModification
+**Foreign Keys:**
+  - event -> events.Event [OneToOne]
+
+### Service Functions
+- `add_host(event: world.events.models.Event, persona: world.scenes.models.Persona, *, is_primary: bool = False) -> world.events.models.EventHost — Add a host to an event.`
+- `cancel_event(event: world.events.models.Event) -> world.events.models.Event — Cancel an event from DRAFT or SCHEDULED status.`
+- `complete_event(event: world.events.models.Event) -> world.events.models.Event — Transition an event from ACTIVE to COMPLETED, finish linked scenes, and revert room.`
+- `create_event(*, name: str, location_id: int, scheduled_real_time: datetime.datetime, host_persona: world.scenes.models.Persona, description: str = '', is_public: bool = True, scheduled_ic_time: datetime.datetime | None = None, time_phase: str = TimePhase.DAY, status: str = EventStatus.DRAFT) -> world.events.models.Event — Create an event with a primary host.`
+- `derive_ic_time_from_real(real_time: datetime.datetime) -> datetime.datetime | None — Derive an IC datetime from a real datetime using the game clock.`
+- `get_visible_events(persona: world.scenes.models.Persona | None = None, *, include_public: bool = True) -> django.db.models.query.QuerySet — Return events visible to a persona.`
+- `invite_organization(event: world.events.models.Event, organization: world.societies.models.Organization, *, invited_by: world.scenes.models.Persona | None = None) -> world.events.models.EventInvitation — Invite an organization to an event.`
+- `invite_persona(event: world.events.models.Event, target_persona: world.scenes.models.Persona, *, invited_by: world.scenes.models.Persona | None = None) -> world.events.models.EventInvitation — Invite a persona to an event.`
+- `invite_society(event: world.events.models.Event, society: world.societies.models.Society, *, invited_by: world.scenes.models.Persona | None = None) -> world.events.models.EventInvitation — Invite a society to an event.`
+- `on_scene_finished(scene: world.scenes.models.Scene) -> None — Grant scene completion rewards and settle reaction windows.`
+- `respond_to_invitation(invitation: world.events.models.EventInvitation, persona: world.scenes.models.Persona, *, response: str) -> world.events.models.EventInvitation — Record an invitee's RSVP (ACCEPTED / DECLINED) on a PERSONA invitation.`
+- `schedule_event(event: world.events.models.Event) -> world.events.models.Event — Transition an event from DRAFT to SCHEDULED.`
+- `set_room_description_overlay(event: world.events.models.Event, overlay_text: str) -> world.events.models.EventModification — Set or update the room description overlay for an event.`
+- `start_event(event: world.events.models.Event) -> world.events.models.Event — Transition an event from SCHEDULED to ACTIVE and create a linked Scene.`
+- `validate_location_gap(location_id: int, scheduled_real_time: datetime.datetime, exclude_event_id: int | None = None) -> bool — Check that no other event at this location is within LOCATION_GAP_HOURS.`
+
+
+## world.fatigue
+
+### FatiguePool
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [OneToOne]
+
+### Service Functions
+- `apply_exhaustion_damage(character_sheet: 'CharacterSheet', amount: 'int') -> 'None' — Apply fatigue-collapse strain as actual health damage.`
+- `apply_fatigue(character_sheet: 'CharacterSheet', category: 'str', base_cost: 'int', effort_level: 'str') -> 'int' — Add fatigue to the pool.`
+- `apply_technique_fatigue(character_sheet: 'CharacterSheet', category: 'str', effective_anima_cost: 'int', strain_commitment: 'int', *, immune_to_fatigue_collapse: 'bool' = False) -> 'int' — Accrue fatigue from a technique cast and conditionally check collapse.`
+- `attempt_endurance_check(character_sheet: 'CharacterSheet', category: 'str') -> 'bool' — Endurance check against fatigue via the unified check system.`
+- `attempt_power_through(character_sheet: 'CharacterSheet', category: 'str') -> 'tuple[bool, int]' — Willpower check to power through collapse via the unified check system.`
+- `get_fatigue_capacity(character_sheet: 'CharacterSheet', category: 'str', *, well_rested: 'bool | None' = None) -> 'int' — Calculate max fatigue capacity for a category.`
+- `get_fatigue_penalty(character_sheet: 'CharacterSheet', category: 'str') -> 'int' — Return the check penalty for the current fatigue zone.`
+- `get_fatigue_percentage(character_sheet: 'CharacterSheet', category: 'str') -> 'float' — Return current fatigue as a percentage of capacity.`
+- `get_fatigue_zone(character_sheet: 'CharacterSheet', category: 'str') -> 'str' — Return the FatigueZone based on current fatigue percentage.`
+- `get_full_status(character_sheet: 'CharacterSheet', *, pool: 'FatiguePool | None') -> 'dict' — Get fatigue status for all three categories in one pass.`
+- `get_or_create_fatigue_pool(character_sheet: 'CharacterSheet') -> 'FatiguePool' — Get or create a FatiguePool for a character sheet.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
+- `reset_fatigue(character_sheet: 'CharacterSheet') -> 'None' — Reset all fatigue pools to 0.`
+- `resolve_fatigue_collapse(character_sheet: 'CharacterSheet', category: 'str') -> 'FatigueCollapseResult' — Run the fatigue collapse sequence for one category and apply strain damage.`
+- `rest(character_sheet: 'CharacterSheet') -> 'RestResult' — Spend AP to rest, gaining well_rested for the next dawn reset.`
+- `should_check_collapse(character_sheet: 'CharacterSheet', category: 'str', effort_level: 'str') -> 'bool' — Return True if a collapse check is needed.`
+- `tick_fatigue_collapse_for_targets(targets: 'Iterable[ObjectDB]') -> 'None' — Evaluate non-cast over-capacity fatigue collapse for each target.`
+
+
 ## world.forms
 
 ### HeightBand
@@ -3047,6 +3356,50 @@
 - `revert_alternate_self(sheet: 'CharacterSheet') -> 'None' — Revert the active alternate self — restore return anchors, delete the`
 - `revert_to_true_form(character) -> 'None' — Revert a character to their true form.`
 - `switch_form(character, target_form: 'CharacterForm') -> 'None' — Switch a character to a different form.`
+
+
+## world.game_clock
+
+### GameClock
+
+### GameClockHistory
+**Foreign Keys:**
+  - changed_by -> accounts.AccountDB [FK] (nullable)
+
+### ScheduledTaskRecord
+
+### GameSeason
+**Pointed to by:**
+  - weeks <- game_clock.GameWeek
+
+### GameWeek
+**Foreign Keys:**
+  - season -> game_clock.GameSeason [FK]
+**Pointed to by:**
+  - social_engagement_trackers <- progression.WeeklySocialEngagement
+  - random_scene_targets <- progression.RandomSceneTarget
+  - development_transactions <- progression.DevelopmentTransaction
+  - skill_usages <- progression.WeeklySkillUsage
+  - vote_budgets <- progression.WeeklyVoteBudget
+  - votes <- progression.WeeklyVote
+  - relationships <- relationships.CharacterRelationship
+  - journal_xp_trackers <- journals.WeeklyJournalXP
+  - gm_reward_trackers <- gm.GMWeeklyRewardTracker
+
+### Service Functions
+- `get_ic_date_for_real_time(real_dt: datetime.datetime) -> datetime.datetime | None — Convert a real datetime to IC datetime, or None if no clock exists.`
+- `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None — Return the current IC datetime, or None if no clock exists.`
+- `get_ic_phase(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.TimePhase | None — Return the current time-of-day phase, or None if no clock exists.`
+- `get_ic_season(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.Season | None — Return the current IC season, or None if no clock exists.`
+- `get_light_level(*, real_now: datetime.datetime | None = None) -> float | None — Return a smooth 0.0-1.0 light level, or None if no clock exists.`
+- `get_real_time_for_ic_date(ic_dt: datetime.datetime) -> datetime.datetime | None — Convert an IC datetime to real datetime, or None if no clock exists.`
+- `light_level_from_ic_time(ic_now: datetime.datetime) -> float — Derive a smooth 0.0-1.0 light level from a concrete IC datetime.`
+- `pause_clock(*, changed_by: evennia.accounts.models.AccountDB, reason: str = '') -> world.game_clock.models.GameClock — Pause the game clock, freezing IC time at its current value.`
+- `phase_from_ic_time(ic_now: datetime.datetime) -> world.game_clock.constants.TimePhase — Derive the time-of-day phase from a concrete IC datetime.`
+- `season_from_ic_time(ic_now: datetime.datetime) -> world.game_clock.constants.Season — Derive the IC season from a concrete IC datetime.`
+- `set_clock(*, new_ic_time: datetime.datetime, changed_by: evennia.accounts.models.AccountDB, reason: str = '') -> world.game_clock.models.GameClock — Set the game clock IC time, creating it if it doesn't exist.`
+- `set_time_ratio(*, ratio: float, changed_by: evennia.accounts.models.AccountDB, reason: str = '') -> world.game_clock.models.GameClock — Change the time ratio, re-anchoring IC time to preserve continuity.`
+- `unpause_clock(*, changed_by: evennia.accounts.models.AccountDB, reason: str = '') -> world.game_clock.models.GameClock — Unpause the game clock, resuming IC time from where it was paused.`
 
 
 ## world.gm
@@ -3218,6 +3571,21 @@
 - `get_total_goal_points(character: 'CharacterSheet') -> int — Get the total goal points available for a character to distribute.`
 - `log_goal_progress(*, character: 'ObjectDB', domain: 'ModifierTarget | None', title: str, content: str, is_public: bool = False) -> 'GoalJournal' — Create a goal-progress journal entry (records 1 XP on the row).`
 - `set_character_goals(*, character: 'ObjectDB', goals: list['GoalInputData']) -> list[world.goals.models.CharacterGoal] — Replace a character's goal allocations, enforcing the weekly revision limit.`
+
+
+## world.instances
+
+### InstancedRoom
+**Foreign Keys:**
+  - room -> objects.ObjectDB [OneToOne]
+  - owner -> character_sheets.CharacterSheet [FK] (nullable)
+  - return_location -> objects.ObjectDB [FK] (nullable)
+**Pointed to by:**
+  - captivities <- captivity.Captivity
+
+### Service Functions
+- `complete_instanced_room(room: evennia.objects.models.ObjectDB) -> None — Mark room completed, relocate occupants, delete if no history.`
+- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '') -> evennia.objects.models.ObjectDB — Create a temporary instanced room and its lifecycle record.`
 
 
 ## world.items
@@ -3568,6 +3936,113 @@
 - `unequip_item(*, equipped_item: 'EquippedItem') -> 'None' — Remove an EquippedItem and invalidate the character's handler cache.`
 - `use_item(*, item_instance: 'ItemInstance', user: 'ObjectDB', target: 'ObjectDB | None' = None) -> 'UseItemResult' — Use an item with an on-use pool: apply its effects (deterministic when the`
 - `visible_worn_items_for(character: 'ObjectDB', observer: 'object | None' = None) -> 'list[VisibleWornItem]' — Return ``character``'s worn items visible to ``observer``.`
+
+
+## world.journals
+
+### JournalEntry
+**Foreign Keys:**
+  - author -> character_sheets.CharacterSheet [FK]
+  - parent -> journals.JournalEntry [FK] (nullable)
+  - related_threads -> magic.Thread [M2M]
+**Pointed to by:**
+  - responses <- journals.JournalEntry
+  - tags <- journals.JournalTag
+
+### JournalTag
+**Foreign Keys:**
+  - entry -> journals.JournalEntry [FK]
+
+### WeeklyJournalXP
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [OneToOne]
+  - game_week -> game_clock.GameWeek [FK] (nullable)
+
+### Service Functions
+- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' — Award XP to an account.`
+- `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None) -> 'JournalEntry' — Create a journal entry and award weekly XP.`
+- `create_journal_response(*, author: 'CharacterSheet', parent: 'JournalEntry', response_type: 'ResponseType', title: 'str', body: 'str') -> 'JournalEntry' — Create a praise or retort response to a journal entry.`
+- `edit_journal_entry(*, entry: 'JournalEntry', title: 'str | None' = None, body: 'str | None' = None) -> 'JournalEntry' — Edit an existing journal entry. Sets edited_at timestamp.`
+- `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' — Increment a stat tracker (create if needed) and check for achievements.`
+
+
+## world.justice
+
+### CrimeKind
+**Pointed to by:**
+  - laws <- justice.AreaLaw
+  - deed_tags <- justice.DeedCrimeTag
+  - accusation_claims <- justice.AccusationCrimeClaim
+  - frame_jobs <- justice.FrameJobDetails
+
+### AreaLaw
+**Foreign Keys:**
+  - area -> areas.Area [FK]
+  - crime_kind -> justice.CrimeKind [FK]
+
+### DeedCrimeTag
+**Foreign Keys:**
+  - deed -> societies.LegendEntry [FK]
+  - crime_kind -> justice.CrimeKind [FK]
+
+### PersonaHeat
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - area -> areas.Area [FK]
+  - society -> societies.Society [FK]
+**Pointed to by:**
+  - sources <- justice.HeatSource
+
+### HeatSource
+**Foreign Keys:**
+  - heat -> justice.PersonaHeat [FK]
+  - deed -> societies.LegendEntry [FK] (nullable)
+
+### AccusationCrimeClaim
+**Foreign Keys:**
+  - secret -> secrets.Secret [OneToOne]
+  - crime_kind -> justice.CrimeKind [FK]
+  - real_deed -> societies.LegendEntry [FK] (nullable)
+
+### AccusationNullification
+**Foreign Keys:**
+  - secret -> secrets.Secret [OneToOne]
+  - authorship_secret -> secrets.Secret [OneToOne] (nullable)
+
+### FrameJobDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - evidence -> justice.CrimeEvidence [FK]
+  - subject_sheet -> character_sheets.CharacterSheet [FK]
+  - crime_kind -> justice.CrimeKind [FK]
+
+### DenounceRecord
+**Foreign Keys:**
+  - authorship_secret -> secrets.Secret [FK]
+  - denouncer_sheet -> character_sheets.CharacterSheet [FK]
+
+### CrimeEvidence
+**Foreign Keys:**
+  - deed -> societies.LegendEntry [OneToOne]
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - item_instance -> items.ItemInstance [OneToOne] (nullable)
+**Pointed to by:**
+  - frame_jobs <- justice.FrameJobDetails
+
+### Service Functions
+- `accrue_accusation_heat(*, secret: 'Secret', area: 'Area | None', scale: 'int' = 1) -> 'PersonaHeat | None' — Mint pursuit heat on an accusation's subject, where the allegation landed.`
+- `accrue_for_deed_knowledge(*, deed: 'LegendEntry', room: 'ObjectDB', new_knower_count: 'int') -> 'None' — The deed-knowledge accrual writer: word landed at ``room`` for ``new_knower_count`` ears.`
+- `accrue_heat(*, persona: 'Persona', crime_kind: 'CrimeKind', area: 'Area | None', deed: 'LegendEntry | None' = None, scale: 'int' = 1) -> 'PersonaHeat | None' — Mint pursuit heat for ``persona`` at ``area``, if the act is criminal there.`
+- `area_for_room(room: 'ObjectDB') -> 'Area | None'`
+- `associate_heat(*, from_persona: 'Persona', to_persona: 'Persona') -> 'int' — Re-apply one persona's heat onto another — the outing/identification seam.`
+- `enforcing_society_for(area: 'Area | None') -> 'Society | None' — Nearest ``dominant_society`` walking up from ``area`` (self first).`
+- `file_criminal_accusation(*, accuser_persona: 'Persona', subject_sheet: 'CharacterSheet', content: 'str', crime_kind: 'CrimeKind', level: 'int' = SecretLevel.WHISPERS, real_deed: 'LegendEntry | None' = None, area: 'Area | None' = None, scale: 'int' = 1) -> 'Secret' — Author a criminal accusation and land its heat in one move.`
+- `heat_decay_tick() -> 'int' — Daily tick: decay every heat row toward zero and drop the cold ones.`
+- `heat_for(persona: 'Persona', room: 'ObjectDB', *, include_sources: 'bool' = False) -> 'HeatReading' — The pursuit picture for ``persona`` standing in ``room`` — the one read seam.`
+- `law_for(area: 'Area | None', crime_kind: 'CrimeKind') -> 'AreaLaw | None' — The law governing ``crime_kind`` at ``area`` — most-specific-wins.`
+- `record_accusation_crime(*, secret: 'Secret', crime_kind: 'CrimeKind', real_deed: 'LegendEntry | None' = None) -> 'AccusationCrimeClaim' — Attach the alleged crime to an accusation secret — the heat bridge's data.`
+- `tag_deed_crimes(deed: 'LegendEntry', crime_kinds: 'Iterable[CrimeKind]') -> 'int' — Idempotently mark ``deed`` as an instance of each crime kind; returns rows created.`
+- `tier_for_value(value: int) -> world.justice.constants.HeatTier — Map a summed heat value onto its display tier.`
 
 
 ## world.locations
@@ -4908,6 +5383,48 @@
 - `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' — Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`
 
 
+## world.military
+
+### MilitaryUnit
+**Foreign Keys:**
+  - owner_org -> societies.Organization [FK] (nullable)
+  - commander -> character_sheets.CharacterSheet [FK] (nullable)
+  - summoned_by -> character_sheets.CharacterSheet [FK] (nullable)
+  - properties -> mechanics.Property [M2M]
+  - capabilities -> conditions.CapabilityType [M2M]
+**Pointed to by:**
+  - battle_units <- battles.BattleUnit
+  - capability_values <- military.MilitaryUnitCapability
+  - armies <- military.Army
+  - army_memberships <- military.ArmyMembership
+
+### MilitaryUnitCapability
+**Foreign Keys:**
+  - unit -> military.MilitaryUnit [FK]
+  - capability -> conditions.CapabilityType [FK]
+
+### Army
+**Foreign Keys:**
+  - commander -> character_sheets.CharacterSheet [FK] (nullable)
+  - campaign_story -> stories.Story [FK] (nullable)
+  - covenant -> covenants.Covenant [FK] (nullable)
+  - units -> military.MilitaryUnit [M2M]
+**Pointed to by:**
+  - army_memberships <- military.ArmyMembership
+
+### ArmyMembership
+**Foreign Keys:**
+  - army -> military.Army [FK]
+  - military_unit -> military.MilitaryUnit [FK]
+
+### Service Functions
+- `add_unit_to_army(*, army: 'Army', military_unit: 'MilitaryUnit') -> 'ArmyMembership' — Add a MilitaryUnit to an Army.`
+- `create_military_unit(*, name: 'str', descriptor: 'str' = '', owner_org=None, commander=None, quality: 'str' = 'trained', strength: 'int' = 100, morale: 'int' = 70, individual_count: 'int | None' = None) -> 'MilitaryUnit' — Create a persistent MilitaryUnit.`
+- `disband_army(*, army: 'Army') -> 'None' — Disband an army: mark all active memberships as left, set disbanded_at.`
+- `form_army(*, name: 'str', commander=None, campaign_story=None, covenant=None, units: 'list[MilitaryUnit] | None' = None) -> 'Army' — Create an Army and optionally add units to it.`
+- `remove_unit_from_army(*, army: 'Army', military_unit: 'MilitaryUnit') -> 'None' — Remove a MilitaryUnit from an Army (set left_at).`
+
+
 ## world.missions
 
 ### MissionCategory
@@ -5310,6 +5827,56 @@
 - `serialize_npc_session_state(session: 'InteractionSession', *, last_result_message: 'str' = '') -> 'dict' — Compose the response payload from a (live or freshly-closed) session.`
 - `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'Character', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
 - `template_visible_to(template: 'MissionTemplate', character: 'ObjectDB', *, persona: 'Persona | None' = None) -> 'bool' — True if ``character`` may see / be offered ``template``.`
+
+
+## world.player_submissions
+
+### PlayerFeedback
+**Foreign Keys:**
+  - reporter_account -> accounts.AccountDB [FK]
+  - reporter_persona -> scenes.Persona [FK]
+  - location -> objects.ObjectDB [FK] (nullable)
+
+### BugReport
+**Foreign Keys:**
+  - reporter_account -> accounts.AccountDB [FK]
+  - reporter_persona -> scenes.Persona [FK]
+  - location -> objects.ObjectDB [FK] (nullable)
+
+### PlayerReport
+**Foreign Keys:**
+  - reporter_account -> accounts.AccountDB [FK]
+  - reported_account -> accounts.AccountDB [FK]
+  - reporter_persona -> scenes.Persona [FK]
+  - reported_persona -> scenes.Persona [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+  - interaction -> scenes.Interaction [FK] (nullable)
+  - location -> objects.ObjectDB [FK] (nullable)
+
+### SystemErrorReport
+**Foreign Keys:**
+  - actor_persona -> scenes.Persona [FK] (nullable)
+
+### Petition
+**Foreign Keys:**
+  - account -> accounts.AccountDB [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+  - subject_character -> objects.ObjectDB [FK] (nullable)
+
+### SubmitterStanding
+**Foreign Keys:**
+  - account -> accounts.AccountDB [OneToOne]
+
+### Service Functions
+- `kudos_total_for(account: 'AccountDB') -> 'int' — The sender's kudos total — the staff inbox's sort key (#2288).`
+- `record_resolution(account: 'AccountDB', status: 'str') -> 'SubmitterStanding' — Stamp the submitter's track record when staff resolve their submission.`
+- `report_error(exc: 'BaseException', *, label: 'str', actor: 'ObjectDB | None' = None) -> 'None' — Capture an exception as a deduplicated ``SystemErrorReport`` + a structured log.`
+- `resolve_petition(petition: 'Petition', *, status: 'str', staff_notes: 'str' = '') -> 'Petition' — Staff close a petition; the outcome feeds the track record.`
+- `run_safely(label: 'str', fn: 'Callable[[], object]', *, actor: 'ObjectDB | None' = None) -> 'object' — Run an optional / best-effort callable; on failure capture + notify, never raise.`
+- `sender_context(account: 'AccountDB') -> 'dict' — Kudos + standing columns shown beside every submission.`
+- `set_ignored(account: 'AccountDB', *, ignored: 'bool') -> 'SubmitterStanding' — The perma-ignore bit: submissions persist but never surface. Silent.`
+- `standing_for(account: 'AccountDB') -> 'SubmitterStanding'`
+- `submit_petition(account: 'AccountDB', *, category: 'str', description: 'str', scene: 'Scene | None' = None, subject_character: 'ObjectDB | None' = None) -> 'Petition' — File the one open petition an account may hold — emergency-only.`
 
 
 ## world.progression
@@ -5829,6 +6396,121 @@
 - `soul_tether_active(a_sheet: 'CharacterSheet', b_sheet: 'CharacterSheet') -> 'bool' — Check whether two characters have an active Soul Tether bond.`
 
 
+## world.room_features
+
+### RoomFeatureKind
+**Foreign Keys:**
+  - allowed_building_kinds -> buildings.BuildingKind [M2M]
+**Pointed to by:**
+  - install_rituals <- room_features.RoomFeatureKindInstallRitual
+  - required_building_owner_types <- room_features.RoomFeatureKindOwnerType
+  - instances <- room_features.RoomFeatureInstance
+  - progression_projects <- room_features.RoomFeatureProgressionDetails
+
+### RoomFeatureKindInstallRitual
+**Foreign Keys:**
+  - feature_kind -> room_features.RoomFeatureKind [FK]
+  - ritual -> magic.Ritual [FK]
+
+### RoomFeatureKindOwnerType
+**Foreign Keys:**
+  - feature_kind -> room_features.RoomFeatureKind [FK]
+
+### RoomFeatureInstance
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [OneToOne]
+  - feature_kind -> room_features.RoomFeatureKind [FK]
+**Pointed to by:**
+  - sanctum_details <- magic.SanctumDetails
+  - field_details <- agriculture.FieldDetails
+  - granary_details <- agriculture.GranaryDetails
+  - stables_details <- companions.StablesDetails
+  - lab_station_details <- items.LabStationDetails
+  - vault_details <- room_features.VaultDetails
+  - brig_details <- room_features.BrigDetails
+
+### RoomFeatureProgressionDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - target_room_profile -> evennia_extensions.RoomProfile [FK]
+  - target_feature_kind -> room_features.RoomFeatureKind [FK]
+
+### Trap
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - position -> areas.Position [FK] (nullable)
+  - consequence_pool -> actions.ConsequencePool [FK]
+  - detect_check_type -> checks.CheckType [FK]
+  - disarm_check_type -> checks.CheckType [FK]
+  - created_by_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - detected_by -> character_sheets.CharacterSheet [M2M]
+
+### VaultDetails
+**Foreign Keys:**
+  - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
+  - founder_persona -> scenes.Persona [FK]
+**Pointed to by:**
+  - access_entries <- room_features.VaultAccessEntry
+
+### VaultAccessEntry
+**Foreign Keys:**
+  - vault_details -> room_features.VaultDetails [FK]
+  - holder_persona -> scenes.Persona [FK] (nullable)
+  - holder_organization -> societies.Organization [FK] (nullable)
+  - added_by -> scenes.Persona [FK]
+
+### ExitBarsDetails
+**Foreign Keys:**
+  - exit_profile -> evennia_extensions.ExitProfile [OneToOne]
+
+### RoomWardDetails
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [OneToOne]
+  - resonance -> magic.Resonance [FK]
+  - reaction_condition -> conditions.ConditionTemplate [FK] (nullable)
+
+### RoomAlarmDetails
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [OneToOne]
+
+### DefenseProgressionDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - target_exit_profile -> evennia_extensions.ExitProfile [FK] (nullable)
+  - target_room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+  - resonance -> magic.Resonance [FK] (nullable)
+  - reaction_condition -> conditions.ConditionTemplate [FK] (nullable)
+
+### BrigDetails
+**Foreign Keys:**
+  - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
+
+### Service Functions
+- `active_captains_quarters_in(room_profile: 'RoomProfile') -> 'RoomFeatureInstance | None' — The room's active Captain's Quarters feature, or None.`
+- `active_hub_feature(room_profile: 'RoomProfile') -> 'RoomFeatureInstance | None' — The room's active civic-hub feature (Notice Board or Town Crier), or None.`
+- `active_library_in(room_profile: 'RoomProfile') -> 'RoomFeatureInstance | None' — The room's active Library feature, or None.`
+- `active_siege_deck_in(room_profile: 'RoomProfile') -> 'RoomFeatureInstance | None' — The room's active Siege Deck feature, or None.`
+- `active_social_hub_in(room_profile: 'RoomProfile') -> 'RoomFeatureInstance | None' — The room's active Social Hub feature, or None (#1694).`
+- `active_training_room_in(room_profile: 'RoomProfile') -> 'RoomFeatureInstance | None' — The room's active Training Room feature, or None.`
+- `can_modify_room_features(persona: 'Persona', room: 'DefaultObject') -> 'bool' — Standing required to install or upgrade a feature in this room.`
+- `complete_defense_installation(project: 'Project', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — Handle resolution of a ROOM_DEFENSE_INSTALLATION project (#2177).`
+- `complete_room_feature_progression(project: 'Project', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — Handle resolution of a ROOM_FEATURE_PROGRESSION project.`
+- `handle_captains_quarters_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — CAPTAINS_QUARTERS strategy (#675): row-only install.`
+- `handle_command_center_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — COMMAND_CENTER strategy (#930): install or level the feature instance.`
+- `handle_library_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — LIBRARY strategy (#675): row-only install/level.`
+- `handle_notice_board_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — NOTICE_BOARD strategy (#1450): row-only install.`
+- `handle_siege_deck_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — SIEGE_DECK strategy (#675): row-only install/level.`
+- `handle_social_hub_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — SOCIAL_HUB strategy (#1694): install/level the feature, mark the hub, draw crowds.`
+- `handle_town_crier_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — TOWN_CRIER strategy (#1450): install the row AND place the crier NPC.`
+- `handle_training_room_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — TRAINING_ROOM strategy (#675): row-only install/level.`
+- `handle_workshop_of_iniquity_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — WORKSHOP_OF_INIQUITY strategy (#1825): row-only install/level.`
+- `react_to_unauthorized_entry(actor, room) -> 'None' — React to `actor` entering `room` when an active ward/alarm is present`
+- `register_room_feature_strategy(strategy_key: 'str', handler: 'RoomFeatureStrategyHandler') -> 'None' — Register/override the strategy handler for ``strategy_key``.`
+- `reset_room_feature_strategies() -> 'None' — Restore the empty baseline. Test-only escape hatch.`
+- `room_ward_upkeep_tick() -> 'None' — Drain each active ward's resonance_reserve; lapse it if depleted (#2177).`
+- `sync_social_hub_traffic(room_profile: 'RoomProfile') -> 'None' — Reconcile the room's crowd-draw TRAFFIC modifier to its hub's current level.`
+
+
 ## world.roster
 
 ### RosterApplication
@@ -6021,6 +6703,7 @@
   - event -> events.Event [FK] (nullable)
   - participants -> accounts.AccountDB [M2M]
 **Pointed to by:**
+  - petitions <- player_submissions.Petition
   - developmenttransaction_set <- progression.DevelopmentTransaction
   - entry_flourish_offers <- magic.PendingEntryFlourishOffer
   - triggered_alterations <- magic.PendingAlteration
@@ -7478,6 +8161,17 @@
   - reviewer -> accounts.AccountDB [FK] (nullable)
 
 
+## world.tarot
+
+### TarotCard
+**Pointed to by:**
+  - profiles <- character_sheets.Profile
+
+### NamingRitualConfig
+**Foreign Keys:**
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
+
+
 ## world.traits
 
 ### Trait
@@ -7548,6 +8242,108 @@
   - outcome -> traits.CheckOutcome [FK]
 
 
+## world.travel
+
+### TravelHub
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [OneToOne]
+**Pointed to by:**
+  - outbound_routes <- travel.TravelRoute
+  - inbound_routes <- travel.TravelRoute
+  - voyages_from <- travel.Voyage
+  - voyages_to <- travel.Voyage
+
+### TravelRoute
+**Foreign Keys:**
+  - origin_hub -> travel.TravelHub [FK]
+  - destination_hub -> travel.TravelHub [FK]
+
+### TravelMethod
+**Foreign Keys:**
+  - ship_type -> ships.ShipType [FK] (nullable)
+**Pointed to by:**
+  - voyages <- travel.Voyage
+
+### Voyage
+**Foreign Keys:**
+  - leader -> scenes.Persona [FK]
+  - travel_method -> travel.TravelMethod [FK]
+  - origin_hub -> travel.TravelHub [FK] (nullable)
+  - destination_hub -> travel.TravelHub [FK] (nullable)
+  - ship -> ships.ShipDetails [OneToOne] (nullable)
+**Pointed to by:**
+  - participants <- travel.VoyageParticipant
+  - invites <- travel.VoyageInvite
+
+### VoyageParticipant
+**Foreign Keys:**
+  - voyage -> travel.Voyage [FK]
+  - persona -> scenes.Persona [FK]
+
+### VoyageInvite
+**Foreign Keys:**
+  - voyage -> travel.Voyage [FK]
+  - target_persona -> scenes.Persona [FK]
+  - invited_by -> scenes.Persona [FK] (nullable)
+
+### Service Functions
+- `abandon_voyage(voyage: 'Voyage', caller) -> 'None' — End voyage at current hub. Participants stay where they are.`
+- `advance_leg(voyage: 'Voyage', caller) -> 'None' — Pay AP for next leg, move all participants to next hub room.`
+- `complete_voyage(voyage: 'Voyage', caller) -> 'None' — Pay all remaining AP, move group directly to destination hub.`
+- `compute_ap_cost(ic_hours: 'float') -> 'int' — AP cost for a given IC travel time.`
+- `compute_remaining_ap(voyage: 'Voyage', character_sheet: 'CharacterSheet', travel_method: 'TravelMethod', ship: 'ShipDetails | None' = None) -> 'int' — Total AP to fast-forward from current hub to destination for this character.`
+- `compute_travel_time(route: 'TravelRoute', travel_method: 'TravelMethod', character_sheet: 'CharacterSheet', ship: 'ShipDetails | None' = None) -> 'float' — Compute IC hours for one leg for a specific character.`
+- `depart_voyage(voyage: 'Voyage', caller) -> 'Voyage' — Transition a DRAFT voyage to IN_TRANSIT.`
+- `find_overworld_route(origin_hub: 'TravelHub', destination_hub: 'TravelHub', travel_mode: 'str') -> 'list[TravelRoute] | None' — BFS over TravelRoute edges filtered by travel_mode.`
+- `invite_to_voyage(voyage: 'Voyage', leader_persona, invitee_persona) -> 'VoyageInvite' — Create a PENDING invite for ``invitee_persona`` to join ``voyage``.`
+- `respond_to_voyage_invite(invite: 'VoyageInvite', decision: 'VoyageInvite.Response') -> 'None' — Resolve a PENDING invite. Sets response + responded_at.`
+- `start_voyage(leader, destination_hub: 'TravelHub', travel_method: 'TravelMethod', ship: 'ShipDetails | None' = None) -> 'Voyage' — Create a DRAFT Voyage, enroll leader as participant.`
+
+
+## world.vitals
+
+### CharacterVitals
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [OneToOne]
+  - died_in_scene -> scenes.Scene [FK] (nullable)
+
+### VitalsConsequenceConfig
+**Foreign Keys:**
+  - knockout_pool -> actions.ConsequencePool [FK] (nullable)
+  - default_wound_pool -> actions.ConsequencePool [FK] (nullable)
+  - default_death_pool -> actions.ConsequencePool [FK] (nullable)
+
+### Service Functions
+- `advance_bleed_out(character_sheet: 'CharacterSheet | None') -> 'bool' — Advance staged bleed-out conditions toward death.`
+- `advance_surrounded(character_sheet: 'CharacterSheet | None', *, battle: 'Battle') -> 'bool' — Advance staged Surrounded (battle acute-peril) conditions toward death (#1733).`
+- `apply_clamped_chronic_damage(character_sheet: 'CharacterSheet', amount: 'int') -> 'int' — Reduce health by ``amount`` but never to/below the knockout floor, never increasing it.`
+- `attempt_wake(character_sheet: 'CharacterSheet | None', *, in_combat_tick: 'bool' = False, destination_room: 'ObjectDB | None' = None) -> 'WakeResult' — Attempt to wake from Unconscious: one Endurance check per round.`
+- `calculate_death_difficulty(*, health_pct: 'float') -> 'int' — Scale death check difficulty by depth of negative health.`
+- `calculate_knockout_difficulty(*, health_pct: 'float') -> 'int' — Scale knockout check difficulty by how far below 20% health.`
+- `calculate_wake_difficulty(*, health_pct: 'float', rounds_elapsed: 'int') -> 'int' — Difficulty of the per-round wake check.`
+- `calculate_wound_difficulty(*, damage: 'int', max_health: 'int') -> 'int' — Scale wound check difficulty by how far damage exceeds 50% threshold.`
+- `can_act(character_sheet: 'CharacterSheet | None') -> 'bool' — Coarse 'can engage at all' gate: not dead AND has awareness.`
+- `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None) -> world.checks.types.ModifierBreakdown — Aggregate all modifier contributions for a check into a ModifierBreakdown.`
+- `conscious_bystander_present(room: 'ObjectDB | None', *, subject_id: 'int', exclude_ids: 'frozenset[int]' = frozenset()) -> 'bool' — True if anyone but ``subject_id`` present in ``room`` is conscious (can_act).`
+- `covenant_role_health(character: 'object', level: 'int') -> 'int' — Level-scaled covenant-role 'armor': sum of level * bonus_per_level over engaged roles'`
+- `derive_base_max_health(character_sheet: 'CharacterSheet') -> 'int' — Derive base_max_health = class stage-rate sum + stamina term + covenant-role armor.`
+- `derive_character_status(character_sheet: 'CharacterSheet | None') -> 'str' — Derive a coarse, read-only life-status string for the wire/API.`
+- `get_dream_room() -> 'ObjectDB | None' — Return the liminal dream room (seeded by the survivability cluster).`
+- `get_vitals_consequence_config() -> 'VitalsConsequenceConfig' — Return the VitalsConsequenceConfig singleton (pk=1), creating it lazily on first call.`
+- `is_alive(character_sheet: 'CharacterSheet | None') -> 'bool' — Return True if the character is not dead.`
+- `is_dead(character_sheet: 'CharacterSheet | None') -> 'bool' — Return True if the character's mortality marker is DEAD.`
+- `is_retired(character_sheet: 'CharacterSheet | None') -> 'bool' — True when the dead character has been released (retire fired, #2287).`
+- `perceives_dreamside(character_sheet: 'CharacterSheet | None') -> 'bool' — True when the character's perception is relocated to the dream side (#2287).`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
+- `process_damage_consequences(character_sheet: 'CharacterSheet | None', damage_dealt: 'int', damage_type: 'DamageType | None', *, extra_modifiers: 'int' = 0, combat_interaction_factory: 'Callable[[], Interaction] | None' = None, source_character: 'ObjectDB | None' = None) -> 'DamageConsequenceResult' — Process survivability consequences after damage is applied.`
+- `recompute_max_health(character_sheet: 'CharacterSheet', *, thread_addend: 'int' = 0) -> 'int' — Derive max_health from base_max_health plus a thread-derived addend.`
+- `resolve_abandonment(character_sheet: 'CharacterSheet | None') -> 'bool' — Resolve an abandoned downed victim's fate through the abandonment pool (#1479 T8).`
+- `resolve_vitals_consequence(character_sheet: 'CharacterSheet', check_type: 'CheckTypeHint', target_difficulty: 'int', pool: 'ConsequencePool', *, extra_modifiers: 'int' = 0, source_character: 'ObjectDB | None' = None) -> 'PendingResolution' — Resolve one survivability consequence through the consequence-pool pipeline.`
+- `retire_character(character_sheet: 'CharacterSheet', *, forced_by: 'object | None' = None) -> 'None' — Release a dead character: the final lock of the ghost interlude (#2287).`
+- `tick_round_for_targets(targets: 'Iterable[ObjectDB]', *, timing: "Literal['start', 'end']" = 'end') -> 'None' — Apply one round's worth of per-target effects for a set of targets.`
+- `unconscious_instance(character_sheet: 'CharacterSheet | None') -> 'ConditionInstance | None' — Return the character's active Unconscious ConditionInstance, if any.`
+
+
 ## world.weather
 
 ### Climate
@@ -7603,3 +8399,45 @@
 - `roll_region_weather(area: 'Area', *, weather_type: 'WeatherType | None' = None) -> 'RegionWeatherState | None' — Set (or roll) a region's current weather and re-apply its exposure modifiers (#1522).`
 - `select_weather_emit(area: 'Area | None', *, season: 'Season | None' = None, phase: 'TimePhase | None' = None) -> 'WeatherEmit | None' — Pick a weighted-random atmospheric emit for a region's current weather (#1522).`
 - `special_weather_for_today(*, real_now: 'datetime | None' = None) -> 'WeatherType | None' — The special weather forced by a feast day on the current IC date, if any (#1522).`
+
+
+## world.worship
+
+### WorshipTradition
+**Foreign Keys:**
+  - rites_specialization -> skills.Specialization [FK]
+**Pointed to by:**
+  - beings <- worship.WorshippedBeing
+
+### WorshippedBeing
+**Foreign Keys:**
+  - tradition -> worship.WorshipTradition [FK]
+  - avatar_sheet -> character_sheets.CharacterSheet [OneToOne] (nullable)
+**Pointed to by:**
+  - grants <- worship.WorshipGrant
+  - devotion_standings <- worship.DevotionStanding
+  - public_worshippers <- worship.WorshipDeclaration
+  - secret_worshippers <- worship.WorshipDeclaration
+  - ceremonies <- ceremonies.Ceremony
+
+### WorshipGrant
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+  - granted_by -> character_sheets.CharacterSheet [FK] (nullable)
+
+### DevotionStanding
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - being -> worship.WorshippedBeing [FK]
+
+### WorshipDeclaration
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [OneToOne]
+  - public_being -> worship.WorshippedBeing [FK] (nullable)
+  - secret_being -> worship.WorshippedBeing [FK] (nullable)
+  - secret -> secrets.Secret [FK] (nullable)
+
+### Service Functions
+- `bump_devotion(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, amount: int) -> world.worship.models.DevotionStanding — Upsert the (sheet, being) standing and run the God's Favorite check.`
+- `gods_favorite_achievement_for(character_sheet: 'CharacterSheet') -> 'Achievement | None' — Resolve the gender-matched God's Favorite achievement row (Decision 6).`
+- `grant_worship(being: world.worship.models.WorshippedBeing, amount: int, *, granted_by: 'CharacterSheet | None' = None, reason: str = '') -> world.worship.models.WorshipGrant — Add worship to a being's pool and record the audit ledger row.`

@@ -32,7 +32,10 @@ class StaffInboxView(APIView):
         page_num = data["page"]
         page_size = data["page_size"]
 
-        items = get_staff_inbox(categories=categories)
+        items = get_staff_inbox(
+            categories=categories,
+            include_ignored=data["include_ignored"],
+        )
         paginator = Paginator(items, page_size)
         try:
             page = paginator.page(page_num)

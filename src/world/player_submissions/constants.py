@@ -24,6 +24,7 @@ class SubmissionCategory(models.TextChoices):
     CHARACTER_APPLICATION = "character_application", "Character Application"
     GM_APPLICATION = "gm_application", "GM Application"
     SYSTEM_ERROR = "system_error", "System Error"  # auto-captured runtime errors (#1164)
+    PETITION = "petition", "Petition"  # urgent staff-contact requests (#2288)
     CATALOG_SUGGESTION = "catalog_suggestion", "Catalog Suggestion"  # GM scenario catalog (#2127)
 
 
@@ -39,3 +40,12 @@ class ReportCategory(models.TextChoices):
     OOC_ABUSE = "ooc_abuse", "OOC Abuse"
     RED_FLAG = "red_flag", "FYI / Red Flag"
     OTHER = "other", "Other"
+
+
+class PetitionCategory(models.TextChoices):
+    """Emergency-only petition categories (#2288) — structured, never free-form."""
+
+    UNFAIR_DEATH = "unfair_death", "Unfair / Unjustified Death"
+    SCENE_CONDUCT_EMERGENCY = "scene_conduct", "Scene Turning OOC-Hostile"
+    STUCK_UNPLAYABLE = "stuck_unplayable", "Character Stuck / Unplayable"
+    OTHER_EMERGENCY = "other_emergency", "Other Emergency"
