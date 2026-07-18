@@ -43,6 +43,8 @@ export type RoundAction = Record<string, unknown>;
 export type SurgeBeat = Record<string, unknown>;
 
 export interface SurgeBeatTyped extends SurgeBeat {
+  /** DramaticSurgeRecord pk — the stable list key (#2423). */
+  id: number;
   narration: string;
   trigger_kind?: string;
   amount?: number;

@@ -1010,7 +1010,10 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
         beats: list[dict[str, Any]] = []
         for record in records:
-            beat: dict[str, Any] = {"narration": self._render_surge_beat_narration(record)}
+            beat: dict[str, Any] = {
+                "id": record.pk,
+                "narration": self._render_surge_beat_narration(record),
+            }
             character_id = record.participant.character_sheet.character_id
             if is_gm_or_staff or character_id in viewer_character_ids:
                 beat["trigger_kind"] = record.trigger_kind
