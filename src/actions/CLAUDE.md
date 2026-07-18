@@ -53,8 +53,9 @@ They do not use the command system, dispatchers, or handlers.
   existing combat service; shared by telnet `CmdCombat` (`combat <subverb>`) and the web
   `CombatEncounterViewSet`. `yield` is not here — `YieldAction` (`duels.py`) is reused. The one
   new service is `toggle_action_ready`, extracted from the inline web `ready` toggle;
-  `locations.py` — `RoomEditAction`, key `"edit_room"` (#1470), owner-gated
-  (`IsRoomOwnerPrerequisite`) edit of the current room's name/description/public-listing via
+  `locations.py` — `RoomEditAction`, key `"edit_room"` (#1470, widened #2452),
+  owner-or-tenant-gated (`IsRoomTenantPrerequisite`) edit of the current room's
+  name/description/public-listing via
   `world.locations.services.set_room_display_data`; shared by the telnet `room` family (`CmdRoom`)
   + web dispatch. Plus the #670 Room Builder family (all REGISTRY, `target_type=SELF`, thin over
   `world.buildings.room_services` / `world.locations.services`): `DigRoomAction` (`"dig_room"`),

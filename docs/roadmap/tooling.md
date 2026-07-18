@@ -18,7 +18,9 @@ sub-issues, not designed here: **#2449** (staff world-builder canvas — the dra
 authoring surface this document's "GM dashboard UI" / "Staff world management" items
 below actually need), **#2450** (GM story areas — `STORY`-origin, never exported),
 **#2451** (discovery/portal authoring — clue placement + portal anchors from the
-canvas), **#2452** (player building via projects, `needs-design`).
+canvas), **#2452** (player room-building constraints — resolved: dig_room stays
+instant, RoomEditAction widened to owner-or-tenant, player rooms confirmed never
+touch the authored grid export).
 
 ## Built (2026-07-17, epic #2436 slice 2 / #2449 — staff world-builder canvas)
 
@@ -63,8 +65,9 @@ required); telnet play verbs only (`sceneroom`/`joinroom`/`leaveroom`,
 are excluded from the player-facing `AreaViewSet`/`RoomProfileViewSet` and never
 publicly listed regardless of a room's own `is_public` flag — see
 `docs/systems/INDEX.md`'s GM section ("Story areas & story rooms") for the full
-model/service/action/API rundown. Remaining: clue/portal layers (#2451), player
-building via projects (#2452, `needs-design`).
+model/service/action/API rundown. Remaining: clue/portal layers (#2451).
+Player room-building constraints resolved (#2452 — dig_room stays instant;
+RoomEditAction opened to tenants).
 
 ## Overview
 Tools for players, GMs, and staff to interact with and manage the game world. Player tools focus on building and customizing spaces. GM tools are granular and level-gated — GMs can only do what their trust level allows. Staff tools are unrestricted for the one staffer coordinating the entire game.

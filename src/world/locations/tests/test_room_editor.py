@@ -4,7 +4,7 @@ Covers the ``set_room_display_data`` service (writes + owner gate + the
 public-toggle scene-privacy guard) and the ``IsRoomOwnerPrerequisite`` gate.
 """
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from actions.prerequisites import IsRoomOwnerPrerequisite
 from evennia_extensions.factories import RoomProfileFactory
@@ -13,7 +13,7 @@ from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.locations.constants import HolderType, LocationParentType
-from world.locations.models import LocationOwnership
+from world.locations.models import LocationOwnership, LocationTenancy
 from world.locations.services import RoomEditError, set_room_display_data
 from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import PersonaFactory, SceneFactory
@@ -28,6 +28,7 @@ def _own_room(profile, persona) -> LocationOwnership:
     )
 
 
+@tag("postgres")
 class SetRoomDisplayDataTests(TestCase):
     def setUp(self) -> None:
         self.ward = AreaFactory(level=AreaLevel.WARD)
@@ -63,6 +64,25 @@ class SetRoomDisplayDataTests(TestCase):
         with self.assertRaises(RoomEditError):
             set_room_display_data(room=self.room, persona=stranger, name="Hijacked")
         assert not ObjectDisplayData.objects.filter(object=self.room).exists()
+
+    def test_tenant_with_no_ownership_can_set_name_description_and_privacy(self) -> None:
+        tenant = PersonaFactory()
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.profile,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=tenant,
+        )
+        set_room_display_data(
+            room=self.room,
+            persona=tenant,
+            name="The Tenant's Nook",
+            description="Cluttered but home.",
+            is_public=False,
+        )
+        display = ObjectDisplayData.objects.get(object=self.room)
+        assert display.longname == "The Tenant's Nook"
+        assert display.permanent_description == "Cluttered but home."
 
     def test_no_persona_and_no_bypass_is_refused(self) -> None:
         """``persona`` defaults to ``None`` now (#2449); without a bypass, that's
@@ -115,6 +135,7 @@ class SetRoomDisplayDataTests(TestCase):
         assert RoomProfile.objects.get(objectdb=self.room).is_public is False
 
 
+@tag("postgres")
 class IsRoomOwnerPrerequisiteTests(TestCase):
     def setUp(self) -> None:
         self.ward = AreaFactory(level=AreaLevel.WARD)

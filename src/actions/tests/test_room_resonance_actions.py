@@ -5,21 +5,13 @@
 
 from django.test import TestCase
 
+from actions.tests.room_test_helpers import character_in_room
 from evennia_extensions.factories import RoomProfileFactory
-from world.character_sheets.factories import CharacterSheetFactory
 from world.locations.constants import KeyType, LocationParentType
 from world.locations.factories import LocationOwnershipFactory, LocationTenancyFactory
 from world.locations.models import LocationValueModifier
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
 from world.magic.services.gain import ROOM_RESONANCE_TAG_SOURCE
-
-
-def _character_in_room(room_profile):
-    sheet = CharacterSheetFactory()
-    character = sheet.character
-    character.location = room_profile.objectdb
-    character.save()
-    return sheet, character
 
 
 class TagRoomResonanceActionTests(TestCase):
@@ -28,7 +20,7 @@ class TagRoomResonanceActionTests(TestCase):
 
         self.action_cls = TagRoomResonanceAction
         self.room_profile = RoomProfileFactory()
-        self.sheet, self.character = _character_in_room(self.room_profile)
+        self.sheet, self.character = character_in_room(self.room_profile)
         self.resonance = ResonanceFactory()
 
     def _tag_row(self):
@@ -114,7 +106,7 @@ class SetPrimaryHomeActionOwnerStandingTests(TestCase):
         from world.locations.models import LocationTenancy
 
         room_profile = RoomProfileFactory()
-        sheet, character = _character_in_room(room_profile)
+        sheet, character = character_in_room(room_profile)
         LocationOwnershipFactory(
             on_room=True,
             room_profile=room_profile,
@@ -140,7 +132,7 @@ class UntagRoomResonanceActionTests(TestCase):
         self.tag_action_cls = TagRoomResonanceAction
         self.action_cls = UntagRoomResonanceAction
         self.room_profile = RoomProfileFactory()
-        self.sheet, self.character = _character_in_room(self.room_profile)
+        self.sheet, self.character = character_in_room(self.room_profile)
         self.resonance = ResonanceFactory()
         LocationOwnershipFactory(
             on_room=True,
@@ -172,7 +164,7 @@ class UntagRoomResonanceActionTests(TestCase):
         self.assertTrue(result.success, result.message)
 
     def test_no_standing_rejected(self) -> None:
-        _stranger_sheet, stranger = _character_in_room(self.room_profile)
+        _stranger_sheet, stranger = character_in_room(self.room_profile)
 
         result = self.action_cls().run(actor=stranger, resonance_id=self.resonance.pk)
 

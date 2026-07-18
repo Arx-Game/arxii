@@ -518,24 +518,27 @@ Same `_validate_location_kwargs` shape as the lifecycle helpers —
 exactly one of `area` or `room_profile`. Raises `ValueError` on
 violation.
 
-## Owner-facing room editing (#1470)
+## Owner-or-tenant room editing (#1470, widened #2452)
 
 `set_room_display_data(*, room, persona=None, name=None, description=None, is_public=None,
-bypass_ownership=False)` is the owner-gated MVP seam for a player editing a room they
-own — the first player-facing write over `RoomProfile` / `ObjectDisplayData`.
+bypass_ownership=False)` is the owner-or-tenant-gated MVP seam for a player editing
+a room they own or hold tenancy in (widened #2452) — the first player-facing write
+over `RoomProfile` / `ObjectDisplayData`.
 `bypass_ownership=True` (staff world-builder, #2449) skips only the ownership raise;
 the #1287 scene-privacy re-check always runs, and `persona` may be `None` only in
 bypass mode. It:
 
-- re-checks `is_owner(persona, room)` as a hard boundary (raises `RoomEditError`,
-  which carries a player-facing `user_message` — never surface `str(exc)`);
+- re-checks `is_owner(persona, room) or is_tenant(persona, room)` as a hard
+  boundary (raises `RoomEditError`, which carries a player-facing
+  `user_message` — never surface `str(exc)`);
 - refuses to flip `is_public`→True while a non-public scene is live in the room
   (`_has_active_non_public_scene`, the inverse of the #1287 scene-privacy invariant);
 - writes name → `ObjectDisplayData.longname`, description → `permanent_description`,
   listing → `RoomProfile.is_public`; idempotent, only supplied fields change.
 
 Callers: `actions.definitions.locations.RoomEditAction` (key `edit_room`), gated by
-`actions.prerequisites.IsRoomOwnerPrerequisite`. Faces: the telnet `room` family
+`actions.prerequisites.IsRoomTenantPrerequisite` (owner-or-tenant, widened #2452).
+Faces: the telnet `room` family
 (`CmdRoom`, aliases `build`/`manageroom` — `room/name|desc|public` plus the #670
 builder verbs), the web action-dispatch endpoint, and the React `RoomEditorPanel`.
 
