@@ -1,1 +1,1 @@
-0111_alter_technique_name_and_more
+0112_alter_technique_name

@@ -111,7 +111,7 @@ still live for non-distinction sources (facet/mantle/motif-coherence passive bon
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `intensity`, `control`, `anima_cost`, `creator`, `target_type`, `reach` |
+| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `intensity`, `control`, `anima_cost`, `creator`, `target_type`, `reach`. Natural key `(gift, name)`, backed by `unique_technique_gift_name` (#2474 — `name` alone is not globally unique; lore reuse or a player-crafted technique can share a name across gifts). Unique per `(gift, name)` |
 
 Key fields: `intensity` (base power), `control` (base safety/precision), `level` (progression
 gate, derives tier), `target_type` (per-technique cardinality — see below).
@@ -185,14 +185,28 @@ so that web case calls `author_staff_technique()` directly.)
 
 **Exposure:** staff/GM-only. Player self-service is a deferred `needs-design` follow-up.
 
-### CG Starter Gift/Technique Catalog (#2426)
+### CG Starter Gift/Technique Catalog (#2426, content pipeline #2474)
 
 The CG magic stage picks a staff-authored catalog `Gift` + `Technique`s directly
 (`get_gift_options`/`get_technique_options`, `world/magic/services/cg_catalog.py`),
 and `finalize_magic_data` only *links* them
 (`world/character_creation/services.py:_finalize_gift_and_techniques`) — no `Gift`
-or `Technique` row is created at CG time. See `world/magic/CLAUDE.md`'s "Starter
-Gift Catalog (CG Technique Picks, #2426)" section for the seeded catalog shape.
+or `Technique` row is created at CG time.
+
+**The catalog is content, not seed data (#2474).** `Resonance`, `Gift`, `Technique`,
+`PathGiftGrant`, and `TraditionGiftGrant` all carry natural keys (`magic.gift`,
+`magic.pathgiftgrant`, etc. in `CONTENT_MODELS`, `core_management/content_export.py`)
+and ship as arx2-lore fixtures, loaded by `core_management.content_fixtures
+.load_world_content()` — the same pipeline that loads every other authored-content
+model, not a bespoke seed function. `Technique`'s natural key is `(gift, name)`
+(`unique_technique_gift_name`), since `name` alone is not globally unique across
+gifts. The formerly-in-repo `seed_starter_gift_catalog()` /
+`StarterGiftCatalogResult` (#2426 Task 7) are retired; a fresh dev database now
+requires `CONTENT_REPO_PATH` to seed at all (`ContentError` if unset/missing — see
+"Content-vs-config boundary" below and ADR-0142). Tests that need a catalog without
+a real content-repo checkout use `MagicContent.create_starter_gift_catalog()`
+(`world/seeds/game_content/magic.py`, a synthetic factory-built stand-in) or the
+enriched `stub_content_root()` fixture (`world/seeds/tests/content_stub.py`).
 
 The pre-#2426 design used a staff-curated `Cantrip` starter-technique-template
 model that CG finalization minted into a new `Technique`; that model and its API
@@ -312,6 +326,27 @@ privacy axis beyond the existing WITNESS tags, and no authored `GlimpseTag`/
 `GlimpseTagDistinctionSuggestion` rows ship with this repo (lore-repo content,
 authored later) — the flow renders gracefully with an empty catalog (axes with
 no tags simply don't render a step).
+
+### Content-vs-config boundary in the dev seed (#2474, ADR-0142)
+
+`seed_dev_database()` (`world/seeds/database.py`) now sequences: (1) resolve
+`CONTENT_REPO_PATH` via `core_management.content_repo.resolve_content_root()` —
+raises `ContentError` immediately if unset/missing, before anything else runs; (2)
+seed config prerequisites the content fixtures FK by natural key — currently just
+`world.magic.seeds_cast.ensure_technique_cast_content()`, since lore-repo
+`Technique` fixtures FK the shared "Technique Cast" `ActionTemplate` and the
+content load's own deferred-retry loop can't conjure a config row the content/grid
+load itself never creates; (3) `load_world_content()`; (4) the `CLUSTER_SEEDERS`
+loop. NPC trainer seeds (`world/npc_services/seeds.py`) resolve their starter
+technique picks as `(gift_name, technique_name)` pairs scoped by gift
+(`Technique.objects.filter(gift__name=..., name=...)`, never a bare `name__in=`
+lookup — see `Technique`'s natural key above) and raise `ContentError` when none of
+the pairs resolve, so a missing/stale catalog fails loudly rather than silently
+seeding an empty trainer. The admin seed view (`web/admin/seed_views.py`) catches
+`ContentError` and surfaces it as a normal form error; the CLI (`arx manage seed`,
+`core_management/management/commands/seed.py`) lets it traceback loudly by
+design — no silent skip, no synthetic in-repo fallback catalog. See ADR-0142 for
+the rationale and the rejected alternative.
 
 ### Standalone Casting — Shared Template + Per-Character Check (#1306) [BUILT & WIRED]
 
@@ -1661,7 +1696,7 @@ The full magic catalog is lore-repo-authorable content, not admin-only data: `Af
 (`core_management/content_export.py`) and exported/imported by the shared
 `content_export.py`/`content_fixtures.py` pipeline (see `docs/systems/INDEX.md`'s
 "Content-repo load" entry for the driver). Every model's natural key is its
-`NaturalKeyConfig.fields`: `Technique` is keyed `(gift, name)` (a `unique_technique_name_per_gift`
+`NaturalKeyConfig.fields`: `Technique` is keyed `(gift, name)` (the `unique_technique_gift_name`
 `UniqueConstraint` backs it — authoring a second technique with the same name under the
 same gift raises `DuplicateTechniqueName`, a clean 400, not an `IntegrityError`); the grant
 tables (`PathGiftGrant`, `TraditionGiftGrant`, `SpeciesGiftGrant`) key on their FK pairs
@@ -1670,18 +1705,15 @@ owning technique plus their own unique-constraint fields, except `TechniqueOutco
 a global outcome-tier table with no technique FK — it's a `OneToOneField` to
 `traits.CheckOutcome` and keys on `outcome` alone; `PortalAnchorKind` keys on `name`
 (`achievements.Achievement` also gained a name natural key this branch but is not itself
-in `CONTENT_MODELS`). `load_entries` (`core_management/content_fixtures.py`) upserts by natural key —
-**fixtures win over seeds**: `seed_starter_gift_catalog()` (`world/seeds/game_content/magic.py`)
-authors a baseline catalog keyed on the same names, and a later lore-repo fixture load
-`update_or_create`s over those rows rather than erroring on the name collision.
-**Operational order matters:** seeds ("Load sane defaults") must run before the first
-content load — technique fixtures reference the seeded shared "Technique Cast"
-`ActionTemplate` and `CheckOutcome` rows (`seeds_cast.ensure_technique_cast_content()`,
-the checks-cluster seed). `load_world_content`'s deferred-retry loop (see
-`docs/systems/INDEX.md`'s content-pipeline entry) papers over load-order gaps between
-content fixtures and the grid, but it cannot conjure a row seeding never created — a
-content load against an unseeded DB leaves those FK targets permanently unresolved
-(landing in the terminal `skipped` list) until "Load sane defaults" runs.
+in `CONTENT_MODELS`). `load_entries` (`core_management/content_fixtures.py`) upserts by
+natural key. There is no in-repo seed catalog to fall back on: the lore repo is the
+single source (`seed_starter_gift_catalog()` was retired by #2474 — see "CG Starter
+Gift/Technique Catalog" and "Content-vs-config boundary in the dev seed" above for the
+seed-vs-content sequencing, which seeds the "Technique Cast" `ActionTemplate` config
+prerequisite before `load_world_content()` runs, and ADR-0142 for the rationale).
+The deferred-retry loop resolves load-order gaps *within* the content/grid load; it
+cannot conjure a config row the load itself never creates — which is why the config
+prerequisites run first in that sequence.
 
 ---
 

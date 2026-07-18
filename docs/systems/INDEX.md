@@ -5102,14 +5102,28 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `character_creation.startingarea`, `evennia_extensions.roomsizetier`, and
   `weather.climate` (#2436/#2448) now that all three carry `NaturalKeyMixin`, plus
   `character_creation.beginnings` and `character_creation.cgexplanation` (Arx
-  beginnings content; canonical prose lives in the lore repo's `beginnings/arx.md`).
-  The full magic catalog joined the allowlist in #2486 — `Gift`/`Technique` (keyed
-  `(gift, name)`, backed by a `unique_technique_name_per_gift` `UniqueConstraint`) +
-  their grant tables (`PathGiftGrant`/`TraditionGiftGrant`/`species.SpeciesGiftGrant`,
-  each keyed on its FK pair) + `Technique`'s payload rows, plus `PortalAnchorKind` —
-  see `docs/systems/magic.md`'s "Content pipeline" section for the full model list and
-  natural keys. `load_entries` now resolves M2M field values (e.g. a grant's
-  `starter_techniques`/`signature_techniques`) to real instances BEFORE the
+  beginnings content; canonical prose lives in the lore repo's `beginnings/arx.md`),
+  and — #2474 — `magic.resonance`/`magic.gift`/`magic.technique`/
+  `magic.pathgiftgrant`/`magic.traditiongiftgrant` (the CG starter-catalog models;
+  `Technique`'s natural key is `(gift, name)`, `unique_technique_gift_name`, since
+  `name` alone collides across gifts). `core_management.content_fixtures.load_entries`
+  gained M2M natural-key resolution and stale-field tolerance (an object referencing
+  a field the current model no longer has is skipped with a warning, not a crash) to
+  carry this content across schema drift. `world.seeds.database.seed_dev_database()`
+  now loads content BEFORE any `CLUSTER_SEEDERS` entry runs (previously content load
+  had no home in the dev-seed flow at all) and raises `ContentError` if
+  `CONTENT_REPO_PATH` is unset/invalid, before writing anything — no silent skip, no
+  synthetic in-repo catalog fallback (ADR-0142). See `docs/systems/magic.md`'s "CG
+  Starter Gift/Technique Catalog" section for the full seed-ordering/error-handling
+  detail; the retired `seed_starter_gift_catalog()` is replaced by
+  `MagicContent.create_starter_gift_catalog()` (test-only factory stand-in) for
+  suites without a real content-repo checkout.
+  #2486 extends that catalog allowlist further: `Technique`'s payload rows
+  (`TechniqueDamageProfile`, `TechniqueAppliedCondition`/`RemovedCondition`,
+  `TechniqueCapabilityGrant`/`Requirement`, plus the global `TechniqueOutcomeModifier`,
+  keyed on `outcome` alone), `magic.restriction`, `magic.portalanchorkind`, and
+  `species.speciesgiftgrant` — see `docs/systems/magic.md`'s "Content pipeline"
+  section for the full model list and natural keys. M2M resolution happens BEFORE the
   `update_or_create` write, so an unresolvable M2M target defers or skips the whole
   entry rather than leaving a half-loaded row with an empty M2M set.
 - **Grid content export/import (#2436/#2448):** rooms/areas are no longer deferred —

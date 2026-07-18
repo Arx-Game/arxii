@@ -31,6 +31,7 @@ from world.npc_services.models import MissionOfferDetails, NPCRole, NPCServiceOf
 from world.seeds.character_creation import ensure_canonical_fallback_room
 from world.seeds.database import seed_dev_database
 from world.seeds.game_content.tutorial import seed_tutorial_dev
+from world.seeds.tests.content_stub import stub_content_root
 
 _T1_NAME = "Arrival"
 _T2_NAME = "What the Walls Remember"
@@ -51,7 +52,8 @@ class SeedTutorialDevTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        seed_dev_database()
+        with stub_content_root():
+            seed_dev_database()
         cls.t1 = MissionTemplate.objects.get(name=_T1_NAME)
         cls.t2 = MissionTemplate.objects.get(name=_T2_NAME)
         cls.t3 = MissionTemplate.objects.get(name=_T3_NAME)
@@ -247,7 +249,8 @@ class MissionOptionRouteQueryHelperTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        seed_dev_database()
+        with stub_content_root():
+            seed_dev_database()
 
     def test_every_chain_template_has_exactly_one_entry_node(self) -> None:
         for name in (_T1_NAME, _T2_NAME, _T3_NAME, _T4_NAME, _T5_NAME, _T6_NAME, _T7_NAME):
@@ -273,7 +276,8 @@ class AuditLegendFloorTutorialChainTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        seed_dev_database()
+        with stub_content_root():
+            seed_dev_database()
 
     def test_no_legend_floor_violations_for_tutorial_chain(self) -> None:
         from world.missions.management.commands.audit_legend_floor import Command

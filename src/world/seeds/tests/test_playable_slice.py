@@ -10,9 +10,11 @@ pipeline and a live multi-round encounter are Phase 2, out of scope here.
 from django.test import TestCase
 
 from world.seeds.database import seed_dev_database
+from world.seeds.tests.content_stub import stub_content_root
 
 
 class TestPlayableSlice(TestCase):
+    @stub_content_root()
     def test_resolution_tables_seeded(self) -> None:
         from world.traits.models import CheckRank, ResultChart
 
@@ -20,6 +22,7 @@ class TestPlayableSlice(TestCase):
         self.assertGreater(CheckRank.objects.count(), 0)
         self.assertGreater(ResultChart.objects.count(), 0)
 
+    @stub_content_root()
     def test_combat_resolution_content_present(self) -> None:
         from world.checks.models import CheckType
 
@@ -27,6 +30,7 @@ class TestPlayableSlice(TestCase):
         # penetration + flee CheckTypes seeded by the combat cluster
         self.assertTrue(CheckType.objects.filter(name__in=["penetration", "flee"]).exists())
 
+    @stub_content_root()
     def test_a_factory_character_check_resolves_to_a_real_outcome(self) -> None:
         """A factory character's check resolves to a real CheckOutcome.
 
@@ -79,6 +83,7 @@ class TestSeededCharacterCreation(TestCase):
     run character creation" gap.
     """
 
+    @stub_content_root()
     def test_finalize_character_works_on_seeded_only_db(self) -> None:
         from evennia.accounts.models import AccountDB
 
@@ -108,7 +113,8 @@ class TestSeededCharacterCreation(TestCase):
         )
         # "The Wanderer" (the generic fallback path) has no starter Gift options —
         # the CG-selectable magic pipeline lives on the 5 style-linked PROSPECT
-        # paths seeded by seed_starter_gift_catalog (#2426).
+        # paths — real lore-repo content, loaded via load_world_content()
+        # (the stub content root carries an equivalent-shaped stand-in, #2474).
         path = CharacterDraft._meta.get_field("selected_path").related_model.objects.get(
             name="Path of Steel"
         )
@@ -120,8 +126,8 @@ class TestSeededCharacterCreation(TestCase):
         )
         tarot = TarotCard.objects.get(name="The Fool")
 
-        # The seeded magic cluster provides the Unbound tradition + a Gift/technique
-        # pool for every PROSPECT path (#2426).
+        # The seeded magic cluster / loaded catalog provides the Unbound
+        # tradition + a Gift/technique pool for every PROSPECT path (#2426/#2474).
         tradition = Tradition.objects.get(name="Unbound")
         gift_options = get_gift_options(tradition, path)
         self.assertTrue(gift_options, "Unbound must have a gift option for Path of Steel")
@@ -177,6 +183,7 @@ class TestSeededCharacterCreation(TestCase):
         # location=None on a Big-Button-seeded DB.
         self.assertIsNotNone(character.location)
 
+    @stub_content_root()
     def test_tradition_step_completable_for_every_seeded_beginning(self) -> None:
         """The CG Tradition step is completable, via the real endpoints, for every
         seeded Beginning (#2426 whole-branch-review finding).
@@ -246,10 +253,12 @@ class TestAcademyTrainingLoopReachable(TestCase):
     ``eligibility_rule``; availability is enforced at grant time inside
     ``run_train_offer`` via ``_technique_available_to_learner``)."""
 
+    @stub_content_root()
     def test_every_prospect_path_has_a_reachable_train_offer(self) -> None:
         from world.action_points.models import ActionPointPool
         from world.currency.services import get_or_create_purse, mint_favor_token
         from world.magic.factories import ResonanceFactory
+        from world.magic.models.grants import PathGiftGrant
         from world.magic.specialization.services import grant_gift_to_character
         from world.npc_services.constants import OfferKind
         from world.npc_services.effects import run_train_offer
@@ -258,16 +267,21 @@ class TestAcademyTrainingLoopReachable(TestCase):
         from world.progression.factories import CharacterPathHistoryFactory
         from world.scenes.factories import PersonaFactory
         from world.seeds.character_creation import ensure_shroudwatch_academy
-        from world.seeds.game_content.magic import seed_starter_gift_catalog
 
+        # The starter Gift/Technique/PathGiftGrant/Tradition catalog is real
+        # lore-repo content, loaded via load_world_content() — the stub content
+        # root carries an equivalent-shaped stand-in (#2474), so
+        # ensure_academy_generalist_trainer_role() (invoked inside
+        # seed_dev_database(), via the npc_services cluster) has real Technique
+        # rows to author TRAIN offers against.
         seed_dev_database()
         academy = ensure_shroudwatch_academy()
-        catalog = seed_starter_gift_catalog()
         role = NPCRole.objects.get(name=ACADEMY_GENERALIST_TRAINER_ROLE_NAME)
 
-        self.assertGreaterEqual(len(catalog.path_gift_grants), 5)
+        path_gift_grants = list(PathGiftGrant.objects.select_related("path", "gift"))
+        self.assertGreaterEqual(len(path_gift_grants), 5)
 
-        for grant in catalog.path_gift_grants.values():
+        for grant in path_gift_grants:
             path = grant.path
             gift = grant.gift
 
@@ -293,10 +307,10 @@ class TestAcademyTrainingLoopReachable(TestCase):
             # Mirrors CG's own `_finalize_magic_data` call shape: a real Prospect
             # always already owns their one Path-matched major Gift (with a
             # provisioned, resonance-anchored GIFT thread) by the time they can
-            # ever see an Academy trainer — seed_starter_gift_catalog's MAJOR
-            # gifts carry no `resonances` M2M of their own, so leaving this
-            # ungranted would hit charge_and_learn's implicit-acquisition path,
-            # which cannot resolve a resonance and never provisions a thread —
+            # ever see an Academy trainer — starter-catalog MAJOR gifts carry no
+            # `resonances` M2M of their own, so leaving this ungranted would hit
+            # charge_and_learn's implicit-acquisition path, which cannot resolve
+            # a resonance and never provisions a thread —
             # not a real player state, just a test-only bare persona artifact.
             grant_gift_to_character(sheet, gift, resonance=ResonanceFactory())
             pool = ActionPointPool.get_or_create_for_character(character)

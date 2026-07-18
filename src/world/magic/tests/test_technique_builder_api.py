@@ -452,10 +452,14 @@ class ConsequencePoolChoiceAPITests(APITestCase):
         technique = Technique.objects.get(pk=resp.data["id"])
         self.assertEqual(technique.action_template.name, "Melee Attack")
 
-        # Non-physical → magic shared default.
+        # Non-physical → magic shared default. Distinct name from the physical
+        # technique above (#2474 review fix): both share `self.gift`, and
+        # Technique now carries a DB UniqueConstraint on (gift, name) matching
+        # its declared natural key — the shared default `_payload()` name would
+        # otherwise collide with the technique created above.
         mental_resp = self.client.post(
             "/api/magic/techniques/author/",
-            self._payload(action_category="mental", name="Spark Mental"),
+            self._payload(name="Flavored Technique (Mental)", action_category="mental"),
             format="json",
         )
         self.assertEqual(mental_resp.status_code, 201, mental_resp.data)

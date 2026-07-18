@@ -240,7 +240,12 @@ class IntensityTier(NaturalKeyMixin, SharedMemoryModel):
 
 
 class TechniqueManager(NaturalKeyManager):
-    """Manager for Technique with natural key support."""
+    """Manager for Technique with natural key support (#2474/#2486).
+
+    Keyed ``(gift, name)`` rather than ``name`` alone: ``name`` is not unique
+    on its own (different gifts can reuse a technique name). Within one Gift
+    the pair is DB-unique (``unique_technique_gift_name``).
+    """
 
 
 class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
@@ -471,7 +476,7 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["gift", "name"],
-                name="unique_technique_name_per_gift",
+                name="unique_technique_gift_name",
             ),
         ]
 

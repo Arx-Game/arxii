@@ -217,3 +217,170 @@ class ContentExportTests(TestCase):
         assert list(path_grant.starter_techniques.all()) == [technique]
         technique.gift.refresh_from_db()
         assert technique.gift.resonances.count() == 1
+
+
+class MagicCatalogContentExportTests(TestCase):
+    """Round-trip coverage for the five magic catalog models (#2474).
+
+    Uses ``load_world_content`` rather than the bare ``build_all`` +
+    ``load_entries`` pair the other tests in this file use: within the
+    ``fixtures/magic/`` directory, ``gift.json`` sorts alphabetically before
+    ``resonance.json`` and ``technique.json`` sorts before ``techniquestyle.json``
+    (file processing order is plain alphabetical — ``NaturalKeyConfig.dependencies``
+    is metadata only, not consulted for load ordering anywhere in this pipeline),
+    so a straight one-pass ``load_entries`` would skip ``Gift``/``Technique``
+    on a fresh load (their FK/M2M targets don't exist yet at the moment their own
+    file is processed). ``load_world_content``'s defer-then-retry-to-fixed-point
+    pass (built for the content-vs-grid circular dependency, #2448; retried to a
+    fixed point rather than once, #2474 review fix) closes this content-internal
+    ordering gap too — see ``test_populated_grant_m2m_resolves_across_multiple_retry_passes``
+    below for the deeper (3-hop) case that needs more than a single retry.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_magic_catalog_round_trips_through_load_world_content(self) -> None:
+        """Resonance/Gift/Technique/PathGiftGrant/TraditionGiftGrant survive a wipe."""
+        from core_management.content_fixtures import load_world_content
+        from world.classes.factories import PathFactory
+        from world.magic.factories import (
+            GiftFactory,
+            PathGiftGrantFactory,
+            ResonanceFactory,
+            TechniqueFactory,
+            TraditionFactory,
+            TraditionGiftGrantFactory,
+        )
+        from world.magic.models import (
+            Gift,
+            PathGiftGrant,
+            Resonance,
+            Technique,
+            TraditionGiftGrant,
+        )
+
+        resonance = ResonanceFactory(name="Round Trip Resonance")
+        gift = GiftFactory(name="Round Trip Gift")
+        # Exercises the many-to-many natural-key fix (#2474) — an untouched
+        # (empty-list) m2m field already broke the load before that fix, so a
+        # populated one proves the fix resolves real related rows, not just
+        # tolerates an empty list.
+        gift.resonances.add(resonance)
+        technique = TechniqueFactory(
+            name="Round Trip Technique",
+            gift=gift,
+            damage_profile=False,
+        )
+        path = PathFactory()
+        path_grant = PathGiftGrantFactory(path=path, gift=gift)
+        tradition = TraditionFactory(name="Round Trip Tradition")
+        tradition_grant = TraditionGiftGrantFactory(tradition=tradition, gift=gift)
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        # Wipe every row the export just captured. Grants first (both PROTECT
+        # their `gift` FK), then technique/gift/resonance. Path/Tradition are
+        # left standing — they aren't part of this issue's five models.
+        TraditionGiftGrant.objects.filter(pk=tradition_grant.pk).delete()
+        PathGiftGrant.objects.filter(pk=path_grant.pk).delete()
+        Technique.objects.filter(pk=technique.pk).delete()
+        Gift.objects.filter(pk=gift.pk).delete()
+        Resonance.objects.filter(pk=resonance.pk).delete()
+
+        world_result = load_world_content(self.root)
+
+        assert world_result.skipped == []
+
+        reloaded_resonance = Resonance.objects.get(name="Round Trip Resonance")
+        reloaded_gift = Gift.objects.get(name="Round Trip Gift")
+        assert list(reloaded_gift.resonances.all()) == [reloaded_resonance]
+
+        reloaded_technique = Technique.objects.get(gift=reloaded_gift, name="Round Trip Technique")
+        # DiscoverableContent's own field (discovery_achievement) survives the
+        # trip at its default null value — Achievement itself lacks a natural
+        # key, so a populated FK there isn't exportable by this pipeline yet;
+        # out of scope for this task (see task-2-report.md).
+        assert reloaded_technique.discovery_achievement is None
+        # TechniqueStyle/EffectType were never wiped — same underlying rows.
+        assert reloaded_technique.style_id == technique.style_id
+        assert reloaded_technique.effect_type_id == technique.effect_type_id
+
+        reloaded_path_grant = PathGiftGrant.objects.get(path=path, gift=reloaded_gift)
+        assert reloaded_path_grant.path_id == path.pk
+
+        reloaded_tradition_grant = TraditionGiftGrant.objects.get(
+            tradition=tradition, gift=reloaded_gift
+        )
+        assert reloaded_tradition_grant.tradition_id == tradition.pk
+
+    def test_populated_grant_m2m_resolves_across_multiple_retry_passes(self) -> None:
+        """#2474 review fix: a 3-hop chain (grant -> gift -> technique) needs >1 retry.
+
+        ``PathGiftGrant.starter_techniques``/``TraditionGiftGrant.signature_techniques``
+        name ``Technique`` rows. On a fresh load, alphabetical file order puts
+        ``pathgiftgrant.json``/``traditiongiftgrant.json`` BEFORE ``technique.json`` —
+        so even after the single retry pass resolves ``gift`` (technique.json's own
+        prerequisite), the grant's m2m still can't resolve, because Technique itself
+        hasn't been created yet within that same retry pass. A single-pass retry
+        lands the grants in ``skipped``; a fixed-point retry (this fix) keeps
+        looping until nothing new resolves, so the grants get another chance once
+        Technique exists.
+        """
+        from core_management.content_fixtures import load_world_content
+        from world.classes.factories import PathFactory
+        from world.magic.factories import (
+            GiftFactory,
+            PathGiftGrantFactory,
+            ResonanceFactory,
+            TechniqueFactory,
+            TraditionFactory,
+            TraditionGiftGrantFactory,
+        )
+        from world.magic.models import (
+            Gift,
+            PathGiftGrant,
+            Resonance,
+            Technique,
+            TraditionGiftGrant,
+        )
+
+        resonance = ResonanceFactory(name="Chain Resonance")
+        gift = GiftFactory(name="Chain Gift")
+        gift.resonances.add(resonance)
+        technique = TechniqueFactory(name="Chain Technique", gift=gift, damage_profile=False)
+        path = PathFactory()
+        path_grant = PathGiftGrantFactory(path=path, gift=gift)
+        path_grant.starter_techniques.add(technique)
+        tradition = TraditionFactory(name="Chain Tradition")
+        tradition_grant = TraditionGiftGrantFactory(tradition=tradition, gift=gift)
+        tradition_grant.signature_techniques.add(technique)
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        TraditionGiftGrant.objects.filter(pk=tradition_grant.pk).delete()
+        PathGiftGrant.objects.filter(pk=path_grant.pk).delete()
+        Technique.objects.filter(pk=technique.pk).delete()
+        Gift.objects.filter(pk=gift.pk).delete()
+        Resonance.objects.filter(pk=resonance.pk).delete()
+
+        world_result = load_world_content(self.root)
+
+        assert world_result.skipped == [], (
+            f"Expected every deferred object to resolve, got skips: {world_result.skipped}"
+        )
+
+        reloaded_gift = Gift.objects.get(name="Chain Gift")
+        reloaded_technique = Technique.objects.get(gift=reloaded_gift, name="Chain Technique")
+
+        reloaded_path_grant = PathGiftGrant.objects.get(path=path, gift=reloaded_gift)
+        assert list(reloaded_path_grant.starter_techniques.all()) == [reloaded_technique]
+
+        reloaded_tradition_grant = TraditionGiftGrant.objects.get(
+            tradition=tradition, gift=reloaded_gift
+        )
+        assert list(reloaded_tradition_grant.signature_techniques.all()) == [reloaded_technique]

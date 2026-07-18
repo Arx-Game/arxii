@@ -76,8 +76,18 @@ def _ensure_role_gift_and_techniques(role: CovenantRole) -> None:
     )
 
     # 2 starter techniques per role gift. These are real Technique rows.
-    # Use Manifestation style (the most universal) if it exists.
-    style = TechniqueStyle.objects.filter(name="Manifestation").first()
+    # "Manifestation" (the most universal style) is get_or_create'd here rather
+    # than merely looked up (#2474): it was formerly guaranteed present as a
+    # side effect of the magic cluster's now-retired starter-catalog seed
+    # (which ran before this "covenant_roles" cluster) — that guarantee is
+    # gone now that the starter catalog is lore-repo content, loaded (or not)
+    # independently of this seed's own cluster ordering.
+    style, _ = TechniqueStyle.objects.get_or_create(
+        name="Manifestation",
+        defaults={
+            "description": "Magic made tangible — raw elemental force given shape and weight.",
+        },
+    )
 
     # Get or create a basic Attack effect type for the techniques
     effect_type, _ = EffectType.objects.get_or_create(
