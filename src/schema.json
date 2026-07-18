@@ -4224,8 +4224,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Starting Area.
+          type: string
         required: true
       tags:
       - character-creation
@@ -33935,8 +33934,15 @@ components:
           type: boolean
           description: Check if the requesting user can access this option.
           readOnly: true
+        codex_entry_ids:
+          type: array
+          items:
+            type: integer
+          description: Get codex entry IDs granted by this beginnings choice.
+          readOnly: true
       required:
       - allowed_species_ids
+      - codex_entry_ids
       - description
       - id
       - is_accessible
@@ -39107,9 +39113,16 @@ components:
           nullable: true
           description: Return a human-readable description of prerequisites.
           readOnly: true
+        codex_entry_ids:
+          type: array
+          items:
+            type: integer
+          description: Get codex entry IDs granted by this distinction.
+          readOnly: true
       required:
       - allow_other
       - category
+      - codex_entry_ids
       - cost_per_rank
       - description
       - effects
@@ -39151,14 +39164,8 @@ components:
           type: string
           readOnly: true
           description: Description of what this effect does.
-        codex_entry_id:
-          type: integer
-          nullable: true
-          description: Return the Codex entry ID if the target modifier type has one.
-          readOnly: true
       required:
       - category
-      - codex_entry_id
       - description
       - id
       - scaling_values
@@ -39218,8 +39225,7 @@ components:
           description: |-
             Return a list of effect summaries for this distinction.
 
-            Each effect includes its description (or auto-generated text)
-            and optional codex_entry_id for linkable terms in the UI.
+            Each effect includes its description (or auto-generated text).
           readOnly: true
         is_locked:
           type: boolean
@@ -39231,9 +39237,16 @@ components:
           nullable: true
           description: Return the reason this distinction is locked, if any.
           readOnly: true
+        codex_entry_ids:
+          type: array
+          items:
+            type: integer
+          description: Get codex entry IDs granted by this distinction.
+          readOnly: true
       required:
       - allow_other
       - category_slug
+      - codex_entry_ids
       - cost_per_rank
       - description
       - effects_summary
@@ -47036,9 +47049,20 @@ components:
         is_active:
           type: boolean
           description: Whether this modifier target is currently active in the game
+        codex_entry_id:
+          type: integer
+          nullable: true
+          description: |-
+            Return the Codex entry ID if this target's resonance has one.
+
+            The GiftStage resonance picker reads ModifierTarget rows (category=resonance).
+            Each has a ``target_resonance`` OneToOne → ``magic.Resonance``, which now
+            carries a ``codex_entry`` FK.
+          readOnly: true
       required:
       - category
       - category_name
+      - codex_entry_id
       - id
       - name
     Mute:
@@ -55407,8 +55431,18 @@ components:
             avoids SharedMemoryModel cache pollution and provides a single cache
             to invalidate when needed.
           readOnly: true
+        codex_entry_ids:
+          type: array
+          items:
+            type: integer
+          description: |-
+            Get codex entry IDs granted by this path.
+
+            Read from ``cached_codex_grants`` populated by the ViewSet prefetch.
+          readOnly: true
       required:
       - aspects
+      - codex_entry_ids
       - description
       - id
       - minimum_level
@@ -58559,10 +58593,8 @@ components:
           description: Description of this resonance.
         codex_entry_id:
           type: integer
-          nullable: true
-          description: Return the Codex entry ID if this resonance's modifier_target
-            has one.
           readOnly: true
+          nullable: true
       required:
       - affinity
       - affinity_name
@@ -61630,7 +61662,12 @@ components:
             type: integer
           description: Get stat bonuses as dictionary.
           readOnly: true
+        codex_entry_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
+      - codex_entry_id
       - id
       - name
       - parent_name
