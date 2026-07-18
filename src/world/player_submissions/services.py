@@ -1,4 +1,4 @@
-"""Error-capture services (#1164) — the bespoke, no-SaaS error path.
+"""Error-capture services (#1164) + staff-contact petitions (#2288).
 
 ``run_safely`` is the boundary for optional / best-effort work: run it, and on failure
 capture a deduplicated ``SystemErrorReport`` (so a real fault reaches staff with a traceback
@@ -16,14 +16,17 @@ from typing import TYPE_CHECKING, cast
 
 from django.utils import timezone
 
-from world.player_submissions.models import SystemErrorReport
+from world.player_submissions.constants import PetitionCategory, SubmissionStatus
+from world.player_submissions.models import Petition, SubmitterStanding, SystemErrorReport
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
     from typeclasses.characters import Character
+    from world.scenes.models import Scene
 
 logger = logging.getLogger(__name__)
 
@@ -119,3 +122,117 @@ def _persona_for(actor: ObjectDB | None) -> object | None:
     except Exception:  # noqa: BLE001 — persona resolution is best-effort context only
         return None
     return persona if isinstance(persona, Persona) else None
+
+
+class StaffContactError(Exception):
+    """A staff-contact rule was violated. Carries a safe user message."""
+
+    def __init__(self, msg: str, *, user_message: str) -> None:
+        super().__init__(msg)
+        self.user_message = user_message
+
+
+# Per-category required references — structure over prose (#2288).
+_CATEGORY_REQUIRES = {
+    PetitionCategory.UNFAIR_DEATH: ("subject_character",),
+    PetitionCategory.SCENE_CONDUCT_EMERGENCY: ("scene",),
+    PetitionCategory.STUCK_UNPLAYABLE: ("subject_character",),
+    PetitionCategory.OTHER_EMERGENCY: (),
+}
+
+
+def submit_petition(
+    account: AccountDB,
+    *,
+    category: str,
+    description: str,
+    scene: Scene | None = None,
+    subject_character: ObjectDB | None = None,
+) -> Petition:
+    """File the one open petition an account may hold — emergency-only.
+
+    The one-open rule is the structural rate-limit that keeps "emergency"
+    legible; per-category required references keep it specific.
+    """
+    if Petition.objects.filter(account=account, status=SubmissionStatus.OPEN).exists():
+        msg = f"account {account.pk} already holds an open petition"
+        raise StaffContactError(
+            msg,
+            user_message="You already have an open petition — one at a time.",
+        )
+    refs = {"scene": scene, "subject_character": subject_character}
+    for required in _CATEGORY_REQUIRES.get(category, ()):
+        if refs.get(required) is None:
+            msg = f"petition category {category} requires {required}"
+            raise StaffContactError(
+                msg,
+                user_message="That kind of petition needs the thing it is about attached.",
+            )
+    return Petition.objects.create(
+        account=account,
+        category=category,
+        description=description[:1000],
+        scene=scene,
+        subject_character=subject_character,
+    )
+
+
+def standing_for(account: AccountDB) -> SubmitterStanding:
+    standing, _ = SubmitterStanding.objects.get_or_create(account=account)
+    return standing
+
+
+def record_resolution(account: AccountDB, status: str) -> SubmitterStanding:
+    """Stamp the submitter's track record when staff resolve their submission."""
+    standing = standing_for(account)
+    if status == SubmissionStatus.REVIEWED:
+        standing.actioned_count += 1
+        standing.save(update_fields=["actioned_count"])
+    elif status == SubmissionStatus.DISMISSED:
+        standing.dismissed_count += 1
+        standing.save(update_fields=["dismissed_count"])
+    return standing
+
+
+def resolve_petition(petition: Petition, *, status: str, staff_notes: str = "") -> Petition:
+    """Staff close a petition; the outcome feeds the track record."""
+    if petition.status != SubmissionStatus.OPEN:
+        msg = f"petition {petition.pk} is not open"
+        raise StaffContactError(msg, user_message="That petition is already resolved.")
+    petition.status = status
+    petition.staff_notes = staff_notes
+    petition.resolved_at = timezone.now()
+    petition.save(update_fields=["status", "staff_notes", "resolved_at"])
+    record_resolution(petition.account, status)
+    return petition
+
+
+def set_ignored(account: AccountDB, *, ignored: bool) -> SubmitterStanding:
+    """The perma-ignore bit: submissions persist but never surface. Silent."""
+    standing = standing_for(account)
+    standing.is_ignored = ignored
+    if ignored:
+        standing.ignored_count += 1
+    standing.save(update_fields=["is_ignored", "ignored_count"])
+    return standing
+
+
+def kudos_total_for(account: AccountDB) -> int:
+    """The sender's kudos total — the staff inbox's sort key (#2288)."""
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        return account.kudos_points_data.total_earned
+    except (AttributeError, ObjectDoesNotExist):
+        return 0
+
+
+def sender_context(account: AccountDB) -> dict:
+    """Kudos + standing columns shown beside every submission."""
+    standing = standing_for(account)
+    return {
+        "kudos_total": kudos_total_for(account),
+        "actioned_count": standing.actioned_count,
+        "dismissed_count": standing.dismissed_count,
+        "is_ignored": standing.is_ignored,
+    }

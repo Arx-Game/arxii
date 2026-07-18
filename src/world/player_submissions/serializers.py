@@ -5,19 +5,22 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from django.core.exceptions import ObjectDoesNotExist
+from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
+from world.player_submissions.constants import PetitionCategory
 from world.player_submissions.github_issues import (
     issue_draft_for_bug,
     issue_draft_for_error,
 )
 from world.player_submissions.models import (
     BugReport,
+    Petition,
     PlayerFeedback,
     PlayerReport,
     SystemErrorReport,
 )
-from world.scenes.models import Persona
+from world.scenes.models import Persona, Scene
 
 _NO_ROSTER_ENTRY = "This persona's character has no roster entry."
 _NO_ACTIVE_TENURE = "This persona's character has no active tenure."
@@ -346,3 +349,38 @@ class FileIssueInputSerializer(serializers.Serializer):
 
     title = serializers.CharField(max_length=256)
     body = serializers.CharField()
+
+
+class PetitionSerializer(serializers.ModelSerializer):
+    """Read serializer for petitions (#2288)."""
+
+    category_display = serializers.CharField(source="get_category_display", read_only=True)
+
+    class Meta:
+        model = Petition
+        fields = (
+            "id",
+            "category",
+            "category_display",
+            "scene",
+            "subject_character",
+            "description",
+            "status",
+            "staff_notes",
+            "created_at",
+            "resolved_at",
+        )
+        read_only_fields = fields
+
+
+class PetitionCreateSerializer(serializers.Serializer):
+    """Input for filing a petition — structured, near-zero free text (#2288)."""
+
+    category = serializers.ChoiceField(choices=PetitionCategory.choices)
+    description = serializers.CharField(max_length=1000)
+    scene = serializers.PrimaryKeyRelatedField(
+        queryset=Scene.objects.all(), required=False, allow_null=True
+    )
+    subject_character = serializers.PrimaryKeyRelatedField(
+        queryset=ObjectDB.objects.all(), required=False, allow_null=True
+    )

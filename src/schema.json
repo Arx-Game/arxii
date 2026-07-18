@@ -4140,8 +4140,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Starting Area.
+          type: string
         required: true
       tags:
       - character-creation
@@ -15292,11 +15291,6 @@ paths:
         resolve_cast_action_template enforces the same split at submit/finalize
         time. The technique builder's category-agnostic picker keeps the flat
         union by passing no param.
-      parameters:
-      - in: query
-        name: action_category
-        schema:
-          type: string
       tags:
       - magic
       security:
@@ -15328,8 +15322,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Consequence Pool.
+          type: string
         required: true
       tags:
       - magic
@@ -23132,6 +23125,134 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlayerFeedbackDetail'
+          description: ''
+  /api/player-submissions/petitions/:
+    get:
+      operationId: player_submissions_petitions_list
+      description: |-
+        Emergency-only structured petitions (#2288). No free-form queue.
+
+        Players see their own petitions; staff see all (and resolve via the
+        ``resolve`` action, which stamps the submitter's track record).
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+          enum:
+          - other_emergency
+          - scene_conduct
+          - stuck_unplayable
+          - unfair_death
+        description: |-
+          * `unfair_death` - Unfair / Unjustified Death
+          * `scene_conduct` - Scene Turning OOC-Hostile
+          * `stuck_unplayable` - Character Stuck / Unplayable
+          * `other_emergency` - Other Emergency
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - dismissed
+          - open
+          - reviewed
+        description: |-
+          * `open` - Open
+          * `reviewed` - Reviewed
+          * `dismissed` - Dismissed
+      tags:
+      - player-submissions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPetitionList'
+          description: ''
+    post:
+      operationId: player_submissions_petitions_create
+      description: |-
+        Emergency-only structured petitions (#2288). No free-form queue.
+
+        Players see their own petitions; staff see all (and resolve via the
+        ``resolve`` action, which stamps the submitter's track record).
+      tags:
+      - player-submissions
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Petition'
+          description: ''
+  /api/player-submissions/petitions/{id}/:
+    get:
+      operationId: player_submissions_petitions_retrieve
+      description: |-
+        Emergency-only structured petitions (#2288). No free-form queue.
+
+        Players see their own petitions; staff see all (and resolve via the
+        ``resolve`` action, which stamps the submitter's track record).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this petition.
+        required: true
+      tags:
+      - player-submissions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Petition'
+          description: ''
+  /api/player-submissions/petitions/{id}/resolve/:
+    post:
+      operationId: player_submissions_petitions_resolve_create
+      description: |-
+        Emergency-only structured petitions (#2288). No free-form queue.
+
+        Players see their own petitions; staff see all (and resolve via the
+        ``resolve`` action, which stamps the submitter's track record).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this petition.
+        required: true
+      tags:
+      - player-submissions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Petition'
           description: ''
   /api/player-submissions/player-reports/:
     get:
@@ -49968,6 +50089,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Persona'
+    PaginatedPetitionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Petition'
     PaginatedPlaceList:
       type: object
       required:
@@ -54848,6 +54992,71 @@ components:
         * `established` - Established
         * `temporary` - Temporary
         * `alternate` - Alternate
+    Petition:
+      type: object
+      description: Read serializer for petitions (#2288).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/PetitionCategoryEnum'
+          readOnly: true
+        category_display:
+          type: string
+          readOnly: true
+        scene:
+          type: integer
+          readOnly: true
+          nullable: true
+        subject_character:
+          type: integer
+          readOnly: true
+          nullable: true
+        description:
+          type: string
+          readOnly: true
+          description: Short and specific — this is an emergency line.
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusD66Enum'
+          readOnly: true
+        staff_notes:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - category
+      - category_display
+      - created_at
+      - description
+      - id
+      - resolved_at
+      - scene
+      - staff_notes
+      - status
+      - subject_character
+    PetitionCategoryEnum:
+      enum:
+      - unfair_death
+      - scene_conduct
+      - stuck_unplayable
+      - other_emergency
+      type: string
+      description: |-
+        * `unfair_death` - Unfair / Unjustified Death
+        * `scene_conduct` - Scene Turning OOC-Hostile
+        * `stuck_unplayable` - Character Stuck / Unplayable
+        * `other_emergency` - Other Emergency
     PhaseEnum:
       enum:
       - dawn
