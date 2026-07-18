@@ -28,6 +28,23 @@ _Avoid_: damage tick, bleed, poison (for the general mechanism)
 The condition effect that adds to or subtracts from a target's capability value (`ConditionCapabilityEffect`: additive integer, floored at zero). It governs what a character CAN do — movement, flight, casting — distinct from check or resistance modifiers.
 _Avoid_: ability modifier, stat effect
 
+**Agency oracle** (`get_effective_capability_value`; note `get_all_capability_values` is NOT part of it —
+that bulk dict feeds the availability oracle's condition-source enumeration and deliberately excludes
+technique grants):
+The "can this character do X right now" answer — innate baseline + `CharacterModifier` contributions
+(distinctions/species/equipment) + condition contributions + the best (max) known-technique grant, floored
+at zero. Consumed by requirement/gate checks (`technique_performable`, mission `challenge_options_for_character`,
+positioning/battle movement gates, predicates, vitals awareness). Distinct from the **availability oracle**
+(`get_capability_sources_for_character`, `world.mechanics.services`), which enumerates every *source* of a
+capability (including prerequisite-gated `TechniqueCapabilityGrant` rows) for "what could grant this."
+**One-oracle merge (#2504):** the agency oracle now folds in known-technique grants too — via
+`_technique_capability_values`, restricted to `prerequisite__isnull=True` grants only (a source-level
+prerequisite is target-contextual, so it stays availability-only) — folding multiple techniques' grants for
+the same capability as MAX, never a sum (ADR-0034 individuation; see ADR-0144). `TraitCapabilityDerivation`
+deliberately does NOT fold into the agency oracle — that asymmetry is intentional (availability-only), not
+an oversight.
+_Avoid_: "the capability system" (there are two oracles, not one; name which)
+
 **Check effect channel**:
 The condition effect that modifies check rolls (`ConditionCheckModifier`: per-check-type modifier value, optionally scaling with severity), folded into a check's extra modifiers by the modifier seam.
 _Avoid_: roll bonus, skill modifier

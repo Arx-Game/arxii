@@ -750,6 +750,57 @@ class GetAllCapabilityValuesTest(TestCase):
         # -3 floored to 0
         assert result == {self.movement.id: 0}
 
+    def test_technique_grant_not_folded_in(self):
+        """(f, #2504 CI fix) Technique grants deliberately do NOT surface here.
+
+        ``get_all_capability_values`` is the availability oracle's bulk
+        condition/baseline aggregation (consumed by
+        ``world.mechanics.services._get_condition_sources``). Technique grants
+        already enter the availability oracle via their own dedicated channel
+        (``_get_technique_sources``, one attributed TECHNIQUE-type
+        CapabilitySource per grant). Folding them in here too double-counted
+        them as a second, unattributed CONDITION-type source and duplicated
+        actions in ``get_available_actions`` — regression caught by
+        ``test_pipeline_integration.ChallengePathTests`` in CI. The agency
+        oracle (``get_effective_capability_value``) is where technique grants
+        fold in for single-capability gate/requirement checks.
+        """
+        from world.magic.factories import (
+            CharacterTechniqueFactory,
+            TechniqueCapabilityGrantFactory,
+            TechniqueFactory,
+        )
+
+        # Case 1: technique-only capability with zero active conditions.
+        technique_only_cap = CapabilityTypeFactory(name="technique_only")
+        technique = TechniqueFactory(intensity=1)
+        TechniqueCapabilityGrantFactory(
+            technique=technique,
+            capability=technique_only_cap,
+            base_value=5,
+            intensity_multiplier=0,
+        )
+        CharacterTechniqueFactory(character=self.target.sheet_data, technique=technique)
+
+        result = get_all_capability_values(self.target.sheet_data)
+        assert technique_only_cap.id not in result
+
+        # Case 2: technique grant alongside an existing condition total for the
+        # same capability — the condition total must stand alone, unmodified.
+        ConditionInstanceFactory(target=self.target, condition=self.hasted)
+
+        weaker_technique = TechniqueFactory(intensity=1)
+        TechniqueCapabilityGrantFactory(
+            technique=weaker_technique,
+            capability=self.movement,
+            base_value=3,
+            intensity_multiplier=0,
+        )
+        CharacterTechniqueFactory(character=self.target.sheet_data, technique=weaker_technique)
+
+        result = get_all_capability_values(self.target.sheet_data)
+        assert result == {self.movement.id: 10}
+
 
 class GetCheckModifierTest(TestCase):
     """Tests for get_check_modifier service function."""

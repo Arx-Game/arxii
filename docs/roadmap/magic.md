@@ -320,6 +320,38 @@ lore-repo content, not synthetic in-repo seed data — closing the gap left when
 
 ---
 
+## One-oracle merge — agency oracle reads technique grants (#2504 — BUILT, 2026-07-18)
+
+Before #2504, a technique-granted `CapabilityType` only fed the **availability** oracle
+(`get_capability_sources_for_character`, `world.mechanics.services` — "what could grant this
+capability"); the **agency** oracle (`get_effective_capability_value`,
+`world.conditions.services` — "can this character do X right now," consumed by requirement/gate
+checks) did not know techniques existed, so a character whose only path to a capability was a
+known technique failed requirement checks a condition or innate baseline would have passed.
+
+- `world.conditions.services._technique_capability_values` folds the best (max) `prerequisite__isnull=True`
+  `TechniqueCapabilityGrant` across a character's known techniques
+  (`technique__character_grants__character=character_sheet`) into `get_effective_capability_value`,
+  reusing `TechniqueCapabilityGrant.calculate_value()`. (`get_all_capability_values` deliberately keeps
+  source-enumeration semantics with NO technique folding — the availability oracle's `_get_condition_sources`
+  reads it, and folding there duplicated technique grants as phantom condition sources; caught by CI on this PR.)
+- Zero per-consumer changes needed: `technique_performable` (`world/magic/services/capability_requirements.py`),
+  mission `challenge_options_for_character` (`world/missions/services/challenge_options.py`), positioning +
+  battle movement gates, predicates, and vitals awareness all now honor technique grants automatically —
+  they already read through the agency oracle.
+- Deliberate asymmetry (ratified, unchanged): `TraitCapabilityDerivation` stays availability-oracle-only.
+- Rationale for MAX-not-sum + prerequisite-free-only: ADR-0144 (extends ADR-0034 individuation).
+- Journey tests: `world/magic/tests/test_technique_requirements.py::TechniqueGrantSatisfiesRequirementTests`,
+  `world/missions/tests/test_services_challenge_options.py::ChallengeOptionsTechniqueGrantTests`.
+- Docs: `src/world/conditions/AGENT_GLOSSARY.md`'s "Agency oracle" entry; the "Technique - FK to
+  ActionTemplate" box in `docs/architecture/action-template-pipeline.md` (was wrongly claiming
+  availability-only).
+- Follow-up noted, not filed (see `reference-capability-two-oracle-split` in project memory): the
+  object-state→challenge bridge (#2503) is the remaining last mile for techniques feeding
+  world-interaction end to end.
+
+---
+
 ## Deeper design & history
 
 - Scope-by-scope build record: [`magic-build-history.md`](magic-build-history.md)

@@ -447,7 +447,8 @@ difficulty is context-dependent and determined by the caller, not the pipeline.
 | MAGIC APP - "Techniques and their capabilities"           |
 |                                                           |
 | Technique - FK to ActionTemplate                          |
-| TechniqueCapabilityGrant - feeds into availability        |
+| TechniqueCapabilityGrant - feeds availability AND agency  |
+|   (one-oracle merge #2504; prereq-null grants only)       |
 | Authors content; actions app defines resolution           |
 +-----------------------------------------------------------+
 
