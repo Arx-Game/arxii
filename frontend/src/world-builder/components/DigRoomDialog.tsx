@@ -23,8 +23,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 
-import type { WorldBuilderActionKey } from '../types';
-
 export interface DigRoomDialogProps {
   areaId: number;
   floor: number;
@@ -32,7 +30,14 @@ export interface DigRoomDialogProps {
   prefill?: { grid_x: number; grid_y: number };
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  runAction: (key: WorldBuilderActionKey, kwargs: Record<string, unknown>) => void;
+  /** Keyed generically (not `WorldBuilderActionKey`) so the story palette's own action-key union type-checks too (#2450). */
+  runAction: (key: string, kwargs: Record<string, unknown>) => void;
+  /**
+   * `'story'` (#2450) hides the fixture-key field (story rooms never carry
+   * one) and dispatches `story_dig_room` instead of `staff_dig_room`.
+   * Defaults to `'staff'`.
+   */
+  palette?: 'staff' | 'story';
 }
 
 export function DigRoomDialog({
@@ -42,7 +47,9 @@ export function DigRoomDialog({
   open,
   onOpenChange,
   runAction,
+  palette = 'staff',
 }: DigRoomDialogProps) {
+  const isStory = palette === 'story';
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [gridX, setGridX] = useState('');
@@ -72,8 +79,8 @@ export function DigRoomDialog({
       kwargs.grid_x = Number(gridX);
       kwargs.grid_y = Number(gridY);
     }
-    if (fixtureKey.trim() !== '') kwargs.fixture_key = fixtureKey.trim();
-    runAction('staff_dig_room', kwargs);
+    if (!isStory && fixtureKey.trim() !== '') kwargs.fixture_key = fixtureKey.trim();
+    runAction(isStory ? 'story_dig_room' : 'staff_dig_room', kwargs);
     onOpenChange(false);
   };
 
@@ -124,18 +131,20 @@ export function DigRoomDialog({
               rows={3}
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="dig-room-fixture-key">Fixture key (optional)</Label>
-            <Input
-              id="dig-room-fixture-key"
-              value={fixtureKey}
-              onChange={(event) => setFixtureKey(event.target.value)}
-              placeholder="area-slug/room-name"
-            />
-            <p className="text-xs text-muted-foreground">
-              Leave blank to auto-generate from the area slug and room name.
-            </p>
-          </div>
+          {!isStory && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="dig-room-fixture-key">Fixture key (optional)</Label>
+              <Input
+                id="dig-room-fixture-key"
+                value={fixtureKey}
+                onChange={(event) => setFixtureKey(event.target.value)}
+                placeholder="area-slug/room-name"
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave blank to auto-generate from the area slug and room name.
+              </p>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

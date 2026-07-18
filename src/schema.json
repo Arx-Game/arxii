@@ -626,7 +626,12 @@ paths:
   /api/areas/:
     get:
       operationId: areas_list
-      description: Browse the area hierarchy for room selection.
+      description: |-
+        Browse the area hierarchy for room selection.
+
+        STORY-origin areas are excluded — those are a GM's own scratch space
+        (world.gm.story_views.StoryBuilderViewSet), not part of the canonical
+        world an ordinary player browses (#2450).
       parameters:
       - in: query
         name: has_parent
@@ -663,7 +668,12 @@ paths:
   /api/areas/{id}/:
     get:
       operationId: areas_retrieve
-      description: Browse the area hierarchy for room selection.
+      description: |-
+        Browse the area hierarchy for room selection.
+
+        STORY-origin areas are excluded — those are a GM's own scratch space
+        (world.gm.story_views.StoryBuilderViewSet), not part of the canonical
+        world an ordinary player browses (#2450).
       parameters:
       - in: path
         name: id
@@ -702,7 +712,12 @@ paths:
   /api/areas/rooms/:
     get:
       operationId: areas_rooms_list
-      description: Browse public rooms, filterable by area (includes descendant areas).
+      description: |-
+        Browse public rooms, filterable by area (includes descendant areas).
+
+        STORY-origin rooms are excluded even when ``is_public=True`` — defense in
+        depth alongside the STORY area exclusion above, since a room's own
+        ``is_public`` flag says nothing about its area's origin (#2450).
       parameters:
       - in: query
         name: area
@@ -735,7 +750,12 @@ paths:
   /api/areas/rooms/{id}/:
     get:
       operationId: areas_rooms_retrieve
-      description: Browse public rooms, filterable by area (includes descendant areas).
+      description: |-
+        Browse public rooms, filterable by area (includes descendant areas).
+
+        STORY-origin rooms are excluded even when ``is_public=True`` — defense in
+        depth alongside the STORY area exclusion above, since a room's own
+        ``is_public`` flag says nothing about its area's origin (#2450).
       parameters:
       - in: path
         name: id
@@ -11892,6 +11912,104 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/gm/story-areas/:
+    get:
+      operationId: gm_story_areas_list
+      description: 'A GM''s own story areas (staff: all story areas). Reads only.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - story-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWorldBuilderAreaList'
+          description: ''
+  /api/gm/story-areas/{id}/:
+    get:
+      operationId: gm_story_areas_retrieve
+      description: 'A GM''s own story areas (staff: all story areas). Reads only.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - story-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorldBuilderArea'
+          description: ''
+  /api/gm/story-areas/{id}/manager/:
+    get:
+      operationId: gm_story_areas_manager_retrieve
+      description: 'A GM''s own story areas (staff: all story areas). Reads only.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - story-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorldBuilderAreaManager'
+          description: ''
+  /api/gm/story-areas/instances/:
+    get:
+      operationId: gm_story_areas_instances_list
+      description: 'A GM''s own story areas (staff: all story areas). Reads only.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - story-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStoryInstanceList'
+          description: ''
   /api/gm/table-memberships/:
     get:
       operationId: gm_table_memberships_list
@@ -51072,6 +51190,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StoryGMOffer'
+    PaginatedStoryInstanceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoryInstance'
     PaginatedStoryListList:
       type: object
       required:
@@ -61631,6 +61772,39 @@ components:
       - status
       - story
       - updated_at
+    StoryInstance:
+      type: object
+      description: A GM-owned temp scene room row for the story-builder dashboard
+        (#2450).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        room_id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/StoryInstanceStatusEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+      - room_id
+    StoryInstanceStatusEnum:
+      enum:
+      - active
+      - completed
+      type: string
+      description: |-
+        * `active` - Active
+        * `completed` - Completed
     StoryList:
       type: object
       description: Lightweight serializer for story list views

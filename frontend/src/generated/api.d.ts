@@ -413,7 +413,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Browse the area hierarchy for room selection. */
+    /**
+     * @description Browse the area hierarchy for room selection.
+     *
+     *     STORY-origin areas are excluded — those are a GM's own scratch space
+     *     (world.gm.story_views.StoryBuilderViewSet), not part of the canonical
+     *     world an ordinary player browses (#2450).
+     */
     get: operations['areas_list'];
     put?: never;
     post?: never;
@@ -430,7 +436,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Browse the area hierarchy for room selection. */
+    /**
+     * @description Browse the area hierarchy for room selection.
+     *
+     *     STORY-origin areas are excluded — those are a GM's own scratch space
+     *     (world.gm.story_views.StoryBuilderViewSet), not part of the canonical
+     *     world an ordinary player browses (#2450).
+     */
     get: operations['areas_retrieve'];
     put?: never;
     post?: never;
@@ -470,7 +482,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Browse public rooms, filterable by area (includes descendant areas). */
+    /**
+     * @description Browse public rooms, filterable by area (includes descendant areas).
+     *
+     *     STORY-origin rooms are excluded even when ``is_public=True`` — defense in
+     *     depth alongside the STORY area exclusion above, since a room's own
+     *     ``is_public`` flag says nothing about its area's origin (#2450).
+     */
     get: operations['areas_rooms_list'];
     put?: never;
     post?: never;
@@ -487,7 +505,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Browse public rooms, filterable by area (includes descendant areas). */
+    /**
+     * @description Browse public rooms, filterable by area (includes descendant areas).
+     *
+     *     STORY-origin rooms are excluded even when ``is_public=True`` — defense in
+     *     depth alongside the STORY area exclusion above, since a room's own
+     *     ``is_public`` flag says nothing about its area's origin (#2450).
+     */
     get: operations['areas_rooms_retrieve'];
     put?: never;
     post?: never;
@@ -7425,6 +7449,74 @@ export interface paths {
      *     URL path: /api/gm/queue/<id>/<action>/ where action is 'approve' or 'deny'.
      */
     post: operations['gm_queue_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/story-areas/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A GM's own story areas (staff: all story areas). Reads only. */
+    get: operations['gm_story_areas_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/story-areas/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A GM's own story areas (staff: all story areas). Reads only. */
+    get: operations['gm_story_areas_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/story-areas/{id}/manager/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A GM's own story areas (staff: all story areas). Reads only. */
+    get: operations['gm_story_areas_manager_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/story-areas/instances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A GM's own story areas (staff: all story areas). Reads only. */
+    get: operations['gm_story_areas_instances_list'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -28792,6 +28884,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['StoryGMOffer'][];
     };
+    PaginatedStoryInstanceList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StoryInstance'][];
+    };
     PaginatedStoryListList: {
       /** @example 123 */
       count: number;
@@ -34302,6 +34409,21 @@ export interface components {
       /** Format: date-time */
       readonly updated_at: string;
     };
+    /** @description A GM-owned temp scene room row for the story-builder dashboard (#2450). */
+    StoryInstance: {
+      readonly id: number;
+      readonly room_id: number;
+      readonly name: string;
+      status?: components['schemas']['StoryInstanceStatusEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description * `active` - Active
+     *     * `completed` - Completed
+     * @enum {string}
+     */
+    StoryInstanceStatusEnum: 'active' | 'completed';
     /** @description Lightweight serializer for story list views */
     StoryList: {
       readonly id: number;
@@ -46241,6 +46363,96 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  gm_story_areas_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedWorldBuilderAreaList'];
+        };
+      };
+    };
+  };
+  gm_story_areas_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorldBuilderArea'];
+        };
+      };
+    };
+  };
+  gm_story_areas_manager_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorldBuilderAreaManager'];
+        };
+      };
+    };
+  };
+  gm_story_areas_instances_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStoryInstanceList'];
+        };
       };
     };
   };

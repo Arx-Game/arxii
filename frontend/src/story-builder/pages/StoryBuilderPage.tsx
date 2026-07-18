@@ -1,13 +1,24 @@
 /**
- * WorldBuilderPage — `/staff/world-builder` (#2449): left area tree, center
- * canvas over the selected area's manager payload, right room detail panel.
+ * StoryBuilderPage — `/gm/story-builder` (#2450): left rail is the GM's own
+ * story areas + temp scene rooms, center is a canvas over the selected
+ * area's manager payload (reusing world-builder's
+ * `WorldCanvas`/`DigRoomDialog`/`LinkRoomsDialog`/`RoomDetailPanel` with
+ * `palette="story"` — see those components' doc comments for exactly what
+ * the story palette hides/renames), right is the selected room's detail
+ * panel plus its access-grant list.
  *
- * Even a staff-only REGISTRY action runs through `action.run(actor=<puppet>)`
- * (see `src/actions/definitions/world_builder.py`'s module docstring), so
- * dispatch still needs a `characterId` — resolved the same way as
- * `StagingPanel` (`frontend/src/battles/components/StagingPanel.tsx:80-88`):
- * the active character's name from Redux, matched against the account's
- * roster entries for its `character_id`.
+ * Structurally mirrors `WorldBuilderPage`
+ * (`@/world-builder/pages/WorldBuilderPage`) — the GM-owned character-id
+ * resolution is identical (see that page's module doc): dispatch still
+ * needs a `characterId` even though story-builder actions are gated on GM
+ * trust rather than staff, because `Action.run(actor=<puppet>)` always needs
+ * an acting ObjectDB.
+ *
+ * `StoryAreaListPanel`/`CreateStoryAreaDialog`/`TempRoomsPanel`/
+ * `RoomAccessPanel` are story-builder-only (not shared with world-builder) —
+ * see `StoryAreaListPanel`'s doc comment for why a GM's flat, non-nested
+ * story areas don't fit `AreaTreePanel`'s recursive-tree shape or its
+ * hardwired staff data source.
  */
 import { useMemo, useState } from 'react';
 
@@ -23,18 +34,19 @@ import {
 import type { GhostCell } from '@/map-canvas/ghosts';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useAppSelector } from '@/store/hooks';
+import { DigRoomDialog } from '@/world-builder/components/DigRoomDialog';
+import { LinkRoomsDialog } from '@/world-builder/components/LinkRoomsDialog';
+import { RoomDetailPanel } from '@/world-builder/components/RoomDetailPanel';
+import { WorldCanvas } from '@/world-builder/components/WorldCanvas';
 
-import { AreaTreePanel } from '../components/AreaTreePanel';
-import { CreateAreaDialog } from '../components/CreateAreaDialog';
-import { DigRoomDialog } from '../components/DigRoomDialog';
-import { LinkRoomsDialog } from '../components/LinkRoomsDialog';
-import { PromoteAreaButton } from '../components/PromoteAreaButton';
-import { RoomDetailPanel } from '../components/RoomDetailPanel';
-import { WorldCanvas } from '../components/WorldCanvas';
-import { useAreaManagerQuery, useWorldBuilderAction } from '../queries';
-import type { WorldBuilderActionKey } from '../types';
+import { CreateStoryAreaDialog } from '../components/CreateStoryAreaDialog';
+import { RoomAccessPanel } from '../components/RoomAccessPanel';
+import { StoryAreaListPanel } from '../components/StoryAreaListPanel';
+import { TempRoomsPanel } from '../components/TempRoomsPanel';
+import { useStoryAreaManagerQuery, useStoryBuilderAction } from '../queries';
+import type { StoryBuilderActionKey } from '../types';
 
-export function WorldBuilderPage() {
+export function StoryBuilderPage() {
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const characterId = useMemo(
@@ -45,22 +57,42 @@ export function WorldBuilderPage() {
   const [selectedAreaId, setSelectedAreaId] = useState<number | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
   const [floor, setFloor] = useState(0);
-  const [createAreaParent, setCreateAreaParent] = useState<number | null | undefined>(undefined);
+  const [createAreaOpen, setCreateAreaOpen] = useState(false);
   const [digPrefill, setDigPrefill] = useState<{ grid_x: number; grid_y: number } | undefined>();
   const [digOpen, setDigOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
 
-  const { data: manager, isLoading } = useAreaManagerQuery(selectedAreaId);
-  const { mutate: runMutation } = useWorldBuilderAction(characterId ?? 0, selectedAreaId);
+  const { data: manager, isLoading } = useStoryAreaManagerQuery(selectedAreaId);
+  const { mutate: runMutation } = useStoryBuilderAction(characterId ?? 0, selectedAreaId);
 
-  // Keyed generically (not `WorldBuilderActionKey`) so this callback still
-  // satisfies the shared canvas/dialog/panel components' widened `runAction`
-  // prop type (they also serve the story palette's own key union, #2450);
-  // the cast back to `WorldBuilderActionKey` at the mutation boundary keeps
-  // `useWorldBuilderAction` itself narrowly typed for this page's own calls.
+  // Keyed generically (not `StoryBuilderActionKey`) so this callback
+  // satisfies the shared world-builder canvas/dialog/panel components'
+  // widened `runAction` prop type (#2450); the cast back at the mutation
+  // boundary keeps `useStoryBuilderAction` itself narrowly typed.
   const runAction = (key: string, kwargs: Record<string, unknown>) => {
     if (characterId == null) return;
-    runMutation({ key: key as WorldBuilderActionKey, kwargs });
+    runMutation({ key: key as StoryBuilderActionKey, kwargs });
+  };
+
+  // Grant/revoke need a per-call success callback (to update
+  // `RoomAccessPanel`'s client-tracked "granted this session" list — see its
+  // doc comment for why there's no server list to read back instead), so
+  // this is a separate mutate call from the generic `runAction` above rather
+  // than threading an `onSuccess` param through every action's kwargs.
+  const runAccessAction = (
+    key: 'grant_story_room' | 'revoke_story_room',
+    kwargs: Record<string, unknown>,
+    onSuccess: () => void
+  ) => {
+    if (characterId == null) return;
+    runMutation(
+      { key, kwargs },
+      {
+        onSuccess: (result) => {
+          if (result.success !== false) onSuccess();
+        },
+      }
+    );
   };
 
   const selectedRoom = manager?.rooms.find((room) => room.id === selectedRoomId) ?? null;
@@ -72,12 +104,9 @@ export function WorldBuilderPage() {
   }, [manager]);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col gap-2 p-2" data-testid="world-builder-page">
+    <div className="flex h-[calc(100vh-4rem)] flex-col gap-2 p-2" data-testid="story-builder-page">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold">World Builder</h1>
-          {manager && <PromoteAreaButton area={manager.area} runAction={runAction} />}
-        </div>
+        <h1 className="text-lg font-semibold">Story Builder</h1>
         {manager && (
           <Select value={String(floor)} onValueChange={(value) => setFloor(Number(value))}>
             <SelectTrigger className="w-32">
@@ -94,20 +123,22 @@ export function WorldBuilderPage() {
         )}
       </div>
       <div className="grid flex-1 grid-cols-[240px_1fr_320px] gap-2 overflow-hidden">
-        <Card className="overflow-hidden">
-          <AreaTreePanel
+        <Card className="flex flex-col overflow-hidden">
+          <StoryAreaListPanel
             selectedAreaId={selectedAreaId}
             onSelectArea={(id) => {
               setSelectedAreaId(id);
               setSelectedRoomId(null);
             }}
-            onCreateArea={(parentId) => setCreateAreaParent(parentId)}
+            onCreateArea={() => setCreateAreaOpen(true)}
+            runAction={runAction}
           />
+          <TempRoomsPanel runAction={runAction} runAccessAction={runAccessAction} />
         </Card>
         <Card className="overflow-hidden">
           <CardContent className="flex h-full flex-col gap-2 p-2">
             {!selectedAreaId && (
-              <p className="text-sm text-muted-foreground">Pick an area to see its map.</p>
+              <p className="text-sm text-muted-foreground">Pick a story area to see its map.</p>
             )}
             {selectedAreaId && isLoading && (
               <p className="text-sm text-muted-foreground">Loading…</p>
@@ -137,6 +168,7 @@ export function WorldBuilderPage() {
                       setDigOpen(true);
                     }}
                     runAction={runAction}
+                    palette="story"
                   />
                 </div>
               </>
@@ -144,14 +176,18 @@ export function WorldBuilderPage() {
           </CardContent>
         </Card>
         <Card className="overflow-y-auto">
-          <CardContent className="p-3">
+          <CardContent className="flex flex-col gap-3 p-3">
             {selectedRoom ? (
-              <RoomDetailPanel
-                room={selectedRoom}
-                exits={manager?.exits ?? []}
-                runAction={runAction}
-                onLinkRooms={() => setLinkOpen(true)}
-              />
+              <>
+                <RoomDetailPanel
+                  room={selectedRoom}
+                  exits={manager?.exits ?? []}
+                  runAction={runAction}
+                  onLinkRooms={() => setLinkOpen(true)}
+                  palette="story"
+                />
+                <RoomAccessPanel roomId={selectedRoom.id} runAccessAction={runAccessAction} />
+              </>
             ) : (
               <p className="text-sm text-muted-foreground">Pick a room to edit it.</p>
             )}
@@ -159,16 +195,11 @@ export function WorldBuilderPage() {
         </Card>
       </div>
 
-      {createAreaParent !== undefined && (
-        <CreateAreaDialog
-          parentId={createAreaParent}
-          open={createAreaParent !== undefined}
-          onOpenChange={(open) => {
-            if (!open) setCreateAreaParent(undefined);
-          }}
-          runAction={runAction}
-        />
-      )}
+      <CreateStoryAreaDialog
+        open={createAreaOpen}
+        onOpenChange={setCreateAreaOpen}
+        runAction={runAction}
+      />
 
       {selectedAreaId != null && (
         <DigRoomDialog
@@ -181,6 +212,7 @@ export function WorldBuilderPage() {
             if (!open) setDigPrefill(undefined);
           }}
           runAction={runAction}
+          palette="story"
         />
       )}
 
@@ -191,6 +223,7 @@ export function WorldBuilderPage() {
           open={linkOpen}
           onOpenChange={setLinkOpen}
           runAction={runAction}
+          palette="story"
         />
       )}
     </div>

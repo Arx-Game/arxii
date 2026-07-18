@@ -39,17 +39,33 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
 import { ROOM_ENCLOSURES } from '../types';
-import type { WorldBuilderActionKey, WorldBuilderExit, WorldBuilderRoom } from '../types';
+import type { WorldBuilderExit, WorldBuilderRoom } from '../types';
 
 export interface RoomDetailPanelProps {
   room: WorldBuilderRoom;
   /** Every exit in the area; the panel filters to this room's outgoing ones. */
   exits: WorldBuilderExit[];
-  runAction: (key: WorldBuilderActionKey, kwargs: Record<string, unknown>) => void;
+  /** Keyed generically (not `WorldBuilderActionKey`) so the story palette's own action-key union type-checks too (#2450). */
+  runAction: (key: string, kwargs: Record<string, unknown>) => void;
   onLinkRooms: () => void;
+  /**
+   * `'story'` (#2450) hides the fixture-key row, the profile-flag toggles
+   * (`story_edit_room` only accepts `name`/`description`), exit renaming (no
+   * `story_rename_exit` action exists), and the promote section — and
+   * dispatches the `story_*` action-key family instead of `staff_*`.
+   * Defaults to `'staff'`.
+   */
+  palette?: 'staff' | 'story';
 }
 
-export function RoomDetailPanel({ room, exits, runAction, onLinkRooms }: RoomDetailPanelProps) {
+export function RoomDetailPanel({
+  room,
+  exits,
+  runAction,
+  onLinkRooms,
+  palette = 'staff',
+}: RoomDetailPanelProps) {
+  const isStory = palette === 'story';
   const [name, setName] = useState(room.name);
   const [description, setDescription] = useState(room.description);
   const [isPublic, setIsPublic] = useState(room.is_public);
@@ -76,23 +92,26 @@ export function RoomDetailPanel({ room, exits, runAction, onLinkRooms }: RoomDet
     room.enclosure,
   ]);
 
-  const dirty =
-    name !== room.name ||
-    description !== room.description ||
-    isPublic !== room.is_public ||
-    isSocialHub !== room.is_social_hub ||
-    isOutdoor !== room.is_outdoor ||
-    enclosure !== room.enclosure;
+  const dirty = isStory
+    ? name !== room.name || description !== room.description
+    : name !== room.name ||
+      description !== room.description ||
+      isPublic !== room.is_public ||
+      isSocialHub !== room.is_social_hub ||
+      isOutdoor !== room.is_outdoor ||
+      enclosure !== room.enclosure;
 
   const saveChanges = () => {
     const kwargs: Record<string, unknown> = { room_id: room.id };
     if (name !== room.name) kwargs.name = name;
     if (description !== room.description) kwargs.description = description;
-    if (isPublic !== room.is_public) kwargs.is_public = isPublic;
-    if (isSocialHub !== room.is_social_hub) kwargs.is_social_hub = isSocialHub;
-    if (isOutdoor !== room.is_outdoor) kwargs.is_outdoor = isOutdoor;
-    if (enclosure !== room.enclosure) kwargs.enclosure = enclosure;
-    runAction('staff_edit_room', kwargs);
+    if (!isStory) {
+      if (isPublic !== room.is_public) kwargs.is_public = isPublic;
+      if (isSocialHub !== room.is_social_hub) kwargs.is_social_hub = isSocialHub;
+      if (isOutdoor !== room.is_outdoor) kwargs.is_outdoor = isOutdoor;
+      if (enclosure !== room.enclosure) kwargs.enclosure = enclosure;
+    }
+    runAction(isStory ? 'story_edit_room' : 'staff_edit_room', kwargs);
   };
 
   const myExits = exits.filter((exit) => exit.from_room_id === room.id);
@@ -106,7 +125,7 @@ export function RoomDetailPanel({ room, exits, runAction, onLinkRooms }: RoomDet
             {room.origin}
           </Badge>
         </div>
-        {room.fixture_key && (
+        {!isStory && room.fixture_key && (
           <p className="text-xs text-muted-foreground">
             Fixture key: <code>{room.fixture_key}</code>
           </p>
@@ -131,37 +150,41 @@ export function RoomDetailPanel({ room, exits, runAction, onLinkRooms }: RoomDet
             rows={4}
           />
         </div>
-        <div className="flex items-center justify-between">
-          <Label htmlFor="world-room-public">Publicly listed</Label>
-          <Switch id="world-room-public" checked={isPublic} onCheckedChange={setIsPublic} />
-        </div>
-        <div className="flex items-center justify-between">
-          <Label htmlFor="world-room-social-hub">Social hub</Label>
-          <Switch
-            id="world-room-social-hub"
-            checked={isSocialHub}
-            onCheckedChange={setIsSocialHub}
-          />
-        </div>
-        <div className="flex items-center justify-between">
-          <Label htmlFor="world-room-outdoor">Outdoor</Label>
-          <Switch id="world-room-outdoor" checked={isOutdoor} onCheckedChange={setIsOutdoor} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="world-room-enclosure">Enclosure</Label>
-          <Select value={enclosure} onValueChange={setEnclosure}>
-            <SelectTrigger id="world-room-enclosure">
-              <SelectValue placeholder="Pick an enclosure" />
-            </SelectTrigger>
-            <SelectContent>
-              {ROOM_ENCLOSURES.map((choice) => (
-                <SelectItem key={choice.value} value={choice.value}>
-                  {choice.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {!isStory && (
+          <>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="world-room-public">Publicly listed</Label>
+              <Switch id="world-room-public" checked={isPublic} onCheckedChange={setIsPublic} />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="world-room-social-hub">Social hub</Label>
+              <Switch
+                id="world-room-social-hub"
+                checked={isSocialHub}
+                onCheckedChange={setIsSocialHub}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="world-room-outdoor">Outdoor</Label>
+              <Switch id="world-room-outdoor" checked={isOutdoor} onCheckedChange={setIsOutdoor} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="world-room-enclosure">Enclosure</Label>
+              <Select value={enclosure} onValueChange={setEnclosure}>
+                <SelectTrigger id="world-room-enclosure">
+                  <SelectValue placeholder="Pick an enclosure" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROOM_ENCLOSURES.map((choice) => (
+                    <SelectItem key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        )}
         <Button size="sm" onClick={saveChanges} disabled={!dirty}>
           Save changes
         </Button>
@@ -174,30 +197,40 @@ export function RoomDetailPanel({ room, exits, runAction, onLinkRooms }: RoomDet
           const pending = renames[exit.id] ?? exit.name;
           return (
             <div key={exit.id} className="flex items-center gap-1.5">
-              <Input
-                value={pending}
-                onChange={(event) =>
-                  setRenames((prev) => ({ ...prev, [exit.id]: event.target.value }))
-                }
-                className="h-8 flex-1"
-              />
+              {isStory ? (
+                <span className="flex-1 truncate text-sm">{exit.name}</span>
+              ) : (
+                <Input
+                  value={pending}
+                  onChange={(event) =>
+                    setRenames((prev) => ({ ...prev, [exit.id]: event.target.value }))
+                  }
+                  className="h-8 flex-1"
+                />
+              )}
               <span className="whitespace-nowrap text-xs text-muted-foreground">
                 → {exit.to_room_name ?? 'elsewhere'}
               </span>
+              {!isStory && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={pending.trim() === exit.name || !pending.trim()}
+                  onClick={() =>
+                    runAction('staff_rename_exit', { exit_id: exit.id, name: pending.trim() })
+                  }
+                >
+                  Rename
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={pending.trim() === exit.name || !pending.trim()}
                 onClick={() =>
-                  runAction('staff_rename_exit', { exit_id: exit.id, name: pending.trim() })
+                  runAction(isStory ? 'story_unlink_rooms' : 'staff_unlink_rooms', {
+                    exit_id: exit.id,
+                  })
                 }
-              >
-                Rename
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => runAction('staff_unlink_rooms', { exit_id: exit.id })}
               >
                 ✕
               </Button>
@@ -209,34 +242,36 @@ export function RoomDetailPanel({ room, exits, runAction, onLinkRooms }: RoomDet
         </Button>
       </div>
 
-      <div className="flex flex-col gap-2 rounded-md border p-2">
-        <h4 className="text-sm font-semibold">Promote</h4>
-        <p className="text-xs text-muted-foreground">
-          Stamps a permanent fixture key and marks this room AUTHORED for export.
-        </p>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button size="sm" variant="outline" disabled={room.origin === 'authored'}>
-              Promote {room.name}
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Promote {room.name}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This stamps a permanent fixture key and marks the room AUTHORED — it will export to
-                the lore repo. This cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => runAction('promote_room', { room_id: room.id })}>
-                Promote
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
+      {!isStory && (
+        <div className="flex flex-col gap-2 rounded-md border p-2">
+          <h4 className="text-sm font-semibold">Promote</h4>
+          <p className="text-xs text-muted-foreground">
+            Stamps a permanent fixture key and marks this room AUTHORED for export.
+          </p>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button size="sm" variant="outline" disabled={room.origin === 'authored'}>
+                Promote {room.name}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Promote {room.name}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This stamps a permanent fixture key and marks the room AUTHORED — it will export
+                  to the lore repo. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => runAction('promote_room', { room_id: room.id })}>
+                  Promote
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      )}
 
       <div className="flex flex-col gap-2 rounded-md border border-destructive/40 p-2">
         <h4 className="text-sm font-semibold text-destructive">Remove room</h4>
@@ -257,7 +292,11 @@ export function RoomDetailPanel({ room, exits, runAction, onLinkRooms }: RoomDet
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => runAction('staff_remove_room', { room_id: room.id })}
+                onClick={() =>
+                  runAction(isStory ? 'story_remove_room' : 'staff_remove_room', {
+                    room_id: room.id,
+                  })
+                }
               >
                 Remove it
               </AlertDialogAction>

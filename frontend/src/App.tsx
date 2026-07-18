@@ -85,6 +85,11 @@ const WorldBuilderPage = lazy(() =>
     default: m.WorldBuilderPage,
   }))
 );
+const StoryBuilderPage = lazy(() =>
+  import('@/story-builder/pages/StoryBuilderPage').then((m) => ({
+    default: m.StoryBuilderPage,
+  }))
+);
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
@@ -711,6 +716,16 @@ function App() {
               <Suspense fallback={<PageLoadingFallback />}>
                 <ProtectedRoute>
                   <GMDashboardPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/gm/story-builder"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <StoryBuilderPage />
                 </ProtectedRoute>
               </Suspense>
             }

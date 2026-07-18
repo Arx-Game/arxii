@@ -11,6 +11,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -161,7 +162,12 @@ function GMDashboardContent() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6">
-      <h1 className="text-2xl font-bold">GM Dashboard</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">GM Dashboard</h1>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/gm/story-builder">Story Builder</Link>
+        </Button>
+      </div>
 
       {/* Evidence summary */}
       <section className="rounded-lg border p-4">
