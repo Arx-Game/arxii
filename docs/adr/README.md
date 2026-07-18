@@ -167,7 +167,9 @@ treat those names as hints to confirm, not gospel.
 - [0132 — Gods are WorshippedBeing rows with optional avatar sheets, not CharacterSheets](0132-gods-are-worshipped-beings-not-charactersheets.md) (#2355/#2289; fix-on-sight: was missing from this index)
 - [0133 — Estate settlement is player-first and timer-backed; theft moves ownership, never history](0133-estate-settlement-is-player-first-and-timer-backed.md) (extends ADR-0131; reaffirms ADR-0091; related ADR-0113, #1985)
 - [0135 — Accusation counter-play: evidence-grown frames, and defense needs no consent](0135-accusation-counterplay-evidence-frames-and-the-defense-consent-split.md) (extends ADR-0114, #2170; related ADR-0023, #1825, #2378)
+- [0139 — Staff world-builder shares the map-canvas layer; authority is the staff flag, not the GM ladder](0139-staff-world-builder-shares-the-map-canvas-layer-gated-by-staff-flag-not-gm-ladder.md) (epic #2436, #2449; follow-ups #2450/#2451/#2452)
 - [0140 — Grid content exports as graph-aware, per-area bundles keyed by permanent slugs](0140-grid-content-exports-as-graph-aware-area-bundles.md) (epic #2436, #2448; related ADR-0120/0121)
+- [0141 — Story-room access is a consent-first player-side join, not a GM summon](0141-story-room-access-is-player-side-join.md) (epic #2436, #2450; extends ADR-0024; related ADR-0139/0140)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

@@ -56,6 +56,44 @@ _Avoid_: pool binding, pool selector (implies live application — this never ap
 `CatalogSuggestion` — a GM's proposed catalog growth (a new `SituationKind`, a check fit, a difficulty guide, or — at EXPERIENCED+ trust — a pool guide), routed through `world.staff_inbox` exactly like a `GMApplication`. Reuses `player_submissions.SubmissionStatus` (OPEN/REVIEWED/DISMISSED, Decision 8) rather than a new enum. `proposal_kind` is tiered by the submitting GM's `GMLevel` (`PROPOSAL_KIND_MIN_LEVEL`, Decision 9) — STARTING/JUNIOR may propose NEW_SITUATION/CHECK_FIT/OTHER only; GM+ additionally DIFFICULTY_GUIDE; EXPERIENCED+ additionally POOL_GUIDE. Staff acceptance is a manual admin action that separately authors the real catalog row(s) — accepting a suggestion never auto-creates them.
 _Avoid_: catalog proposal (use the model name), suggestion (ambiguous outside this context).
 
+**Story Area**:
+`StoryArea` (#2450, epic #2436 slice 3) — a GM's ownership claim on a
+`GridOrigin.STORY` `Area`: a private build-and-run space on the shared grid
+substrate, layered on the #2436/#2449 world-builder canvas but gated by GM trust
+(`MinimumGMLevelPrerequisite`) rather than the staff flag. A sidecar per ADR-0010
+(`areas` stays dependency-free; `gm` points at it), capped per `GMLevel`
+(`GMLevelCap.max_story_areas`). The row survives a staff promotion to AUTHORED as
+provenance, but cap counting filters on `area__origin=STORY` so a promoted area
+stops counting toward the GM's limit. Never exported to the lore repo (only
+`origin=AUTHORED` rows export) and excluded from the player-facing
+`AreaViewSet`/`RoomProfileViewSet`.
+_Avoid_: GM area, story zone, personal area.
+
+**Story Room Grant**:
+`StoryRoomGrant` (#2450) — a GM-issued, consent-first access grant naming a room
+(story-area room or temp scene room) and a character. Gates the JOIN action only
+(`join_story_room`/`leave_story_room`, telnet `joinroom`/`leaveroom`) — once
+inside, movement between rooms rides ordinary exits, unaffected by the grant (see
+ADR-0141). `return_location` is captured on join and cleared on leave; revoke is
+a plain row delete (a grant carries no story-significant history worth
+preserving). Deliberately not a GM-summon — the character dispatches their own
+join.
+_Avoid_: room invite, access token, room pass.
+
+**Temp Scene Room**:
+A disposable `InstancedRoom` a GM spins up for a one-off beat
+(`spin_up_scene_room`, telnet `sceneroom <name> = <description>`) via the
+pre-existing #1349-era instanced-room lifecycle (`world.instances.services
+.spawn_instanced_room`), distinguished from a mission/player instance by
+`InstancedRoom.gm_owner`. Closing it (`close_scene_room`, `sceneroom close
+<#id>`) returns every joined character per their `StoryRoomGrant` before
+completing the instance; deliberately non-atomic and retryable, since a blocked
+return (`move_to` failure) must not silently orphan a character or fake an
+atomic rollback around non-DB side effects (messaging, scene bookkeeping).
+Never publicly listed, like every instanced room.
+_Avoid_: scene instance (ambiguous with `world.instances` generically), pop-up
+room, GM scratch room.
+
 **GM Story Reward**:
 The XP a GM earns (via `world.gm.services.award_gm_story_reward`, `ProgressionReason
 .GM_STORY_REWARD`) for running stories for other players — the opposite direction from

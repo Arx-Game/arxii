@@ -796,7 +796,10 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
   extracted so buildings, battles, and the new `world-builder/` app
   (`/staff/world-builder`, linked from the profile dropdown + Game Setup hub) render
   off one canvas shell instead of three parallel ones. Not built this slice:
-  `edit_area` UI, GM story areas (#2450), clue/portal layers (#2451).
+  `edit_area` UI, clue/portal layers (#2451). **GM story areas (#2450, epic #2436
+  slice 3) BUILT** — a GM's own build-and-run space on the same substrate, gated by
+  GM trust rather than the staff flag; see the GM system's "Story areas & story
+  rooms" entry above for the full model/service/action/API/telnet rundown.
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
@@ -1606,6 +1609,61 @@ GM at a given level may author (#2000, ADR-0097).
   `RenownRisk` tier) seeded idempotently by `world.gm.factories
   .seed_catalog_starter_content`, composed into the `"gm"` cluster seeder
   alongside `seed_default_gm_level_caps`.
+- **Story areas & story rooms (#2450, epic #2436 slice 3, ADR-0141):** a GM's own
+  build-and-run space, layered on the #2436/#2449 grid substrate. Models:
+  `StoryArea` (sidecar per ADR-0010 — `gm.StoryArea.area` OneToOne to a
+  `GridOrigin.STORY` `Area`, `gm` FK; row survives a staff promotion to AUTHORED as
+  provenance, but cap counting filters `area__origin=STORY` so a promoted area stops
+  counting), `StoryRoomGrant` (consent-first join grant: `room`
+  (`evennia_extensions.RoomProfile`) + `character` + `granted_by`, unique
+  `(room, character)`; `return_location` captured at join, cleared on leave — gates
+  the JOIN only, walking inside rides ordinary exits, ADR-0141), `GMLevelCap
+  .max_story_areas`/`max_story_rooms_per_area` (per-level caps, #2450),
+  `instances.InstancedRoom.gm_owner` (nullable FK — a temp scene room a GM spun up
+  rather than a mission/player instance). `world.instances.services
+  .spawn_instanced_room` gained a `gm_owner` kwarg and now always forces
+  `RoomProfile.is_public=False` regardless of the model default, so no instanced
+  room (GM scene room, mission room, captivity cell) can leak into public listings.
+  **Services (`world.gm.story_services`):** `create_story_area`/`remove_story_area`
+  (cap-checked create, empty-only remove), `story_room_cap_check` (raises before a
+  dig would exceed `max_story_rooms_per_area`), `grant_story_room`/
+  `revoke_story_room` (idempotent grant create; revoke returns an in-room character
+  first, via `_return_character`, then deletes the row), `join_story_room`/
+  `leave_story_room` (the character's own move, captures/consumes
+  `return_location`), `spin_up_scene_room`/`close_scene_room` (temp-room lifecycle
+  over `world.instances.services`; `close_scene_room` is deliberately
+  non-atomic and retryable — `move_to` has non-DB side effects a DB rollback can't
+  undo, so a blocked return leaves the grant/instance alone rather than faking
+  atomicity). **Actions (`actions/definitions/story_builder.py`, 15 REGISTRY
+  keys):** category `story_builder` (GM-authored, `MinimumGMLevelPrerequisite
+  (STARTING)`, staff bypass) — `create_story_area`/`edit_story_area`/
+  `remove_story_area`, `story_dig_room`/`story_edit_room`/`story_remove_room`,
+  `story_link_rooms`/`story_unlink_rooms`/`story_place_room`,
+  `grant_story_room`/`revoke_story_room` (resolves either a story-area room or an
+  active GM-owned temp room), `spin_up_scene_room`/`close_scene_room`; category
+  `story_rooms` (player-side, no GM standing required — authorization is the grant
+  itself) — `join_story_room`/`leave_story_room`. Story rooms dug via
+  `story_dig_room` are always `origin=STORY`, `is_public=False`, and never carry a
+  `fixture_key`. `world.areas.grid_services` gained two public helpers
+  (`has_character_occupants`/`has_non_exit_contents`) so the story-builder module's
+  stranding/occupancy guards don't reach into private members. **Telnet**
+  (`commands/story_rooms.py`, play verbs only — canvas authoring stays web-only per
+  epic Decision 2): `sceneroom <name> = <description>` / `sceneroom close <#id>`
+  (GM lifecycle, thin over `SpinUpSceneRoomAction`/`CloseSceneRoomAction`),
+  `joinroom [<#id>|<name>]` (bare form lists the caller's own grants),
+  `leaveroom`. **API:** `StoryBuilderViewSet` (`/api/gm/story-areas/`,
+  `IsGMOrStaff`, read-only — mutations go through action dispatch) reuses
+  `world.areas.builder_views.area_manager_payload` (extracted from
+  `WorldBuilderViewSet.manager`, #2449) for `GET .../<id>/manager/`, attaching
+  per-room `grants` (granted character names); `GET .../instances/` lists the
+  caller's active GM-owned temp scene rooms (staff: all), unpaginated. STORY-origin
+  areas/rooms are excluded from `AreaViewSet`/`RoomProfileViewSet` (the
+  player-facing grid API) even when `is_public=True` on the room —
+  `evennia_extensions.models.room_is_publicly_listed` treats any
+  `GridOrigin.STORY` room as never publicly listed, defense in depth alongside the
+  area-level exclusion. Frontend: `/gm/story-builder`
+  (`frontend/src/story-builder/`) on the shared `map-canvas/` + world-builder
+  components, with a story-specific tool palette.
 - **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates;
   `GroupStoryRequest.claimed_by` → `GMProfile`, #2119 — claiming creates the GROUP
   Story and seats the covenant via `join_table`; `world.stories.services.gm_rewards`
@@ -1624,12 +1682,17 @@ GM at a given level may author (#2000, ADR-0097).
   (`FindSituationAction` → `mechanics.SituationTemplate`, text-search only, no FK),
   actions (`ConsequencePoolGuide.pool` → `actions.ConsequencePool`, advisory only),
   player_submissions/staff_inbox (`CatalogSuggestion` → `SubmissionCategory
-  .CATALOG_SUGGESTION`)
+  .CATALOG_SUGGESTION`), areas (`StoryArea.area` → a `GridOrigin.STORY` `Area`;
+  `world.areas.grid_services` for room/exit CRUD, #2450), evennia_extensions
+  (`StoryRoomGrant.room` → `RoomProfile`), instances (`InstancedRoom.gm_owner` →
+  `GMProfile`; `spawn_instanced_room`/`complete_instanced_room` back
+  `spin_up_scene_room`/`close_scene_room`, #2450)
 - **Source:** `src/world/gm/`
 - **Glossary:** `src/world/gm/AGENT_GLOSSARY.md`
 - **Details:** [../roadmap/gm-system.md](../roadmap/gm-system.md),
   [../adr/0110-gm-content-is-catalog-and-adaptation-never-invention.md](../adr/0110-gm-content-is-catalog-and-adaptation-never-invention.md),
-  [../adr/0097-gm-trust-is-gmprofile-level.md](../adr/0097-gm-trust-is-gmprofile-level.md)
+  [../adr/0097-gm-trust-is-gmprofile-level.md](../adr/0097-gm-trust-is-gmprofile-level.md),
+  [../adr/0141-story-room-access-is-player-side-join.md](../adr/0141-story-room-access-is-player-side-join.md)
 
 ### Scenes
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social
