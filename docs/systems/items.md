@@ -379,6 +379,18 @@ ObjectDB FK). A metallic sword is `metallic`, a holy relic is `blessed`. This ma
 items both capability sources AND potential targets for challenges (a rust spell targets
 `metallic` items).
 
+**Template-authored defaults (#2503).** `ItemTemplateProperty` declares the Properties
+(and magnitudes) every instance of a template starts with (e.g. a torch template
+declares `flammable=1`). `world.items.services.materialize.apply_template_properties`
+copies a template's `default_properties` onto an instance's `game_object` as
+`ObjectProperty` rows via `update_or_create` (idempotent — re-materializing never
+duplicates). It runs from the sole chokepoint where an `ItemInstance` gains a physical
+`ObjectDB`, `materialize_item_game_object` (called by the coin mint, crafted-item
+creation, and evidence/case-file materialization paths). Row-only `ItemInstance`s
+(narrative grants — see `narrative_grants.py`) never materialize a `game_object`, so
+they never carry template-default `ObjectProperty` rows either; per-instance overrides
+still layer on top via `ObjectProperty.objects.update_or_create` directly.
+
 ---
 
 ## Integration with Magic / Threads (Spec A)

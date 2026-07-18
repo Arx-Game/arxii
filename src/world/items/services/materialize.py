@@ -20,12 +20,33 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.items.models import ItemInstance
+    from world.items.models import ItemInstance, ItemTemplate
 
 # Plain object typeclass — the same one item ObjectDBs use throughout the
 # test factories (``evennia_extensions.factories.ObjectDBFactory`` default);
 # items have no bespoke typeclass in this codebase.
 ITEM_TYPECLASS_PATH = "typeclasses.objects.Object"
+
+
+def apply_template_properties(obj: ObjectDB, item_template: ItemTemplate) -> None:  # noqa: OBJECTDB_PARAM
+    """Copy ``item_template``'s declared default Properties onto ``obj``.
+
+    Bridge-object half of #2503: a bare object's affordances (flammable,
+    heavy, ...) come from its template's authored ``ItemTemplateProperty``
+    rows, read by the same oracle that reads granted-technique Properties
+    (``mechanics.ObjectProperty``). Upserts per-property
+    (``update_or_create``, mirroring ``effect_handlers._add_property``) so
+    re-materializing the same instance never duplicates rows. A template
+    with no declared rows is a no-op — no writes issued.
+    """
+    from world.mechanics.models import ObjectProperty  # noqa: PLC0415
+
+    for template_property in item_template.default_properties.select_related("property").all():
+        ObjectProperty.objects.update_or_create(
+            object=obj,
+            property=template_property.property,
+            defaults={"value": template_property.value},
+        )
 
 
 def materialize_item_game_object(
@@ -56,6 +77,7 @@ def materialize_item_game_object(
     )
     instance.game_object = game_object
     instance.save(update_fields=["game_object"])
+    apply_template_properties(game_object, instance.template)
     if hasattr(character, "carried_items"):
         character.carried_items.invalidate()
     return game_object
