@@ -5049,7 +5049,22 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `character_creation.startingarea`, `evennia_extensions.roomsizetier`, and
   `weather.climate` (#2436/#2448) now that all three carry `NaturalKeyMixin`, plus
   `character_creation.beginnings` and `character_creation.cgexplanation` (Arx
-  beginnings content; canonical prose lives in the lore repo's `beginnings/arx.md`).
+  beginnings content; canonical prose lives in the lore repo's `beginnings/arx.md`),
+  and — #2474 — `magic.resonance`/`magic.gift`/`magic.technique`/
+  `magic.pathgiftgrant`/`magic.traditiongiftgrant` (the CG starter-catalog models;
+  `Technique`'s natural key is `(gift, name)`, `unique_technique_gift_name`, since
+  `name` alone collides across gifts). `core_management.content_fixtures.load_entries`
+  gained M2M natural-key resolution and stale-field tolerance (an object referencing
+  a field the current model no longer has is skipped with a warning, not a crash) to
+  carry this content across schema drift. `world.seeds.database.seed_dev_database()`
+  now loads content BEFORE any `CLUSTER_SEEDERS` entry runs (previously content load
+  had no home in the dev-seed flow at all) and raises `ContentError` if
+  `CONTENT_REPO_PATH` is unset/invalid, before writing anything — no silent skip, no
+  synthetic in-repo catalog fallback (ADR-0142). See `docs/systems/magic.md`'s "CG
+  Starter Gift/Technique Catalog" section for the full seed-ordering/error-handling
+  detail; the retired `seed_starter_gift_catalog()` is replaced by
+  `MagicContent.create_starter_gift_catalog()` (test-only factory stand-in) for
+  suites without a real content-repo checkout.
 - **Grid content export/import (#2436/#2448):** rooms/areas are no longer deferred —
   `Area`/`RoomProfile` gained permanent identity keys (`slug`/`fixture_key`) and a
   `GridOrigin` export gate (see the Areas section above). `core_management.grid_export.

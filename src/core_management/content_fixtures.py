@@ -798,7 +798,11 @@ def load_entries(
     is false (the default) — this method's return shape and every skip
     message are otherwise byte-for-byte identical to before this flag
     existed. ``load_world_content`` is the only caller that sets it; it
-    retries the deferred pairs once the grid bundles have loaded.
+    retries the deferred pairs to a FIXED POINT after the grid bundles have
+    loaded — repeated passes until a pass makes no further progress (#2474
+    review fix), not just a single retry — since a deferred object can itself
+    depend on another deferred object (e.g. a ``Technique`` naming a ``Gift``
+    that was ALSO deferred).
 
     Requires Django to be configured; imports are deferred so the module
     stays import-safe for pure validation.

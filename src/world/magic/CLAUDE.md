@@ -327,7 +327,7 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
   now forwards `ritual=ritual` to the service function, so technique-granting
   rituals can resolve their `TechniqueGrant` row.
 
-### Starter Gift Catalog (CG Technique Picks, #2426)
+### Starter Gift Catalog (CG Technique Picks, #2426; content pipeline #2474)
 
 The pre-#2426 design used a staff-curated `Cantrip` starter-technique-template model
 that CG finalization minted into a new `Technique`; that model and its API plumbing
@@ -335,19 +335,25 @@ were fully removed in #2426 Task 8. See below for the live mechanism.
 
 The CG magic stage picks a staff-authored catalog `Gift` + `Technique`s directly — no
 `Gift`/`Technique` row is minted at CG time; `finalize_magic_data` only *links* the
-picks (see `services/cg_catalog.py` above). `seed_starter_gift_catalog()`
-(`world/seeds/game_content/magic.py`, called by `seed_magic_dev()`) authors the
-picked-from content on a fresh DB:
-- 5 MAJOR `Gift` rows, one per `TechniqueStyle`/PROSPECT-`Path` pair (Emberwork/Steel,
-  Shadowcraft/Whispers, Resonant Chorus/Voice, Sacred Communion/Chosen, Glyphwork/Tomes)
-- 25 authored `Technique` rows (5 per Gift, one per `TechniqueCategory`:
-  attack/defense/buff/debuff/utility) — `level=1/intensity=1/control=1/anima_cost=5`,
-  the shared standalone-cast `ActionTemplate`, `action_category` inherited from the
-  linked `Path`
-- `PathGiftGrant` per (path, gift) with all 5 techniques as `starter_techniques`
-- The "Unbound" `Tradition` (richer traditions are lore-repo fixture content) +
-  `TraditionGiftGrant` rows granting Unbound every starter gift, no signatures
-- 5 styles map 1:1 to 5 Prospect paths: Manifestation→Steel, Subtle→Whispers, Performance→Voice, Prayer→Chosen, Incantation→Tome
+picks (see `services/cg_catalog.py` above).
+
+**The catalog is content, not seed data (#2474).** `Resonance`, `Gift`, `Technique`
+(natural key `(gift, name)`, `unique_technique_gift_name`), `PathGiftGrant`, and
+`TraditionGiftGrant` all carry natural keys and ride the ordinary content pipeline —
+`CONTENT_MODELS` (`core_management/content_export.py`) → arx2-lore fixtures →
+`core_management.content_fixtures.load_world_content()`, called from
+`world.seeds.database.seed_dev_database()` before any `CLUSTER_SEEDERS` entry runs.
+The formerly in-repo `seed_starter_gift_catalog()` (`world/seeds/game_content/
+magic.py`, called by `seed_magic_dev()`) — which authored 5 MAJOR `Gift` rows (one
+per `TechniqueStyle`/PROSPECT-`Path` pair), 25 `Technique` rows, `PathGiftGrant`
+per (path, gift), and the "Unbound" `Tradition` + its `TraditionGiftGrant` rows — is
+retired; that shape now lives as lore-repo fixture content. `MagicContent
+.create_starter_gift_catalog()` (same module) is the test-only factory-built
+stand-in for suites that need an equivalent-shaped catalog without a real
+content-repo checkout (see `world/seeds/tests/content_stub.py`'s `stub_content_root()`
+for the enriched fixture-backed alternative). A fresh dev database now requires
+`CONTENT_REPO_PATH` — `seed_dev_database()` raises `ContentError` if it's unset or
+missing, before seeding anything (ADR-0142).
 
 ### Signature Motif Bonus (#1582 — ADR-0072)
 

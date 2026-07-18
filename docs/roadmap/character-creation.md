@@ -1,5 +1,28 @@
 # Character Creation & Identity
 
+## Built (2026-07-18, #2474 — CG magic catalog is lore-repo content, not seed data)
+
+The Gift-stage catalog CG's magic funnel picks from (Path → Tradition → Gift →
+Technique, #2426) previously existed only as synthetic in-repo seed data
+(`seed_starter_gift_catalog()`). It's now real lore-repo content: `Resonance`,
+`Gift`, `Technique` (natural key `(gift, name)`), `PathGiftGrant`, and
+`TraditionGiftGrant` — including the "Unbound" `Tradition` itself — all gained
+natural keys and ride the ordinary `CONTENT_MODELS` → arx2-lore fixtures →
+`load_world_content()` pipeline. `world.seeds.database.seed_dev_database()` now
+loads content (raising `ContentError` loudly if `CONTENT_REPO_PATH` is
+unset/missing) BEFORE any `CLUSTER_SEEDERS` entry runs, and seeds one narrow
+config prerequisite first (`ensure_technique_cast_content()` — the shared
+"Technique Cast" `ActionTemplate` the lore-repo `Technique` fixtures FK by
+natural key) so a fresh database's very first content load can resolve every
+row. `seed_character_creation_dev()`'s `seed_beginning_traditions()` /
+`seed_metallic_order_tradition()` (this file's own cluster) look up the Unbound
+`Tradition` by name exactly as before — only its origin changed. Test suites
+without a real content-repo checkout use `MagicContent
+.create_starter_gift_catalog()` or the enriched `stub_content_root()` in place
+of the retired seed function. Rationale + rejected alternative: ADR-0142. Full
+detail: `docs/systems/magic.md`, `docs/systems/character_creation.md`,
+`docs/roadmap/magic.md`.
+
 ## Built (2026-07-17, #2427 — guided, tag-driven Glimpse story)
 
 The Gift stage's always-visible Glimpse textarea (the character's first-magical-awakening
