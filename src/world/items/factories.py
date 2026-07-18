@@ -6,6 +6,7 @@ import factory
 
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
 from world.items.crafting.constants import CostConsumption, CraftingRecipeKind
+from world.items.gems.constants import GemAxis
 from world.items.models import (
     EquippedItem,
     FacetVogueMomentum,
@@ -573,3 +574,38 @@ class GarmentMitigationFactory(factory.django.DjangoModelFactory):
     stat_key = "cold"
     value = 30
     resonance = None
+
+
+class GemGradeFactory(factory.django.DjangoModelFactory):
+    """Factory for GemGrade — one grade on one gem axis (word + multiplier)."""
+
+    class Meta:
+        model = "items.GemGrade"
+        django_get_or_create = ("axis", "label")
+
+    axis = GemAxis.SIZE
+    sort_order = factory.Sequence(lambda n: n)
+    label = factory.Sequence(lambda n: f"grade-{n}")
+    multiplier = Decimal("1.0")
+
+
+class GemDetailsFactory(factory.django.DjangoModelFactory):
+    """Factory for GemDetails — marks a template as a gem type at a quality level."""
+
+    class Meta:
+        model = "items.GemDetails"
+
+    item_template = factory.SubFactory(ItemTemplateFactory)
+    quality_level = 1
+
+
+class GemInstanceDetailsFactory(factory.django.DjangoModelFactory):
+    """Factory for GemInstanceDetails — a cut/graded gem instance's three axes."""
+
+    class Meta:
+        model = "items.GemInstanceDetails"
+
+    item_instance = factory.SubFactory(ItemInstanceFactory)
+    size_grade = factory.SubFactory(GemGradeFactory, axis=GemAxis.SIZE)
+    purity_grade = factory.SubFactory(GemGradeFactory, axis=GemAxis.PURITY)
+    cut_grade = factory.SubFactory(GemGradeFactory, axis=GemAxis.CUT)

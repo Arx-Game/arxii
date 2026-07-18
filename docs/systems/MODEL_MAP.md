@@ -3637,6 +3637,7 @@
   - disguise_kit_effects <- items.DisguiseKitEffect
   - check_modifiers <- items.ItemCheckModifier
   - garment_mitigations <- items.GarmentMitigation
+  - gem_details <- items.GemDetails
   - stock_listings <- items.StockListing
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
@@ -3674,6 +3675,7 @@
   - outfit_slots <- items.OutfitSlot
   - mantle <- items.Mantle
   - crafted_recipes <- items.CraftedItemRecipe
+  - gem_instance_details <- items.GemInstanceDetails
   - ware_listing <- items.WareListing
   - market_sales <- items.MarketSale
   - reclamation_claims <- items.ReclamationClaim
@@ -3869,6 +3871,19 @@
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - recipe -> items.CraftingRecipe [FK]
+
+### GemGrade
+
+### GemDetails
+**Foreign Keys:**
+  - item_template -> items.ItemTemplate [OneToOne]
+
+### GemInstanceDetails
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [OneToOne]
+  - size_grade -> items.GemGrade [FK]
+  - purity_grade -> items.GemGrade [FK]
+  - cut_grade -> items.GemGrade [FK]
 
 ### MarketSquare
 **Foreign Keys:**

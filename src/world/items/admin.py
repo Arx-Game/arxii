@@ -10,6 +10,9 @@ from world.items.models import (
     FashionStyle,
     FashionStyleBonus,
     GarmentMitigation,
+    GemDetails,
+    GemGrade,
+    GemInstanceDetails,
     InteractionType,
     ItemInstance,
     ItemStyle,
@@ -29,6 +32,25 @@ class MaterialCategoryAdmin(admin.ModelAdmin):
     list_display = ["name", "sort_order"]
     search_fields = ["name"]
     ordering = ["sort_order", "name"]
+
+
+@admin.register(GemGrade)
+class GemGradeAdmin(admin.ModelAdmin):
+    list_display = ["axis", "sort_order", "label", "multiplier"]
+    list_filter = ["axis"]
+    ordering = ["axis", "sort_order"]
+
+
+@admin.register(GemDetails)
+class GemDetailsAdmin(admin.ModelAdmin):
+    list_display = ["item_template", "quality_level"]
+    ordering = ["quality_level"]
+
+
+@admin.register(GemInstanceDetails)
+class GemInstanceDetailsAdmin(admin.ModelAdmin):
+    list_display = ["item_instance", "size_grade", "purity_grade", "cut_grade"]
+    raw_id_fields = ["item_instance"]
 
 
 @admin.register(QualityTier)

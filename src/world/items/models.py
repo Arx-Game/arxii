@@ -176,6 +176,10 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
     fixture JSON is fresh-DB/insert-or-resolve only.
     """
 
+    # Reverse-OneToOne safe accessor (#2386): this template's gem-type sidecar,
+    # or None if the template is not a gem type (Build 0b).
+    gem_type_or_none = ReverseOneToOneOrNone("gem_details")
+
     name = models.CharField(max_length=200, unique=True)
     description = models.TextField(
         blank=True,
@@ -573,8 +577,10 @@ class ItemInstance(SharedMemoryModel):
     for custom names, descriptions, quality, and state.
     """
 
-    # Reverse-OneToOne safe accessor (#2386): missing row -> None.
+    # Reverse-OneToOne safe accessors (#2386): missing row -> None.
     building_permit_details_or_none = ReverseOneToOneOrNone("building_permit_details")
+    # A cut/graded gem instance (Build 0b) — None for non-gems.
+    gem_or_none = ReverseOneToOneOrNone("gem_instance_details")
 
     template = models.ForeignKey(
         ItemTemplate,
@@ -1842,6 +1848,15 @@ from world.items.crafting.models import (  # noqa: E402,F401
     CraftingRecipeConsequence,
     CraftingRecipeModifier,
     CraftingSkillCap,
+)
+
+# ---------------------------------------------------------------------------
+# Gems submodule (Build 0b) — gem value model
+# ---------------------------------------------------------------------------
+from world.items.gems.models import (  # noqa: E402,F401
+    GemDetails,
+    GemGrade,
+    GemInstanceDetails,
 )
 
 # ---------------------------------------------------------------------------
