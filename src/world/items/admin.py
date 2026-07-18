@@ -15,12 +15,20 @@ from world.items.models import (
     ItemStyle,
     ItemTemplate,
     ItemTemplateAppearanceEffect,
+    MaterialCategory,
     OwnershipEvent,
     QualityTier,
     Style,
     TemplateInteraction,
     TemplateSlot,
 )
+
+
+@admin.register(MaterialCategory)
+class MaterialCategoryAdmin(admin.ModelAdmin):
+    list_display = ["name", "sort_order"]
+    search_fields = ["name"]
+    ordering = ["sort_order", "name"]
 
 
 @admin.register(QualityTier)

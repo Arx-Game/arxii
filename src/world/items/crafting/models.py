@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import models
+from django.db.models import Q
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -145,11 +146,25 @@ class CraftingMaterialRequirement(SharedMemoryModel):
     item_template = models.ForeignKey(
         _ITEM_TEMPLATE_FK,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="+",
+        help_text="A specific ingredient template. Mutually exclusive with material_category.",
+    )
+    material_category = models.ForeignKey(
+        "items.MaterialCategory",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Any template in this category satisfies the requirement. Mutually "
+            "exclusive with item_template."
+        ),
     )
     quantity = models.PositiveIntegerField(
         default=1,
-        help_text="Number of items of this template required.",
+        help_text="Number of items required.",
     )
     min_quality_tier = models.ForeignKey(
         _QUALITY_TIER_FK,
@@ -162,9 +177,19 @@ class CraftingMaterialRequirement(SharedMemoryModel):
 
     class Meta:
         app_label = "items"
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    Q(item_template__isnull=False, material_category__isnull=True)
+                    | Q(item_template__isnull=True, material_category__isnull=False)
+                ),
+                name="items_craftingmaterialrequirement_template_xor_category",
+            ),
+        ]
 
     def __str__(self) -> str:
-        return f"{self.quantity}x {self.item_template} for {self.recipe}"
+        target = self.item_template if self.item_template_id else self.material_category
+        return f"{self.quantity}x {target} for {self.recipe}"
 
 
 class CraftingSkillCap(SharedMemoryModel):
