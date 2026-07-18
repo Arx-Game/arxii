@@ -87,6 +87,13 @@ export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
                 )}
               </div>
             </DialogHeader>
+            {entry.art_url && (
+              <img
+                src={entry.art_url}
+                alt={entry.name}
+                className="mb-2 h-40 w-full rounded-md object-cover"
+              />
+            )}
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">{entry.summary}</p>
               {entry.lore_content && (

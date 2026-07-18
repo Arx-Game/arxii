@@ -47,6 +47,7 @@ export interface CodexEntryListItem {
   subject_path: BreadcrumbSegment[];
   display_order: number;
   knowledge_status: 'known' | 'uncovered' | null;
+  art_url: string | null;
 }
 
 export interface CodexLinkRef {
