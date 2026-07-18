@@ -15484,6 +15484,113 @@ export interface paths {
     patch: operations['roster_galleries_partial_update'];
     trace?: never;
   };
+  '/api/roster/invites/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Viewset for game invites.
+     *
+     *     - Create: auth + trust-gated (service validates trust)
+     *     - List: auth, returns only the inviter's own invites
+     *     - Resolve: AllowAny, returns display-safe context for registration page
+     *     - Claim: auth, links invite to the authenticated account
+     *     - Revoke: auth, inviter or staff only
+     */
+    get: operations['roster_invites_list'];
+    put?: never;
+    /** @description Create a new game invite. */
+    post: operations['roster_invites_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/invites/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Viewset for game invites.
+     *
+     *     - Create: auth + trust-gated (service validates trust)
+     *     - List: auth, returns only the inviter's own invites
+     *     - Resolve: AllowAny, returns display-safe context for registration page
+     *     - Claim: auth, links invite to the authenticated account
+     *     - Revoke: auth, inviter or staff only
+     */
+    get: operations['roster_invites_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/invites/{id}/revoke/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Revoke an invite (inviter or staff only). */
+    post: operations['roster_invites_revoke_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/invites/claim/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Claim an invite token (first-login flow). */
+    post: operations['roster_invites_claim_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/invites/resolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Resolve a token to display-safe invite context (for registration page).
+     *
+     *     AllowAny — this is called before the user has an account. Returns only
+     *     the inviter's display name and message, never account info.
+     */
+    get: operations['roster_invites_resolve_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/mail/': {
     parameters: {
       query?: never;
@@ -23440,6 +23547,48 @@ export interface components {
      * @enum {string}
      */
     GMTableStatusEnum: 'active' | 'archived';
+    /**
+     * @description Serializer for listing/viewing game invites.
+     *
+     *     Shows the inviter's display name (not account username) to preserve
+     *     player anonymity. The token is included so the inviter can share the link.
+     */
+    GameInvite: {
+      readonly id: number;
+      readonly inviter_display: string;
+      /** @description URL-safe random token (secrets.token_urlsafe(48)) */
+      readonly token: string;
+      /** @description The inviter's contextual note to the friend (why they're invited). */
+      message: string;
+      readonly status: components['schemas']['GameInviteStatusEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly claimed_at: string | null;
+      /**
+       * Format: date-time
+       * @description Optional expiry; null = no expiry.
+       */
+      readonly expires_at: string | null;
+    };
+    /**
+     * @description Serializer for listing/viewing game invites.
+     *
+     *     Shows the inviter's display name (not account username) to preserve
+     *     player anonymity. The token is included so the inviter can share the link.
+     */
+    GameInviteRequest: {
+      /** @description The inviter's contextual note to the friend (why they're invited). */
+      message: string;
+    };
+    /**
+     * @description * `pending` - Pending
+     *     * `claimed` - Claimed
+     *     * `expired` - Expired
+     *     * `revoked` - Revoked
+     * @enum {string}
+     */
+    GameInviteStatusEnum: 'pending' | 'claimed' | 'expired' | 'revoked';
     /** @description Read-only serializer for GearArchetypeCompatibility join rows. */
     GearArchetypeCompatibility: {
       readonly id: number;
@@ -27373,6 +27522,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['GMTableMembership'][];
+    };
+    PaginatedGameInviteList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['GameInvite'][];
     };
     PaginatedGemitList: {
       /** @example 123 */
@@ -57924,6 +58088,143 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['TenureGallery'];
+        };
+      };
+    };
+  };
+  roster_invites_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGameInviteList'];
+        };
+      };
+    };
+  };
+  roster_invites_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GameInviteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameInvite'];
+        };
+      };
+    };
+  };
+  roster_invites_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Game Invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameInvite'];
+        };
+      };
+    };
+  };
+  roster_invites_revoke_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Game Invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GameInviteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameInvite'];
+        };
+      };
+    };
+  };
+  roster_invites_claim_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GameInviteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameInvite'];
+        };
+      };
+    };
+  };
+  roster_invites_resolve_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameInvite'];
         };
       };
     };
