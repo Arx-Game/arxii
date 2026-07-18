@@ -10,6 +10,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -18,11 +19,17 @@ from world.areas.constants import GridOrigin
 from world.areas.filters import AreaFilter
 from world.areas.models import Area
 from world.areas.serializers import WorldBuilderAreaSerializer
+from world.gm.filters import StoryRoomGrantFilter
 from world.gm.models import StoryRoomGrant
 from world.gm.permissions import IsGMOrStaff
-from world.gm.serializers import StoryAreaManagerSerializer, StoryInstanceSerializer
+from world.gm.serializers import (
+    MyStoryGrantSerializer,
+    StoryAreaManagerSerializer,
+    StoryInstanceSerializer,
+)
 from world.instances.constants import InstanceStatus
 from world.instances.models import InstancedRoom
+from world.stories.pagination import LargeResultsSetPagination
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -97,3 +104,29 @@ class StoryBuilderViewSet(viewsets.ReadOnlyModelViewSet):
             instances, many=True, context={"grants_by_room": grants_by_room}
         )
         return Response(serializer.data)
+
+
+@extend_schema(tags=["story-rooms"])
+class MyStoryGrantsViewSet(viewsets.ReadOnlyModelViewSet):
+    """A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+
+    Read-only listing backing the player-facing Story Rooms page (frontend
+    ``frontend/src/story-rooms/``). Joining/leaving still go through the
+    ``join_story_room``/``leave_story_room`` REGISTRY actions
+    (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+    ``actions/definitions/story_builder.py``), dispatched via the generic
+    action-dispatch endpoint — this ViewSet never mutates.
+    """
+
+    serializer_class = MyStoryGrantSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = StoryRoomGrantFilter
+    pagination_class = LargeResultsSetPagination
+
+    def get_queryset(self) -> QuerySet[StoryRoomGrant]:
+        return (
+            StoryRoomGrant.objects.filter(character__character__db_account=self.request.user)
+            .select_related("room__objectdb", "character__character")
+            .order_by("-created_at")
+        )

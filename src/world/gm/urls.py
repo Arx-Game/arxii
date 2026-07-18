@@ -3,7 +3,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from world.gm.story_views import StoryBuilderViewSet
+from world.gm.story_views import MyStoryGrantsViewSet, StoryBuilderViewSet
 from world.gm.views import (
     CatalogSuggestionViewSet,
     DemandRansomView,
@@ -28,6 +28,7 @@ router.register("table-memberships", GMTableMembershipViewSet, basename="gm-tabl
 router.register("invites", GMRosterInviteViewSet, basename="gm-invite")
 router.register("catalog-suggestions", CatalogSuggestionViewSet, basename="catalog-suggestion")
 router.register("story-areas", StoryBuilderViewSet, basename="gm-story-area")
+router.register("my-story-grants", MyStoryGrantsViewSet, basename="my-story-grant")
 
 # Ordering is load-bearing: ``invites/claim/`` MUST be registered before
 # ``router.urls``. DRF's default detail regex for the ``invites`` viewset

@@ -329,6 +329,13 @@ Delivered this slice:
   `is_public` flag.
 - **Frontend**: `/gm/story-builder` on the shared `map-canvas/`/world-builder
   components, with a story-specific tool palette.
+- **Player web join surface (fix round)**: the spec's Decision 1 promised players
+  a web button in addition to the telnet `joinroom`/`leaveroom` verbs; that
+  surface shipped after the initial slice as `MyStoryGrantsViewSet`
+  (`/api/gm/my-story-grants/`, `IsAuthenticated`, read-only) plus a
+  `/story-rooms` page (`frontend/src/story-rooms/`) with a Join/Leave button per
+  grant, dispatching the same `join_story_room`/`leave_story_room` REGISTRY
+  actions telnet uses.
 
 See `docs/systems/INDEX.md`'s GM section ("Story areas & story rooms") for the full
 model/service/action/API rundown, and ADR-0141 for why access is a consent-first

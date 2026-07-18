@@ -7333,6 +7333,58 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/my-story-grants/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+     *
+     *     Read-only listing backing the player-facing Story Rooms page (frontend
+     *     ``frontend/src/story-rooms/``). Joining/leaving still go through the
+     *     ``join_story_room``/``leave_story_room`` REGISTRY actions
+     *     (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+     *     ``actions/definitions/story_builder.py``), dispatched via the generic
+     *     action-dispatch endpoint — this ViewSet never mutates.
+     */
+    get: operations['gm_my_story_grants_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/my-story-grants/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+     *
+     *     Read-only listing backing the player-facing Story Rooms page (frontend
+     *     ``frontend/src/story-rooms/``). Joining/leaving still go through the
+     *     ``join_story_room``/``leave_story_room`` REGISTRY actions
+     *     (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+     *     ``actions/definitions/story_builder.py``), dispatched via the generic
+     *     action-dispatch endpoint — this ViewSet never mutates.
+     */
+    get: operations['gm_my_story_grants_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/profiles/': {
     parameters: {
       query?: never;
@@ -25845,6 +25897,44 @@ export interface components {
        */
       readonly active_persona_id: number | null;
     };
+    /**
+     * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
+     *
+     *     Backs ``GET /api/gm/my-story-grants/``, the read side of the player-facing
+     *     Story Rooms page. Read-only: joining/leaving still go through the
+     *     ``join_story_room``/``leave_story_room`` REGISTRY actions
+     *     (``JoinStoryRoomAction``/``LeaveStoryRoomAction``,
+     *     ``actions/definitions/story_builder.py``), dispatched via the generic
+     *     action-dispatch endpoint — never a DRF write here.
+     *
+     *     ``character_id`` is included even though it isn't shown in the UI: those
+     *     two actions resolve their actor from ``actor.sheet_data`` (no target-character
+     *     kwarg) and ``join_story_room``/``leave_story_room`` 404 with "no invitation"
+     *     unless the dispatching character is exactly the one the grant was issued to
+     *     — so the frontend must dispatch each row's join/leave against *this*
+     *     character, not whichever character happens to be active. Since
+     *     ``CharacterSheet.character`` is a primary_key OneToOneField, this FK's attname
+     *     (``StoryRoomGrant.character_id``) already equals the character's ObjectDB pk,
+     *     the id the generic dispatch endpoint (``/api/actions/characters/<id>/dispatch/``)
+     *     expects.
+     */
+    MyStoryGrant: {
+      readonly id: number;
+      readonly room_id: number;
+      readonly room_name: string;
+      readonly character_id: number;
+      readonly character_name: string;
+      /**
+       * @description True when the granted character is currently located inside the room.
+       *
+       *     Compares ObjectDB pks directly — ``room_id`` is the same value as the
+       *     room's ObjectDB pk (``RoomProfile.objectdb`` is its primary key), so no
+       *     extra query is needed beyond the character's own location.
+       */
+      readonly is_inside: boolean;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
     NPCAsset: {
       readonly id: number;
       readonly asset_persona_name: string;
@@ -27824,6 +27914,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Mute'][];
+    };
+    PaginatedMyStoryGrantList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['MyStoryGrant'][];
     };
     PaginatedNPCAssetList: {
       /** @example 123 */
@@ -46254,6 +46359,51 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  gm_my_story_grants_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMyStoryGrantList'];
+        };
+      };
+    };
+  };
+  gm_my_story_grants_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MyStoryGrant'];
+        };
       };
     };
   };

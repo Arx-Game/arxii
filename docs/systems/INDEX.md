@@ -1663,7 +1663,20 @@ GM at a given level may author (#2000, ADR-0097).
   `GridOrigin.STORY` room as never publicly listed, defense in depth alongside the
   area-level exclusion. Frontend: `/gm/story-builder`
   (`frontend/src/story-builder/`) on the shared `map-canvas/` + world-builder
-  components, with a story-specific tool palette.
+  components, with a story-specific tool palette. **Player web join surface
+  (#2450 spec Decision 1 fix):** `MyStoryGrantsViewSet`
+  (`/api/gm/my-story-grants/`, `IsAuthenticated`, read-only, paginated
+  `LargeResultsSetPagination`) lists the requesting account's own
+  `StoryRoomGrant`s (`character__character__db_account=request.user`) with
+  `room_id`/`room_name`/`character_id`/`character_name`/`is_inside`/
+  `created_at`; `character_id` matters because `join_story_room`/
+  `leave_story_room` resolve their actor from `actor.sheet_data` with no
+  target-character kwarg, so the frontend must dispatch each row against the
+  exact character the grant names. Frontend: `/story-rooms`
+  (`frontend/src/story-rooms/`) — a Join/Leave button per grant row,
+  dispatching the same `join_story_room`/`leave_story_room` REGISTRY actions
+  telnet's `joinroom`/`leaveroom` already used; linked from
+  `ProfileDropdown`'s general (non-staff) menu section.
 - **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates;
   `GroupStoryRequest.claimed_by` → `GMProfile`, #2119 — claiming creates the GROUP
   Story and seats the covenant via `join_table`; `world.stories.services.gm_rewards`

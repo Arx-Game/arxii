@@ -10,7 +10,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from evennia_extensions.factories import AccountFactory, ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from evennia_extensions.models import RoomProfile
 from world.areas.constants import AreaLevel, GridOrigin
 from world.character_sheets.factories import CharacterSheetFactory
@@ -216,3 +216,80 @@ class StoryInstancesTests(StoryBuilderApiBase):
         response = self._get(self._url(), self.gm_account)
         row = next(r for r in response.data if r["id"] == instance.pk)
         self.assertEqual(row["grants"], [])
+
+
+class MyStoryGrantsTests(StoryBuilderApiBase):
+    """Tests for ``MyStoryGrantsViewSet`` (#2450 Fix 2 — the player web join surface,
+    spec Decision 1). Read-only: join/leave dispatch through the REGISTRY actions,
+    covered separately in ``actions/tests``."""
+
+    def _url(self) -> str:
+        return reverse("gm:my-story-grant-list")
+
+    def _make_grant(self, *, account, room=None, character_name="Grantee", granted_by=None):
+        room = room or _room_in(self.story_area, name=f"Room for {character_name}")
+        profile = RoomProfile.objects.get(objectdb=room)
+        pc_character = CharacterFactory(db_key=character_name)
+        pc_character.db_account = account
+        pc_character.save()
+        sheet = CharacterSheetFactory(character=pc_character)
+        grant = StoryRoomGrantFactory(
+            room=profile, character=sheet, granted_by=granted_by or self.gm
+        )
+        return grant, room, sheet
+
+    def test_anonymous_rejected(self) -> None:
+        response = self.client.get(self._url())
+        self.assertIn(
+            response.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+        )
+
+    def test_own_grants_only(self) -> None:
+        mine, _room, _sheet = self._make_grant(account=self.player_account, character_name="Mine")
+        theirs, _room2, _sheet2 = self._make_grant(
+            account=self.other_gm_account, character_name="Theirs"
+        )
+
+        response = self._get(self._url(), self.player_account)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {row["id"] for row in response.data["results"]}
+        self.assertIn(mine.pk, ids)
+        self.assertNotIn(theirs.pk, ids)
+
+    def test_row_shape(self) -> None:
+        grant, room, sheet = self._make_grant(account=self.player_account, character_name="Shapely")
+
+        response = self._get(self._url(), self.player_account)
+        row = next(r for r in response.data["results"] if r["id"] == grant.pk)
+        self.assertEqual(row["room_id"], room.pk)
+        self.assertEqual(row["room_name"], room.db_key)
+        self.assertEqual(row["character_id"], sheet.character_id)
+        self.assertEqual(row["character_name"], "Shapely")
+        self.assertFalse(row["is_inside"])
+        self.assertIn("created_at", row)
+
+    def test_is_inside_flips_after_moving_character_into_room(self) -> None:
+        grant, room, sheet = self._make_grant(account=self.player_account, character_name="Mover")
+
+        response = self._get(self._url(), self.player_account)
+        row = next(r for r in response.data["results"] if r["id"] == grant.pk)
+        self.assertFalse(row["is_inside"])
+
+        sheet.character.move_to(room, quiet=True)
+
+        response = self._get(self._url(), self.player_account)
+        row = next(r for r in response.data["results"] if r["id"] == grant.pk)
+        self.assertTrue(row["is_inside"])
+
+    def test_filter_by_room(self) -> None:
+        grant_a, room_a, _sheet_a = self._make_grant(
+            account=self.player_account, character_name="RoomA Char"
+        )
+        grant_b, _room_b, _sheet_b = self._make_grant(
+            account=self.player_account, character_name="RoomB Char"
+        )
+
+        response = self._get(self._url(), self.player_account, room=room_a.pk)
+        ids = {row["id"] for row in response.data["results"]}
+        self.assertEqual(ids, {grant_a.pk})
+        self.assertNotIn(grant_b.pk, ids)

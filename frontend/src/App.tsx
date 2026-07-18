@@ -90,6 +90,11 @@ const StoryBuilderPage = lazy(() =>
     default: m.StoryBuilderPage,
   }))
 );
+const StoryRoomsPage = lazy(() =>
+  import('@/story-rooms/pages/StoryRoomsPage').then((m) => ({
+    default: m.StoryRoomsPage,
+  }))
+);
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
@@ -420,6 +425,16 @@ function App() {
                   <XpKudosPage />
                 </RequireCharacter>
               </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/story-rooms"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <StoryRoomsPage />
+                </ProtectedRoute>
+              </Suspense>
             }
           />
           <Route
