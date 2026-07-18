@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("evennia_extensions", "0010_roomprofile_fixture_key_roomprofile_origin"),
+        ("evennia_extensions", "0011_playerdata_lethal_consequences_opt_in"),
     ]
 
     operations = [

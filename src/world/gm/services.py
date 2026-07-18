@@ -159,10 +159,13 @@ def _clear_looking_for_table_on_join(persona: Persona) -> None:
     Walks persona → character_sheet → roster_entry → current_tenure → player_data.
     No-op if any link is missing or the flag is already False.
     """
-    sheet = persona.character_sheet
-    if sheet is None:
+    try:
+        sheet = persona.character_sheet
+        if sheet is None:
+            return
+        roster_entry = sheet.roster_entry
+    except Exception:  # noqa: BLE001 — RelatedObjectDoesNotExist or AttributeError
         return
-    roster_entry = sheet.roster_entry
     if roster_entry is None:
         return
     tenure = roster_entry.current_tenure
