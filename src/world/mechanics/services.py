@@ -992,19 +992,14 @@ def vow_gear_scaling_bonus(
     sheet: object,  # noqa: ARG001
     target: ModifierTarget,  # noqa: ARG001
 ) -> int:
-    """Sum the vow-driven equipment effectiveness bonus (#2022).
+    """Vow-driven equipment amplification — inert pending Layer 3 (#2533).
 
-    For each equipped item, looks up the ``VowGearScaling`` row matching the
-    item's ``gear_archetype`` and the engaged role's ``role_archetype``. If
-    found, adds ``int(gear_stat * thread_level * multiplier)`` — the vow
-    amplifies how much the gear contributes. When the vow dims, the
-    equipment's contribution reverts to base.
-
-    Stub pending Task 2 (#2529): ``CovenantRole.archetype`` was removed for
-    the SWORD/SHIELD/CROWN blend; ``sheet``/``target`` are kept for the call
-    signature until the blend rewrite lands.
+    ``VowGearScaling`` has never been seeded, so this consumer has always
+    returned 0 in real games; it also keyed on the removed
+    ``CovenantRole.archetype``. #2529 short-circuits it to its actual runtime
+    behavior; #2533 (per-vow defense styles + gear substitution) decides the
+    model's real fate. Do not wire it back up without that design.
     """
-    # Task 2 (#2529) rewrites this against the SWORD/SHIELD/CROWN blend.
     return 0
 
 

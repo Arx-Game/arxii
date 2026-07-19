@@ -3278,7 +3278,8 @@ def _select_targets_core(  # noqa: PLR0911
 
     ``_threat_map`` and ``_shield_participant_ids`` are pre-computed by
     ``select_npc_actions`` for HIGHEST_THREAT / SPECIFIC_ROLE modes (#2020).
-    They map candidate PKs to threat values and identify SHIELD-archetype PCs.
+    They map candidate PKs to threat values and identify SHIELD-axis PCs (blend
+    weight > 0).
 
     ``rotation`` offsets the deterministic (non-random, non-health-sorted)
     selection so a swarm's successive attacks fan across distinct targets rather
@@ -3326,9 +3327,9 @@ def _select_targets_core(  # noqa: PLR0911
         )
         return sorted_by_threat[:count]
 
-    # SPECIFIC_ROLE: prioritize SHIELD-archetype (defense) PCs, then break ties
+    # SPECIFIC_ROLE: prioritize SHIELD-axis (defense) PCs, then break ties
     # by highest threat (#2020). Falls back to highest-threat-only (or rotated)
-    # when no SHIELD-archetype PC is present.
+    # when no SHIELD-axis PC is present.
     if selection == TargetSelection.SPECIFIC_ROLE and _shield_participant_ids:
         shielded = [c for c in candidates if c.pk in _shield_participant_ids]
         if shielded:
@@ -3584,7 +3585,7 @@ def select_npc_actions(
     ).values("opponent_id", "participant_id"):
         active_locks_by_opponent[lock["opponent_id"]] = lock["participant_id"]
 
-    # Batch-prefetch SHIELD-archetype participant IDs for SPECIFIC_ROLE (#2020)
+    # Batch-prefetch SHIELD-axis (blend weight > 0) participant IDs for SPECIFIC_ROLE (#2020)
     from world.covenants.constants import RoleArchetype  # noqa: PLC0415
     from world.covenants.services import precedence_role_for_combat  # noqa: PLC0415
 
@@ -4671,7 +4672,7 @@ def _action_matches_slot(
     2. If the slot has a resonance_requirement, the technique's gift must
        have a matching resonance (via the gift's M2M resonances).
     3. If the slot has a required_archetype (#2022), the action's participant's
-       engaged CovenantRole must have that archetype.
+       engaged CovenantRole must have nonzero blend weight on that axis (#2529).
 
     Args:
         action: The PC's declared round action.
@@ -4687,7 +4688,7 @@ def _action_matches_slot(
         resonance_ids = gift_resonance_ids.get(technique.gift_id, set())
         if slot.resonance_requirement_id not in resonance_ids:
             return False
-    # #2022: check required_archetype if set.
+    # #2022: check required_archetype (a blend-axis label, #2529) if set.
     if slot.required_archetype:
         if not _participant_has_archetype(action.participant, slot.required_archetype):
             return False
@@ -4695,12 +4696,12 @@ def _action_matches_slot(
 
 
 def _participant_has_archetype(participant: CombatParticipant, archetype: str) -> bool:
-    """Return True if the participant's engaged CovenantRole blends the given axis.
+    """True if an engaged CovenantRole has weight on the given blend axis (#2529).
 
-    #2529 (was #2022): reads the SWORD/SHIELD/CROWN blend via ``blend_weight_for``
-    instead of an exact archetype match.
+    ``ComboSlot.required_archetype`` values (SWORD/SHIELD/CROWN) are read as
+    blend-axis labels: any engaged role with a nonzero weight on that axis
+    satisfies the slot.
     """
-
     for role in participant.character_sheet.character.covenant_roles.currently_engaged_roles():
         if role.blend_weight_for(archetype) > 0:
             return True
