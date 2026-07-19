@@ -84,7 +84,7 @@ def open_ceremony(  # noqa: PLR0913
 ) -> Ceremony:
     """Open a ceremony at a location, recognizing zero or more honorees.
 
-    Funerals require every honoree dead (retired stays valid, Decision 13).
+    Funerals and Seances require every honoree dead (retired stays valid, Decision 13).
     Only one OPEN ceremony may exist per location (DB constraint).
     """
     ceremony_type = CeremonyType.objects.filter(key=type_key).first()
