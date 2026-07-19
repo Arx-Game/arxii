@@ -136,10 +136,17 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
       <div>
         <h2 className="theme-heading text-2xl font-bold">{copy?.review_heading ?? ''}</h2>
         <p className="mt-2 text-muted-foreground">{copy?.review_intro ?? ''}</p>
+        {copy?.review_epigraph && (
+          <blockquote className="mt-4 border-l-2 border-primary/30 pl-4 text-sm italic text-muted-foreground">
+            {copy.review_epigraph}
+          </blockquote>
+        )}
       </div>
 
       {/* Application Status Banner */}
-      {hasApplication && appStatus && <ApplicationBanner application={application.data!} />}
+      {hasApplication && appStatus && (
+        <ApplicationBanner application={application.data!} copy={copy} />
+      )}
 
       {/* Validation Summary (only when no active application) */}
       {!hasApplication && incompleteStages.length > 0 && (
@@ -191,66 +198,90 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
           <CardTitle className="text-xl">{fullName}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Basic Info */}
-          <section className="grid gap-4 sm:grid-cols-2">
-            <InfoRow label="Homeland" value={draft.selected_area?.name} />
-            <InfoRow label="Beginnings" value={draft.selected_beginnings?.name ?? 'Unknown'} />
-            <InfoRow label="Species" value={draft.selected_species?.name} />
-            <InfoRow label="Gender" value={draft.selected_gender?.display_name} />
-            <InfoRow label="Age" value={draft.age?.toString()} />
+          {/* The Testament — identity picks the character carries into the Durance */}
+          <section className="space-y-4">
+            <h3 className="text-lg font-semibold">
+              {copy?.review_testament_heading ?? 'The Testament'}
+            </h3>
+
+            {draftData.glimpse_story && (
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">
+                  {copy?.review_glimpse_label ?? 'What your character would speak of themselves'}
+                </p>
+                <p className="whitespace-pre-wrap text-sm">{draftData.glimpse_story}</p>
+              </div>
+            )}
+
+            {draftData.background && (
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Background</p>
+                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                  {draftData.background}
+                </p>
+              </div>
+            )}
+
+            {draft.selected_path && (
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Path of the Durance</p>
+                <p className="text-sm">{draft.selected_path.name}</p>
+              </div>
+            )}
+
+            {draft.selected_tradition && (
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Tradition</p>
+                <p className="text-sm">{draft.selected_tradition.name}</p>
+              </div>
+            )}
+
+            {draftData.description && (
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Description</p>
+                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                  {draftData.description}
+                </p>
+              </div>
+            )}
+
+            {draftData.personality && (
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Personality</p>
+                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                  {draftData.personality}
+                </p>
+              </div>
+            )}
           </section>
 
           <Separator />
 
-          {/* Lineage */}
-          <section>
-            <h4 className="mb-2 font-semibold">Lineage</h4>
-            <InfoRow
-              label="Family"
-              value={
-                draft.draft_data.lineage_is_orphan
-                  ? 'Orphan / No Family'
-                  : (draft.family?.name ??
-                    (draft.selected_beginnings?.family_known === false ? 'Unknown' : ''))
-              }
-            />
+          {/* The Record — supporting biographical and mechanical data */}
+          <section className="space-y-4">
+            <h3 className="text-lg font-semibold">{copy?.review_record_heading ?? 'The Record'}</h3>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InfoRow label="Homeland" value={draft.selected_area?.name} />
+              <InfoRow label="Beginnings" value={draft.selected_beginnings?.name ?? 'Unknown'} />
+              <InfoRow label="Species" value={draft.selected_species?.name} />
+              <InfoRow label="Gender" value={draft.selected_gender?.display_name} />
+              <InfoRow label="Age" value={draft.age?.toString()} />
+            </div>
+
+            <div>
+              <h4 className="mb-2 font-semibold">Lineage</h4>
+              <InfoRow
+                label="Family"
+                value={
+                  draft.draft_data.lineage_is_orphan
+                    ? 'Orphan / No Family'
+                    : (draft.family?.name ??
+                      (draft.selected_beginnings?.family_known === false ? 'Unknown' : ''))
+                }
+              />
+            </div>
           </section>
-
-          {draftData.description && (
-            <>
-              <Separator />
-              <section>
-                <h4 className="mb-2 font-semibold">Description</h4>
-                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                  {draftData.description}
-                </p>
-              </section>
-            </>
-          )}
-
-          {draftData.personality && (
-            <>
-              <Separator />
-              <section>
-                <h4 className="mb-2 font-semibold">Personality</h4>
-                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                  {draftData.personality}
-                </p>
-              </section>
-            </>
-          )}
-
-          {draftData.background && (
-            <>
-              <Separator />
-              <section>
-                <h4 className="mb-2 font-semibold">Background</h4>
-                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                  {draftData.background}
-                </p>
-              </section>
-            </>
-          )}
         </CardContent>
       </Card>
 
@@ -335,6 +366,7 @@ interface ApplicationBannerProps {
     reviewer_name: string | null;
     expires_at: string | null;
   };
+  copy: Record<string, string> | undefined;
 }
 
 const BANNER_STYLES: Record<
@@ -382,11 +414,14 @@ const BANNER_STYLES: Record<
 function getBannerMessage(
   status: ApplicationStatus,
   reviewerName: string | null,
-  expiresAt: string | null
+  expiresAt: string | null,
+  copy: Record<string, string> | undefined
 ): string {
   switch (status) {
     case 'submitted':
-      return 'Your character has been submitted and is awaiting review.';
+      return (
+        copy?.review_banner_submitted ?? 'Your character has been submitted and is awaiting review.'
+      );
     case 'in_review':
       return reviewerName
         ? `Your character is being reviewed by ${reviewerName}.`
@@ -406,10 +441,10 @@ function getBannerMessage(
   }
 }
 
-function ApplicationBanner({ application }: ApplicationBannerProps) {
+function ApplicationBanner({ application, copy }: ApplicationBannerProps) {
   const { status, reviewer_name, expires_at } = application;
   const { border, bg, Icon, iconClass } = BANNER_STYLES[status];
-  const message = getBannerMessage(status, reviewer_name, expires_at);
+  const message = getBannerMessage(status, reviewer_name, expires_at, copy);
 
   return (
     <Card className={cn(border, bg)}>
