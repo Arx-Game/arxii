@@ -2030,3 +2030,67 @@ class FinalizeResidenceTests(FinalizationTestMixin, TestCase):
         sheet = character.sheet_data
         self.assertIsNone(sheet.current_residence)
         self.assertFalse(LocationTenancy.objects.exists())
+
+
+class FinalizeCharacterPreludeMissionTests(FinalizationTestMixin, TestCase):
+    """Prelude-mission auto-grant at CG finalization (#2470)."""
+
+    def setUp(self):
+        from evennia_extensions.factories import RoomProfileFactory
+
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username="preludemissiontestuser")
+        self._setup_finalization_base(
+            self, prefix="Prelude Mission Test", height_min=700, height_max=800
+        )
+        # _grant_prelude_mission only runs when a starting room resolves (nested
+        # under finalize_character's `if starting_room is not None:` block) — the
+        # mixin's default StartingArea has no default_starting_room, so give it
+        # one, matching the residence-tenancy tests' pattern above.
+        self.area.default_starting_room = RoomProfileFactory()
+        self.area.save()
+
+    def test_finalize_grants_prelude_mission_when_set(self):
+        from world.missions.constants import MissionStatus
+        from world.missions.factories import MissionNodeFactory, MissionTemplateFactory
+        from world.missions.models import MissionInstance
+
+        template = MissionTemplateFactory(name="Prelude Grant Test Template")
+        MissionNodeFactory(template=template, key="entry", is_entry=True)
+        self.beginnings.prelude_mission = template
+        self.beginnings.save(update_fields=["prelude_mission"])
+
+        draft = self._create_base_draft()
+        character = finalize_character(draft, add_to_roster=True)
+
+        instance = MissionInstance.objects.get(template=template)
+        assert instance.status == MissionStatus.ACTIVE
+        holder = instance.participants.get(is_contract_holder=True)
+        assert holder.character_id == character.id
+        assert instance.accepted_as_persona_id == character.sheet_data.primary_persona.id
+
+    def test_finalize_is_a_no_op_when_beginnings_has_no_prelude_mission(self):
+        from world.missions.models import MissionInstance
+
+        # self.beginnings.prelude_mission is None by default (Task 1's factory default).
+        draft = self._create_base_draft()
+        finalize_character(draft, add_to_roster=True)
+        assert not MissionInstance.objects.exists()
+
+    def test_finalize_raises_when_prelude_mission_has_no_entry_node(self):
+        from world.missions.factories import MissionTemplateFactory
+        from world.missions.models import MissionNode
+
+        template = MissionTemplateFactory(name="Broken Prelude Test Template")
+        # Deliberately no MissionNodeFactory call — no entry node authored.
+        self.beginnings.prelude_mission = template
+        self.beginnings.save(update_fields=["prelude_mission"])
+
+        draft = self._create_base_draft()
+        sheet_count_before = CharacterSheet.objects.count()
+
+        with self.assertRaises(MissionNode.DoesNotExist):
+            finalize_character(draft, add_to_roster=True)
+
+        # Whole-transaction rollback: no Character/CharacterSheet left behind.
+        assert CharacterSheet.objects.count() == sheet_count_before
