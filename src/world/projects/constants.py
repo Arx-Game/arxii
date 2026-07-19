@@ -21,6 +21,7 @@ class ProjectKind(models.TextChoices):
     BUILDING_PREPARATION = "BUILDING_PREPARATION", "Building Preparation"
     BUILDING_RENOVATION = "BUILDING_RENOVATION", "Building Renovation"
     BUILDING_UPGRADE = "BUILDING_UPGRADE", "Building Upgrade"
+    BUILDING_ACTIVATION = "BUILDING_ACTIVATION", "Building Activation"
     DOMAIN_IMPROVEMENT = "DOMAIN_IMPROVEMENT", "Domain Improvement"
     FORTIFICATION_UPGRADE = "FORTIFICATION_UPGRADE", "Fortification Upgrade"
     INTERIOR_DESIGN = "INTERIOR_DESIGN", "Interior Design"
