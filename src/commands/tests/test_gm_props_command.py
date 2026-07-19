@@ -15,14 +15,27 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from actions.constants import ActionBackend
+from actions.player_interface import get_player_actions
 from actions.types import ActionResult, DispatchResult
 from commands.exceptions import CommandError
 from commands.gm_props import _SUBVERBS, CmdStage
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import CapabilityTypeFactory
 from world.items.factories import ItemTemplateFactory, ItemTemplatePropertyFactory
 from world.items.models import ItemInstance
-from world.mechanics.factories import PropertyFactory
+from world.magic.factories import (
+    CharacterTechniqueFactory,
+    TechniqueCapabilityGrantFactory,
+    TechniqueFactory,
+)
+from world.mechanics.constants import DifficultyIndicator
+from world.mechanics.factories import (
+    ApplicationFactory,
+    ChallengeApproachFactory,
+    ChallengeTemplateFactory,
+    PropertyFactory,
+)
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
@@ -174,3 +187,98 @@ class StageCommandEndToEndTests(TestCase):
         instance = ItemInstance.objects.get(template=self.template)
         self.assertIsNotNone(instance.game_object)
         self.assertEqual(instance.game_object.location, self.room)
+
+
+class StageCommandAffordanceChainTests(TestCase):
+    """GM improv journey (#2503 task 6): telnet ``stage prop`` -> technique-sourced Ignite.
+
+    Extends Task 5's ``GMStagedPropAffordanceTests``
+    (``world/mechanics/tests/test_object_affordances.py``) two ways at once:
+
+    1. The staging itself is driven by the REAL telnet ``CmdStage`` command (no direct
+       ``stage_prop`` service call), mirroring ``StageCommandEndToEndTests`` above.
+    2. The pyromancer's capability comes ONLY from a known technique's prerequisite-null
+       ``TechniqueCapabilityGrant`` -- read through the real aggregation path
+       (``get_capability_sources_for_character``, via ``get_player_actions`` ->
+       ``get_available_actions``), not an injected ``CapabilitySource`` test double the
+       way Task 5's test constructs one.
+
+    No telnet command exists to actually DISPATCH a CHALLENGE/WORLD_INTERACTION action
+    from the picker (``grep -rln "ActionBackend.CHALLENGE\\b" commands/*.py`` and the
+    same for ``WORLD_INTERACTION`` both come up empty outside ``actions/player_interface.py``,
+    ``actions/types.py``, and the round-context modules) -- every player-facing pick-and-fire
+    happens over the web dispatcher. This test therefore proves the telnet-reachable half of
+    the chain (GM stages the prop over telnet) composed with the real availability read,
+    rather than inventing a new telnet dispatch surface.
+    """
+
+    def setUp(self) -> None:
+        self.room = _make_room("StageAffordanceRoom")
+        self.gm_account = AccountFactory(username="stageaff_gm", is_staff=True)
+        self.gm_actor, _ = _make_actor_with_account("stageaff_gm_actor", self.room, self.gm_account)
+
+        self.scene = SceneFactory(location=self.room)
+        SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
+
+        self.template = ItemTemplateFactory(name="Affordance Chain Torch")
+        self.prop_flammable = PropertyFactory(name="affordance_chain_flammable")
+        ItemTemplatePropertyFactory(item_template=self.template, property=self.prop_flammable)
+
+        # The pyromancer: a separate character, co-located in the GM's room, whose ONLY
+        # capability source is a known technique's prereq-null grant (innate_baseline
+        # defaults to 0; no CharacterModifier is ever created here).
+        self.pyromancer_account = AccountFactory(username="stageaff_pyro")
+        self.pyromancer, self.pyromancer_sheet = _make_actor_with_account(
+            "stageaff_pyromancer", self.room, self.pyromancer_account
+        )
+        self.capability = CapabilityTypeFactory(name="generation_stage_chain", innate_baseline=0)
+        self.technique = TechniqueFactory(intensity=1)
+        TechniqueCapabilityGrantFactory(
+            technique=self.technique,
+            capability=self.capability,
+            base_value=5,
+            intensity_multiplier=0,
+        )
+        CharacterTechniqueFactory(character=self.pyromancer_sheet, technique=self.technique)
+
+        self.challenge_template = ChallengeTemplateFactory(name="Ignite Chain Torch", severity=3)
+        self.application = ApplicationFactory(
+            name="Ignite Chain",
+            capability=self.capability,
+            target_property=self.prop_flammable,
+            default_template=self.challenge_template,
+        )
+        ChallengeApproachFactory(
+            challenge_template=self.challenge_template,
+            application=self.application,
+            display_name="Ignite it",
+        )
+
+    def test_staged_prop_surfaces_ignite_for_technique_known_pyromancer(self) -> None:
+        """``stage prop`` over telnet -> the pyromancer's next get_player_actions shows Ignite."""
+        cmd = CmdStage()
+        cmd.caller = self.gm_actor
+        cmd.args = "prop Affordance Chain Torch"
+        cmd.raw_string = "stage prop Affordance Chain Torch"
+        cmd.cmdname = "stage"
+        cmd.msg = MagicMock()
+
+        cmd.func()
+
+        instance = ItemInstance.objects.get(template=self.template)
+        torch = instance.game_object
+        self.assertEqual(torch.location, self.room)
+
+        with patch(
+            "world.mechanics.services._get_difficulty_indicator_for_check",
+            return_value=DifficultyIndicator.MODERATE,
+        ):
+            actions = get_player_actions(self.pyromancer)
+
+        matching = [
+            a
+            for a in actions
+            if a.backend == ActionBackend.WORLD_INTERACTION and a.ref.target_object_id == torch.pk
+        ]
+        self.assertEqual(len(matching), 1, "Ignite must surface for the telnet-staged torch")
+        self.assertEqual(matching[0].display_name, "Ignite it")
