@@ -78,11 +78,13 @@ function DetailSkeleton() {
 // Helper: summarize a role's combat-identity blend for display
 // ---------------------------------------------------------------------------
 
-function blendSummary(role: {
+interface BlendWeights {
   sword_weight: string;
   shield_weight: string;
   crown_weight: string;
-}): string {
+}
+
+export function blendSummary(role: BlendWeights): string {
   const axes: Array<[string, number]> = [
     ['Sword', Number(role.sword_weight)],
     ['Shield', Number(role.shield_weight)],
@@ -94,6 +96,33 @@ function blendSummary(role: {
       .map(([label, w]) => `${label} ${Math.round(w * 100)}%`)
       .join(' · ') || 'Unaligned'
   );
+}
+
+/**
+ * Summarize a membership's combat-identity blend, falling back to the anchor
+ * (parent) role's weights when the resolved role is an all-zero sub-role.
+ *
+ * ``covenant_role`` on a membership is the RESOLVED effective role — for a
+ * character who has crossed a resonance sub-role's unlock threshold, that's
+ * the sub-role, which carries all-zero weights on the backend (sub-roles
+ * delegate their blend to the parent). ``anchor_role`` always carries the
+ * stored parent role's real weights (#2529). The displayed role NAME still
+ * comes from the resolved role elsewhere — this helper only affects the
+ * weights used for the blend summary.
+ */
+export function blendSummaryForMembership(membership: {
+  covenant_role: BlendWeights;
+  anchor_role?: BlendWeights | null;
+}): string {
+  const resolved = membership.covenant_role;
+  const isAllZero =
+    Number(resolved.sword_weight) === 0 &&
+    Number(resolved.shield_weight) === 0 &&
+    Number(resolved.crown_weight) === 0;
+  if (isAllZero && membership.anchor_role) {
+    return blendSummary(membership.anchor_role);
+  }
+  return blendSummary(resolved);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +208,7 @@ function MemberRow({
             {role.name}
           </Badge>
           <Badge variant="outline" className="text-xs">
-            {blendSummary(role)}
+            {blendSummaryForMembership(membership)}
           </Badge>
           {membership.engaged && (
             <Badge variant="default" className="text-xs">
