@@ -402,7 +402,10 @@ class Character(ObjectParent, DefaultCharacter):
             emit_event(EventName.MOVED, payload, location=self.location)
 
             # Optional side-effects of arriving — mission ROOM_TRIGGER dispatch (#729),
-            # trap detection (#1051), fame reactions (#881), passive clue triggers (#1160).
+            # trap detection (#1051), passive clue triggers (#1160). Ambient room
+            # reactions (species/resonance/distinction/fame-tier, #2471 — retired #881's
+            # fame_reactions.py) dispatch separately via the MOVED Flows/Trigger event
+            # emitted just above, not through this hardcoded list.
             # Each is wrapped by run_safely (#1164): a failure never breaks the move, but it
             # is captured as a SystemErrorReport and the player is told — not silently
             # swallowed. The cheap room-bound query in each short-circuits ordinary rooms.
@@ -417,7 +420,6 @@ class Character(ObjectParent, DefaultCharacter):
             from world.room_features.trap_services import (
                 check_room_traps_on_entry,
             )
-            from world.societies.fame_reactions import maybe_emit_fame_reaction
             from world.species.services import reconcile_sunlight_exposure
 
             run_safely(
@@ -428,11 +430,6 @@ class Character(ObjectParent, DefaultCharacter):
             run_safely(
                 "trap_detection_on_enter",
                 lambda: check_room_traps_on_entry(self, self.location),
-                actor=self,
-            )
-            run_safely(
-                "fame_reaction_on_enter",
-                lambda: maybe_emit_fame_reaction(self, self.location),
                 actor=self,
             )
             run_safely(
