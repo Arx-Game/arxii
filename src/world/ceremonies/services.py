@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey
+from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey, SeanceOfferStatus
 from world.ceremonies.models import (
     Ceremony,
     CeremonyHonoree,
@@ -23,6 +23,9 @@ from world.ceremonies.models import (
 )
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
+    from world.ceremonies.models import SeanceManifestationOffer
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.scenes.models import Persona
@@ -38,6 +41,14 @@ CEREMONY_LEGEND_SOURCE = "Ceremony"
 
 class CeremonyError(Exception):
     """Player-facing ceremony failure; ``user_message`` is safe to display."""
+
+    def __init__(self, msg: str, *, user_message: str | None = None) -> None:
+        super().__init__(msg)
+        self.user_message = user_message or msg
+
+
+class SeanceOfferError(Exception):
+    """Player-facing seance-offer failure; ``user_message`` is safe to display."""
 
     def __init__(self, msg: str, *, user_message: str | None = None) -> None:
         super().__init__(msg)
@@ -321,6 +332,64 @@ def open_funeral_for(character_sheet: "CharacterSheet") -> Ceremony | None:
         ceremony_type__key=CeremonyTypeKey.FUNERAL,
         honorees__honoree_sheet=character_sheet,
     ).first()
+
+
+def respond_to_seance_offer(
+    offer: "SeanceManifestationOffer", *, account: object, accept: bool
+) -> "SeanceManifestationOffer":
+    """Accept or decline a pending seance manifestation offer (#2393).
+
+    ``account`` must be the offer's honoree's own controlling account (verified
+    via ``account_for_sheet`` — the all-time tenure walk, not "currently
+    available", since a retired honoree is excluded from availability by
+    design). Accepting physically moves the honoree's character object to the
+    ceremony's location — this is what makes the location check in both
+    ``GhostWindowPrerequisite`` and ``Account.can_puppet_for_seance``
+    satisfiable regardless of where the character was left (a ghost pinned to
+    a death scene, or a retired character nobody has been able to move since).
+    """
+    from world.magic.services.gain import account_for_sheet  # noqa: PLC0415
+
+    sheet = offer.ceremony_honoree.honoree_sheet
+    if account_for_sheet(sheet) != account:
+        msg = "That isn't your character to answer for."
+        raise SeanceOfferError(msg)
+    if offer.status != SeanceOfferStatus.PENDING:
+        msg = "That offer has already been answered."
+        raise SeanceOfferError(msg)
+    if offer.ceremony_honoree.ceremony.status != CeremonyStatus.OPEN:
+        msg = "That seance has already closed."
+        raise SeanceOfferError(msg)
+
+    offer.status = SeanceOfferStatus.ACCEPTED if accept else SeanceOfferStatus.DECLINED
+    offer.responded_at = timezone.now()
+    offer.save(update_fields=["status", "responded_at"])
+
+    if accept:
+        character = sheet.character
+        destination = offer.ceremony_honoree.ceremony.location.objectdb
+        if character.location != destination:
+            character.move_to(destination, quiet=True)
+    return offer
+
+
+def pending_seance_offers_for_account(account: object) -> "QuerySet[SeanceManifestationOffer]":
+    """PENDING seance offers addressed to any character this account has ever held (#2393).
+
+    Reachable even for an account whose sole character is retired (and thus
+    absent from get_available_characters) — the point of this surface.
+    """
+    from world.ceremonies.models import SeanceManifestationOffer  # noqa: PLC0415
+
+    return (
+        SeanceManifestationOffer.objects.filter(
+            status=SeanceOfferStatus.PENDING,
+            ceremony_honoree__honoree_sheet__roster_entry__tenures__player_data__account=account,
+            ceremony_honoree__honoree_sheet__roster_entry__tenures__end_date__isnull=True,
+        )
+        .select_related("ceremony_honoree__honoree_sheet", "ceremony_honoree__ceremony")
+        .distinct()
+    )
 
 
 def _require_open(ceremony: Ceremony) -> None:

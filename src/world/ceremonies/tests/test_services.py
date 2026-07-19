@@ -10,11 +10,14 @@ from world.ceremonies.factories import CeremonyTypeFactory
 from world.ceremonies.models import CeremonyOffering, SeanceManifestationOffer
 from world.ceremonies.services import (
     CeremonyError,
+    SeanceOfferError,
     abandon_ceremony,
     finish_ceremony,
     open_ceremony,
     open_funeral_for,
+    pending_seance_offers_for_account,
     record_offering,
+    respond_to_seance_offer,
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.vitals.constants import CharacterLifeState
@@ -324,3 +327,82 @@ class CeremonyFlowTests(TestCase):
         self.assertEqual(open_funeral_for(dead), ceremony)
         finish_ceremony(ceremony=ceremony)
         self.assertIsNone(open_funeral_for(dead))
+
+
+class RespondToSeanceOfferTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.SEANCE, name="Seance")
+        cls.location = RoomProfileFactory()
+
+    def _open_seance(self, *, sheet):
+        persona, officiant_sheet = _persona_with_sheet()
+        being = WorshippedBeingFactory()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=being)
+        return open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[sheet],
+            location_profile=self.location,
+        )
+
+    def _retired_sheet_with_account(self):
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        sheet = _dead_sheet()
+        sheet.vitals.retired_at = timezone.now()
+        sheet.vitals.save(update_fields=["retired_at"])
+        player_data = PlayerDataFactory()
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, player_data=player_data)
+        return sheet, player_data.account
+
+    def test_accept_moves_character_to_ceremony_location(self) -> None:
+        sheet, account = self._retired_sheet_with_account()
+        ceremony = self._open_seance(sheet=sheet)
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+
+        respond_to_seance_offer(offer, account=account, accept=True)
+
+        offer.refresh_from_db()
+        self.assertEqual(offer.status, SeanceOfferStatus.ACCEPTED)
+        self.assertIsNotNone(offer.responded_at)
+        self.assertEqual(sheet.character.location, self.location.objectdb)
+
+    def test_decline_does_not_move_character(self) -> None:
+        sheet, account = self._retired_sheet_with_account()
+        original_location = sheet.character.location
+        ceremony = self._open_seance(sheet=sheet)
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+
+        respond_to_seance_offer(offer, account=account, accept=False)
+
+        offer.refresh_from_db()
+        self.assertEqual(offer.status, SeanceOfferStatus.DECLINED)
+        self.assertEqual(sheet.character.location, original_location)
+
+    def test_wrong_account_cannot_answer(self) -> None:
+        sheet, _account = self._retired_sheet_with_account()
+        ceremony = self._open_seance(sheet=sheet)
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+
+        from world.roster.factories import PlayerDataFactory
+
+        stranger = PlayerDataFactory().account
+        with self.assertRaises(SeanceOfferError):
+            respond_to_seance_offer(offer, account=stranger, accept=True)
+
+    def test_pending_offers_for_account_reaches_retired_honoree(self) -> None:
+        sheet, account = self._retired_sheet_with_account()
+        ceremony = self._open_seance(sheet=sheet)
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+
+        offers = list(pending_seance_offers_for_account(account))
+
+        self.assertEqual(offers, [offer])

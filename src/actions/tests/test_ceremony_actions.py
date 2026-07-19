@@ -115,3 +115,68 @@ class CeremonyActionJourneyTests(TestCase):
             actor=self.officiant, type_key="coronation", honoree_names=[]
         )
         self.assertFalse(result.success)
+
+
+class RespondSeanceOfferActionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.SEANCE, name="Seance")
+        cls.location = RoomProfileFactory()
+
+        officiant_sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=officiant_sheet)
+        being = WorshippedBeingFactory()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=being)
+        cls.officiant_persona = officiant_sheet.primary_persona
+
+        cls.dead_sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(
+            character_sheet=cls.dead_sheet,
+            life_state=CharacterLifeState.DEAD,
+            retired_at=timezone.now(),
+        )
+        cls.player_data = PlayerDataFactory()
+        entry = RosterEntryFactory(character_sheet=cls.dead_sheet)
+        RosterTenureFactory(roster_entry=entry, player_data=cls.player_data)
+
+        cls.ceremony = Ceremony.objects.none()  # replaced in setUp per-test to keep isolation
+
+    def _open_seance(self):
+        from world.ceremonies.services import open_ceremony
+
+        return open_ceremony(
+            officiant_persona=self.officiant_persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[self.dead_sheet],
+            location_profile=self.location,
+        )
+
+    def test_account_can_accept_own_retired_character_offer(self) -> None:
+        from actions.definitions.ceremonies import RespondSeanceOfferAction
+
+        ceremony = self._open_seance()
+        offer = ceremony.honorees.get(honoree_sheet=self.dead_sheet).seance_offer
+
+        result = RespondSeanceOfferAction().run(
+            actor=None, account=self.player_data.account, offer_id=offer.pk, accept=True
+        )
+
+        self.assertTrue(result.success)
+        offer.refresh_from_db()
+        self.assertEqual(offer.status, "accepted")
+
+    def test_missing_offer_id_fails_cleanly(self) -> None:
+        from actions.definitions.ceremonies import RespondSeanceOfferAction
+
+        result = RespondSeanceOfferAction().run(
+            actor=None, account=self.player_data.account, offer_id=None, accept=True
+        )
+
+        self.assertFalse(result.success)
