@@ -3,6 +3,36 @@
 **Status:** in-progress
 **Depends on:** Areas, Items, Combat, Stories (for GM tools)
 
+## Built (2026-07-19, epic #2436 slice 4 / #2451 — discovery/portal authoring)
+
+The last of the epic's authoring slices: staff can now place clues and portal
+anchors from the world-builder canvas instead of Django admin. `RoomDetailPanel`
+gains staff-only "Clues" and "Portal anchors" sections
+(`PlaceClueDialog`/`PlacePortalAnchorDialog`); `WorldRoomNode` shows a combined
+clue+trigger count badge; `WorldCanvas` renders paired same-kind `PortalAnchor`s as
+dashed edges between rooms (`pairPortalAnchors` + `portalEdges` in
+`map-canvas/edges.ts` — an unpaired anchor still shows, just with no edge). Six new
+`world_builder`-category REGISTRY actions
+(`staff_place_clue`/`staff_remove_clue`/`staff_place_clue_trigger`/
+`staff_remove_clue_trigger`/`staff_place_portal_anchor`/`staff_remove_portal_anchor`,
+`src/actions/definitions/world_builder.py`, `StaffOnlyPrerequisite`-gated, same as
+slice 2's verbs) plus one new staff-authoring service,
+`install_portal_anchor_as_staff` (`world.magic.services.portal_travel` — no
+owner/tenant standing check, no `PORTAL_ANCHOR_INSTALL_COST` debit, still refuses a
+duplicate active kind in the same room). `RoomClue`/`ClueTrigger`/`PortalAnchor` all
+gain a nullable-unique `fixture_key` (same pattern as `RoomProfile.fixture_key`);
+`Clue` gains a `NaturalKeyMixin` `slug` and joins `CONTENT_MODELS` — clues are now
+lore-repo content, exported/imported by slug. The grid bundle format gains three
+sidecar sections — `clues`/`clue_triggers`/`portal_anchors`, each keyed by
+`fixture_key` — upserted by `grid_import.load_grid_bundles()`'s new 5th pass and
+report-never-deleted (never hard-deletes a fixture-keyed row absent from a
+reimported bundle). Ratified: reimporting an unchanged bundle always converges a
+dissolved `PortalAnchor` back to active — see `docs/systems/magic.md`'s "Portal
+travel" section for why this is intentional, not a bug. `WorldBuilderRoom`
+(`world.areas.serializers`/`builder_views.py`) carries `clues`/`clue_triggers`/
+`portal_anchors` arrays per room now, built via bulk queries. Epic #2436 is now
+fully built except **#2452** (player building via projects, `needs-design`).
+
 ## Built (2026-07-17, epic #2436 slice 1 / #2448 — grid foundation + export/import)
 
 Staff world-building has a durable content pipeline now, ahead of any authoring UI:
@@ -42,8 +72,8 @@ canvas consumers (buildings, battles, this one) share one implementation — see
 dig → link → place → promote → export journey proving the canvas actually feeds
 slice 1's `export_grid_bundles()` pipeline. Not built this slice: an `edit_area`
 UI (the action exists; no canvas panel calls it yet), GM story areas
-(#2450, see "Built" below), clue/portal layers (#2451) — the latter remains
-filed as its own sub-issue.
+(#2450, see "Built" below), clue/portal layers (#2451, since built — see "Built"
+above).
 
 ## Built (2026-07-18, epic #2436 slice 3 / #2450 — GM story areas & story rooms)
 
@@ -65,9 +95,9 @@ required); telnet play verbs only (`sceneroom`/`joinroom`/`leaveroom`,
 are excluded from the player-facing `AreaViewSet`/`RoomProfileViewSet` and never
 publicly listed regardless of a room's own `is_public` flag — see
 `docs/systems/INDEX.md`'s GM section ("Story areas & story rooms") for the full
-model/service/action/API rundown. Remaining: clue/portal layers (#2451).
-Player room-building constraints resolved (#2452 — dig_room stays instant;
-RoomEditAction opened to tenants).
+model/service/action/API rundown. Clue/portal layers since built (#2451, see
+"Built" above). Player room-building constraints resolved (#2452 — dig_room
+stays instant; RoomEditAction opened to tenants).
 
 ## Overview
 Tools for players, GMs, and staff to interact with and manage the game world. Player tools focus on building and customizing spaces. GM tools are granular and level-gated — GMs can only do what their trust level allows. Staff tools are unrestricted for the one staffer coordinating the entire game.
@@ -88,7 +118,9 @@ Tools for players, GMs, and staff to interact with and manage the game world. Pl
   authored/runtime identity + grid export/import round-trip now exists (#2436/#2448,
   see "Built" above), and a staff-only drag-and-drop authoring canvas now sits on
   top of it (#2449, see "Built" above); a GM-trust-gated variant of that same
-  canvas (story areas + story rooms, #2450) now sits alongside it, see "Built" above
+  canvas (story areas + story rooms, #2450) now sits alongside it, see "Built" above;
+  the staff canvas now also authors discovery/portal content (clue placements,
+  clue triggers, portal anchors — #2451), see "Built" above
 - **GM dashboard** — see `docs/roadmap/gm-system.md` for GM-specific tooling
   (level-gated commands, story areas/rooms, the scenario catalog); this document's
   "GM tools" section below describes the still-open NPC/combat/reward tooling gap

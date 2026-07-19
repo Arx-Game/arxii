@@ -155,6 +155,10 @@ class ContentExportTests(TestCase):
         assert "staff-art" in exported
         assert '"slug": null' not in exported
 
+    def test_clue_is_a_content_model(self) -> None:
+        """Clue became exportable content once it carried a natural key (#2451)."""
+        assert "clues.clue" in CONTENT_MODELS
+
     def test_mission_graph_round_trips(self) -> None:
         """A small authored mission graph exports and reloads as a no-op (#2470).
 

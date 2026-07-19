@@ -64,6 +64,52 @@ def _occupant_counts(room_ids: list[int]) -> dict[int, int]:
     return counts
 
 
+def _clue_and_anchor_sidecars(
+    room_ids: list[int],
+) -> tuple[dict[int, list[dict]], dict[int, list[dict]], dict[int, list[dict]]]:
+    """Per-room clue/trigger/anchor lists, three bulk queries (no per-room N+1)."""
+    from world.clues.models import ClueTrigger, RoomClue  # noqa: PLC0415
+    from world.magic.models import PortalAnchor  # noqa: PLC0415
+
+    clues_by_room: dict[int, list[dict]] = {}
+    for row in RoomClue.objects.filter(room_profile_id__in=room_ids).select_related("clue"):
+        clues_by_room.setdefault(row.room_profile_id, []).append(
+            {
+                "id": row.pk,
+                "clue_name": row.clue.name,
+                "clue_slug": row.clue.slug,
+                "detect_difficulty": row.detect_difficulty,
+                "fixture_key": row.fixture_key,
+            }
+        )
+
+    triggers_by_room: dict[int, list[dict]] = {}
+    for row in ClueTrigger.objects.filter(room_profile_id__in=room_ids).select_related("clue"):
+        triggers_by_room.setdefault(row.room_profile_id, []).append(
+            {
+                "id": row.pk,
+                "clue_name": row.clue.name,
+                "clue_slug": row.clue.slug,
+                "fixture_key": row.fixture_key,
+            }
+        )
+
+    anchors_by_room: dict[int, list[dict]] = {}
+    for row in (
+        PortalAnchor.objects.active().filter(room_profile_id__in=room_ids).select_related("kind")
+    ):
+        anchors_by_room.setdefault(row.room_profile_id, []).append(
+            {
+                "id": row.pk,
+                "kind_name": row.kind.name,
+                "name": row.name,
+                "fixture_key": row.fixture_key,
+            }
+        )
+
+    return clues_by_room, triggers_by_room, anchors_by_room
+
+
 def area_manager_payload(area: Area) -> dict:
     """Area + all rooms + exits for the world-builder/story-builder manager canvas.
 
@@ -80,6 +126,7 @@ def area_manager_payload(area: Area) -> dict:
         for row in ObjectDisplayData.objects.filter(object_id__in=room_ids)
     }
     occupant_counts = _occupant_counts(room_ids)
+    clues_by_room, triggers_by_room, anchors_by_room = _clue_and_anchor_sidecars(room_ids)
 
     exits = list(exits_from_rooms(set(room_ids)).select_related("db_destination"))
     destination_ids = {e.db_destination_id for e in exits if e.db_destination_id is not None}
@@ -107,6 +154,9 @@ def area_manager_payload(area: Area) -> dict:
                 "fixture_key": p.fixture_key,
                 "origin": p.origin,
                 "occupant_count": occupant_counts.get(p.objectdb_id, 0),
+                "clues": clues_by_room.get(p.objectdb_id, []),
+                "clue_triggers": triggers_by_room.get(p.objectdb_id, []),
+                "portal_anchors": anchors_by_room.get(p.objectdb_id, []),
             }
             for p in profiles
         ],

@@ -839,10 +839,24 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
   extracted so buildings, battles, and the new `world-builder/` app
   (`/staff/world-builder`, linked from the profile dropdown + Game Setup hub) render
   off one canvas shell instead of three parallel ones. Not built this slice:
-  `edit_area` UI, clue/portal layers (#2451). **GM story areas (#2450, epic #2436
+  `edit_area` UI. **GM story areas (#2450, epic #2436
   slice 3) BUILT** — a GM's own build-and-run space on the same substrate, gated by
   GM trust rather than the staff flag; see the GM system's "Story areas & story
   rooms" entry above for the full model/service/action/API/telnet rundown.
+  **Discovery/portal authoring (#2451, epic #2436 slice 4) BUILT** — clue/portal
+  layers land in the staff canvas: `RoomDetailPanel` gains staff-only "Clues" and
+  "Portal anchors" sections (`PlaceClueDialog`/`PlacePortalAnchorDialog`),
+  `WorldRoomNode` shows a combined clue+trigger count badge, and `WorldCanvas`
+  renders paired same-kind `PortalAnchor`s as dashed edges (`pairPortalAnchors` +
+  `portalEdges` in `map-canvas/edges.ts`; an unpaired anchor still shows, just with
+  no edge). Six new REGISTRY actions
+  (`staff_place_clue`/`staff_remove_clue`/`staff_place_clue_trigger`/
+  `staff_remove_clue_trigger`/`staff_place_portal_anchor`/`staff_remove_portal_anchor`)
+  and a new staff-authoring service, `install_portal_anchor_as_staff` (no owner/tenant
+  standing check, no currency cost — see magic.md's "Portal travel" section). The
+  grid bundle format gains `clues`/`clue_triggers`/`portal_anchors` sidecar sections;
+  see the "Investigation & Discovery" system entry below for the clue-side
+  model/action detail.
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
@@ -1142,10 +1156,23 @@ a collaborative **research project**.
 - **Models:** `Clue` (DiscriminatorMixin — `target_kind` ∈ CODEX / MISSION / RESCUE / SECRET /
   PERSONA_LINK + a per-kind FK; never exists without a target. PERSONA_LINK (#2120) is the
   documented multi-discriminator exception: `target_persona` + `target_persona_linked`, both
-  FKs → `scenes.Persona`, required together), `CharacterClue` (held-clue, roster-scoped),
-  `RoomClue` (search-anchored placement + `detect_difficulty` + `eligibility_rule`),
-  `ClueTrigger` (passive on-entry placement + `eligibility_rule`), `ResearchProjectDetails`
+  FKs → `scenes.Persona`, required together. Also carries a `NaturalKeyMixin` `slug`
+  (#2451) and is a `CONTENT_MODELS` citizen — a `Clue` now exports/imports as
+  lore-repo content, natural-keyed by slug), `CharacterClue` (held-clue, roster-scoped),
+  `RoomClue` (search-anchored placement + `detect_difficulty` + `eligibility_rule` +
+  `fixture_key`), `ClueTrigger` (passive on-entry placement + `eligibility_rule` +
+  `fixture_key`), `ResearchProjectDetails`
   (the clue a `ProjectKind.RESEARCH` project researches toward)
+- **Staff authoring (#2451, epic #2436 slice 4):** `RoomClue`/`ClueTrigger` both carry
+  a nullable-unique `fixture_key` (same pattern as `RoomProfile.fixture_key`),
+  set when placed from the staff world-builder canvas. `staff_place_clue`/
+  `staff_remove_clue`/`staff_place_clue_trigger`/`staff_remove_clue_trigger`
+  (`src/actions/definitions/world_builder.py`, `category="world_builder"`,
+  `StaffOnlyPrerequisite`-gated) place/hard-delete these rows; the grid bundle
+  format gains `clues`/`clue_triggers` sidecar sections (keyed by `fixture_key`,
+  referencing rooms by their `fixture_key` and the clue by its `slug`), upserted
+  by `grid_import.load_grid_bundles()`'s 5th pass and report-never-deleted when a
+  fixture-keyed row is absent from a reimported bundle.
 - **Key functions (`world/clues/services.py`, `research.py`):** `acquire_clue`,
   `target_already_known`, `search_room` (Search check per hidden clue), `grant_clue_target`
   (AUTOMATIC resolution — codex KNOWN / rescue mission / secret fact / persona-link

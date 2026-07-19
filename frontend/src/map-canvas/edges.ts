@@ -46,3 +46,37 @@ export function exitEdges(exits: ExitRecord[]): ExitEdge[] {
   }
   return [...edges.values()];
 }
+
+export interface PortalAnchorRecord {
+  id: number;
+  room_id: number;
+  kind_name: string;
+  /** The room this anchor's kind is reachable from, if the canvas can resolve one (same-area pairing). Null when no destination is resolvable from this view. */
+  destination_room_id: number | null;
+}
+
+export interface PortalEdge {
+  /** Stable per anchor: `portal-<anchorId>`. */
+  id: string;
+  source: number;
+  target: number;
+  kindName: string;
+}
+
+/**
+ * Turn portal anchors with a resolvable same-area destination into edges —
+ * "canvas shows where it leads" (#2451). An anchor with no destination
+ * resolvable in this view (e.g. the only anchor of its kind, or its pair is
+ * in another area) contributes no edge; it's still visible via the room's
+ * detail panel.
+ */
+export function portalEdges(anchors: PortalAnchorRecord[]): PortalEdge[] {
+  return anchors
+    .filter((anchor) => anchor.destination_room_id !== null)
+    .map((anchor) => ({
+      id: `portal-${anchor.id}`,
+      source: anchor.room_id,
+      target: anchor.destination_room_id as number,
+      kindName: anchor.kind_name,
+    }));
+}

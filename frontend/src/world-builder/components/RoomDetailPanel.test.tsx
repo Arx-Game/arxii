@@ -21,6 +21,9 @@ const room: WorldBuilderRoom = {
   fixture_key: null,
   origin: 'story',
   occupant_count: 2,
+  clues: [],
+  clue_triggers: [],
+  portal_anchors: [],
 };
 
 const exits: WorldBuilderExit[] = [
@@ -109,6 +112,67 @@ describe('RoomDetailPanel', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Remove it' }));
 
     expect(runAction).toHaveBeenCalledWith('staff_remove_room', { room_id: 5 });
+  });
+
+  it('lists clues, triggers, and portal anchors with remove buttons', async () => {
+    const { runAction } = renderPanel({
+      room: {
+        ...room,
+        clues: [
+          {
+            id: 1,
+            clue_name: 'Torn Letter',
+            clue_slug: 'torn-letter',
+            detect_difficulty: 5,
+            fixture_key: null,
+          },
+        ],
+        clue_triggers: [{ id: 2, clue_name: 'Whisper', clue_slug: 'whisper', fixture_key: null }],
+        portal_anchors: [{ id: 3, kind_name: 'Mirror', name: 'a mirror', fixture_key: null }],
+      },
+    });
+
+    expect(screen.getByText('Torn Letter')).toBeInTheDocument();
+    expect(screen.getByText('Whisper')).toBeInTheDocument();
+    expect(screen.getByText('a mirror')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('remove-clue-1'));
+    expect(runAction).toHaveBeenCalledWith('staff_remove_clue', { room_clue_id: 1 });
+
+    await userEvent.click(screen.getByTestId('remove-clue-trigger-2'));
+    expect(runAction).toHaveBeenCalledWith('staff_remove_clue_trigger', { clue_trigger_id: 2 });
+
+    await userEvent.click(screen.getByTestId('remove-portal-anchor-3'));
+    expect(runAction).toHaveBeenCalledWith('staff_remove_portal_anchor', { anchor_id: 3 });
+  });
+
+  it('opens PlaceClueDialog and dispatches staff_place_clue', async () => {
+    const { runAction } = renderPanel();
+
+    await userEvent.click(screen.getByText('Place clue'));
+    await userEvent.type(await screen.findByLabelText(/clue slug/i), 'torn-letter');
+    await userEvent.click(screen.getByTestId('place-clue-submit'));
+
+    expect(runAction).toHaveBeenCalledWith('staff_place_clue', {
+      room_id: 5,
+      clue_slug: 'torn-letter',
+      detect_difficulty: 0,
+    });
+  });
+
+  it('opens PlacePortalAnchorDialog and dispatches staff_place_portal_anchor', async () => {
+    const { runAction } = renderPanel();
+
+    await userEvent.click(screen.getByText('Place portal anchor'));
+    await userEvent.type(await screen.findByLabelText(/anchor kind/i), 'Mirror');
+    await userEvent.type(screen.getByLabelText(/anchor name/i), 'a mirror');
+    await userEvent.click(screen.getByTestId('place-portal-anchor-submit'));
+
+    expect(runAction).toHaveBeenCalledWith('staff_place_portal_anchor', {
+      room_id: 5,
+      kind_name: 'Mirror',
+      name: 'a mirror',
+    });
   });
 });
 

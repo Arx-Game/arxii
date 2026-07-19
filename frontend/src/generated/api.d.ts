@@ -35528,6 +35528,9 @@ export interface components {
       fixture_key: string | null;
       origin: string;
       occupant_count: number;
+      clues: components['schemas']['WorldBuilderRoomClue'][];
+      clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
+      portal_anchors: components['schemas']['WorldBuilderPortalAnchor'][];
       grants: string[];
     };
     /** @description Read-only serializer for StrainAvailability — per-character strain cap snapshot. */
@@ -37078,6 +37081,13 @@ export interface components {
       rooms: components['schemas']['WorldBuilderRoom'][];
       exits: components['schemas']['WorldBuilderExit'][];
     };
+    /** @description One ClueTrigger placement, nested in a WorldBuilderRoom payload (#2451). */
+    WorldBuilderClueTrigger: {
+      id: number;
+      clue_name: string;
+      clue_slug: string;
+      fixture_key: string | null;
+    };
     /**
      * @description One directed exit in the staff area-manager payload (#2449).
      *
@@ -37092,6 +37102,13 @@ export interface components {
       to_room_id: number | null;
       to_room_name: string | null;
       to_area_id: number | null;
+    };
+    /** @description One active PortalAnchor, nested in a WorldBuilderRoom payload (#2451). */
+    WorldBuilderPortalAnchor: {
+      id: number;
+      kind_name: string;
+      name: string;
+      fixture_key: string | null;
     };
     /**
      * @description One RoomProfile in the staff area-manager payload (#2449).
@@ -37115,6 +37132,17 @@ export interface components {
       fixture_key: string | null;
       origin: string;
       occupant_count: number;
+      clues: components['schemas']['WorldBuilderRoomClue'][];
+      clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
+      portal_anchors: components['schemas']['WorldBuilderPortalAnchor'][];
+    };
+    /** @description One RoomClue placement, nested in a WorldBuilderRoom payload (#2451). */
+    WorldBuilderRoomClue: {
+      id: number;
+      clue_name: string;
+      clue_slug: string;
+      detect_difficulty: number;
+      fixture_key: string | null;
     };
     WorshippedBeingRef: {
       readonly id: number;
