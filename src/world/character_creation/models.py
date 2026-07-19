@@ -325,6 +325,18 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         related_name="beginnings_start",
         help_text="Override starting room for this Beginnings path (e.g., Sleeper wake room)",
     )
+    prelude_mission = models.ForeignKey(
+        "missions.MissionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The prelude Mission auto-granted at CG finalization for characters "
+            "choosing this Beginning (#2470). Null = no auto-grant (e.g. content "
+            "not authored yet for this Beginning)."
+        ),
+    )
 
     class NaturalKeyConfig:
         fields = ["starting_area", "name"]

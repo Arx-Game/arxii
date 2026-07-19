@@ -450,6 +450,36 @@ class BeginningsModelTests(TestCase):
         assert str(beginnings) == "Noble Birth (Test Area)"
 
 
+class BeginningsPreludeMissionTests(TestCase):
+    """Beginnings.prelude_mission FK (#2470)."""
+
+    def test_prelude_mission_defaults_to_null(self) -> None:
+        beginnings = BeginningsFactory()
+        assert beginnings.prelude_mission is None
+
+    def test_prelude_mission_can_be_set(self) -> None:
+        from world.missions.factories import MissionTemplateFactory
+
+        template = MissionTemplateFactory(name="Prelude FK Test Template")
+        beginnings = BeginningsFactory(prelude_mission=template)
+        beginnings.refresh_from_db()
+        assert beginnings.prelude_mission_id == template.id
+
+    def test_template_delete_sets_prelude_mission_null(self) -> None:
+        from world.character_creation.models import Beginnings
+        from world.missions.factories import MissionTemplateFactory
+
+        template = MissionTemplateFactory(name="Prelude FK Delete Test Template")
+        beginnings = BeginningsFactory(prelude_mission=template)
+        template.delete()
+        # The Collector-driven SET_NULL bypasses per-instance .save(), so the
+        # idmapper identity map needs an explicit flush before re-reading
+        # (see sharedmemory-model skill's "Known stale-cache traps").
+        Beginnings.flush_instance_cache()
+        beginnings.refresh_from_db()
+        assert beginnings.prelude_mission is None
+
+
 class CharacterDraftBeginningsTests(TestCase):
     """Test CharacterDraft with Beginnings integration."""
 
