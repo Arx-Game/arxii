@@ -3682,6 +3682,15 @@ holder is never notified a claim exists.
     leaves the piece either way (host `lore_value` drops by its worth), freed to the pryer's
     inventory on success or **shattered** on a botch (same shatter spine as gem cutting).
     Returns `PryResult`; spends AP up front.
+  - **Gem cutting** (`world.items.gems.services.cut_gem`, Build 0b slice 3) — the risky value-add
+    axis, "very much crafting": reuses a `CraftingRecipe` (`CraftingRecipeKind.GEM_CUT`) config +
+    the `perform_check` primitive (crafter's `skill_trait` feeds the roll), spends the recipe's AP,
+    and resolves `success_level` **directly to an improved cut `GemGrade`** (`resolve_cut_grade` —
+    no `QualityTier` detour, since the framework's outcome type doesn't fit a gem grade). A botch
+    (`success_level < min`) **shatters** the stone (deleted); success advances the cut ladder and
+    worth recomputes. Returns `CutResult`. Deferred: a hard skill-value cap (`CraftingSkillCap`
+    style) and the consequence-pool narrative outcomes; risky adornment prying reuses this shatter
+    spine.
   - **Gem mining engine** (`world.items.gems.mining.roll_gem_haul`, Build 0b slice 4) — the pure,
     deterministic (injected `roll` seam) haul generator. One mine cycle → a common-gem **aggregate
     value** (`GemHaul.common_value`, never instanced) plus, rarely, a few **Rare-Find** gem

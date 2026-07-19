@@ -1,4 +1,4 @@
-"""Gem worth computation, adornment, and risky prying (Build 0b slices 1-2, 6)."""
+"""Gem worth computation, adornment, risky prying, and cutting (Build 0b slices 1-2, 3, 6)."""
 
 from __future__ import annotations
 
@@ -12,10 +12,12 @@ from world.checks.services import perform_check
 from world.items.exceptions import (
     AdornmentCapacityExceeded,
     CraftingCostUnaffordable,
+    CraftingNotConfigured,
     GemAlreadyAdorned,
     NotAGem,
 )
-from world.items.gems.models import Adornment
+from world.items.gems.constants import GemAxis
+from world.items.gems.models import Adornment, GemGrade
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -23,6 +25,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
+    from world.items.crafting.models import CraftingRecipe
     from world.items.gems.models import GemInstanceDetails
     from world.items.models import ItemInstance, ItemTemplate
 
@@ -151,3 +154,77 @@ def pry_adornment(  # noqa: PLR0913 — keyword-only adornment + crafter + check
         gem_instance.holder_character_sheet = crafter_character_sheet
         gem_instance.save(update_fields=["holder_character_sheet"])
         return PryResult(shattered=False, freed_gem=gem_instance, worth_removed=worth)
+
+
+@dataclass(frozen=True)
+class CutResult:
+    """Outcome of a ``cut_gem`` attempt.
+
+    On a botch the stone shatters (``shattered=True``, gem instance deleted); the
+    forfeited worth is reported in ``worth_lost``. On success the cut grade improves
+    and ``worth`` is the gem's new worth.
+    """
+
+    shattered: bool
+    new_cut_grade: GemGrade | None
+    worth: int
+    worth_lost: int
+
+
+def resolve_cut_grade(current_cut: GemGrade, success_level: int) -> GemGrade:
+    """Return the cut grade a successful cut reaches from ``current_cut``.
+
+    Advances up the CUT-axis grade ladder by ``success_level`` positions (a better
+    roll = a finer cut), capped at the top grade and never below the current grade.
+    Skill therefore gates the achievable cut through the check outcome (a hard,
+    skill-value cap à la ``CraftingSkillCap`` is a deferred refinement).
+    """
+    cuts = list(GemGrade.objects.filter(axis=GemAxis.CUT).order_by("sort_order"))
+    current_index = cuts.index(current_cut)
+    target_index = min(current_index + max(success_level, 1), len(cuts) - 1)
+    return cuts[target_index]
+
+
+def cut_gem(
+    *,
+    gem_instance: ItemInstance,
+    crafter_character: ObjectDB,
+    recipe: CraftingRecipe,
+) -> CutResult:
+    """Attempt to cut/improve a gem via ``recipe`` (a ``GEM_CUT`` CraftingRecipe).
+
+    Reuses the crafting config + ``perform_check`` (the crafter's ``skill_trait`` feeds
+    the roll). Spends the recipe's AP cost up front. On success
+    (``success_level >= recipe.min_success_level``) the cut grade improves and worth
+    rises; on a botch the stone **shatters** (deleted). Raises ``NotAGem`` if the
+    instance is not a gem, ``CraftingNotConfigured`` if the recipe has no check, or
+    ``CraftingCostUnaffordable`` if the crafter can't pay the AP.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+
+    gem = gem_instance.gem_or_none
+    if gem is None:
+        raise NotAGem
+    if recipe.check_type is None:
+        raise CraftingNotConfigured
+
+    ap_cost = recipe.action_point_cost
+    if ap_cost > 0:
+        pool = ActionPointPool.get_or_create_for_character(crafter_character)
+        if not pool.spend(ap_cost):
+            msg = f"You need {ap_cost} action points but only have {pool.current}."
+            raise CraftingCostUnaffordable(msg)
+
+    check_result = perform_check(crafter_character, recipe.check_type, recipe.base_difficulty)
+
+    if check_result.success_level < recipe.min_success_level:
+        worth_lost = compute_gem_worth(gem)
+        gem_instance.delete()  # CASCADE deletes GemInstanceDetails
+        return CutResult(shattered=True, new_cut_grade=None, worth=0, worth_lost=worth_lost)
+
+    new_cut = resolve_cut_grade(gem.cut_grade, check_result.success_level)
+    gem.cut_grade = new_cut
+    gem.save(update_fields=["cut_grade"])
+    return CutResult(
+        shattered=False, new_cut_grade=new_cut, worth=compute_gem_worth(gem), worth_lost=0
+    )

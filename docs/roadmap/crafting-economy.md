@@ -74,6 +74,10 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   (so `appraise()` reflects it). `adorned_materials()` is the queryable "materials on this piece"
   seam the magic app reads. Safe craft-time path only.
 
+- **Gem cutting (Build 0b, slice 3) — DONE.** `cut_gem()` reuses a `GEM_CUT` `CraftingRecipe` +
+  `perform_check` (skill feeds the roll) and resolves `success_level` to an improved cut `GemGrade`;
+  a botch **shatters** the stone. The risky value-add axis, kept in the crafting family.
+
 - **Risky adornment prying (Build 0b, slice 6) — DONE.** `pry_adornment()` completes the adornment
   lifecycle: a risky `perform_check` removes a set gem — freed to the pryer on success, **shattered**
   on a botch (the cut's shatter spine); the host's worth drops either way. High risk, high reward.
@@ -82,11 +86,7 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   haul generator: one mine cycle yields a common-gem **aggregate value** plus, rarely, a few
   **Rare-Find** gem instances (born uncut). Mine quality + minister bonus raise the Rare-Find
   chance and shift every axis roll up; size/purity floored above common on a find. The multiplicative
-  axes give the fat "remarkable find" tail for free. **Deferred to the Build-1 domain track:** the
-  weekly cron, the per-holding `mine_quality` field, the minister-check seam (#2239, schema-only),
-  and where common value accrues (a per-tier vault bucket). Remaining 0b slices: the **cut recipe**
-  (see slice 3 PR) + risky prying/re-set, the **value-denominated / bucket** bulk path, and the
-  domain-cron wiring for this engine.
+  axes give the fat "remarkable find" tail for free.
 
 - **Handler registry** (`CraftingHandler` ABC + `FacetAttachHandler` / `StyleAttachHandler`).
   New kinds (alchemy, wand-crafting, etc.) plug in by authoring a `CraftingRecipe` row +
