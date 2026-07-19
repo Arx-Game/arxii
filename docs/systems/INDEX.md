@@ -1473,7 +1473,8 @@ Multi-stage character creation flow with draft system.
   True, #2036 — an authored per-area toggle for whether finalizing a character there grants a
   `LocationTenancy` at the starting room; `crest_art` — nullable FK →
   `evennia_extensions.Media`, `SET_NULL`, #2408 — replaced a raw-URL field, gradient
-  placeholder when unset), `Beginnings` (`art` — same `Media` FK shape, #2408)
+  placeholder when unset), `Beginnings` (`art` — same `Media` FK shape, #2408; `prelude_mission`
+  nullable FK → `missions.MissionTemplate`, #2470 — the Beginning's auto-granted first-hour Mission)
 - **Key Functions:** Stage validation, draft progression, `_grant_cg_residence_tenancy()` (#2036,
   `world/character_creation/services.py`) — called from `finalize_character`; when
   `starting_area.grants_residence_tenancy` and the starting room resolves a `RoomProfile`, calls
@@ -1481,6 +1482,12 @@ Multi-stage character creation flow with draft system.
   enrollment"), which auto-defaults both Evennia `home` and `CharacterSheet.current_residence` via
   `maybe_default_residence()` — closes the "Academy auto-residence" story with zero manual player
   step, making the daily residence-trickle gate reachable straight out of CG.
+- **Prelude mission auto-grant (#2470):** `_grant_prelude_mission()`
+  (`world/character_creation/services.py`) — called from `finalize_character` right after
+  `_grant_cg_residence_tenancy`. No-op when `draft.selected_beginnings.prelude_mission` is null;
+  otherwise calls `world.missions.services.run.staff_assign_mission()` verbatim (no new
+  missions-app surface). Deliberately NOT best-effort — a misconfigured template raises and rolls
+  back the whole finalization transaction (a content-authoring bug, not contention).
 - **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds Realm/StartingArea/Beginnings/Species/Gender/TarotCard/HeightBand/Build/12 stat Traits/Rosters/Path so `finalize_character` runs on a fresh DB, plus (#2162) every `CGExplanation` stage heading/intro/desc row (`CG_EXPLANATION_COPY`, 28 keys, `update_or_create`d so repo copy fixes keep reaching seeded deploys) so a fresh DB never ships blank CG stage copy. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
 - **Email notifications (#2162):** `world.character_creation.email_service.CGEmailService` —
   submission/approved/revisions-requested/denied notices, called (best-effort) from
@@ -2540,6 +2547,15 @@ state is node position + snapshots + already-applied consequences, never a scrat
   `covenants` (covenant founding/induction), `predicates` (`availability_rule`/`rule_json`
   gating, `has_completed_mission` chain leaf), `mechanics` (Challenge-sourced options),
   `stakes contract engine` (`activate_stakes_for_instance`), `justice` (CRIME_WATCH sink).
+- **Content pipeline (#2470):** `MissionTemplate`/`MissionNode`/`MissionOption` (+ authored `key`
+  slug)/`MissionOptionRoute`/`MissionOptionRouteCandidate`/`MissionOptionRouteReward` (+ NK-only
+  `sequence`, auto-assigned in `save()`)/`MissionRenownAward` (+ `sequence`) all carry
+  `NaturalKeyMixin` and are in `core_management.content_export.CONTENT_MODELS` — the lore repo can
+  author a mission graph as a fixture and install it via the ordinary export/import pipeline, same
+  as any other content model. `checks.CheckType`/`checks.CheckCategory` joined the allowlist in the
+  same change (needed for `MissionOption.authored_check_type` to round-trip). `checks.Consequence`
+  and `npc_services.NPCServiceOffer` remain un-keyed (documented gap, not this issue's scope). The
+  seeded Tutorial Chain is unaffected — it predates this pipeline and stays imperatively seeded.
 - **Source:** `src/world/missions/`. Roadmap: `docs/roadmap/missions.md`.
 
 ### Currency & Org Economy (#923–#932, #930 active collection)
