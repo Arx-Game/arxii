@@ -8,12 +8,14 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.distinctions.factories import DistinctionFactory
 from world.magic.factories import ResonanceFactory
 from world.narrative.ambient_content import compile_line_filter, deliver_ambient_group
 from world.narrative.constants import ConditionConnector, ConditionType, NarrativeCategory
 from world.narrative.factories import AmbientEmoteConditionFactory, AmbientEmoteLineFactory
 from world.narrative.models import NarrativeMessageDelivery
 from world.societies.constants import FameTier
+from world.societies.factories import SocietyFactory
 from world.species.factories import SpeciesFactory
 
 
@@ -53,6 +55,52 @@ class CompileLineFilterTests(TestCase):
             compiled,
             {"path": "character.item_data.species.name", "op": "==", "value": "Infernal"},
         )
+
+    def test_distinction_condition_compiles_to_public_distinction_leaf(self) -> None:
+        distinction = DistinctionFactory(slug="the-iron-duelist")
+        line = AmbientEmoteLineFactory(bystander_body="A murmur.")
+        AmbientEmoteConditionFactory(
+            line=line,
+            condition_type=ConditionType.DISTINCTION,
+            species=None,
+            distinction=distinction,
+        )
+        compiled = compile_line_filter(line)
+        self.assertEqual(
+            compiled,
+            {"path": "character", "op": "has_public_distinction", "value": "the-iron-duelist"},
+        )
+
+    def test_renown_min_condition_compiles_to_fame_tier_leaf(self) -> None:
+        line = AmbientEmoteLineFactory(bystander_body="A murmur.")
+        AmbientEmoteConditionFactory(
+            line=line,
+            condition_type=ConditionType.RENOWN_MIN,
+            species=None,
+            min_fame_tier=FameTier.CELEBRITY,
+        )
+        compiled = compile_line_filter(line)
+        self.assertEqual(
+            compiled,
+            {
+                "path": "character",
+                "op": "fame_tier_at_least",
+                "value": {"min_tier": "celebrity", "perceiving_society": None},
+            },
+        )
+
+    def test_renown_min_condition_with_perceiving_society_compiles_society_name(self) -> None:
+        society = SocietyFactory(name="The Silver Court")
+        line = AmbientEmoteLineFactory(bystander_body="A murmur.")
+        AmbientEmoteConditionFactory(
+            line=line,
+            condition_type=ConditionType.RENOWN_MIN,
+            species=None,
+            min_fame_tier=FameTier.CELEBRITY,
+            perceiving_society=society,
+        )
+        compiled = compile_line_filter(line)
+        self.assertEqual(compiled["value"]["perceiving_society"], "The Silver Court")
 
     def test_two_conditions_and_connector_compiles_to_and_tree(self) -> None:
         species = SpeciesFactory(name="Infernal")
