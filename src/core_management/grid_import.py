@@ -659,12 +659,21 @@ def _ensure_ambient_trigger(room_objectdb: object, trigger_def: object) -> None:
     """Idempotently install a derived ambient Trigger on a room (#2471 v2).
 
     Mirrors world.battles.duel_wiring.install_champion_duel_trigger's get_or_create +
-    on_trigger_added(only when newly created) shape.
+    on_trigger_added(only when newly created) shape, PLUS copies the TriggerDefinition's
+    compiled filter onto the new Trigger row's additional_filter_condition — required
+    because flows.emit._trigger_should_fire (the live MOVED-dispatch path) only ever
+    consults Trigger.additional_filter_condition, never TriggerDefinition
+    .base_filter_condition. duel_wiring's trigger always has an empty base_filter_condition
+    (unconditional per-room fire) so it never needed this copy; the ambient case's
+    compiled SPECIES/RESONANCE/etc filter does. Mirrors the same copy-on-install step in
+    world.conditions.services._install_reactive_side_effects.
     """
     from flows.models import Trigger  # noqa: PLC0415
 
     trigger, created = Trigger.objects.get_or_create(
-        obj=room_objectdb, trigger_definition=trigger_def
+        obj=room_objectdb,
+        trigger_definition=trigger_def,
+        defaults={"additional_filter_condition": trigger_def.base_filter_condition},
     )
     if created:
         handler = room_objectdb.trigger_handler
