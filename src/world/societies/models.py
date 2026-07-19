@@ -32,7 +32,6 @@ from world.checks.models import OutcomeTierAward
 from world.societies.constants import (
     COMMON_KNOWLEDGE_MULTIPLIER,
     DeedKnowledgeSource,
-    FameTier,
     ObligationOrigin,
     ObligationState,
 )
@@ -1627,106 +1626,6 @@ class RankingBandLabel(SharedMemoryModel):
     def __str__(self) -> str:
         scope = self.society.name if self.society_id else "global"
         return f"[{scope}] ranks {self.rank_min}-{self.rank_max}: {self.label[:40]}"
-
-
-class FameReactionLine(SharedMemoryModel):
-    """#881 — an authored room-entry reaction to a notable arrival.
-
-    Per-room, per-society, entirely optional: the noble meeting hall
-    reacts differently from the salon, and unauthored rooms say nothing.
-    Fires when a character whose perceived fame tier meets
-    ``min_fame_tier`` enters ``room`` — bystanders receive
-    ``bystander_body``; the arriver receives ``arriver_body`` (the
-    actor/audience split). A society-voiced line perceives the arriver's
-    tier through that society's ``fame_perception_offset``; ``society``
-    null reads the raw tier. Admin-editable per the flavor-text rule.
-    """
-
-    room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
-        on_delete=models.CASCADE,
-        related_name="fame_reaction_lines",
-    )
-    society = models.ForeignKey(
-        Society,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="fame_reaction_lines",
-        help_text=(
-            "The society whose voice this room speaks with — its "
-            "fame_perception_offset filters how famous the arriver reads. "
-            "Null = raw fame tier."
-        ),
-    )
-    min_fame_tier = models.CharField(
-        max_length=20,
-        choices=FameTier.choices,
-        default=FameTier.TALKED_ABOUT,
-        help_text="Minimum perceived fame tier of the arriver for this line to fire.",
-    )
-    bystander_body = models.TextField(
-        blank=True,
-        help_text="What the room's other occupants see when the line fires.",
-    )
-    arriver_body = models.TextField(
-        blank=True,
-        help_text="What the arriving character themselves sees.",
-    )
-    weight = models.PositiveIntegerField(
-        default=1,
-        help_text="Relative draw weight among this room's eligible lines.",
-    )
-    is_active = models.BooleanField(default=True)
-
-    def clean(self) -> None:
-        super().clean()
-        if not self.bystander_body and not self.arriver_body:
-            raise ValidationError(
-                {"bystander_body": "Author at least one of bystander_body / arriver_body."}
-            )
-
-    def save(self, *args: object, **kwargs: object) -> None:
-        self.clean()
-        super().save(*args, **kwargs)
-
-    def __str__(self) -> str:
-        voice = self.society.name if self.society_id else "no-society"
-        return f"FameReactionLine(room={self.room_id}, {voice}, >={self.min_fame_tier})"
-
-
-class FameReactionCooldown(SharedMemoryModel):
-    """#881 — per-(persona, room) re-fire throttle for fame reactions.
-
-    Mirrors ``missions.MissionGiverCooldown``: without it, pacing in and
-    out of an authored room spams every occupant. One row per pair,
-    upserted on fire.
-    """
-
-    persona = models.ForeignKey(
-        "scenes.Persona",
-        on_delete=models.CASCADE,
-        related_name="fame_reaction_cooldowns",
-    )
-    room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
-        on_delete=models.CASCADE,
-        related_name="fame_reaction_cooldowns",
-    )
-    available_at = models.DateTimeField(
-        help_text="Reactions to this persona in this room re-fire after this time.",
-    )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["persona", "room"],
-                name="unique_fame_reaction_cooldown_pair",
-            ),
-        ]
-
-    def __str__(self) -> str:
-        return f"FameReactionCooldown(persona={self.persona_id}, room={self.room_id})"
 
 
 class CovenantLegendCredit(SharedMemoryModel):

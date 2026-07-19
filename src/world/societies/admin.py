@@ -10,8 +10,6 @@ from django.contrib import admin
 
 from world.societies.models import (
     CovenantLegendCredit,
-    FameReactionCooldown,
-    FameReactionLine,
     GangTurfDetails,
     GangTurfReputationAward,
     GangTurfTierThreshold,
@@ -591,24 +589,6 @@ class RankingBandLabelAdmin(admin.ModelAdmin):
     list_display = ("__str__", "society", "rank_min", "rank_max", "is_active")
     list_filter = ("is_active", "society")
     search_fields = ("label",)
-
-
-@admin.register(FameReactionLine)
-class FameReactionLineAdmin(admin.ModelAdmin):
-    """#881 — per-room, per-society fame reactions to notable arrivals."""
-
-    list_display = ("__str__", "room", "society", "min_fame_tier", "weight", "is_active")
-    list_filter = ("is_active", "min_fame_tier", "society")
-    search_fields = ("bystander_body", "arriver_body")
-
-
-@admin.register(FameReactionCooldown)
-class FameReactionCooldownAdmin(admin.ModelAdmin):
-    """#881 — re-fire throttle rows (operational visibility only)."""
-
-    autocomplete_fields = ["persona"]
-
-    list_display = ("persona", "room", "available_at")
 
 
 @admin.register(GangTurfDetails)
