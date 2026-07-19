@@ -11,6 +11,8 @@ from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
 from world.conditions.factories import CapabilityTypeFactory
+from world.items.factories import ItemTemplateFactory, ItemTemplatePropertyFactory
+from world.items.services.staging import stage_prop
 from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
 from world.mechanics.factories import (
     ApplicationFactory,
@@ -192,4 +194,53 @@ class BareObjectRoomAffordanceTests(TestCase):
         matching = [a for a in actions if a.application_name == "Illuminate"]
         assert len(matching) == 1
         assert matching[0].target_object == self.location
+        assert matching[0].resolved_default_template == self.template
+
+
+@patch(
+    "world.mechanics.services._get_difficulty_indicator_for_check",
+    return_value=DifficultyIndicator.MODERATE,
+)
+class GMStagedPropAffordanceTests(TestCase):
+    """GM stages a torch mid-scene (#2503) -> the room's next available-actions read
+    shows Ignite, with zero bespoke wiring -- the staged prop rides the same
+    materialization chokepoint (``materialize_item_game_object_in_room``) a crafted or
+    looted torch would, so it carries the same template-default ``ObjectProperty`` rows.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = ObjectDBFactory(db_key="PyromancerChar")
+        cls.location = ObjectDBFactory(db_key="StagingRoom")
+
+        cls.capability = CapabilityTypeFactory(name="generation_stage_oa")
+        cls.prop_flammable = PropertyFactory(name="flammable_stage_oa")
+
+        cls.template = ChallengeTemplateFactory(name="Ignite Staged Torch", severity=3)
+        cls.application = ApplicationFactory(
+            name="Ignite Staged",
+            capability=cls.capability,
+            target_property=cls.prop_flammable,
+            default_template=cls.template,
+        )
+        cls.approach = ChallengeApproachFactory(
+            challenge_template=cls.template,
+            application=cls.application,
+            display_name="Ignite it",
+        )
+
+        cls.item_template = ItemTemplateFactory(name="Staged Torch Template")
+        ItemTemplatePropertyFactory(item_template=cls.item_template, property=cls.prop_flammable)
+
+    def test_staged_prop_surfaces_ignite(self, _mock_diff: object) -> None:  # noqa: PT019
+        torch = stage_prop(self.item_template, self.location)
+
+        source = _make_source(
+            capability_id=self.capability.id, capability_name="generation_stage_oa"
+        )
+        actions = get_available_actions(self.character, self.location, capability_sources=[source])
+
+        matching = [a for a in actions if a.application_name == "Ignite Staged"]
+        assert len(matching) == 1
+        assert matching[0].target_object == torch
         assert matching[0].resolved_default_template == self.template

@@ -49,15 +49,37 @@ def apply_template_properties(obj: ObjectDB, item_template: ItemTemplate) -> Non
         )
 
 
+def _create_item_object_db(instance: ItemInstance, location: ObjectDB) -> ObjectDB:  # noqa: OBJECTDB_PARAM
+    """Create + link the physical ``ObjectDB`` for ``instance`` at ``location``.
+
+    The shared chokepoint underlying both public materialize functions below —
+    mirrors the ``ObjectDBFactory`` creation pattern (``create_object`` with an
+    explicit typeclass and ``nohome=True``), links ``instance.game_object`` back,
+    and applies the template's default ``ObjectProperty`` rows
+    (``apply_template_properties``). ``location`` may be a character (inventory
+    placement) or a room (GM-staged prop, #2503) — this function doesn't care
+    which, which is the point: there is exactly one place an ``ItemInstance``
+    gains a physical ``ObjectDB``.
+    """
+    game_object = create_object(
+        typeclass=ITEM_TYPECLASS_PATH,
+        key=instance.display_name,
+        location=location,
+        nohome=True,
+    )
+    instance.game_object = game_object
+    instance.save(update_fields=["game_object"])
+    apply_template_properties(game_object, instance.template)
+    return game_object
+
+
 def materialize_item_game_object(
     instance: ItemInstance,
     holder_sheet: CharacterSheet,
 ) -> ObjectDB | None:
     """Create + link the physical ``ObjectDB`` for ``instance`` in the holder's inventory.
 
-    Mirrors the ``ObjectDBFactory`` creation pattern (``create_object`` with
-    an explicit typeclass and ``nohome=True``) as a production service. The
-    object is placed on the holder's character (location = the character
+    The object is placed on the holder's character (location = the character
     ObjectDB) and the character's ``carried_items`` cache is invalidated so
     the next inventory read sees the new item.
 
@@ -69,15 +91,19 @@ def materialize_item_game_object(
     character = holder_sheet.character
     if character is None:
         return None
-    game_object = create_object(
-        typeclass=ITEM_TYPECLASS_PATH,
-        key=instance.display_name,
-        location=character,
-        nohome=True,
-    )
-    instance.game_object = game_object
-    instance.save(update_fields=["game_object"])
-    apply_template_properties(game_object, instance.template)
+    game_object = _create_item_object_db(instance, character)
     if hasattr(character, "carried_items"):
         character.carried_items.invalidate()
     return game_object
+
+
+def materialize_item_game_object_in_room(instance: ItemInstance, room: ObjectDB) -> ObjectDB:  # noqa: OBJECTDB_PARAM
+    """Create + link the physical ``ObjectDB`` for ``instance`` directly in ``room``.
+
+    The GM stage-prop path (#2503) — a conjured torch belongs to the room itself,
+    not to any character's inventory, so there is no holder/carried-items step
+    (unlike ``materialize_item_game_object``). Always returns an ``ObjectDB``
+    (``room`` is caller-resolved and never ``None``, unlike the holder-sheet
+    defensive-``None`` case above).
+    """
+    return _create_item_object_db(instance, room)

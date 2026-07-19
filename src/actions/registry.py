@@ -172,6 +172,7 @@ from actions.definitions.gm_combat import (
     RemoveEncounterParticipantAction,
     ResolveEncounterRoundAction,
 )
+from actions.definitions.gm_props import StagePropAction, StagePropertyAction
 from actions.definitions.gm_stories import (
     ClaimGroupStoryRequestAction,
     CompleteStoryAction,
@@ -589,6 +590,8 @@ _ALL_ACTIONS: list[Action] = [
     PauseEncounterAction(),
     EndEncounterAction(),
     PreviewOpponentDefaultsAction(),
+    StagePropAction(),
+    StagePropertyAction(),
     CompleteStoryAction(),
     ResolveEpisodeAction(),
     PromoteEpisodeAction(),

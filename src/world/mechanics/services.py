@@ -1943,6 +1943,23 @@ def volatile_object_property(target: ObjectDB) -> ObjectProperty | None:
     )
 
 
+def stage_property(target: ObjectDB, property_: Property, value: int = 1) -> ObjectProperty:
+    """GM improv: attach or refresh a Property on ``target`` (#2503).
+
+    Mirrors ``actions.effects.effect_handlers._add_property``'s upsert convention
+    (``update_or_create`` keyed on ``object``+``property``) as a directly-callable
+    service — a GM narrating "this door looks locked" outside any authored
+    consequence chain. Idempotent: re-staging the same property on the same
+    target updates its value rather than duplicating the row.
+    """
+    obj_prop, _ = ObjectProperty.objects.update_or_create(
+        object=target,
+        property=property_,
+        defaults={"value": value},
+    )
+    return obj_prop
+
+
 def prerequisites_met(prereqs: Iterable[Prerequisite], caster: ObjectDB, target: ObjectDB) -> bool:
     """True if target satisfies every one of prereqs (all() semantics; empty = True).
 

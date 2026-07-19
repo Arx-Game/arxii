@@ -756,6 +756,24 @@ building toward breakthrough moments.
   there, silently falling back to the acting character), so an `EffectTarget.TARGET`
   consequence effect lands on the actual object (e.g. Ignite adds `lit` to the
   torch, not the character).
+- **GM stage-prop improv (#2503)** — `[WIRED]`: the last mile from "a GM wants a
+  torch to exist" to the above pipeline actually finding one. `StagePropAction`
+  (key `stage_prop`, `actions/definitions/gm_props.py`) instantiates a curated
+  `ItemTemplate` as a holder-less `ObjectDB` directly in the room
+  (`world.items.services.staging.stage_prop` →
+  `materialize_item_game_object_in_room`, sharing Task 2's chokepoint — so the
+  staged prop carries the same template-default `ObjectProperty` rows a crafted
+  torch would). The very next `get_available_actions` read at that room picks it
+  up via the bare-object scan above with zero extra wiring.
+  `StagePropertyAction` (key `stage_property`) is the companion "tag an existing
+  object" verb, wrapping `world.mechanics.services.stage_property` (mirrors
+  `effect_handlers._add_property`'s upsert). Both gate on the room's active
+  scene GM/owner or staff (`world.scenes.interaction_services.get_active_scene`
+  + `Scene.is_gm`/`is_owner`, mirroring `dramatic_moments.py`'s
+  `_account_can_gm_scene`); template/property are resolved by exact
+  pk-or-name — a curated gate, never freeform creation. Shared by telnet
+  `CmdStage` (`stage prop <template>` / `stage property <property>
+  [=<target>]`, `commands/gm_props.py`) and the web action-list dispatch.
 
 **Action Enhancement system** — `[WIRED]` (`actions/` — `ActionEnhancement` +
 effect configs).
