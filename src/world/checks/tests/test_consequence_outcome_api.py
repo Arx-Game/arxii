@@ -156,20 +156,33 @@ class ConsequenceOutcomeAPIReadTest(ConsequenceOutcomeAPISetupMixin, TestCase):
         self.assertEqual(selected[0]["label"], "Knockback")
 
     def test_modifiers_breakdown_included(self) -> None:
-        """modifiers list carries both snapshotted rows."""
+        """modifiers list carries the non-staff-visible snapshotted rows."""
         response = self.client.get("/api/checks/consequence-outcomes/")
         row = response.json()["results"][0]
         modifiers = row["modifiers"]
-        self.assertEqual(len(modifiers), 2)
+        self.assertEqual(len(modifiers), 1)
+        self.assertEqual(modifiers[0]["source_kind"], ModifierSourceKind.CONDITION.value)
         for mod in modifiers:
             self.assertIn("source_kind", mod)
             self.assertIn("source_label", mod)
             self.assertIn("value", mod)
 
-    def test_modifier_total_present(self) -> None:
-        """modifier_total field present and equals sum of modifiers."""
+    def test_modifier_total_matches_visible_rows(self) -> None:
+        """modifier_total equals the sum of the rows the requester can see."""
         response = self.client.get("/api/checks/consequence-outcomes/")
         row = response.json()["results"][0]
+        self.assertEqual(row["modifier_total"], 1)
+
+    def test_staff_sees_all_modifier_rows_and_full_total(self) -> None:
+        """Staff reads include every snapshotted row and the stored total."""
+        staff = AccountFactory()
+        staff.is_staff = True
+        staff.save()
+        client = APIClient()
+        client.force_authenticate(user=staff)
+        response = client.get("/api/checks/consequence-outcomes/")
+        row = response.json()["results"][0]
+        self.assertEqual(len(row["modifiers"]), 2)
         self.assertEqual(row["modifier_total"], 3)
 
     def test_summary_and_character_present(self) -> None:

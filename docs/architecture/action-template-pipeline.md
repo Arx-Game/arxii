@@ -427,6 +427,9 @@ difficulty is context-dependent and determined by the caller, not the pipeline.
 | ChallengeInstance - live challenges at locations           |
 | ContextConsequencePool - environmental riders             |
 | get_available_actions() - what can you do right now?       |
+|   TWO sources (#2503): authored ChallengeInstance rows,    |
+|   PLUS lazy bare-object synthesis (ObjectProperty matched  |
+|   against Application.default_template) — see below        |
 | resolve_challenge() - thin wrapper adding bookkeeping     |
 | Effect handlers - dispatch ConsequenceEffects              |
 +--------------+--------------------------------------------+
@@ -504,6 +507,62 @@ difficulty is context-dependent and determined by the caller, not the pipeline.
 
 9. **Flows** — If any consequence had a LAUNCH_FLOW effect, the flow engine picks
    up the sequence (e.g., "tavern fire spreads" narrative).
+
+This example walks the **authored-instance** path — a GM (or seed content)
+placed a `ChallengeInstance` (the locked door) in the room ahead of time. See
+below for the second path: a bare object with no authored instance at all.
+
+### Bare-Object Affordances — the Second Availability Source (#2503)
+
+The locked-door example above assumes someone already placed a
+`ChallengeInstance` in the room. Most everyday objects never get that
+treatment — nobody is going to hand-place a `ChallengeInstance` for every
+flammable torch or dark room a GM improvises mid-scene. `get_available_actions`
+therefore has a **second source**, `_bare_object_actions`
+(`world/mechanics/services.py`), that runs after the authored-instance scan on
+every call:
+
+1. **Mechanics** — `_bare_object_actions` reads `ObjectProperty` rows off
+   every object at the location (plus the location itself, so a room's own
+   properties like "dark" count) and matches them against `Application`s whose
+   `default_template` is set (the curated gate from `ADR-0147` — most
+   Applications leave this null and never produce a bare-object affordance) and
+   whose `capability_id` the character has a source for. A torch carrying
+   `ObjectProperty(flammable)` matches `Application("Ignite")` when the
+   character has a `generation` capability source. No `ChallengeInstance` row
+   exists yet.
+2. Any pair already covered by an authored, active `ChallengeInstance` for
+   that `(target_object, template)` is skipped — an authored instance always
+   wins over lazy synthesis.
+3. The synthesized `AvailableAction` carries `challenge_instance_id=None` and
+   a resolved `target_object` + `resolved_default_template` instead. When
+   `player_interface.py`'s `_avail_to_player_action` sees
+   `challenge_instance_id is None`, it builds a `WORLD_INTERACTION` `ActionRef`
+   (`application_id` + `target_object_id` — both stable before any instance
+   exists) instead of a `CHALLENGE` one.
+4. **Player selects the action.** `dispatch_player_action` re-validates the
+   `(application_id, target_object_id)` pair against a fresh
+   `get_available_actions()` call (never trusts a stale/forged ref), then mints
+   the real `ChallengeInstance` via
+   `instantiate_challenge(resolved_default_template, location, target_object)`.
+5. **Mechanics** — resolves through the *exact same*
+   `resolve_challenge()` used by the CHALLENGE backend — zero reimplementation.
+   `ResolutionContext.target` is populated from `ChallengeInstance.target_object`
+   (previously always `None` on this path), so an `EffectTarget.TARGET`
+   consequence lands on the torch, not the character — e.g. Ignite adds `lit`
+   to the torch itself.
+
+**The last mile — where does the torch come from?** A GM's improv verb,
+`stage prop <template>` (`StagePropAction`, `actions/definitions/gm_props.py`),
+materializes a curated `ItemTemplate` directly into the room
+(`world.items.services.staging.stage_prop` →
+`materialize_item_game_object_in_room`) carrying its template's default
+`ObjectProperty` rows (`apply_template_properties`, the same chokepoint every
+crafted item passes through at materialization). The very next
+`get_available_actions` read at that room picks the staged prop up via the
+bare-object scan above with zero extra wiring — see
+`docs/architecture/property-capability-action.md`'s "GM stage-prop improv"
+note for the full authorization/telnet detail.
 
 ### Non-Challenge Example: Technique in a Social Scene
 
@@ -644,3 +703,15 @@ checks at pause points is additive, not a restructure.
   (uses the action's check result)
 - **Reactive pool** — a ContextConsequencePool with its own check_type that fires
   without player action (traps, hazards)
+- **Bare-object affordance (#2503)** — an `AvailableAction` synthesized straight
+  from an `ObjectProperty` match, with no authored `ChallengeInstance` behind
+  it until the player actually acts. See "Bare-Object Affordances" above and
+  ADR-0147.
+- **World-interaction template (#2503)** — a `ChallengeTemplate` wired onto an
+  `Application.default_template`; the authored resolution content (approaches,
+  check type, consequence pool) a bare-object affordance mints into a real
+  `ChallengeInstance` at dispatch time.
+- **WORLD_INTERACTION backend (#2503)** — the `ActionBackend` for bare-object
+  affordances, keyed on `(application_id, target_object_id)` instead of a
+  `challenge_instance_id`; dispatch mints then resolves through the same
+  `resolve_challenge()` the CHALLENGE backend uses.

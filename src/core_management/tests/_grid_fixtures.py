@@ -18,14 +18,18 @@ from world.areas.constants import AreaLevel, GridOrigin
 from world.areas.models import Area
 from world.buildings.constants import PermitEligibility
 from world.buildings.models import BuildingKind
+from world.clues.constants import ClueTargetKind
+from world.clues.models import Clue, ClueTrigger, RoomClue
+from world.codex.models import CodexCategory, CodexEntry, CodexSubject
 from world.locations.constants import LocationParentType, StatKey
 from world.locations.models import LocationValueModifier, LocationValueOverride
+from world.magic.models import PortalAnchor, PortalAnchorKind
 from world.realms.models import Realm
 from world.societies.models import Society
 from world.weather.models import Climate
 
 
-def build_sample_grid() -> SimpleNamespace:
+def build_sample_grid() -> SimpleNamespace:  # noqa: PLR0915
     """Build one AUTHORED region -> city, two rooms, an exit pair, plus sidecars.
 
     Mirrors the fixture ``GridExportTests.setUpTestData`` originally built inline;
@@ -157,6 +161,45 @@ def build_sample_grid() -> SimpleNamespace:
         source="weather:cold-snap",
     )
 
+    # CODEX target_kind requires target_codex_entry — build one minimally rather
+    # than pulling in the full codex factory graph, since this fixture module
+    # intentionally avoids FactoryBoy (see module docstring).
+    codex_category = CodexCategory.objects.create(name="Rumors")
+    codex_subject = CodexSubject.objects.create(name="The Torn Letter", category=codex_category)
+    codex_entry = CodexEntry.objects.create(
+        subject=codex_subject,
+        name="The Torn Letter",
+        lore_content="It was never sent.",
+    )
+
+    torn_letter = Clue.objects.create(
+        target_kind=ClueTargetKind.CODEX,
+        target_codex_entry=codex_entry,
+        name="Torn Letter",
+        description="A half-burned letter, edges curling.",
+        slug="torn-letter",
+    )
+
+    room_clue = RoomClue.objects.create(
+        room_profile=taproom,
+        clue=torn_letter,
+        detect_difficulty=5,
+        fixture_key="arx-city/golden-hart-taproom/torn-letter",
+    )
+    clue_trigger = ClueTrigger.objects.create(
+        room_profile=taproom,
+        clue=torn_letter,
+        fixture_key="arx-city/golden-hart-taproom/whisper",
+    )
+
+    mirror_kind = PortalAnchorKind.objects.create(name="Mirror")
+    portal_anchor = PortalAnchor.objects.create(
+        room_profile=taproom,
+        kind=mirror_kind,
+        name="a tall silvered mirror",
+        fixture_key="arx-city/golden-hart-taproom/mirror",
+    )
+
     return SimpleNamespace(
         realm=realm,
         climate=climate,
@@ -177,4 +220,9 @@ def build_sample_grid() -> SimpleNamespace:
         override=override,
         authored_modifier=authored_modifier,
         weather_modifier=weather_modifier,
+        torn_letter=torn_letter,
+        room_clue=room_clue,
+        clue_trigger=clue_trigger,
+        mirror_kind=mirror_kind,
+        portal_anchor=portal_anchor,
     )

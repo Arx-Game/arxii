@@ -346,9 +346,13 @@ known technique failed requirement checks a condition or innate baseline would h
 - Docs: `src/world/conditions/AGENT_GLOSSARY.md`'s "Agency oracle" entry; the "Technique - FK to
   ActionTemplate" box in `docs/architecture/action-template-pipeline.md` (was wrongly claiming
   availability-only).
-- Follow-up noted, not filed (see `reference-capability-two-oracle-split` in project memory): the
-  object-state→challenge bridge (#2503) is the remaining last mile for techniques feeding
-  world-interaction end to end.
+- **Follow-up landed (#2503, 2026-07-19):** the object-state→challenge bridge closing this last
+  mile is built — `Application.default_template` + `get_available_actions`'s bare-object second
+  source + the `WORLD_INTERACTION` action backend now let a technique-granted capability surface
+  a world-interaction affordance on any object carrying the matching `mechanics.ObjectProperty`,
+  with no authored `ChallengeInstance` needed. See `docs/roadmap/capabilities-and-challenges.md`'s
+  "Phase 8: Bare-Object Affordances & GM Stage-Prop", ADR-0147, and
+  `docs/architecture/action-template-pipeline.md`'s "Bare-Object Affordances" section.
 
 ---
 

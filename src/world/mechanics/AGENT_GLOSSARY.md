@@ -51,6 +51,22 @@ _Avoid_: explosive, detonatable (prefer "volatile" as the canonical adjective), 
 A way to resolve a challenge (`ChallengeApproach`), connecting what a character can do (an `Application`) with how it is rolled (a `CheckType`) for a specific challenge template, optionally gated by a required effect property.
 _Avoid_: method, tactic, option, resolution path
 
+**World-interaction template** (#2503):
+A `ChallengeTemplate` wired onto an `Application.default_template` — the curated,
+authored resolution content (approaches, check type, consequence pool) a bare-object
+affordance mints into a real `ChallengeInstance` the moment a player acts on it. A null
+`default_template` is the deliberate default: most Applications never grant ambient
+world presence outside a GM-staged Situation.
+_Avoid_: default template (ambiguous — say which model it's a default *for*), ambient
+challenge
+
+**Bare-object affordance** (#2503):
+An `AvailableAction` synthesized by `get_available_actions`'s second source
+(`_bare_object_actions`) straight from an `ObjectProperty` match — no authored
+`ChallengeInstance` exists until the player dispatches it (via the `WORLD_INTERACTION`
+action backend, which mints one lazily). See ADR-0147.
+_Avoid_: object action, environmental action, ambient action
+
 **SituationTrapLink**:
 An authored trap blueprint carried by a `SituationTemplate` — name, consequence
 pool, detect/disarm check types and difficulties, hidden/obvious default.

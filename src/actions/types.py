@@ -109,6 +109,21 @@ class ActionRef:
     - COMBAT (technique): technique_id
     - COMBAT (clash contribution): clash_id + clash_action_slot
     - REGISTRY: registry_key
+    - WORLD_INTERACTION: application_id + target_object_id
+
+    WORLD_INTERACTION backend (#2503)
+    ----------------------------------
+    A bare-object affordance surfaced by ``get_available_actions`` with no
+    ``ChallengeInstance`` yet (``challenge_instance_id`` / ``resolved_challenge_instance``
+    are ``None`` on the source ``AvailableAction``). ``application_id`` and
+    ``target_object_id`` are both stable *before* any instance exists — they identify
+    the ``Application`` and the ``ObjectDB`` the affordance is about, which is enough
+    for the dispatcher to re-validate (recomputing ``get_available_actions`` and
+    matching on this pair) and then mint a ``ChallengeInstance`` via
+    ``instantiate_challenge(resolved_default_template, location, target_object)``
+    before resolving through the unchanged ``resolve_challenge`` path. Never carries
+    ``challenge_instance_id`` — that field stays ``None`` for this backend by
+    construction (there is nothing to mint against yet at ref-build time).
 
     COMBAT ActionRef encoding
     -------------------------
@@ -148,6 +163,11 @@ class ActionRef:
     position_id: int | None = None
     # Blueprint pk for set_the_stage: identifies which PositionBlueprint to instantiate.
     blueprint_id: int | None = None
+    # WORLD_INTERACTION (#2503): identifies the Application + target ObjectDB for a
+    # bare-object affordance that has no ChallengeInstance yet. Both ints are stable
+    # before any instance is minted.
+    application_id: int | None = None
+    target_object_id: int | None = None
 
     def _validate_combat(self) -> None:
         """Validate the COMBAT-backend invariants (technique vs clash, passive slots)."""
@@ -180,6 +200,11 @@ class ActionRef:
         if self.backend == ActionBackend.SCENE_ADAPTIVE and not self.registry_key:
             msg = "SCENE_ADAPTIVE ActionRef requires registry_key"
             raise ValueError(msg)
+        if self.backend == ActionBackend.WORLD_INTERACTION and (
+            self.application_id is None or self.target_object_id is None
+        ):
+            msg = "WORLD_INTERACTION ActionRef requires application_id and target_object_id"
+            raise ValueError(msg)
 
 
 @dataclass
@@ -192,6 +217,7 @@ class DispatchResult:
     ``detail`` carries the immediate result object when ``deferred`` is False:
     - CHALLENGE → ``ChallengeResolutionResult``
     - REGISTRY  → ``ActionResult``
+    - WORLD_INTERACTION → ``ChallengeResolutionResult`` (mints then resolves; #2503)
     - COMBAT (deferred) → None (deferred; resolved later by resolve_round)
     - CHALLENGE (deferred) → None (deferred; resolved later by resolve_round)
     """

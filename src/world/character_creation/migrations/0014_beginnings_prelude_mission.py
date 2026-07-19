@@ -6,21 +6,21 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("buildings", "0024_building_property_activated_at_and_more"),
         ("character_creation", "0013_remove_beginnings_art_image_and_more"),
+        ("missions", "0033_missionoption_required_act_and_more"),
     ]
 
     operations = [
         migrations.AddField(
             model_name="beginnings",
-            name="property_grant_profile",
+            name="prelude_mission",
             field=models.ForeignKey(
                 blank=True,
-                help_text="Granted automatically at finalize_character when set. NULL = no automatic property grant for this path.",
+                help_text="The prelude Mission auto-granted at CG finalization for characters choosing this Beginning (#2470). Null = no auto-grant (e.g. content not authored yet for this Beginning).",
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
-                related_name="beginnings",
-                to="buildings.propertygrantprofile",
+                related_name="+",
+                to="missions.missiontemplate",
             ),
         ),
     ]

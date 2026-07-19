@@ -430,6 +430,24 @@ pattern as `create_base_social_character()`).
   not present on the Challenge itself. This validates that approach eligibility comes
   from the Application table, not from Challenge Properties directly.
 
+## Bare-Object Affordances (#2503 addendum)
+
+`Application` gained a nullable `default_template` FK (to `ChallengeTemplate`)
+after this pass landed — see `docs/architecture/action-template-pipeline.md`'s
+"Bare-Object Affordances" section and ADR-0147. Setting it on an `Application`
+row here is what lets `get_available_actions` synthesize a bare-object
+affordance (e.g. Ignite on any object carrying `ObjectProperty(flammable)`)
+with no authored `ChallengeInstance` placed anywhere. This is opt-in per
+Application — the ~42 starter Applications above needed no changes to keep
+working exactly as designed; `default_template` only matters for the subset
+an author explicitly wants to have ambient world presence outside a
+GM-staged Situation. `ChallengeTemplate`/`ChallengeApproach` (the templates
+`default_template` points at) are now content-loadable via `CONTENT_MODELS`
+(`mechanics.challengetemplate`, `mechanics.challengeapproach`) alongside
+`items.itemtemplateproperty` (the template-default-Properties counterpart on
+the items side) — the capability-grant content pass (magic-catalog fixtures)
+can now author both halves of the bridge.
+
 ## What This Does NOT Cover
 
 - `required_effect_property` filtering on Applications (future — needs resonance

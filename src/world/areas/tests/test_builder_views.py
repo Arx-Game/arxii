@@ -208,3 +208,60 @@ class WorldBuilderAreaManagerTests(WorldBuilderApiBase):
         exit_ids = {row["id"] for row in response.data["exits"]}
         self.assertIn(self.cross_exit.pk, exit_ids)  # location IS in this area — included
         self.assertNotIn(self.foreign_exit.pk, exit_ids)  # location is NOT in this area
+
+    def test_manager_payload_includes_clues_triggers_and_anchors(self) -> None:
+        """Each room's clue/trigger/anchor placements are nested in its payload row (#2451)."""
+        from world.clues.constants import ClueTargetKind
+        from world.clues.factories import ClueFactory, ClueTriggerFactory, RoomClueFactory
+        from world.magic.factories import PortalAnchorFactory, PortalAnchorKindFactory
+
+        room_profile = self.private_room.room_profile
+        clue = ClueFactory(name="Torn Letter", slug="torn-letter", target_kind=ClueTargetKind.CODEX)
+        room_clue = RoomClueFactory(room_profile=room_profile, clue=clue, detect_difficulty=5)
+        trigger = ClueTriggerFactory(room_profile=room_profile, clue=clue)
+        kind = PortalAnchorKindFactory(name="Mirror")
+        anchor = PortalAnchorFactory(room_profile=room_profile, kind=kind, name="a mirror")
+
+        response = self._get(self._url(), self.staff_account)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        room_payload = next(r for r in response.data["rooms"] if r["id"] == self.private_room.pk)
+        self.assertEqual(
+            room_payload["clues"],
+            [
+                {
+                    "id": room_clue.pk,
+                    "clue_name": "Torn Letter",
+                    "clue_slug": "torn-letter",
+                    "detect_difficulty": 5,
+                    "fixture_key": room_clue.fixture_key,
+                }
+            ],
+        )
+        self.assertEqual(
+            room_payload["clue_triggers"],
+            [
+                {
+                    "id": trigger.pk,
+                    "clue_name": "Torn Letter",
+                    "clue_slug": "torn-letter",
+                    "fixture_key": trigger.fixture_key,
+                }
+            ],
+        )
+        self.assertEqual(
+            room_payload["portal_anchors"],
+            [
+                {
+                    "id": anchor.pk,
+                    "kind_name": "Mirror",
+                    "name": "a mirror",
+                    "fixture_key": anchor.fixture_key,
+                }
+            ],
+        )
+        # The other room in this area has none of these placements.
+        other_row = next(r for r in response.data["rooms"] if r["id"] == self.public_room.pk)
+        self.assertEqual(other_row["clues"], [])
+        self.assertEqual(other_row["clue_triggers"], [])
+        self.assertEqual(other_row["portal_anchors"], [])

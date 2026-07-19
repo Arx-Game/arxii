@@ -75,6 +75,34 @@ class WorldBuilderAreaSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class WorldBuilderRoomClueSerializer(serializers.Serializer):
+    """One RoomClue placement, nested in a WorldBuilderRoom payload (#2451)."""
+
+    id = serializers.IntegerField()
+    clue_name = serializers.CharField()
+    clue_slug = serializers.CharField()
+    detect_difficulty = serializers.IntegerField()
+    fixture_key = serializers.CharField(allow_null=True)
+
+
+class WorldBuilderClueTriggerSerializer(serializers.Serializer):
+    """One ClueTrigger placement, nested in a WorldBuilderRoom payload (#2451)."""
+
+    id = serializers.IntegerField()
+    clue_name = serializers.CharField()
+    clue_slug = serializers.CharField()
+    fixture_key = serializers.CharField(allow_null=True)
+
+
+class WorldBuilderPortalAnchorSerializer(serializers.Serializer):
+    """One active PortalAnchor, nested in a WorldBuilderRoom payload (#2451)."""
+
+    id = serializers.IntegerField()
+    kind_name = serializers.CharField()
+    name = serializers.CharField()
+    fixture_key = serializers.CharField(allow_null=True)
+
+
 class WorldBuilderRoomSerializer(serializers.Serializer):
     """One RoomProfile in the staff area-manager payload (#2449).
 
@@ -97,6 +125,9 @@ class WorldBuilderRoomSerializer(serializers.Serializer):
     fixture_key = serializers.CharField(allow_null=True)
     origin = serializers.CharField()
     occupant_count = serializers.IntegerField()
+    clues = WorldBuilderRoomClueSerializer(many=True)
+    clue_triggers = WorldBuilderClueTriggerSerializer(many=True)
+    portal_anchors = WorldBuilderPortalAnchorSerializer(many=True)
 
 
 class WorldBuilderExitSerializer(serializers.Serializer):

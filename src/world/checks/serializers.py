@@ -7,8 +7,12 @@ from dataclasses import asdict
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from world.checks.constants import ModifierSourceKind
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.outcome_utils import build_outcome_display
+
+# Provenance kinds scoped to staff reads.
+_STAFF_ONLY_SOURCE_KINDS = frozenset({ModifierSourceKind.ROLLMOD})
 
 
 class ConsequenceOutcomeModifierSerializer(serializers.ModelSerializer):
@@ -48,10 +52,32 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
     serialization time.
     """
 
-    modifiers = ConsequenceOutcomeModifierSerializer(many=True, read_only=True)
+    modifiers = serializers.SerializerMethodField()
+    modifier_total = serializers.SerializerMethodField()
     outcome_display = serializers.SerializerMethodField()
     combat_interaction_id = serializers.IntegerField(read_only=True)
     challenge_record_id = serializers.IntegerField(read_only=True)
+
+    def _visible_kinds_filter(self, rows: list) -> list:
+        """Modifier rows visible to the requesting user (staff see all kinds)."""
+        request = self.context.get("request")
+        if request is not None and request.user is not None and request.user.is_staff:
+            return rows
+        return [m for m in rows if m.source_kind not in _STAFF_ONLY_SOURCE_KINDS]
+
+    @extend_schema_field(ConsequenceOutcomeModifierSerializer(many=True))
+    def get_modifiers(self, obj: ConsequenceOutcome) -> list[dict]:
+        rows = self._visible_kinds_filter(list(obj.modifiers.all()))
+        return ConsequenceOutcomeModifierSerializer(rows, many=True).data
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_modifier_total(self, obj: ConsequenceOutcome) -> int:
+        rows = list(obj.modifiers.all())
+        visible = self._visible_kinds_filter(rows)
+        if len(visible) == len(rows):
+            return obj.modifier_total
+        hidden = sum(m.value for m in rows if m not in visible)
+        return obj.modifier_total - hidden
 
     class Meta:
         model = ConsequenceOutcome

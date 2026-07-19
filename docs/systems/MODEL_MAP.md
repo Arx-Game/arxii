@@ -1371,6 +1371,7 @@
   - heritage -> character_sheets.Heritage [FK] (nullable)
   - starting_room_override -> objects.ObjectDB [FK] (nullable)
   - property_grant_profile -> buildings.PropertyGrantProfile [FK] (nullable)
+  - prelude_mission -> missions.MissionTemplate [FK] (nullable)
   - allowed_species -> species.Species [M2M]
   - starting_languages -> species.Language [M2M]
   - societies -> societies.Society [M2M]
@@ -1889,6 +1890,8 @@
   - art -> evennia_extensions.Media [FK] (nullable)
   - prerequisites -> codex.CodexEntry [M2M]
 **Pointed to by:**
+  - species <- species.Species
+  - resonances <- magic.Resonance
   - gifts <- magic.Gift
   - techniques <- magic.Technique
   - crossing_options <- magic.CrossingOption
@@ -3667,6 +3670,7 @@
   - ritual_requirements <- magic.RitualComponentRequirement
   - technique_grants <- magic.TechniqueGrant
   - clue_triggers <- clues.ItemClueTrigger
+  - default_properties <- items.ItemTemplateProperty
   - slots <- items.TemplateSlot
   - instances <- items.ItemInstance
   - interaction_bindings <- items.TemplateInteraction
@@ -3678,6 +3682,11 @@
   - stock_listings <- items.StockListing
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
+
+### ItemTemplateProperty
+**Foreign Keys:**
+  - item_template -> items.ItemTemplate [FK]
+  - property -> mechanics.Property [FK]
 
 ### TemplateSlot
 **Foreign Keys:**
@@ -4267,8 +4276,8 @@
 **Foreign Keys:**
   - affinity -> magic.Affinity [FK]
   - opposite -> magic.Resonance [OneToOne] (nullable)
-  - properties -> mechanics.Property [M2M]
   - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - properties -> mechanics.Property [M2M]
 **Pointed to by:**
   - opposite_of <- magic.Resonance
   - gifts <- magic.Gift
@@ -5290,6 +5299,7 @@
   - required_by_approaches <- mechanics.ChallengeApproach
   - context_consequence_pools <- mechanics.ContextConsequencePool
   - consequence_effects <- checks.ConsequenceEffect
+  - item_template_defaults <- items.ItemTemplateProperty
   - threat_pool_entries <- combat.ThreatPoolEntry
   - battle_technique_affinities <- battles.TechniquePropertyAffinity
   - battle_terrain_effects <- battles.TerrainPropertyEffect
@@ -5323,6 +5333,7 @@
   - capability -> conditions.CapabilityType [FK]
   - target_property -> mechanics.Property [FK]
   - required_effect_property -> mechanics.Property [FK] (nullable)
+  - default_template -> mechanics.ChallengeTemplate [FK] (nullable)
 **Pointed to by:**
   - challenge_approaches <- mechanics.ChallengeApproach
 
@@ -5345,6 +5356,7 @@
   - consequences -> checks.Consequence [M2M]
 **Pointed to by:**
   - challenge_template_properties <- mechanics.ChallengeTemplateProperty
+  - default_for_applications <- mechanics.Application
   - challenge_consequences <- mechanics.ChallengeTemplateConsequence
   - approaches <- mechanics.ChallengeApproach
   - situation_templates <- mechanics.SituationTemplate
@@ -5474,6 +5486,7 @@
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' — Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' — Authored covenant-role bonus for ``target``, scaled by character level (#985).`
+- `stage_property(target: 'ObjectDB', property_: 'Property', value: 'int' = 1) -> 'ObjectProperty' — GM improv: attach or refresh a Property on ``target`` (#2503).`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
 - `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' — Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`
 - `vow_gear_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven equipment effectiveness bonus (#2022).`
@@ -7872,8 +7885,8 @@
 ### Species
 **Foreign Keys:**
   - parent -> species.Species [FK] (nullable)
-  - starting_languages -> species.Language [M2M]
   - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - starting_languages -> species.Language [M2M]
 **Pointed to by:**
   - character_sheets <- character_sheets.CharacterSheet
   - children <- species.Species

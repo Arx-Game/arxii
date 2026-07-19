@@ -22,7 +22,12 @@
 import { useCallback, useMemo } from 'react';
 
 import { CELL } from '@/map-canvas/coords';
-import type { ExitEdge, ExitRecord } from '@/map-canvas/edges';
+import {
+  portalEdges,
+  type ExitEdge,
+  type ExitRecord,
+  type PortalAnchorRecord,
+} from '@/map-canvas/edges';
 import { GhostNode } from '@/map-canvas/GhostNode';
 import type { GhostCell } from '@/map-canvas/ghosts';
 import { MapCanvasShell } from '@/map-canvas/MapCanvasShell';
@@ -35,6 +40,38 @@ const nodeTypes = { room: WorldRoomNode, ghost: GhostNode };
 
 const buildRoomNodeData = (room: WorldBuilderRoom) => ({ room });
 const ghostLabel = () => 'Dig room here';
+
+/**
+ * Pair same-kind portal anchors across an area's rooms into `PortalAnchorRecord`s —
+ * "canvas shows where it leads" (#2451). Purely client-side heuristic: the
+ * server doesn't resolve a destination for a portal anchor, so pair
+ * sequentially within each kind (first<->second, third<->fourth, ...); a lone
+ * anchor of a kind contributes no edge (still visible via the room's detail
+ * panel). Extracted to module scope (not inlined in the `useMemo` below) so
+ * this nontrivial edge-case logic is unit-testable without a component-render
+ * harness — see `WorldCanvas.test.tsx`.
+ */
+export function pairPortalAnchors(rooms: WorldBuilderAreaManager['rooms']): PortalAnchorRecord[] {
+  const byKind = new Map<string, { id: number; room_id: number; kind_name: string }[]>();
+  for (const room of rooms) {
+    for (const anchor of room.portal_anchors) {
+      const list = byKind.get(anchor.kind_name) ?? [];
+      list.push({ id: anchor.id, room_id: room.id, kind_name: anchor.kind_name });
+      byKind.set(anchor.kind_name, list);
+    }
+  }
+  const records: PortalAnchorRecord[] = [];
+  for (const anchors of byKind.values()) {
+    // Pair sequentially within the same kind — first↔second, third↔fourth, …
+    // A lone anchor of a kind (no pair yet) contributes no edge, matching
+    // exitEdges' one-way-exit precedent of "still valid, just no visual pair."
+    for (let i = 0; i + 1 < anchors.length; i += 2) {
+      records.push({ ...anchors[i], destination_room_id: anchors[i + 1].room_id });
+      records.push({ ...anchors[i + 1], destination_room_id: anchors[i].room_id });
+    }
+  }
+  return records;
+}
 
 export interface WorldCanvasProps {
   payload: WorldBuilderAreaManager;
@@ -77,6 +114,25 @@ export function WorldCanvas({
     [payload.exits]
   );
 
+  // Pairing heuristic lives in `pairPortalAnchors` above; this just feeds its
+  // output through the shared `portalEdges` shape function.
+  const portalAnchorEdges = useMemo(
+    () => portalEdges(pairPortalAnchors(payload.rooms)),
+    [payload.rooms]
+  );
+
+  const reactFlowPortalEdges = useMemo(
+    () =>
+      portalAnchorEdges.map((edge) => ({
+        id: edge.id,
+        source: String(edge.source),
+        target: String(edge.target),
+        label: edge.kindName,
+        style: { strokeDasharray: '4 4' },
+      })),
+    [portalAnchorEdges]
+  );
+
   const onPlaceRoom = useCallback(
     ({ roomId, grid_x, grid_y, floor: placedFloor }: PlaceRoomArgs) => {
       runAction(palette === 'story' ? 'story_place_room' : 'staff_place_room', {
@@ -107,7 +163,7 @@ export function WorldCanvas({
     <MapCanvasShell
       testId="world-canvas"
       nodes={nodes}
-      edges={edges}
+      edges={[...edges, ...reactFlowPortalEdges]}
       nodeTypes={nodeTypes}
       onNodesChange={onNodesChange}
       onNodeDragStop={onNodeDragStop}

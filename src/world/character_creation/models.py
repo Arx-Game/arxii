@@ -336,6 +336,18 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
             "NULL = no automatic property grant for this path."
         ),
     )
+    prelude_mission = models.ForeignKey(
+        "missions.MissionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The prelude Mission auto-granted at CG finalization for characters "
+            "choosing this Beginning (#2470). Null = no auto-grant (e.g. content "
+            "not authored yet for this Beginning)."
+        ),
+    )
 
     class NaturalKeyConfig:
         fields = ["starting_area", "name"]

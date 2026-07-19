@@ -124,6 +124,7 @@ def finalize_character(
         character.location = starting_room
         character.home = starting_room
         _grant_cg_residence_tenancy(draft, starting_room, primary_persona)
+        _grant_prelude_mission(draft, character, primary_persona)
 
     # Populate sheet fields (demographics, descriptive text, physical traits) and save.
     _apply_sheet_demographics(sheet, draft)
@@ -361,6 +362,25 @@ def _grant_cg_residence_tenancy(
         tenant_persona=primary_persona,
         notes="Academy enrollment",
     )
+
+
+def _grant_prelude_mission(draft: CharacterDraft, character: ObjectDB, persona: Persona) -> None:
+    """Auto-grant the Beginning's prelude Mission at CG finalization (#2470).
+
+    No-op when the draft has no Beginning, or the Beginning has no authored
+    ``prelude_mission`` (e.g. content not written yet for that Beginning).
+
+    Deliberately NOT best-effort, unlike the kinship/house-claim grants below:
+    a misconfigured template (e.g. no entry node) is a content-authoring bug,
+    not contention, and must fail finalization loudly rather than silently
+    mint a character missing its designed, non-replayable first-hour content.
+    """
+    beginnings = draft.selected_beginnings
+    if beginnings is None or beginnings.prelude_mission is None:
+        return
+    from world.missions.services.run import staff_assign_mission  # noqa: PLC0415
+
+    staff_assign_mission(beginnings.prelude_mission, character, persona=persona)
 
 
 def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:  # noqa: C901, PLR0912
