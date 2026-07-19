@@ -163,12 +163,19 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "checks that align with a goal earn a bonus, so pick what your character "
         "actually wants."
     ),
-    "review_heading": "Review & Submit",
+    "review_heading": "Your Testament",
     "review_intro": (
-        "Look over the whole character before you submit. Once it's in for "
-        "review, staff will read it and either welcome your character to Arx or "
-        "ask for revisions."
+        "You are preparing the testament your character will carry into the "
+        "Ritual of the Durance — the moment they stand before the assembly and "
+        "speak who they are. The words you choose here are what they will "
+        "present. The actual rite happens later, in play; for now, this is your "
+        "chance to see your character whole before submitting them for review."
     ),
+    "review_epigraph": ("One stands before us in Durance, speak thy name and testament."),
+    "review_testament_heading": "The Testament",
+    "review_glimpse_label": "What your character would speak of themselves",
+    "review_record_heading": "The Record",
+    "review_banner_submitted": "Your testament has been submitted for review.",
 }
 
 
