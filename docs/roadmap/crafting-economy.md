@@ -72,9 +72,17 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   embedded gem instance (narration + provenance); `adorn_item()` gates on
   `ItemTemplate.adornment_capacity`, embeds the gem, and adds its worth to the host's `lore_value`
   (so `appraise()` reflects it). `adorned_materials()` is the queryable "materials on this piece"
-  seam the magic app reads. Safe craft-time path only. Remaining 0b slices: **mining/distribution**
-  (common aggregate + Rare-Find rolls), the **cut recipe** + risky prying/re-set, and the
-  **value-denominated / bucket** bulk path.
+  seam the magic app reads. Safe craft-time path only.
+
+- **Gem mining engine (Build 0b, slice 4) — DONE.** `roll_gem_haul()` — the pure, deterministic
+  haul generator: one mine cycle yields a common-gem **aggregate value** plus, rarely, a few
+  **Rare-Find** gem instances (born uncut). Mine quality + minister bonus raise the Rare-Find
+  chance and shift every axis roll up; size/purity floored above common on a find. The multiplicative
+  axes give the fat "remarkable find" tail for free. **Deferred to the Build-1 domain track:** the
+  weekly cron, the per-holding `mine_quality` field, the minister-check seam (#2239, schema-only),
+  and where common value accrues (a per-tier vault bucket). Remaining 0b slices: the **cut recipe**
+  (see slice 3 PR) + risky prying/re-set, the **value-denominated / bucket** bulk path, and the
+  domain-cron wiring for this engine.
 
 - **Handler registry** (`CraftingHandler` ABC + `FacetAttachHandler` / `StyleAttachHandler`).
   New kinds (alchemy, wand-crafting, etc.) plug in by authoring a `CraftingRecipe` row +

@@ -3574,6 +3574,16 @@ holder is never notified a claim exists.
     wired `appraise()` reflects it. `adorned_materials(host)` is the queryable "materials on this
     piece" seam magic reads. Exceptions: `AdornmentCapacityExceeded` / `NotAGem` / `GemAlreadyAdorned`.
     Safe craft-time path only; risky prying/re-set defers to the cut slice.
+  - **Gem mining engine** (`world.items.gems.mining.roll_gem_haul`, Build 0b slice 4) — the pure,
+    deterministic (injected `roll` seam) haul generator. One mine cycle → a common-gem **aggregate
+    value** (`GemHaul.common_value`, never instanced) plus, rarely, a few **Rare-Find** gem
+    `ItemInstance`s (born uncut, loose). Mine quality + minister bonus both raise the Rare-Find
+    chance (base 1%) and shift every axis roll up; a find rolls 1d4 stones with `size`/`purity`
+    floored above common (type not floored), top-heavy grade distribution (`_grade_index`, roll²).
+    Does **not** schedule or wire domains — the weekly cron, the per-holding `mine_quality` field,
+    and the schema-only minister-check seam (`OrganizationOffice.feeds_check`, #2239) are the
+    Build-1 wiring that *calls* this; where common value accrues (a per-tier vault bucket) is the
+    caller's concern. All magnitudes PLACEHOLDER.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
