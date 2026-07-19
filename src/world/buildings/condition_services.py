@@ -35,6 +35,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.buildings.constants import (
+    COPPERS_PER_PROGRESS_POINT,
     PREPARATION_PROJECT_DAYS,
     PREPARE_COST_FLOOR_COPPERS,
     PREPARE_COST_PERCENT_OF_PRESTIGE,
@@ -50,10 +51,6 @@ if TYPE_CHECKING:
     from world.scenes.models import Persona
 
 logger = logging.getLogger(__name__)
-
-# Money converts to project progress at this rate (see projects.services
-# add_contribution) — thresholds are stored in progress units.
-_COPPERS_PER_PROGRESS_POINT = 100
 
 
 class ConditionServiceError(Exception):
@@ -210,7 +207,7 @@ def start_building_preparation(*, building: Building, persona: Persona) -> Proje
             user_message=f"A grand preparation is already underway (project #{existing.pk}).",
         )
     target = _prepare_target_tier(building)
-    threshold = max(1, prepare_cost(building) // _COPPERS_PER_PROGRESS_POINT)
+    threshold = max(1, prepare_cost(building) // COPPERS_PER_PROGRESS_POINT)
 
     now = timezone.now()
     project = Project.objects.create(
