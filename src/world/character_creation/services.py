@@ -176,8 +176,8 @@ def finalize_character(
 
     # Family is already set on CharacterSheet above
 
-    # Property grant (The Keeping): a Beginnings-configured grant profile
-    # (if any) hands the new PC an owned building before other CG side-effects run.
+    # Property grant: a Beginnings-configured grant profile (if any) hands
+    # the new PC an owned building before other CG side-effects run.
     _grant_property_house_if_eligible(draft, primary_persona)
 
     # House claim materialization (#1884 Phase D): an approved CG-defined
