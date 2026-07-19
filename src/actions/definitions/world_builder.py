@@ -1,6 +1,7 @@
 """Staff world-builder actions (#2449) — the canvas's dispatch seam.
 
-Eleven REGISTRY actions, all ``category="world_builder"``, ``target_type=SELF``,
+Seventeen REGISTRY actions (eleven original + six discovery/portal-authoring, #2451),
+all ``category="world_builder"``, ``target_type=SELF``,
 gated by ``StaffOnlyPrerequisite`` alone (no ownership/tenancy standing — this is
 staff tooling, not a player-facing builder). Each is a thin wrapper over the
 Task 1+2 substrate: ``world.areas.grid_services`` (room/exit/grid primitives +
