@@ -22836,10 +22836,17 @@ export interface components {
      *     * `until_cured` - Until Cured
      *     * `until_used` - Until Used (consumed on trigger)
      *     * `end_combat` - Until End of Combat
+     *     * `scene` - Until End of Scene
      *     * `permanent` - Permanent (until removed)
      * @enum {string}
      */
-    DefaultDurationTypeEnum: 'rounds' | 'until_cured' | 'until_used' | 'end_combat' | 'permanent';
+    DefaultDurationTypeEnum:
+      | 'rounds'
+      | 'until_cured'
+      | 'until_used'
+      | 'end_combat'
+      | 'scene'
+      | 'permanent';
     /**
      * @description * `attacker` - Attacker
      *     * `defender` - Defender
