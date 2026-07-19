@@ -33,11 +33,14 @@ function renderNode(room: WorldBuilderRoom) {
         type="room"
         data={{ room, selected: false, onSelect: () => {} }}
         selected={false}
+        selectable={false}
+        deletable={false}
+        draggable={false}
         dragging={false}
         zIndex={0}
         isConnectable={false}
-        xPos={0}
-        yPos={0}
+        positionAbsoluteX={0}
+        positionAbsoluteY={0}
       />
     </ReactFlowProvider>
   );
