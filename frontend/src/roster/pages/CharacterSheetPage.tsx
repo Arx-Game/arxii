@@ -22,6 +22,8 @@ import { SecretsTab } from '@/secrets/components/SecretsTab';
 import { CluesTab } from '@/clues/components/CluesTab';
 import { CrimeTab } from '@/justice/components/CrimeTab';
 import { TitlesPanel } from '@/achievements/components/TitlesPanel';
+import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
+import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
 import { SpellbookTab } from '@/magic/components/SpellbookTab';
 import { LocationsTab } from '@/locations/components/LocationsTab';
@@ -36,6 +38,9 @@ export function CharacterSheetPage() {
 
   // Show messages section only when the viewing user owns this character.
   const isMyCharacter = myEntries?.some((e) => e.id === entryId) ?? false;
+  // Full character sheet payload — needed for the origin-story finish-later
+  // editor (#2478) which reads story.origin_slots.
+  const { data: sheetPayload } = useCharacterSheetQuery(entry?.character.id ?? 0);
   // For the Reputation tab on foreign sheets: resolve the viewer's primary
   // persona from their first owned character. Null when the viewer has
   // no characters → the backend returns the anonymous subset.
@@ -137,6 +142,9 @@ export function CharacterSheetPage() {
             </section>
           )}
           <BackgroundSection background={entry.character.background} />
+          {isMyCharacter && sheetPayload && (
+            <OriginStoryEditorDialog characterId={entry.character.id} sheet={sheetPayload} />
+          )}
           <StatsSection
             age={entry.character.age}
             gender={entry.character.gender}

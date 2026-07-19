@@ -113,3 +113,16 @@ class CommentType(models.TextChoices):
 
     MESSAGE = "message", "Message"
     STATUS_CHANGE = "status_change", "Status Change"
+
+
+class OriginStoryState(models.TextChoices):
+    """Deferral/progress state of the guided origin story (#2478).
+
+    Cache of truth — maintained by
+    ``world.character_creation.services.origin_story``, never written directly.
+    Mirrors ``GlimpseState`` (#2427).
+    """
+
+    NOT_STARTED = "not_started", "Not Started"
+    SLOTS_ONLY = "slots_only", "Slots Only"
+    COMPLETE = "complete", "Complete"

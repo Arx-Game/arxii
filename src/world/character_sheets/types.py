@@ -227,6 +227,17 @@ class StorySection(TypedDict):
 
     background: str
     personality: str
+    origin_story_state: str
+    origin_slots: list[OriginSlotEntry]
+
+
+class OriginSlotEntry(TypedDict):
+    """A character's origin-story slot answer (#2478)."""
+
+    slot_id: int
+    slot_name: str
+    slot_prompt: str
+    value: str
 
 
 class GoalEntry(TypedDict):

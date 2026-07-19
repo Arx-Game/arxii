@@ -341,6 +341,47 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         )
         assert willpower_value.value == 2
 
+    def test_finalize_origin_story_from_slots(self) -> None:
+        """Finalize assembles Profile.background from origin slots (#2478)."""
+        from world.character_creation.models import (
+            CharacterOriginSlot,
+            OriginTemplate,
+            OriginTemplateSlot,
+        )
+
+        template = OriginTemplate.objects.create(
+            beginning=self.beginnings,
+            name="Escape",
+            frame_narrative="Your story begins with escape from Salvation.",
+        )
+        slot = OriginTemplateSlot.objects.create(
+            template=template, name="Who helped?", prompt="Who aided your flight?"
+        )
+
+        draft = self._create_complete_draft(first_name="Origin Test")
+        draft.draft_data["origin_slots"] = {str(slot.id): "Mira cut the lock."}
+        draft.save(update_fields=["draft_data"])
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = character.sheet_data
+
+        assert "escape from Salvation" in sheet.background
+        assert "Mira cut the lock" in sheet.background
+        assert CharacterOriginSlot.objects.filter(sheet=sheet).count() == 1
+
+    def test_finalize_legacy_background_still_works(self) -> None:
+        """A draft with legacy draft_data['background'] and no origin slots
+        still writes background verbatim (backward compat)."""
+        draft = self._create_base_draft(
+            first_name="Legacy BG",
+            background="A plain free-text background.",
+        )
+        draft.draft_data.pop("origin_slots", None)
+        draft.save(update_fields=["draft_data"])
+
+        character = finalize_character(draft, add_to_roster=True)
+        assert character.sheet_data.background == "A plain free-text background."
+
     def test_finalize_converts_unspent_cg_points_to_xp(self):
         """Test that unspent CG points are converted to locked XP."""
         from world.progression.models import CharacterXP, CharacterXPTransaction

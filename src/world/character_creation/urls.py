@@ -11,6 +11,7 @@ from world.character_creation.views import (
     CGExplanationsView,
     CGGiftOptionViewSet,
     CGGlimpseTagViewSet,
+    CGOriginTemplateViewSet,
     CGPointBudgetViewSet,
     CGTechniqueOptionViewSet,
     CharacterDraftViewSet,
@@ -46,6 +47,7 @@ router.register("tarot-cards", TarotCardViewSet, basename="tarot-card")
 router.register("gifts", CGGiftOptionViewSet, basename="cg-gift-option")
 router.register("technique-options", CGTechniqueOptionViewSet, basename="cg-technique-option")
 router.register("glimpse-tags", CGGlimpseTagViewSet, basename="cg-glimpse-tag")
+router.register("origin-templates", CGOriginTemplateViewSet, basename="cg-origin-template")
 
 urlpatterns = [
     # Router-based URLs
