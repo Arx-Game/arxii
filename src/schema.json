@@ -4236,8 +4236,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Starting Area.
+          type: string
         required: true
       tags:
       - character-creation
@@ -32439,6 +32438,12 @@ components:
           type: integer
           nullable: true
         blueprint_id:
+          type: integer
+          nullable: true
+        application_id:
+          type: integer
+          nullable: true
+        target_object_id:
           type: integer
           nullable: true
       required:

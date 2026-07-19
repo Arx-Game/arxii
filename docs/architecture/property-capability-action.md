@@ -740,6 +740,22 @@ building toward breakthrough moments.
   (`actions/player_interface.py: _challenge_actions` → `get_player_actions` →
   `dispatch_player_action` → `resolve_challenge`). Conditions impairing a
   capability to ≤0 correctly drop its actions.
+- **Bare-object affordances (#2503)** — `[WIRED]`: an `Application.default_template`
+  lets `get_available_actions` also synthesize an `AvailableAction` straight from an
+  `ObjectProperty` match on any object at the location (a flammable torch, a dark
+  room), with no authored `ChallengeInstance` needed. Surfaced via a dedicated
+  **WORLD_INTERACTION action backend** (`ActionRef.application_id` +
+  `target_object_id`, both stable before any instance exists) —
+  `_avail_to_player_action` branches on `challenge_instance_id is None` to build this
+  ref instead of a CHALLENGE one. `dispatch_player_action` re-validates by
+  recomputing `get_available_actions` and matching `(application_id,
+  target_object_id)`, mints via `instantiate_challenge(resolved_default_template,
+  location, target_object)`, then resolves through the *same* `resolve_challenge` —
+  no separate resolution path. `resolve_challenge`'s `ResolutionContext.target` is
+  now populated from `ChallengeInstance.target_object` (previously always `None`
+  there, silently falling back to the acting character), so an `EffectTarget.TARGET`
+  consequence effect lands on the actual object (e.g. Ignite adds `lit` to the
+  torch, not the character).
 
 **Action Enhancement system** — `[WIRED]` (`actions/` — `ActionEnhancement` +
 effect configs).

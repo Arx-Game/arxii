@@ -19715,6 +19715,8 @@ export interface components {
       action_slot?: string | null;
       position_id?: number | null;
       blueprint_id?: number | null;
+      application_id?: number | null;
+      target_object_id?: number | null;
     };
     /** @description Minimal read-only representation of an ActionTemplate model instance. */
     ActionTemplateMinimal: {
@@ -40850,8 +40852,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Starting Area. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
