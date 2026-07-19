@@ -1,1 +1,1 @@
-0023_buildingpreparationdetails
+0024_building_property_activated_at_and_more

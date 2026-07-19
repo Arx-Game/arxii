@@ -182,6 +182,10 @@ def finalize_character(
 
     # Family is already set on CharacterSheet above
 
+    # Property grant: a Beginnings-configured grant profile (if any) hands
+    # the new PC an owned building before other CG side-effects run.
+    _grant_property_house_if_eligible(draft, primary_persona)
+
     # House claim materialization (#1884 Phase D): an approved CG-defined
     # house builds its full package now, BEFORE the kinship bind (the founder
     # node must land in the new family). Runs before draft deletion (the
@@ -247,6 +251,21 @@ def _bind_house_claim(draft: CharacterDraft, sheet: CharacterSheet) -> None:
             claim.pk,
             draft.pk,
         )
+
+
+def _grant_property_house_if_eligible(draft: CharacterDraft, persona: Persona) -> None:
+    """Grant the selected Beginnings' PropertyGrantProfile, if one is configured.
+
+    Generic hook — no specific beginning or grant profile is named here.
+    Content (lore repo) wires Beginnings.property_grant_profile per path.
+    """
+    beginnings = draft.selected_beginnings
+    profile = beginnings.property_grant_profile if beginnings is not None else None
+    if profile is None:
+        return
+    from world.buildings.property_grant_services import grant_property_house  # noqa: PLC0415
+
+    grant_property_house(persona, profile)
 
 
 def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:

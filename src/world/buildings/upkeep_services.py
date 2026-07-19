@@ -1,6 +1,7 @@
 """Weekly building upkeep — arrears-first, condition-tier slide/regain (#1930).
 
-Flow per RL week, per building (mothballed buildings are skipped entirely):
+Flow per RL week, per building (mothballed buildings, and granted-but-not-yet-
+activated property grants, are skipped entirely):
 
 1. **Dwell decay** for above-normal tiers: EXTRAVAGANT slides back to
    EXCELLENT once its ``ABOVE_NORMAL_DWELL_DAYS`` dwell lapses, always.
@@ -192,9 +193,15 @@ def apply_weekly_upkeep_for_building(building: Building) -> bool:
     """Run one weekly cycle on ``building``. Returns True iff paid (or free).
 
     Mothballed buildings are frozen — no dwell decay, no payment, no
-    arrears (absence costs opportunity, never principal).
+    arrears (absence costs opportunity, never principal). Granted-but-not-yet-
+    activated property grants (``property_granted_at`` set, ``property_activated_at``
+    unset) are likewise exempt — the owner hasn't taken possession yet, so
+    there's nothing to bill for.
     """
     if building.mothballed_at is not None:
+        return True
+
+    if building.property_granted_at is not None and building.property_activated_at is None:
         return True
 
     weekly_total = building_weekly_upkeep(building)

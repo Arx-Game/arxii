@@ -98,3 +98,8 @@ PREPARE_COST_FLOOR_COPPERS: dict[int, int] = {
     ConditionTier.IMMACULATE: 5000,
 }
 PREPARATION_PROJECT_DAYS: int = 30
+
+# Shared by Grand Preparation (condition_services.prepare_cost) and the
+# BUILDING_ACTIVATION project kind (property_grant_services) — coppers
+# funded per unit of Project progress.
+COPPERS_PER_PROGRESS_POINT = 100

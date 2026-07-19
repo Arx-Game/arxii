@@ -649,6 +649,7 @@
   - city_defense_projects <- battles.CityDefenseDetails
   - story_ownership <- gm.StoryArea
   - default_permits_offered <- npc_services.PermitOfferDetails
+  - property_grant_profiles <- buildings.PropertyGrantProfile
   - building_profile <- buildings.Building
   - building_permits_valid_in <- buildings.BuildingPermitDetails
   - construction_projects <- buildings.BuildingConstructionDetails
@@ -1064,10 +1065,19 @@
 **Pointed to by:**
   - allowed_in_wards <- areas.Area
   - offered_by <- npc_services.PermitOfferDetails
+  - property_grant_profiles <- buildings.PropertyGrantProfile
   - buildings <- buildings.Building
   - permits <- buildings.BuildingPermitDetails
   - renovation_targets <- buildings.BuildingRenovationDetails
   - installable_features <- room_features.RoomFeatureKind
+
+### PropertyGrantProfile
+**Foreign Keys:**
+  - building_kind -> buildings.BuildingKind [FK]
+  - ward_area -> areas.Area [FK] (nullable)
+**Pointed to by:**
+  - beginnings <- character_creation.Beginnings
+  - granted_buildings <- buildings.Building
 
 ### BuildingSizeTier
 
@@ -1084,6 +1094,7 @@
   - entry_room -> evennia_extensions.RoomProfile [FK] (nullable)
   - constructed_by_persona -> scenes.Persona [FK] (nullable)
   - source_project -> projects.Project [OneToOne] (nullable)
+  - granted_via_profile -> buildings.PropertyGrantProfile [FK] (nullable)
 **Pointed to by:**
   - bequests <- estates.Bequest
   - battle_fortifications <- battles.Fortification
@@ -1091,6 +1102,7 @@
   - extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - renovation_details <- buildings.BuildingRenovationDetails
+  - activation_details <- buildings.BuildingActivationDetails
   - preparation_details <- buildings.BuildingPreparationDetails
   - upgrade_details <- buildings.BuildingUpgradeDetails
   - design_details <- buildings.InteriorDesignDetails
@@ -1131,6 +1143,11 @@
   - project -> projects.Project [OneToOne]
   - building -> buildings.Building [FK]
   - target_kind -> buildings.BuildingKind [FK]
+
+### BuildingActivationDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - building -> buildings.Building [FK]
 
 ### BuildingPreparationDetails
 **Foreign Keys:**
@@ -1353,6 +1370,7 @@
   - starting_area -> character_creation.StartingArea [FK]
   - heritage -> character_sheets.Heritage [FK] (nullable)
   - starting_room_override -> objects.ObjectDB [FK] (nullable)
+  - property_grant_profile -> buildings.PropertyGrantProfile [FK] (nullable)
   - prelude_mission -> missions.MissionTemplate [FK] (nullable)
   - allowed_species -> species.Species [M2M]
   - starting_languages -> species.Language [M2M]
@@ -1360,6 +1378,7 @@
   - traditions -> magic.Tradition [M2M]
 **Pointed to by:**
   - beginning_traditions <- character_creation.BeginningTradition
+  - origin_templates <- character_creation.OriginTemplate
   - drafts <- character_creation.CharacterDraft
   - ritual_grants <- magic.BeginningsRitualGrant
   - codex_grants <- codex.BeginningsCodexGrant
@@ -1369,6 +1388,23 @@
   - beginning -> character_creation.Beginnings [FK]
   - tradition -> magic.Tradition [FK]
   - required_distinction -> distinctions.Distinction [FK] (nullable)
+
+### OriginTemplate
+**Foreign Keys:**
+  - beginning -> character_creation.Beginnings [FK]
+**Pointed to by:**
+  - slots <- character_creation.OriginTemplateSlot
+
+### OriginTemplateSlot
+**Foreign Keys:**
+  - template -> character_creation.OriginTemplate [FK]
+**Pointed to by:**
+  - character_rows <- character_creation.CharacterOriginSlot
+
+### CharacterOriginSlot
+**Foreign Keys:**
+  - sheet -> character_sheets.CharacterSheet [FK]
+  - slot -> character_creation.OriginTemplateSlot [FK]
 
 ### CharacterDraft
 **Foreign Keys:**
@@ -1410,17 +1446,21 @@
 ### Service Functions
 - `add_application_comment(application: 'DraftApplication', *, author: 'AbstractBaseUser | AnonymousUser', text: 'str') -> 'DraftApplicationComment' — Add a message comment to an application.`
 - `approve_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str' = '') -> 'None' — Approve an application and finalize the character.`
+- `assemble_origin_prose(sheet: 'CharacterSheet') -> 'str' — Compose the frame narrative + slot answers into prose.`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' — Calculate weight in pounds from height and build.`
 - `can_create_character(account: 'AbstractBaseUser | AnonymousUser') -> 'tuple[bool, str]' — Check if an account can create a new character.`
 - `claim_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser') -> 'None' — Claim a submitted application for staff review.`
+- `clear_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot') -> 'None' — Delete a slot answer and recompute state.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' — Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `deny_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' — Deny an application.`
 - `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False, created_by_account: 'AccountDB | None' = None) -> 'ObjectDB' — Create a Character from a completed CharacterDraft.`
 - `finalize_gm_character(draft: 'CharacterDraft') -> 'tuple[RosterEntry, Story]' — Finalize a GM-initiated draft into a roster character + story.`
 - `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' — Create magic models from the CG-chosen catalog Gift/Techniques during finalization.`
 - `get_accessible_starting_areas(account: 'AbstractBaseUser | AnonymousUser') -> 'QuerySet' — Get all starting areas accessible to an account.`
+- `refresh_origin_story_state(sheet: 'CharacterSheet') -> 'OriginStoryState' — Recompute and persist ``origin_story_state`` from slot rows + prose.`
 - `request_revisions(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' — Request revisions on an application.`
 - `resubmit_draft(application: 'DraftApplication', *, comment: 'str' = '') -> 'None' — Resubmit a draft application after revisions.`
+- `set_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot', value: 'str') -> 'None' — Upsert a character's slot answer, then refresh state.`
 - `submit_draft_for_review(draft: 'CharacterDraft', *, submission_notes: 'str' = '') -> 'DraftApplication' — Submit a character draft for staff review.`
 - `unsubmit_draft(application: 'DraftApplication') -> 'None' — Un-submit a draft application, returning it to editable state.`
 - `withdraw_draft(application: 'DraftApplication') -> 'None' — Withdraw a draft application.`
@@ -1458,6 +1498,7 @@
   - kinsperson <- roster.Kinsperson
   - deferred_kin <- roster.Kinsperson
   - roster_entry <- roster.RosterEntry
+  - origin_slots <- character_creation.CharacterOriginSlot
   - class_level_advancements <- progression.ClassLevelAdvancement
   - officiated_advancements <- progression.ClassLevelAdvancement
   - durance_training_roles <- progression.DuranceTrainingSite
@@ -6257,6 +6298,7 @@
   - building_extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - building_renovation_details <- buildings.BuildingRenovationDetails
+  - building_activation_details <- buildings.BuildingActivationDetails
   - building_preparation_details <- buildings.BuildingPreparationDetails
   - building_upgrade_details <- buildings.BuildingUpgradeDetails
   - interior_design_details <- buildings.InteriorDesignDetails

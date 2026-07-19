@@ -2951,6 +2951,38 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   the dependency runs one-way, buildings→battles direction avoided (FK direction
   specific→general, ADR-0010).
 - **Source:** `src/world/buildings/`
+- **Property grants (generic "hand a persona an already-existing Building"
+  primitive):** `PropertyGrantProfile` (catalog: `building_kind`, nullable
+  `ward_area` — falls back to a shared placeholder Ward Area, lazily created;
+  `initial_condition_tier`; nullable `activation_target_tier` — unset means
+  the grant is already active, set means it starts upkeep-exempt and needs a
+  `BUILDING_ACTIVATION` project; `activation_cost_floor_coppers`),
+  `BuildingActivationDetails` (per-project payload: `building`, snapshotted
+  `target_tier`, `applied_at` idempotency marker). `Building` gains
+  `granted_via_profile` / `property_granted_at` / `property_activated_at`.
+  Not content-specific — `character_creation.Beginnings.property_grant_profile`
+  is the only current caller (via `finalize_character`), but
+  `grant_property_house` is callable from anywhere (a future GM/story grant
+  needs no new plumbing). **Key functions**
+  (`world.buildings.property_grant_services`): `grant_property_house(persona,
+  profile) -> Building` (creates the Area/Building/entry-room shape
+  `complete_building_construction` produces, minus the permit/project),
+  `start_building_activation(*, persona, building) -> Project` (owner-gated,
+  `BUILDING_ACTIVATION` kind, `SINGLE_THRESHOLD`, cost = `profile.
+  activation_cost_floor_coppers × building.target_size`), `complete_building_
+  activation(project, outcome_tier=None)` (kind handler — sets
+  `condition_tier` to the snapshotted target, stamps `property_activated_at`,
+  idempotent via `applied_at`). Weekly upkeep (`apply_weekly_upkeep_for_
+  building`) exempts a granted-not-activated building the same way it exempts
+  a mothballed one; `refurbish_building` refuses on one (typed
+  `ConditionServiceError`) — the first-time bring-to-life arc is deliberately
+  the `BUILDING_ACTIVATION` project, not the instant purse-priced refurbish
+  path. Action: `StartBuildingActivationAction` (`"start_building_activation"`,
+  owner-gated via `IsRoomOwnerPrerequisite`, same family as the #1930
+  condition actions). Dev seed: `world.buildings.seeds.ensure_placeholder_
+  property_grant_profile` (cluster `"property_grants"`) — a generic
+  placeholder profile/kind so the feature is exercisable before real content
+  wires a `Beginnings` row at it.
 
 ### Ships (#1832)
 Persistent upgrades + repair + ship-as-sanctum + covenant-scale combat bridge, the

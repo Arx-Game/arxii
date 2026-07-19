@@ -325,6 +325,17 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         related_name="beginnings_start",
         help_text="Override starting room for this Beginnings path (e.g., Sleeper wake room)",
     )
+    property_grant_profile = models.ForeignKey(
+        "buildings.PropertyGrantProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="beginnings",
+        help_text=(
+            "Granted automatically at finalize_character when set. "
+            "NULL = no automatic property grant for this path."
+        ),
+    )
     prelude_mission = models.ForeignKey(
         "missions.MissionTemplate",
         on_delete=models.SET_NULL,

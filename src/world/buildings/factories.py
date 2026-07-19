@@ -3,6 +3,7 @@
 import factory
 from factory.django import DjangoModelFactory
 
+from world.buildings.constants import ConditionTier
 from world.buildings.models import (
     Building,
     BuildingConstructionDetails,
@@ -13,6 +14,7 @@ from world.buildings.models import (
     BuildingUpgradeDetails,
     FortificationUpgradeDetails,
     MaterialLoreEffect,
+    PropertyGrantProfile,
 )
 
 # Factory-path string for the Persona sub-factory, referenced by multiple
@@ -38,6 +40,19 @@ class BuildingKindFactory(DjangoModelFactory):
     is_aerial = False
     is_subterranean = False
     is_secret = False
+
+
+class PropertyGrantProfileFactory(DjangoModelFactory):
+    class Meta:
+        model = PropertyGrantProfile
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"property-grant-profile-{n}")
+    building_kind = factory.SubFactory(BuildingKindFactory)
+    ward_area = None
+    initial_condition_tier = ConditionTier.DECAYED
+    activation_target_tier = None
+    activation_cost_floor_coppers = 0
 
 
 class BuildingFactory(DjangoModelFactory):

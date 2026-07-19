@@ -108,3 +108,19 @@ class UrbanBuildingKindsSeedTests(TestCase):
         ensure_plan_3_seeds()
         for name in URBAN_KIND_FLAGS:
             self.assertTrue(BuildingKind.objects.filter(name=name).exists())
+
+
+class EnsurePlaceholderPropertyGrantProfileTests(TestCase):
+    def test_creates_placeholder_profile(self) -> None:
+        from world.buildings.models import PropertyGrantProfile
+        from world.buildings.seeds import ensure_placeholder_property_grant_profile
+
+        profile = ensure_placeholder_property_grant_profile()
+        self.assertTrue(PropertyGrantProfile.objects.filter(pk=profile.pk).exists())
+
+    def test_is_idempotent(self) -> None:
+        from world.buildings.seeds import ensure_placeholder_property_grant_profile
+
+        first = ensure_placeholder_property_grant_profile()
+        second = ensure_placeholder_property_grant_profile()
+        self.assertEqual(first.pk, second.pk)

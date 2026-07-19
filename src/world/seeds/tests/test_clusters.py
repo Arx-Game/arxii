@@ -39,6 +39,7 @@ class TestClusterRegistry(TestCase):
                 "civic_hubs",
                 "counterplay",
                 "building_condition",
+                "property_grants",
                 "kudos",
                 "survivability",
                 "market",
