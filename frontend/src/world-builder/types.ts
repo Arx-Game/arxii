@@ -10,6 +10,7 @@ import type { components } from '@/generated/api';
 export type WorldBuilderArea = components['schemas']['WorldBuilderArea'];
 export type WorldBuilderAreaManager = components['schemas']['WorldBuilderAreaManager'];
 export type WorldBuilderRoom = components['schemas']['WorldBuilderRoom'];
+export type WorldBuilderPortalAnchor = components['schemas']['WorldBuilderPortalAnchor'];
 export type WorldBuilderExit = components['schemas']['WorldBuilderExit'];
 export type PaginatedWorldBuilderAreaList = components['schemas']['PaginatedWorldBuilderAreaList'];
 
