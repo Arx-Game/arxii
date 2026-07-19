@@ -1,0 +1,24 @@
+[
+  {
+    "model": "distinctions.distinction",
+    "pk": 56,
+    "fields": {
+      "name": "Unbound",
+      "slug": "unbound",
+      "description": "You are magically self-taught, having learned to wield your gifts without the guidance of a formal tradition. While this independence speaks to your resourcefulness, it comes at a cost: your magical development proceeds at half the normal rate. Through play, you may find a mentor or institution willing to take you in, losing this penalty and gaining a proper tradition.",
+      "category": 6,
+      "cost_per_rank": -75,
+      "max_rank": 1,
+      "parent_distinction": null,
+      "allow_other": false,
+      "variants_are_mutually_exclusive": false,
+      "trust_value": null,
+      "trust_category": null,
+      "is_automatic": true,
+      "requires_slot_filled": false,
+      "is_active": true,
+      "mutually_exclusive_with": [],
+      "tags": []
+    }
+  }
+]

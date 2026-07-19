@@ -8,6 +8,7 @@ from django.test import TestCase
 from world.conditions.factories import CapabilityTypeFactory, DamageTypeFactory
 from world.mechanics.factories import (
     ApplicationFactory,
+    ChallengeTemplateFactory,
     PropertyCategoryFactory,
     PropertyDamageModifierFactory,
     PropertyFactory,
@@ -126,6 +127,44 @@ class ApplicationTests(TestCase):
             required_effect_property=effect_prop,
         )
         self.assertEqual(app.required_effect_property, effect_prop)
+
+    def test_default_template_nullable_by_default(self) -> None:
+        """Test default_template defaults to None (no bare-object affordance)."""
+        app = ApplicationFactory(
+            capability=self.capability,
+            target_property=self.target_property,
+        )
+        self.assertIsNone(app.default_template)
+
+    def test_default_template_set(self) -> None:
+        """Test default_template can be set and round-trips."""
+        template = ChallengeTemplateFactory(name="Bridge Object Affordance")
+        app = ApplicationFactory(
+            capability=self.capability,
+            target_property=self.target_property,
+            default_template=template,
+        )
+        app.refresh_from_db()
+        self.assertEqual(app.default_template, template)
+        self.assertIn(app, template.default_for_applications.all())
+
+    def test_default_template_set_null_on_template_delete(self) -> None:
+        """Test deleting the ChallengeTemplate nulls out default_template (SET_NULL).
+
+        The Collector-driven bulk SET_NULL bypasses per-instance .save(), so the
+        idmapper identity map never sees it — flush the cache before re-reading
+        (see the sharedmemory-model skill's stale-cache-traps reference).
+        """
+        template = ChallengeTemplateFactory(name="Doomed Template")
+        app = ApplicationFactory(
+            capability=self.capability,
+            target_property=self.target_property,
+            default_template=template,
+        )
+        template.delete()
+        Application.flush_instance_cache(force=True)
+        app.refresh_from_db()
+        self.assertIsNone(app.default_template)
 
 
 class TraitCapabilityDerivationTests(TestCase):

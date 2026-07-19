@@ -1,0 +1,106 @@
+[
+  {
+    "model": "mechanics.modifiercategory",
+    "fields": {
+      "name": "roll_modifier",
+      "description": "Modifiers to specific types of checks and rolls",
+      "display_order": 15
+    }
+  },
+  {
+    "model": "mechanics.modifiercategory",
+    "fields": {
+      "name": "check",
+      "description": "Allow child information body.",
+      "display_order": 0
+    }
+  },
+  {
+    "model": "mechanics.modifiercategory",
+    "fields": {
+      "name": "stat",
+      "description": "Modifiers to character base stats",
+      "display_order": 1
+    }
+  },
+  {
+    "model": "mechanics.modifiercategory",
+    "fields": {
+      "name": "resonance",
+      "description": "Magical resonance types",
+      "display_order": 4
+    }
+  },
+  {
+    "model": "mechanics.modifiercategory",
+    "fields": {
+      "name": "magic",
+      "description": "Modifiers to magical capabilities such as gift slots and spell power",
+      "display_order": 5
+    }
+  },
+  {
+    "model": "mechanics.modifiercategory",
+    "fields": {
+      "name": "action_points",
+      "description": "Modifiers affecting action point economy",
+      "display_order": 7
+    }
+  },
+  {
+    "model": "mechanics.modifiercategory",
+    "fields": {
+      "name": "height_band",
+      "description": "Modifiers affecting character height options",
+      "display_order": 8
+    }
+  },
+  {
+    "model": "mechanics.modifiercategory",
+    "fields": {
+      "name": "development",
+      "description": "Modifiers affecting skill and trait development rates",
+      "display_order": 9
+    }
+  },
+  {
+    "model": "mechanics.modifiercategory",
+    "fields": {
+      "name": "goal_percent",
+      "description": "Percentage multipliers to goal bonuses",
+      "display_order": 10
+    }
+  },
+  {
+    "model": "mechanics.modifiercategory",
+    "fields": {
+      "name": "goal_points",
+      "description": "Modifiers to goal point allocation",
+      "display_order": 11
+    }
+  },
+  {
+    "model": "mechanics.modifiercategory",
+    "fields": {
+      "name": "condition_control_percent",
+      "description": "Percentage multipliers to condition control loss rates",
+      "display_order": 12
+    }
+  },
+  {
+    "model": "mechanics.modifiercategory",
+    "fields": {
+      "name": "condition_intensity_percent",
+      "description": "Percentage multipliers to condition intensity gains",
+      "display_order": 13
+    }
+  },
+  {
+    "model": "mechanics.modifiercategory",
+    "fields": {
+      "name": "condition_penalty_percent",
+      "description": "Percentage multipliers to condition penalties",
+      "display_order": 14
+    }
+  }
+]

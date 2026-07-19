@@ -1,0 +1,102 @@
+[
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Witchfire",
+      "category": [
+        "Damage Over Time"
+      ],
+      "description": "Engulfed in unnatural green-white flames that hunger for life. Cannot be extinguished by water. Burns until magically suppressed or it consumes its fuel.",
+      "player_description": "Witchfire clings to you with terrible hunger - green-white flames that laugh at water and devour everything they touch. Only magic can save you now.",
+      "observer_description": "is consumed by horrifying witchfire, green-white flames that move with unnatural hunger.",
+      "default_duration_type": "until_cured",
+      "default_duration_value": 0,
+      "is_stackable": true,
+      "max_stacks": 3,
+      "stack_behavior": "intensity",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "fire-alt",
+      "color_hex": "#00FF88",
+      "display_priority": 95,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditiondamageovertime",
+    "fields": {
+      "condition": [
+        "Witchfire"
+      ],
+      "stage": null,
+      "damage_type": [
+        "Witchfire"
+      ],
+      "base_damage": 8,
+      "scales_with_severity": true,
+      "scales_with_stacks": true,
+      "tick_timing": "start"
+    }
+  },
+  {
+    "model": "conditions.conditiondamageovertime",
+    "fields": {
+      "condition": [
+        "Witchfire"
+      ],
+      "stage": null,
+      "damage_type": [
+        "Fire"
+      ],
+      "base_damage": 3,
+      "scales_with_severity": true,
+      "scales_with_stacks": false,
+      "tick_timing": "start"
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Witchfire"
+      ],
+      "stage": null,
+      "check_type": [
+        "Concentration",
+        "Mental"
+      ],
+      "modifier_value": -25,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Witchfire"
+      ],
+      "stage": null,
+      "check_type": [
+        "Willpower",
+        "Mental"
+      ],
+      "modifier_value": -15,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditionconditioninteraction",
+    "fields": {
+      "condition": [
+        "Witchfire"
+      ],
+      "other_condition": [
+        "Wet"
+      ],
+      "trigger": "on_other_applied",
+      "outcome": "remove_other",
+      "result_condition": null,
+      "priority": 20
+    }
+  }
+]

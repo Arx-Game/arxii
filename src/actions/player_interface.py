@@ -15,6 +15,18 @@ Backend resolution:
   each ``AvailableAction`` (which already carries resolved ``resolved_check_type`` and
   ``resolved_action_template`` instances populated by the prefetch chain) into a
   ``PlayerAction``.
+- WORLD_INTERACTION (#2503) -- the SAME ``get_available_actions`` call also surfaces
+  bare-object affordances: an ``AvailableAction`` with ``challenge_instance_id=None``
+  and ``target_object``/``resolved_default_template`` set instead (synthesized from an
+  ``Application.default_template`` match against an ``ObjectProperty``, no authored
+  ``ChallengeInstance`` yet). ``_avail_to_player_action`` branches on
+  ``challenge_instance_id is None`` to build a WORLD_INTERACTION ``ActionRef``
+  (``application_id`` + ``target_object_id``) instead of a CHALLENGE one.
+  ``dispatch_player_action`` mints the instance via ``instantiate_challenge`` at
+  dispatch time, then resolves through the unchanged ``resolve_challenge`` path --
+  see ``_dispatch_world_interaction``. No round-declaration gating (dispatched
+  immediately, like REGISTRY): object interaction isn't a combat/social-round
+  concern.
 - COMBAT      -- only when ``get_active_round_context`` returns a ``RoundContext``
   whose ``is_declaration_open`` is ``True``; enumerates the character's known
   techniques that have an ``action_template`` (= combat-usable techniques) and
@@ -135,6 +147,11 @@ def dispatch_player_action(
     # REGISTRY: validate the key exists; no round gating — always immediate.
     if ref.backend == ActionBackend.REGISTRY:
         return _dispatch_registry(character, ref, kwargs, ctx)
+
+    # WORLD_INTERACTION (#2503): bare-object affordance — mint + resolve immediately,
+    # no round-declaration gating (mirrors REGISTRY's always-immediate treatment).
+    if ref.backend == ActionBackend.WORLD_INTERACTION:
+        return _dispatch_world_interaction(character, ref, ctx)
 
     # SCENE_ADAPTIVE: anti-spam gated, then immediate or declaration-deferred.
     if ref.backend == ActionBackend.SCENE_ADAPTIVE:
@@ -326,6 +343,93 @@ def _dispatch_immediate_challenge(
     _tick_scene_round_if_active(ctx)
 
     return DispatchResult(backend=ActionBackend.CHALLENGE, deferred=False, detail=resolution)
+
+
+def _dispatch_world_interaction(
+    character: ObjectDB,
+    ref: ActionRef,
+    ctx: RoundContext | None,
+) -> DispatchResult:
+    """Mint a ChallengeInstance for a bare-object affordance ref, then resolve it (#2503).
+
+    Re-validates ``ref`` against the character's *current* availability by
+    recomputing ``get_available_actions`` and matching ``(application_id,
+    target_object_id)`` — the same stale/forged-ref safety property
+    ``_find_available_action_for_ref`` provides for CHALLENGE, applied to the
+    pair that identifies a bare-object affordance before any instance exists.
+    An object that left the room, lost its property, or a capability the
+    character no longer has all surface here as a clean
+    ``ActionDispatchError(UNKNOWN_ACTION_REF)`` — no instance is minted.
+
+    Once matched, mints via ``instantiate_challenge(resolved_default_template,
+    location, target_object)`` and resolves through the EXACT same
+    ``resolve_challenge`` used by the CHALLENGE backend — zero reimplementation.
+    """
+    avail = _find_available_action_for_world_interaction_ref(character, ref)
+
+    location = character.db_location
+    template = avail.resolved_default_template
+    target_object = avail.target_object
+    approach = avail.resolved_challenge_approach
+    if location is None or template is None or target_object is None or approach is None:
+        # Defensive: should be unreachable — a matched bare-object AvailableAction
+        # always carries all four (see AvailableAction's #2503 docstring).
+        raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+
+    # Deferred import: challenge_resolution imports actions.services; top-level would cycle.
+    from world.mechanics.challenge_resolution import (  # noqa: PLC0415
+        instantiate_challenge,
+        resolve_challenge,
+    )
+
+    instance = instantiate_challenge(template, location=location, target_object=target_object)
+    resolution = resolve_challenge(
+        character,
+        instance,
+        approach,
+        avail.capability_source,
+    )
+
+    # Post-dispatch tick: a WORLD_INTERACTION action costs a turn; advance the scene
+    # round if active (mirrors _dispatch_immediate_challenge's tail).
+    _tick_scene_round_if_active(ctx)
+
+    return DispatchResult(
+        backend=ActionBackend.WORLD_INTERACTION,
+        deferred=False,
+        detail=resolution,
+    )
+
+
+def _find_available_action_for_world_interaction_ref(
+    character: ObjectDB, ref: ActionRef
+) -> AvailableAction:
+    """Find the synthesized bare-object ``AvailableAction`` matching *ref* (#2503).
+
+    Recomputes ``get_available_actions`` fresh (no caching) and matches on
+    ``(application_id, target_object_id)`` — the two ids stable before any
+    ``ChallengeInstance`` exists. Only matches synthesized entries
+    (``challenge_instance_id is None``); an authored CHALLENGE action can never
+    satisfy a WORLD_INTERACTION ref.
+
+    Raises:
+        ActionDispatchError: With ``UNKNOWN_ACTION_REF`` if no match found.
+    """
+    location = character.db_location
+    if location is None:
+        raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+
+    available = get_available_actions(character, location)
+    for avail in available:
+        if (
+            avail.challenge_instance_id is None
+            and avail.target_object is not None
+            and avail.application_id == ref.application_id
+            and avail.target_object.pk == ref.target_object_id
+        ):
+            return avail
+
+    raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
 
 
 def _tick_scene_round_if_active(ctx: RoundContext | None) -> None:
@@ -852,6 +956,12 @@ def _avail_to_player_action(avail: AvailableAction) -> PlayerAction:
     ``ActionDispatchError(UNKNOWN_ACTION_REF)`` if ``resolved_check_type`` is missing
     (defensive; should not happen for a validly-matched ``AvailableAction``).
 
+    Branches on ``avail.challenge_instance_id is None`` (#2503): a bare-object
+    affordance has no authored ``ChallengeInstance`` yet, so it gets a
+    WORLD_INTERACTION ``ActionRef`` (``application_id`` + ``target_object_id``)
+    instead of a CHALLENGE one — CHALLENGE's ``__post_init__`` requires a non-None
+    ``challenge_instance_id``, which a synthesized affordance never has.
+
     Args:
         avail: A matched ``AvailableAction`` from ``get_available_actions``.
 
@@ -861,6 +971,24 @@ def _avail_to_player_action(avail: AvailableAction) -> PlayerAction:
     check_type = avail.resolved_check_type
     if check_type is None:
         raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+
+    if avail.challenge_instance_id is None and avail.target_object is not None:
+        ref = ActionRef(
+            backend=ActionBackend.WORLD_INTERACTION,
+            application_id=avail.application_id,
+            target_object_id=avail.target_object.pk,
+        )
+        return PlayerAction(
+            backend=ActionBackend.WORLD_INTERACTION,
+            check_type=check_type,
+            display_name=avail.display_name,
+            ref=ref,
+            action_template=avail.resolved_action_template,
+            description=avail.custom_description,
+            difficulty=avail.difficulty_indicator,
+            prerequisite_met=avail.prerequisite_met,
+            prerequisite_reasons=avail.prerequisite_reasons,
+        )
 
     ref = ActionRef(
         backend=ActionBackend.CHALLENGE,

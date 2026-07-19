@@ -1,0 +1,146 @@
+[
+  {
+    "model": "magic.resonance",
+    "fields": {
+      "name": "Tideborne",
+      "description": "The Tideborne resonance.",
+      "affinity": [
+        "Primal (Tideborne)"
+      ],
+      "opposite": null,
+      "properties": []
+    }
+  },
+  {
+    "model": "magic.resonance",
+    "fields": {
+      "name": "Wild Hunt",
+      "description": "The Wild Hunt resonance.",
+      "affinity": [
+        "Primal"
+      ],
+      "opposite": null,
+      "properties": []
+    }
+  },
+  {
+    "model": "magic.resonance",
+    "fields": {
+      "name": "Web of Spiders",
+      "description": "The Web of Spiders resonance.",
+      "affinity": [
+        "Abyssal"
+      ],
+      "opposite": null,
+      "properties": []
+    }
+  },
+  {
+    "model": "magic.resonance",
+    "fields": {
+      "name": "Social Influence",
+      "description": "The Social Influence resonance.",
+      "affinity": [
+        "Social"
+      ],
+      "opposite": null,
+      "properties": []
+    }
+  },
+  {
+    "model": "magic.resonance",
+    "fields": {
+      "name": "Light",
+      "description": "",
+      "affinity": [
+        "Celestial"
+      ],
+      "opposite": null,
+      "properties": []
+    }
+  },
+  {
+    "model": "magic.resonance",
+    "fields": {
+      "name": "Sanctity",
+      "description": "",
+      "affinity": [
+        "Celestial"
+      ],
+      "opposite": null,
+      "properties": []
+    }
+  },
+  {
+    "model": "magic.resonance",
+    "fields": {
+      "name": "Radiance",
+      "description": "",
+      "affinity": [
+        "Celestial"
+      ],
+      "opposite": null,
+      "properties": []
+    }
+  },
+  {
+    "model": "magic.resonance",
+    "fields": {
+      "name": "Dissolution",
+      "description": "",
+      "affinity": [
+        "Abyssal"
+      ],
+      "opposite": null,
+      "properties": []
+    }
+  },
+  {
+    "model": "magic.resonance",
+    "fields": {
+      "name": "Praedari",
+      "description": "The resonance of the predator, the hunt, and the kill.",
+      "affinity": [
+        "Primal"
+      ],
+      "opposite": null,
+      "properties": []
+    }
+  },
+  {
+    "model": "magic.resonance",
+    "fields": {
+      "name": "Fervor",
+      "description": "The resonance of dramatic flair and commanding presence.",
+      "affinity": [
+        "Celestial"
+      ],
+      "opposite": null,
+      "properties": []
+    }
+  },
+  {
+    "model": "magic.resonance",
+    "fields": {
+      "name": "Reflection",
+      "description": "The resonance of thresholds and mirrored passage.",
+      "affinity": [
+        "Celestial"
+      ],
+      "opposite": null,
+      "properties": []
+    }
+  },
+  {
+    "model": "magic.resonance",
+    "fields": {
+      "name": "Bene",
+      "description": "",
+      "affinity": [
+        "Celestial"
+      ],
+      "opposite": null,
+      "properties": []
+    }
+  }
+]

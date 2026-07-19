@@ -1,0 +1,443 @@
+[
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Frightened",
+      "category": [
+        "Mental"
+      ],
+      "description": "Overwhelmed by supernatural fear. Compelled to flee or cower.",
+      "player_description": "Terror grips your heart. Every instinct screams at you to run.",
+      "observer_description": "trembles with visible fear, eyes wide with terror.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 3,
+      "is_stackable": true,
+      "max_stacks": 3,
+      "stack_behavior": "intensity",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "ghost",
+      "color_hex": "#886688",
+      "display_priority": 70,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Frightened"
+      ],
+      "stage": null,
+      "check_type": [
+        "Melee Attack",
+        "Combat"
+      ],
+      "modifier_value": -20,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Frightened"
+      ],
+      "stage": null,
+      "check_type": [
+        "Concentration",
+        "Mental"
+      ],
+      "modifier_value": -15,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Frightened"
+      ],
+      "stage": null,
+      "check_type": [
+        "Willpower",
+        "Mental"
+      ],
+      "modifier_value": -10,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Frightened"
+      ],
+      "stage": null,
+      "scales_with_severity": false,
+      "check_type": [
+        "Persuasion",
+        "Social"
+      ],
+      "modifier_value": -150
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Charmed",
+      "category": [
+        "Mental"
+      ],
+      "description": "Magically compelled to view the charmer favorably. Cannot attack them directly.",
+      "player_description": "They seem so wonderful, so trustworthy. Why would you ever want to harm them?",
+      "observer_description": "gazes adoringly at their charmer, clearly under magical influence.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 10,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "heart",
+      "color_hex": "#FF69B4",
+      "display_priority": 75,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Charmed"
+      ],
+      "stage": null,
+      "check_type": [
+        "Insight",
+        "Mental"
+      ],
+      "modifier_value": -30,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Confused",
+      "category": [
+        "Mental"
+      ],
+      "description": "Mind scrambled, actions unpredictable. May attack allies or stand idle.",
+      "player_description": "Your thoughts scatter like leaves in a storm. What were you doing?",
+      "observer_description": "acts erratically, their movements disjointed and purposeless.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 3,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "question",
+      "color_hex": "#FFAA00",
+      "display_priority": 80,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Confused"
+      ],
+      "stage": null,
+      "check_type": [
+        "Melee Attack",
+        "Combat"
+      ],
+      "modifier_value": -25,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Confused"
+      ],
+      "stage": null,
+      "check_type": [
+        "Ranged Attack",
+        "Combat"
+      ],
+      "modifier_value": -25,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Confused"
+      ],
+      "stage": null,
+      "check_type": [
+        "Magic Attack",
+        "Combat"
+      ],
+      "modifier_value": -25,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Confused"
+      ],
+      "stage": null,
+      "check_type": [
+        "Concentration",
+        "Mental"
+      ],
+      "modifier_value": -40,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Stunned",
+      "category": [
+        "Control"
+      ],
+      "description": "Mentally overwhelmed, unable to take actions. Defenseless.",
+      "player_description": "Your mind goes blank. You can't think, can't act, can only exist.",
+      "observer_description": "stands stock still, eyes unfocused, completely unresponsive.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 1,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "star",
+      "color_hex": "#FFFF88",
+      "display_priority": 95,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": [
+        "Stunned"
+      ],
+      "stage": null,
+      "capability": [
+        "movement"
+      ],
+      "value": -100
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": [
+        "Stunned"
+      ],
+      "stage": null,
+      "capability": [
+        "melee_attack"
+      ],
+      "value": -100
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": [
+        "Stunned"
+      ],
+      "stage": null,
+      "capability": [
+        "ranged_attack"
+      ],
+      "value": -100
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Stunned"
+      ],
+      "stage": null,
+      "scales_with_severity": false,
+      "check_type": [
+        "Magic Control",
+        "Magic"
+      ],
+      "modifier_value": -500
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": [
+        "Stunned"
+      ],
+      "stage": null,
+      "capability": [
+        "defense"
+      ],
+      "value": -100
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Blinded",
+      "category": [
+        "Sensory"
+      ],
+      "description": "Unable to see. Severe penalties to actions requiring sight.",
+      "player_description": "Darkness engulfs you. You cannot see anything.",
+      "observer_description": "gropes blindly, unable to see.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 3,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "eye-slash",
+      "color_hex": "#333333",
+      "display_priority": 85,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": [
+        "Blinded"
+      ],
+      "stage": null,
+      "capability": [
+        "awareness"
+      ],
+      "value": -75
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Blinded"
+      ],
+      "stage": null,
+      "check_type": [
+        "Melee Attack",
+        "Combat"
+      ],
+      "modifier_value": -30,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Blinded"
+      ],
+      "stage": null,
+      "check_type": [
+        "Ranged Attack",
+        "Combat"
+      ],
+      "modifier_value": -50,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Blinded"
+      ],
+      "stage": null,
+      "check_type": [
+        "Physical Defense",
+        "Combat"
+      ],
+      "modifier_value": -25,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Deafened",
+      "category": [
+        "Sensory"
+      ],
+      "description": "Unable to hear. Cannot respond to verbal commands or detect sounds.",
+      "player_description": "Silence. Complete and absolute. You hear nothing.",
+      "observer_description": "doesn't respond to sounds, clearly unable to hear.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 5,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "volume-mute",
+      "color_hex": "#666666",
+      "display_priority": 50,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Deafened"
+      ],
+      "stage": null,
+      "check_type": [
+        "Perception",
+        "Exploration"
+      ],
+      "modifier_value": -20,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Deafened"
+      ],
+      "stage": null,
+      "check_type": [
+        "Initiative",
+        "Combat"
+      ],
+      "modifier_value": -10,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditionresistancemodifier",
+    "fields": {
+      "condition": [
+        "Deafened"
+      ],
+      "stage": null,
+      "damage_type": [
+        "Sound"
+      ],
+      "modifier_value": 50
+    }
+  }
+]

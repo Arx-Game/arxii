@@ -8,15 +8,18 @@ from world.items.factories import (
     InteractionTypeFactory,
     ItemInstanceFactory,
     ItemTemplateFactory,
+    ItemTemplatePropertyFactory,
     QualityTierFactory,
 )
 from world.items.models import (
     CurrencyBalance,
     EquippedItem,
+    ItemTemplateProperty,
     OwnershipEvent,
     TemplateInteraction,
     TemplateSlot,
 )
+from world.mechanics.factories import PropertyFactory
 from world.roster.factories import MediaFactory
 
 
@@ -119,6 +122,45 @@ class ItemTemplateTests(TestCase):
                 equipment_layer=EquipmentLayer.OVER,
             )
         self.assertEqual(template.slots.count(), 3)
+
+
+class ItemTemplatePropertyTests(TestCase):
+    """Tests for ItemTemplateProperty model (bridge-object affordances, #2503)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.template = ItemTemplateFactory(name="Rusty Lever")
+        cls.prop = PropertyFactory(name="pryable")
+
+    def test_str(self) -> None:
+        link = ItemTemplatePropertyFactory(
+            item_template=self.template,
+            property=self.prop,
+            value=2,
+        )
+        self.assertEqual(str(link), "Rusty Lever: pryable (2)")
+
+    def test_default_value(self) -> None:
+        link = ItemTemplatePropertyFactory(item_template=self.template, property=self.prop)
+        self.assertEqual(link.value, 1)
+
+    def test_unique_constraint(self) -> None:
+        ItemTemplatePropertyFactory(item_template=self.template, property=self.prop)
+        with self.assertRaises(IntegrityError):
+            ItemTemplateProperty.objects.create(item_template=self.template, property=self.prop)
+
+    def test_default_properties_related_name(self) -> None:
+        link = ItemTemplatePropertyFactory(item_template=self.template, property=self.prop)
+        self.assertIn(link, self.template.default_properties.all())
+        self.assertIn(link, self.prop.item_template_defaults.all())
+
+    def test_natural_key_round_trips(self) -> None:
+        """natural_key() flattens FK natural keys — ItemTemplate/Property key on name."""
+        link = ItemTemplatePropertyFactory(item_template=self.template, property=self.prop)
+        natural_key = link.natural_key()
+        self.assertEqual(natural_key, (self.template.name, self.prop.name))
+        looked_up = ItemTemplateProperty.objects.get_by_natural_key(*natural_key)
+        self.assertEqual(looked_up, link)
 
 
 class ItemInstanceTests(TestCase):

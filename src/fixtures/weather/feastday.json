@@ -1,0 +1,26 @@
+[
+  {
+    "model": "weather.feastday",
+    "fields": {
+      "name": "Moon Madness",
+      "ic_month": 10,
+      "ic_day": 31,
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "is_active": true
+    }
+  },
+  {
+    "model": "weather.feastday",
+    "fields": {
+      "name": "Eclipse of Mirrors",
+      "ic_month": 3,
+      "ic_day": 20,
+      "weather_type": [
+        "Eclipse of Mirrors"
+      ],
+      "is_active": true
+    }
+  }
+]

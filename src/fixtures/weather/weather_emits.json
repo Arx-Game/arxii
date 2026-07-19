@@ -1,0 +1,4999 @@
+[
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The sun shines clear in a cloudless sky, bright against the blue, while a red-tinged moon basks in the light.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The red-tinged moon is bright, painting everything with a subtle silvery hue.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The sun peeks out from behind the clouds here and there, casting mottled shadows on the ground below. Every now and then, the red-tinged moon can be glimpsed through the scattered cover.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The moon hides behind the clouds, a dim silver glow in the sky.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Rain falls, beating a staccato tattoo against the buildings and streets of the city.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Thunder rumbles in the distance, and the sky is lit by flickers of lightning.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Rain falls in torrential sheets from the dark clouds overhead, as thunder rolls in the distance.",
+      "gm_notes": "",
+      "weight": 2,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "Soft, fluffy flakes of snow drift from the sky, gilding the city in white.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "Snow falls in thick drifts, bringing a cold and pristine beauty to the world.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "The driving snow is so thick as to obscure the city; everything is a sheet of cold white.",
+      "gm_notes": "",
+      "weight": 7,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Cold rain pours down on the city.  Flashes of lightning brighten the sky, and thunder rumbles in the distance.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "The wind shakes foliage throughout the city, building and then ebbing in periodic gusts.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "A slurry of rain and wet snow falls in clumps, leaving surfaces perilously slick and wet. The precipitation obscures visibility further than a few feet.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "Objects seemed limned in soft luminous light, sounds and visibility muffled by the morning fog that hugs the ground.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The sun shines brightly on a cloudless day, warming everywhere that is not cooled by shadow. A red-tinged moon hangs in the sky, only just visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "The rumbling boom of thunder sounds in the atmosphere through the flurries of snow.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "The sky above closes in as the dark, ominous rain clouds have driven near, gathering together in a council.  Then comes the deep, rumbling warning of thunder, heralding rain.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Vivid lightning strafes in white sheets, illuminating the heavy anvil-head clouds gathered thickly overhead.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "Big fat white clouds hang in the sky like a herd of fluffy overfed sheep, shifting along with the winds, occasionally drifting across the moon.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Faint mist hangs in the damp air as bands of drizzle leave the world glossy and slick.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "Heavy fog gathers in a creeping soup that shrouds the city in muffled silence.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Big clouds blot out the stars in places, making constellations more difficult to make out.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "Big clouds blot out the stars in places, making constellations more difficult to make out.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "A warm, strong breeze pulls through the city, disturbing the hot day.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The punishing summer heat bleaches the cloudless blue sky almost to white. Against the intensity, the moon is nearly, if not quite, invisible, its edges limned with the faintest crimson.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "Mist hangs low, limiting visibility more than a few feet.  Beads of water gather on surfaces and people in the spring chill.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Thunder rumbles overhead as lightning arcs across the sky, casting brief relief from the darkness, illuminating the heavy bellies of the clouds above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "A red-tinged moon hangs high above while clouds drift across the sky.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "The wind blows through, whistling as it carries along rustling fall leaves.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "The trees all wear coats of sparkling ice as the frozen rain glistens in the morning light, the fresh layer of snow still pristine white and untouched. A pale moon is just barely visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "The sky is hidden behind clouds, everything gray and overcast.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The heat of the night settles its weight over the city and brings with it an oppressive, sweating stillness.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The chill of the night lingers in the morning air on this clear day. One can see their misty breath in the cold air. Above, a red-tinged moon remains while the sun climbs ever higher.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "Large flakes scatter in wild eddies, driven by the wind. None of the snow rests long enough to pile, save when trapped against walls.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "A light drizzle of rain falls from the storm clouds that hang over the city.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The summer air is oppressively humid. The moon is white against the sky, its surface delicately brushed with just the faintest hint of crimson.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Wind drives the rain into sheets that crash against buildings like the cold waves of the Mourning Sea.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "The sky is spitting little drizzles of rain, giving the air a chill that sets in to the bones.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Rain is coming down in steady sheets, driving against the roofs and streets in an unending roar.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "A morning mist rolls in from the bay, covering the city in a faint haze. Now and then, the moon can be glimpsed through the fog.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "A light rain falls, the fine drops like a soft mist drifting gently down from above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "Flakes of snow drift lazily in the air, hanging in the soft wind before they gently settle on the ground.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "A thick blanket of new fallen snow swallows the sounds of the city. The day dawns to a profound stillness, the faint outline of the moon overlooking all.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Driven by the wind, rain rattles against windows like a beast demanding to come inside.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Cold rain pours down in punishing sheets.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "The harsh winter wind cuts through clothing and whistles through drafty buildings, taking with it all memory of warmth.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "A brief sun shower falls from a wisp of a cloud in the azure sky. The red-tinged moon is clearly visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "In the crystalline night air, the stars glitter like a handful of diamonds cast on black velvet.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Under the endless, dull drizzle, the world is like a pastel drawing that has been ever so slightly smudged.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "The sky is an ominous blanket of of mackerel clouds, inky and amber-tinted.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "A red-tinged moon is just visible as the morning sun spills light all over the land, gilding the edges of white clouds overhead.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "Heat bears down on the city as the sun climbs towards its zenith. The stark white moon is unmistakable.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Torrential rain falls, accompanied by the occasional flash of forked lightning and a great clap of thunder.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "There is a biting chill to the air and the wind only makes it worse, swirling the snow on the ground up into great flurries of white.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "Clear skies do not mean warm weather; though the sun shines, its warmth is lacking on this cloudless day. A faint outline of the moon can be seen.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Thunder rolls and the darkened sky is illuminated with periodic flashes of lightning. Within those flashes the deep purple-gray of the clouds is illuminated in all their billowing glory as they pelt the world with buckets of cold rain.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "So thick you can barely see halfway down a street, white fog rolls about, its cloaking presence muffling and distorting the direction of sounds as the sun tries to burn it off. Every now and then, the moon is only just visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "The snow piles high from the clouds tonight, quickly filling footprints and leaving them unseen.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The air is heavy and moist with humidity; what few clouds there are do little to alleviate the heat from the sun overhead. In contrast, the moon is faded and cold.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "There is a fresh and clean scent to the warm breeze that blows. The clouds overhead form wild shapes as they dance across the sky, while the red-tinged moon looks on.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Rain drizzles slowly down from a drab and colorless gray sky.  The air smells of damp earth.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Through the paleness of the morning, a cold autumnal rain falls over the city. Even the most ardent of heart clutch at their coat in quiet, chilled misery. Occasionally, the moon peeks through the gray clouds.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "The lamps of the city reveal in their ambient glow little flurries of snow drifting from above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The paper skyline has been evaporated of all clouds and all that remains is the sun, bright and gold, glaring hotly overhead alongside the cold and silver moon.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Tumultuous black clouds churn with relentless toil, flashes of lightning forking in their thick plumes, the rolling thunder occasionally shattering the din of the harsh, slanted rain.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The evening air feels balmy, warm and pleasant, only a few clouds making their way across the skies above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "A refreshingly light breeze picks up now and again, otherwise the day is bright and sunny. The red-tinged moon is unmistakable against the blue sky.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "It is cold, with intermittent rain showers and a blustery wind that makes being outdoors unpleasant.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "It is cold, with intermittent rain showers and a blustery wind that makes being out somewhat difficult.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "The dreary skies above seem to soften the edges of the world and cast a gloomy pallor across the city.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The day is hot and bright, the sun blazing down on the city. A faded moon is just slightly visible in the sky.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The day is bright and cheerful, with only a few clouds dotting the skies above. The moon is faint.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The sky shines bright with a thousand points of light.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "It is a gloomy day, the skies overcast with occasional showers to send people seeking shelter indoors.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "A cool mist works its way through the city this morning, leaving glimmers of moisture on everything it touches. The red-tinged moon waits on the horizon.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The day is hot and almost muggy, the sort of weather familiar to those from the south and somewhat insufferable to those from the north. The moon is present, if faded.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "A heavy, relentless rain pervades the city, leaving puddles everywhere in its wake.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "The sky is clear save the occasional white cloud and the soft impression of the moon, yet there is the sound of thunder in the distance.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "It's a clear, dark night, with no hint of clouds to mar the gleam of starlight and moonlight from above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "It's absolutely pouring. Rain soaks through clothing to skin in seconds for any who dare to step outside, the raindrops fat and heavy.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "A dense, clammy mist clings to the streets, obscuring the world and turning the familiar into something shadowed and ominous.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "The air is frigid and yet there is no wind. Thick blotches of fog stand in eerily still clumps, distorting sight.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "Snow drifts downwards in light and airy flakes, coating the world in a thin layer of white.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "The driving snow is so thick that it's hard to see; the biting wind cuts cold through even the warmest of clothing.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "A blanket of fog hangs over the city, turning everything into a world of half-seen shadows.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The chill winter air is marked by grey skies, the sun lightening the clouds but not reaching far beyond. The crispness in the air suggests snowfall might be possible, but the weather is clear for now. The pale moon is occasionally visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The autumn air is deliciously crisp, almost as if one could smell the harvest of apples on the breeze. A few clouds mark the sky, but the sun beams through happily, and the moon is faint and silver.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "It's the clearest of clear skies. There's not a cloud in sight to mar that brilliant blue and radiant sunshine. The moon is faded and only just visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "A light fall of rain mingles with the warmth of sunshine for that particularly lovely phenomenon: a sunshower.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "A light fall of rain mingles with the warmth of sunshine for that particularly lovely phenomenon: a sunshower.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "It's raining lightly enough to underestimate through the window and refrain from adding a protective layer, but just enough to be a bit annoying outside.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "Although the sun shines brilliantly, the air is crisp as figurative ice, and the red-tinged moon is just as cold.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "The wind sobs between gaps in the buildings, roiling leaves and dust to make patterns in the dusk.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "Flakes of snow gently drift down from the gray clouds above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "The damp weather has left a subsequent fog, which covers the area in a fine mist. Both the morning sun and the faint moon are but a haze through it, and visibility is low outside.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "Gusts of wind whip at anyone unlucky enough to be outside.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "A summer shower provides respite from the heat of the afternoon.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "A cool, pearlescent fog drifts through the streets of the city, and the air glows with the morning light.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "The morning air seems unnaturally quiet, while frost etches window panes and icicles gleam along rooftops and from the trees. Large, feathery snowflakes drift lazily down from pale clouds overhead. The moon can occasionally be glimpsed through the cover.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "A cold, dreary rain falls from the dark skies above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "A gentle, soothing rain trickles down in a sparkling curtain from sparse gray clouds drifting overhead.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Eclipse of Mirrors"
+      ],
+      "text": "Though the sky is crystal clear and utterly dark, there's not a star to see; it's as though even the stars themselves fear the huge, ominous red moon that seems to dominate everything.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Eclipse of Mirrors"
+      ],
+      "text": "Clouds drift across the enormous crimson moon that dominates the sky, casting the city below into deep shadow.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Eclipse of Mirrors"
+      ],
+      "text": "The city is painted in shades of crimson and copper by the enormous red moon overhead, lending an eerie and unsettling feel to what should be familiar streets.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Eclipse of Mirrors"
+      ],
+      "text": "The clouds overhead are limned in crimson by the abnormally large red moon, turning them into bloodied smears across the darkened sky.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Eclipse of Mirrors"
+      ],
+      "text": "The crimson moon seems all the brighter in the evening as a fog rolls out from the Bay of Thrax towards Arx, the Bay and Gray River awashed with the color of blood.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "Whispy fog fills the air, slowly burning off as the day wears on. While you can see a block, maybe two, the haze blurs things and leaves a dewy dampness in its wake.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "A chill wind moves through the city, catching at the edges of clothing and seeping through cracks in doors and windows.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "The world is wet with autumn rain that chills to the bone.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Snowy"
+      ],
+      "text": "Stinging flakes of snow fall from the sky above, carried by sharp whistling winds.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The silvery-white disc of the moon only serves to enhance the feeling of autumn's bitter chill as breath fogs in the moonlight.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Eclipse of Mirrors"
+      ],
+      "text": "The crimson moon overhead seems like a wound in the Dream itself, one that bleeds an eerie red light onto the world below.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "A light breeze, laden with the tang of the sea, sweeps away the myriad city smells.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "The thick blanket of fog plays tricks with sounds, muffling some, and making others seem much nearer than they are.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "Fog turns lights to smears, and all else to darkness.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "A stubborn fog clings to the city streets, thinned by the sunlight, but refusing to let itself be burned away. The red-tinged moon is only just visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "The intermittent wind blows in sharp gusts that tug at skirts and cloaks, and steals hats away.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "The crisp, cool wind brings with it the scent of fall.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "The treetops thrash and dance in the steady wind, creating a rushing whisper that seems to come from everywhere at once.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "Clouds swirl and boil overhead; they chase each other across the sky, running before the steady wind. The moon is faded, but everpresent.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "The still air is filled with an icy fog, stinging exposed skin with sharp pinpricks of cold.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "Puffs of weak wind give bare moments of relief from the oppressive heat.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "Wind rattles windows and doors, bending branches and howling across rooftops.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "On the foggy streets, passing strangers become mere silhouettes, black forms against a backdrop of swirling gray.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "A thin fog creeps through the city streets like a living thing.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "Details become mere smears of gray in the fog, as if the city itself was out of focus.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "The low fog is heavy with moisture.  Water beads up on surfaces, leaving everything unpleasantly damp.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Clear"
+      ],
+      "text": "The air is crisp, just cool enough that one can smell the scent of smoke from a chimney or two on the breeze.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "A storm rages as if the gods themselves seek to scour the city clean. Windows shudder in sills with every too-close bolt of lightning.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "Windows shudder and walls creak as the wind howls through the city streets.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "A thin veil of frost-laden mist creeps into the city from the sea, rising high to envelop Arx in an icy, diaphanous curtain.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Foggy"
+      ],
+      "text": "Impenetrable, early-morning fog rises from the Bay of Thrax, engulfing the shore in an undulating, opaque cloud that obscures everything it covers from sight.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Windy"
+      ],
+      "text": "Powerful gusts of wind sweep through the city, bringing with it a frigid chill from the North; the cold seeps into the bones of any outside for a prolonged amount of time.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Stormy"
+      ],
+      "text": "Clouds are scattered through the dark heavens, allowing glimpses of the stars between them. The air is crisp but not unpleasant.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The sun shines clear in a cloudless sky, bright against the blue, while the pale moon is only just visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The moon is bright, painting everything with a subtle silvery hue.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The sun peeks out from behind the clouds here and there, casting mottled shadows on the ground below. Every now and then, the moon can be glimpsed through the scattered cover.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The moon hides behind the clouds, a dim silver glow in the sky.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Rain falls, beating a staccato tattoo against the buildings and streets of the city.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Thunder rumbles in the distance, and the sky is lit by flickers of lightning.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Rain falls in torrential sheets from the dark clouds overhead, as thunder rolls in the distance.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Soft, fluffy flakes of snow drift from the sky, gilding the city in white.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Snow falls in thick drifts, bringing a cold and pristine beauty to the world.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The driving snow is so thick as to obscure the city; everything is a sheet of cold white.",
+      "gm_notes": "",
+      "weight": 7,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Cold rain pours down on the city.  Flashes of lightning brighten the sky, and thunder rumbles in the distance.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The wind shakes foliage throughout the city, building and then ebbing in periodic gusts.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A slurry of rain and wet snow falls in clumps, leaving surfaces perilously slick and wet. The precipitation obscures visibility further than a few feet.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Objects seemed limned in soft luminous light, sounds and visibility muffled by the morning fog that hugs the ground.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The sun shines brightly on a cloudless day, warming everywhere that is not cooled by shadow. A pale moon hangs in the sky, only just visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The rumbling boom of thunder sounds in the atmosphere through the flurries of snow.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The sky above closes in as the dark, ominous rain clouds have driven near, gathering together in a council.  Then comes the deep, rumbling warning of thunder, heralding rain.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Vivid lightning strafes in white sheets, illuminating the heavy anvil-head clouds gathered thickly overhead.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Big fat white clouds hang in the sky like a herd of fluffy overfed sheep, shifting along with the winds, occasionally drifting across the moon.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Faint mist hangs in the damp air as bands of drizzle leave the world glossy and slick.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Heavy fog gathers in a creeping soup that shrouds the city in muffled silence.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Big clouds blot out the stars in places, making constellations more difficult to make out.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A warm, strong breeze pulls through the city, disturbing the hot day",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The punishing summer heat bleaches the cloudless blue sky almost to white. Against the intensity, the moon is nearly, if not quite, invisible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Mist hangs low, limiting visibility more than a few feet.  Beads of water gather on surfaces and people in the spring chill.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Thunder rumbles overhead as lightning arcs across the sky, casting brief relief from the darkness, illuminating the heavy bellies of the clouds above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A faded moon hangs high above while clouds drift across the sky.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The wind blows through, whistling as it carries along rustling fall leaves.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The trees all wear coats of sparkling ice as the frozen rain glistens in the morning light, the fresh layer of snow still pristine white and untouched. A pale moon is just barely visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The sky is hidden behind clouds, everything gray and overcast.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The heat of the night settles its weight over the city and brings with it an oppressive, sweating stillness.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The chill of the night lingers in the morning air on this clear day. One can see their misty breath in the cold air. Above, a pale moon remains while the sun climbs ever higher.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Large flakes scatter in wild eddies, driven by the wind. None of the snow rests long enough to pile, save when trapped against walls.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A light drizzle of rain falls from the storm clouds that hang over the city.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The summer air is oppressively humid. The moon is white against the sky.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Wind drives the rain into sheets that crash against buildings like the cold waves of the Mourning Sea.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The sky is spitting little drizzles of rain, giving the air a chill that sets in to the bones.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Rain is coming down in steady sheets, driving against the roofs and streets in an unending roar.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A morning mist rolls in from the bay, covering the city in a faint haze. Now and then, the moon can be glimpsed through the fog.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A light rain falls, the fine drops like a soft mist drifting gently down from above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Flakes of snow drift lazily in the air, hanging in the soft wind before they gently settle on the ground.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A thick blanket of new fallen snow swallows the sounds of the city.   The day dawns to a profound stillness, the faint outline of the moon overlooking all.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Driven by the wind, rain rattles against windows like a beast demanding to come inside.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Cold rain pours down in punishing sheets.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The harsh winter wind cuts through clothing and whistles through drafty buildings, taking with it all memory of warmth.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A brief sun shower falls from a wisp of a cloud in the azure sky. The pale moon is clearly visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "In the crystalline night air, the stars glitter like a handful of diamonds cast on black velvet.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Under the endless, dull drizzle, the world is like a pastel drawing that has been ever so slightly smudged.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The sky is an ominous blanket of of mackerel clouds, inky and amber-tinted.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A faded moon is just visible as the morning sun spills light all over the land, gilding the edges of white clouds overhead.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Heat bears down on the city as the sun climbs towards its zenith. The stark white moon is unmistakable.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Torrential rain falls, accompanied by the occasional flash of forked lightning and a great clap of thunder.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "There is a biting chill to the air and the wind only makes it worse, swirling the snow on the ground up into great flurries of white.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Clear skies do not mean warm weather; though the sun shines, its warmth is lacking on this cloudless day. A faint outline of the moon can be seen.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Thunder rolls and the darkened sky is illuminated with periodic flashes of lightning. Within those flashes the deep purple-gray of the clouds is illuminated in all their billowing glory as they pelt the world with buckets of cold rain.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "So thick you can barely see halfway down a street, white fog rolls about, its cloaking presence muffling and distorting the direction of sounds as the sun tries to burn it off. Every now and then, the moon is only just visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The snow piles high from the clouds tonight, quickly filling footprints and leaving them unseen.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The air is heavy and moist with humidity; what few clouds there are do little to alleviate the heat from the sun overhead. In contrast, the moon is faded and cold.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "There is a fresh and clean scent to the warm breeze that blows. The clouds overhead form wild shapes as they dance across the sky, while the pale moon looks on.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Rain drizzles slowly down from a drab and colorless gray sky.  The air smells of damp earth.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Through the paleness of the morning, a cold autumnal rain falls over the city. Even the most ardent of heart clutch at their coat in quiet, chilled misery. Occasionally, the moon peeks through the gray clouds.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The lamps of the city reveal in their ambient glow little flurries of snow drifting from above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The paper skyline has been evaporated of all clouds and all that remains is the sun, bright and gold, glaring hotly overhead alongside the cold and silver moon.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Tumultuous black clouds churn with relentless toil, flashes of lightning forking in their thick plumes, the rolling thunder occasionally shattering the din of the harsh, slanted rain.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The evening air feels balmy, warm and pleasant, only a few clouds making their way across the skies above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A refreshingly light breeze picks up now and again, otherwise the day is bright and sunny. The pale moon is unmistakable against the blue sky.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "It is cold, with intermittent rain showers and a blustery wind that makes being outdoors unpleasant.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "It is cold, with intermittent rain showers and a blustery wind that makes being out somewhat difficult.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The dreary skies above seem to soften the edges of the world and cast a gloomy pallor across the city.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The day is hot and bright, the sun blazing down on the city. A faded moon is just slightly visible in the sky.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The day is bright and cheerful, with only a few clouds dotting the skies above. The moon is faint.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The sky shines bright with a thousand points of light.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "It is a gloomy day, the skies overcast with occasional showers to send people seeking shelter indoors.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A cool mist works its way through the city this morning, leaving glimmers of moisture on everything it touches. The pale moon waits on the horizon.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The day is hot and almost muggy, the sort of weather familiar to those from the south and somewhat insufferable to those from the north. The moon is present, if faded.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A heavy, relentless rain pervades the city, leaving puddles everywhere in its wake.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The sky is clear save the occasional white cloud and the soft impression of the moon, yet there is the sound of thunder in the distance.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "It's a clear, dark night, with no hint of clouds to mar the gleam of starlight and moonlight from above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "It's absolutely pouring. Rain soaks through clothing to skin in seconds for any who dare to step outside, the raindrops fat and heavy.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A dense, clammy mist clings to the streets, obscuring the world and turning the familiar into something shadowed and ominous.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The air is frigid and yet there is no wind. Thick blotches of fog stand in eerily still clumps, distorting sight.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Snow drifts downwards in light and airy flakes, coating the world in a thin layer of white.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The driving snow is so thick that it's hard to see; the biting wind cuts cold through even the warmest of clothing.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A blanket of fog hangs over the city, turning everything into a world of half-seen shadows.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The chill winter air is marked by grey skies, the sun lightening the clouds but not reaching far beyond. The crispness in the air suggests snowfall might be possible, but the weather is clear for now. The pale moon is occasionally visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The autumn air is deliciously crisp, almost as if one could smell the harvest of apples on the breeze. A few clouds mark the sky, but the sun beams through happily, and the moon is faint and silver.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "It's the clearest of clear skies. There's not a cloud in sight to mar that brilliant blue and radiant sunshine. The moon is faded and only just visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A light fall of rain mingles with the warmth of sunshine for that particularly lovely phenomenon: a sunshower.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "It's raining lightly enough to underestimate through the window and refrain from adding a protective layer, but just enough to be a bit annoying outside.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Although the sun shines brilliantly, the air is crisp as figurative ice, and the white moon is just as cold.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The wind sobs between gaps in the buildings, roiling leaves and dust to make patterns in the dusk.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Flakes of snow gently drift down from the gray clouds above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The damp weather has left a subsequent fog, which covers the area in a fine mist. Both the morning sun and the faint moon are but a haze through it, and visibility is low outside.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Gusts of wind whip at anyone unlucky enough to be outside.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A summer shower provides respite from the heat of the afternoon.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A cool, pearlescent fog drifts through the streets of the city, and the air glows with the morning light.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The morning air seems unnaturally quiet, while frost etches window panes and icicles gleam along rooftops and from the trees.  Large, feathery snowflakes drift lazily down from pale clouds overhead. The can occasionally be glimpsed through the cover.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A cold, dreary rain falls from the dark skies above.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A gentle, soothing rain trickles down in a sparkling curtain from sparse gray clouds drifting overhead.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Wispy fog fills the air, slowly burning off as the day wears on. While you can see a block, maybe two, the haze blurs things and leaves a dewy dampness in its wake.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A chill wind moves through the city, catching at the edges of clothing and seeping through cracks in doors and windows.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The world is wet with autumn rain that chills to the bone.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Stinging flakes of snow fall from the sky above, carried by sharp whistling winds.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The silvery-white disc of the moon only serves to enhance the feeling of autumn's bitter chill as breath fogs in the moonlight.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A light breeze, laden with the tang of the sea, sweeps away the myriad city smells.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The thick blanket of fog plays tricks with sounds, muffling some, and making others seem much nearer than they are.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Fog turns lights to smears, and all else to darkness.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A stubborn fog clings to the city streets, thinned by the sunlight, but refusing to let itself be burned away. The pale moon is only just visible.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The intermittent wind blows in sharp gusts that tug at skirts and cloaks, and steals hats away.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The crisp, cool wind brings with it the scent of fall.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Clouds swirl and boil overhead; they chase each other across the sky, running before the steady wind. The moon is faded, but everpresent.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The still air is filled with an icy fog, stinging exposed skin with sharp pinpricks of cold.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Puffs of weak wind give bare moments of relief from the oppressive heat.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Wind rattles windows and doors, bending branches and howling across rooftops.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "On the foggy streets, passing strangers become mere silhouettes, black forms against a backdrop of swirling gray.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A thin fog creeps through the city streets like a living thing.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Details become mere smears of gray in the fog, as if the city itself was out of focus.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The low fog is heavy with moisture.  Water beads up on surfaces, leaving everything unpleasantly damp.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "The air is crisp, just cool enough that one can smell the scent of smoke from a chimney or two on the breeze.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A storm rages as if the gods themselves seek to scour the city clean. Windows shudder in sills with every too-close bolt of lightning.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Windows shudder and walls creak as the wind howls through the city streets.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "A thin veil of frost-laden mist creeps into the city from the sea, rising high to envelop Arx in an icy, diaphanous curtain.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Impenetrable, early-morning fog rises from the Bay of Thrax, engulfing the shore in an undulating, opaque cloud that obscures everything it covers from sight.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": false,
+      "at_dawn": true,
+      "at_day": false,
+      "at_dusk": false,
+      "at_night": false
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Powerful gusts of wind sweep through the city, bringing with it a frigid chill from the North; the cold seeps into the bones of any outside for a prolonged amount of time.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": false,
+      "in_summer": false,
+      "in_autumn": false,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Moon Madness"
+      ],
+      "text": "Clouds are scattered through the dark heavens, allowing glimpses of the stars between them. The air is crisp but not unpleasant.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": false,
+      "in_winter": false,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Eclipse of Mirrors"
+      ],
+      "text": "The night air brings with it the subtle sound of dry clicking.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": false,
+      "at_day": false,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Eclipse of Mirrors"
+      ],
+      "text": "The sky is empty of all but the bloody moon, swollen against the darkness. The howling of wolves is quiet and distant enough that it must surely be the imagination.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Eclipse of Mirrors"
+      ],
+      "text": "The surface of the huge, crimson moon seems to crawl with red light and bloody shadow.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  },
+  {
+    "model": "weather.weatheremit",
+    "fields": {
+      "weather_type": [
+        "Eclipse of Mirrors"
+      ],
+      "text": "Gusts of wind chase red shadows across the streets, along with the whispered rattle and clink of old metal. The crimson moon looks on.",
+      "gm_notes": "",
+      "weight": 10,
+      "in_spring": true,
+      "in_summer": true,
+      "in_autumn": true,
+      "in_winter": true,
+      "at_dawn": true,
+      "at_day": true,
+      "at_dusk": true,
+      "at_night": true
+    }
+  }
+]

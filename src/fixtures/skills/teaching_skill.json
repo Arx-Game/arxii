@@ -1,0 +1,22 @@
+[
+  {
+    "model": "traits.trait",
+    "pk": 1000,
+    "fields": {
+      "name": "Teaching",
+      "trait_type": "skill",
+      "category": "general",
+      "description": "The ability to effectively instruct and mentor others, improving the quality of training."
+    }
+  },
+  {
+    "model": "skills.skill",
+    "pk": 1000,
+    "fields": {
+      "trait": 1000,
+      "tooltip": "Improves mentor bonus when training other characters.",
+      "display_order": 900,
+      "is_active": true
+    }
+  }
+]

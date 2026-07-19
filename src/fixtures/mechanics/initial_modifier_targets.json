@@ -1,0 +1,657 @@
+[
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "strength",
+      "category": [
+        "stat"
+      ],
+      "description": "Modifier to Strength stat",
+      "display_order": 1,
+      "is_active": true,
+      "target_trait": [
+        "strength"
+      ]
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "agility",
+      "category": [
+        "stat"
+      ],
+      "description": "Modifier to Agility stat",
+      "display_order": 2,
+      "is_active": true,
+      "target_trait": [
+        "agility"
+      ]
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "stamina",
+      "category": [
+        "stat"
+      ],
+      "description": "Modifier to Stamina stat",
+      "display_order": 3,
+      "is_active": true,
+      "target_trait": [
+        "stamina"
+      ]
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "charm",
+      "category": [
+        "stat"
+      ],
+      "description": "Modifier to Charm stat",
+      "display_order": 4,
+      "is_active": true,
+      "target_trait": [
+        "charm"
+      ]
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "presence",
+      "category": [
+        "stat"
+      ],
+      "description": "Modifier to Presence stat",
+      "display_order": 5,
+      "is_active": true,
+      "target_trait": [
+        "presence"
+      ]
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "willpower",
+      "category": [
+        "stat"
+      ],
+      "description": "Modifier to Willpower stat",
+      "display_order": 6,
+      "is_active": true,
+      "target_trait": [
+        "willpower"
+      ]
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "intellect",
+      "category": [
+        "stat"
+      ],
+      "description": "Modifier to Intellect stat",
+      "display_order": 7,
+      "is_active": true,
+      "target_trait": [
+        "intellect"
+      ]
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "perception",
+      "category": [
+        "stat"
+      ],
+      "description": "Modifier to Perception stat",
+      "display_order": 8,
+      "is_active": true,
+      "target_trait": [
+        "perception"
+      ]
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "wits",
+      "category": [
+        "stat"
+      ],
+      "description": "Modifier to Wits stat",
+      "display_order": 9,
+      "is_active": true,
+      "target_trait": [
+        "wits"
+      ]
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Bene",
+      "category": [
+        "resonance"
+      ],
+      "description": "Celestial resonance: Give freely, generosity, sacrifice for others.",
+      "display_order": 1,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Liberare",
+      "category": [
+        "resonance"
+      ],
+      "description": "Celestial resonance: Free others, liberation, breaking chains.",
+      "display_order": 2,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Fidelis",
+      "category": [
+        "resonance"
+      ],
+      "description": "Celestial resonance: Keep bonds, loyalty, faithfulness.",
+      "display_order": 3,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Misera",
+      "category": [
+        "resonance"
+      ],
+      "description": "Celestial resonance: Spare enemies, mercy, compassion.",
+      "display_order": 4,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Fortis",
+      "category": [
+        "resonance"
+      ],
+      "description": "Celestial resonance: Stand firm, courage, resolve.",
+      "display_order": 5,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Honoris",
+      "category": [
+        "resonance"
+      ],
+      "description": "Celestial resonance: Fair conduct, honor, integrity.",
+      "display_order": 6,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Verax",
+      "category": [
+        "resonance"
+      ],
+      "description": "Celestial resonance: Seek truth, honesty, transparency.",
+      "display_order": 7,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Copperi",
+      "category": [
+        "resonance"
+      ],
+      "description": "Celestial resonance: Maintain hope, inspiration, optimism.",
+      "display_order": 8,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Praedari",
+      "category": [
+        "resonance"
+      ],
+      "description": "Abyssal resonance: Ruthlessly take, predation, acquisition.",
+      "display_order": 9,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Dominari",
+      "category": [
+        "resonance"
+      ],
+      "description": "Abyssal resonance: Control others, domination, subjugation.",
+      "display_order": 10,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Perfidus",
+      "category": [
+        "resonance"
+      ],
+      "description": "Abyssal resonance: Betray bonds, treachery, broken oaths.",
+      "display_order": 11,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Maligna",
+      "category": [
+        "resonance"
+      ],
+      "description": "Abyssal resonance: Harm with malice, cruelty, sadism.",
+      "display_order": 12,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Tremora",
+      "category": [
+        "resonance"
+      ],
+      "description": "Abyssal resonance: Break through fear, terror, intimidation.",
+      "display_order": 13,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Saevus",
+      "category": [
+        "resonance"
+      ],
+      "description": "Abyssal resonance: Brutal destruction, savagery, ferocity.",
+      "display_order": 14,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Insidia",
+      "category": [
+        "resonance"
+      ],
+      "description": "Abyssal resonance: Deceive and manipulate, cunning, treachery.",
+      "display_order": 15,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Despari",
+      "category": [
+        "resonance"
+      ],
+      "description": "Abyssal resonance: Crush into despair, hopelessness, nihilism.",
+      "display_order": 16,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Firma",
+      "category": [
+        "resonance"
+      ],
+      "description": "Primal resonance: Lasting, durable, steady, enduring.",
+      "display_order": 17,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Vola",
+      "category": [
+        "resonance"
+      ],
+      "description": "Primal resonance: Fleeting, swift, illusory, transient.",
+      "display_order": 18,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Audax",
+      "category": [
+        "resonance"
+      ],
+      "description": "Primal resonance: Reckless, bold, instinctive, daring.",
+      "display_order": 19,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Medita",
+      "category": [
+        "resonance"
+      ],
+      "description": "Primal resonance: Patient, planned, careful, deliberate.",
+      "display_order": 20,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Arderi",
+      "category": [
+        "resonance"
+      ],
+      "description": "Primal resonance: Emotionally driven, expressive, passionate.",
+      "display_order": 21,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Sereni",
+      "category": [
+        "resonance"
+      ],
+      "description": "Primal resonance: Controlled, calm, reserved, tranquil.",
+      "display_order": 22,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Fera",
+      "category": [
+        "resonance"
+      ],
+      "description": "Primal resonance: Natural, instinctive, feral, wild.",
+      "display_order": 23,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "Civitas",
+      "category": [
+        "resonance"
+      ],
+      "description": "Primal resonance: Trained, civilized, precise, refined.",
+      "display_order": 24,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "ap_daily_regen",
+      "category": [
+        "action_points"
+      ],
+      "description": "Modifier to daily action point regeneration",
+      "display_order": 1,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "ap_weekly_regen",
+      "category": [
+        "action_points"
+      ],
+      "description": "Modifier to weekly action point regeneration",
+      "display_order": 2,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "ap_maximum",
+      "category": [
+        "action_points"
+      ],
+      "description": "Modifier to maximum action point capacity",
+      "display_order": 3,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "max_height_band_bonus",
+      "category": [
+        "height_band"
+      ],
+      "description": "Additional height bands above normal maximum",
+      "display_order": 1,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "physical_skill_development_rate",
+      "category": [
+        "development"
+      ],
+      "description": "Percentage modifier to physical skill development rate",
+      "display_order": 1,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "social_skill_development_rate",
+      "category": [
+        "development"
+      ],
+      "description": "Percentage modifier to social skill development rate",
+      "display_order": 2,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "mental_skill_development_rate",
+      "category": [
+        "development"
+      ],
+      "description": "Percentage modifier to mental skill development rate",
+      "display_order": 3,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "all_skill_development_rate",
+      "category": [
+        "development"
+      ],
+      "description": "Percentage modifier to all skill development rates",
+      "display_order": 4,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "all",
+      "category": [
+        "goal_percent"
+      ],
+      "description": "Percentage multiplier to all goal bonuses",
+      "display_order": 1,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "needs",
+      "category": [
+        "goal_percent"
+      ],
+      "description": "Percentage multiplier to Needs goal bonuses",
+      "display_order": 2,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "total_points",
+      "category": [
+        "goal_points"
+      ],
+      "description": "Bonus goal points to distribute at character creation",
+      "display_order": 1,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "angry",
+      "category": [
+        "condition_control_percent"
+      ],
+      "description": "Percentage multiplier to Angry condition control loss",
+      "display_order": 1,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "angry",
+      "category": [
+        "condition_intensity_percent"
+      ],
+      "description": "Percentage multiplier to Angry condition intensity gain",
+      "display_order": 1,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "humiliated",
+      "category": [
+        "condition_penalty_percent"
+      ],
+      "description": "Percentage multiplier to Humiliated condition penalties",
+      "display_order": 1,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "allure",
+      "category": [
+        "roll_modifier"
+      ],
+      "description": "Modifier to attractiveness-related checks (TODO: reputation system)",
+      "display_order": 1,
+      "is_active": true,
+      "target_trait": null
+    }
+  },
+  {
+    "model": "mechanics.modifiertarget",
+    "fields": {
+      "name": "stealth",
+      "category": [
+        "roll_modifier"
+      ],
+      "description": "Modifier to stealth-related checks (TODO: check system)",
+      "display_order": 2,
+      "is_active": true,
+      "target_trait": null
+    }
+  }
+]

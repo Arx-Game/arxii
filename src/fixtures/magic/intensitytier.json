@@ -1,0 +1,82 @@
+[
+  {
+    "model": "magic.intensitytier",
+    "fields": {
+      "name": "Minor",
+      "threshold": 5,
+      "control_modifier": 0,
+      "description": "Minor intensity level.",
+      "admin_notes": ""
+    }
+  },
+  {
+    "model": "magic.intensitytier",
+    "fields": {
+      "name": "Moderate",
+      "threshold": 10,
+      "control_modifier": -2,
+      "description": "Moderate intensity level.",
+      "admin_notes": ""
+    }
+  },
+  {
+    "model": "magic.intensitytier",
+    "fields": {
+      "name": "Major",
+      "threshold": 15,
+      "control_modifier": -5,
+      "description": "Major intensity level.",
+      "admin_notes": ""
+    }
+  },
+  {
+    "model": "magic.intensitytier",
+    "fields": {
+      "name": "Enhanced",
+      "threshold": 25,
+      "control_modifier": 5,
+      "description": "The power's effect is noticeably stronger. Damage increases, durations extend, or effects become more pronounced.",
+      "admin_notes": "Achievable with moderate resonance stacking or aura alignment."
+    }
+  },
+  {
+    "model": "magic.intensitytier",
+    "fields": {
+      "name": "Amplified",
+      "threshold": 40,
+      "control_modifier": 10,
+      "description": "Additional targets or area of effect. Single-target powers can affect small groups; area powers expand significantly.",
+      "admin_notes": "Requires good resonance alignment and likely emotional state boost."
+    }
+  },
+  {
+    "model": "magic.intensitytier",
+    "fields": {
+      "name": "Overwhelming",
+      "threshold": 60,
+      "control_modifier": 20,
+      "description": "Mass targeting becomes possible. Effects that normally affect one or few can sweep across crowds or battlefields.",
+      "admin_notes": "Difficult to achieve without relationship invocation or perfect conditions."
+    }
+  },
+  {
+    "model": "magic.intensitytier",
+    "fields": {
+      "name": "Scene-Defining",
+      "threshold": 80,
+      "control_modifier": 30,
+      "description": "The power becomes a pivotal moment in the scene. Effects are dramatic and memorable, potentially changing the course of events.",
+      "admin_notes": "Very rare. Usually requires multiple relationship invocations and dramatic stakes."
+    }
+  },
+  {
+    "model": "magic.intensitytier",
+    "fields": {
+      "name": "Audere",
+      "threshold": 100,
+      "control_modifier": 50,
+      "description": "World-shaking power. Reality bends. This is the stuff of legends - effects that will be remembered for generations.",
+      "admin_notes": "Audere threshold. Should only occur in climactic moments with heavy relationship investment. Control failure at this tier can be catastrophic."
+    }
+  }
+]

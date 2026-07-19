@@ -1,0 +1,686 @@
+[
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Pyromancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Geomancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Cryomancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Stormcalling"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Wildcraft"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Flesh-Shaping"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Hemomancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Fury"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Necromancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Shadowcraft"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Dominion"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Corruption"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Glamour"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Resonant Chorus"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Radiance"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Glyphwork"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Unbound"
+      ],
+      "gift": [
+        "Oathcraft"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "The Vigil"
+      ],
+      "gift": [
+        "Necromancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "The Vigil"
+      ],
+      "gift": [
+        "Oathcraft"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Metallic Order"
+      ],
+      "gift": [
+        "Glyphwork"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Metallic Order"
+      ],
+      "gift": [
+        "Oathcraft"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Metallic Order"
+      ],
+      "gift": [
+        "Pyromancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Metallic Order"
+      ],
+      "gift": [
+        "Radiance"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Metallic Order"
+      ],
+      "gift": [
+        "Geomancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Fractals of the Abyss"
+      ],
+      "gift": [
+        "Glamour"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Fractals of the Abyss"
+      ],
+      "gift": [
+        "Corruption"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Fractals of the Abyss"
+      ],
+      "gift": [
+        "Cryomancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Fractals of the Abyss"
+      ],
+      "gift": [
+        "Flesh-Shaping"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Masque"
+      ],
+      "gift": [
+        "Glamour"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Masque"
+      ],
+      "gift": [
+        "Resonant Chorus"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Late Cardian"
+      ],
+      "gift": [
+        "Pyromancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Late Cardian"
+      ],
+      "gift": [
+        "Glyphwork"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "The Silken Thread"
+      ],
+      "gift": [
+        "Dominion"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "The Silken Thread"
+      ],
+      "gift": [
+        "Shadowcraft"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Umbral Guard"
+      ],
+      "gift": [
+        "Shadowcraft"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Umbral Guard"
+      ],
+      "gift": [
+        "Geomancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Smiling Shadows"
+      ],
+      "gift": [
+        "Shadowcraft"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Smiling Shadows"
+      ],
+      "gift": [
+        "Glamour"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Sanguinus"
+      ],
+      "gift": [
+        "Hemomancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Sanguinus"
+      ],
+      "gift": [
+        "Flesh-Shaping"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Furyborn"
+      ],
+      "gift": [
+        "Fury"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Furyborn"
+      ],
+      "gift": [
+        "Wildcraft"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "The Red Feast"
+      ],
+      "gift": [
+        "Flesh-Shaping"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "The Red Feast"
+      ],
+      "gift": [
+        "Fury"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Envalan"
+      ],
+      "gift": [
+        "Corruption"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Envalan"
+      ],
+      "gift": [
+        "Glamour"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Envalan"
+      ],
+      "gift": [
+        "Pyromancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "The Old Troth"
+      ],
+      "gift": [
+        "Oathcraft"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "The Old Troth"
+      ],
+      "gift": [
+        "Stormcalling"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "The Old Troth"
+      ],
+      "gift": [
+        "Wildcraft"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Deathspeakers"
+      ],
+      "gift": [
+        "Necromancy"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Deathspeakers"
+      ],
+      "gift": [
+        "Oathcraft"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Order of the Lys"
+      ],
+      "gift": [
+        "Radiance"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "Order of the Lys"
+      ],
+      "gift": [
+        "Oathcraft"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "The Lumenaires"
+      ],
+      "gift": [
+        "Radiance"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "The Lumenaires"
+      ],
+      "gift": [
+        "Glyphwork"
+      ],
+      "signature_techniques": []
+    }
+  },
+  {
+    "model": "magic.traditiongiftgrant",
+    "fields": {
+      "tradition": [
+        "La Chasse"
+      ],
+      "gift": [
+        "Wildcraft"
+      ],
+      "signature_techniques": []
+    }
+  }
+]

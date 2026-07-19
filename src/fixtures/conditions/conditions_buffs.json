@@ -1,0 +1,495 @@
+[
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Empowered",
+      "category": [
+        "Buff"
+      ],
+      "description": "Magically enhanced, attacks and abilities deal increased damage.",
+      "player_description": "Power surges through you. Your strikes will land with devastating force.",
+      "observer_description": "glows with gathered power, their movements charged with energy.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 3,
+      "is_stackable": true,
+      "max_stacks": 5,
+      "stack_behavior": "intensity",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "fist",
+      "color_hex": "#FF8800",
+      "display_priority": 60,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Empowered"
+      ],
+      "stage": null,
+      "check_type": [
+        "Melee Attack",
+        "Combat"
+      ],
+      "modifier_value": 15,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Empowered"
+      ],
+      "stage": null,
+      "check_type": [
+        "Magic Attack",
+        "Combat"
+      ],
+      "modifier_value": 15,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Protected",
+      "category": [
+        "Buff"
+      ],
+      "description": "Shielded by magic, taking reduced damage from all sources.",
+      "player_description": "A barrier of force surrounds you, deflecting harm.",
+      "observer_description": "is surrounded by a shimmering protective barrier.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 5,
+      "is_stackable": true,
+      "max_stacks": 3,
+      "stack_behavior": "intensity",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "shield",
+      "color_hex": "#4488FF",
+      "display_priority": 65,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditionresistancemodifier",
+    "fields": {
+      "condition": [
+        "Protected"
+      ],
+      "stage": null,
+      "damage_type": null,
+      "modifier_value": 20
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Protected"
+      ],
+      "stage": null,
+      "check_type": [
+        "Physical Defense",
+        "Combat"
+      ],
+      "modifier_value": 10,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Protected"
+      ],
+      "stage": null,
+      "check_type": [
+        "Magic Defense",
+        "Combat"
+      ],
+      "modifier_value": 10,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Hastened",
+      "category": [
+        "Buff"
+      ],
+      "description": "Moving at supernatural speed. Enhanced reflexes and additional actions.",
+      "player_description": "The world slows around you. You move like lightning.",
+      "observer_description": "blurs with speed, moving almost too fast to track.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 3,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "running",
+      "color_hex": "#00FFFF",
+      "display_priority": 70,
+      "is_visible_to_others": true,
+      "affects_turn_order": true,
+      "turn_order_modifier": 20
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": [
+        "Hastened"
+      ],
+      "stage": null,
+      "capability": [
+        "movement"
+      ],
+      "value": 50
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Hastened"
+      ],
+      "stage": null,
+      "check_type": [
+        "Initiative",
+        "Combat"
+      ],
+      "modifier_value": 20,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Hastened"
+      ],
+      "stage": null,
+      "check_type": [
+        "Physical Defense",
+        "Combat"
+      ],
+      "modifier_value": 15,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Hastened"
+      ],
+      "stage": null,
+      "check_type": [
+        "Acrobatics",
+        "Exploration"
+      ],
+      "modifier_value": 20,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Strengthened",
+      "category": [
+        "Buff"
+      ],
+      "description": "Physically enhanced beyond normal limits. Greater strength and resilience.",
+      "player_description": "Raw power floods your muscles. You feel like you could move mountains.",
+      "observer_description": "seems larger, more solid, radiating physical power.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 5,
+      "is_stackable": true,
+      "max_stacks": 3,
+      "stack_behavior": "intensity",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "dumbbell",
+      "color_hex": "#CC4400",
+      "display_priority": 55,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Strengthened"
+      ],
+      "stage": null,
+      "check_type": [
+        "Melee Attack",
+        "Combat"
+      ],
+      "modifier_value": 10,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Strengthened"
+      ],
+      "stage": null,
+      "check_type": [
+        "Athletics",
+        "Exploration"
+      ],
+      "modifier_value": 20,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditionresistancemodifier",
+    "fields": {
+      "condition": [
+        "Strengthened"
+      ],
+      "stage": null,
+      "damage_type": [
+        "Physical"
+      ],
+      "modifier_value": 15
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Inspired",
+      "category": [
+        "Buff"
+      ],
+      "description": "Filled with courage and determination. Enhanced mental fortitude.",
+      "player_description": "Hope and determination fill your heart. You will not falter.",
+      "observer_description": "stands tall with renewed resolve, fear banished from their eyes.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 5,
+      "is_stackable": true,
+      "max_stacks": 3,
+      "stack_behavior": "intensity",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "star",
+      "color_hex": "#FFDD00",
+      "display_priority": 50,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Inspired"
+      ],
+      "stage": null,
+      "check_type": [
+        "Willpower",
+        "Mental"
+      ],
+      "modifier_value": 20,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Inspired"
+      ],
+      "stage": null,
+      "check_type": [
+        "Concentration",
+        "Mental"
+      ],
+      "modifier_value": 15,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditionconditioninteraction",
+    "fields": {
+      "condition": [
+        "Inspired"
+      ],
+      "other_condition": [
+        "Frightened"
+      ],
+      "trigger": "on_self_applied",
+      "outcome": "remove_other",
+      "result_condition": null,
+      "priority": 10
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Focused",
+      "category": [
+        "Buff"
+      ],
+      "description": "Mind sharpened to a razor edge. Enhanced concentration and precision.",
+      "player_description": "Everything becomes clear. Your mind is a perfect instrument.",
+      "observer_description": "moves with deliberate precision, utterly focused.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 5,
+      "is_stackable": true,
+      "max_stacks": 3,
+      "stack_behavior": "intensity",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "crosshairs",
+      "color_hex": "#AAFFAA",
+      "display_priority": 45,
+      "is_visible_to_others": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Focused"
+      ],
+      "stage": null,
+      "check_type": [
+        "Concentration",
+        "Mental"
+      ],
+      "modifier_value": 25,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Focused"
+      ],
+      "stage": null,
+      "check_type": [
+        "Ranged Attack",
+        "Combat"
+      ],
+      "modifier_value": 15,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Focused"
+      ],
+      "stage": null,
+      "check_type": [
+        "Magic Control",
+        "Magic"
+      ],
+      "modifier_value": 20,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Regenerating",
+      "category": [
+        "Buff"
+      ],
+      "description": "Wounds close rapidly. Recovering health each round.",
+      "player_description": "Your wounds knit together before your eyes. The pain fades.",
+      "observer_description": "heals visibly, wounds closing with unnatural speed.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 5,
+      "is_stackable": true,
+      "max_stacks": 3,
+      "stack_behavior": "intensity",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "heart",
+      "color_hex": "#00FF66",
+      "display_priority": 55,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Invisible",
+      "category": [
+        "Buff"
+      ],
+      "description": "Cannot be seen by normal means. Grants stealth advantages.",
+      "player_description": "You fade from sight, becoming one with the shadows.",
+      "observer_description": "",
+      "default_duration_type": "rounds",
+      "default_duration_value": 5,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "eye-slash",
+      "color_hex": "#CCCCCC",
+      "display_priority": 75,
+      "is_visible_to_others": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Invisible"
+      ],
+      "stage": null,
+      "scales_with_severity": false,
+      "check_type": [
+        "Stealth",
+        "Physical"
+      ],
+      "modifier_value": 500
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Invisible"
+      ],
+      "stage": null,
+      "check_type": [
+        "Stealth",
+        "Physical"
+      ],
+      "modifier_value": 50,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Invisible"
+      ],
+      "stage": null,
+      "check_type": [
+        "Physical Defense",
+        "Combat"
+      ],
+      "modifier_value": 25,
+      "scales_with_severity": false
+    }
+  }
+]

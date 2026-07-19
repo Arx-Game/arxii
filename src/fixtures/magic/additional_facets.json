@@ -1,0 +1,92 @@
+[
+  {
+    "model": "magic.facet",
+    "pk": 202,
+    "fields": {
+      "name": "Skull",
+      "parent": [
+        "Organic",
+        [
+          "Materials",
+          null
+        ]
+      ],
+      "description": ""
+    }
+  },
+  {
+    "model": "magic.facet",
+    "pk": 203,
+    "fields": {
+      "name": "Gravestone",
+      "parent": [
+        "Stones",
+        [
+          "Materials",
+          null
+        ]
+      ],
+      "description": ""
+    }
+  },
+  {
+    "model": "magic.facet",
+    "pk": 204,
+    "fields": {
+      "name": "Mask",
+      "parent": [
+        "Details",
+        [
+          "Fashion",
+          null
+        ]
+      ],
+      "description": ""
+    }
+  },
+  {
+    "model": "magic.facet",
+    "pk": 205,
+    "fields": {
+      "name": "Blood",
+      "parent": [
+        "Organic",
+        [
+          "Materials",
+          null
+        ]
+      ],
+      "description": ""
+    }
+  },
+  {
+    "model": "magic.facet",
+    "pk": 206,
+    "fields": {
+      "name": "Witchfire",
+      "parent": [
+        "Fire",
+        [
+          "Elements",
+          null
+        ]
+      ],
+      "description": ""
+    }
+  },
+  {
+    "model": "magic.facet",
+    "pk": 207,
+    "fields": {
+      "name": "Corruption",
+      "parent": [
+        "States",
+        [
+          "Symbols",
+          null
+        ]
+      ],
+      "description": ""
+    }
+  }
+]

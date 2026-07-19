@@ -1,0 +1,1238 @@
+[
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "black",
+      "display_name": "Black",
+      "sort_order": 1,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "brown",
+      "display_name": "Brown",
+      "sort_order": 3,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "blonde",
+      "display_name": "Blonde",
+      "sort_order": 7,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "red",
+      "display_name": "Red",
+      "sort_order": 10,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "auburn",
+      "display_name": "Auburn",
+      "sort_order": 5,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "white",
+      "display_name": "White",
+      "sort_order": 15,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "gray",
+      "display_name": "Gray",
+      "sort_order": 17,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "eye_color"
+      ],
+      "name": "brown",
+      "display_name": "Brown",
+      "sort_order": 1,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "eye_color"
+      ],
+      "name": "blue",
+      "display_name": "Blue",
+      "sort_order": 7,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "eye_color"
+      ],
+      "name": "green",
+      "display_name": "Green",
+      "sort_order": 5,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "eye_color"
+      ],
+      "name": "gray",
+      "display_name": "Gray",
+      "sort_order": 6,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "eye_color"
+      ],
+      "name": "hazel",
+      "display_name": "Hazel",
+      "sort_order": 4,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "fair",
+      "display_name": "Fair",
+      "sort_order": 2,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "light",
+      "display_name": "Light",
+      "sort_order": 3,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "medium",
+      "display_name": "Medium",
+      "sort_order": 4,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "tan",
+      "display_name": "Tan",
+      "sort_order": 6,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "dark",
+      "display_name": "Dark",
+      "sort_order": 4,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "dark_brown",
+      "display_name": "Dark Brown",
+      "sort_order": 2,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "light_brown",
+      "display_name": "Light Brown",
+      "sort_order": 4,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "chestnut",
+      "display_name": "Chestnut",
+      "sort_order": 6,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "platinum_blonde",
+      "display_name": "Platinum Blonde",
+      "sort_order": 8,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "strawberry_blonde",
+      "display_name": "Strawberry Blonde",
+      "sort_order": 9,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "copper",
+      "display_name": "Copper",
+      "sort_order": 11,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "mahogany",
+      "display_name": "Mahogany",
+      "sort_order": 12,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "burgundy",
+      "display_name": "Burgundy",
+      "sort_order": 13,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "rust",
+      "display_name": "Rust",
+      "sort_order": 14,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "silver",
+      "display_name": "Silver",
+      "sort_order": 16,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "tawny",
+      "display_name": "Tawny",
+      "sort_order": 18,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "golden",
+      "display_name": "Golden",
+      "sort_order": 19,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "green",
+      "display_name": "Green",
+      "sort_order": 20,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "hair_color"
+      ],
+      "name": "olive",
+      "display_name": "Olive",
+      "sort_order": 21,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "eye_color"
+      ],
+      "name": "dark_brown",
+      "display_name": "Dark Brown",
+      "sort_order": 2,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "eye_color"
+      ],
+      "name": "amber",
+      "display_name": "Amber",
+      "sort_order": 3,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "eye_color"
+      ],
+      "name": "light_blue",
+      "display_name": "Light Blue",
+      "sort_order": 8,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "eye_color"
+      ],
+      "name": "black",
+      "display_name": "Black",
+      "sort_order": 9,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "eye_color"
+      ],
+      "name": "violet",
+      "display_name": "Violet",
+      "sort_order": 10,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "eye_color"
+      ],
+      "name": "gold",
+      "display_name": "Gold",
+      "sort_order": 11,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "eye_color"
+      ],
+      "name": "red",
+      "display_name": "Red",
+      "sort_order": 12,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "porcelain",
+      "display_name": "Porcelain",
+      "sort_order": 1,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "olive",
+      "display_name": "Olive",
+      "sort_order": 5,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "bronze",
+      "display_name": "Bronze",
+      "sort_order": 7,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "brown",
+      "display_name": "Brown",
+      "sort_order": 8,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "dark_brown",
+      "display_name": "Dark Brown",
+      "sort_order": 9,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "deep",
+      "display_name": "Deep",
+      "sort_order": 10,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "red",
+      "display_name": "Red",
+      "sort_order": 20,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "crimson",
+      "display_name": "Crimson",
+      "sort_order": 21,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "purple",
+      "display_name": "Purple",
+      "sort_order": 22,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "dark_purple",
+      "display_name": "Dark Purple",
+      "sort_order": 23,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "ash_gray",
+      "display_name": "Ash Gray",
+      "sort_order": 24,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "charcoal",
+      "display_name": "Charcoal",
+      "sort_order": 25,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "skin_tone"
+      ],
+      "name": "obsidian",
+      "display_name": "Obsidian",
+      "sort_order": 26,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "scale_color"
+      ],
+      "name": "green",
+      "display_name": "Green",
+      "sort_order": 1,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "scale_color"
+      ],
+      "name": "dark_green",
+      "display_name": "Dark Green",
+      "sort_order": 2,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "scale_color"
+      ],
+      "name": "brown",
+      "display_name": "Brown",
+      "sort_order": 3,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "scale_color"
+      ],
+      "name": "gray",
+      "display_name": "Gray",
+      "sort_order": 4,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "scale_color"
+      ],
+      "name": "black",
+      "display_name": "Black",
+      "sort_order": 5,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "scale_color"
+      ],
+      "name": "rust",
+      "display_name": "Rust",
+      "sort_order": 6,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "scale_color"
+      ],
+      "name": "olive",
+      "display_name": "Olive",
+      "sort_order": 7,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "scale_color"
+      ],
+      "name": "mottled",
+      "display_name": "Mottled",
+      "sort_order": 8,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "ear_type"
+      ],
+      "name": "normal",
+      "display_name": "Normal",
+      "sort_order": 1,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "ear_type"
+      ],
+      "name": "pointed",
+      "display_name": "Pointed",
+      "sort_order": 2,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "ear_type"
+      ],
+      "name": "fox",
+      "display_name": "Fox",
+      "sort_order": 3,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "ear_type"
+      ],
+      "name": "canine",
+      "display_name": "Canine",
+      "sort_order": 4,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "ear_type"
+      ],
+      "name": "feline",
+      "display_name": "Feline",
+      "sort_order": 5,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "ear_type"
+      ],
+      "name": "feathered",
+      "display_name": "Feathered",
+      "sort_order": 6,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "ear_type"
+      ],
+      "name": "fin",
+      "display_name": "Fin",
+      "sort_order": 7,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "ear_type"
+      ],
+      "name": "none",
+      "display_name": "None",
+      "sort_order": 8,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "ear_type"
+      ],
+      "name": "rodent",
+      "display_name": "Rodent",
+      "sort_order": 9,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "ear_type"
+      ],
+      "name": "rabbit",
+      "display_name": "Rabbit",
+      "sort_order": 10,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "fangs"
+      ],
+      "name": "no",
+      "display_name": "No",
+      "sort_order": 1,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "fangs"
+      ],
+      "name": "yes",
+      "display_name": "Yes",
+      "sort_order": 2,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "claws"
+      ],
+      "name": "no",
+      "display_name": "No",
+      "sort_order": 1,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "claws"
+      ],
+      "name": "yes",
+      "display_name": "Yes",
+      "sort_order": 2,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "tail_type"
+      ],
+      "name": "none",
+      "display_name": "None",
+      "sort_order": 1,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "tail_type"
+      ],
+      "name": "short",
+      "display_name": "Short",
+      "sort_order": 2,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "tail_type"
+      ],
+      "name": "long",
+      "display_name": "Long",
+      "sort_order": 3,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "tail_type"
+      ],
+      "name": "fox",
+      "display_name": "Fox",
+      "sort_order": 4,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "tail_type"
+      ],
+      "name": "canine",
+      "display_name": "Canine",
+      "sort_order": 5,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "tail_type"
+      ],
+      "name": "feline",
+      "display_name": "Feline",
+      "sort_order": 6,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "tail_type"
+      ],
+      "name": "lizard",
+      "display_name": "Lizard",
+      "sort_order": 7,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "tail_type"
+      ],
+      "name": "rodent",
+      "display_name": "Rodent",
+      "sort_order": 8,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "tail_type"
+      ],
+      "name": "rabbit_tuft",
+      "display_name": "Rabbit Tuft",
+      "sort_order": 9,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "tail_type"
+      ],
+      "name": "tail_feathers",
+      "display_name": "Tail Feathers",
+      "sort_order": 10,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "wing_type"
+      ],
+      "name": "none",
+      "display_name": "None",
+      "sort_order": 1,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "wing_type"
+      ],
+      "name": "bat_small",
+      "display_name": "Bat (Small)",
+      "sort_order": 2,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "wing_type"
+      ],
+      "name": "bat_large",
+      "display_name": "Bat (Large)",
+      "sort_order": 3,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "wing_type"
+      ],
+      "name": "feather_white",
+      "display_name": "Feather (White)",
+      "sort_order": 4,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "wing_type"
+      ],
+      "name": "feather_black",
+      "display_name": "Feather (Black)",
+      "sort_order": 5,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "horn_type"
+      ],
+      "name": "none",
+      "display_name": "None",
+      "sort_order": 1,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "horn_type"
+      ],
+      "name": "small_curved",
+      "display_name": "Small Curved",
+      "sort_order": 2,
+      "height_modifier_inches": 2
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "horn_type"
+      ],
+      "name": "large_curved",
+      "display_name": "Large Curved",
+      "sort_order": 3,
+      "height_modifier_inches": 4
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "horn_type"
+      ],
+      "name": "straight",
+      "display_name": "Straight",
+      "sort_order": 4,
+      "height_modifier_inches": 3
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "horn_type"
+      ],
+      "name": "swept_back",
+      "display_name": "Swept Back",
+      "sort_order": 5,
+      "height_modifier_inches": 2
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "horn_type"
+      ],
+      "name": "ridged",
+      "display_name": "Ridged",
+      "sort_order": 6,
+      "height_modifier_inches": 3
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "horn_type"
+      ],
+      "name": "spiral",
+      "display_name": "Spiral",
+      "sort_order": 7,
+      "height_modifier_inches": 5
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "horn_type"
+      ],
+      "name": "crown",
+      "display_name": "Crown",
+      "sort_order": 8,
+      "height_modifier_inches": 3
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "facial_markings"
+      ],
+      "name": "none",
+      "display_name": "None",
+      "sort_order": 1,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "facial_markings"
+      ],
+      "name": "cheek_pattern",
+      "display_name": "Cheek Pattern",
+      "sort_order": 2,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "facial_markings"
+      ],
+      "name": "under_eye_pattern",
+      "display_name": "Under-eye Pattern",
+      "sort_order": 3,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "facial_markings"
+      ],
+      "name": "temple_pattern",
+      "display_name": "Temple Pattern",
+      "sort_order": 4,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "facial_markings"
+      ],
+      "name": "facial_spots",
+      "display_name": "Facial Spots",
+      "sort_order": 5,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "facial_markings"
+      ],
+      "name": "brow_marks",
+      "display_name": "Brow Marks",
+      "sort_order": 6,
+      "height_modifier_inches": null
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": [
+        "facial_markings"
+      ],
+      "name": "runic_pattern",
+      "display_name": "Runic Pattern",
+      "sort_order": 7,
+      "height_modifier_inches": null
+    }
+  }
+]

@@ -379,6 +379,37 @@ ObjectDB FK). A metallic sword is `metallic`, a holy relic is `blessed`. This ma
 items both capability sources AND potential targets for challenges (a rust spell targets
 `metallic` items).
 
+**Template-authored defaults (#2503).** `ItemTemplateProperty` declares the Properties
+(and magnitudes) every instance of a template starts with (e.g. a torch template
+declares `flammable=1`). `world.items.services.materialize.apply_template_properties`
+copies a template's `default_properties` onto an instance's `game_object` as
+`ObjectProperty` rows via `update_or_create` (idempotent — re-materializing never
+duplicates). It runs from the shared internal chokepoint where an `ItemInstance` gains a
+physical `ObjectDB` (`materialize._create_item_object_db`), reached through either of two
+public entry points: `materialize_item_game_object` (holder-inventory placement — called
+by the coin mint, crafted-item creation, and evidence/case-file materialization paths) or
+`materialize_item_game_object_in_room` (direct room placement, no holder). Row-only
+`ItemInstance`s (narrative grants — see `narrative_grants.py`) never materialize a
+`game_object`, so they never carry template-default `ObjectProperty` rows either;
+per-instance overrides still layer on top via `ObjectProperty.objects.update_or_create`
+directly.
+
+**GM stage-prop improv (#2503).** `world.items.services.staging.stage_prop(item_template,
+room)` is the GM's "are there torches in here?" verb — it creates a fresh, holder-less
+`ItemInstance` of a curated template and materializes it straight into `room` via
+`materialize_item_game_object_in_room`, so the conjured prop carries the same
+template-default `ObjectProperty` rows a crafted or looted item of that template would
+(picked up automatically by the bare-object `get_available_actions` scan, no bespoke
+wiring). The companion `world.mechanics.services.stage_property(target, property, value=1)`
+lets a GM tag an *existing* object with a curated `Property` directly (mirrors
+`actions.effects.effect_handlers._add_property`'s upsert convention). Both are exposed as
+REGISTRY actions (`StagePropAction`/`StagePropertyAction`,
+`actions/definitions/gm_props.py`, keys `stage_prop`/`stage_property`), gated to the
+room's active scene GM/owner or staff, resolving the template/property by exact
+pk-or-name (curated gate — no freeform creation); shared by telnet `CmdStage` (`stage
+prop <template>` / `stage property <property> [=<target>]`,
+`commands/gm_props.py`) and the web action-list dispatch.
+
 ---
 
 ## Integration with Magic / Threads (Spec A)

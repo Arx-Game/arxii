@@ -1,0 +1,1172 @@
+[
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Human"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Human"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Human"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Khati"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Khati"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Khati"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Vulpi"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Vulpi"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Vulpi"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Vulpi"
+      ],
+      "trait": [
+        "ear_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Vulpi"
+      ],
+      "trait": [
+        "fangs"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Vulpi"
+      ],
+      "trait": [
+        "claws"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Vulpi"
+      ],
+      "trait": [
+        "tail_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Vulpi"
+      ],
+      "trait": [
+        "facial_markings"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Cani"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Cani"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Cani"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Cani"
+      ],
+      "trait": [
+        "ear_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Cani"
+      ],
+      "trait": [
+        "fangs"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Cani"
+      ],
+      "trait": [
+        "claws"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Cani"
+      ],
+      "trait": [
+        "tail_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Cani"
+      ],
+      "trait": [
+        "facial_markings"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Leoi"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Leoi"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Leoi"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Leoi"
+      ],
+      "trait": [
+        "ear_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Leoi"
+      ],
+      "trait": [
+        "fangs"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Leoi"
+      ],
+      "trait": [
+        "claws"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Leoi"
+      ],
+      "trait": [
+        "tail_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Leoi"
+      ],
+      "trait": [
+        "facial_markings"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Aviari"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Aviari"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Aviari"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Aviari"
+      ],
+      "trait": [
+        "ear_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Aviari"
+      ],
+      "trait": [
+        "fangs"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Aviari"
+      ],
+      "trait": [
+        "claws"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Aviari"
+      ],
+      "trait": [
+        "tail_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Aviari"
+      ],
+      "trait": [
+        "facial_markings"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Repi"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Repi"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Repi"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Repi"
+      ],
+      "trait": [
+        "ear_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Repi"
+      ],
+      "trait": [
+        "fangs"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Repi"
+      ],
+      "trait": [
+        "claws"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Repi"
+      ],
+      "trait": [
+        "tail_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Repi"
+      ],
+      "trait": [
+        "facial_markings"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Nezi"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Nezi"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Nezi"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Nezi"
+      ],
+      "trait": [
+        "ear_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Nezi"
+      ],
+      "trait": [
+        "fangs"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Nezi"
+      ],
+      "trait": [
+        "claws"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Nezi"
+      ],
+      "trait": [
+        "tail_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Nezi"
+      ],
+      "trait": [
+        "facial_markings"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Lopari"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Lopari"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Lopari"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Lopari"
+      ],
+      "trait": [
+        "ear_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Lopari"
+      ],
+      "trait": [
+        "fangs"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Lopari"
+      ],
+      "trait": [
+        "claws"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Lopari"
+      ],
+      "trait": [
+        "tail_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Lopari"
+      ],
+      "trait": [
+        "facial_markings"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Infernal"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Infernal"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Infernal"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Infernal"
+      ],
+      "trait": [
+        "tail_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Infernal"
+      ],
+      "trait": [
+        "wing_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Infernal"
+      ],
+      "trait": [
+        "horn_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Infernal"
+      ],
+      "trait": [
+        "facial_markings"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Daeva"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Daeva"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Daeva"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Daeva"
+      ],
+      "trait": [
+        "wing_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Daeva"
+      ],
+      "trait": [
+        "facial_markings"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Vampire"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Vampire"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Vampire"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Vampire"
+      ],
+      "trait": [
+        "fangs"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Dhampir"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Dhampir"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Dhampir"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Dhampir"
+      ],
+      "trait": [
+        "fangs"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Lycan"
+      ],
+      "trait": [
+        "hair_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Lycan"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Lycan"
+      ],
+      "trait": [
+        "skin_tone"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Saurian"
+      ],
+      "trait": [
+        "eye_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Saurian"
+      ],
+      "trait": [
+        "scale_color"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Saurian"
+      ],
+      "trait": [
+        "fangs"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Saurian"
+      ],
+      "trait": [
+        "claws"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": [
+        "Saurian"
+      ],
+      "trait": [
+        "tail_type"
+      ],
+      "is_available_in_cg": true,
+      "allowed_options": []
+    }
+  }
+]

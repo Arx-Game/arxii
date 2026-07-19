@@ -32,6 +32,16 @@ _Avoid_: skill gate, quality limit
 The property of an ItemInstance that must never be auto-purged by soft-delete cleanup because it carries material lore value, attached facets, or transfer provenance (it changed hands). A strict subset of "differs from template" — cosmetic-only data like a custom name or quality tier is not lore-critical.
 _Avoid_: significant, important, protected
 
+**Template default Properties** (#2503):
+The `mechanics.Property` rows an `ItemTemplate` declares via `ItemTemplateProperty`
+(e.g. a Torch template → `flammable`) — applied to every materialized instance's
+physical `ObjectDB` at the single materialization chokepoint
+(`apply_template_properties`, `world/items/services/materialize.py`), whether it
+lands in a character's inventory or a GM-staged room prop. Feeds the mechanics app's
+bare-object affordance scan (`_bare_object_actions`) — see
+`world/mechanics/AGENT_GLOSSARY.md`'s "Bare-object affordance".
+_Avoid_: default tags, template flags, inherent properties
+
 **Container Access Policy**:
 A container-only setting (`ItemInstance.access_policy`: Open / Friends / Owner Only) controlling who may take items *out* of that container with a plain take. Non-containers ignore it. It governs only the immediate container an item sits in — no chaining up nested containers — and it never blocks Steal, which is the deliberate bypass.
 _Avoid_: container lock, container permissions
