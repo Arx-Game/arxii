@@ -451,8 +451,9 @@ class AmbientEmoteLine(DiscriminatorMixin, SharedMemoryModel):
         ordering = ["parent_type", "id"]
 
     def clean(self) -> None:  # noqa: C901, PLR0912 — one branch per trigger_type enum value
-        super().clean()
-        errors: dict[str, str] = {}
+        errors: dict[str, str] = self._validate_discriminator(
+            self.DISCRIMINATOR_FIELD, self.DISCRIMINATOR_MAP
+        )
         conditional_fields = {
             "trigger_species": self.trigger_species_id,
             "trigger_resonance": self.trigger_resonance_id,
@@ -490,10 +491,6 @@ class AmbientEmoteLine(DiscriminatorMixin, SharedMemoryModel):
             )
         if errors:
             raise ValidationError(errors)
-
-    def save(self, *args: object, **kwargs: object) -> None:
-        self.clean()
-        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         target = self.get_active_target_name()

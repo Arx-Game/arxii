@@ -184,3 +184,20 @@ class AmbientEmoteLineTriggerTypeTests(TestCase):
         )
         line.save()
         self.assertIsNotNone(line.pk)
+
+    def test_discriminator_and_trigger_type_errors_both_reported(self) -> None:
+        """A bad parent_type discriminator AND a bad trigger_type must both surface
+        in the same ValidationError, instead of the discriminator error masking the
+        trigger-type error (#2471 review finding #2)."""
+        line = AmbientEmoteLine(
+            parent_type=LocationParentType.ROOM,
+            room_profile=None,
+            trigger_type=AmbientTriggerType.SPECIES,
+            trigger_species=None,
+            bystander_body="A murmur runs through the crowd.",
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            line.save()
+        message_dict = ctx.exception.message_dict
+        self.assertIn("room_profile", message_dict)
+        self.assertIn("trigger_species", message_dict)
