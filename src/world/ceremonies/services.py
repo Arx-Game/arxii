@@ -300,6 +300,7 @@ def finish_ceremony(*, ceremony: Ceremony) -> Ceremony:
     ceremony.status = CeremonyStatus.COMPLETED
     ceremony.finished_at = timezone.now()
     ceremony.save(update_fields=["quality_level", "status", "finished_at"])
+    revoke_seance_manifestations(ceremony)
     return ceremony
 
 
@@ -309,7 +310,40 @@ def abandon_ceremony(*, ceremony: Ceremony) -> Ceremony:
     ceremony.status = CeremonyStatus.ABANDONED
     ceremony.finished_at = timezone.now()
     ceremony.save(update_fields=["status", "finished_at"])
+    revoke_seance_manifestations(ceremony)
     return ceremony
+
+
+def revoke_seance_manifestations(ceremony: Ceremony) -> None:
+    """Force-unpuppet any manifested RETIRED honoree when a Seance closes (#2393).
+
+    Dead-but-unretired honorees keep their ordinary puppet access after the
+    seance closes (only their emit/pose window narrows back down) — only a
+    retired honoree's temporary puppet grant is torn down here, mirroring
+    ``vitals.services.retire_character``'s own unpuppet-on-retire loop. No-op
+    for any non-Seance ceremony type.
+    """
+    if ceremony.ceremony_type.key != CeremonyTypeKey.SEANCE:
+        return
+    from world.ceremonies.models import SeanceManifestationOffer  # noqa: PLC0415
+    from world.vitals.services import is_retired  # noqa: PLC0415
+
+    offers = SeanceManifestationOffer.objects.filter(
+        ceremony_honoree__ceremony=ceremony, status=SeanceOfferStatus.ACCEPTED
+    ).select_related("ceremony_honoree__honoree_sheet")
+    for offer in offers:
+        sheet = offer.ceremony_honoree.honoree_sheet
+        if not is_retired(sheet):
+            continue
+        character = sheet.character
+        account = character.db_account
+        if account is None:
+            continue
+        for session in list(character.sessions.all()):
+            try:
+                account.unpuppet_object(session)
+            except Exception:
+                logger.exception("unpuppet on seance close failed for sheet %s", sheet.pk)
 
 
 def execute_will(character_sheet: "CharacterSheet") -> None:

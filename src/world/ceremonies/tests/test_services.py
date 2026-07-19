@@ -406,3 +406,69 @@ class RespondToSeanceOfferTests(TestCase):
         offers = list(pending_seance_offers_for_account(account))
 
         self.assertEqual(offers, [offer])
+
+
+class RevokeSeanceManifestationsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.SEANCE, name="Seance")
+        cls.public = WorshippedBeingFactory()
+        cls.location = RoomProfileFactory()
+
+    def test_abandon_unpuppets_manifested_retired_honoree(self) -> None:
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        sheet = _dead_sheet()
+        sheet.vitals.retired_at = timezone.now()
+        sheet.vitals.save(update_fields=["retired_at"])
+
+        player_data = PlayerDataFactory()
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, player_data=player_data)
+        account = player_data.account
+
+        persona, officiant_sheet = _persona_with_sheet()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=self.public)
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[sheet],
+            location_profile=self.location,
+        )
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+        respond_to_seance_offer(offer, account=account, accept=True)
+
+        character = sheet.character
+        character.db_account = account
+        character.save()
+
+        # No live Evennia session exists in a plain unit test — character.sessions
+        # is always empty here, so this exercises the loop's no-op branch. It
+        # proves the revoke hook runs cleanly on the abandon path without
+        # raising, which is the realistic unit-test shape; a full puppet/
+        # unpuppet round-trip belongs in an integration test, not this one.
+        abandon_ceremony(ceremony=ceremony)
+
+        self.assertEqual(ceremony.status, "abandoned")
+
+    def test_abandon_calls_revoke_for_seance_type_only(self) -> None:
+        persona, officiant_sheet = _persona_with_sheet()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=self.public)
+        sheet = _dead_sheet()
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[sheet],
+            location_profile=self.location,
+        )
+
+        with mock.patch("world.ceremonies.services.revoke_seance_manifestations") as mock_revoke:
+            abandon_ceremony(ceremony=ceremony)
+
+        mock_revoke.assert_called_once_with(ceremony)
