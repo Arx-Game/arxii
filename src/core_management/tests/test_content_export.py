@@ -475,3 +475,86 @@ class MagicCatalogContentExportTests(TestCase):
             tradition=tradition, gift=reloaded_gift
         )
         assert list(reloaded_tradition_grant.signature_techniques.all()) == [reloaded_technique]
+
+
+class SpeciesFormTraitContentExportTests(TestCase):
+    """Round-trip coverage for Species/FormTrait/FormTraitOption/SpeciesFormTrait.
+
+    These four models are the CG Appearance stage's data source (#2463): a
+    species with zero ``SpeciesFormTrait`` rows renders an empty Appearance
+    stage. The round-trip below proves the content pipeline carries a species'
+    full form-trait set (trait + options + the species↔trait link, including
+    the ``allowed_options`` M2M) through an export → wipe → reload — the exact
+    shape that broke when the elf subspecies shipped without form-trait rows.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_species_form_traits_round_trip_through_load_world_content(self) -> None:
+        """A species' form traits + options survive a content wipe and reload."""
+        from core_management.content_fixtures import load_world_content
+        from world.forms.factories import (
+            FormTraitFactory,
+            FormTraitOptionFactory,
+            SpeciesFormTraitFactory,
+        )
+        from world.forms.models import FormTrait, FormTraitOption, SpeciesFormTrait
+        from world.species.factories import SpeciesFactory
+        from world.species.models import Species
+
+        species = SpeciesFactory(name="Round Trip Species")
+        hair_trait = FormTraitFactory(name="rt_hair_color", display_name="Hair Color")
+        eye_trait = FormTraitFactory(name="rt_eye_color", display_name="Eye Color")
+        # Two options on hair, one on eye — hair exercises the multi-option path.
+        hair_opt_a = FormTraitOptionFactory(trait=hair_trait, name="black", display_name="Black")
+        hair_opt_b = FormTraitOptionFactory(trait=hair_trait, name="silver", display_name="Silver")
+        eye_opt = FormTraitOptionFactory(trait=eye_trait, name="violet", display_name="Violet")
+
+        hair_link = SpeciesFormTraitFactory(species=species, trait=hair_trait)
+        eye_link = SpeciesFormTraitFactory(species=species, trait=eye_trait)
+        # Restrict hair to a subset of options — exercises the allowed_options M2M
+        # round-trip (the path that breaks silently when the M2M isn't carried).
+        hair_link.allowed_options.add(hair_opt_a, hair_opt_b)
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        # Wipe every row the export captured. SpeciesFormTrait first (FK→species,
+        # FK→trait), then options (FK→trait), then traits, then species.
+        SpeciesFormTrait.objects.filter(pk__in=[hair_link.pk, eye_link.pk]).delete()
+        FormTraitOption.objects.filter(pk__in=[hair_opt_a.pk, hair_opt_b.pk, eye_opt.pk]).delete()
+        FormTrait.objects.filter(pk__in=[hair_trait.pk, eye_trait.pk]).delete()
+        Species.objects.filter(pk=species.pk).delete()
+
+        world_result = load_world_content(self.root)
+        assert world_result.skipped == []
+
+        reloaded_species = Species.objects.get(name="Round Trip Species")
+        reloaded_hair = FormTrait.objects.get(name="rt_hair_color")
+        reloaded_eye = FormTrait.objects.get(name="rt_eye_color")
+
+        # Both traits link back to the species, available in CG.
+        links = SpeciesFormTrait.objects.filter(
+            species=reloaded_species, is_available_in_cg=True
+        ).select_related("trait")
+        assert {link.trait.name for link in links} == {"rt_hair_color", "rt_eye_color"}
+
+        # The allowed_options M2M survived the trip for hair; eye (empty) stayed empty.
+        reloaded_hair_link = SpeciesFormTrait.objects.get(
+            species=reloaded_species, trait=reloaded_hair
+        )
+        reloaded_eye_link = SpeciesFormTrait.objects.get(
+            species=reloaded_species, trait=reloaded_eye
+        )
+        assert {opt.name for opt in reloaded_hair_link.allowed_options.all()} == {
+            "black",
+            "silver",
+        }
+        assert reloaded_eye_link.allowed_options.count() == 0
+
+        # The options themselves round-tripped and re-attach to their traits.
+        assert {opt.name for opt in reloaded_hair.options.all()} == {"black", "silver"}
+        assert {opt.name for opt in reloaded_eye.options.all()} == {"violet"}
