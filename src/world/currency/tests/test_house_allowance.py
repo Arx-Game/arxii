@@ -70,6 +70,13 @@ class DistributeAllowanceTests(TestCase):
         self.assertEqual(self._purse(self.active), 250)
         self.assertEqual(self._purse(self.stale), 250)
 
+    def test_member_with_multiple_personas_is_paid_once(self) -> None:
+        second_face = PersonaFactory(character_sheet=self.active.character_sheet)
+        OrganizationMembershipFactory(persona=second_face, organization=self.org, rank=3)
+        result = distribute_allowance(organization=self.org, surplus=1000)
+        self.assertEqual(result.member_count, 1)  # both memberships share one sheet
+        self.assertEqual(self._purse(self.active), 500)  # not doubled
+
     def test_no_surplus_is_a_noop(self) -> None:
         result = distribute_allowance(organization=self.org, surplus=0)
         self.assertEqual(result.total_distributed, 0)

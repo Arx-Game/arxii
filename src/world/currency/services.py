@@ -56,10 +56,19 @@ from world.currency.types import AllowanceResult, CollectionResult, ImprovementR
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
+    from evennia.accounts.models import AccountDB
+
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.scenes.models import Persona
     from world.societies.models import Organization
+
+
+def _account_active_since(account: AccountDB | None, cutoff: datetime) -> bool:
+    """A piloted account counts as active when it logged in on/after ``cutoff`` (#929/#932)."""
+    return account is not None and account.last_login is not None and account.last_login >= cutoff
 
 
 def get_or_create_purse(character_sheet: CharacterSheet) -> CharacterPurse:
@@ -602,6 +611,10 @@ def distribute_allowance(*, organization: Organization, surplus: int) -> Allowan
     if surplus <= 0:
         return AllowanceResult(total_distributed=0, per_member=0, member_count=0)
     treasury = get_or_create_treasury(organization)
+    # Read the balance under the same row lock the transfers below take, so a concurrent
+    # withdrawal can't shrink it between the pool cap and the payouts (which would abort
+    # the whole distribution instead of distributing the smaller pool).
+    treasury = OrganizationTreasury.objects.select_for_update().get(pk=treasury.pk)
     pool = min(surplus * ALLOWANCE_SURPLUS_PCT // 100, treasury.balance)
     if pool <= 0:
         return AllowanceResult(total_distributed=0, per_member=0, member_count=0)
@@ -610,13 +623,12 @@ def distribute_allowance(*, organization: Organization, surplus: int) -> Allowan
     active_sheets: dict[int, CharacterSheet] = {}
     memberships = OrganizationMembership.objects.filter(
         organization=organization, left_at__isnull=True, exiled_at__isnull=True
-    ).select_related("persona__character_sheet__character")
+    ).select_related("persona__character_sheet__character__db_account")
     for membership in memberships:
         sheet = membership.persona.character_sheet
         if sheet is None or sheet.pk in active_sheets:
             continue
-        account = sheet.character.db_account
-        if account is not None and account.last_login is not None and account.last_login >= cutoff:
+        if _account_active_since(sheet.character.db_account, cutoff):
             active_sheets[sheet.pk] = sheet
     if not active_sheets:
         return AllowanceResult(total_distributed=0, per_member=0, member_count=0)
@@ -1407,12 +1419,7 @@ def _weekly_wages() -> int:
     ):
         try:
             account = employment.character_sheet.character.db_account
-            was_active = bool(
-                account is not None
-                and account.last_login is not None
-                and account.last_login >= cutoff
-            )
-            run_weekly_employment(employment, was_active=was_active)
+            run_weekly_employment(employment, was_active=_account_active_since(account, cutoff))
             count += 1
         except Exception:
             logger.exception("weekly economy: wages failed for employment %s", employment.pk)
