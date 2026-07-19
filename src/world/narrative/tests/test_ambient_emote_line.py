@@ -201,3 +201,12 @@ class AmbientEmoteLineTriggerTypeTests(TestCase):
         message_dict = ctx.exception.message_dict
         self.assertIn("room_profile", message_dict)
         self.assertIn("trigger_species", message_dict)
+
+
+class AmbientEmoteLineFactoryTests(TestCase):
+    def test_factory_produces_valid_saved_instance(self) -> None:
+        from world.narrative.factories import AmbientEmoteLineFactory
+
+        line = AmbientEmoteLineFactory()
+        self.assertIsNotNone(line.pk)
+        self.assertEqual(line.trigger_type, AmbientTriggerType.NONE)

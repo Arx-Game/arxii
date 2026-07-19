@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from world.narrative.models import (
+    AmbientEmoteLine,
     AmbientStirLine,
     Gemit,
     NarrativeMessage,
@@ -67,3 +68,27 @@ class AmbientStirLineAdmin(admin.ModelAdmin):
     list_display = ("__str__", "weight", "is_active")
     list_filter = ("is_active",)
     search_fields = ("body",)
+
+
+@admin.register(AmbientEmoteLine)
+class AmbientEmoteLineAdmin(admin.ModelAdmin):
+    """#2471 — authored room/area-entry reactions (plain atmosphere + conditional)."""
+
+    list_display = (
+        "__str__",
+        "trigger_type",
+        "weight",
+        "fire_chance",
+        "cooldown_minutes",
+        "is_active",
+    )
+    list_filter = ("trigger_type", "parent_type", "is_active")
+    search_fields = ("bystander_body", "arriver_body")
+    raw_id_fields = (
+        "area",
+        "room_profile",
+        "trigger_species",
+        "trigger_resonance",
+        "trigger_distinction",
+        "trigger_perceiving_society",
+    )

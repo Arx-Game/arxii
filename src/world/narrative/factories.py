@@ -4,8 +4,15 @@ import factory
 import factory.django as factory_django
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.narrative.constants import NarrativeCategory
-from world.narrative.models import Gemit, NarrativeMessage, NarrativeMessageDelivery, UserStoryMute
+from world.locations.constants import LocationParentType
+from world.narrative.constants import AmbientTriggerType, NarrativeCategory
+from world.narrative.models import (
+    AmbientEmoteLine,
+    Gemit,
+    NarrativeMessage,
+    NarrativeMessageDelivery,
+    UserStoryMute,
+)
 
 
 class NarrativeMessageFactory(factory_django.DjangoModelFactory):
@@ -47,3 +54,18 @@ class UserStoryMuteFactory(factory_django.DjangoModelFactory):
 
     account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
     story = factory.SubFactory("world.stories.factories.StoryFactory")
+
+
+class AmbientEmoteLineFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = AmbientEmoteLine
+
+    parent_type = LocationParentType.ROOM
+    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    area = None
+    trigger_type = AmbientTriggerType.NONE
+    arriver_body = factory.Sequence(lambda n: f"PLACEHOLDER ambient line {n}")
+    weight = 1
+    fire_chance = 100
+    cooldown_minutes = 0
+    is_active = True
