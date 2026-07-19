@@ -153,6 +153,7 @@ class CharacterOriginSlotAdmin(admin.ModelAdmin):
     list_filter = ["slot__template__beginning__starting_area"]
     search_fields = ["value"]
     readonly_fields = ["sheet", "slot", "value"]
+    autocomplete_fields = ["sheet"]
 
 
 @admin.register(CharacterDraft)
