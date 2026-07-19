@@ -2224,7 +2224,7 @@ GM availability read. ADR-0086 (extends ADR-0024, ADR-0033).
 ### Narrative
 General-purpose IC message delivery — GM/Staff/automated messages to characters. Used by stories for beat and episode-resolution informs; also available for atmosphere, visions, happenstance.
 
-- **Models:** `NarrativeMessage` (body, ooc_note, category, sender_account, optional related_story / related_beat_completion / related_episode_resolution FKs), `NarrativeMessageDelivery` (message + recipient_character_sheet, delivered_at, acknowledged_at)
+- **Models:** `NarrativeMessage` (body, ooc_note, category, sender_account, optional related_story / related_beat_completion / related_episode_resolution FKs), `NarrativeMessageDelivery` (message + recipient_character_sheet, delivered_at, acknowledged_at), `AmbientEmoteLine` (authored prose + weight/cooldown/fire-chance), `AmbientEmoteCondition` (0+ leaf conditions per line, AND/OR-composed)
 - **Categories:** STORY, ATMOSPHERE, VISIONS, HAPPENSTANCE, SYSTEM, COVENANT, RENOWN,
   WEATHER (weather tick emits),
   ABILITY (access-change notifications — gained/lost techniques or capabilities; also used
@@ -2235,6 +2235,19 @@ General-purpose IC message delivery — GM/Staff/automated messages to character
 - **Pattern:** One message fans out to many recipients via NarrativeMessageDelivery rows (e.g., GM sends covenant message to 5 of 8 members — one message, five delivery rows). Messages are immutable; delivery rows track per-recipient state.
 - **API Endpoints:** `GET /api/narrative/my-messages/` (paginated, filterable by category / related_story / acknowledged), `POST /api/narrative/deliveries/{id}/acknowledge/`
 - **Integrates with:** stories (beat completions + episode resolutions emit messages via `stories.services.narrative`), character_sheets (recipient), accounts (sender)
+- **Ambient room reactions (#2471 v2):** `AmbientEmoteLine` (authored prose + weight/cooldown/
+  fire-chance) + `AmbientEmoteCondition` (0+ leaf conditions per line, AND/OR-composed) — species/
+  resonance-threshold/distinction/fame-tier conditions compile (`world.narrative.ambient_content
+  .compile_line_filter`) to real Trigger-system filter conditions, extending the DSL's existing
+  method-dispatch pattern (`Character.has_property`/`has_capability`/`shares_covenant_with`) with
+  three new methods (`has_resonance_at_least`/`has_public_distinction`/`fame_tier_at_least`).
+  Dispatched via the existing Flows/Triggers `MOVED` event: at grid-bundle import
+  (`core_management.grid_import._install_ambient_triggers`), lines are grouped by their compiled,
+  identical condition set, and each distinct group gets one DERIVED `TriggerDefinition`/
+  `FlowDefinition`/`Trigger` (not authored directly, not a fixed config singleton — computed from
+  content, like `RegionWeatherState`). `deliver_ambient_group` only picks among an
+  already-matched group's own lines (weighted + cooldown + fire-chance); it never re-decides
+  whether a condition matched. Supersedes `world.societies.fame_reactions` (#881, retired).
 - **Source:** `src/world/narrative/`
 
 ### Achievements
