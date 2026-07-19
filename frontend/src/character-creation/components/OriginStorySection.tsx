@@ -13,8 +13,8 @@
 
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { useOriginTemplates, useUpdateDraft } from '../../queries';
-import type { CharacterDraft } from '../../types';
+import { useOriginTemplates, useUpdateDraft } from '../queries';
+import type { CharacterDraft } from '../types';
 
 interface OriginStorySectionProps {
   draft: CharacterDraft;
@@ -41,7 +41,10 @@ export function OriginStorySection({ draft }: OriginStorySectionProps) {
             value={draft.draft_data.background ?? ''}
             onChange={(e) =>
               updateDraft.mutate({
-                draft_data: { ...draft.draft_data, background: e.target.value },
+                draftId: draft.id,
+                data: {
+                  draft_data: { background: e.target.value },
+                },
               })
             }
             placeholder="Tell us about your character's past..."
@@ -58,9 +61,11 @@ export function OriginStorySection({ draft }: OriginStorySectionProps) {
 
   const updateSlot = (slotId: number, value: string) => {
     updateDraft.mutate({
-      draft_data: {
-        ...draft.draft_data,
-        origin_slots: { ...originSlots, [slotId]: value },
+      draftId: draft.id,
+      data: {
+        draft_data: {
+          origin_slots: { ...originSlots, [slotId]: value },
+        },
       },
     });
   };

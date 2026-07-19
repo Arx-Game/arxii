@@ -2650,6 +2650,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/origin-templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List active origin-story templates for the CG guided flow (#2478).
+     *
+     *     Filter by ``beginning`` to get templates available for a specific beginning.
+     *     Mirrors ``CGGlimpseTagViewSet``.
+     */
+    get: operations['character_creation_origin_templates_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/origin-templates/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List active origin-story templates for the CG guided flow (#2478).
+     *
+     *     Filter by ``beginning`` to get templates available for a specific beginning.
+     *     Mirrors ``CGGlimpseTagViewSet``.
+     */
+    get: operations['character_creation_origin_templates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/paths/': {
     parameters: {
       query?: never;
@@ -2957,6 +3001,40 @@ export interface paths {
     get: operations['character_sheets_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/clear-origin-slot/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Clear a character's origin-story slot answer (#2478). */
+    post: operations['character_sheets_clear_origin_slot_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/set-origin-slot/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Set a character's origin-story slot answer (#2478). */
+    post: operations['character_sheets_set_origin_slot_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -20755,6 +20833,23 @@ export interface components {
       /** @description Display name for this distinction. */
       readonly name: string;
     };
+    /**
+     * @description Origin template for the CG guided flow (#2478).
+     *
+     *     Backs ``GET /api/character-creation/origin-templates/``.
+     */
+    CGOriginTemplate: {
+      readonly id: number;
+      /** @description Template name (part of natural key). */
+      readonly name: string;
+      /** @description The fixed frame prose every character with this beginning shares. */
+      readonly frame_narrative: string;
+      /** @description Inactive templates are hidden from CG. */
+      readonly is_active: boolean;
+      /** @description Display order when multiple templates exist. */
+      readonly sort_order: number;
+      readonly slots: components['schemas']['OriginTemplateSlot'][];
+    };
     /** @description Serializer for CG point budget configuration. */
     CGPointBudget: {
       readonly id: number;
@@ -27393,6 +27488,19 @@ export interface components {
      * @enum {string}
      */
     OriginEnum: 'authored' | 'story' | 'player';
+    /** @description Slot prompt within an origin template (#2478). */
+    OriginTemplateSlot: {
+      readonly id: number;
+      /** @description Slot name (part of natural key). */
+      readonly name: string;
+      /** @description The question shown to the player. */
+      readonly prompt: string;
+      /** @description Short illustrative answer shown in the guided step. */
+      readonly example: string;
+      readonly sort_order: number;
+      /** @description Required slots are marked in the post-CG finish-later editor. */
+      readonly is_required: boolean;
+    };
     /**
      * @description * `unresolved` - Unresolved
      *     * `attacker_decisive` - Attacker — decisive
@@ -40729,6 +40837,49 @@ export interface operations {
       };
     };
   };
+  character_creation_origin_templates_list: {
+    parameters: {
+      query?: {
+        beginning?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGOriginTemplate'][];
+        };
+      };
+    };
+  };
+  character_creation_origin_templates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Origin Template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGOriginTemplate'];
+        };
+      };
+    };
+  };
   character_creation_paths_list: {
     parameters: {
       query?: never;
@@ -41026,6 +41177,46 @@ export interface operations {
     };
   };
   character_sheets_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_clear_origin_slot_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_set_origin_slot_create: {
     parameters: {
       query?: never;
       header?: never;

@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { apiFetch } from '@/lib/api';
+import { apiFetch } from '@/evennia_replacements/api';
 import type { CharacterSheetPayload } from '@/character_sheets/api';
 
 interface OriginStoryEditorDialogProps {
