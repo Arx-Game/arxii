@@ -2190,7 +2190,7 @@ GM availability read. ADR-0086 (extends ADR-0024, ADR-0033).
 ### Narrative
 General-purpose IC message delivery — GM/Staff/automated messages to characters. Used by stories for beat and episode-resolution informs; also available for atmosphere, visions, happenstance.
 
-- **Models:** `NarrativeMessage` (body, ooc_note, category, sender_account, optional related_story / related_beat_completion / related_episode_resolution FKs), `NarrativeMessageDelivery` (message + recipient_character_sheet, delivered_at, acknowledged_at)
+- **Models:** `NarrativeMessage` (body, ooc_note, category, sender_account, optional related_story / related_beat_completion / related_episode_resolution FKs), `NarrativeMessageDelivery` (message + recipient_character_sheet, delivered_at, acknowledged_at), `AmbientEmoteLine` (#2471 — authored room/area-entry reaction; `parent_type` Area-or-Room discriminator mirrors `world.locations.LocationValueOverride`, most-specific-wins; `trigger_type` NONE/SPECIES/RESONANCE_MIN/DISTINCTION/RENOWN_MIN gates on the arriving character; NONE is private plain atmosphere, every other type is room-wide actor/audience-split)
 - **Categories:** STORY, ATMOSPHERE, VISIONS, HAPPENSTANCE, SYSTEM, COVENANT, RENOWN,
   WEATHER (weather tick emits),
   ABILITY (access-change notifications — gained/lost techniques or capabilities; also used
@@ -2199,6 +2199,7 @@ General-purpose IC message delivery — GM/Staff/automated messages to character
   - `send_narrative_message(recipients, body, category, ...)` — atomic create + fan-out + real-time push to puppeted recipients via `character.msg()` with `|R[NARRATIVE]|n` color tag; offline recipients stay queued
   - `deliver_queued_messages(sheet)` — drains queued deliveries at login (called from `at_post_puppet` via stories login service)
 - **Pattern:** One message fans out to many recipients via NarrativeMessageDelivery rows (e.g., GM sends covenant message to 5 of 8 members — one message, five delivery rows). Messages are immutable; delivery rows track per-recipient state.
+- **Ambient room reactions (#2471):** `emit_room_ambient_reaction(*, payload)` dispatches via the existing Flows/Triggers `MOVED` event (not a periodic scheduler) — one shared `TriggerDefinition`/`FlowDefinition` bootstrapped as config by `world.narrative.ambient_trigger_content.ensure_ambient_reaction_content()` (called from the Big Button, `world.seeds.database.seed_dev_database()`), with a per-room `Trigger` row installed during grid-bundle import (`core_management.grid_import._import_ambient_lines`/`_ensure_ambient_trigger`). `AmbientEmoteLine` content itself rides the grid-bundle sidecar mechanism (`core_management.grid_export`/`grid_import`), the same shape as `LocationValueOverride`/`LocationValueModifier` sidecars — not the flat `content_export.py` `CONTENT_MODELS` allowlist. Supersedes `world.societies.fame_reactions` (#881, retired) — `RENOWN_MIN` is the fame-tier case, generalized.
 - **API Endpoints:** `GET /api/narrative/my-messages/` (paginated, filterable by category / related_story / acknowledged), `POST /api/narrative/deliveries/{id}/acknowledge/`
 - **Integrates with:** stories (beat completions + episode resolutions emit messages via `stories.services.narrative`), character_sheets (recipient), accounts (sender)
 - **Source:** `src/world/narrative/`

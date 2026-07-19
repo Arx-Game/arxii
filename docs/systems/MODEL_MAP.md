@@ -401,8 +401,6 @@
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - portal_anchors <- magic.PortalAnchor
-  - fame_reaction_lines <- societies.FameReactionLine
-  - fame_reaction_cooldowns <- societies.FameReactionCooldown
   - hidden_clues <- clues.RoomClue
   - clue_triggers <- clues.ClueTrigger
   - crime_evidence <- justice.CrimeEvidence
@@ -415,6 +413,7 @@
   - events <- events.Event
   - ceremonies <- ceremonies.Ceremony
   - story_grants <- gm.StoryRoomGrant
+  - ambient_emote_lines <- narrative.AmbientEmoteLine
   - functionaries <- npc_services.Functionary
   - npc_assignments <- npc_services.NPCAssignment
   - entry_for_buildings <- buildings.Building
@@ -648,6 +647,7 @@
   - battles <- battles.Battle
   - city_defense_projects <- battles.CityDefenseDetails
   - story_ownership <- gm.StoryArea
+  - ambient_emote_lines <- narrative.AmbientEmoteLine
   - default_permits_offered <- npc_services.PermitOfferDetails
   - building_profile <- buildings.Building
   - building_permits_valid_in <- buildings.BuildingPermitDetails
@@ -5763,10 +5763,20 @@
 **Foreign Keys:**
   - account -> accounts.AccountDB [FK]
 
+### AmbientEmoteLine
+**Foreign Keys:**
+  - area -> areas.Area [FK] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+  - trigger_species -> species.Species [FK] (nullable)
+  - trigger_resonance -> magic.Resonance [FK] (nullable)
+  - trigger_distinction -> distinctions.Distinction [FK] (nullable)
+  - trigger_perceiving_society -> societies.Society [FK] (nullable)
+
 ### Service Functions
 - `broadcast_gemit(*, body: 'str', sender_account: 'AccountDB', reach: 'str' = GemitReach.GAME_WIDE, societies: 'Iterable[Society] | None' = None, organizations: 'Iterable[Organization] | None' = None, related_era: 'Era | None' = None, related_story: 'Story | None' = None) -> 'Gemit' — Create a Gemit and push it to its ``reach`` audience in green (#1450).`
 - `deliver_queued_messages(character_sheet: 'CharacterSheet') -> 'int' — Push all undelivered messages for this character and mark delivered.`
 - `emit_ambient_room_stir(room: 'ObjectDB', *, exclude: 'ObjectDB | None' = None) -> 'None' — Send a source-ambiguous ambient line to a room's bystanders (#885).`
+- `emit_room_ambient_reaction(*, payload: 'object') -> 'bool' — MOVED-triggered: fire at most one authored AmbientEmoteLine for the arriver (#2471).`
 - `is_category_muted(*, account: 'AccountDB', category: 'str') -> 'bool' — Whether an account has muted a narrative category's live push.`
 - `send_narrative_message(*, recipients: 'Iterable[CharacterSheet]', body: 'str', category: 'str', sender_account: 'AccountDB | None' = None, ooc_note: 'str' = '', related_story: 'Story | None' = None, related_beat_completion: 'BeatCompletion | None' = None, related_episode_resolution: 'EpisodeResolution | None' = None) -> 'NarrativeMessage' — Create a NarrativeMessage and fan out deliveries to each recipient.`
 - `send_story_ooc_message(*, story: 'Story', sender_account: 'AccountDB', body: 'str', ooc_note: 'str' = '') -> 'NarrativeMessage' — Lead GM or staff sends an OOC notice to all participants of a story.`
@@ -6893,7 +6903,6 @@
   - legend_spreads <- societies.LegendSpread
   - legend_stories_written <- societies.LegendDeedStory
   - deed_knowledge <- societies.PersonaDeedKnowledge
-  - fame_reaction_cooldowns <- societies.FameReactionCooldown
   - org_contributions <- currency.ContributionRecord
   - contracts_proposed <- currency.Contract
   - contracts_received <- currency.Contract
@@ -7418,7 +7427,6 @@
   - heard_legend_spreads <- societies.LegendSpread
   - ranking_displays <- societies.RankingDisplay
   - ranking_band_labels <- societies.RankingBandLabel
-  - fame_reaction_lines <- societies.FameReactionLine
   - house_templates <- societies.HouseTemplate
   - exposed_secrets <- secrets.Secret
   - dominant_areas <- areas.Area
@@ -7615,16 +7623,6 @@
 ### RankingBandLabel
 **Foreign Keys:**
   - society -> societies.Society [FK] (nullable)
-
-### FameReactionLine
-**Foreign Keys:**
-  - room -> evennia_extensions.RoomProfile [FK]
-  - society -> societies.Society [FK] (nullable)
-
-### FameReactionCooldown
-**Foreign Keys:**
-  - persona -> scenes.Persona [FK]
-  - room -> evennia_extensions.RoomProfile [FK]
 
 ### CovenantLegendCredit
 **Foreign Keys:**
