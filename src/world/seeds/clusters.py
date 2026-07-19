@@ -538,7 +538,11 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from actions.models import ActionTemplate, ConsequencePool  # noqa: PLC0415
     from world.agriculture.models import CropType  # noqa: PLC0415
     from world.battles.models import BattleMapBlueprint, BattleUnitTemplate  # noqa: PLC0415
-    from world.buildings.models import BuildingKind, DecorationKind  # noqa: PLC0415
+    from world.buildings.models import (  # noqa: PLC0415
+        BuildingKind,
+        DecorationKind,
+        PropertyGrantProfile,
+    )
     from world.character_creation.models import (  # noqa: PLC0415
         Beginnings,
         CGExplanation,
@@ -665,6 +669,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Building condition: the Grand Preparation "Direct the Household"
         # ContributionMethod (#1930).
         "building_condition": [ContributionMethod],
+        # Property grants: a generic placeholder PropertyGrantProfile so
+        # grant_property_house is exercisable on a fresh dev DB before any
+        # real fixture content wires a Beginnings row at one.
+        "property_grants": [PropertyGrantProfile],
         # Kudos: 4 KudosSourceCategory rows (pose_kudos/spread_assist/social_engagement/
         # relationship_writeup) + the "xp" KudosClaimCategory; represented by
         # KudosSourceCategory (#2026).
