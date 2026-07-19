@@ -233,6 +233,48 @@ class GridExportTests(TestCase):
             ],
         )
 
+    def test_bundle_includes_ambient_lines_with_nested_conditions(self) -> None:
+        from world.narrative.constants import ConditionType
+        from world.narrative.factories import AmbientEmoteConditionFactory, AmbientEmoteLineFactory
+        from world.species.factories import SpeciesFactory
+
+        species = SpeciesFactory(name="Infernal")
+        line = AmbientEmoteLineFactory(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.taproom,
+            area=None,
+            bystander_body="A murmur runs through the taproom.",
+        )
+        AmbientEmoteConditionFactory(
+            line=line, condition_type=ConditionType.SPECIES, species=species
+        )
+
+        result = export_grid_bundles(self.root)
+        self.assertEqual(result.errors, [])
+        bundle = self._load_bundle("arx-city")
+
+        self.assertEqual(len(bundle["ambient_lines"]), 1)
+        entry = bundle["ambient_lines"][0]
+        self.assertEqual(entry["parent_type"], LocationParentType.ROOM)
+        self.assertEqual(entry["room"], self.taproom.fixture_key)
+        self.assertEqual(entry["condition_connector"], line.condition_connector)
+        self.assertEqual(entry["bystander_body"], "A murmur runs through the taproom.")
+        self.assertEqual(entry["arriver_body"], line.arriver_body)
+        self.assertEqual(entry["weight"], 1)
+        self.assertEqual(entry["fire_chance"], 100)
+        self.assertEqual(entry["cooldown_minutes"], 0)
+        self.assertTrue(entry["is_active"])
+
+        self.assertEqual(len(entry["conditions"]), 1)
+        condition = entry["conditions"][0]
+        self.assertEqual(condition["condition_type"], ConditionType.SPECIES)
+        self.assertEqual(condition["species"], "Infernal")
+        self.assertIsNone(condition["resonance"])
+        self.assertIsNone(condition["minimum_value"])
+        self.assertIsNone(condition["distinction"])
+        self.assertIsNone(condition["min_fame_tier"])
+        self.assertIsNone(condition["perceiving_society"])
+
     def test_authored_room_in_non_authored_area_raises(self) -> None:
         """An AUTHORED room housed by a non-AUTHORED (e.g. STORY) area is also
         silently unexportable (#2448) — the area itself must be AUTHORED."""

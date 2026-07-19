@@ -401,8 +401,6 @@
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - portal_anchors <- magic.PortalAnchor
-  - fame_reaction_lines <- societies.FameReactionLine
-  - fame_reaction_cooldowns <- societies.FameReactionCooldown
   - hidden_clues <- clues.RoomClue
   - clue_triggers <- clues.ClueTrigger
   - crime_evidence <- justice.CrimeEvidence
@@ -415,6 +413,7 @@
   - events <- events.Event
   - ceremonies <- ceremonies.Ceremony
   - story_grants <- gm.StoryRoomGrant
+  - ambient_emote_lines <- narrative.AmbientEmoteLine
   - functionaries <- npc_services.Functionary
   - npc_assignments <- npc_services.NPCAssignment
   - entry_for_buildings <- buildings.Building
@@ -648,6 +647,7 @@
   - battles <- battles.Battle
   - city_defense_projects <- battles.CityDefenseDetails
   - story_ownership <- gm.StoryArea
+  - ambient_emote_lines <- narrative.AmbientEmoteLine
   - default_permits_offered <- npc_services.PermitOfferDetails
   - property_grant_profiles <- buildings.PropertyGrantProfile
   - building_profile <- buildings.Building
@@ -5817,6 +5817,21 @@
 **Foreign Keys:**
   - account -> accounts.AccountDB [FK]
 
+### AmbientEmoteLine
+**Foreign Keys:**
+  - area -> areas.Area [FK] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+**Pointed to by:**
+  - conditions <- narrative.AmbientEmoteCondition
+
+### AmbientEmoteCondition
+**Foreign Keys:**
+  - line -> narrative.AmbientEmoteLine [FK]
+  - species -> species.Species [FK] (nullable)
+  - resonance -> magic.Resonance [FK] (nullable)
+  - distinction -> distinctions.Distinction [FK] (nullable)
+  - perceiving_society -> societies.Society [FK] (nullable)
+
 ### Service Functions
 - `broadcast_gemit(*, body: 'str', sender_account: 'AccountDB', reach: 'str' = GemitReach.GAME_WIDE, societies: 'Iterable[Society] | None' = None, organizations: 'Iterable[Organization] | None' = None, related_era: 'Era | None' = None, related_story: 'Story | None' = None) -> 'Gemit' — Create a Gemit and push it to its ``reach`` audience in green (#1450).`
 - `deliver_queued_messages(character_sheet: 'CharacterSheet') -> 'int' — Push all undelivered messages for this character and mark delivered.`
@@ -6948,7 +6963,6 @@
   - legend_spreads <- societies.LegendSpread
   - legend_stories_written <- societies.LegendDeedStory
   - deed_knowledge <- societies.PersonaDeedKnowledge
-  - fame_reaction_cooldowns <- societies.FameReactionCooldown
   - org_contributions <- currency.ContributionRecord
   - contracts_proposed <- currency.Contract
   - contracts_received <- currency.Contract
@@ -7473,7 +7487,6 @@
   - heard_legend_spreads <- societies.LegendSpread
   - ranking_displays <- societies.RankingDisplay
   - ranking_band_labels <- societies.RankingBandLabel
-  - fame_reaction_lines <- societies.FameReactionLine
   - house_templates <- societies.HouseTemplate
   - exposed_secrets <- secrets.Secret
   - dominant_areas <- areas.Area
@@ -7670,16 +7683,6 @@
 ### RankingBandLabel
 **Foreign Keys:**
   - society -> societies.Society [FK] (nullable)
-
-### FameReactionLine
-**Foreign Keys:**
-  - room -> evennia_extensions.RoomProfile [FK]
-  - society -> societies.Society [FK] (nullable)
-
-### FameReactionCooldown
-**Foreign Keys:**
-  - persona -> scenes.Persona [FK]
-  - room -> evennia_extensions.RoomProfile [FK]
 
 ### CovenantLegendCredit
 **Foreign Keys:**

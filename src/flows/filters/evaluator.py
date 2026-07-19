@@ -34,6 +34,9 @@ OP_CONTAINS = "contains"
 OP_HAS_PROPERTY = "has_property"
 OP_HAS_CAPABILITY = "has_capability"
 OP_SHARES_COVENANT = "shares_covenant"
+OP_HAS_RESONANCE_AT_LEAST = "has_resonance_at_least"
+OP_HAS_PUBLIC_DISTINCTION = "has_public_distinction"
+OP_FAME_TIER_AT_LEAST = "fame_tier_at_least"
 
 # Filter DSL self-reference token and dotted prefix
 SELF_TOKEN = "self"  # noqa: S105
@@ -72,6 +75,20 @@ def _eval_leaf(spec: dict, payload: Any, *, self_ref: Any) -> bool:
     return _apply_operator(op, resolved, value, path)
 
 
+# Method-dispatched operators: op -> the method name to call on `resolved`.
+# Each of these delegates entirely to a Character (or similar) method rather than
+# comparing values directly — the reactive-filter DSL's escape hatch for logic too
+# rich for a plain comparison operator.
+METHOD_OPERATORS: dict[str, str] = {
+    OP_HAS_PROPERTY: "has_property",
+    OP_HAS_CAPABILITY: "has_capability",
+    OP_SHARES_COVENANT: "shares_covenant_with",
+    OP_HAS_RESONANCE_AT_LEAST: "has_resonance_at_least",
+    OP_HAS_PUBLIC_DISTINCTION: "has_public_distinction",
+    OP_FAME_TIER_AT_LEAST: "fame_tier_at_least",
+}
+
+
 def _apply_operator(op: str, resolved: Any, value: Any, path: str) -> bool:
     """Apply comparison operator using dispatch table."""
     operators: dict[str, Any] = {
@@ -86,21 +103,12 @@ def _apply_operator(op: str, resolved: Any, value: Any, path: str) -> bool:
     }
     if op in operators:
         return operators[op](resolved, value)
-    if op == OP_HAS_PROPERTY:
-        if not hasattr(resolved, "has_property"):
-            msg = f"Value at '{path}' has no has_property method"
+    if op in METHOD_OPERATORS:
+        method_name = METHOD_OPERATORS[op]
+        if not hasattr(resolved, method_name):
+            msg = f"Value at '{path}' has no {method_name} method"
             raise FilterPathError(msg)
-        return bool(resolved.has_property(value))
-    if op == OP_HAS_CAPABILITY:
-        if not hasattr(resolved, "has_capability"):
-            msg = f"Value at '{path}' has no has_capability method"
-            raise FilterPathError(msg)
-        return bool(resolved.has_capability(value))
-    if op == OP_SHARES_COVENANT:
-        if not hasattr(resolved, "shares_covenant_with"):
-            msg = f"Value at '{path}' has no shares_covenant_with method"
-            raise FilterPathError(msg)
-        return bool(resolved.shares_covenant_with(value))
+        return bool(getattr(resolved, method_name)(value))
     msg = f"Unknown operator: {op}"
     raise FilterPathError(msg)
 

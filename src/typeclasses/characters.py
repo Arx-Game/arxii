@@ -295,6 +295,57 @@ class Character(ObjectParent, DefaultCharacter):
             return False
         return get_effective_capability_value(sheet, capability) > 0
 
+    def has_resonance_at_least(self, spec: dict) -> bool:
+        """True if this character's lifetime-earned value for a Resonance meets a minimum.
+
+        ``spec = {"resonance": <name>, "minimum": <int>}``. Used by the reactive-filter
+        ``has_resonance_at_least`` op (#2471 v2).
+        """
+        from world.magic.models import Resonance
+
+        resonance = Resonance.objects.filter(name=spec["resonance"]).first()
+        if resonance is None:
+            return False
+        return self.resonances.lifetime(resonance) >= spec["minimum"]
+
+    def has_public_distinction(self, slug: str) -> bool:
+        """True if this character holds the named Distinction and it isn't secret-relocated.
+
+        A distinction relocated into a Secret (#1334) must never leak through a reactive
+        filter. Used by the reactive-filter ``has_public_distinction`` op (#2471 v2).
+        """
+        return self.distinctions.filter(distinction__slug=slug, secret__isnull=True).exists()
+
+    def fame_tier_at_least(self, spec: dict) -> bool:
+        """True if this character's active persona's perceived fame tier meets a minimum.
+
+        ``spec = {"min_tier": <FameTier value>, "perceiving_society": <name or None>}``.
+        ``perceiving_society`` applies that society's ``fame_perception_offset`` before
+        comparing (insular societies perceive less fame). Used by the reactive-filter
+        ``fame_tier_at_least`` op (#2471 v2).
+        """
+        from world.scenes.models import Persona
+        from world.scenes.services import active_persona_for_sheet
+        from world.societies.constants import FAME_TIER_ORDER
+
+        sheet = self.character_sheet
+        if sheet is None:
+            return False
+        try:
+            persona = active_persona_for_sheet(sheet)
+        except Persona.DoesNotExist:
+            return False
+        offset = 0
+        society_name = spec.get("perceiving_society")
+        if society_name:
+            from world.societies.models import Society
+
+            society = Society.objects.filter(name=society_name).first()
+            if society is not None:
+                offset = society.fame_perception_offset or 0
+        perceived_index = max(0, FAME_TIER_ORDER.index(persona.fame_tier) + offset)
+        return perceived_index >= FAME_TIER_ORDER.index(spec["min_tier"])
+
     def do_look(self, target):
         desc = self.at_look(target)
         self.msg(desc)
@@ -402,7 +453,10 @@ class Character(ObjectParent, DefaultCharacter):
             emit_event(EventName.MOVED, payload, location=self.location)
 
             # Optional side-effects of arriving — mission ROOM_TRIGGER dispatch (#729),
-            # trap detection (#1051), fame reactions (#881), passive clue triggers (#1160).
+            # trap detection (#1051), passive clue triggers (#1160). Ambient room
+            # reactions (species/resonance/distinction/fame-tier, #2471 — retired #881's
+            # fame_reactions.py) dispatch separately via the MOVED Flows/Trigger event
+            # emitted just above, not through this hardcoded list.
             # Each is wrapped by run_safely (#1164): a failure never breaks the move, but it
             # is captured as a SystemErrorReport and the player is told — not silently
             # swallowed. The cheap room-bound query in each short-circuits ordinary rooms.
@@ -417,7 +471,6 @@ class Character(ObjectParent, DefaultCharacter):
             from world.room_features.trap_services import (
                 check_room_traps_on_entry,
             )
-            from world.societies.fame_reactions import maybe_emit_fame_reaction
             from world.species.services import reconcile_sunlight_exposure
 
             run_safely(
@@ -428,11 +481,6 @@ class Character(ObjectParent, DefaultCharacter):
             run_safely(
                 "trap_detection_on_enter",
                 lambda: check_room_traps_on_entry(self, self.location),
-                actor=self,
-            )
-            run_safely(
-                "fame_reaction_on_enter",
-                lambda: maybe_emit_fame_reaction(self, self.location),
                 actor=self,
             )
             run_safely(
