@@ -76,6 +76,7 @@ def _copy_option_into(new_node: MissionNode, source_option: MissionOption) -> Mi
     return MissionOption.objects.create(
         node=new_node,
         order=source_option.order,
+        key=source_option.key,
         option_kind=source_option.option_kind,
         source_kind=source_option.source_kind,
         visibility_rule=dict(source_option.visibility_rule or {}),

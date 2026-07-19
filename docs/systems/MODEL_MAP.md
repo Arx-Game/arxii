@@ -1353,6 +1353,7 @@
   - starting_area -> character_creation.StartingArea [FK]
   - heritage -> character_sheets.Heritage [FK] (nullable)
   - starting_room_override -> objects.ObjectDB [FK] (nullable)
+  - prelude_mission -> missions.MissionTemplate [FK] (nullable)
   - allowed_species -> species.Species [M2M]
   - starting_languages -> species.Language [M2M]
   - societies -> societies.Society [M2M]

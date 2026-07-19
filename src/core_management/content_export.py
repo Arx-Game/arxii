@@ -122,6 +122,15 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "mechanics.prerequisite",
         "mechanics.property",
         "mechanics.propertycategory",
+        # missions
+        "missions.missioncategory",
+        "missions.missiontemplate",
+        "missions.missionnode",
+        "missions.missionoption",
+        "missions.missionoptionroute",
+        "missions.missionoptionroutecandidate",
+        "missions.missionoptionroutereward",
+        "missions.missionrenownaward",
         # realms
         "realms.realm",
         # skills

@@ -124,6 +124,7 @@ class MissionOptionFactory(DjangoModelFactory):
 
     node = factory.SubFactory(MissionNodeFactory)
     order = factory.Sequence(lambda n: n)
+    key = factory.Sequence(lambda n: f"option-{n}")
     option_kind = OptionKind.BRANCH
     source_kind = OptionSource.AUTHORED
     visibility_rule = factory.LazyFunction(dict)
