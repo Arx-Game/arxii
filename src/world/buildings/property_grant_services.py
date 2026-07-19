@@ -9,14 +9,19 @@ not in this module — see PropertyGrantProfile's docstring.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.utils import timezone
 
+from world.buildings.constants import COPPERS_PER_PROGRESS_POINT
+from world.buildings.room_services import RoomBuildError
+
 if TYPE_CHECKING:
     from world.areas.models import Area
     from world.buildings.models import Building, PropertyGrantProfile
+    from world.projects.models import Project
     from world.scenes.models import Persona
 
 _PLACEHOLDER_WARD_SLUG = "property-grant-placeholder-ward"
@@ -79,3 +84,74 @@ def grant_property_house(persona: Persona, profile: PropertyGrantProfile) -> Bui
         building.entry_room = room
         building.save(update_fields=["entry_room"])
     return building
+
+
+def _open_activation_project(building: Building) -> Project | None:
+    """The building's not-yet-resolved BUILDING_ACTIVATION Project, if one exists."""
+    from world.buildings.models import BuildingActivationDetails  # noqa: PLC0415
+    from world.projects.constants import ProjectStatus  # noqa: PLC0415
+
+    details = (
+        BuildingActivationDetails.objects.filter(
+            building=building,
+            project__status__in=(
+                ProjectStatus.PLANNING,
+                ProjectStatus.ACTIVE,
+                ProjectStatus.RESOLVING,
+            ),
+        )
+        .select_related("project")
+        .first()
+    )
+    return details.project if details is not None else None
+
+
+def start_building_activation(*, persona: Persona, building: Building) -> Project:
+    """Open a BUILDING_ACTIVATION project bringing *building* to its profile's target tier.
+
+    Owner-gated. Refuses when the building was never granted, is already
+    activated, its grant profile has no activation arc configured, or it
+    already has an open activation project.
+    """
+    from world.buildings.models import BuildingActivationDetails  # noqa: PLC0415
+    from world.locations.services import is_owner  # noqa: PLC0415
+    from world.projects.constants import CompletionMode, ProjectKind  # noqa: PLC0415
+    from world.projects.models import Project  # noqa: PLC0415
+
+    entry = building.entry_room
+    if entry is None or not is_owner(persona, entry.objectdb):
+        msg = "Only the building's owner can commission its activation."
+        raise RoomBuildError(msg)
+    if building.property_granted_at is None:
+        msg = "This building wasn't a property grant — there's nothing to activate."
+        raise RoomBuildError(msg)
+    if building.property_activated_at is not None:
+        msg = "This house has already been brought to life."
+        raise RoomBuildError(msg)
+    profile = building.granted_via_profile
+    if profile is None or profile.activation_target_tier is None:
+        msg = "This property doesn't need activation."
+        raise RoomBuildError(msg)
+    if _open_activation_project(building) is not None:
+        msg = "An activation project is already underway."
+        raise RoomBuildError(msg)
+
+    cost = profile.activation_cost_floor_coppers * building.target_size
+    threshold = max(1, cost // COPPERS_PER_PROGRESS_POINT)
+    now = timezone.now()
+    with transaction.atomic():
+        project = Project.objects.create(
+            kind=ProjectKind.BUILDING_ACTIVATION,
+            completion_mode=CompletionMode.SINGLE_THRESHOLD,
+            owner_persona=persona,
+            started_at=now,
+            time_limit=now + timedelta(days=30),
+            threshold_target=threshold,
+            description=f"Bring {building} to life",
+        )
+        BuildingActivationDetails.objects.create(
+            project=project,
+            building=building,
+            target_tier=profile.activation_target_tier,
+        )
+    return project

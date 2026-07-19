@@ -1,11 +1,17 @@
 """Tests for the PropertyGrantProfile model and world.buildings.property_grant_services."""
 
+import unittest
+
 from django.test import TestCase
 
 from world.areas.constants import AreaLevel
 from world.buildings.constants import ConditionTier
 from world.buildings.factories import BuildingKindFactory, PropertyGrantProfileFactory
 from world.buildings.models import BuildingSizeTier, PropertyGrantProfile
+from world.buildings.room_services import RoomBuildError
+from world.locations.constants import HolderType, LocationParentType
+from world.locations.models import LocationOwnership
+from world.projects.constants import CompletionMode, ProjectKind
 from world.scenes.factories import PersonaFactory
 
 
@@ -92,3 +98,83 @@ class GrantPropertyHouseTests(TestCase):
         profile = PropertyGrantProfileFactory(ward_area=ward)
         building = grant_property_house(persona, profile)
         assert building.area.parent_id == ward.pk
+
+
+def _owned_building_with_persona():
+    """A granted, un-activated Building with an owning Persona and an entry room."""
+    from world.buildings.property_grant_services import grant_property_house
+
+    _ensure_hut_tier()
+    persona = PersonaFactory()
+    profile = PropertyGrantProfileFactory(
+        activation_target_tier=ConditionTier.RAMSHACKLE,
+        activation_cost_floor_coppers=100,
+    )
+    building = grant_property_house(persona, profile)
+    LocationOwnership.objects.create(
+        parent_type=LocationParentType.AREA,
+        area=building.area,
+        holder_type=HolderType.PERSONA,
+        holder_persona=persona,
+    )
+    return persona, building
+
+
+class StartBuildingActivationTests(TestCase):
+    def test_commissions_activation_project(self):
+        from world.buildings.property_grant_services import start_building_activation
+
+        persona, building = _owned_building_with_persona()
+        project = start_building_activation(persona=persona, building=building)
+        assert project.kind == ProjectKind.BUILDING_ACTIVATION
+        assert project.completion_mode == CompletionMode.SINGLE_THRESHOLD
+        assert project.building_activation_details.target_tier == ConditionTier.RAMSHACKLE
+
+    def test_non_owner_refused(self):
+        from world.buildings.property_grant_services import start_building_activation
+
+        _, building = _owned_building_with_persona()
+        other = PersonaFactory()
+        with self.assertRaises(RoomBuildError):
+            start_building_activation(persona=other, building=building)
+
+    def test_not_a_grant_refused(self):
+        from world.buildings.factories import BuildingFactory
+        from world.buildings.property_grant_services import start_building_activation
+
+        persona = PersonaFactory()
+        building = BuildingFactory()
+        LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=building.area,
+            holder_type=HolderType.PERSONA,
+            holder_persona=persona,
+        )
+        from world.buildings.services import create_entry_room
+
+        room = create_entry_room(building, "Entry Hall")
+        building.entry_room = room
+        building.save(update_fields=["entry_room"])
+        with self.assertRaises(RoomBuildError):
+            start_building_activation(persona=persona, building=building)
+
+    @unittest.skip("implemented in Task 6")
+    def test_already_activated_refused(self):
+        from world.buildings.property_grant_services import (
+            complete_building_activation,
+            start_building_activation,
+        )
+
+        persona, building = _owned_building_with_persona()
+        project = start_building_activation(persona=persona, building=building)
+        complete_building_activation(project)
+        with self.assertRaises(RoomBuildError):
+            start_building_activation(persona=persona, building=building)
+
+    def test_duplicate_open_project_refused(self):
+        from world.buildings.property_grant_services import start_building_activation
+
+        persona, building = _owned_building_with_persona()
+        start_building_activation(persona=persona, building=building)
+        with self.assertRaises(RoomBuildError):
+            start_building_activation(persona=persona, building=building)
