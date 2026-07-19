@@ -278,6 +278,12 @@ def _seed_survivability() -> None:
     seed_survivability_content()
 
 
+def _seed_ceremonies() -> None:
+    from world.ceremonies.seeds import seed_ceremony_types  # noqa: PLC0415
+
+    seed_ceremony_types()
+
+
 def _seed_gm() -> None:
     from world.gm.factories import (  # noqa: PLC0415
         seed_catalog_starter_content,
@@ -459,6 +465,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # After "kudos" (shares the KudosSourceCategory model) and "checks" (the
     # outcome spine); both idempotent either way.
     "survivability": _seed_survivability,
+    # Ceremony types: Funeral/Blessing/Sermon/Seance CeremonyType rows (#2289/#2393).
+    # Without this cluster, opening ANY ceremony fails with "not recognized" on a
+    # fresh database — no other seed or migration ever creates these rows.
+    "ceremonies": _seed_ceremonies,
     # Market: the PLACEHOLDER capital square + NPC stock stall (#2066).
     "market": _seed_market,
     # Kinship: the PLACEHOLDER ducal demo tree + slots/pool + truth-pair (#2062).
@@ -543,6 +553,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         DecorationKind,
         PropertyGrantProfile,
     )
+    from world.ceremonies.models import CeremonyType  # noqa: PLC0415
     from world.character_creation.models import (  # noqa: PLC0415
         Beginnings,
         CGExplanation,
@@ -681,6 +692,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # staged condition + foundational CapabilityTypes + dream room (#2287).
         # Represented by ConsequencePool (the tier pools).
         "survivability": [ConsequencePool],
+        # Ceremony types: the four authored CeremonyType rows (#2289/#2393).
+        "ceremonies": [CeremonyType],
         # Market: the PLACEHOLDER capital square (#2066).
         "market": [MarketSquare],
         # GM trust ladder: the 5 default GMLevelCap rows, one per GMLevel (#2000).
