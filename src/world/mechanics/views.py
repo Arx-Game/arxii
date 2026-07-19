@@ -58,7 +58,9 @@ class ModifierCategoryViewSet(viewsets.ReadOnlyModelViewSet):
 class ModifierTargetViewSet(viewsets.ReadOnlyModelViewSet):
     """List and retrieve modifier targets."""
 
-    queryset = ModifierTarget.objects.select_related("category").filter(is_active=True)
+    queryset = ModifierTarget.objects.select_related("category", "target_resonance").filter(
+        is_active=True
+    )
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_class = ModifierTargetFilter

@@ -126,6 +126,7 @@
   - applications <- mechanics.Application
   - trait_derivations <- mechanics.TraitCapabilityDerivation
   - blocking_challenges <- mechanics.ChallengeTemplate
+  - check_type_modifiers <- checks.CheckTypeCapabilityModifier
   - granted_by_roles <- covenants.CovenantRole
   - combat_pull_grants <- combat.CombatPullResolvedEffect
   - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge
@@ -1653,6 +1654,7 @@
   - context_consequence_pools <- mechanics.ContextConsequencePool
   - consequence_outcomes <- checks.ConsequenceOutcome
   - traits <- checks.CheckTypeTrait
+  - capability_modifiers <- checks.CheckTypeCapabilityModifier
   - aspects <- checks.CheckTypeAspect
   - specializations <- checks.CheckTypeSpecialization
   - item_check_modifiers <- items.ItemCheckModifier
@@ -1669,6 +1671,11 @@
 **Foreign Keys:**
   - check_type -> checks.CheckType [FK]
   - trait -> traits.Trait [FK]
+
+### CheckTypeCapabilityModifier
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+  - capability -> conditions.CapabilityType [FK]
 
 ### CheckTypeAspect
 **Foreign Keys:**
@@ -2388,6 +2395,7 @@
   - applications <- mechanics.Application
   - trait_derivations <- mechanics.TraitCapabilityDerivation
   - blocking_challenges <- mechanics.ChallengeTemplate
+  - check_type_modifiers <- checks.CheckTypeCapabilityModifier
   - granted_by_roles <- covenants.CovenantRole
   - combat_pull_grants <- combat.CombatPullResolvedEffect
   - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge
@@ -3648,6 +3656,7 @@
   - disguise_kit_effects <- items.DisguiseKitEffect
   - check_modifiers <- items.ItemCheckModifier
   - garment_mitigations <- items.GarmentMitigation
+  - gem_details <- items.GemDetails
   - stock_listings <- items.StockListing
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
@@ -3685,6 +3694,9 @@
   - outfit_slots <- items.OutfitSlot
   - mantle <- items.Mantle
   - crafted_recipes <- items.CraftedItemRecipe
+  - gem_instance_details <- items.GemInstanceDetails
+  - adornments <- items.Adornment
+  - adorned_on <- items.Adornment
   - ware_listing <- items.WareListing
   - market_sales <- items.MarketSale
   - reclamation_claims <- items.ReclamationClaim
@@ -3880,6 +3892,25 @@
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - recipe -> items.CraftingRecipe [FK]
+
+### GemGrade
+
+### GemDetails
+**Foreign Keys:**
+  - item_template -> items.ItemTemplate [OneToOne]
+
+### GemInstanceDetails
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [OneToOne]
+  - size_grade -> items.GemGrade [FK]
+  - purity_grade -> items.GemGrade [FK]
+  - cut_grade -> items.GemGrade [FK]
+
+### Adornment
+**Foreign Keys:**
+  - host_instance -> items.ItemInstance [FK]
+  - gem_instance -> items.ItemInstance [OneToOne]
+  - set_by_account -> accounts.AccountDB [FK] (nullable)
 
 ### MarketSquare
 **Foreign Keys:**
@@ -4157,7 +4188,7 @@
 - `room_exposure_breakdown(room: 'DefaultObject') -> 'list[AxisBreakdown]' — Per-axis pressure/mitigation/net for a room — the build-HUD's engine (#1514).`
 - `set_primary_home(*, persona: 'Persona', room: 'DefaultObject', notes: 'str' = '') -> 'LocationTenancy' — Designate one of the persona's active room tenancies as their home (#670, #2036).`
 - `set_residence(*, character: 'DefaultObject', room: 'DefaultObject') -> 'None' — Set a character's primary residence (#1514).`
-- `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona | None' = None, name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None, bypass_ownership: 'bool' = False) -> 'None' — Owner-gated edit of a room's display name, description, and public listing.`
+- `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona | None' = None, name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None, bypass_ownership: 'bool' = False) -> 'None' — Owner-or-tenant-gated edit of a room's display name, description, and public listing.`
 - `set_room_stat_modifier(room_profile: 'RoomProfile', stat_key: 'StatKey', *, source: 'str', value: 'int') -> 'LocationValueModifier | None' — Set the room-level ``(room_profile, stat_key, source)`` cascade row to ``value``.`
 - `tenancies_for(persona: 'Persona', room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return the QuerySet of currently-active tenancies that give this`
 - `tenancies_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, list[LocationTenancy]]' — Bulk-resolve currently-active tenancies for many rooms.`
@@ -4219,6 +4250,7 @@
   - affinity -> magic.Affinity [FK]
   - opposite -> magic.Resonance [OneToOne] (nullable)
   - properties -> mechanics.Property [M2M]
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
 **Pointed to by:**
   - opposite_of <- magic.Resonance
   - gifts <- magic.Gift
@@ -7822,6 +7854,7 @@
 **Foreign Keys:**
   - parent -> species.Species [FK] (nullable)
   - starting_languages -> species.Language [M2M]
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
 **Pointed to by:**
   - character_sheets <- character_sheets.CharacterSheet
   - children <- species.Species

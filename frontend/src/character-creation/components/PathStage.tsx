@@ -7,6 +7,7 @@
  */
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CodexTerm } from '@/codex/components/CodexTerm';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -90,7 +91,13 @@ function PathDetailPanel({ path }: { path: Path | null }) {
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20 text-primary">
                 <Icon className="h-5 w-5" />
               </div>
-              <CardTitle className="text-lg">{path.name}</CardTitle>
+              <CardTitle className="text-lg">
+                {path.codex_entry_ids?.length > 0 ? (
+                  <CodexTerm entryId={path.codex_entry_ids[0]}>{path.name}</CodexTerm>
+                ) : (
+                  path.name
+                )}
+              </CardTitle>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -197,7 +204,13 @@ export function PathStage({ draft }: PathStageProps) {
                     >
                       <Icon className="h-5 w-5" />
                     </div>
-                    <CardTitle className="text-lg">{path.name}</CardTitle>
+                    <CardTitle className="text-lg">
+                      {path.codex_entry_ids?.length > 0 ? (
+                        <CodexTerm entryId={path.codex_entry_ids[0]}>{path.name}</CodexTerm>
+                      ) : (
+                        path.name
+                      )}
+                    </CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent>

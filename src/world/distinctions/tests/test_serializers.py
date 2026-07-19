@@ -20,37 +20,8 @@ class DistinctionEffectSerializerTest(TestCase):
         cls.modifier_target = ModifierTargetFactory(name="Allure")
         cls.distinction = DistinctionFactory(name="Attractive")
 
-    def test_codex_entry_id_returns_id_when_linked(self):
-        """codex_entry_id returns the entry ID when modifier type has a Codex entry."""
-        # Create a codex entry linked to this modifier target
-        codex_entry = CodexEntryFactory(
-            name="Allure Codex Entry",
-            modifier_target=self.modifier_target,
-        )
-        effect = DistinctionEffectFactory(
-            distinction=self.distinction,
-            target=self.modifier_target,
-        )
-
-        serializer = DistinctionEffectSerializer(effect)
-        data = serializer.data
-
-        self.assertEqual(data["codex_entry_id"], codex_entry.id)
-
-    def test_codex_entry_id_returns_none_when_not_linked(self):
-        """codex_entry_id returns None when modifier type has no Codex entry."""
-        effect = DistinctionEffectFactory(
-            distinction=self.distinction,
-            target=self.modifier_target,
-        )
-
-        serializer = DistinctionEffectSerializer(effect)
-        data = serializer.data
-
-        self.assertIsNone(data["codex_entry_id"])
-
     def test_serializer_includes_all_expected_fields(self):
-        """Serializer includes all expected fields."""
+        """Serializer includes all expected fields (no codex_entry_id — removed in #2477)."""
         effect = DistinctionEffectFactory(
             distinction=self.distinction,
             target=self.modifier_target,
@@ -68,7 +39,7 @@ class DistinctionEffectSerializerTest(TestCase):
         self.assertIn("value_per_rank", data)
         self.assertIn("scaling_values", data)
         self.assertIn("description", data)
-        self.assertIn("codex_entry_id", data)
+        self.assertNotIn("codex_entry_id", data)
         self.assertEqual(data["target_name"], "Allure")
 
 
@@ -81,12 +52,13 @@ class DistinctionDetailSerializerTest(TestCase):
         cls.modifier_target = ModifierTargetFactory(name="Charm")
         cls.distinction = DistinctionFactory(name="Charming")
 
-    def test_effects_include_codex_entry_id(self):
-        """Effects in detail serializer include codex_entry_id."""
-        codex_entry = CodexEntryFactory(
-            name="Charm Codex Entry",
-            modifier_target=self.modifier_target,
-        )
+    def test_effects_no_longer_include_codex_entry_id(self):
+        """DistinctionEffectSerializer no longer includes codex_entry_id.
+
+        Per-effect codex was removed in #2477; distinction-level lore now
+        comes from DistinctionCodexGrant via codex_entry_ids on the list
+        serializer.
+        """
         DistinctionEffectFactory(
             distinction=self.distinction,
             target=self.modifier_target,
@@ -96,7 +68,21 @@ class DistinctionDetailSerializerTest(TestCase):
         data = serializer.data
 
         self.assertEqual(len(data["effects"]), 1)
-        self.assertEqual(data["effects"][0]["codex_entry_id"], codex_entry.id)
+        self.assertNotIn("codex_entry_id", data["effects"][0])
+
+    def test_detail_includes_codex_entry_ids_from_grant_table(self):
+        """DistinctionDetailSerializer surfaces codex_entry_ids via DistinctionCodexGrant."""
+        from world.codex.models import DistinctionCodexGrant
+
+        entry = CodexEntryFactory(name="Distinction Lore")
+        DistinctionCodexGrant.objects.create(distinction=self.distinction, entry=entry)
+        self.distinction.cached_codex_grants  # noqa: B018
+
+        serializer = DistinctionDetailSerializer(self.distinction)
+        data = serializer.data
+
+        self.assertIn("codex_entry_ids", data)
+        self.assertEqual(data["codex_entry_ids"], [entry.id])
 
 
 class EffectsSummaryTextTests(TestCase):

@@ -141,6 +141,12 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "these are the trained competencies your character can already call on."
     ),
     "magic_heading": "Magic & Gifts",
+    "anima_check_heading": "Anima Check",
+    "anima_check_intro": (
+        "Every cast rolls a check built from a stat and a skill you choose now. "
+        "This is purely mechanical — how your magic looks and feels in a scene is "
+        "always yours to describe."
+    ),
     "identity_heading": "Name & Identity",
     "identity_intro": (
         "Give your character a name, a guiding concept, and the words and history "

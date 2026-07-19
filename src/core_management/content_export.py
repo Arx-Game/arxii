@@ -44,6 +44,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "character_creation.startingarea",
         # character_sheets
         "character_sheets.gender",
+        # checks
+        "checks.checktypecapabilitymodifier",
         # classes
         "classes.aspect",
         "classes.path",
@@ -53,6 +55,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "codex.codexentry",
         "codex.codexsubject",
         "codex.traditioncodexgrant",
+        "codex.beginningscodexgrant",
+        "codex.distinctioncodexgrant",
+        "codex.pathcodexgrant",
         # conditions
         "conditions.capabilitytype",
         "conditions.conditioncapabilityeffect",
@@ -103,8 +108,12 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.tradition",
         "magic.traditiongiftgrant",
         # mechanics
+        "mechanics.application",
         "mechanics.modifiercategory",
         "mechanics.modifiertarget",
+        "mechanics.prerequisite",
+        "mechanics.property",
+        "mechanics.propertycategory",
         # realms
         "realms.realm",
         # skills

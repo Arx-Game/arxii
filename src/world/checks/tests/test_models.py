@@ -8,11 +8,19 @@ from django.test import TestCase
 from world.checks.factories import (
     CheckCategoryFactory,
     CheckTypeAspectFactory,
+    CheckTypeCapabilityModifierFactory,
     CheckTypeFactory,
     CheckTypeTraitFactory,
 )
-from world.checks.models import CheckCategory, CheckType, CheckTypeAspect, CheckTypeTrait
+from world.checks.models import (
+    CheckCategory,
+    CheckType,
+    CheckTypeAspect,
+    CheckTypeCapabilityModifier,
+    CheckTypeTrait,
+)
 from world.classes.models import Aspect
+from world.conditions.factories import CapabilityTypeFactory
 from world.traits.models import Trait, TraitCategory, TraitType
 
 
@@ -91,6 +99,54 @@ class CheckTypeTraitTests(TestCase):
             weight=Decimal("0.5"),
         )
         assert ctt.weight == Decimal("0.5")
+
+
+class CheckTypeCapabilityModifierTests(TestCase):
+    """Test CheckTypeCapabilityModifier model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.check_type = CheckTypeFactory(name="Balance")
+        cls.movement = CapabilityTypeFactory(name="test_movement_ctcm")
+        cls.perception = CapabilityTypeFactory(name="test_perception_ctcm")
+
+    def test_str_representation(self):
+        ctcm = CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type, capability=self.movement, weight=Decimal("1.0")
+        )
+        assert "Balance" in str(ctcm)
+        assert "test_movement_ctcm" in str(ctcm)
+
+    def test_default_weight_is_one(self):
+        ctcm = CheckTypeCapabilityModifier.objects.create(
+            check_type=self.check_type, capability=self.movement
+        )
+        assert ctcm.weight == Decimal("1.0")
+
+    def test_unique_together_check_type_and_capability(self):
+        CheckTypeCapabilityModifier.objects.create(
+            check_type=self.check_type, capability=self.movement
+        )
+        with self.assertRaises(IntegrityError):
+            CheckTypeCapabilityModifier.objects.create(
+                check_type=self.check_type, capability=self.movement
+            )
+
+    def test_fractional_weight(self):
+        ctcm = CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type,
+            capability=self.perception,
+            weight=Decimal("0.5"),
+        )
+        assert ctcm.weight == Decimal("0.5")
+
+    def test_natural_key_round_trip(self):
+        ctcm = CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type, capability=self.movement, weight=Decimal("1.0")
+        )
+        nk = ctcm.natural_key()
+        fetched = CheckTypeCapabilityModifier.objects.get_by_natural_key(*nk)
+        assert fetched.pk == ctcm.pk
 
 
 class CheckTypeAspectTests(TestCase):

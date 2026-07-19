@@ -621,12 +621,12 @@ Character advantages and disadvantages (CG Stage 6: Traits).
 ### Checks
 Check resolution engine — converts trait values to ranks and rolls against result charts.
 
-- **Models:** `CheckCategory`, `CheckType`, `CheckTypeTrait`, `CheckTypeAspect`
+- **Models:** `CheckCategory`, `CheckType`, `CheckTypeTrait`, `CheckTypeAspect`, `CheckTypeCapabilityModifier` (#2505 — curated authored `(check_type, capability)` weight, `related_name="capability_modifiers"`)
 - **Seeded check types:** `Composure` (willpower-weighted; resistance-specific — seeded via `create_resistance_check_types()` in `checks/factories.py`; used by `compute_resist_increment`)
 - **Key Functions:** `perform_check(character, check_type, target_difficulty, extra_modifiers) -> CheckResult`, `get_rollmod(character) -> int`, `compute_resist_increment(defender_character, resist_effort_level) -> int` (resolves the Composure CheckType to compute a numeric difficulty bonus for active defense)
-- **Key Types:** `CheckResult` (outcome, chart, roller_rank, target_rank, trait_points, aspect_bonus)
-- **Pipeline:** trait points (weighted via CheckTypeTrait) + aspect bonus (path level) + modifiers → CheckRank → ResultChart → roll+rollmod → outcome
-- **Integrates with:** traits (lookup tables), skills (check bonuses), conditions (check modifiers), goals (bonuses), scenes (active resistance via `compute_resist_increment`)
+- **Key Types:** `CheckResult` (outcome, chart, roller_rank, target_rank, trait_points, aspect_bonus, specialization_points, capability_points)
+- **Pipeline:** trait points (weighted via CheckTypeTrait) + aspect bonus (path level) + capability points (weighted via authored `CheckTypeCapabilityModifier`, curated gate — #2505) + modifiers → CheckRank → ResultChart → roll+rollmod → outcome
+- **Integrates with:** traits (lookup tables), skills (check bonuses), conditions (check modifiers + `get_effective_capability_value` agency oracle for authored capability points), goals (bonuses), scenes (active resistance via `compute_resist_increment`), mechanics (`resolve_challenge()` folds its `capability_source.value` into `extra_modifiers`)
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
@@ -3560,6 +3560,25 @@ holder is never notified a claim exists.
     ("N value of a tier") are Build 0b, gated on the gemstone-value ladder. Crafting
     *execution* honors category requirements; the read-only quote preview raises
     `CategoryRequirementsNotQuotable` until the quote surface lands.
+  - **Gem value model** (`world.items.gems`, Build 0b slice 1) — gem *types* are ordinary
+    `ItemTemplate` rows decorated by a `GemDetails` sidecar (`quality_level` 1–15; tier =
+    `MaterialCategory`; motif reuses `tied_resonance`), so they stay requirable/consumable like
+    any material. A cut gem *instance* is an `ItemInstance` decorated by `GemInstanceDetails`
+    carrying its size/purity/cut `GemGrade`s (one axis-discriminated lookup, `multiplier` floor
+    1.0). Worth = `template.value × size × purity × cut` via `world.items.gems.services
+    .compute_gem_worth`, folded into the wired `appraise()` (`services/pricing.py` → `suggested_value`).
+    Accessors: `ItemTemplate.gem_type_or_none`, `ItemInstance.gem_or_none`. No standalone gem
+    roster (would orphan the consumption stack); `quality_level` is a plain int, not new
+    `QualityTier` rows. Mining / cut-recipe are later 0b slices.
+  - **Gem adornment** (`world.items.gems`, Build 0b slice 2) — `Adornment` (standalone model,
+    *not* an `ItemAttachment` subclass — that base requires a non-null `attachment_quality_tier`,
+    meaningless for a grade-carrying gem) links a host `ItemInstance` to an embedded `gem_instance`
+    with `narration` + `set_by_account`/`set_at`. `world.items.gems.services.adorn_item()` gates on
+    `ItemTemplate.adornment_capacity` (mirrors `facet_capacity`), validates the offered instance is
+    a gem and unset, embeds it (clears holder), and adds its worth to the host's `lore_value` so the
+    wired `appraise()` reflects it. `adorned_materials(host)` is the queryable "materials on this
+    piece" seam magic reads. Exceptions: `AdornmentCapacityExceeded` / `NotAGem` / `GemAlreadyAdorned`.
+    Safe craft-time path only; risky prying/re-set defers to the cut slice.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
@@ -5072,7 +5091,7 @@ Extensions to Evennia models for additional data storage.
   and staff-authored art in one model — role is derived from `player_data`
   (null ⇒ staff-authored), not a stored flag; staff rows additionally carry a
   nullable, unique `slug` for natural-key addressing from the lore-repo content
-  pipeline (see ADR-0143). `PageBackground` (`slot: PageBackgroundSlot` — HOMEPAGE /
+  pipeline (see ADR-0146). `PageBackground` (`slot: PageBackgroundSlot` — HOMEPAGE /
   ROSTER / CG_STAGE / GAME_CLIENT, unique — → `art: Media | None`, `SET_NULL`) maps
   a named page slot to a background `Media` row; read via `GET /api/backgrounds/`.
 - **Pattern:** Extend Evennia models without modifying library code
@@ -5182,6 +5201,21 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   and the `--check`/admin-preview surfaces (warn) share. `world.seeds.character_creation.
   ensure_canonical_fallback_room()` houses the canonical fallback starting room in a
   reserved AUTHORED area (`slug="arx"`) for exactly this reason.
+- **Strict-mode health gate (#2501):** `tools/build_content_fixtures.py --load --strict`
+  exits `7` if any `world_result.skipped` entry isn't covered by
+  `<content_root>/fixtures/KNOWN_DRIFT.txt` (one substring pattern per line, `#`-comment
+  and blank lines ignored; absent file = no known drift). `core_management.content_health`
+  (`group_skips`, `load_known_drift`, `partition_skips`, `render_health_report`) is the
+  pure-python layer this rides — import-safe without Django, same convention as
+  `content_fixtures.py`. A health report (per-source skip counts, known-drift count, and
+  every unexpected skip verbatim) always prints after the load summary, `--strict` or not,
+  so a silent-skip regression (the #2501 root cause — 350 rows dropped with no signal) is
+  visible even on a plain `--load`. `--strict` requires `--load`.
+  `CONTENT_MODELS` (`core_management/content_export.py`) also gained
+  `mechanics.application`, `mechanics.prerequisite`, `mechanics.property`, and
+  `mechanics.propertycategory` — the loader was already dynamic (any `NaturalKeyMixin`
+  model can be fixture-loaded); this only widens the **export** allowlist to cover the
+  Capabilities & Challenges catalog.
 - **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
   mirroring `game_setup_views.py`'s gate).
 - **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,

@@ -25,6 +25,7 @@ export interface Beginnings {
   grants_species_languages: boolean;
   cg_point_cost: number;
   is_accessible: boolean;
+  codex_entry_ids: number[];
 }
 
 export interface Species {
@@ -34,6 +35,7 @@ export interface Species {
   parent?: number | null;
   parent_name?: string | null;
   stat_bonuses: Record<string, number>;
+  codex_entry_id: number | null;
 }
 
 export interface CGPointBudget {
@@ -241,6 +243,7 @@ export interface Path {
   icon_url: string | null;
   icon_name: string; // Lucide icon name (e.g., 'swords', 'eye')
   aspects: string[]; // Aspect names only (weights are staff-only)
+  codex_entry_ids: number[];
   skill_suggestions?: PathSkillSuggestion[];
 }
 
@@ -608,6 +611,7 @@ export interface ModifierTypeItem {
   is_active: boolean;
   opposite: number | null;
   resonance_affinity: string | null;
+  codex_entry_id: number | null;
 }
 
 export type Affinity = ModifierTypeItem;

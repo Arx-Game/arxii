@@ -1107,18 +1107,6 @@ paths:
       responses:
         '200':
           description: No response body
-  /api/backgrounds/:
-    get:
-      operationId: backgrounds_retrieve
-      description: Return every configured page background (slot -> art URL).
-      tags:
-      - backgrounds
-      security:
-      - cookieAuth: []
-      - {}
-      responses:
-        '200':
-          description: No response body
   /api/battles/:
     get:
       operationId: battles_list
@@ -4236,7 +4224,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this Starting Area.
         required: true
       tags:
       - character-creation
@@ -26526,7 +26515,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedMediaList'
+                $ref: '#/components/schemas/PaginatedPlayerMediaList'
           description: ''
     post:
       operationId: roster_media_create
@@ -26540,7 +26529,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Media'
+                $ref: '#/components/schemas/PlayerMedia'
           description: ''
   /api/roster/media/{id}/:
     get:
@@ -26551,7 +26540,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this media.
+        description: A unique integer value identifying this player media.
         required: true
       tags:
       - roster
@@ -26562,7 +26551,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Media'
+                $ref: '#/components/schemas/PlayerMedia'
           description: ''
     put:
       operationId: roster_media_update
@@ -26572,7 +26561,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this media.
+        description: A unique integer value identifying this player media.
         required: true
       tags:
       - roster
@@ -26583,7 +26572,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Media'
+                $ref: '#/components/schemas/PlayerMedia'
           description: ''
     patch:
       operationId: roster_media_partial_update
@@ -26593,7 +26582,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this media.
+        description: A unique integer value identifying this player media.
         required: true
       tags:
       - roster
@@ -26604,7 +26593,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Media'
+                $ref: '#/components/schemas/PlayerMedia'
           description: ''
     delete:
       operationId: roster_media_destroy
@@ -26614,7 +26603,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this media.
+        description: A unique integer value identifying this player media.
         required: true
       tags:
       - roster
@@ -26632,7 +26621,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this media.
+        description: A unique integer value identifying this player media.
         required: true
       tags:
       - roster
@@ -26643,7 +26632,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Media'
+                $ref: '#/components/schemas/PlayerMedia'
           description: ''
   /api/roster/media/{id}/set_profile_picture/:
     post:
@@ -26654,7 +26643,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this media.
+        description: A unique integer value identifying this player media.
         required: true
       tags:
       - roster
@@ -26665,7 +26654,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Media'
+                $ref: '#/components/schemas/PlayerMedia'
           description: ''
   /api/roster/rosters/:
     get:
@@ -33206,7 +33195,7 @@ components:
             Public persona identity only — id/name/thumbnail(s), never account/username.
 
             ``thumbnail_media_url`` mirrors ``world/combat/serializers.py``'s
-            ``get_thumbnail_media_url`` — the uploaded-portrait ``Media`` FK,
+            ``get_thumbnail_media_url`` — the uploaded-portrait ``PlayerMedia`` FK,
             already ``select_related``'d by the view's Prefetch (world/battles/views.py),
             so this never issues a query. ``thumbnail_url`` is the legacy URLField,
             kept alongside for callers still on it.
@@ -33916,10 +33905,9 @@ components:
           description: Worldbuilding text shown to players
         art_image:
           type: string
-          nullable: true
-          description: Cloudinary URL sourced from art (#2408); key name kept for
-            frontend compat.
-          readOnly: true
+          format: uri
+          description: URL for visual presentation
+          maxLength: 200
         family_known:
           type: boolean
           description: Whether family is selectable in Lineage stage (False = 'Unknown')
@@ -33947,9 +33935,15 @@ components:
           type: boolean
           description: Check if the requesting user can access this option.
           readOnly: true
+        codex_entry_ids:
+          type: array
+          items:
+            type: integer
+          description: Get codex entry IDs granted by this beginnings choice.
+          readOnly: true
       required:
       - allowed_species_ids
-      - art_image
+      - codex_entry_ids
       - description
       - id
       - is_accessible
@@ -33967,6 +33961,11 @@ components:
           type: string
           minLength: 1
           description: Worldbuilding text shown to players
+        art_image:
+          type: string
+          format: uri
+          description: URL for visual presentation
+          maxLength: 200
         family_known:
           type: boolean
           description: Whether family is selectable in Lineage stage (False = 'Unknown')
@@ -36919,12 +36918,7 @@ components:
           type: integer
           readOnly: true
           nullable: true
-        art_url:
-          type: string
-          nullable: true
-          readOnly: true
       required:
-      - art_url
       - id
       - knowledge_status
       - lore_content
@@ -36979,12 +36973,7 @@ components:
           type: string
           readOnly: true
           nullable: true
-        art_url:
-          type: string
-          nullable: true
-          readOnly: true
       required:
-      - art_url
       - id
       - knowledge_status
       - name
@@ -37683,6 +37672,7 @@ components:
       - affinity
       - pull
       - relationship
+      - capability
       type: string
       description: |-
         * `condition` - Condition
@@ -37697,6 +37687,7 @@ components:
         * `affinity` - Affinity
         * `pull` - Combat Pull
         * `relationship` - Relationship
+        * `capability` - Capability
     ConsequencePoolCatalog:
       type: object
       description: Read-only serializer for the curated technique-cast consequence-pool
@@ -39125,9 +39116,16 @@ components:
           nullable: true
           description: Return a human-readable description of prerequisites.
           readOnly: true
+        codex_entry_ids:
+          type: array
+          items:
+            type: integer
+          description: Get codex entry IDs granted by this distinction.
+          readOnly: true
       required:
       - allow_other
       - category
+      - codex_entry_ids
       - cost_per_rank
       - description
       - effects
@@ -39169,14 +39167,8 @@ components:
           type: string
           readOnly: true
           description: Description of what this effect does.
-        codex_entry_id:
-          type: integer
-          nullable: true
-          description: Return the Codex entry ID if the target modifier type has one.
-          readOnly: true
       required:
       - category
-      - codex_entry_id
       - description
       - id
       - scaling_values
@@ -39236,8 +39228,7 @@ components:
           description: |-
             Return a list of effect summaries for this distinction.
 
-            Each effect includes its description (or auto-generated text)
-            and optional codex_entry_id for linkable terms in the UI.
+            Each effect includes its description (or auto-generated text).
           readOnly: true
         is_locked:
           type: boolean
@@ -39249,9 +39240,16 @@ components:
           nullable: true
           description: Return the reason this distinction is locked, if any.
           readOnly: true
+        codex_entry_ids:
+          type: array
+          items:
+            type: integer
+          description: Get codex entry IDs granted by this distinction.
+          readOnly: true
       required:
       - allow_other
       - category_slug
+      - codex_entry_ids
       - cost_per_rank
       - description
       - effects_summary
@@ -45485,67 +45483,16 @@ components:
         * `moderate` - Moderate
         * `high` - High
         * `extreme` - Extreme
-    Media:
-      type: object
-      description: Serialize media uploaded by a player.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        cloudinary_public_id:
-          type: string
-          readOnly: true
-          description: Cloudinary public ID for this media
-        cloudinary_url:
-          type: string
-          format: uri
-          readOnly: true
-          description: Full Cloudinary URL
-        media_type:
-          allOf:
-          - $ref: '#/components/schemas/MediaTypeEnum'
-          readOnly: true
-        title:
-          type: string
-          readOnly: true
-        description:
-          type: string
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-        uploaded_date:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_date:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - cloudinary_public_id
-      - cloudinary_url
-      - created_by
-      - description
-      - id
-      - media_type
-      - title
-      - updated_date
-      - uploaded_date
     MediaTypeEnum:
       enum:
       - photo
       - portrait
       - gallery
-      - background
-      - illustration
       type: string
       description: |-
         * `photo` - Photo
         * `portrait` - Character Portrait
         * `gallery` - Gallery Image
-        * `background` - Background
-        * `illustration` - Illustration
     MentorPersona:
       type: object
       description: Minimal read-only representation of a mentor persona.
@@ -47105,9 +47052,20 @@ components:
         is_active:
           type: boolean
           description: Whether this modifier target is currently active in the game
+        codex_entry_id:
+          type: integer
+          nullable: true
+          description: |-
+            Return the Codex entry ID if this target's resonance has one.
+
+            The GiftStage resonance picker reads ModifierTarget rows (category=resonance).
+            Each has a ``target_resonance`` OneToOne → ``magic.Resonance``, which now
+            carries a ``codex_entry`` FK.
+          readOnly: true
       required:
       - category
       - category_name
+      - codex_entry_id
       - id
       - name
     Mute:
@@ -48080,7 +48038,7 @@ components:
           type: string
           nullable: true
           description: |-
-            Media portrait URL, dynamically resolved (#2196).
+            PlayerMedia portrait URL, dynamically resolved (#2196).
 
             Uses ``resolve_thumbnail()`` when the opponent has a persona (character).
             For persona-less (generic/ephemeral) NPCs, falls back to the opponent's
@@ -50495,29 +50453,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LabStationDetails'
-    PaginatedMediaList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/Media'
     PaginatedMissionCategoryList:
       type: object
       required:
@@ -51482,6 +51417,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerMail'
+    PaginatedPlayerMediaList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerMedia'
     PaginatedPlayerReportDetailList:
       type: object
       required:
@@ -53027,7 +52985,7 @@ components:
           type: string
           nullable: true
           description: |-
-            Media portrait URL, dynamically resolved (#2196).
+            PlayerMedia portrait URL, dynamically resolved (#2196).
 
             Uses ``resolve_thumbnail()`` via the primary persona's character.
             ``None`` when there is no primary persona.
@@ -55476,8 +55434,18 @@ components:
             avoids SharedMemoryModel cache pollution and provides a single cache
             to invalidate when needed.
           readOnly: true
+        codex_entry_ids:
+          type: array
+          items:
+            type: integer
+          description: |-
+            Get codex entry IDs granted by this path.
+
+            Read from ``cached_codex_grants`` populated by the ViewSet prefetch.
+          readOnly: true
       required:
       - aspects
+      - codex_entry_ids
       - description
       - id
       - minimum_level
@@ -56803,6 +56771,53 @@ components:
       - recipient_tenure
       - sender_tenure
       - subject
+    PlayerMedia:
+      type: object
+      description: Serialize media uploaded by a player.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        cloudinary_public_id:
+          type: string
+          readOnly: true
+          description: Cloudinary public ID for this media
+        cloudinary_url:
+          type: string
+          format: uri
+          readOnly: true
+          description: Full Cloudinary URL
+        media_type:
+          allOf:
+          - $ref: '#/components/schemas/MediaTypeEnum'
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        uploaded_date:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_date:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - cloudinary_public_id
+      - cloudinary_url
+      - created_by
+      - description
+      - id
+      - media_type
+      - title
+      - updated_date
+      - uploaded_date
     PlayerReportCreate:
       type: object
       description: |-
@@ -58581,10 +58596,8 @@ components:
           description: Description of this resonance.
         codex_entry_id:
           type: integer
-          nullable: true
-          description: Return the Codex entry ID if this resonance's modifier_target
-            has one.
           readOnly: true
+          nullable: true
       required:
       - affinity
       - affinity_name
@@ -61652,7 +61665,12 @@ components:
             type: integer
           description: Get stat bonuses as dictionary.
           readOnly: true
+        codex_entry_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
+      - codex_entry_id
       - id
       - name
       - parent_name
@@ -62481,10 +62499,11 @@ components:
           description: Rich description shown on hover/click in character creation
         crest_image:
           type: string
+          format: uri
           nullable: true
-          description: Cloudinary URL sourced from crest_art (#2408); key name kept
-            for frontend compat.
-          readOnly: true
+          description: Cloudinary URL for crest/flag image. Leave blank for gradient
+            placeholder.
+          maxLength: 200
         is_accessible:
           type: boolean
           description: Check if the requesting user can access this area.
@@ -62494,7 +62513,6 @@ components:
           readOnly: true
           default: default
       required:
-      - crest_image
       - description
       - id
       - is_accessible
@@ -62513,6 +62531,13 @@ components:
           type: string
           minLength: 1
           description: Rich description shown on hover/click in character creation
+        crest_image:
+          type: string
+          format: uri
+          nullable: true
+          description: Cloudinary URL for crest/flag image. Leave blank for gradient
+            placeholder.
+          maxLength: 200
       required:
       - description
       - name
@@ -64263,7 +64288,7 @@ components:
           readOnly: true
         media:
           allOf:
-          - $ref: '#/components/schemas/Media'
+          - $ref: '#/components/schemas/PlayerMedia'
           readOnly: true
         gallery:
           type: integer

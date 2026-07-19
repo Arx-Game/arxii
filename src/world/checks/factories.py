@@ -13,6 +13,7 @@ from world.checks.models import (
     CheckCategory,
     CheckType,
     CheckTypeAspect,
+    CheckTypeCapabilityModifier,
     CheckTypeSpecialization,
     CheckTypeTrait,
     Consequence,
@@ -69,6 +70,15 @@ class CheckTypeAspectFactory(DjangoModelFactory):
 
     check_type = factory.SubFactory(CheckTypeFactory)
     aspect = None  # Must be provided by caller
+    weight = Decimal("1.0")
+
+
+class CheckTypeCapabilityModifierFactory(DjangoModelFactory):
+    class Meta:
+        model = CheckTypeCapabilityModifier
+
+    check_type = factory.SubFactory(CheckTypeFactory)
+    capability = None  # Must be provided by caller (a conditions.CapabilityType)
     weight = Decimal("1.0")
 
 

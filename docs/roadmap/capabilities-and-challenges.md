@@ -109,6 +109,16 @@ The core resolution loop is implemented end-to-end.
 - **Character loss filtering** — DONE. Always applied regardless of consequence source (approach-level or template-level). Positive rollmod downgrades to worst non-loss alternative.
 - **CharacterChallengeRecord creation** — DONE. Records approach used, check outcome, consequence selected, and whether resolution was successful
 - **Check integration** — DONE. ChallengeApproach.check_type connects to `perform_check()` pipeline. Difficulty indicator uses rank-based calculation from the check system.
+- **Capability modifiers folded into checks** (#2505) — DONE. `CheckTypeCapabilityModifier`
+  (curated, authored `(check_type, capability)` pairs, `world/checks/models.py`) lets a
+  CheckType read the agency oracle (`get_effective_capability_value`) directly — an authored
+  row contributes `weight x effective_capability_value` (summed, truncated toward zero) into
+  `perform_check`'s `total_points`, alongside a `CAPABILITY`-kind `ModifierContribution` in
+  `collect_check_modifiers`'s provenance. `resolve_challenge()` also folds its
+  `capability_source.value` (the technique/trait/condition/item capability that chose the
+  approach) directly into `extra_modifiers` before calling `perform_check` — the two
+  capability oracles (availability's technique-grant read vs. this agency-value read) now both
+  reach the roll.
 
 ### Phase 2: Prerequisite System — DONE
 Prerequisites are now data-driven property checks, not code-dispatched callables.

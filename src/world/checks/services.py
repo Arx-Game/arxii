@@ -1,5 +1,6 @@
 """Check resolution service functions."""
 
+from decimal import Decimal
 import random
 from typing import TYPE_CHECKING, NamedTuple, cast
 
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.checks.models import CheckType, Consequence
+    from world.checks.models import CheckType, CheckTypeCapabilityModifier, Consequence
     from world.mechanics.models import CharacterChallengeRecord
     from world.scenes.models import Interaction, Scene
     from world.skills.models import Specialization
@@ -131,6 +132,7 @@ class _CheckBreakdown(NamedTuple):
     trait_points: int
     specialization_points: int
     aspect_bonus: int
+    capability_points: int
     total_points: int
     roller_rank: "CheckRank | None"
     target_rank: "CheckRank | None"
@@ -160,10 +162,12 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     trait_points = _calculate_trait_points(handler, check_type)
     specialization_points = _calculate_specialization_points(character, check_type, specialization)
     aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
+    capability_points = _calculate_capability_points(character, check_type)
     total_points = (
         trait_points
         + specialization_points
         + aspect_bonus
+        + capability_points
         + extra_modifiers
         + effort_modifier
         + fatigue_penalty
@@ -180,6 +184,7 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
         trait_points=trait_points,
         specialization_points=specialization_points,
         aspect_bonus=aspect_bonus,
+        capability_points=capability_points,
         total_points=total_points,
         roller_rank=roller_rank,
         target_rank=target_rank,
@@ -228,6 +233,7 @@ def _check_result(
         aspect_bonus=breakdown.aspect_bonus,
         total_points=breakdown.total_points,
         specialization_points=breakdown.specialization_points,
+        capability_points=breakdown.capability_points,
     )
 
 
@@ -326,6 +332,90 @@ def _calculate_specialization_points(
         if value > 0:
             total += PointConversionRange.calculate_points(TraitType.SKILL, value)
 
+    return total
+
+
+def _capability_point_allocation(
+    character_sheet: "CharacterSheet",
+    capability_modifiers: list["CheckTypeCapabilityModifier"],
+) -> tuple[int, list[int]]:
+    """Shared capability arithmetic (#2505) — the ONLY place either caller computes it.
+
+    Both the rolled total (``_calculate_capability_points``) and the recorded
+    provenance (``_capability_contributions``) must agree, so they share this one
+    helper instead of each re-deriving the math (a prior version truncated
+    per-row in the provenance path, which could diverge from the roll path's
+    single truncation — see #2505 review fix).
+
+    1. Raw per-row products: ``weight * get_effective_capability_value(...)`` (Decimal).
+    2. ``truncated_total = int(sum(raw_products))`` — truncated toward zero ONCE,
+       matching ``CheckTypeCapabilityModifier.weight``'s help_text.
+    3. The truncated total is allocated back across rows by **largest remainder**:
+       floor each row's raw product toward zero, then distribute the leftover
+       units (``truncated_total - sum(floors)``) to the rows with the largest
+       fractional remainder, breaking ties by capability name for determinism.
+       This guarantees per-row allocated ints sum EXACTLY to ``truncated_total``.
+
+    Returns:
+        ``(truncated_total, allocated)`` where ``allocated`` is a list of ints in
+        the same order as ``capability_modifiers``. Callers filter zero entries
+        AFTER allocation (not before — a row can be nonzero pre-allocation and
+        land on zero, or vice versa).
+    """
+    from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
+
+    raw_products: list[Decimal] = [
+        row.weight * get_effective_capability_value(character_sheet, row.capability)
+        for row in capability_modifiers
+    ]
+    truncated_total = int(sum(raw_products)) if raw_products else 0
+
+    floors = [int(product) for product in raw_products]
+    leftover = truncated_total - sum(floors)
+
+    if leftover != 0:
+        step = 1 if leftover > 0 else -1
+
+        def _remainder_key(i: int) -> tuple[Decimal, str]:
+            remainder = abs(raw_products[i] - floors[i])
+            return (-remainder, capability_modifiers[i].capability.name)
+
+        order = sorted(range(len(capability_modifiers)), key=_remainder_key)
+        for i in order[: abs(leftover)]:
+            floors[i] += step
+
+    return truncated_total, floors
+
+
+def _calculate_capability_points(character: "ObjectDB", check_type: "CheckType") -> int:
+    """Weighted capability contribution from authored CheckTypeCapabilityModifier rows (#2505).
+
+    Curated gate: only (check_type, capability) pairs an author has explicitly linked can
+    ever move points — a character's raw capability value (however large) has zero effect
+    on a check_type with no authored row for it. When there are no authored rows this
+    returns 0 without ever calling the capability oracle (no pointless queries).
+
+    Per row: weight x get_effective_capability_value(sheet, capability) — the agency
+    oracle (innate baseline + CharacterModifier + condition contributions + passive
+    grants). Summed across rows, then truncated toward zero ONCE via
+    ``_capability_point_allocation`` (matches CheckTypeCapabilityModifier.weight's
+    help_text), analogous to how trait/aspect points truncate.
+
+    A character with no CharacterSheet (``sheet_data``) contributes 0 and never raises —
+    mirrors the guard in ``get_rollmod``.
+    """
+    capability_modifiers = list(
+        check_type.capability_modifiers.select_related("capability").all()  # type: ignore[attr-defined] — reverse FK manager from CheckTypeCapabilityModifier
+    )
+    if not capability_modifiers:
+        return 0
+
+    try:
+        character_sheet = character.sheet_data  # type: ignore[attr-defined] — ObjectDB typeclass extension
+    except (ObjectDoesNotExist, AttributeError):
+        return 0
+
+    total, _allocated = _capability_point_allocation(character_sheet, capability_modifiers)
     return total
 
 
@@ -648,6 +738,15 @@ def collect_check_modifiers(
             _character_and_equipment_contributions(character_sheet, check_type, scene)
         )
 
+    # --- CAPABILITY contributions (#2505) ---
+    # Authored CheckTypeCapabilityModifier rows. Shares the _capability_point_allocation
+    # helper with _calculate_capability_points (the roll path) so recorded provenance always
+    # sums to exactly what moved total_points, never independently re-derived. Reuses the
+    # isinstance guard: a mocked check_type has no real reverse ``capability_modifiers``
+    # manager.
+    if isinstance(check_type, _DjangoModel):
+        contributions.extend(_capability_contributions(character_sheet, check_type))
+
     # --- CALLER-SUPPLIED contributions (combat strain/affinity, effort, ...) ---
     # Appended last so the gathered condition/rollmod/scene ordering stays stable.
     if extra_contributions:
@@ -758,4 +857,38 @@ def _character_and_equipment_contributions(
                 )
             )
 
+    return contributions
+
+
+def _capability_contributions(
+    character_sheet: "CharacterSheet", check_type: "CheckType"
+) -> list[ModifierContribution]:
+    """CAPABILITY contributions from authored CheckTypeCapabilityModifier rows (#2505).
+
+    Uses ``_capability_point_allocation`` — the same helper ``_calculate_capability_points``
+    calls — so the per-row values recorded here (ModifierBreakdown / ConsequenceOutcomeModifier
+    provenance) always sum EXACTLY to the same truncated total that moved ``total_points`` on
+    the roll path. The truncated total is allocated back across rows by largest remainder
+    (see ``_capability_point_allocation`` docstring); zero-value rows are dropped only AFTER
+    that allocation. No authored rows -> no queries beyond ``check_type.capability_modifiers``
+    itself (the curated gate).
+    """
+    capability_modifiers = list(
+        check_type.capability_modifiers.select_related("capability").all()  # type: ignore[attr-defined] — reverse FK manager from CheckTypeCapabilityModifier
+    )
+    if not capability_modifiers:
+        return []
+
+    _total, allocated = _capability_point_allocation(character_sheet, capability_modifiers)
+
+    contributions: list[ModifierContribution] = []
+    for row, value in zip(capability_modifiers, allocated, strict=True):
+        if value != 0:
+            contributions.append(
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.CAPABILITY,
+                    source_label=f"Capability: {row.capability.name}",
+                    value=value,
+                )
+            )
     return contributions

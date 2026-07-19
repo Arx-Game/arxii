@@ -176,6 +176,10 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
     fixture JSON is fresh-DB/insert-or-resolve only.
     """
 
+    # Reverse-OneToOne safe accessor (#2386): this template's gem-type sidecar,
+    # or None if the template is not a gem type (Build 0b).
+    gem_type_or_none = ReverseOneToOneOrNone("gem_details")
+
     name = models.CharField(max_length=200, unique=True)
     description = models.TextField(
         blank=True,
@@ -335,6 +339,13 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text=(
             "Number of Style slots this template can carry. "
             "Plain items = 0 or 1; fine items = 2-3; ceremonial = 4-5."
+        ),
+    )
+    adornment_capacity = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Number of gems that can be set into this template as adornment (Build 0b). "
+            "A ring holds 1-2; a gem-covered table holds many; plain items = 0."
         ),
     )
     gear_archetype = models.CharField(
@@ -573,8 +584,10 @@ class ItemInstance(SharedMemoryModel):
     for custom names, descriptions, quality, and state.
     """
 
-    # Reverse-OneToOne safe accessor (#2386): missing row -> None.
+    # Reverse-OneToOne safe accessors (#2386): missing row -> None.
     building_permit_details_or_none = ReverseOneToOneOrNone("building_permit_details")
+    # A cut/graded gem instance (Build 0b) — None for non-gems.
+    gem_or_none = ReverseOneToOneOrNone("gem_instance_details")
 
     template = models.ForeignKey(
         ItemTemplate,
@@ -1842,6 +1855,16 @@ from world.items.crafting.models import (  # noqa: E402,F401
     CraftingRecipeConsequence,
     CraftingRecipeModifier,
     CraftingSkillCap,
+)
+
+# ---------------------------------------------------------------------------
+# Gems submodule (Build 0b) — gem value model
+# ---------------------------------------------------------------------------
+from world.items.gems.models import (  # noqa: E402,F401
+    Adornment,
+    GemDetails,
+    GemGrade,
+    GemInstanceDetails,
 )
 
 # ---------------------------------------------------------------------------

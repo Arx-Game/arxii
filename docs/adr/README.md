@@ -80,6 +80,7 @@ treat those names as hints to confirm, not gospel.
 
 ### Resolution
 - [0019 — Unified resolution: one roll path, data-sourced difficulty, graded outcomes](0019-unified-resolution-one-roll-path.md)
+- [0145 — Capabilities reach checks only through authored CheckTypeCapabilityModifier rows](0145-capability-check-links-are-authored-only.md) (extends ADR-0019; related ADR-0110; #2505)
 
 ### Process & workflow
 - [0020 — Feature specs live in the GitHub issue body, gated by labels](0020-feature-specs-live-in-the-issue-body.md)
@@ -171,6 +172,9 @@ treat those names as hints to confirm, not gospel.
 - [0139 — Staff world-builder shares the map-canvas layer; authority is the staff flag, not the GM ladder](0139-staff-world-builder-shares-the-map-canvas-layer-gated-by-staff-flag-not-gm-ladder.md) (epic #2436, #2449; follow-ups #2450/#2451/#2452)
 - [0140 — Grid content exports as graph-aware, per-area bundles keyed by permanent slugs](0140-grid-content-exports-as-graph-aware-area-bundles.md) (epic #2436, #2448; related ADR-0120/0121)
 - [0141 — Story-room access is a consent-first player-side join, not a GM summon](0141-story-room-access-is-player-side-join.md) (epic #2436, #2450; extends ADR-0024; related ADR-0139/0140)
+- [0143 — Canonical capability vocabulary is the 27-name union of wired + affordance sets](0143-canonical-capability-vocabulary-is-the-27-name-union.md) (#2503 spec phase 0; related `docs/architecture/capability-challenge-content.md`)
+- [0144 — Technique capability folding is max-not-sum, and prerequisite-free grants only](0144-technique-capability-folding-is-max-not-sum.md) (#2504; related ADR-0034)
+- [0146 — One unified Media model, not separate PlayerMedia/GameArt](0146-unified-media-model-not-player-plus-game-art.md) (#2408)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

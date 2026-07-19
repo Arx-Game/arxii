@@ -48,6 +48,7 @@ class ModifierTargetListSerializer(serializers.ModelSerializer):
     """Lighter serializer for list views."""
 
     category_name = serializers.CharField(source="category.name", read_only=True)
+    codex_entry_id = serializers.SerializerMethodField()
 
     class Meta:
         model = ModifierTarget
@@ -59,7 +60,25 @@ class ModifierTargetListSerializer(serializers.ModelSerializer):
             "description",
             "display_order",
             "is_active",
+            "codex_entry_id",
         ]
+
+    def get_codex_entry_id(self, obj) -> int | None:
+        """Return the Codex entry ID if this target's resonance has one.
+
+        The GiftStage resonance picker reads ModifierTarget rows (category=resonance).
+        Each has a ``target_resonance`` OneToOne → ``magic.Resonance``, which now
+        carries a ``codex_entry`` FK.
+        """
+        from world.magic.models import Resonance  # noqa: PLC0415
+
+        try:
+            resonance = obj.target_resonance
+        except Resonance.DoesNotExist:
+            return None
+        if resonance is None:
+            return None
+        return resonance.codex_entry_id
 
 
 class ModifierSourceSerializer(serializers.ModelSerializer):

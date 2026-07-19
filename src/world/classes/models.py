@@ -118,6 +118,14 @@ class Path(NaturalKeyMixin, SharedMemoryModel):
         return list(self.path_aspects.select_related("aspect").all())
 
     @cached_property
+    def cached_codex_grants(self) -> list:
+        """Codex grants — the Prefetch/query shared interface (#2386).
+
+        Authored content: negligible staleness on the identity-mapped row.
+        """
+        return list(self.codex_grants.all())
+
+    @cached_property
     def cached_parent_paths(self) -> list["Path"]:
         """
         Get parent paths for this path.

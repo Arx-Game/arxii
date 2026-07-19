@@ -19,6 +19,11 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionTemplateFactory,
 )
+from world.magic.factories import (
+    CharacterTechniqueFactory,
+    TechniqueCapabilityGrantFactory,
+    TechniqueFactory,
+)
 from world.mechanics.factories import (
     ApplicationFactory,
     ChallengeApproachFactory,
@@ -149,3 +154,38 @@ class ChallengeOptionsForCharacterTests(TestCase):
         by_approach = {o.approach.pk: o for o in options}
         self.assertIn(miracle.pk, by_approach)
         self.assertTrue(by_approach[miracle.pk].auto_succeeds)
+
+
+class ChallengeOptionsTechniqueGrantTests(TestCase):
+    """#2504: journey B — an approach's capability requirement can be met by
+    a technique-granted capability (folded into
+    ``get_effective_capability_value`` by the agency oracle), not only
+    conditions/innate baseline (see
+    ``test_qualifies_via_non_condition_capability_source`` above for the
+    innate-baseline direction). Exercises the real
+    ``challenge_options_for_character`` service path."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.challenge = ChallengeTemplateFactory(name="tf-The Vault")
+        cls.cap = CapabilityTypeFactory(name="tf-lockpicking", innate_baseline=0)
+        cls.technique = TechniqueFactory(name="tf-Arcane Unlock", intensity=1)
+        cls.grant = TechniqueCapabilityGrantFactory(
+            technique=cls.technique, capability=cls.cap, base_value=5, intensity_multiplier=0
+        )
+        cls.approach = ChallengeApproachFactory(
+            challenge_template=cls.challenge,
+            application=ApplicationFactory(name="tf-app-unlock", capability=cls.cap),
+            display_name="Unlock arcanely",
+        )
+        cls.character = CharacterFactory()
+        CharacterSheetFactory(character=cls.character)
+
+    def test_ineligible_for_bare_character(self) -> None:
+        options = challenge_options_for_character(self.challenge, self.character)
+        self.assertNotIn(self.approach.pk, {o.approach.pk for o in options})
+
+    def test_eligible_once_granting_technique_is_known(self) -> None:
+        CharacterTechniqueFactory(character=self.character.sheet_data, technique=self.technique)
+        options = challenge_options_for_character(self.challenge, self.character)
+        self.assertIn(self.approach.pk, {o.approach.pk for o in options})

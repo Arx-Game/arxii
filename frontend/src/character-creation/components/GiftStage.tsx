@@ -14,14 +14,10 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CodexTerm } from '@/codex/components/CodexTerm';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
 import { motion } from 'framer-motion';
 import { CheckCircle2 } from 'lucide-react';
@@ -188,23 +184,42 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
             <StepLabel label={FUNNEL_STEPS[3].label} complete={completion.resonance} />
           </AccordionTrigger>
           <AccordionContent>
-            <div className="max-w-xs space-y-2">
-              <Label htmlFor="gift-resonance">Gift Resonance</Label>
-              <Select
-                value={selectedResonanceId?.toString() ?? ''}
-                onValueChange={handleSelectResonance}
-              >
-                <SelectTrigger id="gift-resonance">
-                  <SelectValue placeholder="Select a resonance" />
-                </SelectTrigger>
-                <SelectContent>
-                  {resonances.map((resonance) => (
-                    <SelectItem key={resonance.id} value={resonance.id.toString()}>
-                      {resonance.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {resonances.map((resonance) => {
+                const isSelected = selectedResonanceId === resonance.id;
+                return (
+                  <Card
+                    key={resonance.id}
+                    onClick={() => handleSelectResonance(resonance.id.toString())}
+                    className={cn(
+                      'cursor-pointer transition-colors hover:bg-accent',
+                      isSelected && 'border-primary bg-accent'
+                    )}
+                  >
+                    <CardHeader className="p-3">
+                      <CardTitle className="flex items-center justify-between gap-2 text-sm">
+                        <span>
+                          {resonance.codex_entry_id != null ? (
+                            <CodexTerm entryId={resonance.codex_entry_id}>
+                              {resonance.name}
+                            </CodexTerm>
+                          ) : (
+                            resonance.name
+                          )}
+                        </span>
+                        {isSelected && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />}
+                      </CardTitle>
+                    </CardHeader>
+                    {resonance.description && (
+                      <CardContent className="px-3 pb-3 pt-0">
+                        <CardDescription className="text-xs">
+                          {resonance.description}
+                        </CardDescription>
+                      </CardContent>
+                    )}
+                  </Card>
+                );
+              })}
             </div>
           </AccordionContent>
         </AccordionItem>

@@ -403,15 +403,9 @@ class ResonanceSerializerTest(TestCase):
     """Tests for ResonanceSerializer with codex_entry_id."""
 
     def test_codex_entry_id_returns_id_when_linked(self):
-        """codex_entry_id returns the entry ID when modifier_target has a Codex entry."""
-        from world.mechanics.factories import ModifierTargetFactory
-
-        resonance = ResonanceFactory(name="Praedari")
-        target = ModifierTargetFactory(name="Praedari Target", target_resonance=resonance)
-        codex_entry = CodexEntryFactory(
-            name="Praedari Codex Entry",
-            modifier_target=target,
-        )
+        """codex_entry_id returns the entry ID when resonance has a codex_entry FK."""
+        codex_entry = CodexEntryFactory(name="Praedari Codex Entry")
+        resonance = ResonanceFactory(name="Praedari", codex_entry=codex_entry)
 
         serializer = ResonanceSerializer(resonance)
         data = serializer.data
@@ -419,7 +413,7 @@ class ResonanceSerializerTest(TestCase):
         self.assertEqual(data["codex_entry_id"], codex_entry.id)
 
     def test_codex_entry_id_returns_none_when_not_linked(self):
-        """codex_entry_id returns None when resonance has no modifier_target."""
+        """codex_entry_id returns None when resonance has no codex_entry."""
         resonance = ResonanceFactory(name="Umbral")
 
         serializer = ResonanceSerializer(resonance)

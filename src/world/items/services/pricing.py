@@ -18,10 +18,18 @@ if TYPE_CHECKING:
 def appraise(instance: ItemInstance) -> int:
     """Estimate an item's worth in coppers (#2243).
 
-    ``template.value`` scaled by the item's quality tier's ``stat_multiplier``,
-    plus its material construction value (``lore_value``). A shoddy item is worth
-    its base; a masterwork is worth a multiple; rich materials add on top.
+    For a **gem** (an instance with a ``GemInstanceDetails`` sidecar, Build 0b), worth
+    is ``template.value × size × purity × cut`` — the gem grade multipliers replace the
+    quality-tier multiplier. Otherwise: ``template.value`` scaled by the item's quality
+    tier's ``stat_multiplier``. Either way, material construction value (``lore_value``)
+    is added on top.
     """
+    material = instance.lore_value or 0
+    gem = instance.gem_or_none
+    if gem is not None:
+        from world.items.gems.services import compute_gem_worth  # noqa: PLC0415
+
+        return compute_gem_worth(gem) + material
     base = instance.template.value
     tier = instance.quality_tier
     # ``stat_multiplier`` is a DecimalField but can be a plain float in memory
@@ -29,5 +37,4 @@ def appraise(instance: ItemInstance) -> int:
     # codebase does (ItemInstance.quality_multiplier) so ``Decimal * float`` never
     # raises TypeError.
     multiplier = Decimal(str(tier.stat_multiplier)) if tier is not None else Decimal(1)
-    material = instance.lore_value or 0
     return int((Decimal(base) * multiplier).to_integral_value()) + material

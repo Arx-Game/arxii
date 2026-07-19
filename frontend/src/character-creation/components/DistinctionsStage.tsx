@@ -416,7 +416,13 @@ function DistinctionDetailPanel({ distinction }: { distinction: Distinction | nu
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium">{distinction.name}</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                {distinction.codex_entry_ids?.length > 0 ? (
+                  <CodexTerm entryId={distinction.codex_entry_ids[0]}>{distinction.name}</CodexTerm>
+                ) : (
+                  distinction.name
+                )}
+              </CardTitle>
               <Badge variant="outline" className="text-xs">
                 {formatCost(distinction.cost_per_rank)}
               </Badge>
@@ -479,7 +485,13 @@ function DistinctionCard({
     >
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-sm font-medium">{distinction.name}</CardTitle>
+          <CardTitle className="text-sm font-medium">
+            {distinction.codex_entry_ids?.length > 0 ? (
+              <CodexTerm entryId={distinction.codex_entry_ids[0]}>{distinction.name}</CodexTerm>
+            ) : (
+              distinction.name
+            )}
+          </CardTitle>
           <div className="flex items-center gap-1">
             {isSelected && <Check className="h-4 w-4 text-primary" />}
             {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
@@ -554,18 +566,11 @@ interface EffectBadgeProps {
 }
 
 /**
- * Renders an effect badge with optional CodexTerm link.
- * If the effect has a codex_entry_id, the text becomes clickable
- * to open the Codex modal for that term.
+ * Renders an effect badge.
+ * Per-effect codex links were removed in #2477; distinction-level lore
+ * now comes from codex_entry_ids on the Distinction itself.
  */
 function EffectBadge({ effect }: EffectBadgeProps) {
-  if (effect.codex_entry_id) {
-    return (
-      <Badge variant="secondary" className="text-xs">
-        <CodexTerm entryId={effect.codex_entry_id}>{effect.text}</CodexTerm>
-      </Badge>
-    );
-  }
   return (
     <Badge variant="secondary" className="text-xs">
       {effect.text}

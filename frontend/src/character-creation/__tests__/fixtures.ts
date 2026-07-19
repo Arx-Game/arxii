@@ -42,6 +42,7 @@ export const mockBeginnings: Beginnings = {
   grants_species_languages: true,
   cg_point_cost: 0,
   is_accessible: true,
+  codex_entry_ids: [],
 };
 
 export const mockBeginningsUnknownFamily: Beginnings = {
@@ -54,6 +55,7 @@ export const mockBeginningsUnknownFamily: Beginnings = {
   grants_species_languages: false,
   cg_point_cost: 0,
   is_accessible: true,
+  codex_entry_ids: [],
 };
 
 // =============================================================================
@@ -102,6 +104,7 @@ export const mockSpeciesHuman: Species = {
   name: 'Human',
   description: 'The most common species in the realm.',
   stat_bonuses: { strength: 1 },
+  codex_entry_id: null,
 };
 
 export const mockSpeciesElf: Species = {
@@ -109,6 +112,7 @@ export const mockSpeciesElf: Species = {
   name: 'Elf',
   description: 'Long-lived and graceful beings.',
   stat_bonuses: { agility: 1, intellect: 1 },
+  codex_entry_id: null,
 };
 
 export const mockSpeciesDwarf: Species = {
@@ -116,6 +120,7 @@ export const mockSpeciesDwarf: Species = {
   name: 'Dwarf',
   description: 'Stout and hardy folk.',
   stat_bonuses: { stamina: 1, willpower: 1 },
+  codex_entry_id: null,
 };
 
 export const mockSpeciesList: Species[] = [mockSpeciesHuman, mockSpeciesElf, mockSpeciesDwarf];
@@ -427,6 +432,7 @@ export const mockResonances: Resonance[] = [
     is_active: true,
     opposite: null,
     resonance_affinity: 'abyssal',
+    codex_entry_id: null,
   },
   {
     id: 2,
@@ -438,6 +444,7 @@ export const mockResonances: Resonance[] = [
     is_active: true,
     opposite: null,
     resonance_affinity: 'primal',
+    codex_entry_id: null,
   },
 ];
 
@@ -480,6 +487,7 @@ export const mockPath: Path = {
   icon_url: null,
   icon_name: 'compass',
   aspects: ['Wanderlust'],
+  codex_entry_ids: [],
 };
 
 export const mockTradition: Tradition = {

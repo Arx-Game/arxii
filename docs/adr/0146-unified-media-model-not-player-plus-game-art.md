@@ -1,4 +1,4 @@
-# ADR-0143: One unified `Media` model, not separate `PlayerMedia`/`GameArt`
+# ADR-0146: One unified `Media` model, not separate `PlayerMedia`/`GameArt`
 
 ## Status
 

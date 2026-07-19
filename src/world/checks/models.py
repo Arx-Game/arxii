@@ -116,6 +116,42 @@ class CheckTypeTrait(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.check_type.name}: {self.trait.name} ({self.weight}x)"
 
 
+class CheckTypeCapabilityModifier(NaturalKeyMixin, SharedMemoryModel):
+    """Weighted capability contribution to a check type."""
+
+    check_type = models.ForeignKey(
+        CheckType,
+        on_delete=models.CASCADE,
+        related_name="capability_modifiers",
+    )
+    capability = models.ForeignKey(
+        "conditions.CapabilityType",
+        on_delete=models.CASCADE,
+        related_name="check_type_modifiers",
+    )
+    weight = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=1.0,
+        help_text=(
+            "Multiplier applied to the character's effective capability value. "
+            "Per-check contribution is int(sum of weight x value) truncated toward zero."
+        ),
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["check_type", "capability"]
+        dependencies = ["checks.CheckType", "conditions.CapabilityType"]
+
+    class Meta:
+        unique_together = ["check_type", "capability"]
+
+    def __str__(self):
+        return f"{self.check_type.name}: {self.capability.name} ({self.weight}x)"
+
+
 class CheckTypeAspect(NaturalKeyMixin, SharedMemoryModel):
     """Weighted aspect relevance for a check type."""
 

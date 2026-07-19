@@ -268,7 +268,7 @@ Web-only surface: compose at `/profile/mail` or in-scene via `SendLetterDialog` 
 ## Integration Points
 
 - **PlayerData** (`evennia_extensions.PlayerData`): Extends AccountDB with `player_data` reverse relation; tenures link to PlayerData, not AccountDB directly
-- **Media** (`evennia_extensions.Media`, renamed from `PlayerMedia` #2408): Actual media storage (player uploads and staff-authored art, derived by `player_data` nullability — see ADR-0143); TenureMedia bridges to character tenures
+- **Media** (`evennia_extensions.Media`, renamed from `PlayerMedia` #2408): Actual media storage (player uploads and staff-authored art, derived by `player_data` nullability — see ADR-0146); TenureMedia bridges to character tenures
 - **Scenes System**: Personas reference characters via ObjectDB, which have `roster_entry` for identity resolution
 - **Character Creation**: `Family` and `FamilyMember` used during CG for family selection; families filtered by `origin_realm`
 
