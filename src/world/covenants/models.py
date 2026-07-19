@@ -17,6 +17,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.covenants.constants import (
     MENTOR_BOND_ADJACENCY_OFFSET,
     MENTOR_BOND_BAND_WIDTH,
@@ -225,7 +226,11 @@ class Covenant(SharedMemoryModel):
         return f"{self.name} ({self.get_covenant_type_display()}, {state})"
 
 
-class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
+class CovenantRoleManager(NaturalKeyManager):
+    """Manager for CovenantRole with natural key support."""
+
+
+class CovenantRole(NaturalKeyMixin, AbstractSpecializedVariant, SharedMemoryModel):
     """A role that a character can hold within a covenant.
 
     Lookup table — staff-authored, cached via SharedMemoryModel.
@@ -333,6 +338,8 @@ class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
         ),
     )
 
+    objects = CovenantRoleManager()
+
     @cached_property
     def cached_sub_roles(self) -> list:
         """Sub-roles for this role. Supports Prefetch(to_attr=).
@@ -421,6 +428,9 @@ class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
                 name="covenant_subrole_unique_per_parent_resonance_level",
             ),
         ]
+
+    class NaturalKeyConfig:
+        fields = ["slug"]
 
     def _clean_subrole(self) -> None:
         if self.unlock_thread_level == 0:
@@ -904,7 +914,11 @@ class VowGearScaling(SharedMemoryModel):
         )
 
 
-class CovenantRoleActionScaling(SharedMemoryModel):
+class CovenantRoleActionScalingManager(NaturalKeyManager):
+    """Manager for CovenantRoleActionScaling with natural key support."""
+
+
+class CovenantRoleActionScaling(NaturalKeyMixin, SharedMemoryModel):
     """Authored per-role scaling for universal combat actions (#2529, was #2022).
 
     Keyed by ``(covenant_role, action_key)``. A Bulwark's interpose scales by
@@ -936,6 +950,8 @@ class CovenantRoleActionScaling(SharedMemoryModel):
         ),
     )
 
+    objects = CovenantRoleActionScalingManager()
+
     class Meta:
         ordering = ["action_key", "covenant_role__slug"]
         constraints = [
@@ -944,6 +960,10 @@ class CovenantRoleActionScaling(SharedMemoryModel):
                 name="covenant_role_action_scaling_unique",
             ),
         ]
+
+    class NaturalKeyConfig:
+        fields = ["covenant_role", "action_key"]
+        dependencies = ["covenants.CovenantRole"]
 
     def __str__(self) -> str:
         return (

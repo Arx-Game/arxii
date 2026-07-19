@@ -77,6 +77,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "conditions.conditionstage",
         "conditions.conditiontemplate",
         "conditions.damagetype",
+        # covenants
+        "covenants.covenantrole",
+        "covenants.covenantroleactionscaling",
         # distinctions
         "distinctions.distinction",
         "distinctions.distinctioncategory",
