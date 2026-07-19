@@ -25,6 +25,15 @@ def _make_room(key: str):
     return evennia_create.create_object(typeclass="typeclasses.rooms.Room", key=key, nohome=True)
 
 
+def _make_account_for(sheet):
+    from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
+
+    player_data = PlayerDataFactory()
+    entry = RosterEntryFactory(character_sheet=sheet)
+    RosterTenureFactory(roster_entry=entry, player_data=player_data)
+    return player_data.account
+
+
 class CeremonyActionJourneyTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
@@ -178,5 +187,70 @@ class RespondSeanceOfferActionTests(TestCase):
         result = RespondSeanceOfferAction().run(
             actor=None, account=self.player_data.account, offer_id=None, accept=True
         )
+
+        self.assertFalse(result.success)
+
+
+class GhostWindowSeanceContainerTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.vitals.constants import CharacterLifeState
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.SEANCE, name="Seance")
+        cls.seance_room = _make_room("Seance Room")
+        cls.location = RoomProfileFactory(objectdb=cls.seance_room)
+
+        officiant_sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=officiant_sheet)
+        being = WorshippedBeingFactory()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=being)
+        cls.officiant_persona = officiant_sheet.primary_persona
+
+        cls.dead_sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(
+            character_sheet=cls.dead_sheet,
+            life_state=CharacterLifeState.DEAD,
+            died_at=timezone.now() - timezone.timedelta(days=30),
+        )
+        cls.ghost = cls.dead_sheet.character
+
+    def test_ghost_may_emit_during_open_accepted_seance(self) -> None:
+        from world.ceremonies.services import open_ceremony, respond_to_seance_offer
+
+        ceremony = open_ceremony(
+            officiant_persona=self.officiant_persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[self.dead_sheet],
+            location_profile=self.location,
+        )
+        offer = ceremony.honorees.get(honoree_sheet=self.dead_sheet).seance_offer
+        account = _make_account_for(self.dead_sheet)
+        respond_to_seance_offer(offer, account=account, accept=True)
+
+        # Fetch the ghost fresh rather than reusing `self.ghost`: Django's
+        # `TestCase.setUpTestData` hands out `copy.deepcopy` snapshots of class-level
+        # fixtures on first per-test access (`django.test.testcases.TestData`), so
+        # `self.ghost` would carry whatever in-memory `.location` it had *before*
+        # `respond_to_seance_offer`'s `move_to` call, not the post-move DB state.
+        from evennia.objects.models import ObjectDB
+
+        ghost = ObjectDB.objects.get(pk=self.ghost.pk)
+        result = EmitAction().run(actor=ghost, text="A voice from beyond.")
+
+        self.assertTrue(result.success, result.message)
+
+    def test_ghost_cannot_emit_without_accepted_offer(self) -> None:
+        from world.ceremonies.services import open_ceremony
+
+        open_ceremony(
+            officiant_persona=self.officiant_persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[self.dead_sheet],
+            location_profile=self.location,
+        )
+        self.ghost.move_to(self.seance_room, quiet=True)
+
+        result = EmitAction().run(actor=self.ghost, text="Silence.")
 
         self.assertFalse(result.success)

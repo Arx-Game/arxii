@@ -773,18 +773,19 @@ class HasCompanionCapacityPrerequisite(Prerequisite):
 class GhostWindowPrerequisite(Prerequisite):
     """Bound a dead character's emit/pose to recognized containers (#2287).
 
-    Alive actors always pass. A dead actor passes while either container is
+    Alive actors always pass. A dead actor passes while any container is
     open:
 
     - the scene they died in is still active and they are at its location,
     - an OPEN funeral honoring them is underway at their location (#2289), or
     - the current IC day matches the IC day of their death (real-day fallback
-      when no game clock exists).
-
-    The seance container is the later issue's hook (#2290).
+      when no game clock exists), or
+    - an ACCEPTED seance offer whose ceremony is OPEN, at the ceremony's location (#2393).
     """
 
-    def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
+    def is_met(  # noqa: PLR0911
+        self, actor, target=None, context=None
+    ) -> tuple[bool, str]:
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
         from world.ceremonies.services import open_funeral_for  # noqa: PLC0415
@@ -804,6 +805,8 @@ class GhostWindowPrerequisite(Prerequisite):
         if funeral is not None and actor.location == funeral.location.objectdb:
             return True, ""
         if _same_ic_day_as_now(vitals.died_at):
+            return True, ""
+        if _seance_container_open(actor, sheet):
             return True, ""
         return False, "The scene of your death has closed; your voice is spent."
 
@@ -827,3 +830,22 @@ def _same_ic_day_as_now(died_at: Any) -> bool:
     if ic_now is not None and died_ic is not None:
         return died_ic.date() == ic_now.date()
     return died_at.date() == timezone.now().date()
+
+
+def _seance_container_open(actor: Any, sheet: Any) -> bool:
+    """True when an ACCEPTED seance offer's ceremony is OPEN at the actor's location (#2393)."""
+    from world.ceremonies.constants import CeremonyStatus, SeanceOfferStatus  # noqa: PLC0415
+    from world.ceremonies.models import SeanceManifestationOffer  # noqa: PLC0415
+
+    offer = (
+        SeanceManifestationOffer.objects.filter(
+            ceremony_honoree__honoree_sheet=sheet,
+            status=SeanceOfferStatus.ACCEPTED,
+            ceremony_honoree__ceremony__status=CeremonyStatus.OPEN,
+        )
+        .select_related("ceremony_honoree__ceremony__location")
+        .first()
+    )
+    if offer is None:
+        return False
+    return actor.location == offer.ceremony_honoree.ceremony.location.objectdb
