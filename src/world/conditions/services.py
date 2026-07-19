@@ -1286,6 +1286,48 @@ def expire_end_of_combat_conditions(
     return removed
 
 
+@transaction.atomic
+def expire_scene_scoped_conditions(
+    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM
+) -> list[ConditionTemplate]:
+    """Remove all SCENE-duration conditions from the given targets.
+
+    Called when a scene finishes (see ``finish_scene_full`` in
+    ``world.scenes.scene_admin_services``). Mirrors
+    ``expire_end_of_combat_conditions``: queries by
+    ``condition__default_duration_type=DurationType.SCENE`` and calls
+    ``remove_condition`` per instance so the full teardown fires
+    (CONDITION_REMOVED reactive event, stories notification, deferred-death
+    resolution). Suppressed instances are included.
+
+    Idempotent: targets with no SCENE-duration conditions are no-ops, so it
+    composes safely with system-specific sweeps that already removed their own
+    scene-scoped state.
+
+    Args:
+        targets: ObjectDB instances to sweep (scene participants). ``None``
+            entries are ignored.
+
+    Returns:
+        The list of removed ConditionTemplates.
+    """
+    target_list = [t for t in targets if t is not None]
+    if not target_list:
+        return []
+
+    instances = ConditionInstance.objects.filter(
+        target_id__in=[t.pk for t in target_list],
+        condition__default_duration_type=DurationType.SCENE,
+    ).select_related("condition", "target")
+
+    removed: list[ConditionTemplate] = []
+    for instance in instances:
+        was_removed = remove_condition(instance.target, instance.condition, include_suppressed=True)
+        if was_removed:
+            removed.append(instance.condition)
+    return removed
+
+
 # =============================================================================
 # Interaction Processing
 # =============================================================================

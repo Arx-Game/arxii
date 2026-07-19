@@ -2660,6 +2660,7 @@
 - `ensure_conditions_content() -> None — Idempotently seed all core conditions content.`
 - `ensure_poison_content() -> None — Idempotently seed poison content (#1050).`
 - `expire_end_of_combat_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all UNTIL_END_OF_COMBAT conditions from the given targets.`
+- `expire_scene_scoped_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all SCENE-duration conditions from the given targets (#2514).`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
