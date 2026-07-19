@@ -159,9 +159,22 @@ class ContentExportTests(TestCase):
         """A small authored mission graph exports and reloads as a no-op (#2470).
 
         Exercises 2+ MissionOptionRouteReward rows and 2+ MissionRenownAward
-        rows sharing the same parent route (the exact sequence-collision
-        scenario a whole-branch review flagged — see models.py save()) plus a
-        MissionOptionRouteCandidate, so all three natural keys round-trip.
+        rows sharing the same parent route, plus a MissionOptionRouteCandidate,
+        so all three natural keys round-trip.
+
+        NOTE (re-review, #2470): this test verifies pipeline SHAPE only — rows
+        here are created before export and never deleted before reimport, so
+        ``load_entries``'s ``update_or_create(**lookup, defaults=fields)``
+        always matches an existing row and takes the UPDATE branch.
+        ``save()``'s ``if self.pk is None:`` guard (the actual sequence
+        auto-assign fix in models.py) is a no-op on updates, so this test does
+        NOT exercise it and would pass identically against the pre-fix
+        formula. The real proof that save() auto-assigns correctly under the
+        adversarial explicit-then-auto-assign ordering lives in
+        ``world/missions/tests/test_sequence_auto_assign.py``, which calls
+        save() directly and does not go through this pipeline. This test is
+        kept as legitimate (if narrower) coverage that multiple rows per
+        parent survive an export/import round trip unchanged.
         """
         from world.missions.factories import (
             MissionNodeFactory,
