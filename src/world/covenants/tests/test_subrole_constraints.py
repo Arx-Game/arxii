@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from world.covenants.constants import CovenantType, RoleArchetype
+from world.covenants.constants import CovenantType
 from world.covenants.factories import (
     CovenantRoleFactory,
     SubroleCovenantRoleFactory,
@@ -24,7 +24,9 @@ class SubroleCleanValidationTests(TestCase):
             resonance=None,
             unlock_thread_level=3,
             covenant_type=parent.covenant_type,
-            archetype=parent.archetype,
+            sword_weight=0,
+            shield_weight=0,
+            crown_weight=0,
         )
         with self.assertRaises(ValidationError):
             role.full_clean()
@@ -58,7 +60,9 @@ class SubroleCleanValidationTests(TestCase):
             resonance=resonance,
             unlock_thread_level=3,
             covenant_type=parent.covenant_type,
-            archetype=parent.archetype,
+            sword_weight=0,
+            shield_weight=0,
+            crown_weight=0,
         )
         role.full_clean()  # should not raise
 
@@ -82,7 +86,9 @@ class SubroleCleanValidationTests(TestCase):
             resonance=resonance,
             unlock_thread_level=0,
             covenant_type=parent.covenant_type,
-            archetype=parent.archetype,
+            sword_weight=0,
+            shield_weight=0,
+            crown_weight=0,
         )
         with self.assertRaises(ValidationError) as ctx:
             role.full_clean()
@@ -97,26 +103,30 @@ class SubroleCleanValidationTests(TestCase):
             resonance=resonance,
             unlock_thread_level=3,
             covenant_type=CovenantType.BATTLE,
-            archetype=parent.archetype,
+            sword_weight=0,
+            shield_weight=0,
+            crown_weight=0,
         )
         with self.assertRaises(ValidationError) as ctx:
             role.full_clean()
         self.assertIn("covenant_type", ctx.exception.message_dict)
 
-    def test_archetype_must_match_parent(self) -> None:
-        """Sub-role archetype differs from parent → invalid."""
-        parent = CovenantRoleFactory(archetype=RoleArchetype.SWORD)
+    def test_sub_role_blend_weights_are_rejected(self) -> None:
+        """Sub-role setting any blend weight → invalid (#2529: blend lives on parent only)."""
+        parent = CovenantRoleFactory()
         resonance = ResonanceFactory()
         role = CovenantRoleFactory.build(
             parent_role=parent,
             resonance=resonance,
             unlock_thread_level=3,
             covenant_type=parent.covenant_type,
-            archetype=RoleArchetype.SHIELD,
+            sword_weight=1,
+            shield_weight=0,
+            crown_weight=0,
         )
         with self.assertRaises(ValidationError) as ctx:
             role.full_clean()
-        self.assertIn("archetype", ctx.exception.message_dict)
+        self.assertIn("sword_weight", ctx.exception.message_dict)
 
     def test_single_depth_inheritance_enforced(self) -> None:
         """parent_role itself already has a parent_role → sub-sub-role forbidden."""
@@ -124,7 +134,6 @@ class SubroleCleanValidationTests(TestCase):
         parent = SubroleCovenantRoleFactory(
             parent_role=grandparent,
             covenant_type=grandparent.covenant_type,
-            archetype=grandparent.archetype,
         )
         resonance = ResonanceFactory()
         role = CovenantRoleFactory.build(
@@ -132,7 +141,9 @@ class SubroleCleanValidationTests(TestCase):
             resonance=resonance,
             unlock_thread_level=3,
             covenant_type=parent.covenant_type,
-            archetype=parent.archetype,
+            sword_weight=0,
+            shield_weight=0,
+            crown_weight=0,
         )
         with self.assertRaises(ValidationError) as ctx:
             role.full_clean()
@@ -151,14 +162,12 @@ class SubroleUniqueConstraintTests(TestCase):
             resonance=resonance,
             unlock_thread_level=3,
             covenant_type=parent.covenant_type,
-            archetype=parent.archetype,
         )
         with self.assertRaises(IntegrityError), transaction.atomic():
             CovenantRole.objects.create(
                 name="Different Name",
                 slug="different-slug",
                 covenant_type=parent.covenant_type,
-                archetype=parent.archetype,
                 speed_rank=parent.speed_rank,
                 parent_role=parent,
                 resonance=resonance,
@@ -174,14 +183,12 @@ class SubroleUniqueConstraintTests(TestCase):
             resonance=resonance,
             unlock_thread_level=3,
             covenant_type=parent.covenant_type,
-            archetype=parent.archetype,
         )
         # Different level should not conflict
         higher_tier = CovenantRole.objects.create(
             name="Higher Tier",
             slug="higher-tier",
             covenant_type=parent.covenant_type,
-            archetype=parent.archetype,
             speed_rank=parent.speed_rank,
             parent_role=parent,
             resonance=resonance,

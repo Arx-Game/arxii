@@ -156,7 +156,7 @@ class ComboSlotArchetypeTests(TestCase):
         cov = CovenantFactory(name="ArchComboCov", covenant_type=CovenantType.DURANCE)
         sword_role = CovenantRoleFactory(
             covenant_type=CovenantType.DURANCE,
-            archetype=RoleArchetype.SWORD,
+            sword_weight=1,
         )
         from evennia_extensions.factories import ObjectDBFactory
         from world.covenants.services import set_engaged_membership

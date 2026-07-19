@@ -8,6 +8,7 @@ membership, progression) is future work.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
@@ -258,10 +259,26 @@ class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
         default=CovenantType.DURANCE,
         help_text="Which covenant type this role belongs to.",
     )
-    archetype = models.CharField(
-        max_length=20,
-        choices=RoleArchetype.choices,
-        help_text="Foundational archetype: Sword (offense), Shield (defense), Crown (support).",
+    sword_weight = models.DecimalField(
+        max_digits=4,
+        decimal_places=3,
+        default=0,
+        help_text=(
+            "SWORD axis of the combat-identity blend (0-1). Weights are stored on "
+            "primary roles only; sub-roles read the parent's blend (#2529)."
+        ),
+    )
+    shield_weight = models.DecimalField(
+        max_digits=4,
+        decimal_places=3,
+        default=0,
+        help_text="SHIELD axis of the combat-identity blend (0-1).",
+    )
+    crown_weight = models.DecimalField(
+        max_digits=4,
+        decimal_places=3,
+        default=0,
+        help_text="CROWN axis of the combat-identity blend (0-1).",
     )
     speed_rank = models.PositiveIntegerField(
         help_text="Combat resolution order. Lower is faster (1 = fastest).",
@@ -323,6 +340,22 @@ class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
         To invalidate: ``del instance.cached_sub_roles``.
         """
         return list(self.sub_roles.all())
+
+    def blend_weight_for(self, axis: str) -> Decimal:
+        """Return this role's blend weight for a SWORD/SHIELD/CROWN axis (#2529).
+
+        Sub-roles carry no weights of their own — the blend always reads from
+        the primary (parent) role, so specialization can never drift the
+        combat-identity blend (ADR-0055: sub-roles specialize by resonance).
+        """
+        source = self.parent_role if self.parent_role_id is not None else self
+        if axis == RoleArchetype.SWORD:
+            return source.sword_weight
+        if axis == RoleArchetype.SHIELD:
+            return source.shield_weight
+        if axis == RoleArchetype.CROWN:
+            return source.crown_weight
+        return Decimal(0)
 
     @classmethod
     def _variant_queryset(
@@ -399,9 +432,14 @@ class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
             raise ValidationError(
                 {"covenant_type": "Sub-role covenant_type must match parent_role.covenant_type."}
             )
-        if parent.archetype != self.archetype:
+        if self.sword_weight or self.shield_weight or self.crown_weight:
             raise ValidationError(
-                {"archetype": "Sub-role archetype must match parent_role.archetype."}
+                {
+                    "sword_weight": (
+                        "Sub-roles must not set blend weights — the blend lives on "
+                        "the parent role (#2529)."
+                    )
+                }
             )
         if parent.parent_role_id is not None:
             raise ValidationError(
@@ -422,6 +460,20 @@ class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
                 {
                     "unlock_thread_level": (
                         "Primary roles (no parent_role/resonance) must have unlock_thread_level=0."
+                    )
+                }
+            )
+        for field in ("sword_weight", "shield_weight", "crown_weight"):
+            value = getattr(self, field)
+            if value < 0 or value > 1:
+                raise ValidationError({field: "Blend weights must be between 0 and 1."})
+        total = self.sword_weight + self.shield_weight + self.crown_weight
+        if abs(total - Decimal(1)) > Decimal("0.01"):
+            raise ValidationError(
+                {
+                    "sword_weight": (
+                        f"Blend weights must sum to 1.0 (got {total}). "
+                        "Adjust sword/shield/crown weights."
                     )
                 }
             )
@@ -852,29 +904,27 @@ class VowGearScaling(SharedMemoryModel):
         )
 
 
-class ArchetypeActionScaling(SharedMemoryModel):
-    """Authored archetype-driven scaling for universal combat actions (#2022).
+class CovenantRoleActionScaling(SharedMemoryModel):
+    """Authored per-role scaling for universal combat actions (#2529, was #2022).
 
-    Keyed by ``(action_key, role_archetype)``. A SHIELD role's interpose
-    scales by the COVENANT_ROLE thread level; a CROWN role's rally scales;
-    a SWORD role's strikes gain a rider. Null = no scaling (the action works
-    as today for unroled characters).
-
-    The scaling is a ``thread_level_multiplier`` — the bonus applied per
-    COVENANT_ROLE thread level when the actor's engaged ``CovenantRole`` has
-    the matching archetype.
+    Keyed by ``(covenant_role, action_key)``. A Bulwark's interpose scales by
+    the COVENANT_ROLE thread level; a Luminary's rally scales. Roles without a
+    row contribute 0 (the action works at base). Replaced the archetype-keyed
+    ``ArchetypeActionScaling`` when the single-archetype enum became the
+    SWORD/SHIELD/CROWN blend; ``cast_technique`` scaling moved to the blend
+    power term (``covenant_role_blend_power_term``).
     """
 
+    covenant_role = models.ForeignKey(
+        CovenantRole,
+        on_delete=models.CASCADE,
+        related_name="action_scalings",
+    )
     action_key = models.CharField(
         max_length=50,
         help_text=(
-            "The Action.key this scaling applies to (e.g. 'combat_interpose', "
-            "'cast_technique', 'combat_rally')."
+            "The Action.key this scaling applies to (e.g. 'combat_interpose', 'combat_rally')."
         ),
-    )
-    role_archetype = models.CharField(
-        max_length=20,
-        choices=RoleArchetype.choices,
     )
     thread_level_multiplier = models.DecimalField(
         max_digits=5,
@@ -887,18 +937,17 @@ class ArchetypeActionScaling(SharedMemoryModel):
     )
 
     class Meta:
-        ordering = ["action_key", "role_archetype"]
+        ordering = ["action_key", "covenant_role__slug"]
         constraints = [
             models.UniqueConstraint(
-                fields=["action_key", "role_archetype"],
-                name="archetype_action_scaling_unique",
+                fields=["covenant_role", "action_key"],
+                name="covenant_role_action_scaling_unique",
             ),
         ]
 
     def __str__(self) -> str:
         return (
-            f"{self.action_key} + {self.get_role_archetype_display()}: "
-            f"×{self.thread_level_multiplier}/level"
+            f"{self.action_key} + {self.covenant_role.name}: ×{self.thread_level_multiplier}/level"
         )
 
 

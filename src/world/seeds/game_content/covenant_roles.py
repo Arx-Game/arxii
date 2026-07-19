@@ -1,6 +1,6 @@
-"""Role catalog seed for vows as combat roles (#2022).
+"""Role catalog seed for vows as combat roles (#2022, updated #2529).
 
-Seeds the granted gifts, granted capabilities, and archetype action scaling
+Seeds the granted gifts, granted capabilities, and per-role action scaling
 rows for the three canonical covenant roles (Vanguard/SWORD, Bulwark/SHIELD,
 Harmonizer/CROWN). The role rows themselves are created by
 ``seed_gear_archetype_compatibility`` in the items seed; this module
@@ -24,7 +24,7 @@ def seed_role_catalog_content() -> None:
     rows. For each role:
     - 1 granted Gift (MINOR) with 2 starter Techniques
     - 2 granted CapabilityTypes
-    - 1 ArchetypeActionScaling row for the role's signature action
+    - 1 CovenantRoleActionScaling row for the role's signature action
 
     All idempotent via get_or_create.
     """
@@ -48,7 +48,7 @@ def seed_role_catalog_content() -> None:
 
         _ensure_role_gift_and_techniques(role)
         _ensure_role_capabilities(role, archetype)
-        _ensure_archetype_scaling(archetype)
+        _ensure_role_action_scaling(role, archetype)
 
 
 def _ensure_role_gift_and_techniques(role: CovenantRole) -> None:
@@ -132,11 +132,15 @@ def _ensure_role_capabilities(role: CovenantRole, archetype: str) -> None:
         role.granted_capabilities.add(cap)
 
 
-def _ensure_archetype_scaling(archetype: str) -> None:
-    """Create the ArchetypeActionScaling row for this role's signature action."""
+def _ensure_role_action_scaling(role: CovenantRole, archetype: str) -> None:
+    """Create the CovenantRoleActionScaling row for this role's signature action.
+
+    Re-keyed on ``covenant_role`` (was ``role_archetype``) by #2529 — the ``archetype``
+    param still selects which signature action this role gets.
+    """
     from decimal import Decimal  # noqa: PLC0415
 
-    from world.covenants.models import ArchetypeActionScaling  # noqa: PLC0415
+    from world.covenants.models import CovenantRoleActionScaling  # noqa: PLC0415
 
     # Each archetype's signature action:
     action_keys = {
@@ -148,8 +152,8 @@ def _ensure_archetype_scaling(archetype: str) -> None:
     if action_key is None:
         return
 
-    ArchetypeActionScaling.objects.get_or_create(
+    CovenantRoleActionScaling.objects.get_or_create(
+        covenant_role=role,
         action_key=action_key,
-        role_archetype=archetype,
         defaults={"thread_level_multiplier": Decimal("0.10")},
     )

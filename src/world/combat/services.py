@@ -3591,7 +3591,7 @@ def select_npc_actions(
     shield_participant_ids: set[int] = set()
     for p in active_participants:
         role = precedence_role_for_combat(p.character_sheet)
-        if role is not None and role.archetype == RoleArchetype.SHIELD:
+        if role is not None and role.blend_weight_for(RoleArchetype.SHIELD) > 0:
             shield_participant_ids.add(p.pk)
 
     actions: list[CombatOpponentAction] = []
@@ -4695,10 +4695,14 @@ def _action_matches_slot(
 
 
 def _participant_has_archetype(participant: CombatParticipant, archetype: str) -> bool:
-    """Return True if the participant's engaged CovenantRole has the given archetype (#2022)."""
+    """Return True if the participant's engaged CovenantRole blends the given axis.
+
+    #2529 (was #2022): reads the SWORD/SHIELD/CROWN blend via ``blend_weight_for``
+    instead of an exact archetype match.
+    """
 
     for role in participant.character_sheet.character.covenant_roles.currently_engaged_roles():
-        if role.archetype == archetype:
+        if role.blend_weight_for(archetype) > 0:
             return True
     return False
 

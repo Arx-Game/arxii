@@ -240,19 +240,17 @@ def enhancement_overlap_term(ctx: PowerTermContext) -> int:
 _ENHANCEMENT_OVERLAP_BONUS: int = 2
 
 
-def archetype_cast_scaling_term(ctx: PowerTermContext) -> int:
-    """Flat power bonus from archetype action scaling on cast_technique (#2022).
+def archetype_cast_scaling_term(ctx: PowerTermContext) -> int:  # noqa: ARG001
+    """Flat power bonus from the SWORD/SHIELD/CROWN blend on cast_technique (#2529, was #2022).
 
-    A SWORD-role character's declared techniques gain a small flat damage bonus
-    scaling with their COVENANT_ROLE thread level. This reads the
-    ``ArchetypeActionScaling`` row for ``("cast_technique", role_archetype)``
-    and returns ``int(thread_level * multiplier)``.
+    A SWORD-blended character's declared techniques gain a small flat damage
+    bonus scaling with their COVENANT_ROLE thread level.
+
+    Stub pending Task 2 (#2529): ``ctx`` is kept for the ``PowerTermProvider``
+    interface shape (see ``_PROVIDERS`` below).
     """
-    from world.covenants.services import archetype_action_scaling_bonus  # noqa: PLC0415
-
-    character = ctx.sheet.character
-    bonus = archetype_action_scaling_bonus(character, "cast_technique")
-    return int(bonus)
+    # Task 2 (#2529) rewrites this against covenant_role_blend_power_term.
+    return 0
 
 
 _PROVIDERS: list[PowerTermProvider] = [

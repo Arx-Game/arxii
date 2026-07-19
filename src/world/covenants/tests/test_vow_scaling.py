@@ -6,7 +6,9 @@ Covers the spec items that were missing from the prematurely-merged PR #2106:
 2. VowGearScaling — equipment effectiveness multiplier
 3. Role-source variant resolution — COVENANT_ROLE thread level for role-granted techniques
 4. Capability grant wiring — CovenantRole.granted_capabilities M2M read by the handler
-5. ArchetypeActionScaling — interpose partial-block scaling for SHIELD roles
+5. CovenantRoleActionScaling — interpose partial-block scaling for SHIELD-blended roles
+   (was ArchetypeActionScaling; #2529 Task 1 stubs the consumer to 0.0/0 pending Task 2's
+   blend rewrite — see the ArchetypeActionScalingTests docstring below)
 6. Enhancement overlap — flat bonus when enhancement technique overlaps existing kit
 """
 
@@ -14,13 +16,13 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from world.covenants.constants import CovenantType, RoleArchetype
+from world.covenants.constants import CovenantType
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
+    CovenantRoleActionScalingFactory,
     CovenantRoleFactory,
 )
 from world.covenants.models import (
-    ArchetypeActionScaling,
     VowStatScaling,
 )
 from world.covenants.services import (
@@ -42,9 +44,7 @@ class VowStatScalingTests(TestCase):
         """An unengaged character gets 0 from vow stat scaling."""
         from world.mechanics.services import vow_stat_scaling_bonus
 
-        role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE, archetype=RoleArchetype.SWORD
-        )
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
         membership = CharacterCovenantRoleFactory(covenant_role=role)
         sheet = membership.character_sheet
 
@@ -54,9 +54,7 @@ class VowStatScalingTests(TestCase):
         """An engaged character with no VowStatScaling row gets 0."""
         from world.mechanics.services import vow_stat_scaling_bonus
 
-        role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE, archetype=RoleArchetype.SWORD
-        )
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
         membership = CharacterCovenantRoleFactory(covenant_role=role)
         sheet = membership.character_sheet
 
@@ -71,9 +69,7 @@ class VowStatScalingTests(TestCase):
         from world.mechanics.models import ModifierCategory, ModifierTarget
         from world.mechanics.services import vow_stat_scaling_bonus
 
-        role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE, archetype=RoleArchetype.SWORD
-        )
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
         membership = CharacterCovenantRoleFactory(covenant_role=role)
         sheet = membership.character_sheet
 
@@ -110,9 +106,7 @@ class VowGearScalingTests(TestCase):
         """An unengaged character gets 0 from vow gear scaling."""
         from world.mechanics.services import vow_gear_scaling_bonus
 
-        role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE, archetype=RoleArchetype.SHIELD
-        )
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
         membership = CharacterCovenantRoleFactory(covenant_role=role)
         sheet = membership.character_sheet
 
@@ -122,9 +116,7 @@ class VowGearScalingTests(TestCase):
         """An engaged character with no VowGearScaling row gets 0."""
         from world.mechanics.services import vow_gear_scaling_bonus
 
-        role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE, archetype=RoleArchetype.SHIELD
-        )
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
         membership = CharacterCovenantRoleFactory(covenant_role=role)
         sheet = membership.character_sheet
 
@@ -134,19 +126,27 @@ class VowGearScalingTests(TestCase):
 
 
 class ArchetypeActionScalingTests(TestCase):
-    """ArchetypeActionScaling provides a bonus for combat actions by archetype (#2022)."""
+    """CovenantRoleActionScaling provides a bonus for combat actions per role (#2529, was #2022).
+
+    #2529 Task 1 stubs ``archetype_action_scaling_bonus`` to always return 0.0 —
+    it read the archetype-keyed ``ArchetypeActionScaling`` model, which no longer
+    exists now that ``CovenantRole.archetype`` is a SWORD/SHIELD/CROWN blend.
+    Task 2 rewrites the consumer against the blend + the re-keyed
+    ``CovenantRoleActionScaling`` model; ``test_bonus_scales_by_thread_level``
+    below is intentionally still exercising the row-creation + thread-level
+    setup so Task 2 only has to change the assertion once the real scaling
+    logic is restored.
+    """
 
     def test_no_bonus_when_not_engaged(self):
         """An unengaged character gets 0.0 bonus."""
-        role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE, archetype=RoleArchetype.SHIELD
-        )
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
         membership = CharacterCovenantRoleFactory(covenant_role=role)
         character = membership.character_sheet.character
 
-        ArchetypeActionScaling.objects.create(
+        CovenantRoleActionScalingFactory(
+            covenant_role=role,
             action_key="combat_interpose",
-            role_archetype=RoleArchetype.SHIELD,
             thread_level_multiplier=Decimal("0.10"),
         )
 
@@ -155,9 +155,7 @@ class ArchetypeActionScalingTests(TestCase):
 
     def test_no_bonus_when_no_scaling_row(self):
         """An engaged character with no scaling row gets 0.0."""
-        role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE, archetype=RoleArchetype.SHIELD
-        )
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
         membership = CharacterCovenantRoleFactory(covenant_role=role)
         character = membership.character_sheet.character
 
@@ -167,20 +165,18 @@ class ArchetypeActionScalingTests(TestCase):
         self.assertEqual(bonus, 0.0)
 
     def test_bonus_scales_by_thread_level(self):
-        """The bonus is thread_level * multiplier for the matching archetype."""
+        """Pending Task 2's blend rewrite, the stub returns 0.0 (was thread_level * multiplier)."""
         from world.magic.constants import TargetKind
         from world.magic.models import Thread
 
-        role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE, archetype=RoleArchetype.SHIELD
-        )
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
         membership = CharacterCovenantRoleFactory(covenant_role=role)
         sheet = membership.character_sheet
         character = sheet.character
 
-        ArchetypeActionScaling.objects.create(
+        CovenantRoleActionScalingFactory(
+            covenant_role=role,
             action_key="combat_interpose",
-            role_archetype=RoleArchetype.SHIELD,
             thread_level_multiplier=Decimal("0.10"),
         )
 
@@ -196,7 +192,7 @@ class ArchetypeActionScalingTests(TestCase):
         set_engaged_membership(membership=membership)
 
         bonus = archetype_action_scaling_bonus(character, "combat_interpose")
-        self.assertAlmostEqual(bonus, 1.0, places=2)  # 10 * 0.10 = 1.0
+        self.assertEqual(bonus, 0.0)  # Task 2 (#2529) restores: 10 * 0.10 = 1.0
 
 
 class RoleSourceVariantResolutionTests(TestCase):
@@ -209,9 +205,7 @@ class RoleSourceVariantResolutionTests(TestCase):
         from world.magic.specialization.models import TechniqueVariant
         from world.magic.specialization.services import resolve_specialized_variant
 
-        role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE, archetype=RoleArchetype.SWORD
-        )
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
         membership = CharacterCovenantRoleFactory(covenant_role=role)
         sheet = membership.character_sheet
         character = sheet.character
@@ -255,9 +249,7 @@ class RoleSourceVariantResolutionTests(TestCase):
         """CharacterTechnique without role_source resolves via GIFT thread."""
         from world.magic.specialization.services import resolve_specialized_variant
 
-        role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE, archetype=RoleArchetype.SWORD
-        )
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
         membership = CharacterCovenantRoleFactory(covenant_role=role)
         sheet = membership.character_sheet
         character = sheet.character
@@ -288,9 +280,7 @@ class CapabilityGrantWiringTests(TestCase):
         from world.magic.constants import TargetKind
         from world.magic.models import Thread
 
-        role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE, archetype=RoleArchetype.SHIELD
-        )
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
         membership = CharacterCovenantRoleFactory(covenant_role=role)
         sheet = membership.character_sheet
         character = sheet.character
@@ -322,9 +312,7 @@ class CapabilityGrantWiringTests(TestCase):
         from world.magic.constants import TargetKind
         from world.magic.models import Thread
 
-        role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE, archetype=RoleArchetype.SHIELD
-        )
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
         membership = CharacterCovenantRoleFactory(covenant_role=role)
         sheet = membership.character_sheet
         character = sheet.character

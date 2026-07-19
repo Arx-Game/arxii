@@ -185,7 +185,7 @@ def seed_gear_archetype_compatibility() -> GearArchetypeCompatibilityResult:
     Returns:
         GearArchetypeCompatibilityResult with all compat rows + role instances.
     """
-    from world.covenants.constants import CovenantType, RoleArchetype  # noqa: PLC0415
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
     from world.covenants.models import CovenantRole, GearArchetypeCompatibility  # noqa: PLC0415
     from world.items.constants import GearArchetype  # noqa: PLC0415
 
@@ -194,7 +194,7 @@ def seed_gear_archetype_compatibility() -> GearArchetypeCompatibilityResult:
         defaults={
             "name": "Vanguard",
             "covenant_type": CovenantType.DURANCE,
-            "archetype": RoleArchetype.SWORD,
+            "sword_weight": 1,
             "speed_rank": 2,
         },
     )
@@ -203,7 +203,7 @@ def seed_gear_archetype_compatibility() -> GearArchetypeCompatibilityResult:
         defaults={
             "name": "Bulwark",
             "covenant_type": CovenantType.DURANCE,
-            "archetype": RoleArchetype.SHIELD,
+            "shield_weight": 1,
             "speed_rank": 3,
         },
     )
@@ -212,7 +212,7 @@ def seed_gear_archetype_compatibility() -> GearArchetypeCompatibilityResult:
         defaults={
             "name": "Luminary",
             "covenant_type": CovenantType.DURANCE,
-            "archetype": RoleArchetype.CROWN,
+            "crown_weight": 1,
             "speed_rank": 1,
         },
     )
