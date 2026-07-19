@@ -123,6 +123,7 @@ from commands.retire import CmdRetire  # #2287
 from commands.ritual import CmdRitual
 from commands.sanctum import CmdSanctum
 from commands.scene import CmdScene
+from commands.seance import CmdSeance
 from commands.setsituation import CmdSetSituation
 from commands.setstage import CmdSetStage
 from commands.ships import CmdShip
@@ -401,6 +402,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #2289 — ceremony rites: funeral/blessing/sermon open, offering,
             # speech, finish/abandon + the show read surface.
             CmdCeremony,
+            # #2393 — seance manifestation-offer inbox: offers/accept/decline,
+            # account-scoped (reaches a retired honoree with no active puppet).
+            CmdSeance,
             # #1511 — organization membership lifecycle.
             CmdOrg,
             # #1348 — progression-reward telnet commands: kudos/vote/randomscene/pathintent.
