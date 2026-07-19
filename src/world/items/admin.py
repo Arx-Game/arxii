@@ -21,7 +21,9 @@ from world.items.models import (
     ItemTemplateAppearanceEffect,
     MaterialCategory,
     OwnershipEvent,
+    PendingRareFind,
     QualityTier,
+    StreamCommonGemPool,
     Style,
     TemplateInteraction,
     TemplateSlot,
@@ -59,6 +61,19 @@ class AdornmentAdmin(admin.ModelAdmin):
     list_display = ["host_instance", "gem_instance", "set_by_account", "set_at"]
     # host_instance / gem_instance → large ItemInstance table; set_by_account → AccountDB.
     raw_id_fields = ["host_instance", "gem_instance", "set_by_account"]
+
+
+@admin.register(StreamCommonGemPool)
+class StreamCommonGemPoolAdmin(admin.ModelAdmin):
+    list_display = ["income_stream", "tier", "uncollected_value"]
+    list_filter = ["tier"]
+    raw_id_fields = ["income_stream"]  # large OrgIncomeStream table
+
+
+@admin.register(PendingRareFind)
+class PendingRareFindAdmin(admin.ModelAdmin):
+    list_display = ["gem_instance", "income_stream", "accrued_at"]
+    raw_id_fields = ["income_stream", "gem_instance"]  # large tables
 
 
 @admin.register(QualityTier)

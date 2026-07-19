@@ -1906,6 +1906,8 @@ from world.items.gems.models import (  # noqa: E402,F401
     GemDetails,
     GemGrade,
     GemInstanceDetails,
+    PendingRareFind,
+    StreamCommonGemPool,
 )
 
 # ---------------------------------------------------------------------------

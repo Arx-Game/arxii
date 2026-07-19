@@ -78,11 +78,18 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   haul generator: one mine cycle yields a common-gem **aggregate value** plus, rarely, a few
   **Rare-Find** gem instances (born uncut). Mine quality + minister bonus raise the Rare-Find
   chance and shift every axis roll up; size/purity floored above common on a find. The multiplicative
-  axes give the fat "remarkable find" tail for free. **Deferred to the Build-1 domain track:** the
-  weekly cron, the per-holding `mine_quality` field, the minister-check seam (#2239, schema-only),
-  and where common value accrues (a per-tier vault bucket). Remaining 0b slices: the **cut recipe**
-  (see slice 3 PR) + risky prying/re-set, the **value-denominated / bucket** bulk path, and the
-  domain-cron wiring for this engine.
+  axes give the fat "remarkable find" tail for free.
+
+- **Mine accrual (Build 0b, slice 7) — DONE.** `accrue_mine_cycle()` runs one weekly cycle for a
+  mine holding: `DomainHolding` gains `mine_quality` + `common_gem_tier`, and the cycle accrues the
+  haul into **uncollected** pools on the holding's income stream (`StreamCommonGemPool` for common
+  value, `PendingRareFind` for the stones) — the gem analogue of `OrgIncomeStream.uncollected_pool`.
+  **Design (Apostate):** gems are *lumped with tax collection* — they ride the same active
+  `collect_org_income` dispatch (same band + graft + catastrophe loss) into the house's stock.
+  **Remaining domain-cron sub-slices:** the **collection** (extend `collect_org_income` — common
+  value → shared house stock, surviving stones → collector's hands, a bad collection loses some),
+  the **crafting draw** (house members craft from the collected stock), the `game_clock`
+  **scheduling**, and the minister seam (#2239). Plus: the **cut recipe** (slice 3 PR) + refinements.
 
 - **Handler registry** (`CraftingHandler` ABC + `FacetAttachHandler` / `StyleAttachHandler`).
   New kinds (alchemy, wand-crafting, etc.) plug in by authoring a `CraftingRecipe` row +

@@ -3614,8 +3614,17 @@ holder is never notified a claim exists.
     floored above common (type not floored), top-heavy grade distribution (`_grade_index`, roll²).
     Does **not** schedule or wire domains — the weekly cron, the per-holding `mine_quality` field,
     and the schema-only minister-check seam (`OrganizationOffice.feeds_check`, #2239) are the
-    Build-1 wiring that *calls* this; where common value accrues (a per-tier vault bucket) is the
-    caller's concern. All magnitudes PLACEHOLDER.
+    Build-1 wiring that *calls* this; where common value accrues is handled by
+    `accrue_mine_cycle` (below). All magnitudes PLACEHOLDER.
+  - **Mine accrual** (`world.items.gems.mining.accrue_mine_cycle`, Build 0b slice 7) — the weekly
+    cycle for a mine holding. `DomainHolding` gains `mine_quality` + `common_gem_tier`; the cycle
+    calls `roll_gem_haul` and accrues the haul into **uncollected** pools on the holding's
+    `OrgIncomeStream` — common value into `StreamCommonGemPool` (per stream/tier; the gem analogue
+    of `OrgIncomeStream.uncollected_pool`), each Rare Find into a `PendingRareFind` (a loose stone
+    awaiting collection). "Lumped with tax collection": both ride the **same** active
+    `collect_org_income` dispatch (same band/graft/catastrophe loss) into the house's stock — that
+    collection step, and the `game_clock` scheduling + minister seam (#2239), are the follow-on
+    sub-slices. A holding with no `common_gem_tier`/stream accrues nothing.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)

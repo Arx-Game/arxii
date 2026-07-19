@@ -2947,6 +2947,8 @@
   - domain_holding <- societies.DomainHolding
   - declarations <- currency.IncomeDeclaration
   - garnishing_contracts <- currency.Contract
+  - common_gem_pools <- items.StreamCommonGemPool
+  - pending_rare_finds <- items.PendingRareFind
 
 ### IncomeDeclaration
 **Foreign Keys:**
@@ -3706,6 +3708,7 @@
   - gem_instance_details <- items.GemInstanceDetails
   - adornments <- items.Adornment
   - adorned_on <- items.Adornment
+  - pending_rare_find <- items.PendingRareFind
   - ware_listing <- items.WareListing
   - market_sales <- items.MarketSale
   - reclamation_claims <- items.ReclamationClaim
@@ -3920,6 +3923,16 @@
   - host_instance -> items.ItemInstance [FK]
   - gem_instance -> items.ItemInstance [OneToOne]
   - set_by_account -> accounts.AccountDB [FK] (nullable)
+
+### StreamCommonGemPool
+**Foreign Keys:**
+  - income_stream -> currency.OrgIncomeStream [FK]
+  - tier -> items.MaterialCategory [FK]
+
+### PendingRareFind
+**Foreign Keys:**
+  - income_stream -> currency.OrgIncomeStream [FK]
+  - gem_instance -> items.ItemInstance [OneToOne]
 
 ### MarketSquare
 **Foreign Keys:**
@@ -7747,6 +7760,7 @@
   - domain -> societies.Domain [FK]
   - kind -> societies.HoldingKind [FK]
   - income_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
+  - common_gem_tier -> items.MaterialCategory [FK] (nullable)
 **Pointed to by:**
   - improvement_details <- societies.DomainImprovementDetails
 
