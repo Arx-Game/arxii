@@ -140,8 +140,9 @@ backups/
 # Generated OpenAPI schema (intermediate artifact for type generation)
 src/schema.json
 
-# Django fixtures (generated locally)
-**/fixtures/*.json
+# Django fixtures (generated locally from the content repo — never commit;
+# the ** mid-path pattern also covers per-app subdirs like src/fixtures/magic/)
+**/fixtures/**/*.json
 # Fixture integrity tests (require local fixtures)
 **/test_fixture_integrity.py
 

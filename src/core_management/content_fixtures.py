@@ -659,7 +659,49 @@ def _extract_natural_key(model, fields: dict, source_path: Path | None) -> dict:
     return lookup
 
 
-def _upsert_fixture_object(
+def _coerce_scalar_fields(model, fields: dict) -> None:
+    """Normalize JSON-native scalar values into the types their model fields expect.
+
+    ``json.loads`` only ever produces ``str``/``int``/``float``/``bool``/``None``/
+    ``list``/``dict`` — types that happen to satisfy most Django field types
+    unmodified (``CharField``, ``IntegerField``, ``BooleanField``, ``DateField``,
+    ``DateTimeField`` and ``DecimalField`` all self-correct: their own
+    ``get_prep_value``/``get_db_prep_value`` calls ``to_python`` internally).
+    ``DurationField`` does not — its ``get_db_prep_value`` requires an actual
+    ``timedelta`` and calls ``.days``/``.seconds`` on whatever it is given, so a
+    still-a-string value blows up with a bare ``AttributeError`` deep in the SQL
+    compiler (#2470: ``MissionTemplate.cooldown`` was the first content model
+    field to hit this). Django's own fixture deserializer
+    (``django.core.serializers.python.Deserializer``) avoids the whole class of
+    bug by calling ``field.to_python(value)`` on every scalar field; this loader
+    bypasses that deserializer entirely (it needs upsert-by-natural-key, not
+    ``loaddata``'s pk-based insert — see the module docstring), so it has to redo
+    the same per-field normalization here. Calling ``to_python`` on a value that
+    is already the right type is a harmless no-op for every field above, so this
+    runs unconditionally rather than special-casing ``DurationField``.
+
+    Relational fields are skipped: a to-one FK's natural-key list has already
+    been swapped for a real instance by ``_resolve_natural_key_fields`` by the
+    time this runs, and m2m fields are popped out of *fields* before either
+    function ever sees them. A fixture field naming a removed/renamed model
+    field is left untouched here too (mirrors ``_pop_m2m_fields``'s stale-field
+    tolerance) — the existing schema-drift handling downstream still catches it.
+    """
+    from django.core.exceptions import FieldDoesNotExist  # noqa: PLC0415
+
+    for field_name, value in fields.items():
+        if value is None:
+            continue
+        try:
+            field = model._meta.get_field(field_name)  # noqa: SLF001
+        except FieldDoesNotExist:
+            continue
+        if field.is_relation:
+            continue
+        fields[field_name] = field.to_python(value)
+
+
+def _upsert_fixture_object(  # noqa: C901 — one branch per distinct skip reason, see docstring
     model: type,
     obj: dict,
     source_path: Path | None,
@@ -683,7 +725,7 @@ def _upsert_fixture_object(
     still lands in ``result.skipped`` with the exact same message text as
     before this function was factored out.
     """
-    from django.core.exceptions import FieldError  # noqa: PLC0415
+    from django.core.exceptions import FieldError, ValidationError  # noqa: PLC0415
     from django.db import IntegrityError  # noqa: PLC0415
 
     from core.natural_keys import NaturalKeyConfigError  # noqa: PLC0415
@@ -717,12 +759,21 @@ def _upsert_fixture_object(
         _resolve_natural_key_fields(model, lookup, source_path)
         _resolve_natural_key_fields(model, fields, source_path)
         resolved_m2m = _resolve_m2m_fields(model, m2m_fields, source_path)
+        _coerce_scalar_fields(model, fields)
         instance, created = model.objects.update_or_create(**lookup, defaults=fields)
     except UnresolvedNaturalKeyError as exc:
         # Must be caught before the broader ContentError clause below (it's a
         # subclass) — this is the ONLY failure mode ever deferred.
         if defer_unresolved:
             return OUTCOME_DEFERRED
+        skip_msg = f"{source_path}: {model.__name__} could not be loaded: {exc}"
+    except NaturalKeyConfigError as exc:
+        # Arity mismatch (wrong number of natural-key values). Must be caught
+        # before the broader (ValueError, TypeError) clause below —
+        # NaturalKeyConfigError IS a ValueError subclass, so without this
+        # dedicated clause it would silently fall into the pk-based-FK-
+        # reference branch and report the wrong skip reason (Sonar python:S1045
+        # flagged the resulting dead tuple member once this line changed).
         skip_msg = f"{source_path}: {model.__name__} could not be loaded: {exc}"
     except (ValueError, TypeError) as exc:
         # A FK value that is a raw integer (pk-based fixture) rather than a
@@ -732,12 +783,14 @@ def _upsert_fixture_object(
             f"{source_path}: {model.__name__} could not be loaded "
             f"(likely pk-based FK reference): {exc}"
         )
-    except (NaturalKeyConfigError, ContentError, FieldError) as exc:
+    except (ContentError, FieldError, ValidationError) as exc:
         # FK resolution failure or schema drift. ContentError covers every
         # OTHER re-raised failure from _resolve_natural_key_fields (the
         # non-relational-list-field case) plus _extract_natural_key's own
-        # errors; NaturalKeyConfigError covers arity mismatches; FieldError
-        # covers fixture fields that no longer exist on the model.
+        # errors; FieldError covers fixture fields that no longer exist on
+        # the model. ValidationError covers a scalar value
+        # ``_coerce_scalar_fields`` can't parse into its field's type (e.g. a
+        # malformed duration string).
         skip_msg = f"{source_path}: {model.__name__} could not be loaded: {exc}"
     except model.DoesNotExist as exc:
         # The model's own DoesNotExist — the natural-key lookup didn't find

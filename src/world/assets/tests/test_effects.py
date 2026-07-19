@@ -13,6 +13,11 @@ from world.checks.factories import CheckTypeCapabilityModifierFactory
 from world.checks.models import CheckCategory, CheckType
 from world.checks.test_helpers import force_check_outcome
 from world.conditions.factories import CapabilityTypeFactory
+from world.magic.factories import (
+    CharacterTechniqueFactory,
+    TechniqueCapabilityGrantFactory,
+    TechniqueFactory,
+)
 from world.npc_services.constants import OfferKind
 from world.npc_services.effects import dispatch_offer_effect
 from world.npc_services.factories import FunctionaryFactory, NPCServiceOfferFactory
@@ -270,6 +275,139 @@ class PromotionCapabilityModifierEffectTests(EvenniaTestCase):
             check_type=self.ungated_check_type,
             check_difficulty=10,
         )
-        result = dispatch_offer_effect(offer, self.persona)
+        dispatch_offer_effect(offer, self.persona)
         self.assertFalse(NPCAsset.objects.filter(promoter_persona=self.persona).exists())
+
+
+class TechniqueSourcedPromotionCapabilityModifierEffectTests(EvenniaTestCase):
+    """The spec's named promotion case with a REAL technique source (#2503 task 6).
+
+    Same E2E shape as ``PromotionCapabilityModifierEffectTests`` above (#2505's
+    innate-baseline proof), but the capability comes ONLY from a known technique's
+    prerequisite-null ``TechniqueCapabilityGrant`` -- ``CapabilityTypeFactory``
+    defaults ``innate_baseline=0`` and no ``CharacterModifier`` is ever created here.
+    This proves the #2504 technique fold (``get_effective_capability_value``) moves
+    the SAME curated ``CheckTypeCapabilityModifier``-gated promotion roll #2505
+    exercises for an innate baseline -- the technique route into "agency" (can this
+    character actually do the thing) is not a second, weaker channel.
+
+    Two otherwise-identical characters share the same gated check_type/functionary
+    setup; only one of them knows the technique. The offer's check_type carries the
+    SAME authored ``CheckTypeCapabilityModifier`` row in both tests -- the technique
+    alone decides the outcome, never the dice (guaranteed-outcome charts, mirroring
+    the base class).
+    """
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        from world.areas.services import get_room_profile
+
+        self.room = create_object(
+            "typeclasses.rooms.Room", key="Technique Capability Cultivation Room"
+        )
+        self.room_profile = get_room_profile(self.room)
+
+        # Same rank/chart pipeline as the base class: rank 1 requires 10+ capability
+        # points; weight 2.0 * calculate_value()==5 == 10, matching exactly.
+        CheckRank.objects.get_or_create(
+            rank=0, defaults={"min_points": 0, "name": "AssetPromoCapabilityNone"}
+        )
+        CheckRank.objects.get_or_create(
+            rank=1, defaults={"min_points": 10, "name": "AssetPromoCapabilityReady"}
+        )
+        failure_outcome = CheckOutcomeFactory(
+            name="Technique Capability Promo Failure", success_level=-1
+        )
+        success_outcome = CheckOutcomeFactory(
+            name="Technique Capability Promo Success", success_level=1
+        )
+        below_chart, _ = ResultChart.objects.get_or_create(
+            rank_difference=-1, defaults={"name": "AssetPromoBelowTarget"}
+        )
+        at_chart, _ = ResultChart.objects.get_or_create(
+            rank_difference=0, defaults={"name": "AssetPromoAtTarget"}
+        )
+        ResultChartOutcome.objects.get_or_create(
+            chart=below_chart,
+            min_roll=1,
+            defaults={"max_roll": 100, "outcome": failure_outcome},
+        )
+        ResultChartOutcome.objects.get_or_create(
+            chart=at_chart,
+            min_roll=1,
+            defaults={"max_roll": 100, "outcome": success_outcome},
+        )
+        ResultChart.clear_cache()
+
+        category, _ = CheckCategory.objects.get_or_create(
+            name="Test Technique Capability Category", defaults={"display_order": 0}
+        )
+
+        # The ONLY capability source: a known technique's prereq-null grant.
+        self.capability = CapabilityTypeFactory(
+            name="test_promo_technique_charm", innate_baseline=0
+        )
+        self.technique = TechniqueFactory(intensity=1)
+        self.grant = TechniqueCapabilityGrantFactory(
+            technique=self.technique,
+            capability=self.capability,
+            base_value=5,
+            intensity_multiplier=0,
+        )
+        self.assertEqual(self.grant.calculate_value(), 5)
+
+        self.gated_check_type, _ = CheckType.objects.get_or_create(
+            name="Technique Capability Gated Cultivation Check",
+            category=category,
+            defaults={"is_active": True},
+        )
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.gated_check_type,
+            capability=self.capability,
+            weight=Decimal("2.0"),
+        )
+
+        # Character A: knows the technique.
+        self.sheet_with_technique = CharacterSheetFactory()
+        self.character_with_technique = self.sheet_with_technique.character
+        self.character_with_technique.location = self.room
+        self.character_with_technique.save()
+        self.persona_with_technique = persona_for_character(self.character_with_technique)
+        CharacterTechniqueFactory(character=self.sheet_with_technique, technique=self.technique)
+
+        # Character B: otherwise identical, but does NOT know the technique -- the
+        # control side of the flip.
+        self.sheet_without_technique = CharacterSheetFactory()
+        self.character_without_technique = self.sheet_without_technique.character
+        self.character_without_technique.location = self.room
+        self.character_without_technique.save()
+        self.persona_without_technique = persona_for_character(self.character_without_technique)
+
+    def test_technique_known_character_flips_promotion_to_success(self) -> None:
+        functionary = FunctionaryFactory(room=self.room_profile)
+        offer = NPCServiceOfferFactory(
+            role=functionary.role,
+            kind=OfferKind.INFORMANT,
+            check_type=self.gated_check_type,
+            check_difficulty=10,
+        )
+        result = dispatch_offer_effect(offer, self.persona_with_technique)
+        asset = NPCAsset.objects.get(promoter_persona=self.persona_with_technique)
+        self.assertEqual(asset.source_functionary, functionary)
+        self.assertIn("agrees to work", result.message.lower())
+
+    def test_identical_character_without_technique_still_fails(self) -> None:
+        functionary = FunctionaryFactory(room=self.room_profile)
+        offer = NPCServiceOfferFactory(
+            role=functionary.role,
+            kind=OfferKind.INFORMANT,
+            check_type=self.gated_check_type,
+            check_difficulty=10,
+        )
+        result = dispatch_offer_effect(offer, self.persona_without_technique)
+        self.assertFalse(
+            NPCAsset.objects.filter(promoter_persona=self.persona_without_technique).exists()
+        )
+        self.assertIn("not ready", result.message.lower())
         self.assertIn("not ready", result.message.lower())

@@ -106,7 +106,16 @@ def resolve_challenge(
     )
 
     # 5. Apply effects
-    context = ResolutionContext(character=character, challenge_instance=challenge_instance)
+    # target=challenge_instance.target_object (#2503): ChallengeInstance.target_object
+    # is a required field naming "the object embodying this challenge" — for a
+    # bare-object affordance that's the actual torch/door/etc a consequence effect
+    # with EffectTarget.TARGET must land on, not the acting character (the previous
+    # unconditional None left every such effect falling back to context.character).
+    context = ResolutionContext(
+        character=character,
+        challenge_instance=challenge_instance,
+        target=challenge_instance.target_object,
+    )
     pending = PendingResolution(
         check_result=check_result,
         selected_consequence=consequence,
@@ -297,7 +306,12 @@ def _resolve_via_template(
     from actions.services import start_action_resolution  # noqa: PLC0415
 
     action_template = approach.action_template
-    context = ResolutionContext(character=character, challenge_instance=challenge_instance)
+    # target=challenge_instance.target_object (#2503) — see the direct-path comment above.
+    context = ResolutionContext(
+        character=character,
+        challenge_instance=challenge_instance,
+        target=challenge_instance.target_object,
+    )
 
     pending = start_action_resolution(
         character=character,

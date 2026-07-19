@@ -29,6 +29,7 @@ from world.magic.models import CharacterAnima, PortalAnchor
 from world.magic.services.portal_travel import (
     dissolve_portal_anchor,
     install_portal_anchor,
+    install_portal_anchor_as_staff,
     perform_portal_travel as _perform_portal_travel,
     portal_destinations,
     portal_route,
@@ -431,6 +432,40 @@ class InstallPortalAnchorTests(TestCase):
         purse.refresh_from_db()
         self.assertEqual(purse.balance, 10_000)  # mocked transfer never actually debited
         self.assertFalse(PortalAnchor.objects.active().filter(room_profile=room_profile).exists())
+
+
+class InstallPortalAnchorAsStaffTests(TestCase):
+    def test_creates_anchor_without_standing_or_cost(self) -> None:
+        room_profile = RoomProfileFactory()
+        kind = PortalAnchorKindFactory()
+
+        # No persona, no purse setup at all — staff install must not touch currency.
+        anchor = install_portal_anchor_as_staff(
+            room=room_profile.objectdb, kind=kind, name="a tall silvered mirror"
+        )
+        self.assertEqual(anchor.room_profile, room_profile)
+        self.assertEqual(anchor.kind, kind)
+        self.assertIsNone(anchor.installed_by)
+
+    def test_rejects_duplicate_active_kind_in_same_room(self) -> None:
+        room_profile = RoomProfileFactory()
+        kind = PortalAnchorKindFactory()
+        PortalAnchorFactory(room_profile=room_profile, kind=kind)
+
+        with self.assertRaises(PortalAnchorKindAlreadyInstalled):
+            install_portal_anchor_as_staff(room=room_profile.objectdb, kind=kind, name="another")
+
+    def test_sets_fixture_key_when_given(self) -> None:
+        room_profile = RoomProfileFactory()
+        kind = PortalAnchorKindFactory()
+
+        anchor = install_portal_anchor_as_staff(
+            room=room_profile.objectdb,
+            kind=kind,
+            name="a doorway",
+            fixture_key="arx-city/golden-hart-taproom/doorway",
+        )
+        self.assertEqual(anchor.fixture_key, "arx-city/golden-hart-taproom/doorway")
 
 
 class DissolvePortalAnchorTests(TestCase):

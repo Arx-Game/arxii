@@ -74,6 +74,10 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   (so `appraise()` reflects it). `adorned_materials()` is the queryable "materials on this piece"
   seam the magic app reads. Safe craft-time path only.
 
+- **Risky adornment prying (Build 0b, slice 6) — DONE.** `pry_adornment()` completes the adornment
+  lifecycle: a risky `perform_check` removes a set gem — freed to the pryer on success, **shattered**
+  on a botch (the cut's shatter spine); the host's worth drops either way. High risk, high reward.
+
 - **Gem mining engine (Build 0b, slice 4) — DONE.** `roll_gem_haul()` — the pure, deterministic
   haul generator: one mine cycle yields a common-gem **aggregate value** plus, rarely, a few
   **Rare-Find** gem instances (born uncut). Mine quality + minister bonus raise the Rare-Find

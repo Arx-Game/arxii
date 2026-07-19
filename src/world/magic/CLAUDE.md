@@ -1490,10 +1490,14 @@ soft-deleted via `dissolved_at`, one active per `(room_profile, kind)`) live in
 cardinality) or a `RoomDecoration` (wrong domain — see ADR-0121). Services
 (`services/portal_travel.py`): `travel_anchor_kinds_for` / `portal_destinations` /
 `portal_route` / `perform_portal_travel` / `install_portal_anchor` /
+`install_portal_anchor_as_staff` (#2451 — the staff-authoring counterpart called from the
+world-builder canvas: no owner/tenant standing check, no currency cost) /
 `dissolve_portal_anchor` — never consults `RoomProfile.is_public`. Install costs a flat
 `settings.PORTAL_ANCHOR_INSTALL_COST` (default 5000 copper); actions
 `portal_anchor_install`/`portal_anchor_dissolve` (`actions/definitions/portals.py`), telnet
-`CmdPortalAnchor` (`portal/install <kind>=<name>` / `portal/dissolve [<kind>]`). Discovery
+`CmdPortalAnchor` (`portal/install <kind>=<name>` / `portal/dissolve [<kind>]`). `PortalAnchor`
+also carries an optional nullable-unique `fixture_key` (#2451) for grid-bundle export/import —
+see the "Grid content export/import" area of `docs/systems/INDEX.md`. Discovery
 API lives in `world.locations` (not this app) alongside `ComfortViewSet`: `GET
 /api/locations/portal-destinations/?character_id=<id>`. Seed:
 `ensure_portal_travel_content()` (`world/seeds/game_content/magic.py`) — "Mirror" anchor

@@ -11,6 +11,13 @@
 > (folded into the generalized Property/Challenge/Situation system). See the
 > corrected status block in "How This Maps to Current Code". When in doubt,
 > trust the code, not this doc.
+>
+> **Update (#2503, 2026-07-19):** the capability→available-action pipeline
+> now has a **second source** — bare-object affordances synthesized from
+> `ObjectProperty` matches with no authored `ChallengeInstance` — surfaced via
+> a second `WORLD_INTERACTION` action backend alongside CHALLENGE. See
+> "Bare-object affordances (#2503)" in the corrected status block below and
+> ADR-0147.
 
 > The foundational interaction model for Arx II. This document describes how
 > characters interact with the game world through four layers: what things
@@ -586,7 +593,11 @@ into coherent scenes.
 ## The Interaction Pipeline
 
 When Capabilities meet Properties in Challenges, the system resolves what
-Actions are available through a consistent pipeline:
+Actions are available through a consistent pipeline. **(#2503 note:** step 1
+below describes the authored-instance path; a second, lazy path synthesizes
+Actions straight from bare-object `ObjectProperty` matches with no
+`ChallengeInstance` at all — see "Bare-object affordances (#2503)" further
+down and `docs/architecture/action-template-pipeline.md`.)
 
 ```
 1. IDENTIFY active Challenges in the room
@@ -740,6 +751,40 @@ building toward breakthrough moments.
   (`actions/player_interface.py: _challenge_actions` → `get_player_actions` →
   `dispatch_player_action` → `resolve_challenge`). Conditions impairing a
   capability to ≤0 correctly drop its actions.
+- **Bare-object affordances (#2503)** — `[WIRED]`: an `Application.default_template`
+  lets `get_available_actions` also synthesize an `AvailableAction` straight from an
+  `ObjectProperty` match on any object at the location (a flammable torch, a dark
+  room), with no authored `ChallengeInstance` needed. Surfaced via a dedicated
+  **WORLD_INTERACTION action backend** (`ActionRef.application_id` +
+  `target_object_id`, both stable before any instance exists) —
+  `_avail_to_player_action` branches on `challenge_instance_id is None` to build this
+  ref instead of a CHALLENGE one. `dispatch_player_action` re-validates by
+  recomputing `get_available_actions` and matching `(application_id,
+  target_object_id)`, mints via `instantiate_challenge(resolved_default_template,
+  location, target_object)`, then resolves through the *same* `resolve_challenge` —
+  no separate resolution path. `resolve_challenge`'s `ResolutionContext.target` is
+  now populated from `ChallengeInstance.target_object` (previously always `None`
+  there, silently falling back to the acting character), so an `EffectTarget.TARGET`
+  consequence effect lands on the actual object (e.g. Ignite adds `lit` to the
+  torch, not the character).
+- **GM stage-prop improv (#2503)** — `[WIRED]`: the last mile from "a GM wants a
+  torch to exist" to the above pipeline actually finding one. `StagePropAction`
+  (key `stage_prop`, `actions/definitions/gm_props.py`) instantiates a curated
+  `ItemTemplate` as a holder-less `ObjectDB` directly in the room
+  (`world.items.services.staging.stage_prop` →
+  `materialize_item_game_object_in_room`, sharing Task 2's chokepoint — so the
+  staged prop carries the same template-default `ObjectProperty` rows a crafted
+  torch would). The very next `get_available_actions` read at that room picks it
+  up via the bare-object scan above with zero extra wiring.
+  `StagePropertyAction` (key `stage_property`) is the companion "tag an existing
+  object" verb, wrapping `world.mechanics.services.stage_property` (mirrors
+  `effect_handlers._add_property`'s upsert). Both gate on the room's active
+  scene GM/owner or staff (`world.scenes.interaction_services.get_active_scene`
+  + `Scene.is_gm`/`is_owner`, mirroring `dramatic_moments.py`'s
+  `_account_can_gm_scene`); template/property are resolved by exact
+  pk-or-name — a curated gate, never freeform creation. Shared by telnet
+  `CmdStage` (`stage prop <template>` / `stage property <property>
+  [=<target>]`, `commands/gm_props.py`) and the web action-list dispatch.
 
 **Action Enhancement system** — `[WIRED]` (`actions/` — `ActionEnhancement` +
 effect configs).

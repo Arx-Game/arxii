@@ -172,6 +172,7 @@ from actions.definitions.gm_combat import (
     RemoveEncounterParticipantAction,
     ResolveEncounterRoundAction,
 )
+from actions.definitions.gm_props import StagePropAction, StagePropertyAction
 from actions.definitions.gm_stories import (
     ClaimGroupStoryRequestAction,
     CompleteStoryAction,
@@ -431,7 +432,13 @@ from actions.definitions.world_builder import (
     StaffDigRoomAction,
     StaffEditRoomAction,
     StaffLinkRoomsAction,
+    StaffPlaceClueAction,
+    StaffPlaceClueTriggerAction,
+    StaffPlacePortalAnchorAction,
     StaffPlaceRoomAction,
+    StaffRemoveClueAction,
+    StaffRemoveClueTriggerAction,
+    StaffRemovePortalAnchorAction,
     StaffRemoveRoomAction,
     StaffRenameExitAction,
     StaffUnlinkRoomsAction,
@@ -589,6 +596,8 @@ _ALL_ACTIONS: list[Action] = [
     PauseEncounterAction(),
     EndEncounterAction(),
     PreviewOpponentDefaultsAction(),
+    StagePropAction(),
+    StagePropertyAction(),
     CompleteStoryAction(),
     ResolveEpisodeAction(),
     PromoteEpisodeAction(),
@@ -808,6 +817,12 @@ _ALL_ACTIONS: list[Action] = [
     StaffRemoveRoomAction(),
     PromoteRoomAction(),
     PromoteAreaAction(),
+    StaffPlaceClueAction(),
+    StaffRemoveClueAction(),
+    StaffPlaceClueTriggerAction(),
+    StaffRemoveClueTriggerAction(),
+    StaffPlacePortalAnchorAction(),
+    StaffRemovePortalAnchorAction(),
     # #2450 — GM story builder: create/edit/remove story areas + dig/edit story rooms.
     CreateStoryAreaAction(),
     EditStoryAreaAction(),

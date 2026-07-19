@@ -41,6 +41,11 @@ class GridExportTests(TestCase):
         cls.north_exit = grid.north_exit
         cls.south_exit = grid.south_exit
         cls.stray_exit = grid.stray_exit
+        cls.torn_letter = grid.torn_letter
+        cls.room_clue = grid.room_clue
+        cls.clue_trigger = grid.clue_trigger
+        cls.mirror_kind = grid.mirror_kind
+        cls.portal_anchor = grid.portal_anchor
 
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -185,6 +190,48 @@ class GridExportTests(TestCase):
 
         with self.assertRaisesRegex(ContentExportError, "arx-city/homeless-room"):
             export_grid_bundles(self.root)
+
+    def test_bundle_includes_clues_triggers_and_portal_anchors(self) -> None:
+        export_grid_bundles(self.root)
+        bundle = self._load_bundle("arx-city")
+
+        self.assertEqual(
+            bundle["clues"],
+            [
+                {
+                    "fixture_key": "arx-city/golden-hart-taproom/torn-letter",
+                    "room": "arx-city/golden-hart-taproom",
+                    "clue": "torn-letter",
+                    "detect_difficulty": 5,
+                    "eligibility_rule": {},
+                    "is_active": True,
+                }
+            ],
+        )
+        self.assertEqual(
+            bundle["clue_triggers"],
+            [
+                {
+                    "fixture_key": "arx-city/golden-hart-taproom/whisper",
+                    "room": "arx-city/golden-hart-taproom",
+                    "clue": "torn-letter",
+                    "eligibility_rule": {},
+                    "is_active": True,
+                }
+            ],
+        )
+        self.assertEqual(
+            bundle["portal_anchors"],
+            [
+                {
+                    "fixture_key": "arx-city/golden-hart-taproom/mirror",
+                    "room": "arx-city/golden-hart-taproom",
+                    "kind": "Mirror",
+                    "name": "a tall silvered mirror",
+                    "is_network_open": True,
+                }
+            ],
+        )
 
     def test_authored_room_in_non_authored_area_raises(self) -> None:
         """An AUTHORED room housed by a non-AUTHORED (e.g. STORY) area is also

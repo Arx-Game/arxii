@@ -1,1 +1,1 @@
-0040_itemtemplate_adornment_capacity_adornment
+0041_itemtemplateproperty

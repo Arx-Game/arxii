@@ -1,10 +1,13 @@
 """Clue model invariants (#1144) — a clue always points at exactly one target."""
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
+from core.natural_keys import NaturalKeyMixin
+from evennia_extensions.factories import RoomProfileFactory
 from world.clues.constants import ClueTargetKind
-from world.clues.factories import ClueFactory
+from world.clues.factories import ClueFactory, ClueTriggerFactory, RoomClueFactory
 from world.clues.models import Clue
 from world.missions.factories import MissionTemplateFactory
 
@@ -85,3 +88,66 @@ class ClueInvariantTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             clue.full_clean()
+
+
+class RoomClueFixtureKeyTests(TestCase):
+    def test_fixture_key_defaults_to_none(self) -> None:
+        room_clue = RoomClueFactory()
+        self.assertIsNone(room_clue.fixture_key)
+
+    def test_fixture_key_is_settable_and_unique(self) -> None:
+        RoomClueFactory(fixture_key="arx-city/golden-hart-taproom/torn-letter")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            RoomClueFactory(fixture_key="arx-city/golden-hart-taproom/torn-letter")
+
+
+class ClueTriggerFixtureKeyTests(TestCase):
+    def test_fixture_key_defaults_to_none(self) -> None:
+        trigger = ClueTriggerFactory()
+        self.assertIsNone(trigger.fixture_key)
+
+    def test_fixture_key_is_settable_and_unique(self) -> None:
+        ClueTriggerFactory(fixture_key="arx-city/golden-hart-taproom/whisper")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ClueTriggerFactory(fixture_key="arx-city/golden-hart-taproom/whisper")
+
+
+class RoomClueUniqueRoomClueConstraintTests(TestCase):
+    """DB-level backing for the `update_or_create(room_profile=..., clue=...)`
+    idempotency `StaffPlaceClueAction` relies on (#2451 whole-branch review)."""
+
+    def test_room_profile_clue_pair_is_unique(self) -> None:
+        room_profile = RoomProfileFactory()
+        clue = ClueFactory()
+        RoomClueFactory(room_profile=room_profile, clue=clue)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            RoomClueFactory(room_profile=room_profile, clue=clue)
+
+
+class ClueTriggerUniqueRoomClueConstraintTests(TestCase):
+    """DB-level backing for `StaffPlaceClueTriggerAction`'s `update_or_create`
+    idempotency (#2451 whole-branch review)."""
+
+    def test_room_profile_clue_pair_is_unique(self) -> None:
+        room_profile = RoomProfileFactory()
+        clue = ClueFactory()
+        ClueTriggerFactory(room_profile=room_profile, clue=clue)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ClueTriggerFactory(room_profile=room_profile, clue=clue)
+
+
+class ClueNaturalKeyTests(TestCase):
+    def test_clue_is_a_natural_key_mixin(self) -> None:
+        self.assertTrue(issubclass(Clue, NaturalKeyMixin))
+
+    def test_slug_defaults_to_none_and_is_unique(self) -> None:
+        clue = ClueFactory(slug=None)
+        self.assertIsNone(clue.slug)
+        ClueFactory(slug="torn-letter")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ClueFactory(slug="torn-letter")
+
+    def test_natural_key_round_trip(self) -> None:
+        clue = ClueFactory(slug="torn-letter")
+        self.assertEqual(clue.natural_key(), ("torn-letter",))
+        self.assertEqual(Clue.objects.get_by_natural_key("torn-letter"), clue)
