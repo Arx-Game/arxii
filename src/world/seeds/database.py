@@ -36,6 +36,7 @@ from __future__ import annotations
 from core_management.content_fixtures import ContentError, load_world_content
 from core_management.content_repo import resolve_content_root
 from world.magic.seeds_cast import ensure_technique_cast_content
+from world.narrative.ambient_trigger_content import ensure_ambient_reaction_content
 from world.seeds.clusters import CLUSTER_SEEDERS, seeded_models
 from world.seeds.types import SeedReport
 
@@ -70,6 +71,11 @@ def seed_dev_database(*, verbose: bool = False) -> SeedReport:
     # content/grid load never creates. Idempotent; not content — see the module
     # docstring's "Config prerequisites" section.
     ensure_technique_cast_content()
+    # Config prerequisite (#2471): the shared MOVED TriggerDefinition + FlowDefinition
+    # ambient room reactions dispatch through — one fixed row, not lore-repo content
+    # (ADR-0142). Must exist before the grid-bundle import below installs per-room
+    # Trigger rows against it (core_management.grid_import._ensure_ambient_trigger).
+    ensure_ambient_reaction_content()
 
     content_result = load_world_content(content_root)
     report.clusters["content"] = content_result.created + content_result.updated
