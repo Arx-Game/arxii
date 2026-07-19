@@ -26,7 +26,10 @@ but is absent from every bundle is never deleted — it's surfaced as a
 replaced wholesale (deleted + recreated from the bundle); any other
 ``source`` (e.g. ``weather:cold-snap``) is left untouched. The same
 report-never-delete rule applies to fixture-keyed ``RoomClue``/
-``ClueTrigger``/``PortalAnchor`` rows absent from every bundle.
+``ClueTrigger``/``PortalAnchor`` rows absent from every bundle, and to derived
+ambient ``TriggerDefinition``/``FlowDefinition``/``Trigger`` rows whose source
+condition's compiled filter later changes — the old row-set is left in place,
+never cleaned up.
 
 Import-safe without Django configured (mirrors ``grid_export.py``). All
 Django imports are deferred.
@@ -677,6 +680,10 @@ def _ensure_ambient_group_trigger(
     re-imports of unchanged content resolve to the same row (get_or_create by name);
     changed content (new lines added to the same condition, or a changed filter under an
     unlikely digest collision) refreshes the existing row's filter/parameters in place.
+    A condition group whose compiled filter actually changes gets a new digest, so a new
+    FlowDefinition/TriggerDefinition row-set is created rather than migrating the old
+    one in place; the old (now-orphaned) rows are never deleted or deactivated — same
+    report-never-delete deferral as this file's other sidecar types, not a bug.
     """
     import hashlib  # noqa: PLC0415
     import json  # noqa: PLC0415
