@@ -75,6 +75,28 @@ function DetailSkeleton() {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: summarize a role's combat-identity blend for display
+// ---------------------------------------------------------------------------
+
+function blendSummary(role: {
+  sword_weight: string;
+  shield_weight: string;
+  crown_weight: string;
+}): string {
+  const axes: Array<[string, number]> = [
+    ['Sword', Number(role.sword_weight)],
+    ['Shield', Number(role.shield_weight)],
+    ['Crown', Number(role.crown_weight)],
+  ];
+  return (
+    axes
+      .filter(([, w]) => w > 0)
+      .map(([label, w]) => `${label} ${Math.round(w * 100)}%`)
+      .join(' · ') || 'Unaligned'
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Member row
 // ---------------------------------------------------------------------------
 
@@ -156,8 +178,8 @@ function MemberRow({
           <Badge variant="outline" className="text-xs">
             {role.name}
           </Badge>
-          <Badge variant="outline" className="text-xs capitalize">
-            {role.archetype_display}
+          <Badge variant="outline" className="text-xs">
+            {blendSummary(role)}
           </Badge>
           {membership.engaged && (
             <Badge variant="default" className="text-xs">
