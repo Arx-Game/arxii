@@ -927,6 +927,47 @@ class StartBuildingRenovationAction(_RoomBuilderAction):
         )
 
 
+@dataclass
+class StartBuildingActivationAction(_RoomBuilderAction):
+    """Commission the project bringing a granted building to life.
+
+    Distinct from ``start_building_renovation`` (kind-swap) and
+    ``refurbish_building`` (priced instant recovery, refused on an
+    un-activated granted building) — this is the one-time commissioning
+    step for a granted building's activation arc.
+    """
+
+    key: str = "start_building_activation"
+    name: str = "Activate Property Grant"
+    icon: str = "hammer"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.buildings.property_grant_services import (  # noqa: PLC0415
+            start_building_activation,
+        )
+        from world.buildings.room_services import RoomBuildError, building_for_room  # noqa: PLC0415
+
+        room = _resolve_room(actor, kwargs)
+        if room is None:
+            return ActionResult(success=False, message=_no_room_message(kwargs))
+        building = building_for_room(room)
+        if building is None:
+            return ActionResult(success=False, message=_NOT_PART_OF_BUILDING_MESSAGE)
+        try:
+            project = start_building_activation(persona=_persona_for(actor), building=building)
+        except RoomBuildError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"Activation commissioned (project #{project.pk}). Fund it via project/donate.",
+        )
+
+
 def _building_condition_status(building) -> str:
     """Owner-only condition/upkeep readout (#1930).
 

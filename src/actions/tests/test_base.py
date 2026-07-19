@@ -174,6 +174,7 @@ class ActionRegistryTests(TestCase):
             "commission_decoration",
             "start_building_extension",
             "start_building_renovation",
+            "start_building_activation",
             "settle_building_arrears",
             "refurbish_building",
             "prepare_building",
