@@ -701,7 +701,7 @@ def _coerce_scalar_fields(model, fields: dict) -> None:
         fields[field_name] = field.to_python(value)
 
 
-def _upsert_fixture_object(
+def _upsert_fixture_object(  # noqa: C901 — one branch per distinct skip reason, see docstring
     model: type,
     obj: dict,
     source_path: Path | None,
@@ -767,6 +767,14 @@ def _upsert_fixture_object(
         if defer_unresolved:
             return OUTCOME_DEFERRED
         skip_msg = f"{source_path}: {model.__name__} could not be loaded: {exc}"
+    except NaturalKeyConfigError as exc:
+        # Arity mismatch (wrong number of natural-key values). Must be caught
+        # before the broader (ValueError, TypeError) clause below —
+        # NaturalKeyConfigError IS a ValueError subclass, so without this
+        # dedicated clause it would silently fall into the pk-based-FK-
+        # reference branch and report the wrong skip reason (Sonar python:S1045
+        # flagged the resulting dead tuple member once this line changed).
+        skip_msg = f"{source_path}: {model.__name__} could not be loaded: {exc}"
     except (ValueError, TypeError) as exc:
         # A FK value that is a raw integer (pk-based fixture) rather than a
         # natural-key list causes a ValueError on assignment. These fixtures
@@ -775,14 +783,14 @@ def _upsert_fixture_object(
             f"{source_path}: {model.__name__} could not be loaded "
             f"(likely pk-based FK reference): {exc}"
         )
-    except (NaturalKeyConfigError, ContentError, FieldError, ValidationError) as exc:
+    except (ContentError, FieldError, ValidationError) as exc:
         # FK resolution failure or schema drift. ContentError covers every
         # OTHER re-raised failure from _resolve_natural_key_fields (the
         # non-relational-list-field case) plus _extract_natural_key's own
-        # errors; NaturalKeyConfigError covers arity mismatches; FieldError
-        # covers fixture fields that no longer exist on the model.
-        # ValidationError covers a scalar value ``_coerce_scalar_fields``
-        # can't parse into its field's type (e.g. a malformed duration string).
+        # errors; FieldError covers fixture fields that no longer exist on
+        # the model. ValidationError covers a scalar value
+        # ``_coerce_scalar_fields`` can't parse into its field's type (e.g. a
+        # malformed duration string).
         skip_msg = f"{source_path}: {model.__name__} could not be loaded: {exc}"
     except model.DoesNotExist as exc:
         # The model's own DoesNotExist — the natural-key lookup didn't find
