@@ -99,6 +99,10 @@ class GridRoundTripJourneyTests(TestCase):
             room_profile=self.grid.taproom,
             area=None,
             arriver_body="The taproom's low murmur greets you.",
+            weight=3,
+            fire_chance=75,
+            cooldown_minutes=30,
+            is_active=False,
         )
 
         export_to_content_repo(self.root)
@@ -114,7 +118,44 @@ class GridRoundTripJourneyTests(TestCase):
             room_profile=self.grid.taproom, arriver_body="The taproom's low murmur greets you."
         )
         self.assertIsNotNone(restored.pk)
+        self.assertEqual(restored.weight, 3)
+        self.assertEqual(restored.fire_chance, 75)
+        self.assertEqual(restored.cooldown_minutes, 30)
+        self.assertEqual(restored.trigger_type, line.trigger_type)
+        self.assertFalse(restored.is_active)
         self.assertTrue(
             Trigger.objects.filter(obj=self.grid.taproom_obj).exists(),
             "importing an authored room with ambient content should install its Trigger",
+        )
+
+    def test_ambient_area_fallback_installs_trigger_on_every_room(self) -> None:
+        """An area-scoped line with no room-scoped lines installs Triggers on every room
+        in that area's bundle (the ``area_has_lines`` fallback branch in
+        ``core_management.grid_import._import_ambient_lines``), not just rooms with a
+        direct ``AmbientEmoteLine`` of their own."""
+        from flows.models import Trigger
+        from world.locations.constants import LocationParentType
+        from world.narrative.ambient_trigger_content import ensure_ambient_reaction_content
+        from world.narrative.factories import AmbientEmoteLineFactory
+
+        ensure_ambient_reaction_content()
+        AmbientEmoteLineFactory(
+            parent_type=LocationParentType.AREA,
+            area=self.grid.city,
+            room_profile=None,
+            arriver_body="A general hum of city life surrounds you.",
+        )
+
+        export_to_content_repo(self.root)
+        export_grid_bundles(self.root)
+
+        # No room in the bundle has a Trigger yet — the fallback line hasn't imported.
+        self.assertFalse(Trigger.objects.filter(obj=self.grid.taproom_obj).exists())
+
+        load_world_content(self.root)
+
+        self.assertTrue(
+            Trigger.objects.filter(obj=self.grid.taproom_obj).exists(),
+            "an area-scoped fallback ambient line should install a Trigger on every "
+            "room in that area's bundle, even a room with no direct AmbientEmoteLine",
         )
