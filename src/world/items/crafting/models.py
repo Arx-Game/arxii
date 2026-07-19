@@ -174,6 +174,15 @@ class CraftingMaterialRequirement(SharedMemoryModel):
         related_name="+",
         help_text="Minimum quality tier required for the ingredient. Null = any tier.",
     )
+    required_value = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Bulk mode (Build 0b): value drawn from the crafter's common-gem bucket for "
+            "this material_category tier, instead of counting instances. Only valid with "
+            "material_category; when set, quantity is ignored."
+        ),
+    )
 
     class Meta:
         app_label = "items"
@@ -185,10 +194,17 @@ class CraftingMaterialRequirement(SharedMemoryModel):
                 ),
                 name="items_craftingmaterialrequirement_template_xor_category",
             ),
+            # required_value (bulk mode) only pairs with a material_category, never a template.
+            models.CheckConstraint(
+                check=Q(required_value__isnull=True) | Q(material_category__isnull=False),
+                name="items_craftingmaterialrequirement_value_needs_category",
+            ),
         ]
 
     def __str__(self) -> str:
         target = self.item_template if self.item_template_id else self.material_category
+        if self.required_value is not None:
+            return f"{self.required_value} value of {target} for {self.recipe}"
         return f"{self.quantity}x {target} for {self.recipe}"
 
 

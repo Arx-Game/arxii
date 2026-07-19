@@ -1903,6 +1903,7 @@ from world.items.crafting.models import (  # noqa: E402,F401
 # ---------------------------------------------------------------------------
 from world.items.gems.models import (  # noqa: E402,F401
     Adornment,
+    CommonGemBucket,
     GemDetails,
     GemGrade,
     GemInstanceDetails,

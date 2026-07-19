@@ -213,6 +213,15 @@ class GemAlreadyAdorned(ItemError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That gem is already set in a piece."})
 
 
+class InsufficientCommonGems(ItemError):
+    """Raised when a common-gem value bucket lacks the value a bulk requirement needs (Build 0b)."""
+
+    user_message = "You don't have enough common gems of that kind."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"You don't have enough common gems of that kind."},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Inventory action errors (pick_up, drop, give, equip, etc.)
 # ---------------------------------------------------------------------------
