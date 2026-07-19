@@ -270,6 +270,12 @@ class RoomClue(SharedMemoryModel):
         ordering = ["room_profile", "clue"]
         verbose_name = "Room Clue"
         verbose_name_plural = "Room Clues"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["room_profile", "clue"],
+                name="room_clue_unique_room_clue",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.clue.name} hidden in {self.room_profile}"
@@ -324,6 +330,12 @@ class ClueTrigger(SharedMemoryModel):
         ordering = ["room_profile", "clue"]
         verbose_name = "Clue Trigger"
         verbose_name_plural = "Clue Triggers"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["room_profile", "clue"],
+                name="clue_trigger_unique_room_clue",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.clue.name} triggers in {self.room_profile}"

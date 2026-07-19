@@ -5,6 +5,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from core.natural_keys import NaturalKeyMixin
+from evennia_extensions.factories import RoomProfileFactory
 from world.clues.constants import ClueTargetKind
 from world.clues.factories import ClueFactory, ClueTriggerFactory, RoomClueFactory
 from world.clues.models import Clue
@@ -109,6 +110,30 @@ class ClueTriggerFixtureKeyTests(TestCase):
         ClueTriggerFactory(fixture_key="arx-city/golden-hart-taproom/whisper")
         with self.assertRaises(IntegrityError), transaction.atomic():
             ClueTriggerFactory(fixture_key="arx-city/golden-hart-taproom/whisper")
+
+
+class RoomClueUniqueRoomClueConstraintTests(TestCase):
+    """DB-level backing for the `update_or_create(room_profile=..., clue=...)`
+    idempotency `StaffPlaceClueAction` relies on (#2451 whole-branch review)."""
+
+    def test_room_profile_clue_pair_is_unique(self) -> None:
+        room_profile = RoomProfileFactory()
+        clue = ClueFactory()
+        RoomClueFactory(room_profile=room_profile, clue=clue)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            RoomClueFactory(room_profile=room_profile, clue=clue)
+
+
+class ClueTriggerUniqueRoomClueConstraintTests(TestCase):
+    """DB-level backing for `StaffPlaceClueTriggerAction`'s `update_or_create`
+    idempotency (#2451 whole-branch review)."""
+
+    def test_room_profile_clue_pair_is_unique(self) -> None:
+        room_profile = RoomProfileFactory()
+        clue = ClueFactory()
+        ClueTriggerFactory(room_profile=room_profile, clue=clue)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ClueTriggerFactory(room_profile=room_profile, clue=clue)
 
 
 class ClueNaturalKeyTests(TestCase):
