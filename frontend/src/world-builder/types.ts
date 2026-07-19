@@ -25,7 +25,13 @@ export type WorldBuilderActionKey =
   | 'staff_place_room'
   | 'staff_remove_room'
   | 'promote_room'
-  | 'promote_area';
+  | 'promote_area'
+  | 'staff_place_clue'
+  | 'staff_remove_clue'
+  | 'staff_place_clue_trigger'
+  | 'staff_remove_clue_trigger'
+  | 'staff_place_portal_anchor'
+  | 'staff_remove_portal_anchor';
 
 /** Mirrors `world.areas.constants.AreaLevel` — select options for CreateAreaDialog. */
 export const AREA_LEVELS: { value: number; label: string }[] = [
