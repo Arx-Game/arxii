@@ -414,6 +414,7 @@ class RevokeSeanceManifestationsTests(TestCase):
         from evennia_extensions.factories import RoomProfileFactory
 
         CeremonyTypeFactory(key=CeremonyTypeKey.SEANCE, name="Seance")
+        CeremonyTypeFactory(key=CeremonyTypeKey.FUNERAL, name="Funeral")
         cls.public = WorshippedBeingFactory()
         cls.location = RoomProfileFactory()
 
@@ -472,3 +473,41 @@ class RevokeSeanceManifestationsTests(TestCase):
             abandon_ceremony(ceremony=ceremony)
 
         mock_revoke.assert_called_once_with(ceremony)
+
+    def test_finish_calls_revoke_too(self) -> None:
+        persona, officiant_sheet = _persona_with_sheet()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=self.public)
+        sheet = _dead_sheet()
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[sheet],
+            location_profile=self.location,
+        )
+
+        with mock.patch("world.ceremonies.services.revoke_seance_manifestations") as mock_revoke:
+            finish_ceremony(ceremony=ceremony)
+
+        mock_revoke.assert_called_once_with(ceremony)
+
+    def test_abandon_non_seance_ceremony_is_a_real_no_op(self) -> None:
+        """revoke_seance_manifestations' own early-return guard (its body, not the call
+        site — both abandon_ceremony and finish_ceremony call it unconditionally) must
+        no-op cleanly for a Funeral. A Funeral honoree never gets a SeanceManifestationOffer
+        (open_ceremony only creates those for SEANCE — see the ``if ceremony_type.key ==
+        CeremonyTypeKey.SEANCE`` guard there), so there's nothing puppet-related to assert
+        beyond: the call completes without raising and the ceremony still reaches ABANDONED.
+        """
+        persona, officiant_sheet = _persona_with_sheet()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=self.public)
+        dead = _dead_sheet()
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.FUNERAL,
+            honoree_sheets=[dead],
+            location_profile=self.location,
+        )
+
+        abandon_ceremony(ceremony=ceremony)
+
+        self.assertEqual(ceremony.status, CeremonyStatus.ABANDONED)
