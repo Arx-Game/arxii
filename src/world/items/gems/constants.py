@@ -22,3 +22,16 @@ class GemAxis(models.TextChoices):
     SIZE = "size", "Size"
     PURITY = "purity", "Purity"
     CUT = "cut", "Cut"
+
+
+# --- Mining / haul distribution (Build 0b slice 4) ---
+# All magnitudes are PLACEHOLDER, admin/caller-tunable — the *shape* is the point.
+#
+# A weekly offscreen mine yields a bulk of common gems as an aggregate *value* (never
+# instanced) plus, rarely, a few individuated "Rare Find" stones. Mine quality and the
+# overseeing minister's skill both help: they add to the Rare-Find chance AND shift every
+# axis roll up (a +10 mine turns a 90 into a 100 — max for the roll).
+RARE_FIND_BASE_CHANCE = 1  # percent, before mine-quality / minister bonuses
+RARE_FIND_MAX_COUNT = 4  # 1dN finds when a Rare Find occurs
+# Common-bulk value produced per point of mine quality per cycle (pure placeholder).
+COMMON_VALUE_PER_QUALITY = 50
