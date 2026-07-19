@@ -3,9 +3,9 @@
 Magically-empowered group oaths with roles, gear compatibility, a per-covenant rank
 ladder, and (as of #1165) a Mentor's Vow bond system for level-mismatched parties.
 
-**Standing invariant:** `CovenantRole` = combat power (archetype, speed_rank, Thread
-pulls). `CovenantRank` = administrative authority (invite/kick/manage). These two
-axes are orthogonal — never re-merge them.
+**Standing invariant:** `CovenantRole` = combat power (SWORD/SHIELD/CROWN blend
+weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
+(invite/kick/manage). These two axes are orthogonal — never re-merge them.
 
 ## Models
 
@@ -16,6 +16,15 @@ axes are orthogonal — never re-merge them.
   boolean, `rank` FK → `CovenantRank`.
 - **`GearArchetypeCompatibility`** — existence-only join: which `CovenantRole`s are
   compatible with which `GearArchetype` values (read-only authored content).
+- **`CovenantRole.sword_weight` / `.shield_weight` / `.crown_weight`** (#2529, ADR-0149)
+  — `DecimalField`s (max_digits=4, decimal_places=3) forming the combat-identity blend.
+  Weights are stored on primary roles only and sum to 1; sub-roles carry all-zero
+  weights and delegate via `blend_weight_for(axis) -> Decimal`, which reads from
+  `parent_role` when set. Replaced the single-value `archetype` field (SWORD/SHIELD/
+  CROWN enum) — a role can now be meaningfully both a striker and a rallying voice.
+  Authored blend values are lore-repo content (`NaturalKeyMixin`, `covenants.covenantrole`
+  in `content_export.py`'s `CONTENT_MODELS`); arxii's own seeds carry only
+  placeholder-pure 1/0/0 blends for the three canonical roles.
 - **`CovenantRole`** sub-role fields — a sub-role is a `CovenantRole` with a non-null
   `parent_role` (self-FK) and `resonance` (FK → `magic.Resonance`). Additional fields:
   - `unlock_thread_level` (PositiveIntegerField, default 0 for primary roles; >0 for
@@ -37,17 +46,25 @@ axes are orthogonal — never re-merge them.
   dims (#2051), the scaling drops to 0.
 - **`VowGearScaling`** (#2022) — authored config: one row per
   `(gear_archetype, role_archetype)` with a `thread_level_multiplier` (Decimal).
-  Amplifies how much equipped gear contributes: the bonus is
-  `int(gear_stat × thread_level × multiplier)`. Extends
-  `GearArchetypeCompatibility` from a gate (which gear you can use) to a
-  multiplier (how much it contributes). When the vow dims, the equipment's
-  contribution reverts to base.
-- **`ArchetypeActionScaling`** (#2022) — authored config: one row per
-  `(action_key, role_archetype)` with a `thread_level_multiplier` (Decimal).
-  Read by `archetype_action_scaling_bonus(character, action_key)` at the combat
-  action resolution seam. SHIELD roles scale the interpose partial-block damage
-  reduction; SWORD roles add a flat power bonus to `cast_technique` via a power
-  term provider; CROWN roles scale rally actions.
+  Keyed on the now-removed `CovenantRole.archetype` field. `vow_gear_scaling_bonus`
+  (`world.mechanics.services`) short-circuits to a flat 0 as of #2529 — the model was
+  never seeded in a real game (already inert before the rework), so this makes its
+  actual runtime behavior explicit rather than leaving a latent bug on a removed field.
+  ADR-0149's Layer 3 (#2533, defense styles + gear substitution) decides the model's
+  real fate; do not wire it back up without that design.
+- **`CovenantRoleActionScaling`** (#2529, ADR-0149; replaced `ArchetypeActionScaling`)
+  — authored config: one row per `(covenant_role, action_key)` with a
+  `thread_level_multiplier` (Decimal). Natural-key content
+  (`covenants.covenantroleactionscaling` in `CONTENT_MODELS`). Read by
+  `covenant_role_action_scaling_bonus(character, action_key)` at the combat action
+  resolution seam — sums `thread_level × multiplier` across the character's engaged
+  roles that have a row for the action, normalizing engaged (possibly resolved
+  sub-)roles to their anchor (parent) role before lookup, since rows and COVENANT_ROLE
+  threads both key on the anchor. Rows are authored per-role now, not per-archetype:
+  seed content gives Bulwark (SHIELD) an interpose row and Luminary (CROWN) a rally
+  row; the Vanguard's old `cast_technique` row is not recreated — that scaling moved to
+  the always-on `covenant_role_blend_power_term` power term
+  (`world.magic.services.power_terms`, see `docs/systems/magic.md`).
 - **`CovenantRoleGiftGrant`** (#2022) — through model for
   `CovenantRole.granted_gifts` M2M to `magic.Gift`. Carries
   `unlock_thread_level` — the COVENANT_ROLE thread level at which the gift's
@@ -516,6 +533,11 @@ Graduation: when the adjusted party's real primary level re-enters the band,
 - **Court deferred items** — the convince-the-master economy, enemy-of-master substrate,
   per-instance authored roles, and active capability surge were deliberately NOT built in #1589;
   they are follow-up design items.
+- **Vow power, four-layer model (ADR-0149)** — #2529 shipped Layer 1 (the SWORD/SHIELD/
+  CROWN blend + always-on baseline power term) only. Layer 2 (per-vow technique
+  specialty, #2443), Layer 3 (defense styles + gear substitution, `VowGearScaling`'s
+  real fate, #2533), and Layer 4 (deterministic situational perks — "the point of
+  vows", #2536) are tracked separately.
 
 ## Integrates With
 

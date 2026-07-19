@@ -2805,6 +2805,7 @@
   - gear_compatibilities <- covenants.GearArchetypeCompatibility
   - character_assignments <- covenants.CharacterCovenantRole
   - vow_stat_scalings <- covenants.VowStatScaling
+  - action_scalings <- covenants.CovenantRoleActionScaling
   - gift_grants <- covenants.CovenantRoleGiftGrant
   - role_bonuses <- covenants.CovenantRoleBonus
   - combat_participations <- combat.CombatParticipant
@@ -2841,7 +2842,9 @@
 
 ### VowGearScaling
 
-### ArchetypeActionScaling
+### CovenantRoleActionScaling
+**Foreign Keys:**
+  - covenant_role -> covenants.CovenantRole [FK]
 
 ### CovenantRoleGiftGrant
 **Foreign Keys:**
@@ -2907,7 +2910,6 @@
 ### Service Functions
 - `active_court_pact_for(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet') -> 'CourtPact | None' — Return the single active CourtPact for (covenant, servant_sheet), or None.`
 - `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole') -> 'CharacterCovenantRole' — Create a new active membership row. Atomic.`
-- `archetype_action_scaling_bonus(character: 'object', action_key: 'str') -> 'float' — Return the archetype-driven scaling bonus for a combat action (#2022).`
 - `assert_initiator_can_induct(*, session: 'RitualSession') -> 'None' — Draft-time gate for INDUCTION rituals: the initiator must hold a can_invite`
 - `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole', rank: 'CovenantRank | None' = None) -> 'CharacterCovenantRole' — Create a new active CharacterCovenantRole row. Atomic.`
 - `assign_rank(*, membership: 'CharacterCovenantRole', actor: 'CharacterCovenantRole', rank: 'CovenantRank') -> 'CharacterCovenantRole' — Assign a new rank to a member. Requires can_manage_ranks.`
@@ -2918,6 +2920,7 @@
 - `clear_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Un-engage this membership. Idempotent.`
 - `complete_rites_for_encounter(*, encounter: 'CombatEncounter') -> 'None' — Sweep covenant rite buffs when a combat encounter ends.`
 - `covenant_members_present(*, covenant: 'Covenant', room: 'ObjectDB') -> 'list[CharacterSheet]' — CharacterSheets of active `covenant` members present in `room`.`
+- `covenant_role_action_scaling_bonus(character: 'object', action_key: 'str') -> 'float' — Return the per-role scaling bonus for a combat action (#2529, was #2022).`
 - `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]', battle_binding: 'str' = '', campaign_story: 'Story | None' = None, leader: 'CharacterSheet | None' = None, flat: 'bool' = False) -> 'Covenant' — Create a covenant with its initial set of founder memberships. Atomic.`
 - `create_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on FORMATION fire. Unpacks the session into create_covenant args.`
 - `create_rank(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', name: 'str', tier: 'int', can_invite: 'bool' = False, can_kick: 'bool' = False, can_manage_ranks: 'bool' = False, can_lead_rituals: 'bool' = False) -> 'CovenantRank' — Create a new rank in the covenant's ladder. Requires can_manage_ranks.`
@@ -4866,6 +4869,8 @@
 
 ### StandingCapBand
 
+### CovenantRoleBlendConfig
+
 ### MagicProgressionMilestone
 **Foreign Keys:**
   - codex_entry -> codex.CodexEntry [FK] (nullable)
@@ -5521,7 +5526,7 @@
 - `stage_property(target: 'ObjectDB', property_: 'Property', value: 'int' = 1) -> 'ObjectProperty' — GM improv: attach or refresh a Property on ``target`` (#2503).`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
 - `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' — Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`
-- `vow_gear_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven equipment effectiveness bonus (#2022).`
+- `vow_gear_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Vow-driven equipment amplification — inert pending Layer 3 (#2533).`
 - `vow_stat_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven stat scaling across engaged roles (#2022).`
 - `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' — Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`
 

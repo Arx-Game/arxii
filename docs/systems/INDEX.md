@@ -3899,18 +3899,27 @@ Magically-empowered group oaths with roles, gear compatibility, a per-covenant r
 ladder, a Mentor's Vow bond system for level-mismatched parties (#1165), and a Covenant
 of the Court type for master/servant pacts (#1589).
 
-**Standing invariant:** `CovenantRole` = combat power (archetype, speed_rank,
-Thread pulls). `CovenantRank` = administrative authority (invite/kick/manage).
-These two axes are orthogonal — never re-merge them.
+**Standing invariant:** `CovenantRole` = combat power (SWORD/SHIELD/CROWN blend
+weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
+(invite/kick/manage). These two axes are orthogonal — never re-merge them.
 
 - **Models:**
   - `CharacterCovenantRole` — per-character membership row; `left_at IS NULL` =
     currently active. Fields include `covenant` FK, `covenant_role` FK, `engaged`
     boolean, `rank` FK → `CovenantRank`.
+  - `CovenantRole.sword_weight`/`.shield_weight`/`.crown_weight` (#2529, ADR-0149) —
+    Decimal weights forming the combat-identity blend; stored on primary roles only
+    (sum to 1), sub-roles delegate via `blend_weight_for(axis) -> Decimal`. Replaced
+    the single-value `archetype` enum. Lore-repo content (`NaturalKeyMixin`,
+    `CONTENT_MODELS`).
   - `CovenantRole` sub-role fields — `parent_role` (self-FK), `resonance` (FK →
     `magic.Resonance`), `unlock_thread_level` (PositiveInt, 0 for primary / >0 for sub-roles),
     `discovery_achievement` (FK → `achievements.Achievement`, nullable, sub-roles only),
     `codex_entry` (FK → `codex.CodexEntry`, nullable, sub-roles only).
+  - `CovenantRoleActionScaling` (#2529, ADR-0149; replaced `ArchetypeActionScaling`) —
+    one row per `(covenant_role, action_key)` with `thread_level_multiplier`. Read by
+    `covenant_role_action_scaling_bonus(character, action_key)`, anchor-role
+    normalized. Lore-repo content.
   - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
     compatible with which `GearArchetype` values (read-only authored content)
   - `CovenantRoleBonus` — authored config: one row per
@@ -3972,6 +3981,10 @@ These two axes are orthogonal — never re-merge them.
   - `is_gear_compatible(role, archetype) -> bool`
   - `role_base_bonus_for_target(role, target, char_level) -> int` (in
     `world.mechanics.services`)
+  - `covenant_role_action_scaling_bonus(character, action_key) -> float` (#2529,
+    ADR-0149; replaces `archetype_action_scaling_bonus`) — sums `thread_level ×
+    multiplier` across engaged roles' `CovenantRoleActionScaling` rows, anchor-role
+    normalized
   - **Rank management** — all require `actor.rank.can_manage_ranks=True`:
     `create_rank`, `rename_rank`, `set_rank_capabilities`, `reorder_ranks`,
     `delete_rank`, `assign_rank`, `transfer_top`. Lock-out invariant:
