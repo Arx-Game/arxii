@@ -1,10 +1,10 @@
 """Generic "grant a persona an already-existing Building" primitive.
 
-Not tied to CG, Arx, or any specific content — grant_property_house is
-callable from anywhere (finalize_character via Beginnings.property_grant_profile
-today; a GM/story action or a later relocation flow could call it directly
-with any PropertyGrantProfile). "The Keeping" (#2461) is a content instance
-of this primitive, not a code path — see PropertyGrantProfile's docstring.
+Not tied to character creation, player progression, or any specific content —
+grant_property_house is callable from anywhere (e.g., during finalization via
+a PropertyGrantProfile, a GM/story action, or a later relocation flow). Actual
+content that instantiates a PropertyGrantProfile lives in fixtures/content data,
+not in this module — see PropertyGrantProfile's docstring.
 """
 
 from __future__ import annotations
