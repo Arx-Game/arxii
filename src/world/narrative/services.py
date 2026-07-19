@@ -16,13 +16,18 @@ online sessions and persists a Gemit record for retroactive viewing.
 from __future__ import annotations
 
 from collections.abc import Generator, Iterable
+from datetime import timedelta
+import random
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 
-from world.narrative.constants import GemitReach, NarrativeCategory
+from world.locations.constants import LocationParentType
+from world.narrative.constants import AmbientTriggerType, GemitReach, NarrativeCategory
 from world.narrative.models import (
+    AmbientEmoteLine,
     AmbientStirLine,
     Gemit,
     NarrativeMessage,
@@ -377,3 +382,178 @@ def emit_ambient_room_stir(room: ObjectDB, *, exclude: ObjectDB | None = None) -
         category=NarrativeCategory.HAPPENSTANCE,
         ooc_note="Ambient room stir (source withheld by design).",
     )
+
+
+def _eligible_ambient_lines(profile: object) -> list[AmbientEmoteLine]:
+    """Most-specific-wins pool for ``profile``: room lines if any exist, else the area's.
+
+    Mirrors the location-cascade convention (``LocationValueOverride``): a room-scoped
+    pool entirely REPLACES an area-scoped one covering it, rather than merging with it.
+    """
+    select = (
+        "trigger_species",
+        "trigger_resonance",
+        "trigger_distinction",
+        "trigger_perceiving_society",
+    )
+    room_lines = list(
+        AmbientEmoteLine.objects.filter(
+            parent_type=LocationParentType.ROOM, room_profile=profile, is_active=True
+        ).select_related(*select)
+    )
+    if room_lines:
+        return room_lines
+    if profile.area_id is None:
+        return []
+    return list(
+        AmbientEmoteLine.objects.filter(
+            parent_type=LocationParentType.AREA, area_id=profile.area_id, is_active=True
+        ).select_related(*select)
+    )
+
+
+def _renown_min_matches(line: AmbientEmoteLine, persona: object) -> bool:
+    """Mirrors the retired ``world.societies.fame_reactions._tier_meets`` (#881)."""
+    from world.societies.constants import FAME_TIER_ORDER  # noqa: PLC0415
+
+    offset = (
+        (line.trigger_perceiving_society.fame_perception_offset or 0)
+        if line.trigger_perceiving_society_id
+        else 0
+    )
+    perceived_index = max(0, FAME_TIER_ORDER.index(persona.fame_tier) + offset)
+    return perceived_index >= FAME_TIER_ORDER.index(line.trigger_min_fame_tier)
+
+
+def _active_persona_or_none(character: object) -> object | None:
+    """Mirrors the retired ``world.societies.fame_reactions._active_persona`` (#881)."""
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    sheet = character.character_sheet
+    if sheet is None:
+        return None
+    try:
+        return active_persona_for_sheet(sheet)
+    except ObjectDoesNotExist:
+        return None
+
+
+def _trigger_matches(  # noqa: PLR0911 — one branch per trigger_type
+    line: AmbientEmoteLine, character: object
+) -> bool:
+    """Does ``character`` meet ``line``'s trigger_type condition."""
+    if line.trigger_type == AmbientTriggerType.NONE:
+        return True
+    if line.trigger_type == AmbientTriggerType.SPECIES:
+        species = character.item_data.species
+        return species is not None and species.pk == line.trigger_species_id
+    if line.trigger_type == AmbientTriggerType.RESONANCE_MIN:
+        # lifetime_earned, not balance — an identity marker ("how deeply attuned"),
+        # not spendable currency that drains as the character spends it.
+        return character.resonances.lifetime(line.trigger_resonance) >= line.trigger_minimum_value
+    if line.trigger_type == AmbientTriggerType.DISTINCTION:
+        from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+
+        return CharacterDistinction.objects.filter(
+            character=character,
+            distinction=line.trigger_distinction,
+            secret__isnull=True,
+        ).exists()
+    if line.trigger_type == AmbientTriggerType.RENOWN_MIN:
+        persona = _active_persona_or_none(character)
+        if persona is None:
+            return False
+        return _renown_min_matches(line, persona)
+    return False
+
+
+def _deliver_ambient_line(line: AmbientEmoteLine, character: object, room: object) -> None:
+    """Send the bystander line to the room (minus arriver) + the arriver line.
+
+    Generalizes the retired ``world.societies.fame_reactions._deliver`` (#881).
+    """
+    category = (
+        NarrativeCategory.RENOWN
+        if line.trigger_type == AmbientTriggerType.RENOWN_MIN
+        else NarrativeCategory.ATMOSPHERE
+    )
+    if line.bystander_body:
+        bystander_sheets = []
+        for obj in room.contents:
+            if obj.pk == character.pk:
+                continue
+            sheet = obj.character_sheet
+            if sheet is not None:
+                bystander_sheets.append(sheet)
+        if bystander_sheets:
+            send_narrative_message(
+                recipients=bystander_sheets,
+                body=line.bystander_body,
+                category=category,
+                ooc_note="Ambient room reaction (bystander register, #2471).",
+            )
+    if line.arriver_body:
+        arriver_sheet = character.character_sheet
+        if arriver_sheet is not None:
+            send_narrative_message(
+                recipients=[arriver_sheet],
+                body=line.arriver_body,
+                category=category,
+                ooc_note="Ambient room reaction (arriver register, #2471).",
+            )
+
+
+def emit_room_ambient_reaction(  # noqa: PLR0911 — one guard per quiet-exit case
+    *, payload: object
+) -> bool:
+    """MOVED-triggered: fire at most one authored AmbientEmoteLine for the arriver (#2471).
+
+    Generalizes the retired ``world.societies.fame_reactions.maybe_emit_fame_reaction``
+    (#881) — species, resonance-threshold, distinction, and fame-tier conditions, plus
+    plain unconditional atmosphere, through one mechanism. Called via the shared
+    ``ambient_room_reaction`` Flow's CALL_SERVICE_FUNCTION step
+    (``world.narrative.ambient_trigger_content.ensure_ambient_reaction_content``), with
+    ``payload`` the ``flows.events.payloads.MovedPayload`` for the MOVED event.
+
+    Returns True when a line fired (for tests); False on any quiet exit (no room
+    profile, sheetless arriver, no eligible/matching line, cooldown active, or the
+    fire_chance roll missed).
+    """
+    character = payload.character
+    room = payload.destination
+    if character is None or room is None:
+        return False
+    if character.character_sheet is None:
+        return False
+    profile = room.room_profile_or_none
+    if profile is None:
+        return False
+
+    lines = _eligible_ambient_lines(profile)
+    if not lines:
+        return False
+
+    matching = [line for line in lines if _trigger_matches(line, character)]
+    if not matching:
+        return False
+
+    now = timezone.now()
+    fireable = [
+        line
+        for line in matching
+        if line.last_fired_at is None
+        or now >= line.last_fired_at + timedelta(minutes=line.cooldown_minutes)
+    ]
+    if not fireable:
+        return False
+
+    from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
+
+    line = select_weighted(fireable)
+    if random.randint(1, 100) > line.fire_chance:  # noqa: S311
+        return False
+
+    _deliver_ambient_line(line, character, room)
+    line.last_fired_at = now
+    line.save(update_fields=["last_fired_at"])
+    return True
