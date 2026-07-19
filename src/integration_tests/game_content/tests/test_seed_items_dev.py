@@ -49,20 +49,26 @@ class SeedItemsDevCreationTests(TestCase):
         self.assertEqual(len(self.result.compatibility.compatibilities), 11)
         self.assertEqual(GearArchetypeCompatibility.objects.count(), 11)
 
-    def test_sword_role_archetype(self) -> None:
-        from world.covenants.constants import RoleArchetype
+    def test_sword_role_blend(self) -> None:
+        """The seeded sword role is placeholder-pure: sword_weight=1, others 0."""
+        role = self.result.compatibility.sword_role
+        self.assertEqual(role.sword_weight, 1)
+        self.assertEqual(role.shield_weight, 0)
+        self.assertEqual(role.crown_weight, 0)
 
-        self.assertEqual(self.result.compatibility.sword_role.archetype, RoleArchetype.SWORD)
+    def test_shield_role_blend(self) -> None:
+        """The seeded shield role is placeholder-pure: shield_weight=1, others 0."""
+        role = self.result.compatibility.shield_role
+        self.assertEqual(role.sword_weight, 0)
+        self.assertEqual(role.shield_weight, 1)
+        self.assertEqual(role.crown_weight, 0)
 
-    def test_shield_role_archetype(self) -> None:
-        from world.covenants.constants import RoleArchetype
-
-        self.assertEqual(self.result.compatibility.shield_role.archetype, RoleArchetype.SHIELD)
-
-    def test_crown_role_archetype(self) -> None:
-        from world.covenants.constants import RoleArchetype
-
-        self.assertEqual(self.result.compatibility.crown_role.archetype, RoleArchetype.CROWN)
+    def test_crown_role_blend(self) -> None:
+        """The seeded crown role is placeholder-pure: crown_weight=1, others 0."""
+        role = self.result.compatibility.crown_role
+        self.assertEqual(role.sword_weight, 0)
+        self.assertEqual(role.shield_weight, 0)
+        self.assertEqual(role.crown_weight, 1)
 
     def test_template_archetype_keys_match_constants(self) -> None:
         """templates dict keys are actual GearArchetype values (not label strings)."""

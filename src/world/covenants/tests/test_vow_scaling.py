@@ -3,7 +3,8 @@ role-source variant resolution, and capability grant wiring (#2022 completion).
 
 Covers the spec items that were missing from the prematurely-merged PR #2106:
 1. VowStatScaling — thread-level stat scaling in the modifier pipeline
-2. VowGearScaling — equipment effectiveness multiplier
+2. VowGearScaling — equipment effectiveness multiplier, short-circuited to 0
+   pending #2533 (#2529 Layer 1); see ``VowGearScalingTests`` below
 3. Role-source variant resolution — COVENANT_ROLE thread level for role-granted techniques
 4. Capability grant wiring — CovenantRole.granted_capabilities M2M read by the handler
 5. CovenantRoleActionScaling — interpose partial-block scaling per engaged role
@@ -101,10 +102,17 @@ class VowStatScalingTests(TestCase):
 
 
 class VowGearScalingTests(TestCase):
-    """VowGearScaling amplifies equipment contribution by thread level (#2022)."""
+    """VowGearScaling is deferred pending #2533 (#2529 Task 2, Layer 1)."""
 
-    def test_no_scaling_when_not_engaged(self):
-        """An unengaged character gets 0 from vow gear scaling."""
+    def test_short_circuits_to_zero_pending_2533(self):
+        """``vow_gear_scaling_bonus`` unconditionally returns 0 (mechanics/services.py:991-1003).
+
+        #2529 short-circuited this function ahead of the VowGearScaling model's
+        eventual fate; #2533 decides whether the model is reworked or removed.
+        Engagement/config-row state has no bearing on the result today, so this
+        test asserts the constant directly rather than building setup that the
+        function no longer reads.
+        """
         from world.mechanics.services import vow_gear_scaling_bonus
 
         role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
@@ -113,20 +121,8 @@ class VowGearScalingTests(TestCase):
 
         self.assertEqual(vow_gear_scaling_bonus(sheet, None), 0)
 
-    def test_no_scaling_when_no_config_row(self):
-        """An engaged character with no VowGearScaling row gets 0."""
-        from world.mechanics.services import vow_gear_scaling_bonus
 
-        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
-        membership = CharacterCovenantRoleFactory(covenant_role=role)
-        sheet = membership.character_sheet
-
-        set_engaged_membership(membership=membership)
-
-        self.assertEqual(vow_gear_scaling_bonus(sheet, None), 0)
-
-
-class ArchetypeActionScalingTests(TestCase):
+class CovenantRoleActionScalingTests(TestCase):
     """CovenantRoleActionScaling provides a bonus for combat actions per role (#2529, was #2022).
 
     ``covenant_role_action_scaling_bonus`` sums thread_level × multiplier across the

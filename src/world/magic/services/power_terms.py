@@ -17,7 +17,13 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import AuraPowerConfig, LevelPowerConfig, Technique, Thread
+    from world.magic.models import (
+        AuraPowerConfig,
+        CovenantRoleBlendConfig,
+        LevelPowerConfig,
+        Technique,
+        Thread,
+    )
 
 
 @dataclass(frozen=True)
@@ -240,7 +246,7 @@ def enhancement_overlap_term(ctx: PowerTermContext) -> int:
 _ENHANCEMENT_OVERLAP_BONUS: int = 2
 
 
-def get_covenant_role_blend_config():
+def get_covenant_role_blend_config() -> CovenantRoleBlendConfig:
     """Return the CovenantRoleBlendConfig singleton, lazy-creating pk=1."""
     from world.magic.models import CovenantRoleBlendConfig  # noqa: PLC0415
 
