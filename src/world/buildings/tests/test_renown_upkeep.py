@@ -691,3 +691,34 @@ class GrantedNotActivatedUpkeepExemptionTests(TestCase):
         self.assertFalse(paid)
         building.refresh_from_db()
         self.assertEqual(building.consecutive_missed_upkeep, 1)
+
+
+class RefurbishGrantedNotActivatedGuardTests(TestCase):
+    def test_refurbish_refused_on_granted_not_activated_building(self):
+        owner = _make_persona_with_wallet(gold=10_000)
+        building = _granted_building_with_upkeep(
+            owner, weekly=10, activation_target_tier=ConditionTier.RAMSHACKLE
+        )
+        with self.assertRaises(ConditionServiceError) as ctx:
+            refurbish_building(building=building, payer_purse=_purse(owner))
+        assert "activated" in ctx.exception.user_message.lower()
+
+    def test_refurbish_succeeds_once_activated(self):
+        owner = _make_persona_with_wallet(gold=10_000)
+        building = _granted_building_with_upkeep(
+            owner, weekly=10, activation_target_tier=ConditionTier.RAMSHACKLE
+        )
+        LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=building.area,
+            holder_type=HolderType.PERSONA,
+            holder_persona=owner,
+        )
+        project = start_building_activation(persona=owner, building=building)
+        complete_building_activation(project)
+        building.refresh_from_db()
+
+        refurbish_building(building=building, payer_purse=_purse(owner))
+
+        building.refresh_from_db()
+        self.assertEqual(building.condition_tier, ConditionTier.EXCELLENT)

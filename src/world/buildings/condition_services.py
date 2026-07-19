@@ -142,6 +142,14 @@ def refurbish_building(*, building: Building, payer_purse: CharacterPurse) -> in
     repair-chore treadmill. Requires arrears settled; refuses when the
     building is already at or above EXCELLENT.
     """
+    if building.property_granted_at is not None and building.property_activated_at is None:
+        msg = f"building {building.pk} is a granted-not-activated property"
+        raise ConditionServiceError(
+            msg,
+            user_message=(
+                "This house hasn't been brought to life yet — it needs to be activated first."
+            ),
+        )
     _require_settled(building, "refurbish")
     if building.condition_tier >= ConditionTier.EXCELLENT:
         msg = f"building {building.pk} already at/above EXCELLENT"
