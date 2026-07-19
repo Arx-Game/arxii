@@ -21,12 +21,6 @@ from world.locations.models import LocationOwnership
 from world.projects.constants import ProjectKind
 
 
-def _room_in(area, *, name="A Room"):
-    room = ObjectDBFactory(db_key=name, db_typeclass_path="typeclasses.rooms.Room")
-    RoomProfile.objects.update_or_create(objectdb=room, defaults={"area": area})
-    return room
-
-
 def _make_owner_of_granted_building(*, activation_target_tier=ConditionTier.RAMSHACKLE):
     BuildingSizeTier.objects.get_or_create(tier=1, defaults={"name": "Hut", "space_budget": 50})
     actor = CharacterFactory()

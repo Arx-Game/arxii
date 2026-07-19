@@ -9,7 +9,7 @@ from world.buildings.models import BuildingSizeTier, PropertyGrantProfile
 from world.buildings.room_services import RoomBuildError
 from world.locations.constants import HolderType, LocationParentType
 from world.locations.models import LocationOwnership
-from world.projects.constants import CompletionMode, ProjectKind
+from world.projects.constants import CompletionMode, ProjectKind, ProjectStatus
 from world.scenes.factories import PersonaFactory
 
 
@@ -127,6 +127,13 @@ class StartBuildingActivationTests(TestCase):
         assert project.kind == ProjectKind.BUILDING_ACTIVATION
         assert project.completion_mode == CompletionMode.SINGLE_THRESHOLD
         assert project.building_activation_details.target_tier == ConditionTier.RAMSHACKLE
+
+    def test_project_starts_active(self):
+        from world.buildings.property_grant_services import start_building_activation
+
+        persona, building = _owned_building_with_persona()
+        project = start_building_activation(persona=persona, building=building)
+        assert project.status == ProjectStatus.ACTIVE
 
     def test_non_owner_refused(self):
         from world.buildings.property_grant_services import start_building_activation

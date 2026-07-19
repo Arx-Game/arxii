@@ -11,7 +11,7 @@ Plan 3 seeds:
 
 from __future__ import annotations
 
-from world.buildings.models import BuildingKind
+from world.buildings.models import BuildingKind, PropertyGrantProfile
 from world.buildings.services import BUILDING_PERMIT_TEMPLATE_NAME
 
 HOUSE_KIND_NAME = "House"
@@ -310,14 +310,14 @@ PLACEHOLDER_PROPERTY_GRANT_KIND_NAME = "Unclaimed Property (placeholder)"
 PLACEHOLDER_PROPERTY_GRANT_PROFILE_NAME = "Generic Property Grant (placeholder)"
 
 
-def ensure_placeholder_property_grant_profile():
+def ensure_placeholder_property_grant_profile() -> PropertyGrantProfile:
     """Get-or-create a generic dev/test PropertyGrantProfile.
 
     Not content — a schema-exercising placeholder so grant_property_house is
     testable end-to-end before any real fixture content wires a Beginnings
     row at a PropertyGrantProfile.
     """
-    from world.buildings.models import BuildingKind, PropertyGrantProfile  # noqa: PLC0415
+    from world.buildings.models import BuildingKind  # noqa: PLC0415
 
     kind, _ = BuildingKind.objects.get_or_create(
         name=PLACEHOLDER_PROPERTY_GRANT_KIND_NAME,

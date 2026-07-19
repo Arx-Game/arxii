@@ -115,7 +115,7 @@ def start_building_activation(*, persona: Persona, building: Building) -> Projec
     """
     from world.buildings.models import BuildingActivationDetails  # noqa: PLC0415
     from world.locations.services import is_owner  # noqa: PLC0415
-    from world.projects.constants import CompletionMode, ProjectKind  # noqa: PLC0415
+    from world.projects.constants import CompletionMode, ProjectKind, ProjectStatus  # noqa: PLC0415
     from world.projects.models import Project  # noqa: PLC0415
 
     entry = building.entry_room
@@ -143,6 +143,7 @@ def start_building_activation(*, persona: Persona, building: Building) -> Projec
         project = Project.objects.create(
             kind=ProjectKind.BUILDING_ACTIVATION,
             completion_mode=CompletionMode.SINGLE_THRESHOLD,
+            status=ProjectStatus.ACTIVE,
             owner_persona=persona,
             started_at=now,
             time_limit=now + timedelta(days=30),
