@@ -18,6 +18,7 @@ from django.utils import timezone
 
 from world.currency.constants import (
     ACTIVE_WEEK_LOGIN_DAYS,
+    ALLOWANCE_SURPLUS_PCT,
     BUSINESS_BASE_WEEKLY_PER_LEVEL,
     BUSINESS_FORTUNE_MAX,
     BUSINESS_FORTUNE_MIN,
@@ -50,7 +51,7 @@ from world.currency.models import (
     OrgIncomeStream,
     OrgObligation,
 )
-from world.currency.types import CollectionResult, ImprovementResult
+from world.currency.types import AllowanceResult, CollectionResult, ImprovementResult
 
 logger = logging.getLogger(__name__)
 
@@ -580,6 +581,60 @@ def collect_org_income(*, organization: Organization, character) -> CollectionRe
         process_income_stream(stream, share)
     return CollectionResult(
         gathered=gathered, landed=net, graft_leak=graft_leak, success_level=success_level
+    )
+
+
+@transaction.atomic
+def distribute_allowance(*, organization: Organization, surplus: int) -> AllowanceResult:
+    """Auto-split a share of ``surplus`` among the org's active piloted members (#2540).
+
+    The **non-discretionary allowance** rail — the head cannot withhold it. Meant to fire off the
+    collection event (the future domain dispatch calls ``collect_org_income`` then this with the
+    net as ``surplus``), so the baseline reaches players without anyone having to coerce the head.
+    A PLACEHOLDER share (``ALLOWANCE_SURPLUS_PCT``) of surplus splits equally among members whose
+    account logged in within ``ACTIVE_WEEK_LOGIN_DAYS`` — pure NPCs have no ``db_account`` and are
+    excluded for free, and a member is paid once even across multiple member personas. Paid from
+    the treasury (where the collected surplus sits); the pool is capped at the treasury balance so
+    it never overdraws. Whole-copper division; the remainder simply stays in the treasury.
+    """
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    if surplus <= 0:
+        return AllowanceResult(total_distributed=0, per_member=0, member_count=0)
+    treasury = get_or_create_treasury(organization)
+    pool = min(surplus * ALLOWANCE_SURPLUS_PCT // 100, treasury.balance)
+    if pool <= 0:
+        return AllowanceResult(total_distributed=0, per_member=0, member_count=0)
+
+    cutoff = timezone.now() - timedelta(days=ACTIVE_WEEK_LOGIN_DAYS)
+    active_sheets: dict[int, CharacterSheet] = {}
+    memberships = OrganizationMembership.objects.filter(
+        organization=organization, left_at__isnull=True, exiled_at__isnull=True
+    ).select_related("persona__character_sheet__character")
+    for membership in memberships:
+        sheet = membership.persona.character_sheet
+        if sheet is None or sheet.pk in active_sheets:
+            continue
+        account = sheet.character.db_account
+        if account is not None and account.last_login is not None and account.last_login >= cutoff:
+            active_sheets[sheet.pk] = sheet
+    if not active_sheets:
+        return AllowanceResult(total_distributed=0, per_member=0, member_count=0)
+
+    per_member = pool // len(active_sheets)
+    if per_member <= 0:
+        return AllowanceResult(total_distributed=0, per_member=0, member_count=len(active_sheets))
+    distributed = 0
+    for sheet in active_sheets.values():
+        transfer(
+            amount=per_member,
+            reason="house allowance",
+            from_treasury=treasury,
+            to_purse=get_or_create_purse(sheet),
+        )
+        distributed += per_member
+    return AllowanceResult(
+        total_distributed=distributed, per_member=per_member, member_count=len(active_sheets)
     )
 
 

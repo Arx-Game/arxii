@@ -179,3 +179,7 @@ BUSINESS_FORTUNE_MAX = 60
 # Wages pay only for actively-played weeks (#929/#932): a login within this
 # many days of the rollover counts as active.
 ACTIVE_WEEK_LOGIN_DAYS = 8
+
+# House allowance (#2540): the non-discretionary share of a collection's surplus that
+# auto-splits among active piloted members. PLACEHOLDER — magnitude is Apostate's tuning call.
+ALLOWANCE_SURPLUS_PCT = 50
