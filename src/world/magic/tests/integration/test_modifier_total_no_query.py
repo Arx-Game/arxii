@@ -200,7 +200,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
     def test_query_budget_after_handler_warm(self) -> None:
         """Pin get_modifier_total to BASELINE_QUERIES after character-side handlers are warm.
 
-        Documented query budget (10 total on first call):
+        Documented query budget (9 total on first call):
           Query 1: CharacterModifier.exists() — always fires in get_modifier_breakdown,
                    returns early because no CharacterModifier rows exist for this sheet.
           Query 2: ThreadPullEffect.filter(target_kind=FACET, resonance=..., tier=0, ...) —
@@ -234,10 +234,12 @@ class ModifierTotalQueryBudgetTests(TestCase):
                    vow_stat_scaling_bonus (#2022) fires once per engaged role's
                    modifier-total call; returns no rows (no authored scaling) so it
                    contributes 0.
-          Query 10: VowGearScaling.filter(role_archetype__in=...) —
-                   vow_gear_scaling_bonus (#2022) fires once per engaged role's
-                   modifier-total call; returns no rows (no authored scaling) so it
-                   contributes 0.
+
+        Note: the former Query 10 (VowGearScaling.filter(role_archetype__in=...) via
+        vow_gear_scaling_bonus, #2022) was removed by the #2529 short-circuit —
+        vow_gear_scaling_bonus now returns 0 unconditionally (CovenantRole.archetype was
+        removed for the SWORD/SHIELD/CROWN blend rewrite), so it no longer fires a query.
+        Its fate: #2533.
 
         Queries that do NOT fire after warming:
           - equipped_items queryset (warmed by iter_item_facets)
@@ -261,15 +263,16 @@ class ModifierTotalQueryBudgetTests(TestCase):
         list(self.character_obj.covenant_roles.currently_engaged_roles())
 
         # --- Assert documented query count ---
-        # BASELINE = 10: CharacterModifier.exists + ThreadPullEffect.filter
+        # BASELINE = 9: CharacterModifier.exists + ThreadPullEffect.filter
         #               + CharacterClassLevel (current_level) + is_gear_compatible
         #               + CovenantLevelBonus.first() (covenant_level_bonus, #762)
         #               + CharacterSheet.motif fetch (passive_motif_style_bonuses, #1150)
         #               + CovenantRoleBonus.first() (role_base_bonus_for_target, #985)
         #               + CrossingChoice.filter (passive_facet_crossing_bonuses, #1990)
         #               + VowStatScaling.filter (vow_stat_scaling_bonus, #2022)
-        #               + VowGearScaling.filter (vow_gear_scaling_bonus, #2022)
-        baseline_queries = 10
+        # (VowGearScaling.filter / vow_gear_scaling_bonus, #2022, was removed by the
+        # #2529 short-circuit — see the docstring note above. Fate: #2533.)
+        baseline_queries = 9
         with self.assertNumQueries(baseline_queries):
             result = get_modifier_total(self.sheet, self.target)
 
@@ -281,10 +284,10 @@ class ModifierTotalQueryBudgetTests(TestCase):
         self.assertEqual(result, 5)
 
     def test_no_handler_warm_query_count_is_higher(self) -> None:
-        """Without warming, handler queries fire on top of the baseline 8.
+        """Without warming, handler queries fire on top of the baseline 9.
 
         This is the control test: demonstrate that warmup matters. After
-        invalidating the handler caches, we expect MORE than 8 queries because
+        invalidating the handler caches, we expect MORE than 9 queries because
         the handler walks (equipped_items, threads, covenant_roles) must fetch
         from the DB on first access.
 
@@ -301,7 +304,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
         self.character_obj.threads.invalidate()
         self.character_obj.covenant_roles.invalidate()
 
-        baseline_queries = 10
+        baseline_queries = 9
 
         # Capture actual count by running without constraint
         from django.db import connection
