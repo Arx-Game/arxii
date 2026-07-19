@@ -196,6 +196,42 @@ def _serialize_modifiers(modifiers, room_fixture_by_pk: dict) -> list[dict]:
     return modifiers_data
 
 
+def _serialize_ambient_lines(lines, room_fixture_by_pk: dict) -> list[dict]:
+    lines_data = [
+        {
+            "parent_type": row.parent_type,
+            "room": _override_target(row, room_fixture_by_pk),
+            "trigger_type": row.trigger_type,
+            "trigger_species": row.trigger_species.name if row.trigger_species_id else None,
+            "trigger_resonance": (row.trigger_resonance.name if row.trigger_resonance_id else None),
+            "trigger_minimum_value": row.trigger_minimum_value,
+            "trigger_distinction": (
+                row.trigger_distinction.name if row.trigger_distinction_id else None
+            ),
+            "trigger_min_fame_tier": row.trigger_min_fame_tier or None,
+            "trigger_perceiving_society": (
+                row.trigger_perceiving_society.name if row.trigger_perceiving_society_id else None
+            ),
+            "bystander_body": row.bystander_body,
+            "arriver_body": row.arriver_body,
+            "weight": row.weight,
+            "fire_chance": row.fire_chance,
+            "cooldown_minutes": row.cooldown_minutes,
+            "is_active": row.is_active,
+        }
+        for row in lines
+    ]
+    lines_data.sort(
+        key=lambda r: (
+            r["parent_type"],
+            r["room"] or "",
+            r["trigger_type"],
+            r["arriver_body"][:40],
+        )
+    )
+    return lines_data
+
+
 def _build_area_bundle(area, result: GridExportResult) -> dict:
     """Assemble one area's full bundle dict. Raises ContentExportError on the never-silent
     rules (missing area slug — checked by the caller — or missing room fixture_key)."""
@@ -207,6 +243,7 @@ def _build_area_bundle(area, result: GridExportResult) -> dict:
     from world.areas.constants import GridOrigin  # noqa: PLC0415
     from world.locations.constants import LocationParentType  # noqa: PLC0415
     from world.locations.models import LocationValueModifier, LocationValueOverride  # noqa: PLC0415
+    from world.narrative.models import AmbientEmoteLine  # noqa: PLC0415
 
     rooms = list(
         RoomProfile.objects.filter(area=area, origin=GridOrigin.AUTHORED)
@@ -250,11 +287,20 @@ def _build_area_bundle(area, result: GridExportResult) -> dict:
             sidecar_scope, source__startswith="authored:"
         ).select_related("resonance", "damage_type")
     )
+    ambient_lines = list(
+        AmbientEmoteLine.objects.filter(sidecar_scope).select_related(
+            "trigger_species",
+            "trigger_resonance",
+            "trigger_distinction",
+            "trigger_perceiving_society",
+        )
+    )
 
     rooms_data = _serialize_rooms(rooms, display_map)
     exits_data = _serialize_exits(exit_qs, room_fixture_by_objectdb_id, result.reports)
     overrides_data = _serialize_overrides(overrides, room_fixture_by_pk)
     modifiers_data = _serialize_modifiers(modifiers, room_fixture_by_pk)
+    ambient_lines_data = _serialize_ambient_lines(ambient_lines, room_fixture_by_pk)
 
     result.room_count += len(rooms_data)
 
@@ -265,6 +311,7 @@ def _build_area_bundle(area, result: GridExportResult) -> dict:
         "exits": exits_data,
         "overrides": overrides_data,
         "modifiers": modifiers_data,
+        "ambient_lines": ambient_lines_data,
     }
 
 

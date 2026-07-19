@@ -205,3 +205,25 @@ class GridExportTests(TestCase):
 
         with self.assertRaisesRegex(ContentExportError, "arx-city/misplaced-room"):
             export_grid_bundles(self.root)
+
+    def test_bundle_includes_ambient_lines(self) -> None:
+        from world.narrative.factories import AmbientEmoteLineFactory
+
+        AmbientEmoteLineFactory(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.taproom,
+            area=None,
+            arriver_body="The taproom's low murmur greets you.",
+        )
+
+        result = export_grid_bundles(self.root)
+
+        self.assertEqual(result.errors, [])
+        bundle = self._load_bundle("arx-city")
+        self.assertIn("ambient_lines", bundle)
+        self.assertEqual(len(bundle["ambient_lines"]), 1)
+        line = bundle["ambient_lines"][0]
+        self.assertEqual(line["parent_type"], LocationParentType.ROOM)
+        self.assertEqual(line["room"], "arx-city/golden-hart-taproom")
+        self.assertEqual(line["trigger_type"], "none")
+        self.assertEqual(line["arriver_body"], "The taproom's low murmur greets you.")
