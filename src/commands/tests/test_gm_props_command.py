@@ -241,6 +241,16 @@ class StageCommandAffordanceChainTests(TestCase):
         )
         CharacterTechniqueFactory(character=self.pyromancer_sheet, technique=self.technique)
 
+        # Control character: co-located in the same room, otherwise identical, but
+        # does NOT know the technique -- the fail-closed side of the comparison
+        # (mirrors ``world.mechanics.tests.test_capability_currency_e2e
+        # .TechniqueToWorldToCurrencyE2ETests``). No ``CharacterTechniqueFactory``
+        # call for this sheet.
+        self.non_pyromancer_account = AccountFactory(username="stageaff_nopyro")
+        self.non_pyromancer, self.non_pyromancer_sheet = _make_actor_with_account(
+            "stageaff_nonpyromancer", self.room, self.non_pyromancer_account
+        )
+
         self.challenge_template = ChallengeTemplateFactory(name="Ignite Chain Torch", severity=3)
         self.application = ApplicationFactory(
             name="Ignite Chain",
@@ -282,3 +292,36 @@ class StageCommandAffordanceChainTests(TestCase):
         ]
         self.assertEqual(len(matching), 1, "Ignite must surface for the telnet-staged torch")
         self.assertEqual(matching[0].display_name, "Ignite it")
+
+    def test_staged_prop_shows_no_ignite_for_character_without_technique(self) -> None:
+        """Fail-closed counterpart: after the GM stages the torch, a co-located character
+        who never learned the technique gets no Ignite affordance for it."""
+        cmd = CmdStage()
+        cmd.caller = self.gm_actor
+        cmd.args = "prop Affordance Chain Torch"
+        cmd.raw_string = "stage prop Affordance Chain Torch"
+        cmd.cmdname = "stage"
+        cmd.msg = MagicMock()
+
+        cmd.func()
+
+        instance = ItemInstance.objects.get(template=self.template)
+        torch = instance.game_object
+        self.assertEqual(torch.location, self.room)
+
+        with patch(
+            "world.mechanics.services._get_difficulty_indicator_for_check",
+            return_value=DifficultyIndicator.MODERATE,
+        ):
+            actions = get_player_actions(self.non_pyromancer)
+
+        matching = [
+            a
+            for a in actions
+            if a.backend == ActionBackend.WORLD_INTERACTION and a.ref.target_object_id == torch.pk
+        ]
+        self.assertEqual(
+            len(matching),
+            0,
+            "Ignite must NOT surface for a character who never learned the technique",
+        )

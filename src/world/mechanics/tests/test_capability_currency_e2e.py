@@ -102,6 +102,14 @@ class TechniqueToWorldToCurrencyE2ETests(TestCase):
         )
         CharacterTechniqueFactory(character=cls.sheet, technique=cls.technique)
 
+        # Control character: otherwise identical, but does NOT know the technique --
+        # the fail-closed side of the comparison (mirrors
+        # ``world.assets.tests.test_effects
+        # .TechniqueSourcedPromotionCapabilityModifierEffectTests``). No
+        # ``CharacterTechniqueFactory`` call for this sheet.
+        cls.sheet_without_technique = CharacterSheetFactory()
+        cls.character_without_technique = cls.sheet_without_technique.character
+
         # (2) Torch spawned from an ItemTemplate via the real materialization chokepoint.
         cls.prop_flammable = PropertyFactory(name="flammable_capstone")
         cls.item_template = ItemTemplateFactory(name="Capstone Torch Template")
@@ -111,6 +119,7 @@ class TechniqueToWorldToCurrencyE2ETests(TestCase):
         instance = ItemInstance.objects.create(template=cls.item_template)
         cls.torch = materialize_item_game_object_in_room(instance, cls.room)
         _set_character_location(cls.character, cls.room)
+        _set_character_location(cls.character_without_technique, cls.room)
 
         # Ignite: Application/ChallengeTemplate/Approach wired to the technique-sourced
         # capability + the template-materialized flammable property.
@@ -202,6 +211,30 @@ class TechniqueToWorldToCurrencyE2ETests(TestCase):
         self.assertFalse(
             ObjectProperty.objects.filter(object=self.character, property=self.prop_lit).exists(),
             "the character itself must never receive the 'lit' property",
+        )
+
+    def test_identical_character_without_technique_gets_no_ignite_action(self) -> None:
+        """Fail-closed proof: identical setup minus the CharacterTechnique link -> no Ignite.
+
+        Mirrors ``world.assets.tests.test_effects
+        .TechniqueSourcedPromotionCapabilityModifierEffectTests
+        .test_identical_character_without_technique_still_fails`` -- same room, same
+        materialized torch, same Application/ChallengeTemplate/Approach wiring; the ONLY
+        difference from ``self.character`` is the absent ``CharacterTechnique`` link, so
+        ``get_capability_sources_for_character`` has no source for the capability and
+        ``get_player_actions`` must not synthesize the WORLD_INTERACTION affordance.
+        """
+        actions = get_player_actions(self.character_without_technique)
+        wi_actions = [
+            a
+            for a in actions
+            if a.backend == ActionBackend.WORLD_INTERACTION
+            and a.ref.target_object_id == self.torch.pk
+        ]
+        self.assertEqual(
+            len(wi_actions),
+            0,
+            "Ignite must NOT surface for a character who never learned the technique",
         )
 
     def test_capability_comes_only_from_the_technique(self) -> None:
