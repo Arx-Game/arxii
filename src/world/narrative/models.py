@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.narrative.constants import GemitReach, NarrativeCategory
+from core.mixins import DiscriminatorMixin
+from world.locations.constants import LocationParentType
+from world.narrative.constants import AmbientTriggerType, GemitReach, NarrativeCategory
+from world.societies.constants import FameTier
 
 _STR_PREVIEW_LEN = 40
 _GEMIT_PREVIEW_LEN = 60
@@ -306,3 +310,191 @@ class UserCategoryMute(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"UserCategoryMute(account=#{self.account_id}, category={self.category})"
+
+
+class AmbientEmoteLine(DiscriminatorMixin, SharedMemoryModel):
+    """An authored room/area-entry reaction — plain atmosphere or category-conditional
+    (#2471).
+
+    Generalizes and retires ``world.societies.FameReactionLine`` (#881):
+    ``trigger_type=NONE`` is the plain "set the mood" case (prelude slivers,
+    atmospheric areas), private to the arriving character. Every other
+    ``trigger_type`` is a category-based condition on the arriver (never a specific
+    named character) and is room-wide (arriver + bystanders, actor/audience split —
+    matches ``FameReactionLine``'s existing split).
+
+    Attach point is Area or Room (``parent_type``, most-specific-wins — mirrors
+    ``world.locations.LocationValueOverride``): a room-scoped pool replaces an
+    area-scoped one covering it, rather than merging with it.
+
+    Dispatched by the shared MOVED Trigger/Flow installed per-room during
+    grid-bundle import (``core_management.grid_import._import_ambient_lines``,
+    ``world.narrative.ambient_trigger_content``), not a periodic scheduler.
+    """
+
+    DISCRIMINATOR_FIELD = "parent_type"
+    DISCRIMINATOR_MAP = {
+        LocationParentType.AREA: "area",
+        LocationParentType.ROOM: "room_profile",
+    }
+
+    parent_type = models.CharField(
+        max_length=10,
+        choices=LocationParentType.choices,
+        help_text="Selects which FK (area or room_profile) is active.",
+    )
+    area = models.ForeignKey(
+        "areas.Area",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="ambient_emote_lines",
+    )
+    room_profile = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="ambient_emote_lines",
+    )
+
+    trigger_type = models.CharField(
+        max_length=20,
+        choices=AmbientTriggerType.choices,
+        default=AmbientTriggerType.NONE,
+    )
+    trigger_species = models.ForeignKey(
+        "species.Species",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="Required when trigger_type is SPECIES.",
+    )
+    trigger_resonance = models.ForeignKey(
+        "magic.Resonance",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="Required when trigger_type is RESONANCE_MIN (with trigger_minimum_value).",
+    )
+    trigger_minimum_value = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Minimum lifetime_earned for trigger_resonance. Required when "
+            "trigger_type is RESONANCE_MIN."
+        ),
+    )
+    trigger_distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="Required when trigger_type is DISTINCTION.",
+    )
+    trigger_min_fame_tier = models.CharField(
+        max_length=20,
+        choices=FameTier.choices,
+        blank=True,
+        default="",
+        help_text="Required when trigger_type is RENOWN_MIN.",
+    )
+    trigger_perceiving_society = models.ForeignKey(
+        "societies.Society",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text=(
+            "RENOWN_MIN only: perceive the arriver's fame tier through this "
+            "society's fame_perception_offset (mirrors the retired "
+            "FameReactionLine.society). Null = raw fame tier."
+        ),
+    )
+
+    bystander_body = models.TextField(
+        blank=True,
+        help_text="What the room's other occupants see. Must be empty for trigger_type=NONE.",
+    )
+    arriver_body = models.TextField(
+        blank=True,
+        help_text="What the arriving character sees.",
+    )
+
+    weight = models.PositiveIntegerField(
+        default=1,
+        help_text="Relative draw weight among this room/area's eligible lines.",
+    )
+    fire_chance = models.PositiveIntegerField(
+        default=100,
+        help_text="0-100: probability this line fires once selected. Dial down noisy rooms.",
+    )
+    cooldown_minutes = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Re-fire throttle after this line fires, scoped to the line itself "
+            "(not per-character or per-room) — deliberately simpler than the "
+            "retired FameReactionCooldown's per-(persona, room) throttle."
+        ),
+    )
+    last_fired_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Runtime only — never exported to the lore repo grid bundle.",
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["parent_type", "id"]
+
+    def clean(self) -> None:  # noqa: C901, PLR0912 — one branch per trigger_type enum value
+        super().clean()
+        errors: dict[str, str] = {}
+        conditional_fields = {
+            "trigger_species": self.trigger_species_id,
+            "trigger_resonance": self.trigger_resonance_id,
+            "trigger_minimum_value": self.trigger_minimum_value,
+            "trigger_distinction": self.trigger_distinction_id,
+            "trigger_min_fame_tier": self.trigger_min_fame_tier,
+            "trigger_perceiving_society": self.trigger_perceiving_society_id,
+        }
+        if self.trigger_type == AmbientTriggerType.NONE:
+            for field_name, value in conditional_fields.items():
+                if value:
+                    errors[field_name] = "Must be empty when trigger_type is NONE."
+            if self.bystander_body:
+                errors["bystander_body"] = (
+                    "Must be empty when trigger_type is NONE (unconditional lines "
+                    "are private to the arriver)."
+                )
+        elif self.trigger_type == AmbientTriggerType.SPECIES:
+            if not self.trigger_species_id:
+                errors["trigger_species"] = "Required when trigger_type is SPECIES."
+        elif self.trigger_type == AmbientTriggerType.RESONANCE_MIN:
+            if not self.trigger_resonance_id:
+                errors["trigger_resonance"] = "Required when trigger_type is RESONANCE_MIN."
+            if not self.trigger_minimum_value:
+                errors["trigger_minimum_value"] = "Required when trigger_type is RESONANCE_MIN."
+        elif self.trigger_type == AmbientTriggerType.DISTINCTION:
+            if not self.trigger_distinction_id:
+                errors["trigger_distinction"] = "Required when trigger_type is DISTINCTION."
+        elif self.trigger_type == AmbientTriggerType.RENOWN_MIN:
+            if not self.trigger_min_fame_tier:
+                errors["trigger_min_fame_tier"] = "Required when trigger_type is RENOWN_MIN."
+        if not self.bystander_body and not self.arriver_body:
+            errors.setdefault(
+                "arriver_body", "Author at least one of bystander_body / arriver_body."
+            )
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        target = self.get_active_target_name()
+        return f"AmbientEmoteLine({self.trigger_type} @ {target})"
