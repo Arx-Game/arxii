@@ -135,7 +135,7 @@ def deliver_ambient_group(*, payload: object, line_ids: list[int]) -> bool:
     from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
 
     line = select_weighted(fireable)
-    if random.randint(1, 100) > line.fire_chance:  # noqa: S311
+    if random.randint(1, 100) > line.fire_chance:  # noqa: S311 # NOSONAR game RNG
         return False
 
     _deliver_line(line, character, room)
