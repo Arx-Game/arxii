@@ -99,3 +99,59 @@ class GridRoundTripJourneyTests(TestCase):
         # No duplicate rooms were created by the reload.
         room_count_after = ObjectDB.objects.filter(db_typeclass_path=_ROOM_TYPECLASS).count()
         self.assertEqual(room_count_after, room_count_before)
+
+    def test_ambient_condition_group_derives_and_installs_trigger(self) -> None:
+        from flows.models import Trigger
+        from world.locations.constants import LocationParentType
+        from world.narrative.constants import ConditionType
+        from world.narrative.factories import AmbientEmoteConditionFactory, AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteLine
+        from world.species.factories import SpeciesFactory
+
+        species = SpeciesFactory(name="Infernal")
+        line = AmbientEmoteLineFactory(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.grid.taproom,
+            area=None,
+            bystander_body="A murmur runs through the taproom.",
+        )
+        AmbientEmoteConditionFactory(
+            line=line, condition_type=ConditionType.SPECIES, species=species
+        )
+
+        export_to_content_repo(self.root)
+        export_grid_bundles(self.root)
+
+        # Drift: delete everything, confirm nothing exists before reimport.
+        AmbientEmoteLine.objects.all().delete()
+        self.assertFalse(Trigger.objects.filter(obj=self.grid.taproom_obj).exists())
+
+        load_world_content(self.root)
+
+        restored = AmbientEmoteLine.objects.get(
+            room_profile=self.grid.taproom, bystander_body="A murmur runs through the taproom."
+        )
+        self.assertEqual(restored.conditions.count(), 1)
+        self.assertEqual(restored.conditions.first().species.name, "Infernal")
+        self.assertTrue(
+            Trigger.objects.filter(obj=self.grid.taproom_obj).exists(),
+            "importing ambient content should derive + install its condition-group Trigger",
+        )
+
+    def test_area_scoped_group_installs_on_rooms_without_room_override(self) -> None:
+        from flows.models import Trigger
+        from world.locations.constants import LocationParentType
+        from world.narrative.factories import AmbientEmoteLineFactory
+
+        AmbientEmoteLineFactory(
+            parent_type=LocationParentType.AREA,
+            area=self.grid.city,
+            room_profile=None,
+            arriver_body="The district's general mood.",
+        )
+
+        export_to_content_repo(self.root)
+        export_grid_bundles(self.root)
+        load_world_content(self.root)
+
+        self.assertTrue(Trigger.objects.filter(obj=self.grid.taproom_obj).exists())

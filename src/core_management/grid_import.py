@@ -46,6 +46,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Internal (not-persisted) scope discriminators used only while grouping freshly-imported
+# AmbientEmoteLine rows by compiled filter — see _install_ambient_triggers (#2471 v2).
+_AMBIENT_SCOPE_ROOM = "room"
+_AMBIENT_SCOPE_AREA = "area"
+
 
 @dataclass
 class GridImportResult:
@@ -527,6 +532,247 @@ def _import_clue_and_anchor_sidecars(
                 result.updated_clue_sidecars += not created
 
 
+def _resolve_ambient_condition_fks(row_data: dict, bundle_name: str) -> dict[str, object]:
+    """Resolve the natural-key FK fields an AmbientEmoteCondition row may carry (#2471 v2)."""
+    from core_management.content_fixtures import ContentError  # noqa: PLC0415
+    from world.distinctions.models import Distinction  # noqa: PLC0415
+    from world.magic.models import Resonance  # noqa: PLC0415
+    from world.societies.models import Society  # noqa: PLC0415
+    from world.species.models import Species  # noqa: PLC0415
+
+    resolved: dict[str, object] = {}
+
+    species_name = row_data.get("species")
+    if species_name:
+        resolved["species"] = _resolve_named_fk(Species, species_name, bundle_name, "species")
+
+    resonance_name = row_data.get("resonance")
+    if resonance_name:
+        resolved["resonance"] = _resolve_named_fk(
+            Resonance, resonance_name, bundle_name, "resonance"
+        )
+
+    distinction_slug = row_data.get("distinction")
+    if distinction_slug:
+        # Distinction.name is NOT unique (display text only) — slug is the model's actual
+        # NaturalKeyConfig field (world/distinctions/models.py).
+        distinction = Distinction.objects.filter(slug=distinction_slug).first()
+        if distinction is None:
+            msg = f"{bundle_name}: unknown distinction {distinction_slug!r}"
+            raise ContentError(msg)
+        resolved["distinction"] = distinction
+
+    society_name = row_data.get("perceiving_society")
+    if society_name:
+        resolved["perceiving_society"] = _resolve_named_fk(
+            Society, society_name, bundle_name, "society"
+        )
+
+    return resolved
+
+
+def _validate_ambient_line_row(row_data: dict, bundle_name: str) -> None:
+    """Content-authoring invariant: unconditional lines must be private (#2471 v2).
+
+    Checked here (bundle-dict level, before any DB write) rather than in
+    ``AmbientEmoteLine.clean()`` — conditions live in a child model created after the line,
+    so the model layer can't see "does this line have zero conditions" at its own clean()
+    time. The bundle dict has both at once.
+    """
+    from core_management.content_fixtures import ContentError  # noqa: PLC0415
+
+    if not row_data.get("conditions") and row_data.get("bystander_body"):
+        msg = (
+            f"{bundle_name}: ambient line with no conditions has a bystander_body "
+            "(unconditional lines must be private — arriver_body only)"
+        )
+        raise ContentError(msg)
+
+
+def _import_ambient_lines(
+    bundles: list[tuple[Path, dict]],
+    area_by_path: dict[Path, Area],
+    room_by_fixture_key: dict[str, RoomProfile],
+) -> None:
+    """Pass: per-bundle AmbientEmoteLine/AmbientEmoteCondition rows, then derive + install
+    condition-group Triggers (#2471 v2).
+
+    Wholesale replace within each bundle's scope (delete-then-recreate, cascading to
+    conditions) rather than upsert — AmbientEmoteLine rows have no natural per-parent
+    uniqueness, mirroring how authored: LocationValueModifier rows are handled.
+    """
+    from django.db import transaction  # noqa: PLC0415
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.locations.constants import LocationParentType  # noqa: PLC0415
+    from world.narrative.models import AmbientEmoteCondition, AmbientEmoteLine  # noqa: PLC0415
+
+    for path, bundle in bundles:
+        area = area_by_path[path]
+        bundle_name = path.name
+        bundle_room_fixture_keys = [room_data["fixture_key"] for room_data in bundle["rooms"]]
+        bundle_room_ids = [room_by_fixture_key[key].objectdb_id for key in bundle_room_fixture_keys]
+
+        with transaction.atomic():
+            scope = Q(parent_type=LocationParentType.AREA, area=area) | Q(
+                parent_type=LocationParentType.ROOM, room_profile_id__in=bundle_room_ids
+            )
+            AmbientEmoteLine.objects.filter(scope).delete()
+
+            created_lines = []
+            for row_data in bundle.get("ambient_lines", []):
+                _validate_ambient_line_row(row_data, bundle_name)
+                parent_field, parent_obj = _resolve_parent(
+                    row_data, area, room_by_fixture_key, bundle_name
+                )
+                line = AmbientEmoteLine.objects.create(
+                    parent_type=row_data["parent_type"],
+                    condition_connector=row_data.get("condition_connector", "and"),
+                    bystander_body=row_data.get("bystander_body", ""),
+                    arriver_body=row_data.get("arriver_body", ""),
+                    weight=row_data["weight"],
+                    fire_chance=row_data["fire_chance"],
+                    cooldown_minutes=row_data["cooldown_minutes"],
+                    is_active=row_data["is_active"],
+                    **{parent_field: parent_obj},
+                )
+                for condition_data in row_data.get("conditions", []):
+                    fk_fields = _resolve_ambient_condition_fks(condition_data, bundle_name)
+                    AmbientEmoteCondition.objects.create(
+                        line=line,
+                        condition_type=condition_data["condition_type"],
+                        minimum_value=condition_data.get("minimum_value"),
+                        min_fame_tier=condition_data.get("min_fame_tier") or "",
+                        **fk_fields,
+                    )
+                created_lines.append(line)
+
+            _install_ambient_triggers(
+                area, bundle_room_fixture_keys, room_by_fixture_key, created_lines
+            )
+
+
+def _ensure_ambient_trigger(room_objectdb: object, trigger_def: object) -> None:
+    """Idempotently install a derived ambient Trigger on a room (#2471 v2).
+
+    Mirrors world.battles.duel_wiring.install_champion_duel_trigger's get_or_create +
+    on_trigger_added(only when newly created) shape.
+    """
+    from flows.models import Trigger  # noqa: PLC0415
+
+    trigger, created = Trigger.objects.get_or_create(
+        obj=room_objectdb, trigger_definition=trigger_def
+    )
+    if created:
+        handler = room_objectdb.trigger_handler
+        if handler is not None:
+            handler.on_trigger_added(trigger)
+
+
+def _ensure_ambient_group_trigger(
+    scope: str, scope_key: str, compiled_filter: dict | None, line_ids: list[int]
+) -> object:
+    """Idempotently create (or refresh) the derived TriggerDefinition for one condition
+    group (#2471 v2). Name is deterministic from (scope, scope_key, filter digest), so
+    re-imports of unchanged content resolve to the same row (get_or_create by name);
+    changed content (new lines added to the same condition, or a changed filter under an
+    unlikely digest collision) refreshes the existing row's filter/parameters in place.
+    """
+    import hashlib  # noqa: PLC0415
+    import json  # noqa: PLC0415
+
+    from flows.constants import EventName  # noqa: PLC0415
+    from flows.consts import FlowActionChoices  # noqa: PLC0415
+    from flows.factories import FlowStepDefinitionFactory  # noqa: PLC0415
+    from flows.models import FlowDefinition  # noqa: PLC0415
+    from flows.models.triggers import TriggerDefinition  # noqa: PLC0415
+
+    digest = hashlib.sha1(  # noqa: S324 (content-addressing, not security)
+        json.dumps(compiled_filter, sort_keys=True).encode()
+    ).hexdigest()[:12]
+    name = f"moved_ambient_{scope}_{scope_key}_{digest}"
+
+    flow, _ = FlowDefinition.objects.get_or_create(name=name)
+    step_parameters = {"payload": "@payload", "line_ids": sorted(line_ids)}
+    if not flow.steps.exists():
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="world.narrative.ambient_content.deliver_ambient_group",
+            parameters=step_parameters,
+        )
+    else:
+        step = flow.steps.first()
+        if step.parameters != step_parameters:
+            step.parameters = step_parameters
+            step.save(update_fields=["parameters"])
+
+    trigger_def, created = TriggerDefinition.objects.get_or_create(
+        name=name,
+        defaults={
+            "event_name": EventName.MOVED,
+            "flow_definition": flow,
+            "base_filter_condition": compiled_filter,
+        },
+    )
+    if not created and trigger_def.base_filter_condition != compiled_filter:
+        trigger_def.base_filter_condition = compiled_filter
+        trigger_def.save(update_fields=["base_filter_condition"])
+    return trigger_def
+
+
+def _install_ambient_triggers(
+    area: Area,
+    bundle_room_fixture_keys: list[str],
+    room_by_fixture_key: dict[str, RoomProfile],
+    lines: list,
+) -> None:
+    """Group freshly-imported lines by compiled filter, derive/install Triggers (#2471 v2).
+
+    Room-scoped groups install only on their own room. Area-scoped groups install on every
+    bundle room EXCEPT one that has its own room-scoped group with an IDENTICAL compiled
+    filter — per-condition-group most-specific-wins, not a wholesale room-vs-area pool
+    replacement: a room's own SPECIES override doesn't suppress the area's unrelated
+    RESONANCE_MIN group.
+    """
+    from collections import defaultdict  # noqa: PLC0415
+    import json  # noqa: PLC0415
+
+    from world.locations.constants import LocationParentType  # noqa: PLC0415
+    from world.narrative.ambient_content import compile_line_filter  # noqa: PLC0415
+
+    room_fixture_by_id = {
+        profile.objectdb_id: fixture_key for fixture_key, profile in room_by_fixture_key.items()
+    }
+
+    groups: dict[tuple[str, str, str], list] = defaultdict(list)
+    for line in lines:
+        compiled = compile_line_filter(line)
+        compiled_json = json.dumps(compiled, sort_keys=True)
+        if line.parent_type == LocationParentType.ROOM:
+            scope, scope_key = _AMBIENT_SCOPE_ROOM, room_fixture_by_id[line.room_profile_id]
+        else:
+            scope, scope_key = _AMBIENT_SCOPE_AREA, area.slug
+        groups[(scope, scope_key, compiled_json)].append(line)
+
+    room_override_filters: dict[str, set[str]] = defaultdict(set)
+    for scope, scope_key, compiled_json in groups:
+        if scope == _AMBIENT_SCOPE_ROOM:
+            room_override_filters[scope_key].add(compiled_json)
+
+    for (scope, scope_key, compiled_json), group_lines in groups.items():
+        compiled = json.loads(compiled_json)
+        line_ids = [line.pk for line in group_lines]
+        trigger_def = _ensure_ambient_group_trigger(scope, scope_key, compiled, line_ids)
+        if scope == _AMBIENT_SCOPE_ROOM:
+            _ensure_ambient_trigger(room_by_fixture_key[scope_key].objectdb, trigger_def)
+        else:
+            for fixture_key in bundle_room_fixture_keys:
+                if compiled_json in room_override_filters[fixture_key]:
+                    continue
+                _ensure_ambient_trigger(room_by_fixture_key[fixture_key].objectdb, trigger_def)
+
+
 def _report_missing_clue_and_anchor_sidecars(
     bundles: list[tuple[Path, dict]], result: GridImportResult
 ) -> None:
@@ -618,6 +864,7 @@ def load_grid_bundles(content_root: Path | None = None) -> GridImportResult:
     _import_exits(bundles, room_by_fixture_key, result)
     _report_orphaned_exits(bundles, result)
     _import_sidecars(bundles, area_by_path, room_by_fixture_key)
+    _import_ambient_lines(bundles, area_by_path, room_by_fixture_key)
     _report_missing_authored(area_by_slug, room_by_fixture_key, result)
     _import_clue_and_anchor_sidecars(bundles, room_by_fixture_key, result)
     _report_missing_clue_and_anchor_sidecars(bundles, result)
