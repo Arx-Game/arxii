@@ -6,8 +6,8 @@ from django.utils import timezone
 import factory
 import factory.django as factory_django
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
-from evennia_extensions.models import Artist, Media, PlayerData
+from evennia_extensions.factories import AccountFactory, CharacterFactory, MediaFactory
+from evennia_extensions.models import Artist, PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.models import (
     Family,
@@ -172,21 +172,6 @@ class TenureDisplaySettingsFactory(factory_django.DjangoModelFactory):
     allow_pages = True
     allow_tells = True
     plot_involvement = "medium"
-
-
-class MediaFactory(factory_django.DjangoModelFactory):
-    """Factory for Media instances."""
-
-    class Meta:
-        model = Media
-
-    player_data = factory.SubFactory(PlayerDataFactory)
-    cloudinary_public_id = factory.Sequence(lambda n: f"test_media_{n}")
-    cloudinary_url = factory.LazyAttribute(
-        lambda obj: f"https://res.cloudinary.com/test/image/upload/{obj.cloudinary_public_id}",
-    )
-    media_type = "photo"
-    title = factory.Sequence(lambda n: f"Test Media {n}")
 
 
 class TenureMediaFactory(factory_django.DjangoModelFactory):
