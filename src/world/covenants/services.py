@@ -866,25 +866,49 @@ def is_gear_compatible(role: CovenantRole, archetype: str) -> bool:
     ).exists()
 
 
-def archetype_action_scaling_bonus(
-    character: object,  # noqa: ARG001
-    action_key: str,  # noqa: ARG001
-) -> float:
+def covenant_role_action_scaling_bonus(character: object, action_key: str) -> float:
     """Return the per-role scaling bonus for a combat action (#2529, was #2022).
 
-    Reads the ``CovenantRoleActionScaling`` row for the character's engaged
-    ``CovenantRole``, multiplied by the COVENANT_ROLE thread level. Returns
-    0.0 when no row exists or the character has no engaged role.
+    Sums ``thread_level × multiplier`` across the character's engaged roles
+    that have a ``CovenantRoleActionScaling`` row for ``action_key``. Rows and
+    COVENANT_ROLE threads key on the ANCHOR (parent) role — engaged roles are
+    resolved sub-roles (ADR-0055), so normalize before lookup. Returns 0.0
+    when no engaged role has a row.
 
     The returned float is a multiplier bonus — callers add it to the action's
-    base effect. E.g., a SHIELD-blended role's interpose: the partial-block
-    damage reduction scales by ``1.0 + bonus`` (a deeper vow blocks more damage).
-
-    Stub pending Task 2 (#2529): keeps the call signature stable for
-    ``power_terms.archetype_cast_scaling_term`` while the blend rewrite lands.
+    base effect (e.g. interpose partial-block divisor = ``2 + bonus``).
     """
-    # Task 2 (#2529) rewrites this against the blend + CovenantRoleActionScaling.
-    return 0.0
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.covenants.models import CovenantRoleActionScaling  # noqa: PLC0415
+
+    if not hasattr(character, "covenant_roles"):
+        return 0.0
+    engaged_roles = character.covenant_roles.currently_engaged_roles()
+    if not engaged_roles:
+        return 0.0
+    try:
+        sheet = character.sheet_data
+    except AttributeError:
+        return 0.0
+    if sheet is None:
+        return 0.0
+
+    anchors = []
+    for role in engaged_roles:
+        anchor = role.parent_role if role.parent_role_id is not None else role
+        if anchor not in anchors:
+            anchors.append(anchor)
+
+    scalings = CovenantRoleActionScaling.objects.filter(
+        action_key=action_key,
+        covenant_role__in=anchors,
+    )
+    total = Decimal(0)
+    for scaling in scalings:
+        thread_level = _covenant_role_thread_level(sheet, scaling.covenant_role)
+        total += Decimal(thread_level) * scaling.thread_level_multiplier
+    return float(total)
 
 
 @transaction.atomic

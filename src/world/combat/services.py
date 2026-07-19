@@ -8072,15 +8072,15 @@ def _grade_interpose_damage(
     Extracted from :func:`apply_interpose_outcome` (the mundane
     capability-reaction path) so :func:`_try_technique_interpose` (a technique
     guardian's own cast-check resolution) grades identically without
-    duplicating the SHIELD-scaling partial-block math:
+    duplicating the covenant-role-scaling partial-block math:
 
     - **clean block** (``force_clean`` or ``success_level > 0``): the blow is
       fully turned aside — ``pre_payload.amount = 0``.
     - **partial** (``success_level == 0``, not forced-clean): the interposer
-      softens but does not stop the blow — ``pre_payload.amount //= 2``. A
-      SHIELD-role interposer scales this reduction by their COVENANT_ROLE
-      thread level (#2022): the deeper the vow, the more damage the partial
-      block absorbs.
+      softens but does not stop the blow — ``pre_payload.amount //= 2``. An
+      interposer engaged in a role with a ``combat_interpose`` scaling row
+      scales this reduction by their COVENANT_ROLE thread level (#2022,
+      #2529): the deeper the vow, the more damage the partial block absorbs.
     - **failure** (``success_level < 0``): the interpose fails — no change.
 
     ``force_clean`` lets a caller fold in a resolution-type override (the
@@ -8097,15 +8097,15 @@ def _grade_interpose_damage(
         return True
 
     if success_level == 0:
-        # #2022: SHIELD archetype scaling — a deeper vow blocks more damage
+        # #2022/#2529: covenant-role scaling — a deeper vow blocks more damage
         # on a partial block. The bonus reduces the remaining damage further.
         divisor = 2
         if interposer is not None:
             from world.covenants.services import (  # noqa: PLC0415
-                archetype_action_scaling_bonus,
+                covenant_role_action_scaling_bonus,
             )
 
-            bonus = archetype_action_scaling_bonus(interposer, "combat_interpose")
+            bonus = covenant_role_action_scaling_bonus(interposer, "combat_interpose")
             if bonus > 0:
                 # Scale: partial block reduces to amount / (2 + bonus).
                 # A bonus of 1.0 (a deep SHIELD vow) makes the divisor 3,
