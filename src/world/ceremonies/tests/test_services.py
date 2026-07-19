@@ -407,6 +407,42 @@ class RespondToSeanceOfferTests(TestCase):
 
         self.assertEqual(offers, [offer])
 
+    def test_pending_offer_reaches_account_after_real_retire_character_call(self) -> None:
+        """Guards the load-bearing fact the whole retired-honoree flow depends on:
+        ``retire_character`` stamps ``retired_at`` but does NOT close out the
+        character's ``RosterTenure``. Every other seance test builds "retired" state
+        by hand (``CharacterVitalsFactory(retired_at=...)``); this one calls the real
+        service function so a future change to its behavior (e.g. also setting
+        ``end_date``) would break this test instead of silently rotting the feature.
+        """
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+        from world.vitals.services import retire_character
+
+        sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=sheet, life_state=CharacterLifeState.DEAD)
+        player_data = PlayerDataFactory()
+        entry = RosterEntryFactory(character_sheet=sheet)
+        tenure = RosterTenureFactory(roster_entry=entry, player_data=player_data)
+        account = player_data.account
+
+        retire_character(sheet)
+
+        sheet.vitals.refresh_from_db()
+        self.assertIsNotNone(sheet.vitals.retired_at)
+        tenure.refresh_from_db()
+        self.assertIsNone(tenure.end_date)
+
+        ceremony = self._open_seance(sheet=sheet)
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+        self.assertEqual(offer.status, SeanceOfferStatus.PENDING)
+
+        offers = list(pending_seance_offers_for_account(account))
+        self.assertEqual(offers, [offer])
+
 
 class RevokeSeanceManifestationsTests(TestCase):
     @classmethod

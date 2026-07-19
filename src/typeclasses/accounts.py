@@ -237,11 +237,14 @@ class Account(DefaultAccount):
         """Narrow bypass of the retired-login gate for an accepted seance offer (#2393).
 
         True only when the character is retired, THIS account is their own
-        controlling account (via roster tenure — never "currently available",
-        which retired characters are excluded from by design), and an
-        ACCEPTED SeanceManifestationOffer exists for them whose ceremony is
-        still OPEN. Deliberately separate from can_puppet_character — the
-        general login gate never learns about seances.
+        controlling account (resolved via ``account_for_sheet``'s current-tenure
+        walk — ``tenure.end_date IS NULL`` — not "currently available"; retiring
+        a character does not end their tenure, so this still resolves correctly
+        for a retired honoree, unlike ``get_available_characters()``, which
+        additionally filters out anything ``is_retired``), and an ACCEPTED
+        SeanceManifestationOffer exists for them whose ceremony is still OPEN.
+        Deliberately separate from can_puppet_character — the general login
+        gate never learns about seances.
         """
         from django.core.exceptions import ObjectDoesNotExist
 

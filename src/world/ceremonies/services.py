@@ -374,13 +374,16 @@ def respond_to_seance_offer(
     """Accept or decline a pending seance manifestation offer (#2393).
 
     ``account`` must be the offer's honoree's own controlling account (verified
-    via ``account_for_sheet`` — the all-time tenure walk, not "currently
-    available", since a retired honoree is excluded from availability by
-    design). Accepting physically moves the honoree's character object to the
-    ceremony's location — this is what makes the location check in both
-    ``GhostWindowPrerequisite`` and ``Account.can_puppet_for_seance``
-    satisfiable regardless of where the character was left (a ghost pinned to
-    a death scene, or a retired character nobody has been able to move since).
+    via ``account_for_sheet``'s current-tenure walk — ``tenure.end_date IS
+    NULL`` — not "currently available"; retiring a character does not end
+    their tenure, so this still resolves correctly for a retired honoree,
+    unlike ``get_available_characters()``, which additionally filters out
+    anything ``is_retired``). Accepting physically moves the honoree's
+    character object to the ceremony's location — this is what makes the
+    location check in both ``GhostWindowPrerequisite`` and
+    ``Account.can_puppet_for_seance`` satisfiable regardless of where the
+    character was left (a ghost pinned to a death scene, or a retired
+    character nobody has been able to move since).
     """
     from world.magic.services.gain import account_for_sheet  # noqa: PLC0415
 

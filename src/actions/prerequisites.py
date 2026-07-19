@@ -837,15 +837,9 @@ def _seance_container_open(actor: Any, sheet: Any) -> bool:
     from world.ceremonies.constants import CeremonyStatus, SeanceOfferStatus  # noqa: PLC0415
     from world.ceremonies.models import SeanceManifestationOffer  # noqa: PLC0415
 
-    offer = (
-        SeanceManifestationOffer.objects.filter(
-            ceremony_honoree__honoree_sheet=sheet,
-            status=SeanceOfferStatus.ACCEPTED,
-            ceremony_honoree__ceremony__status=CeremonyStatus.OPEN,
-        )
-        .select_related("ceremony_honoree__ceremony__location")
-        .first()
-    )
-    if offer is None:
-        return False
-    return actor.location == offer.ceremony_honoree.ceremony.location.objectdb
+    return SeanceManifestationOffer.objects.filter(
+        ceremony_honoree__honoree_sheet=sheet,
+        status=SeanceOfferStatus.ACCEPTED,
+        ceremony_honoree__ceremony__status=CeremonyStatus.OPEN,
+        ceremony_honoree__ceremony__location__objectdb=actor.location,
+    ).exists()

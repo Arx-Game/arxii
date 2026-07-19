@@ -254,3 +254,56 @@ class GhostWindowSeanceContainerTests(TestCase):
         result = EmitAction().run(actor=self.ghost, text="Silence.")
 
         self.assertFalse(result.success)
+
+    def test_ghost_checks_offer_at_own_location_not_merely_the_newest_offer(self) -> None:
+        """Regression for the ``_seance_container_open`` location bug (#2393 final review):
+        the same honoree can have two ACCEPTED offers open at two different rooms (each
+        room ran its own Seance). The query must match the offer at the ACTOR's location,
+        not just whichever offer is newest (``SeanceManifestationOffer.Meta.ordering =
+        ["-created_at"]`` previously made ``.first()`` pick the newest one regardless of
+        where the actor actually stood).
+        """
+        from evennia.objects.models import ObjectDB
+
+        from world.ceremonies.services import open_ceremony, respond_to_seance_offer
+
+        # First seance: opens and is accepted at self.seance_room (the OLDER offer).
+        first_ceremony = open_ceremony(
+            officiant_persona=self.officiant_persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[self.dead_sheet],
+            location_profile=self.location,
+        )
+        first_offer = first_ceremony.honorees.get(honoree_sheet=self.dead_sheet).seance_offer
+        account = _make_account_for(self.dead_sheet)
+        respond_to_seance_offer(first_offer, account=account, accept=True)
+
+        # Second seance: a different room, different officiant, honoring the SAME
+        # retired sheet, opened and accepted AFTER the first — this is the NEWEST
+        # offer by created_at.
+        other_room = _make_room("Other Seance Room")
+        from evennia_extensions.factories import RoomProfileFactory
+
+        other_location = RoomProfileFactory(objectdb=other_room)
+        other_officiant_sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=other_officiant_sheet)
+        other_being = WorshippedBeingFactory()
+        WorshipDeclaration.objects.create(
+            character_sheet=other_officiant_sheet, public_being=other_being
+        )
+        second_ceremony = open_ceremony(
+            officiant_persona=other_officiant_sheet.primary_persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[self.dead_sheet],
+            location_profile=other_location,
+        )
+        second_offer = second_ceremony.honorees.get(honoree_sheet=self.dead_sheet).seance_offer
+        respond_to_seance_offer(second_offer, account=account, accept=True)
+
+        # The ghost stands at the FIRST (older) location, not the newest offer's room.
+        ghost = ObjectDB.objects.get(pk=self.ghost.pk)
+        ghost.move_to(self.seance_room, quiet=True)
+
+        result = EmitAction().run(actor=ghost, text="A voice from the first room.")
+
+        self.assertTrue(result.success, result.message)
