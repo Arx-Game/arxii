@@ -402,9 +402,6 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #2289 — ceremony rites: funeral/blessing/sermon open, offering,
             # speech, finish/abandon + the show read surface.
             CmdCeremony,
-            # #2393 — seance manifestation-offer inbox: offers/accept/decline,
-            # account-scoped (reaches a retired honoree with no active puppet).
-            CmdSeance,
             # #1511 — organization membership lifecycle.
             CmdOrg,
             # #1348 — progression-reward telnet commands: kudos/vote/randomscene/pathintent.
@@ -471,6 +468,9 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
 
         self.add(CmdIC())
         self.add(CmdCharacters())
+        # #2393 — seance manifestation-offer inbox: offers/accept/decline,
+        # account-scoped (reaches a retired honoree with no active puppet).
+        self.add(CmdSeance())
         self.add(CmdAccount())
         self.add(CmdSheet())
         self.add(CmdPage())
