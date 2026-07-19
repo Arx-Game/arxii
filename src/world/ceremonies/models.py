@@ -10,7 +10,7 @@ mapping, the devotion economy, bounded abandonment, and retired honorees.
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey
+from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey, SeanceOfferStatus
 
 
 class CeremonyType(SharedMemoryModel):
@@ -223,3 +223,32 @@ def get_ceremony_config() -> CeremonyConfig:
     if config is None:
         config = CeremonyConfig.objects.create()
     return config
+
+
+class SeanceManifestationOffer(SharedMemoryModel):
+    """Consent gate for a Seance honoree's voice/puppet grant (#2393).
+
+    One row per CeremonyHonoree on a Seance-type ceremony, created when the
+    ceremony opens. PENDING until the honoree's own controlling account
+    answers (see world.ceremonies.services.respond_to_seance_offer) — accept
+    both widens GhostWindowPrerequisite's third container AND, for a retired
+    honoree, unlocks the narrow puppet-grant fallback in
+    Account.can_puppet_for_seance. Never mutated once ACCEPTED/DECLINED; a
+    fresh ceremony mints a fresh row (this one just becomes unreachable —
+    every consumer filters on `ceremony_honoree__ceremony__status=OPEN`).
+    """
+
+    ceremony_honoree = models.OneToOneField(
+        CeremonyHonoree, on_delete=models.CASCADE, related_name="seance_offer"
+    )
+    status = models.CharField(
+        max_length=20, choices=SeanceOfferStatus.choices, default=SeanceOfferStatus.PENDING
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Seance offer for {self.ceremony_honoree} ({self.status})"

@@ -4,7 +4,12 @@ import factory
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.ceremonies.constants import CeremonyTypeKey
-from world.ceremonies.models import Ceremony, CeremonyHonoree, CeremonyType
+from world.ceremonies.models import (
+    Ceremony,
+    CeremonyHonoree,
+    CeremonyType,
+    SeanceManifestationOffer,
+)
 from world.scenes.factories import PersonaFactory
 from world.worship.factories import WorshippedBeingFactory
 
@@ -35,3 +40,10 @@ class CeremonyHonoreeFactory(factory.django.DjangoModelFactory):
         model = CeremonyHonoree
 
     ceremony = factory.SubFactory(CeremonyFactory)
+
+
+class SeanceManifestationOfferFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = SeanceManifestationOffer
+
+    ceremony_honoree = factory.SubFactory(CeremonyHonoreeFactory)
