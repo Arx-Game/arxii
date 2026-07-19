@@ -11,6 +11,13 @@
 > (folded into the generalized Property/Challenge/Situation system). See the
 > corrected status block in "How This Maps to Current Code". When in doubt,
 > trust the code, not this doc.
+>
+> **Update (#2503, 2026-07-19):** the capability→available-action pipeline
+> now has a **second source** — bare-object affordances synthesized from
+> `ObjectProperty` matches with no authored `ChallengeInstance` — surfaced via
+> a second `WORLD_INTERACTION` action backend alongside CHALLENGE. See
+> "Bare-object affordances (#2503)" in the corrected status block below and
+> ADR-0147.
 
 > The foundational interaction model for Arx II. This document describes how
 > characters interact with the game world through four layers: what things
@@ -586,7 +593,11 @@ into coherent scenes.
 ## The Interaction Pipeline
 
 When Capabilities meet Properties in Challenges, the system resolves what
-Actions are available through a consistent pipeline:
+Actions are available through a consistent pipeline. **(#2503 note:** step 1
+below describes the authored-instance path; a second, lazy path synthesizes
+Actions straight from bare-object `ObjectProperty` matches with no
+`ChallengeInstance` at all — see "Bare-object affordances (#2503)" further
+down and `docs/architecture/action-template-pipeline.md`.)
 
 ```
 1. IDENTIFY active Challenges in the room

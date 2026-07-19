@@ -21,7 +21,9 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 
 ### Data Models (mechanics app)
 - **PropertyCategory, Property** — tagged descriptors for anything in the game world
-- **Application** — links a CapabilityType to a target Property with optional required_effect_property
+- **Application** — links a CapabilityType to a target Property with optional required_effect_property.
+  `default_template` (nullable FK to ChallengeTemplate, #2503) is the curated bare-object-affordance
+  gate — see Phase 8.
 - **TraitCapabilityDerivation** — maps Traits to Capabilities with `base_value + (trait_multiplier * trait_value)` formula
 - **ChallengeCategory, ChallengeTemplate** — atomic problems with severity, resolution type, and Properties M2M
 - **ChallengeConsequence** — outcomes for success/failure/partial on a Challenge
@@ -52,6 +54,10 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 ### Data Models (conditions app)
 - **CapabilityType.prerequisite** — FK to PrerequisiteType, inherent prerequisites checked for ALL sources of a Capability
 - **ConditionTemplate.properties M2M** — Properties temporarily granted while a condition is active
+
+### Data Models (items app, #2503)
+- **ItemTemplateProperty** — declares the `mechanics.Property` rows a template's instances carry
+  by default (e.g. a Torch template → `flammable`); migration `0041`
 
 ### Services (mechanics app)
 - **`get_capability_sources_for_character(character)`** — collects per-source Capability values from Techniques, trait derivations, and conditions. Returns separate entries per source (no aggregation)
@@ -402,6 +408,48 @@ Built capability and challenge content layer exercising the full pipeline end-to
   to appear on the challenge's Properties. ChallengeApproaches whose Application references
   a property not on the challenge (e.g., Solve/analysis+mechanical on a door with locked/solid/breakable)
   are correctly filtered out. Approaches must be designed with property overlap in mind.
+
+### Phase 8: Bare-Object Affordances & GM Stage-Prop — DONE (#2503)
+
+Closed the last mile from "a character has a granted capability" to "the world actually
+offers something to do with it" — everyday objects (a flammable torch, a dark room) now
+surface affordances with no GM having to hand-place a `ChallengeInstance` first. See
+ADR-0147 and `docs/architecture/action-template-pipeline.md`'s "Bare-Object Affordances"
+section for the full design.
+
+- **`Application.default_template`** (mechanics, nullable FK to `ChallengeTemplate`) — the
+  curated authoring gate. Null (the default for most Applications) means no bare-object
+  affordance ever synthesizes for that Application, no matter what `ObjectProperty` rows
+  exist.
+- **`ItemTemplateProperty`** (items) + **`apply_template_properties`**
+  (`world/items/services/materialize.py`) — template-authored default `ObjectProperty` rows,
+  applied at the single materialization chokepoint (`_create_item_object_db`) shared by
+  inventory placement and GM room-staging.
+- **`get_available_actions`'s second source** (`_bare_object_actions`,
+  `world/mechanics/services.py`) — scans `ObjectProperty` rows on the location and its
+  contents, matches against gated Applications, dedups against any authored active
+  `ChallengeInstance` covering the same `(object, template)` pair.
+- **`ActionBackend.WORLD_INTERACTION`** — a fifth backend keyed on `(application_id,
+  target_object_id)` (both stable before any instance exists). `dispatch_player_action`
+  re-validates, mints via `instantiate_challenge`, resolves through the unchanged
+  `resolve_challenge()`. `ResolutionContext.target` is now populated from
+  `ChallengeInstance.target_object` (previously always `None` on this path) so
+  `EffectTarget.TARGET` consequences land on the object, not the acting character.
+- **GM stage-prop improv** — `StagePropAction`/`StagePropertyAction`
+  (`actions/definitions/gm_props.py`) + telnet `CmdStage` (`commands/gm_props.py`).
+  Materializes a curated `ItemTemplate` as a room prop, or tags an existing object with a
+  curated `Property`; gated on the room's active scene GM/owner or staff. Rides the same
+  materialization chokepoint above — a staged torch is immediately visible to the
+  bare-object scan with zero extra wiring.
+- **Content-loadable:** `mechanics.challengetemplate`, `mechanics.challengeapproach`,
+  `checks.checkcategory`/`checktype`/`checktypetrait`, and `items.itemtemplateproperty` are
+  all in `CONTENT_MODELS` — the capability-grant content pass (magic-catalog fixtures) can
+  author both halves of the bridge (`TechniqueCapabilityGrant` rows for the grant side,
+  `default_template` world-interaction templates for the bare-object side).
+- **Capstone E2Es** (`world/mechanics/tests/test_capability_currency_e2e.py`,
+  `commands/tests/test_gm_props_command.py`) prove the full technique-known → affordance
+  chain end to end, with fail-closed negative-direction controls (no technique link → no
+  affordance).
 
 ## Cross-System Integration
 

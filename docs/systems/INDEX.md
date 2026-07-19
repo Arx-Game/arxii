@@ -3454,9 +3454,20 @@ Unified modifier system — categories, types, sources, and per-character modifi
     (stacks on combat's gear read); incompatible slot adds `max(0, role_bonus -
     gear_stat)`; 0 when no roles engaged. `role_base_bonus_for_target` and
     `item_mundane_stat_for_target` now wired (#985)
-  - `resolve_challenge(character, challenge_instance, approach, capability_source) -> ChallengeResolutionResult` — resolve a character's action against a challenge
+  - `resolve_challenge(character, challenge_instance, approach, capability_source) -> ChallengeResolutionResult` — resolve a character's action against a challenge. `ResolutionContext.target` is now populated from `challenge_instance.target_object` (#2503, was always `None`), so an `EffectTarget.TARGET` consequence lands on the actual object.
   - `select_consequence(character, check_type, difficulty, consequences) -> PendingResolution` — generic: perform check + select weighted consequence (in `checks/consequence_resolution.py`)
   - `apply_resolution(pending, context) -> list[AppliedEffect]` — generic: dispatch ConsequenceEffects (in `checks/consequence_resolution.py`)
+  - **Bare-object affordances (#2503, ADR-0147):** `Application.default_template` (nullable FK
+    to `ChallengeTemplate`) is a curated gate — when set, `get_available_actions` also
+    synthesizes an `AvailableAction` straight from an `ObjectProperty` match on any object at
+    the location (no authored `ChallengeInstance` needed), via `_bare_object_actions`. Surfaced
+    through a second action backend, `ActionBackend.WORLD_INTERACTION` (`ActionRef.application_id`
+    + `target_object_id`); `dispatch_player_action` re-validates, mints via
+    `instantiate_challenge(resolved_default_template, location, target_object)`, then resolves
+    through the same `resolve_challenge()`. `stage_property(target, property_, value=1)` — the
+    GM improv upsert wrapping `ObjectProperty.objects.update_or_create` (used by
+    `StagePropertyAction`, see the Actions section). See
+    `docs/architecture/action-template-pipeline.md`'s "Bare-Object Affordances" section.
 - **Categories:** stat, magic, affinity, resonance, action_points, development, height_band,
   condition_control_percent, condition_intensity_percent, condition_penalty_percent, goal
 - **Constants (Spec D PR1):**
@@ -3752,6 +3763,16 @@ holder is never notified a claim exists.
   `DeleteOutfitAction`/`AddOutfitSlotAction`/`RemoveOutfitSlotAction`
   (`actions/definitions/outfits.py`) — the same Actions the `ItemFacetViewSet`/
   `ItemStyleCraftViewSet`/`OutfitViewSet`/`OutfitSlotViewSet` now dispatch through.
+- **Template-authored default Properties (#2503):** `ItemTemplateProperty`
+  (`world/items/models.py`, migration `0041`) declares which `mechanics.Property` rows a
+  template's instances carry by default (e.g. a Torch template → `flammable`). Applied at the
+  materialization chokepoint — `apply_template_properties(obj, item_template)`
+  (`world/items/services/materialize.py`), called from `_create_item_object_db`, the single
+  place any `ItemInstance` gains a physical `ObjectDB` — so every materialization path
+  (character inventory, GM-staged room prop) upserts the same `mechanics.ObjectProperty` rows
+  a granted-technique Property would use. `stage_prop(item_template, room)`
+  (`world.items.services.staging`) is the GM stage-prop wrapper over
+  `materialize_item_game_object_in_room` — see the Actions section's `StagePropAction`.
 - **Pattern:** Templates define archetypes; instances hold per-item state. Equipment uses
   region + layer grid (unique constraint per character). Facets attach up to `facet_capacity`
   per item via the crafting framework; worn facets feed the mechanics modifier walk (see
@@ -5019,7 +5040,13 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `GrantItemAction` (JUNIOR-tier GM narrative item grant, #707/#2117), `GMAwardDistinctionAction` (`registry_key="gm_award_distinction"`, JUNIOR-tier GM distinction award/rank-up, telnet `grant_distinction`, wraps `distinctions.grant_distinction`, #2037), `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485), `GiveWriteupKudosAction` / `FileWriteupComplaintAction` (writeup feedback — subject commends a writeup; any viewer files a bad-faith complaint for staff triage; shared by `CmdRelationship` and `RelationshipUpdateViewSet`, #1537)
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `GrantItemAction` (JUNIOR-tier GM narrative item grant, #707/#2117), `GMAwardDistinctionAction` (`registry_key="gm_award_distinction"`, JUNIOR-tier GM distinction award/rank-up, telnet `grant_distinction`, wraps `distinctions.grant_distinction`, #2037), `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485), `GiveWriteupKudosAction` / `FileWriteupComplaintAction` (writeup feedback — subject commends a writeup; any viewer files a bad-faith complaint for staff triage; shared by `CmdRelationship` and `RelationshipUpdateViewSet`, #1537), `StagePropAction` / `StagePropertyAction` (`registry_key="stage_prop"`/`"stage_property"`, `actions/definitions/gm_props.py`, #2503) — GM improv: materialize a curated `ItemTemplate` as a physical prop in the room, or tag an existing object with a curated `Property`; gated on the room's active scene GM/owner or staff; shared by telnet `CmdStage` (`stage prop <template>` / `stage property <property> [=<target>]`, `commands/gm_props.py`)
+- **WORLD_INTERACTION backend (#2503):** a fifth `ActionBackend` (alongside CHALLENGE, COMBAT,
+  REGISTRY, SCENE_ADAPTIVE) for bare-object affordances synthesized by `get_available_actions`'s
+  second source (see the Mechanics section). `ActionRef` carries `application_id` +
+  `target_object_id` instead of `challenge_instance_id`; `dispatch_player_action` re-validates
+  the pair, mints a `ChallengeInstance` via `instantiate_challenge`, then resolves through the
+  unchanged `resolve_challenge()`. See `docs/architecture/action-template-pipeline.md`.
 - **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `MinimumGMLevelPrerequisite` (#2117 — staff bypass + `GMProfile.level` >= a configured `GMLevel` tier, generalizing `world.combat.scaling.validate_stakes_requirement`'s pattern; gates `SetTheStageAction`/`PemitAction` at STARTING and `SetSituationAction`/`GrantItemAction` at JUNIOR), `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
