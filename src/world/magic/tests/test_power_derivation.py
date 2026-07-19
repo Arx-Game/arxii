@@ -925,3 +925,138 @@ class StandingCapBandModelTests(TestCase):
 
         band = StandingCapBand(min_level=6, cap=100, mode=StandingCapMode.SOFT, diminish_pct=50)
         band.full_clean()  # no raise
+
+
+class CovenantRoleBlendPowerTermTests(TestCase):
+    """covenant_role_blend_power_term: always-on blend floor for engaged roles (#2529)."""
+
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+
+    def _ctx(self, technique=None):
+        from world.magic.services.power_terms import PowerTermContext
+
+        return PowerTermContext(sheet=self.sheet, technique=technique, applicable_threads=[])
+
+    def _technique(self, alignment):
+        return TechniqueFactory(archetype_alignment=alignment)
+
+    def _thread(self, level):
+        from world.magic.factories import ThreadFactory
+
+        return ThreadFactory(owner=self.sheet, level=level)
+
+    def _engage_role(self, *, sword=0, shield=0, crown=0, covenant=None):
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+
+        role = CovenantRoleFactory(
+            sword_weight=Decimal(str(sword)),
+            shield_weight=Decimal(str(shield)),
+            crown_weight=Decimal(str(crown)),
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=self.sheet,
+            covenant=covenant or CovenantFactory(),
+            covenant_role=role,
+            engaged=True,
+        )
+        return role
+
+    def test_no_engaged_role_returns_zero(self):
+        from world.magic.services.power_terms import covenant_role_blend_power_term
+
+        self._thread(level=10)
+        technique = self._technique("sword")
+        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 0)
+
+    def test_no_threads_returns_zero(self):
+        from world.magic.services.power_terms import covenant_role_blend_power_term
+
+        self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"))
+        technique = self._technique("sword")
+        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 0)
+
+    def test_no_technique_returns_zero(self):
+        from world.magic.services.power_terms import covenant_role_blend_power_term
+
+        self._thread(level=10)
+        self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"))
+        self.assertEqual(covenant_role_blend_power_term(self._ctx(None)), 0)
+
+    def test_sword_aligned_technique_scales_by_sword_weight(self):
+        from world.magic.services.power_terms import covenant_role_blend_power_term
+
+        self._thread(level=10)
+        self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"))
+        technique = self._technique("sword")
+        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 6)
+
+    def test_crown_aligned_technique_scales_by_crown_weight(self):
+        from world.magic.services.power_terms import covenant_role_blend_power_term
+
+        self._thread(level=10)
+        self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"))
+        technique = self._technique("crown")
+        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 4)
+
+    def test_shield_aligned_technique_with_zero_weight_returns_zero(self):
+        from world.magic.services.power_terms import covenant_role_blend_power_term
+
+        self._thread(level=10)
+        self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"))
+        technique = self._technique("shield")
+        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 0)
+
+    def test_two_engaged_roles_sum(self):
+        from world.covenants.factories import CovenantFactory
+        from world.magic.services.power_terms import covenant_role_blend_power_term
+
+        self._thread(level=10)
+        self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"), covenant=CovenantFactory())
+        self._engage_role(sword=Decimal("0.3"), crown=Decimal("0.7"), covenant=CovenantFactory())
+        technique = self._technique("sword")
+        # (10*0.6*1.0) + (10*0.3*1.0) = 6.0 + 3.0 = 9.0 -> int(9.0) = 9
+        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 9)
+
+    def test_multiplier_tenths_scales_result(self):
+        from world.magic.services.power_terms import (
+            covenant_role_blend_power_term,
+            get_covenant_role_blend_config,
+        )
+
+        self._thread(level=10)
+        self._engage_role(sword=Decimal("0.6"), crown=Decimal("0.4"))
+        technique = self._technique("sword")
+        config = get_covenant_role_blend_config()
+        config.multiplier_tenths = 20
+        config.save()
+        self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 12)
+
+
+class TotalThreadLevelAcrossAllKindsTests(TestCase):
+    """total_thread_level_across_all_kinds sums raw levels across thread kinds (#2529)."""
+
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+
+    def test_sums_across_thread_kinds_and_ignores_retired(self):
+        from django.utils import timezone
+
+        from world.magic.factories import ThreadFactory
+        from world.magic.services.threads import total_thread_level_across_all_kinds
+
+        ThreadFactory(owner=self.sheet, level=4)  # TRAIT (default kind)
+        ThreadFactory(owner=self.sheet, level=6, as_technique_thread=True)
+        ThreadFactory(owner=self.sheet, level=100, retired_at=timezone.now())  # ignored
+        self.assertEqual(total_thread_level_across_all_kinds(self.sheet), 10)
+
+    def test_empty_returns_zero(self):
+        from world.magic.services.threads import total_thread_level_across_all_kinds
+
+        self.assertEqual(total_thread_level_across_all_kinds(self.sheet), 0)

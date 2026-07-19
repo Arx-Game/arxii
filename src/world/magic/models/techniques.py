@@ -22,6 +22,7 @@ from actions.constants import ActionCategory, ActionTargetType
 from core.managers import CachedAllMixin
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.achievements.models import DiscoverableContent
+from world.covenants.constants import RoleArchetype
 from world.magic.constants import TechniqueCategory, TechniqueReach
 from world.magic.models.gifts import Gift
 
@@ -323,6 +324,16 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         help_text=(
             "Physical/social/mental arena this technique acts in "
             "(drives combat slot + fatigue routing)."
+        ),
+    )
+    archetype_alignment = models.CharField(
+        max_length=20,
+        choices=RoleArchetype.choices,
+        default=RoleArchetype.CROWN,
+        help_text=(
+            "#2529: which SWORD/SHIELD/CROWN blend axis boosts this technique "
+            "(designer-authored; seeded from effect_type.category, override for "
+            "edge cases like a self-damage-buff→SWORD)."
         ),
     )
     reach = models.CharField(
