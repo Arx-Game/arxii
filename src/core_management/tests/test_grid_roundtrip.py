@@ -87,3 +87,34 @@ class GridRoundTripJourneyTests(TestCase):
         # No duplicate rooms were created by the reload.
         room_count_after = ObjectDB.objects.filter(db_typeclass_path=_ROOM_TYPECLASS).count()
         self.assertEqual(room_count_after, room_count_before)
+
+    def test_ambient_line_round_trips_and_installs_trigger(self) -> None:
+        from flows.models import Trigger
+        from world.narrative.ambient_trigger_content import ensure_ambient_reaction_content
+        from world.narrative.factories import AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteLine
+
+        ensure_ambient_reaction_content()
+        line = AmbientEmoteLineFactory(
+            room_profile=self.grid.taproom,
+            area=None,
+            arriver_body="The taproom's low murmur greets you.",
+        )
+
+        export_to_content_repo(self.root)
+        export_grid_bundles(self.root)
+
+        # Drift: delete the line entirely, and confirm no Trigger exists yet.
+        AmbientEmoteLine.objects.filter(pk=line.pk).delete()
+        self.assertFalse(Trigger.objects.filter(obj=self.grid.taproom_obj).exists())
+
+        load_world_content(self.root)
+
+        restored = AmbientEmoteLine.objects.get(
+            room_profile=self.grid.taproom, arriver_body="The taproom's low murmur greets you."
+        )
+        self.assertIsNotNone(restored.pk)
+        self.assertTrue(
+            Trigger.objects.filter(obj=self.grid.taproom_obj).exists(),
+            "importing an authored room with ambient content should install its Trigger",
+        )

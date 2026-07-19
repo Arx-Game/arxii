@@ -6,7 +6,7 @@ Export writes one JSON bundle per ``AUTHORED`` (see
 ``<content_root>/fixtures/grid/<area-slug>.json``; this module reads every
 bundle back and upserts the areas/rooms/exits/sidecar rows they describe.
 
-Four passes, in order, because later passes reference rows earlier passes
+Five passes, in order, because later passes reference rows earlier passes
 create (a room's area, an exit's source/destination rooms, a sidecar row's
 area/room target):
 
@@ -17,6 +17,9 @@ area/room target):
    ``fixture_key`` against the rooms pass 2 just built.
 4. **Sidecars** — ``LocationValueOverride``/``LocationValueModifier`` rows
    scoped to each bundle's area/rooms.
+5. **Ambient lines** — ``AmbientEmoteLine`` (#2471) rows scoped to each
+   bundle's area/rooms, plus installing the shared ambient-reaction
+   ``Trigger`` on every room with reachable ambient content.
 
 **Report-never-delete.** An authored area/room/exit that exists in the DB
 but is absent from every bundle is never deleted — it's surfaced as a
@@ -449,6 +452,139 @@ def _import_sidecars(
                 )
 
 
+def _resolve_ambient_trigger_fks(row_data: dict, bundle_name: str) -> dict[str, object]:
+    """Resolve the natural-key FK fields an AmbientEmoteLine row may carry (#2471)."""
+    from core_management.content_fixtures import ContentError  # noqa: PLC0415
+    from world.distinctions.models import Distinction  # noqa: PLC0415
+    from world.magic.models import Resonance  # noqa: PLC0415
+    from world.societies.models import Society  # noqa: PLC0415
+    from world.species.models import Species  # noqa: PLC0415
+
+    resolved: dict[str, object] = {}
+
+    species_name = row_data.get("trigger_species")
+    if species_name:
+        species = Species.objects.filter(name=species_name).first()
+        if species is None:
+            msg = f"{bundle_name}: unknown species {species_name!r}"
+            raise ContentError(msg)
+        resolved["trigger_species"] = species
+
+    resonance_name = row_data.get("trigger_resonance")
+    if resonance_name:
+        resonance = Resonance.objects.filter(name=resonance_name).first()
+        if resonance is None:
+            msg = f"{bundle_name}: unknown resonance {resonance_name!r}"
+            raise ContentError(msg)
+        resolved["trigger_resonance"] = resonance
+
+    distinction_slug = row_data.get("trigger_distinction")
+    if distinction_slug:
+        # Distinction.name is NOT unique (display text only) — slug is the model's
+        # actual NaturalKeyConfig field (world/distinctions/models.py). The
+        # "trigger_distinction" bundle field holds a slug, not a display name.
+        distinction = Distinction.objects.filter(slug=distinction_slug).first()
+        if distinction is None:
+            msg = f"{bundle_name}: unknown distinction {distinction_slug!r}"
+            raise ContentError(msg)
+        resolved["trigger_distinction"] = distinction
+
+    society_name = row_data.get("trigger_perceiving_society")
+    if society_name:
+        society = Society.objects.filter(name=society_name).first()
+        if society is None:
+            msg = f"{bundle_name}: unknown society {society_name!r}"
+            raise ContentError(msg)
+        resolved["trigger_perceiving_society"] = society
+
+    return resolved
+
+
+def _ensure_ambient_trigger(room_objectdb: object) -> None:
+    """Idempotently install the shared ambient-reaction Trigger on a room (#2471).
+
+    Mirrors world.battles.duel_wiring.install_champion_duel_trigger. No-op when the
+    seeded TriggerDefinition is absent (content not wired in this deployment).
+    """
+    from flows.models import Trigger  # noqa: PLC0415
+    from flows.models.triggers import TriggerDefinition  # noqa: PLC0415
+    from world.narrative.ambient_trigger_content import (  # noqa: PLC0415
+        AMBIENT_REACTION_TRIGGER_NAME,
+    )
+
+    trigger_def = TriggerDefinition.objects.filter(name=AMBIENT_REACTION_TRIGGER_NAME).first()
+    if trigger_def is None:
+        return
+    trigger, created = Trigger.objects.get_or_create(
+        obj=room_objectdb, trigger_definition=trigger_def
+    )
+    if created:
+        handler = room_objectdb.trigger_handler
+        if handler is not None:
+            handler.on_trigger_added(trigger)
+
+
+def _import_ambient_lines(
+    bundles: list[tuple[Path, dict]],
+    area_by_path: dict[Path, Area],
+    room_by_fixture_key: dict[str, RoomProfile],
+) -> None:
+    """Pass 5: per-bundle AmbientEmoteLine sidecar rows + per-room Trigger install (#2471).
+
+    Wholesale replace within each bundle's scope (like authored: LocationValueModifier
+    rows) rather than upsert — AmbientEmoteLine rows have no natural per-parent
+    uniqueness (a room/area can carry many lines), unlike LocationValueOverride.
+    """
+    from django.db import transaction  # noqa: PLC0415
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.locations.constants import LocationParentType  # noqa: PLC0415
+    from world.narrative.models import AmbientEmoteLine  # noqa: PLC0415
+
+    for path, bundle in bundles:
+        area = area_by_path[path]
+        bundle_name = path.name
+        bundle_room_fixture_keys = [room_data["fixture_key"] for room_data in bundle["rooms"]]
+        bundle_room_ids = [room_by_fixture_key[key].objectdb_id for key in bundle_room_fixture_keys]
+
+        with transaction.atomic():
+            scope = Q(parent_type=LocationParentType.AREA, area=area) | Q(
+                parent_type=LocationParentType.ROOM, room_profile_id__in=bundle_room_ids
+            )
+            AmbientEmoteLine.objects.filter(scope).delete()
+
+            area_has_lines = False
+            rooms_with_direct_lines: set[str] = set()
+            for row_data in bundle.get("ambient_lines", []):
+                parent_field, parent_obj = _resolve_parent(
+                    row_data, area, room_by_fixture_key, bundle_name
+                )
+                fk_fields = _resolve_ambient_trigger_fks(row_data, bundle_name)
+                AmbientEmoteLine.objects.create(
+                    parent_type=row_data["parent_type"],
+                    trigger_type=row_data["trigger_type"],
+                    trigger_minimum_value=row_data.get("trigger_minimum_value"),
+                    trigger_min_fame_tier=row_data.get("trigger_min_fame_tier") or "",
+                    bystander_body=row_data.get("bystander_body", ""),
+                    arriver_body=row_data.get("arriver_body", ""),
+                    weight=row_data["weight"],
+                    fire_chance=row_data["fire_chance"],
+                    cooldown_minutes=row_data["cooldown_minutes"],
+                    is_active=row_data["is_active"],
+                    **{parent_field: parent_obj},
+                    **fk_fields,
+                )
+                if row_data["parent_type"] == LocationParentType.AREA:
+                    area_has_lines = True
+                else:
+                    rooms_with_direct_lines.add(row_data["room"])
+
+            if area_has_lines or rooms_with_direct_lines:
+                for fixture_key in bundle_room_fixture_keys:
+                    if area_has_lines or fixture_key in rooms_with_direct_lines:
+                        _ensure_ambient_trigger(room_by_fixture_key[fixture_key].objectdb)
+
+
 def _report_missing_authored(
     area_by_slug: dict[str, Area],
     room_by_fixture_key: dict[str, RoomProfile],
@@ -504,6 +640,7 @@ def load_grid_bundles(content_root: Path | None = None) -> GridImportResult:
     _import_exits(bundles, room_by_fixture_key, result)
     _report_orphaned_exits(bundles, result)
     _import_sidecars(bundles, area_by_path, room_by_fixture_key)
+    _import_ambient_lines(bundles, area_by_path, room_by_fixture_key)
     _report_missing_authored(area_by_slug, room_by_fixture_key, result)
 
     return result
