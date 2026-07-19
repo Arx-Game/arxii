@@ -3,9 +3,13 @@
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from world.ceremonies.constants import CeremonyStatus
-from world.ceremonies.factories import CeremonyFactory
-from world.ceremonies.models import get_ceremony_config
+from world.ceremonies.constants import CeremonyStatus, SeanceOfferStatus
+from world.ceremonies.factories import (
+    CeremonyFactory,
+    CeremonyHonoreeFactory,
+    SeanceManifestationOfferFactory,
+)
+from world.ceremonies.models import SeanceManifestationOffer, get_ceremony_config
 
 
 class CeremonyModelTests(TestCase):
@@ -33,3 +37,22 @@ class CeremonyModelTests(TestCase):
         first = get_ceremony_config()
         second = get_ceremony_config()
         self.assertEqual(first.pk, second.pk)
+
+
+class SeanceManifestationOfferModelTests(TestCase):
+    def test_defaults_to_pending(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        offer = SeanceManifestationOfferFactory(
+            ceremony_honoree=CeremonyHonoreeFactory(honoree_sheet=CharacterSheetFactory())
+        )
+        self.assertEqual(offer.status, SeanceOfferStatus.PENDING)
+        self.assertIsNone(offer.responded_at)
+
+    def test_one_offer_per_honoree(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        honoree = CeremonyHonoreeFactory(honoree_sheet=CharacterSheetFactory())
+        SeanceManifestationOffer.objects.create(ceremony_honoree=honoree)
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            SeanceManifestationOffer.objects.create(ceremony_honoree=honoree)

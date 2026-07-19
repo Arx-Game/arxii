@@ -145,6 +145,34 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
             and not is_retired(tenure.roster_entry.character_sheet)
         ]
 
+    def get_seance_manifestable_characters(self):
+        """Retired characters this player can manifest via an accepted, open seance (#2393).
+
+        Disjoint from get_available_characters() — retired characters are
+        always excluded there. This is the narrow companion list CmdIC also
+        searches so `@ic <name>` can reach a retired honoree once their
+        seance offer is accepted.
+        """
+        from world.ceremonies.constants import CeremonyStatus, SeanceOfferStatus  # noqa: PLC0415
+        from world.ceremonies.models import SeanceManifestationOffer  # noqa: PLC0415
+        from world.vitals.services import is_retired  # noqa: PLC0415
+
+        result = []
+        for tenure in self.cached_active_tenures:
+            if not tenure.roster_entry.roster.is_active:
+                continue
+            sheet = tenure.roster_entry.character_sheet
+            if not is_retired(sheet):
+                continue
+            has_accepted_open_offer = SeanceManifestationOffer.objects.filter(
+                ceremony_honoree__honoree_sheet=sheet,
+                status=SeanceOfferStatus.ACCEPTED,
+                ceremony_honoree__ceremony__status=CeremonyStatus.OPEN,
+            ).exists()
+            if has_accepted_open_offer:
+                result.append(sheet.character)
+        return result
+
     def get_current_character(self):
         """Get the character this player is currently logged in as"""
         # This would be set when player switches characters via @ic command

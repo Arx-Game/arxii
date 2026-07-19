@@ -2671,11 +2671,13 @@ paths:
           enum:
           - blessing
           - funeral
+          - seance
           - sermon
         description: |-
           * `funeral` - Funeral
           * `blessing` - Blessing
           * `sermon` - Sermon
+          * `seance` - Seance
       - in: query
         name: location
         schema:
@@ -2740,6 +2742,99 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Ceremony'
+          description: ''
+  /api/ceremonies/seance-offers/:
+    get:
+      operationId: ceremonies_seance_offers_list
+      description: |-
+        PENDING seance-offer inbox for the requesting account (#2393).
+
+        GET  /api/ceremonies/seance-offers/ — the caller's own PENDING offers,
+        across every character sheet they've ever held (live, dead, or retired).
+        Deliberately no pagination — this list is always small (bounded by how
+        many open Seance ceremonies currently name this account's characters).
+        POST .../{id}/accept/ — accept (mints the location move + retired-puppet grant).
+        POST .../{id}/decline/ — decline.
+      tags:
+      - ceremonies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SeanceManifestationOffer'
+          description: ''
+  /api/ceremonies/seance-offers/{id}/accept/:
+    post:
+      operationId: ceremonies_seance_offers_accept_create
+      description: |-
+        PENDING seance-offer inbox for the requesting account (#2393).
+
+        GET  /api/ceremonies/seance-offers/ — the caller's own PENDING offers,
+        across every character sheet they've ever held (live, dead, or retired).
+        Deliberately no pagination — this list is always small (bounded by how
+        many open Seance ceremonies currently name this account's characters).
+        POST .../{id}/accept/ — accept (mints the location move + retired-puppet grant).
+        POST .../{id}/decline/ — decline.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - ceremonies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeanceManifestationOfferRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeanceManifestationOffer'
+          description: ''
+  /api/ceremonies/seance-offers/{id}/decline/:
+    post:
+      operationId: ceremonies_seance_offers_decline_create
+      description: |-
+        PENDING seance-offer inbox for the requesting account (#2393).
+
+        GET  /api/ceremonies/seance-offers/ — the caller's own PENDING offers,
+        across every character sheet they've ever held (live, dead, or retired).
+        Deliberately no pagination — this list is always small (bounded by how
+        many open Seance ceremonies currently name this account's characters).
+        POST .../{id}/accept/ — accept (mints the location move + retired-puppet grant).
+        POST .../{id}/decline/ — decline.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - ceremonies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeanceManifestationOfferRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeanceManifestationOffer'
           description: ''
   /api/chapters/:
     get:
@@ -60580,6 +60675,38 @@ components:
         * `character` - Personal
         * `group` - Group
         * `global` - Global
+    SeanceManifestationOffer:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        honoree_name:
+          type: string
+          readOnly: true
+        ceremony_location_name:
+          type: string
+          readOnly: true
+        ceremony_id:
+          type: integer
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/Status7baEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - ceremony_id
+      - ceremony_location_name
+      - created_at
+      - honoree_name
+      - id
+    SeanceManifestationOfferRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/Status7baEnum'
     SeasonEnum:
       enum:
       - spring
@@ -62783,6 +62910,16 @@ components:
         * `resolving` - Resolving
         * `between_rounds` - Between Rounds
         * `completed` - Completed
+    Status7baEnum:
+      enum:
+      - pending
+      - accepted
+      - declined
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `declined` - Declined
     Status83bEnum:
       enum:
       - pending

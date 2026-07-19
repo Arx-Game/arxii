@@ -3,17 +3,21 @@
 from unittest import mock
 
 from django.test import TestCase
+from django.utils import timezone
 
-from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey
+from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey, SeanceOfferStatus
 from world.ceremonies.factories import CeremonyTypeFactory
-from world.ceremonies.models import CeremonyOffering
+from world.ceremonies.models import CeremonyOffering, SeanceManifestationOffer
 from world.ceremonies.services import (
     CeremonyError,
+    SeanceOfferError,
     abandon_ceremony,
     finish_ceremony,
     open_ceremony,
     open_funeral_for,
+    pending_seance_offers_for_account,
     record_offering,
+    respond_to_seance_offer,
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.vitals.constants import CharacterLifeState
@@ -129,6 +133,62 @@ class OpenCeremonyTests(TestCase):
                 officiant_persona=other,
                 type_key=CeremonyTypeKey.FUNERAL,
                 honoree_sheets=[_dead_sheet()],
+                location_profile=self.location,
+            )
+
+
+class OpenSeanceTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        cls.seance_type = CeremonyTypeFactory(key=CeremonyTypeKey.SEANCE, name="Seance")
+        cls.public = WorshippedBeingFactory()
+        cls.location = RoomProfileFactory()
+
+    def _officiant(self):
+        persona, sheet = _persona_with_sheet()
+        WorshipDeclaration.objects.create(character_sheet=sheet, public_being=self.public)
+        return persona
+
+    def test_rejects_living_honoree(self) -> None:
+        persona = self._officiant()
+        living_sheet = CharacterSheetFactory()
+        with self.assertRaises(CeremonyError):
+            open_ceremony(
+                officiant_persona=persona,
+                type_key=CeremonyTypeKey.SEANCE,
+                honoree_sheets=[living_sheet],
+                location_profile=self.location,
+            )
+
+    def test_accepts_retired_honoree_and_creates_pending_offer(self) -> None:
+        persona = self._officiant()
+        dead_sheet = _dead_sheet()
+        CharacterVitalsFactory(character_sheet=dead_sheet)  # no-op if already created
+        dead_sheet.vitals.retired_at = timezone.now()
+        dead_sheet.vitals.save(update_fields=["retired_at"])
+
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[dead_sheet],
+            location_profile=self.location,
+        )
+
+        honoree = ceremony.honorees.get(honoree_sheet=dead_sheet)
+        self.assertEqual(honoree.seance_offer.status, SeanceOfferStatus.PENDING)
+        self.assertEqual(
+            SeanceManifestationOffer.objects.filter(ceremony_honoree=honoree).count(), 1
+        )
+
+    def test_requires_at_least_one_honoree(self) -> None:
+        persona = self._officiant()
+        with self.assertRaises(CeremonyError):
+            open_ceremony(
+                officiant_persona=persona,
+                type_key=CeremonyTypeKey.SEANCE,
+                honoree_sheets=[],
                 location_profile=self.location,
             )
 
@@ -267,3 +327,223 @@ class CeremonyFlowTests(TestCase):
         self.assertEqual(open_funeral_for(dead), ceremony)
         finish_ceremony(ceremony=ceremony)
         self.assertIsNone(open_funeral_for(dead))
+
+
+class RespondToSeanceOfferTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.SEANCE, name="Seance")
+        cls.location = RoomProfileFactory()
+
+    def _open_seance(self, *, sheet):
+        persona, officiant_sheet = _persona_with_sheet()
+        being = WorshippedBeingFactory()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=being)
+        return open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[sheet],
+            location_profile=self.location,
+        )
+
+    def _retired_sheet_with_account(self):
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        sheet = _dead_sheet()
+        sheet.vitals.retired_at = timezone.now()
+        sheet.vitals.save(update_fields=["retired_at"])
+        player_data = PlayerDataFactory()
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, player_data=player_data)
+        return sheet, player_data.account
+
+    def test_accept_moves_character_to_ceremony_location(self) -> None:
+        sheet, account = self._retired_sheet_with_account()
+        ceremony = self._open_seance(sheet=sheet)
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+
+        respond_to_seance_offer(offer, account=account, accept=True)
+
+        offer.refresh_from_db()
+        self.assertEqual(offer.status, SeanceOfferStatus.ACCEPTED)
+        self.assertIsNotNone(offer.responded_at)
+        self.assertEqual(sheet.character.location, self.location.objectdb)
+
+    def test_decline_does_not_move_character(self) -> None:
+        sheet, account = self._retired_sheet_with_account()
+        original_location = sheet.character.location
+        ceremony = self._open_seance(sheet=sheet)
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+
+        respond_to_seance_offer(offer, account=account, accept=False)
+
+        offer.refresh_from_db()
+        self.assertEqual(offer.status, SeanceOfferStatus.DECLINED)
+        self.assertEqual(sheet.character.location, original_location)
+
+    def test_wrong_account_cannot_answer(self) -> None:
+        sheet, _account = self._retired_sheet_with_account()
+        ceremony = self._open_seance(sheet=sheet)
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+
+        from world.roster.factories import PlayerDataFactory
+
+        stranger = PlayerDataFactory().account
+        with self.assertRaises(SeanceOfferError):
+            respond_to_seance_offer(offer, account=stranger, accept=True)
+
+    def test_pending_offers_for_account_reaches_retired_honoree(self) -> None:
+        sheet, account = self._retired_sheet_with_account()
+        ceremony = self._open_seance(sheet=sheet)
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+
+        offers = list(pending_seance_offers_for_account(account))
+
+        self.assertEqual(offers, [offer])
+
+    def test_pending_offer_reaches_account_after_real_retire_character_call(self) -> None:
+        """Guards the load-bearing fact the whole retired-honoree flow depends on:
+        ``retire_character`` stamps ``retired_at`` but does NOT close out the
+        character's ``RosterTenure``. Every other seance test builds "retired" state
+        by hand (``CharacterVitalsFactory(retired_at=...)``); this one calls the real
+        service function so a future change to its behavior (e.g. also setting
+        ``end_date``) would break this test instead of silently rotting the feature.
+        """
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+        from world.vitals.services import retire_character
+
+        sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=sheet, life_state=CharacterLifeState.DEAD)
+        player_data = PlayerDataFactory()
+        entry = RosterEntryFactory(character_sheet=sheet)
+        tenure = RosterTenureFactory(roster_entry=entry, player_data=player_data)
+        account = player_data.account
+
+        retire_character(sheet)
+
+        sheet.vitals.refresh_from_db()
+        self.assertIsNotNone(sheet.vitals.retired_at)
+        tenure.refresh_from_db()
+        self.assertIsNone(tenure.end_date)
+
+        ceremony = self._open_seance(sheet=sheet)
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+        self.assertEqual(offer.status, SeanceOfferStatus.PENDING)
+
+        offers = list(pending_seance_offers_for_account(account))
+        self.assertEqual(offers, [offer])
+
+
+class RevokeSeanceManifestationsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.SEANCE, name="Seance")
+        CeremonyTypeFactory(key=CeremonyTypeKey.FUNERAL, name="Funeral")
+        cls.public = WorshippedBeingFactory()
+        cls.location = RoomProfileFactory()
+
+    def test_abandon_unpuppets_manifested_retired_honoree(self) -> None:
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        sheet = _dead_sheet()
+        sheet.vitals.retired_at = timezone.now()
+        sheet.vitals.save(update_fields=["retired_at"])
+
+        player_data = PlayerDataFactory()
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, player_data=player_data)
+        account = player_data.account
+
+        persona, officiant_sheet = _persona_with_sheet()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=self.public)
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[sheet],
+            location_profile=self.location,
+        )
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+        respond_to_seance_offer(offer, account=account, accept=True)
+
+        character = sheet.character
+        character.db_account = account
+        character.save()
+
+        # No live Evennia session exists in a plain unit test — character.sessions
+        # is always empty here, so this exercises the loop's no-op branch. It
+        # proves the revoke hook runs cleanly on the abandon path without
+        # raising, which is the realistic unit-test shape; a full puppet/
+        # unpuppet round-trip belongs in an integration test, not this one.
+        abandon_ceremony(ceremony=ceremony)
+
+        self.assertEqual(ceremony.status, "abandoned")
+
+    def test_abandon_calls_revoke_for_seance_type_only(self) -> None:
+        persona, officiant_sheet = _persona_with_sheet()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=self.public)
+        sheet = _dead_sheet()
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[sheet],
+            location_profile=self.location,
+        )
+
+        with mock.patch("world.ceremonies.services.revoke_seance_manifestations") as mock_revoke:
+            abandon_ceremony(ceremony=ceremony)
+
+        mock_revoke.assert_called_once_with(ceremony)
+
+    def test_finish_calls_revoke_too(self) -> None:
+        persona, officiant_sheet = _persona_with_sheet()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=self.public)
+        sheet = _dead_sheet()
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[sheet],
+            location_profile=self.location,
+        )
+
+        with mock.patch("world.ceremonies.services.revoke_seance_manifestations") as mock_revoke:
+            finish_ceremony(ceremony=ceremony)
+
+        mock_revoke.assert_called_once_with(ceremony)
+
+    def test_abandon_non_seance_ceremony_is_a_real_no_op(self) -> None:
+        """revoke_seance_manifestations' own early-return guard (its body, not the call
+        site — both abandon_ceremony and finish_ceremony call it unconditionally) must
+        no-op cleanly for a Funeral. A Funeral honoree never gets a SeanceManifestationOffer
+        (open_ceremony only creates those for SEANCE — see the ``if ceremony_type.key ==
+        CeremonyTypeKey.SEANCE`` guard there), so there's nothing puppet-related to assert
+        beyond: the call completes without raising and the ceremony still reaches ABANDONED.
+        """
+        persona, officiant_sheet = _persona_with_sheet()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=self.public)
+        dead = _dead_sheet()
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.FUNERAL,
+            honoree_sheets=[dead],
+            location_profile=self.location,
+        )
+
+        abandon_ceremony(ceremony=ceremony)
+
+        self.assertEqual(ceremony.status, CeremonyStatus.ABANDONED)

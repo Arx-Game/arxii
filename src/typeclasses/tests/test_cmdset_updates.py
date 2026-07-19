@@ -72,3 +72,67 @@ class CommandUpdateTests(TestCase):
             char.at_post_puppet()
         entry.refresh_from_db()
         assert entry.last_puppeted == now
+
+
+class GetSeanceManifestableCharactersTests(TestCase):
+    """PlayerData.get_seance_manifestable_characters (#2393)."""
+
+    def test_excludes_alive_and_non_retired_dead(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+        from world.vitals.factories import CharacterVitalsFactory
+
+        player_data = PlayerDataFactory()
+        sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=sheet)  # ALIVE
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, player_data=player_data)
+
+        self.assertEqual(player_data.get_seance_manifestable_characters(), [])
+
+    def test_includes_retired_with_accepted_open_offer(self) -> None:
+        from django.utils import timezone
+
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.ceremonies.constants import CeremonyTypeKey
+        from world.ceremonies.factories import CeremonyTypeFactory
+        from world.ceremonies.services import open_ceremony, respond_to_seance_offer
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+        from world.vitals.constants import CharacterLifeState
+        from world.vitals.factories import CharacterVitalsFactory
+        from world.worship.factories import WorshippedBeingFactory
+        from world.worship.models import WorshipDeclaration
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.SEANCE, name="Seance")
+        player_data = PlayerDataFactory()
+        sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(
+            character_sheet=sheet, life_state=CharacterLifeState.DEAD, retired_at=timezone.now()
+        )
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, player_data=player_data)
+
+        officiant_sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=officiant_sheet)
+
+        being = WorshippedBeingFactory()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=being)
+        ceremony = open_ceremony(
+            officiant_persona=officiant_sheet.primary_persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[sheet],
+            location_profile=RoomProfileFactory(),
+        )
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+        respond_to_seance_offer(offer, account=player_data.account, accept=True)
+
+        self.assertEqual(player_data.get_seance_manifestable_characters(), [sheet.character])

@@ -1,7 +1,10 @@
 """Ceremony actions (#2289): open, offering, speech, finish, abandon.
 
 Thin wrappers over ``world.ceremonies.services`` — telnet (``ceremony``
-command family) and web endpoints converge here via ``action.run()``.
+command family) and web endpoints converge here via ``action.run()``. Also
+includes the #2393 seance-offer response pair, account-authorized so a
+retired honoree's player (who may have no puppeted character at all) can
+answer.
 """
 
 from dataclasses import dataclass
@@ -10,6 +13,7 @@ from typing import Any
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action, ActionResult
+from actions.prerequisites import Prerequisite
 from actions.types import ActionContext, TargetType
 
 
@@ -321,3 +325,71 @@ class AbandonCeremonyAction(Action):
         except CeremonyError as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(success=True, message="The rite is left unfinished.")
+
+
+@dataclass
+class _SeanceOfferActionBase(Action):
+    """Shared account-authorized shape for seance-offer accept/decline (#2393).
+
+    Mirrors ``actions/definitions/dramatic_moments.py``'s account-authorized
+    pattern — the offer's own player may have no puppeted character at all (a
+    retired honoree), so this takes an ``account`` kwarg and accepts
+    ``actor=None`` through ``run()``.
+    """
+
+    category: str = "ceremonies"
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list["Prerequisite"]:
+        return []
+
+
+def _seance_offer_or_none(offer_id: Any):
+    from world.ceremonies.models import SeanceManifestationOffer  # noqa: PLC0415
+
+    if offer_id is None:
+        return None
+    try:
+        return SeanceManifestationOffer.objects.select_related(
+            "ceremony_honoree__ceremony", "ceremony_honoree__honoree_sheet"
+        ).get(pk=int(offer_id))
+    except (SeanceManifestationOffer.DoesNotExist, ValueError, TypeError):
+        return None
+
+
+@dataclass
+class RespondSeanceOfferAction(_SeanceOfferActionBase):
+    """Accept or decline a pending seance manifestation offer (#2393).
+
+    Expects kwargs: ``offer_id`` (int), ``account`` (AccountDB), ``accept`` (bool).
+    """
+
+    key: str = "seance_offer_respond"
+    name: str = "Respond to Seance Offer"
+    icon: str = "ghost"
+
+    def execute(
+        self, actor: ObjectDB | None, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.ceremonies.services import (  # noqa: PLC0415
+            SeanceOfferError,
+            respond_to_seance_offer,
+        )
+
+        offer = _seance_offer_or_none(kwargs.get("offer_id"))
+        if offer is None:
+            return ActionResult(success=False, message="Which offer? Provide an offer id.")
+        account = kwargs.get("account")
+        if account is None:
+            return ActionResult(success=False, message="No account to answer for.")
+        accept = bool(kwargs.get("accept"))
+        try:
+            respond_to_seance_offer(offer, account=account, accept=accept)
+        except SeanceOfferError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        verb = "answer" if accept else "decline"
+        return ActionResult(
+            success=True,
+            message=f"You {verb} the seance's call.",
+            data={"offer_id": offer.pk, "status": offer.status},
+        )

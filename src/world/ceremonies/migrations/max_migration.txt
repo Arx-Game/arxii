@@ -1,1 +1,1 @@
-0002_ceremonyoffering_item_legend_value
+0003_alter_ceremonytype_key_seancemanifestationoffer

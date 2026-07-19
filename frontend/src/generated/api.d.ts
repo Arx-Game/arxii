@@ -1750,6 +1750,84 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/ceremonies/seance-offers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description PENDING seance-offer inbox for the requesting account (#2393).
+     *
+     *     GET  /api/ceremonies/seance-offers/ — the caller's own PENDING offers,
+     *     across every character sheet they've ever held (live, dead, or retired).
+     *     Deliberately no pagination — this list is always small (bounded by how
+     *     many open Seance ceremonies currently name this account's characters).
+     *     POST .../{id}/accept/ — accept (mints the location move + retired-puppet grant).
+     *     POST .../{id}/decline/ — decline.
+     */
+    get: operations['ceremonies_seance_offers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/ceremonies/seance-offers/{id}/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description PENDING seance-offer inbox for the requesting account (#2393).
+     *
+     *     GET  /api/ceremonies/seance-offers/ — the caller's own PENDING offers,
+     *     across every character sheet they've ever held (live, dead, or retired).
+     *     Deliberately no pagination — this list is always small (bounded by how
+     *     many open Seance ceremonies currently name this account's characters).
+     *     POST .../{id}/accept/ — accept (mints the location move + retired-puppet grant).
+     *     POST .../{id}/decline/ — decline.
+     */
+    post: operations['ceremonies_seance_offers_accept_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/ceremonies/seance-offers/{id}/decline/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description PENDING seance-offer inbox for the requesting account (#2393).
+     *
+     *     GET  /api/ceremonies/seance-offers/ — the caller's own PENDING offers,
+     *     across every character sheet they've ever held (live, dead, or retired).
+     *     Deliberately no pagination — this list is always small (bounded by how
+     *     many open Seance ceremonies currently name this account's characters).
+     *     POST .../{id}/accept/ — accept (mints the location move + retired-puppet grant).
+     *     POST .../{id}/decline/ — decline.
+     */
+    post: operations['ceremonies_seance_offers_decline_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/chapters/': {
     parameters: {
       query?: never;
@@ -34121,6 +34199,18 @@ export interface components {
      * @enum {string}
      */
     ScopeA20Enum: 'unassigned' | 'character' | 'group' | 'global';
+    SeanceManifestationOffer: {
+      readonly id: number;
+      readonly honoree_name: string;
+      readonly ceremony_location_name: string;
+      readonly ceremony_id: number;
+      status?: components['schemas']['Status7baEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    SeanceManifestationOfferRequest: {
+      status?: components['schemas']['Status7baEnum'];
+    };
     /**
      * @description * `spring` - Spring
      *     * `summer` - Summer
@@ -35227,6 +35317,13 @@ export interface components {
      * @enum {string}
      */
     Status4e6Enum: 'declaring' | 'resolving' | 'between_rounds' | 'completed';
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `declined` - Declined
+     * @enum {string}
+     */
+    Status7baEnum: 'pending' | 'accepted' | 'declined';
     /**
      * @description * `pending` - Pending
      *     * `accepted` - Accepted
@@ -39582,8 +39679,9 @@ export interface operations {
          * @description * `funeral` - Funeral
          *     * `blessing` - Blessing
          *     * `sermon` - Sermon
+         *     * `seance` - Seance
          */
-        ceremony_type__key?: 'blessing' | 'funeral' | 'sermon';
+        ceremony_type__key?: 'blessing' | 'funeral' | 'seance' | 'sermon';
         location?: number;
         location__objectdb?: number;
         /** @description A page number within the paginated result set. */
@@ -39631,6 +39729,75 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Ceremony'];
+        };
+      };
+    };
+  };
+  ceremonies_seance_offers_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SeanceManifestationOffer'][];
+        };
+      };
+    };
+  };
+  ceremonies_seance_offers_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['SeanceManifestationOfferRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SeanceManifestationOffer'];
+        };
+      };
+    };
+  };
+  ceremonies_seance_offers_decline_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['SeanceManifestationOfferRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SeanceManifestationOffer'];
         };
       };
     };

@@ -1325,6 +1325,7 @@
   - honoree_sheet -> character_sheets.CharacterSheet [FK]
 **Pointed to by:**
   - speeches <- ceremonies.CeremonySpeech
+  - seance_offer <- ceremonies.SeanceManifestationOffer
 
 ### CeremonyOffering
 **Foreign Keys:**
@@ -1340,6 +1341,10 @@
 
 ### CeremonyConfig
 
+### SeanceManifestationOffer
+**Foreign Keys:**
+  - ceremony_honoree -> ceremonies.CeremonyHonoree [OneToOne]
+
 ### Service Functions
 - `abandon_ceremony(*, ceremony: world.ceremonies.models.Ceremony) -> world.ceremonies.models.Ceremony — Decision 12: close the rite awarding nothing; frees the location + ghost window.`
 - `execute_will(character_sheet: 'CharacterSheet') -> None — Execute the deceased's estate — the funeral door of #1985.`
@@ -1347,8 +1352,11 @@
 - `get_ceremony_config() -> world.ceremonies.models.CeremonyConfig — Get-or-create the first CeremonyConfig row (singleton-by-convention).`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None) -> world.ceremonies.models.Ceremony — Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None — The OPEN funeral honoring this character, if any (the ghost container).`
+- `pending_seance_offers_for_account(account: object) -> 'QuerySet[SeanceManifestationOffer]' — PENDING seance offers addressed to any character this account has ever held (#2393).`
 - `record_offering(*, ceremony: world.ceremonies.models.Ceremony, item_instances: 'list[ItemInstance]') -> list[world.ceremonies.models.CeremonyOffering] — Sacrifice items: destroy them, feed the being's pool, log offerings.`
 - `record_speech(*, ceremony: world.ceremonies.models.Ceremony, speaker_persona: 'Persona', target_honoree: world.ceremonies.models.CeremonyHonoree | None = None) -> world.ceremonies.models.CeremonySpeech — Recognize a speaker; their Performance/Oratory roll shapes the tally.`
+- `respond_to_seance_offer(offer: 'SeanceManifestationOffer', *, account: object, accept: bool) -> 'SeanceManifestationOffer' — Accept or decline a pending seance manifestation offer (#2393).`
+- `revoke_seance_manifestations(ceremony: world.ceremonies.models.Ceremony) -> None — Force-unpuppet any manifested RETIRED honoree when a Seance closes (#2393).`
 
 
 ## world.character_creation

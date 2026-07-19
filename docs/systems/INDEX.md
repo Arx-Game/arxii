@@ -4874,8 +4874,9 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `secret_worship` → `_create_worship_declaration` at finalization. Seeds: `worship` cluster
   (Rites skill + 4 specs, Ceremony Rites CheckType, Devotion aspect for Path of the Chosen,
   achievements, PLACEHOLDER beings); `secret-investigation` consent category in the consent seed.
-- **Ceremony models** (`world/ceremonies`): `CeremonyType` (Funeral/Blessing/Sermon rows),
-  `Ceremony` (officiant Persona, TRUE `being` vs `presented_being` — player surfaces render
+- **Ceremony models** (`world/ceremonies`): `CeremonyType` (Funeral/Blessing/Sermon/Seance
+  rows — seeded via the `"ceremonies"` cluster, #2393), `Ceremony` (officiant Persona, TRUE
+  `being` vs `presented_being` — player surfaces render
   presented ONLY, one-OPEN-per-location constraint, nullable scene/event FKs, `quality_level`),
   `CeremonyHonoree`, `CeremonyOffering` (item destroyed; snapshot), `CeremonySpeech`,
   `CeremonyConfig` singleton (`get_ceremony_config`, PLACEHOLDER magnitudes).
@@ -4886,8 +4887,18 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `abandon_ceremony`, `open_funeral_for` (ghost container); `run_twisted_rite_leak`
   (`ceremonies/leak.py` — consent-gated Search roll → clue on the worship Secret).
   Exceptions: `CeremonyError` (user_message).
-- **Integration**: `GhostWindowPrerequisite` third container (open funeral at the ghost's
-  location); `_dead_owner_trusts` corpse-handler exemption (`flows/service_functions/
+- **Seance (#2393)**: `SeanceManifestationOffer` (one per honoree, PENDING/ACCEPTED/DECLINED)
+  — created by `open_ceremony` for a SEANCE-type ceremony. `respond_to_seance_offer`
+  (account-scoped accept/decline; accept moves the honoree's character to the ceremony's
+  location), `pending_seance_offers_for_account`, `revoke_seance_manifestations` (called from
+  `finish_ceremony`/`abandon_ceremony`, unpuppets any manifested RETIRED honoree). Retired-login
+  bypass lives on `Account.can_puppet_for_seance` — deliberately NOT merged into
+  `can_puppet_character`/`get_available_characters` (see ADR-0147). Actions:
+  `seance_offer_respond`; telnet `seance` (offers/accept/decline); API
+  `/api/ceremonies/seance-offers/` (list + accept/decline); frontend `SeanceOfferBanner`.
+- **Integration**: `GhostWindowPrerequisite` third container (open funeral, or an open
+  ACCEPTED seance, at the ghost's location, #2393); `_dead_owner_trusts` corpse-handler
+  exemption (`flows/service_functions/
   inventory.py`); `ceremonies.auto_abandon` hourly cron. Actions `ceremony_open`/`_offering`/
   `_speech`/`_finish`/`_abandon`; telnet `ceremony` family; API `/api/worship/beings/` +
   `/api/ceremonies/ceremonies/` (both paginated read-only); game-view `CeremonyRoomCard`.

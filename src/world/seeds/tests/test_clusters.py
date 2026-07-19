@@ -42,6 +42,7 @@ class TestClusterRegistry(TestCase):
                 "property_grants",
                 "kudos",
                 "survivability",
+                "ceremonies",
                 "market",
                 "gm",
                 "kinship",
