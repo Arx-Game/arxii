@@ -4067,6 +4067,58 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-creation/origin-templates/:
+    get:
+      operationId: character_creation_origin_templates_list
+      description: |-
+        List active origin-story templates for the CG guided flow (#2478).
+
+        Filter by ``beginning`` to get templates available for a specific beginning.
+        Mirrors ``CGGlimpseTagViewSet``.
+      parameters:
+      - in: query
+        name: beginning
+        schema:
+          type: integer
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CGOriginTemplate'
+          description: ''
+  /api/character-creation/origin-templates/{id}/:
+    get:
+      operationId: character_creation_origin_templates_retrieve
+      description: |-
+        List active origin-story templates for the CG guided flow (#2478).
+
+        Filter by ``beginning`` to get templates available for a specific beginning.
+        Mirrors ``CGGlimpseTagViewSet``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Origin Template.
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CGOriginTemplate'
+          description: ''
   /api/character-creation/paths/:
     get:
       operationId: character_creation_paths_list
@@ -4420,6 +4472,40 @@ paths:
         Returns character sheet data for a single character. The response
         includes a `can_edit` flag based on whether the requesting user is
         the original creator or staff.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/clear-origin-slot/:
+    post:
+      operationId: character_sheets_clear_origin_slot_create
+      description: Clear a character's origin-story slot answer (#2478).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/set-origin-slot/:
+    post:
+      operationId: character_sheets_set_origin_slot_create
+      description: Set a character's origin-story slot answer (#2478).
       parameters:
       - in: path
         name: id
@@ -34632,6 +34718,44 @@ components:
       required:
       - id
       - name
+    CGOriginTemplate:
+      type: object
+      description: |-
+        Origin template for the CG guided flow (#2478).
+
+        Backs ``GET /api/character-creation/origin-templates/``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Template name (part of natural key).
+        frame_narrative:
+          type: string
+          readOnly: true
+          description: The fixed frame prose every character with this beginning shares.
+        is_active:
+          type: boolean
+          readOnly: true
+          description: Inactive templates are hidden from CG.
+        sort_order:
+          type: integer
+          readOnly: true
+          description: Display order when multiple templates exist.
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/OriginTemplateSlot'
+          readOnly: true
+      required:
+      - frame_narrative
+      - id
+      - is_active
+      - name
+      - slots
+      - sort_order
     CGPointBudget:
       type: object
       description: Serializer for CG point budget configuration.
@@ -48648,6 +48772,39 @@ components:
         * `authored` - Authored (canonical, exported)
         * `story` - GM Story (never exported)
         * `player` - Player-built (never exported)
+    OriginTemplateSlot:
+      type: object
+      description: Slot prompt within an origin template (#2478).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Slot name (part of natural key).
+        prompt:
+          type: string
+          readOnly: true
+          description: The question shown to the player.
+        example:
+          type: string
+          readOnly: true
+          description: Short illustrative answer shown in the guided step.
+        sort_order:
+          type: integer
+          readOnly: true
+        is_required:
+          type: boolean
+          readOnly: true
+          description: Required slots are marked in the post-CG finish-later editor.
+      required:
+      - example
+      - id
+      - is_required
+      - name
+      - prompt
+      - sort_order
     Outcome5d6Enum:
       enum:
       - unresolved

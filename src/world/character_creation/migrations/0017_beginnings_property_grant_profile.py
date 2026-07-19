@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("buildings", "0024_building_property_activated_at_and_more"),
-        ("character_creation", "0014_beginnings_prelude_mission"),
+        ("character_creation", "0016_characteroriginslot"),
     ]
 
     operations = [

@@ -42,6 +42,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "character_creation.beginningtradition",
         "character_creation.cgexplanation",
         "character_creation.startingarea",
+        "character_creation.origintemplate",
+        "character_creation.origintemplateslot",
         # character_sheets
         "character_sheets.gender",
         # checks

@@ -680,6 +680,8 @@ export interface DraftData {
   description?: string;
   personality?: string;
   background?: string;
+  // Origin story guided flow (#2478)
+  origin_slots?: Record<string, string>;
   concept?: string;
   quote?: string;
   stats?: Stats;
@@ -821,4 +823,23 @@ export interface DraftSummary {
   gender: string | null;
   age: number | null;
   stage_completion: Record<number, boolean>;
+}
+
+// Origin story guided flow (#2478)
+export interface OriginTemplateSlot {
+  id: number;
+  name: string;
+  prompt: string;
+  example: string;
+  sort_order: number;
+  is_required: boolean;
+}
+
+export interface OriginTemplate {
+  id: number;
+  name: string;
+  frame_narrative: string;
+  is_active: boolean;
+  sort_order: number;
+  slots: OriginTemplateSlot[];
 }

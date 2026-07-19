@@ -39,6 +39,7 @@ import {
   getGifts,
   getGlimpseTags,
   getHeightBands,
+  getOriginTemplates,
   getPaths,
   getPathSkillSuggestions,
   getResonanceAssociations,
@@ -99,6 +100,9 @@ export const characterCreationKeys = {
     [...characterCreationKeys.all, 'cg-technique-options', draftId, giftId] as const,
   // Glimpse tag catalog (guided Glimpse flow, #2427)
   glimpseTags: () => [...characterCreationKeys.all, 'glimpse-tags'] as const,
+  // Origin template catalog (guided origin-story flow, #2478)
+  originTemplates: (beginningId: number) =>
+    [...characterCreationKeys.all, 'origin-templates', beginningId] as const,
   // Build-your-own magic system keys
   techniqueStyles: () => [...characterCreationKeys.all, 'technique-styles'] as const,
   effectTypes: () => [...characterCreationKeys.all, 'effect-types'] as const,
@@ -435,6 +439,15 @@ export function useGlimpseTags() {
   return useQuery({
     queryKey: characterCreationKeys.glimpseTags(),
     queryFn: getGlimpseTags,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useOriginTemplates(beginningId: number | null | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.originTemplates(beginningId ?? 0),
+    queryFn: () => getOriginTemplates(beginningId!),
+    enabled: !!beginningId,
     staleTime: 5 * 60 * 1000,
   });
 }

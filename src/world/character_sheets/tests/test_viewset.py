@@ -1512,9 +1512,14 @@ class TestStorySection(TestCase):
         return response.data["story"]
 
     def test_story_has_expected_keys(self) -> None:
-        """Story section contains background and personality."""
+        """Story section contains background, personality, and origin-story fields."""
         story = self._get_story()
-        assert set(story.keys()) == {"background", "personality"}
+        assert set(story.keys()) == {
+            "background",
+            "personality",
+            "origin_story_state",
+            "origin_slots",
+        }
 
     def test_story_background(self) -> None:
         """background comes from CharacterSheet.background."""
@@ -2102,9 +2107,11 @@ class TestCharacterSheetQueryCount(TestCase):
          32.   aura glimpse_tags prefetch (#2427 — chosen glimpse tags for the
                 guided-flow "finish your glimpse" affordance; one join query,
                 select_related onto the catalog tag)
+         33.   origin_slots prefetch (#2478 — origin-story slot answers for
+                the guided-flow "finish your origin story" affordance)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(32):
+        with self.assertNumQueries(33):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
@@ -2329,8 +2336,25 @@ class TestPrefetchCompleteness(TestCase):
 
     def test_story_zero_queries(self) -> None:
         sheet = self._get_sheet()
+        # Prefetch origin_slots (mirrors the serializer's prefetch, #2478) so
+        # _build_story doesn't issue a live query for slot answers.
+        from django.db.models import Prefetch
+
+        from world.character_creation.models import CharacterOriginSlot
+
+        sheet = (
+            type(sheet)
+            .objects.prefetch_related(
+                Prefetch(
+                    "origin_slots",
+                    queryset=CharacterOriginSlot.objects.select_related("slot"),
+                    to_attr="cached_origin_slots",
+                )
+            )
+            .get(pk=sheet.pk)
+        )
         with self.assertNumQueries(0):
-            _build_story(bio_profile=sheet.true_profile)
+            _build_story(sheet=sheet, bio_profile=sheet.true_profile)
 
     def test_goals_zero_queries(self) -> None:
         sheet = self._get_sheet()

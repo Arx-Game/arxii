@@ -2,17 +2,30 @@
 Views for the character sheets API.
 """
 
+from http import HTTPMethod
+
 from django.db.models import QuerySet
 from django.http import Http404
+from rest_framework import status
+from rest_framework.decorators import action
 from rest_framework.mixins import RetrieveModelMixin
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from world.character_creation.services import (
+    clear_origin_slot,
+    set_origin_slot,
+)
 from world.character_sheets.models import CharacterSheet
 from world.character_sheets.serializers import (
     CharacterSheetSerializer,
+    OriginSlotClearSerializer,
+    OriginSlotInputSerializer,
     get_character_sheet_queryset,
 )
+from world.character_sheets.services import can_edit_character_sheet
 from world.scenes.block_services import sheet_blocked_for_viewer
 
 
@@ -45,3 +58,45 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
         if not user.is_staff and sheet_blocked_for_viewer(viewer_account=user, sheet=sheet):
             raise Http404
         return sheet
+
+    def _check_ownership(self, sheet: CharacterSheet) -> None:
+        """404 if the requesting user can't edit this sheet.
+
+        Uses 404 (not 403) so a non-owner can't distinguish "not yours" from
+        "doesn't exist" — mirrors the block-viewer pattern in ``get_object``.
+        """
+        roster_entry = sheet.roster_entry
+        if roster_entry is None or not can_edit_character_sheet(self.request.user, roster_entry):
+            raise Http404
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="set-origin-slot")
+    def set_origin_slot_action(self, request: Request, pk: int | None = None) -> Response:
+        """Set a character's origin-story slot answer (#2478)."""
+        sheet = self.get_object()
+        self._check_ownership(sheet)
+        serializer = OriginSlotInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        from world.character_creation.models import OriginTemplateSlot  # noqa: PLC0415
+
+        try:
+            slot = OriginTemplateSlot.objects.get(pk=serializer.validated_data["slot_id"])
+        except OriginTemplateSlot.DoesNotExist:
+            return Response({"detail": "Slot not found."}, status=status.HTTP_404_NOT_FOUND)
+        set_origin_slot(sheet, slot, serializer.validated_data["value"])
+        return Response(status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="clear-origin-slot")
+    def clear_origin_slot_action(self, request: Request, pk: int | None = None) -> Response:
+        """Clear a character's origin-story slot answer (#2478)."""
+        sheet = self.get_object()
+        self._check_ownership(sheet)
+        serializer = OriginSlotClearSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        from world.character_creation.models import OriginTemplateSlot  # noqa: PLC0415
+
+        try:
+            slot = OriginTemplateSlot.objects.get(pk=serializer.validated_data["slot_id"])
+        except OriginTemplateSlot.DoesNotExist:
+            return Response({"detail": "Slot not found."}, status=status.HTTP_404_NOT_FOUND)
+        clear_origin_slot(sheet, slot)
+        return Response(status=status.HTTP_200_OK)

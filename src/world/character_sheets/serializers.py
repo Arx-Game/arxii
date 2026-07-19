@@ -18,6 +18,7 @@ from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 from rest_framework.request import Request
 
+from world.character_creation.models import CharacterOriginSlot
 from world.character_sheets.models import CharacterSheet, Profile
 from world.character_sheets.services import can_edit_character_sheet
 from world.character_sheets.types import (
@@ -36,6 +37,7 @@ from world.character_sheets.types import (
     MagicSection,
     MotifResonanceEntry,
     MotifSection,
+    OriginSlotEntry,
     PathDetailSection,
     PathHistoryEntry,
     PersonaEntry,
@@ -78,6 +80,20 @@ from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
 from world.skills.services import is_skill_at_xp_boundary
 from world.traits.models import CharacterTraitValue, TraitType
+
+
+class OriginSlotInputSerializer(serializers.Serializer):
+    """Input for CharacterSheetViewSet.set-origin-slot (#2478)."""
+
+    slot_id = serializers.IntegerField()
+    value = serializers.CharField(allow_blank=True)
+
+
+class OriginSlotClearSerializer(serializers.Serializer):
+    """Input for CharacterSheetViewSet.clear-origin-slot (#2478)."""
+
+    slot_id = serializers.IntegerField()
+
 
 # --- Tiny helpers for nested {id, name} representations ---
 
@@ -811,10 +827,16 @@ def _build_magic(sheet: CharacterSheet, *, privileged: bool = False) -> MagicSec
 
 
 _STORY_SELECT_RELATED: tuple[str, ...] = ("true_profile",)  # #1270 — background/personality
-_STORY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
+_STORY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    Prefetch(
+        "origin_slots",
+        queryset=CharacterOriginSlot.objects.select_related("slot"),
+        to_attr="cached_origin_slots",
+    ),
+)
 
 
-def _build_story(*, bio_profile: Profile | None = None) -> StorySection:
+def _build_story(*, sheet: CharacterSheet, bio_profile: Profile | None = None) -> StorySection:
     """Build the story section from the presented face's bio profile (#1270).
 
     ``bio_profile`` is the real ``true_profile`` for a revealed identity, a cover persona's own
@@ -822,10 +844,35 @@ def _build_story(*, bio_profile: Profile | None = None) -> StorySection:
     story and a bare anonymous figure shows nothing.
     """
     if bio_profile is None:
-        return StorySection(background="", personality="")
+        return StorySection(
+            background="",
+            personality="",
+            origin_story_state=sheet.origin_story_state,
+            origin_slots=[],
+        )
+    # Origin-story slot answers are always the real sheet's (#2478) — a cover
+    # identity doesn't get its own origin story. Uses the prefetched attr when
+    # available (serializer path); falls back to a live query only when called
+    # directly (e.g. unit tests without the prefetch set up).
+    raw_slots = (
+        sheet.cached_origin_slots
+        if hasattr(sheet, "cached_origin_slots")
+        else sheet.origin_slots.select_related("slot")
+    )
+    origin_slots = [
+        OriginSlotEntry(
+            slot_id=row.slot_id,
+            slot_name=row.slot.name,
+            slot_prompt=row.slot.prompt,
+            value=row.value,
+        )
+        for row in raw_slots
+    ]
     return StorySection(
         background=bio_profile.background,
         personality=bio_profile.personality,
+        origin_story_state=sheet.origin_story_state,
+        origin_slots=origin_slots,
     )
 
 
@@ -1131,7 +1178,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             "distinctions": _build_distinctions(sheet, privileged=privileged),
             "magic": _build_magic(sheet, privileged=privileged) if show_magic else None,
             # Story reads from the presented face's profile (cover identities show their own).
-            "story": _build_story(bio_profile=bio_profile),
+            "story": _build_story(sheet=sheet, bio_profile=bio_profile),
             "goals": _build_goals(sheet) if show_goals else [],
             "personas": _build_personas(
                 sheet,

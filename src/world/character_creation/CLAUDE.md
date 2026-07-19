@@ -36,6 +36,21 @@ Character creation is a multi-stage process that guides players through creating
 - Can override starting room (e.g., Sleeper Wake Room)
 - Has CG point cost and trust requirements
 
+### OriginTemplate / OriginTemplateSlot (#2478)
+- Authored origin-story frames (content models, lore-repo via `CONTENT_MODELS`).
+  Multiple templates per Beginning allowed; today one active template auto-assigns.
+- `OriginTemplate.frame_narrative` fixes the narrative frame (e.g. "escape from
+  Salvation"); `OriginTemplateSlot` carries authored slot prompts the player fills in.
+- No slug fields — natural keys from FK + `name` (mirroring `Beginnings`).
+- `CharacterOriginSlot` is instance data (FK→`CharacterSheet`, FK→`OriginTemplateSlot`).
+- At CG finalize, slot answers are assembled into `Profile.background` prose via
+  `assemble_origin_prose()` (pure concatenation, no LLM). The structured rows are
+  queryable for future GM/story tools.
+- Not required at CG submit (mirrors #2427 Glimpse — no validation gate). Finish-later
+  via `OriginStoryEditorDialog` on the character sheet (`set-origin-slot` /
+  `clear-origin-slot` sheet API actions).
+- `CharacterSheet.origin_story_state` caches NOT_STARTED/SLOTS_ONLY/COMPLETE.
+
 ### CGExplanation
 - Key-value table: each row has `key`, `text`, and `help_text` fields
 - Keys match frontend references (e.g. `origin_heading`, `heritage_intro`)
