@@ -1051,9 +1051,11 @@ class MissionOptionRouteReward(NaturalKeyMixin, SharedMemoryModel):
         default=0,
         help_text=(
             "NK discriminator only — reward lines have no display order (nothing "
-            "ever reorders them). 0 is the 'auto-assign' sentinel: save() computes "
-            "the next value per parent (route or candidate) when left at 0. Pass "
-            "an explicit non-zero value only for fixture round-trip / deliberate "
+            "ever reorders them). 0 is a pure 'unassigned' sentinel, never a stored "
+            "value: save() assigns 1, 2, 3... per parent (route or candidate) when "
+            "left at 0, so a legitimately-first row can never be mistaken for "
+            "'still needs assignment' on a later re-import in a different order. "
+            "Pass an explicit value ≥1 only for fixture round-trip / deliberate "
             "override — see save()."
         ),
     )
@@ -1166,7 +1168,7 @@ class MissionOptionRouteReward(NaturalKeyMixin, SharedMemoryModel):
             max_seq = MissionOptionRouteReward.objects.filter(
                 **{parent_field: parent_id}
             ).aggregate(models.Max("sequence"))["sequence__max"]
-            self.sequence = 0 if max_seq is None else max_seq + 1
+            self.sequence = (max_seq or 0) + 1
         self.clean()
         super().save(*args, **kwargs)
 
@@ -1264,7 +1266,9 @@ class MissionRenownAward(NaturalKeyMixin, SharedMemoryModel):
         default=0,
         help_text=(
             "NK discriminator only — same rationale as "
-            "MissionOptionRouteReward.sequence. 0 is the auto-assign sentinel."
+            "MissionOptionRouteReward.sequence: 0 is a pure 'unassigned' sentinel, "
+            "never a stored value — save() assigns 1, 2, 3... per route when left "
+            "at 0."
         ),
     )
 
@@ -1290,7 +1294,7 @@ class MissionRenownAward(NaturalKeyMixin, SharedMemoryModel):
             max_seq = MissionRenownAward.objects.filter(route_id=self.route_id).aggregate(
                 models.Max("sequence")
             )["sequence__max"]
-            self.sequence = 0 if max_seq is None else max_seq + 1
+            self.sequence = (max_seq or 0) + 1
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:

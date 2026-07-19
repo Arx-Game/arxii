@@ -156,20 +156,39 @@ class ContentExportTests(TestCase):
         assert '"slug": null' not in exported
 
     def test_mission_graph_round_trips(self) -> None:
-        """A small authored mission graph exports and reloads as a no-op (#2470)."""
+        """A small authored mission graph exports and reloads as a no-op (#2470).
+
+        Exercises 2+ MissionOptionRouteReward rows and 2+ MissionRenownAward
+        rows sharing the same parent route (the exact sequence-collision
+        scenario a whole-branch review flagged — see models.py save()) plus a
+        MissionOptionRouteCandidate, so all three natural keys round-trip.
+        """
         from world.missions.factories import (
             MissionNodeFactory,
             MissionOptionFactory,
+            MissionOptionRouteCandidateFactory,
             MissionOptionRouteFactory,
             MissionOptionRouteRewardFactory,
             MissionTemplateFactory,
         )
+        from world.missions.models import MissionRenownAward
+        from world.societies.constants import RenownMagnitude, RenownRisk
 
         template = MissionTemplateFactory(name="Round Trip Prelude Template")
         node = MissionNodeFactory(template=template, key="entry", is_entry=True)
         option = MissionOptionFactory(node=node, key="entry-option")
-        route = MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
+        route = MissionOptionRouteFactory(
+            option=option, outcome_tier=None, target_node=None, is_random_set=True
+        )
         MissionOptionRouteRewardFactory(route=route, amount=50)
+        MissionOptionRouteRewardFactory(route=route, amount=75)
+        MissionOptionRouteCandidateFactory(route=route)
+        MissionRenownAward.objects.create(
+            route=route, magnitude=RenownMagnitude.MODERATE, risk=RenownRisk.NONE
+        )
+        MissionRenownAward.objects.create(
+            route=route, magnitude=RenownMagnitude.HIGH, risk=RenownRisk.LOW
+        )
 
         from core_management.content_fixtures import build_all, load_entries
 
@@ -178,6 +197,14 @@ class ContentExportTests(TestCase):
         load_result = build_all(self.root)
         created, _updated = load_entries(load_result)
         assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        # Re-run to prove idempotency isn't order-dependent luck: a second
+        # import of the same export must also create nothing.
+        load_result_again = build_all(self.root)
+        created_again, _updated_again = load_entries(load_result_again)
+        assert created_again == 0, (
+            f"Second round-trip created {created_again} new records (expected 0)"
+        )
 
     def test_content_models_all_have_natural_key(self) -> None:
         """Every model in the allowlist must have NaturalKeyMixin."""
