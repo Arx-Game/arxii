@@ -79,6 +79,20 @@ from world.skills.models import CharacterSkillValue, CharacterSpecializationValu
 from world.skills.services import is_skill_at_xp_boundary
 from world.traits.models import CharacterTraitValue, TraitType
 
+
+class OriginSlotInputSerializer(serializers.Serializer):
+    """Input for CharacterSheetViewSet.set-origin-slot (#2478)."""
+
+    slot_id = serializers.IntegerField()
+    value = serializers.CharField(allow_blank=True)
+
+
+class OriginSlotClearSerializer(serializers.Serializer):
+    """Input for CharacterSheetViewSet.clear-origin-slot (#2478)."""
+
+    slot_id = serializers.IntegerField()
+
+
 # --- Tiny helpers for nested {id, name} representations ---
 
 
