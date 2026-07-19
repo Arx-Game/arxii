@@ -3,10 +3,11 @@
 from unittest import mock
 
 from django.test import TestCase
+from django.utils import timezone
 
-from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey
+from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey, SeanceOfferStatus
 from world.ceremonies.factories import CeremonyTypeFactory
-from world.ceremonies.models import CeremonyOffering
+from world.ceremonies.models import CeremonyOffering, SeanceManifestationOffer
 from world.ceremonies.services import (
     CeremonyError,
     abandon_ceremony,
@@ -129,6 +130,62 @@ class OpenCeremonyTests(TestCase):
                 officiant_persona=other,
                 type_key=CeremonyTypeKey.FUNERAL,
                 honoree_sheets=[_dead_sheet()],
+                location_profile=self.location,
+            )
+
+
+class OpenSeanceTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        cls.seance_type = CeremonyTypeFactory(key=CeremonyTypeKey.SEANCE, name="Seance")
+        cls.public = WorshippedBeingFactory()
+        cls.location = RoomProfileFactory()
+
+    def _officiant(self):
+        persona, sheet = _persona_with_sheet()
+        WorshipDeclaration.objects.create(character_sheet=sheet, public_being=self.public)
+        return persona
+
+    def test_rejects_living_honoree(self) -> None:
+        persona = self._officiant()
+        living_sheet = CharacterSheetFactory()
+        with self.assertRaises(CeremonyError):
+            open_ceremony(
+                officiant_persona=persona,
+                type_key=CeremonyTypeKey.SEANCE,
+                honoree_sheets=[living_sheet],
+                location_profile=self.location,
+            )
+
+    def test_accepts_retired_honoree_and_creates_pending_offer(self) -> None:
+        persona = self._officiant()
+        dead_sheet = _dead_sheet()
+        CharacterVitalsFactory(character_sheet=dead_sheet)  # no-op if already created
+        dead_sheet.vitals.retired_at = timezone.now()
+        dead_sheet.vitals.save(update_fields=["retired_at"])
+
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[dead_sheet],
+            location_profile=self.location,
+        )
+
+        honoree = ceremony.honorees.get(honoree_sheet=dead_sheet)
+        self.assertEqual(honoree.seance_offer.status, SeanceOfferStatus.PENDING)
+        self.assertEqual(
+            SeanceManifestationOffer.objects.filter(ceremony_honoree=honoree).count(), 1
+        )
+
+    def test_requires_at_least_one_honoree(self) -> None:
+        persona = self._officiant()
+        with self.assertRaises(CeremonyError):
+            open_ceremony(
+                officiant_persona=persona,
+                type_key=CeremonyTypeKey.SEANCE,
+                honoree_sheets=[],
                 location_profile=self.location,
             )
 

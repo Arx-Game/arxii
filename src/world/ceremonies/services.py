@@ -91,11 +91,13 @@ def open_ceremony(  # noqa: PLR0913
     if ceremony_type is None:
         msg = "That kind of ceremony is not recognized."
         raise CeremonyError(msg)
-    if ceremony_type.key == CeremonyTypeKey.FUNERAL:
+    if ceremony_type.key in (CeremonyTypeKey.FUNERAL, CeremonyTypeKey.SEANCE):
         from world.vitals.services import is_dead  # noqa: PLC0415
 
         if not honoree_sheets:
             msg = "A funeral needs at least one deceased to honor."
+            if ceremony_type.key == CeremonyTypeKey.SEANCE:
+                msg = "A seance needs at least one dead soul to call."
             raise CeremonyError(msg)
         for sheet in honoree_sheets:
             if not is_dead(sheet):
@@ -119,6 +121,13 @@ def open_ceremony(  # noqa: PLR0913
             CeremonyHonoree.objects.bulk_create(
                 CeremonyHonoree(ceremony=ceremony, honoree_sheet=sheet) for sheet in honoree_sheets
             )
+            if ceremony_type.key == CeremonyTypeKey.SEANCE:
+                from world.ceremonies.models import SeanceManifestationOffer  # noqa: PLC0415
+
+                SeanceManifestationOffer.objects.bulk_create(
+                    SeanceManifestationOffer(ceremony_honoree=honoree)
+                    for honoree in ceremony.honorees.all()
+                )
     except IntegrityError as exc:
         msg = "A ceremony is already underway here."
         raise CeremonyError(msg) from exc
