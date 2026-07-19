@@ -155,6 +155,30 @@ class ContentExportTests(TestCase):
         assert "staff-art" in exported
         assert '"slug": null' not in exported
 
+    def test_mission_graph_round_trips(self) -> None:
+        """A small authored mission graph exports and reloads as a no-op (#2470)."""
+        from world.missions.factories import (
+            MissionNodeFactory,
+            MissionOptionFactory,
+            MissionOptionRouteFactory,
+            MissionOptionRouteRewardFactory,
+            MissionTemplateFactory,
+        )
+
+        template = MissionTemplateFactory(name="Round Trip Prelude Template")
+        node = MissionNodeFactory(template=template, key="entry", is_entry=True)
+        option = MissionOptionFactory(node=node, key="entry-option")
+        route = MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
+        MissionOptionRouteRewardFactory(route=route, amount=50)
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
     def test_content_models_all_have_natural_key(self) -> None:
         """Every model in the allowlist must have NaturalKeyMixin."""
         from django.apps import apps

@@ -45,6 +45,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # character_sheets
         "character_sheets.gender",
         # checks
+        "checks.checkcategory",
+        "checks.checktype",
         "checks.checktypecapabilitymodifier",
         # classes
         "classes.aspect",
@@ -114,6 +116,15 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "mechanics.prerequisite",
         "mechanics.property",
         "mechanics.propertycategory",
+        # missions
+        "missions.missioncategory",
+        "missions.missiontemplate",
+        "missions.missionnode",
+        "missions.missionoption",
+        "missions.missionoptionroute",
+        "missions.missionoptionroutecandidate",
+        "missions.missionoptionroutereward",
+        "missions.missionrenownaward",
         # realms
         "realms.realm",
         # skills
