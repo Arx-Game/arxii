@@ -12,10 +12,11 @@ from django.utils.html import format_html
 
 from evennia_extensions.models import (
     Artist,
+    Media,
     ObjectDisplayData,
+    PageBackground,
     PlayerAllowList,
     PlayerData,
-    PlayerMedia,
     RoomProfile,
     RoomSizeTier,
 )
@@ -74,8 +75,8 @@ class PlayerAllowListAdmin(admin.ModelAdmin):
     readonly_fields: ClassVar[list[str]] = ["added_date"]
 
 
-@admin.register(PlayerMedia)
-class PlayerMediaAdmin(admin.ModelAdmin):
+@admin.register(Media)
+class MediaAdmin(admin.ModelAdmin):
     autocomplete_fields = ["player_data"]
     list_display: ClassVar[list[str]] = [
         "player_data",
@@ -87,6 +88,12 @@ class PlayerMediaAdmin(admin.ModelAdmin):
     list_filter: ClassVar[list[str]] = ["media_type", "uploaded_date"]
     search_fields: ClassVar[list[str]] = ["player_data__account__username", "title"]
     readonly_fields: ClassVar[list[str]] = ["uploaded_date", "updated_date"]
+
+
+@admin.register(PageBackground)
+class PageBackgroundAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["art"]
+    list_display: ClassVar[list[str]] = ["slot", "art"]
 
 
 @admin.register(ObjectDisplayData)

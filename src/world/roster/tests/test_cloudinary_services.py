@@ -9,7 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 import pytest
 
-from evennia_extensions.models import MediaType, PlayerMedia
+from evennia_extensions.models import Media, MediaType
 from world.roster.factories import (
     ArtistFactory,
     CharacterFactory,
@@ -88,7 +88,7 @@ class TestCloudinaryGalleryService(TestCase):
             tenure=self.tenure,
         )
 
-        assert isinstance(media, PlayerMedia)
+        assert isinstance(media, Media)
         assert media.player_data == self.tenure.player_data
         assert media.cloudinary_public_id == "test/image123"
         assert (
@@ -222,7 +222,7 @@ class TestCloudinaryGalleryService(TestCase):
         assert result is True
         mock_destroy.assert_called_once_with(media.cloudinary_public_id)
 
-        assert not PlayerMedia.objects.filter(id=media.id).exists()
+        assert not Media.objects.filter(id=media.id).exists()
 
     @patch("cloudinary.uploader.destroy")
     def test_delete_media_cloudinary_error(self, mock_destroy):
@@ -235,7 +235,7 @@ class TestCloudinaryGalleryService(TestCase):
         result = CloudinaryGalleryService.delete_media(media)
 
         assert result is False
-        assert not PlayerMedia.objects.filter(id=media_id).exists()
+        assert not Media.objects.filter(id=media_id).exists()
 
     def test_get_tenure_gallery(self):
         """Test getting tenure gallery media."""

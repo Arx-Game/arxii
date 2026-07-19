@@ -45,7 +45,7 @@ from world.roster.models import (
 |-------|---------|------------|
 | `TenureDisplaySettings` | Per-tenure UI preferences (1:1) | `tenure` (OneToOne), `public_character_info`, `show_online_status`, `allow_pages`, `allow_tells`, `appear_offline` (quiet/hidden mode #1463 — drops off where/who + unpageable except allowlist; read via `world.scenes.presence.character_appears_offline`, written via `world.roster.services.display.set_appear_offline`), `rp_preferences`, `plot_involvement` |
 | `TenureGallery` | Named collection of media for a tenure | `tenure` (FK), `name`, `is_public`, `allowed_viewers` (M2M RosterTenure) |
-| `TenureMedia` | Bridge between player media and tenures | `tenure` (FK), `media` (FK PlayerMedia), `gallery` (FK TenureGallery, nullable), `sort_order` |
+| `TenureMedia` | Bridge between player media and tenures | `tenure` (FK), `media` (FK Media, renamed from PlayerMedia #2408), `gallery` (FK TenureGallery, nullable), `sort_order` |
 
 ### Mail
 
@@ -268,7 +268,7 @@ Web-only surface: compose at `/profile/mail` or in-scene via `SendLetterDialog` 
 ## Integration Points
 
 - **PlayerData** (`evennia_extensions.PlayerData`): Extends AccountDB with `player_data` reverse relation; tenures link to PlayerData, not AccountDB directly
-- **PlayerMedia** (`evennia_extensions.PlayerMedia`): Actual media storage; TenureMedia bridges to character tenures
+- **Media** (`evennia_extensions.Media`, renamed from `PlayerMedia` #2408): Actual media storage (player uploads and staff-authored art, derived by `player_data` nullability — see ADR-0146); TenureMedia bridges to character tenures
 - **Scenes System**: Personas reference characters via ObjectDB, which have `roster_entry` for identity resolution
 - **Character Creation**: `Family` and `FamilyMember` used during CG for family selection; families filtered by `origin_realm`
 

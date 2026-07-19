@@ -17,7 +17,7 @@ from world.items.models import (
     TemplateInteraction,
     TemplateSlot,
 )
-from world.roster.factories import PlayerMediaFactory
+from world.roster.factories import MediaFactory
 
 
 class QualityTierTests(TestCase):
@@ -190,7 +190,7 @@ class ItemInstanceTests(TestCase):
 
     def test_display_image_falls_back_to_template(self) -> None:
         """display_image returns template image when no instance image set."""
-        media = PlayerMediaFactory()
+        media = MediaFactory()
         self.template.image = media
         self.template.save()
         instance = ItemInstanceFactory(template=self.template, image=None)
@@ -198,8 +198,8 @@ class ItemInstanceTests(TestCase):
 
     def test_display_image_instance_overrides_template(self) -> None:
         """Instance image overrides template image."""
-        template_media = PlayerMediaFactory()
-        instance_media = PlayerMediaFactory()
+        template_media = MediaFactory()
+        instance_media = MediaFactory()
         self.template.image = template_media
         self.template.save()
         instance = ItemInstanceFactory(template=self.template, image=instance_media)

@@ -229,6 +229,14 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
         related_name="codex_entry",
         help_text="Link to a modifier target this entry documents (for resonances, stats, etc.).",
     )
+    art = models.ForeignKey(
+        "evennia_extensions.Media",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="codex_entries",
+        help_text="Illustration for this entry, shown in the codex modal (#2408).",
+    )
 
     objects = NaturalKeyManager()
 

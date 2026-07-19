@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from evennia_extensions.models import PlayerMedia
+    from evennia_extensions.models import Media
     from world.conditions.models import DamageType
     from world.mechanics.models import ModifierTarget
 
@@ -320,7 +320,7 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Potency tier, required together with tied_resonance.",
     )
     image = models.ForeignKey(
-        "evennia_extensions.PlayerMedia",
+        "evennia_extensions.Media",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -724,7 +724,7 @@ class ItemInstance(SharedMemoryModel):
         help_text=("Container item this item is stored inside (null = not in a container)."),
     )
     image = models.ForeignKey(
-        "evennia_extensions.PlayerMedia",
+        "evennia_extensions.Media",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -801,7 +801,7 @@ class ItemInstance(SharedMemoryModel):
         return total
 
     @property
-    def display_image(self) -> PlayerMedia | None:
+    def display_image(self) -> Media | None:
         """Return custom image if set, otherwise template image."""
         return self.image or self.template.image
 

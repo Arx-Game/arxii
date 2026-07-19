@@ -343,7 +343,7 @@ All models registered with comprehensive admin interfaces:
 ## Dynamic Thumbnails (#2196)
 
 `ConditionTemplate`, `ConditionStage`, and `AlternateSelf` each have an optional
-`thumbnail` FK to `PlayerMedia`. When set, the thumbnail overrides the persona's
+`thumbnail` FK to `Media` (renamed from `PlayerMedia`, #2408). When set, the thumbnail overrides the persona's
 default in all serialization surfaces (room state, combat, character sheet).
 
 Resolution is handled by `world.conditions.thumbnail_services.resolve_thumbnail()`,

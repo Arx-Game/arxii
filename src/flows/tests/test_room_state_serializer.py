@@ -15,7 +15,7 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
 )
 from world.conditions.services import register_detection
-from world.roster.factories import PlayerMediaFactory, RosterEntryFactory
+from world.roster.factories import MediaFactory, RosterEntryFactory
 
 
 class RoomStateSerializerCharacterSplitTests(TestCase):
@@ -48,7 +48,7 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
 
         # Create display data for all objects
         for obj in (self.room, self.caller, self.other_char, self.item, self.exit):
-            media = PlayerMediaFactory()
+            media = MediaFactory()
             ObjectDisplayData.objects.create(object=obj, thumbnail=media)
 
         # Initialize scene data manager and states
@@ -199,7 +199,7 @@ class RoomStateSerializerConcealmentTests(TestCase):
         ConditionInstanceFactory(target=self.concealed, condition=self.concealing_condition)
 
         for obj in (self.room, self.caller, self.visible, self.concealed):
-            media = PlayerMediaFactory()
+            media = MediaFactory()
             ObjectDisplayData.objects.create(object=obj, thumbnail=media)
 
         self.context = SceneDataManagerFactory()

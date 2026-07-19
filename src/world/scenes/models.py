@@ -333,7 +333,7 @@ class Persona(SharedMemoryModel):
     )
     thumbnail_url = models.URLField(blank=True, max_length=500)
     thumbnail = models.ForeignKey(
-        "evennia_extensions.PlayerMedia",
+        "evennia_extensions.Media",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

@@ -575,6 +575,7 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
     mechanics_links: [],
     learn_threshold: 0,
     research_progress: null,
+    art_url: null,
   };
 }
 

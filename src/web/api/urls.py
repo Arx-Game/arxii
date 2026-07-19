@@ -11,6 +11,7 @@ from web.api.views.general_views import (
     ServerStatusAPIView,
     SocialProvidersAPIView,
 )
+from web.api.views.page_background_views import PageBackgroundListAPIView
 from web.api.views.search_views import (
     MissionGiverTargetSearchAPIView,
     OnlineCharacterSearchAPIView,
@@ -19,6 +20,7 @@ from web.api.views.search_views import (
 
 urlpatterns = [
     path("status/", ServerStatusAPIView.as_view(), name="api-status"),
+    path("backgrounds/", PageBackgroundListAPIView.as_view(), name="api-backgrounds"),
     path("user/", CurrentUserAPIView.as_view(), name="api-current-user"),
     path(
         "register/availability/",

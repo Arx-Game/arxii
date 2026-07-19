@@ -8,7 +8,7 @@ from world.roster.models import RosterTenure
 class IsOwnerOrStaff(permissions.BasePermission):
     """
     Permission to check if user owns the object or is staff.
-    Used for PlayerMedia and other user-owned resources.
+    Used for Media and other user-owned resources.
     """
 
     def has_object_permission(self, request: Request, view: APIView, obj: object) -> bool:
@@ -16,8 +16,11 @@ class IsOwnerOrStaff(permissions.BasePermission):
         if request.user.is_staff:
             return True
 
-        # Check if user owns this object through player_data relationship
-        return obj.player_data.account == request.user
+        # Check if user owns this object through player_data relationship.
+        # player_data can be None for staff-authored rows (e.g. Media with no
+        # owning player) -- treat that as "not owned by this requester" rather
+        # than raising AttributeError.
+        return obj.player_data is not None and obj.player_data.account == request.user
 
 
 class IsPlayerOrStaff(permissions.BasePermission):
@@ -48,7 +51,7 @@ class IsPlayerOrStaff(permissions.BasePermission):
 class ReadOnlyOrOwner(permissions.BasePermission):
     """
     Permission for read-only access to everyone, but write access only to owners.
-    Used for PlayerMedia viewsets where anyone can view but only owners can modify.
+    Used for Media viewsets where anyone can view but only owners can modify.
     """
 
     def has_permission(self, request: Request, view: APIView) -> bool:
@@ -64,8 +67,12 @@ class ReadOnlyOrOwner(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        # Write permissions require ownership or staff
-        return request.user.is_staff or obj.player_data.account == request.user
+        # Write permissions require ownership or staff. player_data can be None
+        # for staff-authored rows (e.g. Media with no owning player) -- treat
+        # that as "not owned by this requester" rather than raising AttributeError.
+        return request.user.is_staff or (
+            obj.player_data is not None and obj.player_data.account == request.user
+        )
 
 
 class StaffOnlyWrite(permissions.BasePermission):

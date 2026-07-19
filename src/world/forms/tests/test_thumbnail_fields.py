@@ -3,7 +3,7 @@
 from django.test import TestCase
 
 from world.forms.factories import AlternateSelfFactory
-from world.roster.factories import PlayerMediaFactory
+from world.roster.factories import MediaFactory
 
 
 class AlternateSelfThumbnailTest(TestCase):
@@ -13,8 +13,8 @@ class AlternateSelfThumbnailTest(TestCase):
         assert alt_self.thumbnail is None
 
     def test_thumbnail_can_be_set(self) -> None:
-        """A PlayerMedia can be attached as the alt-self thumbnail."""
-        media = PlayerMediaFactory()
+        """A Media can be attached as the alt-self thumbnail."""
+        media = MediaFactory()
         alt_self = AlternateSelfFactory(thumbnail=media)
         alt_self.refresh_from_db()
         assert alt_self.thumbnail == media

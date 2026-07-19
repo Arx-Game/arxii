@@ -1107,6 +1107,18 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/backgrounds/:
+    get:
+      operationId: backgrounds_retrieve
+      description: Return every configured page background (slot -> art URL).
+      tags:
+      - backgrounds
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
   /api/battles/:
     get:
       operationId: battles_list
@@ -26515,7 +26527,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedPlayerMediaList'
+                $ref: '#/components/schemas/PaginatedMediaList'
           description: ''
     post:
       operationId: roster_media_create
@@ -26529,7 +26541,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlayerMedia'
+                $ref: '#/components/schemas/Media'
           description: ''
   /api/roster/media/{id}/:
     get:
@@ -26540,7 +26552,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this player media.
+        description: A unique integer value identifying this media.
         required: true
       tags:
       - roster
@@ -26551,7 +26563,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlayerMedia'
+                $ref: '#/components/schemas/Media'
           description: ''
     put:
       operationId: roster_media_update
@@ -26561,7 +26573,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this player media.
+        description: A unique integer value identifying this media.
         required: true
       tags:
       - roster
@@ -26572,7 +26584,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlayerMedia'
+                $ref: '#/components/schemas/Media'
           description: ''
     patch:
       operationId: roster_media_partial_update
@@ -26582,7 +26594,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this player media.
+        description: A unique integer value identifying this media.
         required: true
       tags:
       - roster
@@ -26593,7 +26605,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlayerMedia'
+                $ref: '#/components/schemas/Media'
           description: ''
     delete:
       operationId: roster_media_destroy
@@ -26603,7 +26615,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this player media.
+        description: A unique integer value identifying this media.
         required: true
       tags:
       - roster
@@ -26621,7 +26633,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this player media.
+        description: A unique integer value identifying this media.
         required: true
       tags:
       - roster
@@ -26632,7 +26644,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlayerMedia'
+                $ref: '#/components/schemas/Media'
           description: ''
   /api/roster/media/{id}/set_profile_picture/:
     post:
@@ -26643,7 +26655,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this player media.
+        description: A unique integer value identifying this media.
         required: true
       tags:
       - roster
@@ -26654,7 +26666,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlayerMedia'
+                $ref: '#/components/schemas/Media'
           description: ''
   /api/roster/rosters/:
     get:
@@ -33195,7 +33207,7 @@ components:
             Public persona identity only — id/name/thumbnail(s), never account/username.
 
             ``thumbnail_media_url`` mirrors ``world/combat/serializers.py``'s
-            ``get_thumbnail_media_url`` — the uploaded-portrait ``PlayerMedia`` FK,
+            ``get_thumbnail_media_url`` — the uploaded-portrait ``Media`` FK,
             already ``select_related``'d by the view's Prefetch (world/battles/views.py),
             so this never issues a query. ``thumbnail_url`` is the legacy URLField,
             kept alongside for callers still on it.
@@ -33905,9 +33917,10 @@ components:
           description: Worldbuilding text shown to players
         art_image:
           type: string
-          format: uri
-          description: URL for visual presentation
-          maxLength: 200
+          nullable: true
+          description: Cloudinary URL sourced from art (#2408); key name kept for
+            frontend compat.
+          readOnly: true
         family_known:
           type: boolean
           description: Whether family is selectable in Lineage stage (False = 'Unknown')
@@ -33943,6 +33956,7 @@ components:
           readOnly: true
       required:
       - allowed_species_ids
+      - art_image
       - codex_entry_ids
       - description
       - id
@@ -33961,11 +33975,6 @@ components:
           type: string
           minLength: 1
           description: Worldbuilding text shown to players
-        art_image:
-          type: string
-          format: uri
-          description: URL for visual presentation
-          maxLength: 200
         family_known:
           type: boolean
           description: Whether family is selectable in Lineage stage (False = 'Unknown')
@@ -36918,7 +36927,12 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        art_url:
+          type: string
+          nullable: true
+          readOnly: true
       required:
+      - art_url
       - id
       - knowledge_status
       - lore_content
@@ -36973,7 +36987,12 @@ components:
           type: string
           readOnly: true
           nullable: true
+        art_url:
+          type: string
+          nullable: true
+          readOnly: true
       required:
+      - art_url
       - id
       - knowledge_status
       - name
@@ -45483,16 +45502,67 @@ components:
         * `moderate` - Moderate
         * `high` - High
         * `extreme` - Extreme
+    Media:
+      type: object
+      description: Serialize media uploaded by a player.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        cloudinary_public_id:
+          type: string
+          readOnly: true
+          description: Cloudinary public ID for this media
+        cloudinary_url:
+          type: string
+          format: uri
+          readOnly: true
+          description: Full Cloudinary URL
+        media_type:
+          allOf:
+          - $ref: '#/components/schemas/MediaTypeEnum'
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        uploaded_date:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_date:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - cloudinary_public_id
+      - cloudinary_url
+      - created_by
+      - description
+      - id
+      - media_type
+      - title
+      - updated_date
+      - uploaded_date
     MediaTypeEnum:
       enum:
       - photo
       - portrait
       - gallery
+      - background
+      - illustration
       type: string
       description: |-
         * `photo` - Photo
         * `portrait` - Character Portrait
         * `gallery` - Gallery Image
+        * `background` - Background
+        * `illustration` - Illustration
     MentorPersona:
       type: object
       description: Minimal read-only representation of a mentor persona.
@@ -48038,7 +48108,7 @@ components:
           type: string
           nullable: true
           description: |-
-            PlayerMedia portrait URL, dynamically resolved (#2196).
+            Media portrait URL, dynamically resolved (#2196).
 
             Uses ``resolve_thumbnail()`` when the opponent has a persona (character).
             For persona-less (generic/ephemeral) NPCs, falls back to the opponent's
@@ -50453,6 +50523,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LabStationDetails'
+    PaginatedMediaList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Media'
     PaginatedMissionCategoryList:
       type: object
       required:
@@ -51417,29 +51510,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerMail'
-    PaginatedPlayerMediaList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/PlayerMedia'
     PaginatedPlayerReportDetailList:
       type: object
       required:
@@ -52985,7 +53055,7 @@ components:
           type: string
           nullable: true
           description: |-
-            PlayerMedia portrait URL, dynamically resolved (#2196).
+            Media portrait URL, dynamically resolved (#2196).
 
             Uses ``resolve_thumbnail()`` via the primary persona's character.
             ``None`` when there is no primary persona.
@@ -56771,53 +56841,6 @@ components:
       - recipient_tenure
       - sender_tenure
       - subject
-    PlayerMedia:
-      type: object
-      description: Serialize media uploaded by a player.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        cloudinary_public_id:
-          type: string
-          readOnly: true
-          description: Cloudinary public ID for this media
-        cloudinary_url:
-          type: string
-          format: uri
-          readOnly: true
-          description: Full Cloudinary URL
-        media_type:
-          allOf:
-          - $ref: '#/components/schemas/MediaTypeEnum'
-          readOnly: true
-        title:
-          type: string
-          readOnly: true
-        description:
-          type: string
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-        uploaded_date:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_date:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - cloudinary_public_id
-      - cloudinary_url
-      - created_by
-      - description
-      - id
-      - media_type
-      - title
-      - updated_date
-      - uploaded_date
     PlayerReportCreate:
       type: object
       description: |-
@@ -62499,11 +62522,10 @@ components:
           description: Rich description shown on hover/click in character creation
         crest_image:
           type: string
-          format: uri
           nullable: true
-          description: Cloudinary URL for crest/flag image. Leave blank for gradient
-            placeholder.
-          maxLength: 200
+          description: Cloudinary URL sourced from crest_art (#2408); key name kept
+            for frontend compat.
+          readOnly: true
         is_accessible:
           type: boolean
           description: Check if the requesting user can access this area.
@@ -62513,6 +62535,7 @@ components:
           readOnly: true
           default: default
       required:
+      - crest_image
       - description
       - id
       - is_accessible
@@ -62531,13 +62554,6 @@ components:
           type: string
           minLength: 1
           description: Rich description shown on hover/click in character creation
-        crest_image:
-          type: string
-          format: uri
-          nullable: true
-          description: Cloudinary URL for crest/flag image. Leave blank for gradient
-            placeholder.
-          maxLength: 200
       required:
       - description
       - name
@@ -64288,7 +64304,7 @@ components:
           readOnly: true
         media:
           allOf:
-          - $ref: '#/components/schemas/PlayerMedia'
+          - $ref: '#/components/schemas/Media'
           readOnly: true
         gallery:
           type: integer

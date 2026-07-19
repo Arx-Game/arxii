@@ -170,7 +170,7 @@
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
   - resist_check_type -> checks.CheckType [FK] (nullable)
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
   - properties -> mechanics.Property [M2M]
@@ -219,7 +219,7 @@
   - condition -> conditions.ConditionTemplate [FK]
   - resist_check_type -> checks.CheckType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - properties -> mechanics.Property [M2M]
   - on_entry_conditions -> conditions.ConditionTemplate [M2M]
 **Pointed to by:**
@@ -328,7 +328,7 @@
 ### PlayerData
 **Foreign Keys:**
   - account -> accounts.AccountDB [OneToOne]
-  - profile_picture -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - profile_picture -> evennia_extensions.Media [FK] (nullable)
 **Pointed to by:**
   - applications <- roster.RosterApplication
   - reviewed_applications <- roster.RosterApplication
@@ -341,7 +341,7 @@
   - treasured_signoffs <- stories.TreasuredSignoff
   - content_boundaries <- boundaries.PlayerBoundary
   - artist_profile <- evennia_extensions.Artist
-  - media <- evennia_extensions.PlayerMedia
+  - media <- evennia_extensions.Media
   - allow_list <- evennia_extensions.PlayerAllowList
   - allowed_by <- evennia_extensions.PlayerAllowList
 
@@ -349,28 +349,36 @@
 **Foreign Keys:**
   - player_data -> evennia_extensions.PlayerData [OneToOne]
 **Pointed to by:**
-  - created_media <- evennia_extensions.PlayerMedia
+  - created_media <- evennia_extensions.Media
 
-### PlayerMedia
+### Media
 **Foreign Keys:**
-  - player_data -> evennia_extensions.PlayerData [FK]
+  - player_data -> evennia_extensions.PlayerData [FK] (nullable)
   - created_by -> evennia_extensions.Artist [FK] (nullable)
 **Pointed to by:**
   - tenure_links <- roster.TenureMedia
+  - starting_area_crests <- character_creation.StartingArea
+  - beginnings_art <- character_creation.Beginnings
   - persona_thumbnails <- scenes.Persona
   - alternate_self_thumbnails <- forms.AlternateSelf
+  - codex_entries <- codex.CodexEntry
   - condition_template_thumbnails <- conditions.ConditionTemplate
   - condition_stage_thumbnails <- conditions.ConditionStage
   - item_templates <- items.ItemTemplate
   - item_instances <- items.ItemInstance
   - combat_opponent_portraits <- combat.CombatOpponent
   - profile_for_players <- evennia_extensions.PlayerData
+  - page_backgrounds <- evennia_extensions.PageBackground
   - thumbnailed_objects <- evennia_extensions.ObjectDisplayData
+
+### PageBackground
+**Foreign Keys:**
+  - art -> evennia_extensions.Media [FK] (nullable)
 
 ### ObjectDisplayData
 **Foreign Keys:**
   - object -> objects.ObjectDB [OneToOne]
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
 
 ### PlayerAllowList
 **Foreign Keys:**
@@ -1333,6 +1341,7 @@
 ### StartingArea
 **Foreign Keys:**
   - realm -> realms.Realm [FK] (nullable)
+  - crest_art -> evennia_extensions.Media [FK] (nullable)
   - default_starting_room -> evennia_extensions.RoomProfile [FK] (nullable)
 **Pointed to by:**
   - beginnings <- character_creation.Beginnings
@@ -1340,6 +1349,7 @@
 
 ### Beginnings
 **Foreign Keys:**
+  - art -> evennia_extensions.Media [FK] (nullable)
   - starting_area -> character_creation.StartingArea [FK]
   - heritage -> character_sheets.Heritage [FK] (nullable)
   - starting_room_override -> objects.ObjectDB [FK] (nullable)
@@ -1858,6 +1868,7 @@
 **Foreign Keys:**
   - subject -> codex.CodexSubject [FK]
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
+  - art -> evennia_extensions.Media [FK] (nullable)
   - prerequisites -> codex.CodexEntry [M2M]
 **Pointed to by:**
   - gifts <- magic.Gift
@@ -1963,7 +1974,7 @@
   - encounter -> combat.CombatEncounter [FK]
   - threat_pool -> combat.ThreatPool [FK] (nullable)
   - persona -> scenes.Persona [FK] (nullable)
-  - portrait -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - portrait -> evennia_extensions.Media [FK] (nullable)
   - objectdb -> objects.ObjectDB [FK] (nullable)
   - mirrors_participant -> combat.CombatParticipant [FK] (nullable)
   - summoned_by -> character_sheets.CharacterSheet [FK] (nullable)
@@ -2428,7 +2439,7 @@
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
   - resist_check_type -> checks.CheckType [FK] (nullable)
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
   - properties -> mechanics.Property [M2M]
@@ -2477,7 +2488,7 @@
   - condition -> conditions.ConditionTemplate [FK]
   - resist_check_type -> checks.CheckType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - properties -> mechanics.Property [M2M]
   - on_entry_conditions -> conditions.ConditionTemplate [M2M]
 **Pointed to by:**
@@ -3316,7 +3327,7 @@
   - form -> forms.CharacterForm [FK] (nullable)
   - persona -> scenes.Persona [FK] (nullable)
   - combat_profile -> forms.FormCombatProfile [FK] (nullable)
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
   - techniques -> magic.Technique [M2M]
 **Pointed to by:**
@@ -3629,7 +3640,7 @@
   - minimum_quality_tier -> items.QualityTier [FK] (nullable)
   - tied_resonance -> magic.Resonance [FK] (nullable)
   - resonance_tier -> magic.ResonanceTier [FK] (nullable)
-  - image -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - image -> evennia_extensions.Media [FK] (nullable)
   - weapon_damage_type -> conditions.DamageType [FK] (nullable)
   - polish_category -> buildings.PolishCategory [FK] (nullable)
   - interactions -> items.InteractionType [M2M]
@@ -3666,7 +3677,7 @@
   - designer_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - designer_persona_display -> scenes.Persona [FK] (nullable)
   - contained_in -> items.ItemInstance [FK] (nullable)
-  - image -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - image -> evennia_extensions.Media [FK] (nullable)
   - legend_deeds -> societies.LegendEntry [M2M]
 **Pointed to by:**
   - applied_disguise_overlays <- forms.CharacterFormState
@@ -6720,7 +6731,7 @@
 ### TenureMedia
 **Foreign Keys:**
   - tenure -> roster.RosterTenure [FK]
-  - media -> evennia_extensions.PlayerMedia [FK]
+  - media -> evennia_extensions.Media [FK]
   - gallery -> roster.TenureGallery [FK] (nullable)
 **Pointed to by:**
   - profile_for_entries <- roster.RosterEntry
@@ -6831,7 +6842,7 @@
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - profile -> character_sheets.Profile [FK] (nullable)
-  - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - properties -> mechanics.Property [M2M]
 **Pointed to by:**
   - mentored_allocations <- skills.TrainingAllocation

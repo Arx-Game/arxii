@@ -43,7 +43,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.covenants.factories import CovenantFactory
 from world.military.factories import MilitaryUnitFactory
-from world.roster.factories import PlayerMediaFactory
+from world.roster.factories import MediaFactory
 from world.scenes.constants import RoundStatus, ScenePrivacyMode
 from world.scenes.factories import SceneParticipationFactory
 from world.societies.factories import LegendEntryFactory, LegendSourceTypeFactory
@@ -443,8 +443,8 @@ class BattleApiJourneyTest(TestCase):
 
     def test_participant_persona_thumbnail_media_url_resolves_uploaded_portrait(self) -> None:
         """Mirrors combat's ``get_thumbnail_media_url`` parity (#2009 review):
-        the uploaded ``PlayerMedia`` portrait FK, not just the legacy URLField."""
-        media = PlayerMediaFactory()
+        the uploaded ``Media`` portrait FK, not just the legacy URLField."""
+        media = MediaFactory()
         persona = self.pc_sheet.primary_persona
         persona.thumbnail = media
         persona.save(update_fields=["thumbnail"])

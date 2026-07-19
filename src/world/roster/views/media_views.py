@@ -1,5 +1,5 @@
 """
-PlayerMedia and gallery views.
+Media and gallery views.
 """
 
 from http import HTTPMethod
@@ -13,40 +13,40 @@ from rest_framework.permissions import BasePermission
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from evennia_extensions.models import Artist, MediaType, PlayerMedia
+from evennia_extensions.models import Artist, Media, MediaType
 from world.roster.filters import TenureGalleryFilterSet
 from world.roster.models import RosterTenure, TenureGallery, TenureMedia
 from world.roster.permissions import IsOwnerOrStaff, ReadOnlyOrOwner
-from world.roster.serializers import PlayerMediaSerializer, TenureGallerySerializer
+from world.roster.serializers import MediaSerializer, TenureGallerySerializer
 from world.roster.services import CloudinaryGalleryService
 
 
-class PlayerMediaViewSet(viewsets.ModelViewSet):
+class MediaViewSet(viewsets.ModelViewSet):
     """API viewset for managing player media."""
 
     # Paginated via the project default (ADR-0138): a player's whole uploaded
-    # image library grows over time. PlayerMedia.Meta.ordering (-uploaded_date)
+    # image library grows over time. Media.Meta.ordering (-uploaded_date)
     # gives stable page boundaries; the frontend gallery loads every page via
     # fetchAllPages since the grid shows the full set.
-    serializer_class = PlayerMediaSerializer
+    serializer_class = MediaSerializer
     permission_classes = [ReadOnlyOrOwner]
 
-    def get_queryset(self) -> QuerySet[PlayerMedia]:
+    def get_queryset(self) -> QuerySet[Media]:
         # For listing, show user's own media unless staff
         # For detail views, show all media (permissions will restrict modifications)
         if self.action == "list":
             if self.request.user.is_staff:
-                return PlayerMedia.objects.all()
+                return Media.objects.all()
             try:
-                return PlayerMedia.objects.filter(
+                return Media.objects.filter(
                     player_data=self.request.user.player_data,
                 )
             except AttributeError:
                 # User has no player_data, return empty queryset
-                return PlayerMedia.objects.none()
+                return Media.objects.none()
         else:
             # For detail views (retrieve, update, etc), show all media
-            return PlayerMedia.objects.all()
+            return Media.objects.all()
 
     def get_permissions(self) -> list[BasePermission]:
         """

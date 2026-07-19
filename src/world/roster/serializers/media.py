@@ -4,7 +4,7 @@ Media and gallery serializers for the roster system.
 
 from rest_framework import serializers
 
-from evennia_extensions.models import Artist, PlayerMedia
+from evennia_extensions.models import Artist, Media
 from world.roster.models import TenureGallery, TenureMedia
 
 
@@ -23,12 +23,12 @@ class ArtistSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class PlayerMediaSerializer(serializers.ModelSerializer):
+class MediaSerializer(serializers.ModelSerializer):
     """Serialize media uploaded by a player."""
 
     created_by = serializers.SerializerMethodField()
 
-    def get_created_by(self, obj: PlayerMedia):
+    def get_created_by(self, obj: Media):
         """Return serialized artist information if present."""
         artist = obj.created_by
         if not artist:
@@ -36,7 +36,7 @@ class PlayerMediaSerializer(serializers.ModelSerializer):
         return ArtistSerializer(artist).data
 
     class Meta:
-        model = PlayerMedia
+        model = Media
         fields = (
             "id",
             "cloudinary_public_id",
@@ -54,7 +54,7 @@ class PlayerMediaSerializer(serializers.ModelSerializer):
 class TenureMediaSerializer(serializers.ModelSerializer):
     """Serialize media associated with a roster tenure."""
 
-    media = PlayerMediaSerializer(read_only=True)
+    media = MediaSerializer(read_only=True)
 
     class Meta:
         model = TenureMedia

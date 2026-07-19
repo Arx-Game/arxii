@@ -13,8 +13,10 @@ import { RecentConnected } from './RecentConnected';
 import { NewsTeaser } from './NewsTeaser';
 import { useStatusQuery } from './queries';
 import { useAccount } from '@/store/hooks';
+import { usePageBackgrounds, pageBackgroundStyle } from '@/hooks/usePageBackgrounds';
 
 export function HomePage() {
+  const { data: backgrounds } = usePageBackgrounds();
   const { data, isLoading } = useStatusQuery();
   const account = useAccount();
   const hasCharacters = (account?.available_characters?.length ?? 0) > 0;
@@ -22,7 +24,7 @@ export function HomePage() {
   const heroLabel = account && !hasCharacters ? 'Create a character' : 'Play in the browser';
 
   return (
-    <>
+    <div style={pageBackgroundStyle(backgrounds, 'homepage', 'Homepage')}>
       <section
         id="hero"
         className="container mx-auto flex flex-col items-center gap-8 py-12 text-center"
@@ -59,6 +61,6 @@ export function HomePage() {
       <QuickActions />
       <NewPlayerSection />
       <LoreTabs />
-    </>
+    </div>
   );
 }

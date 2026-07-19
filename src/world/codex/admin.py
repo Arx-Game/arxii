@@ -78,7 +78,7 @@ class CodexEntryAdmin(admin.ModelAdmin):
     ordering = ["subject", "display_order", "name"]
 
     fieldsets = (
-        (None, {"fields": ("subject", "name", "summary")}),
+        (None, {"fields": ("subject", "name", "summary", "art")}),
         (
             "Content",
             {
@@ -111,7 +111,7 @@ class CodexEntryAdmin(admin.ModelAdmin):
         ),
         ("Display", {"fields": ("display_order", "is_public"), "classes": ["collapse"]}),
     )
-    autocomplete_fields = ["modifier_target"]
+    autocomplete_fields = ["modifier_target", "art"]
 
     def prerequisite_count(self, obj: CodexEntry) -> int:
         return obj.prerequisites.count()

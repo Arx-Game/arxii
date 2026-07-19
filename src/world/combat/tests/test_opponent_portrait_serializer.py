@@ -18,7 +18,7 @@ from django.test import TestCase
 
 from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.combat.serializers import OpponentSerializer
-from world.roster.factories import PlayerMediaFactory
+from world.roster.factories import MediaFactory
 from world.scenes.factories import PersonaFactory
 
 
@@ -28,7 +28,7 @@ class OpponentPortraitSerializerTests(TestCase):
         self.encounter = CombatEncounterFactory()
 
     def test_persona_with_thumbnail_exposes_media_and_direct_url(self) -> None:
-        media = PlayerMediaFactory()
+        media = MediaFactory()
         persona = PersonaFactory(
             thumbnail=media,
             thumbnail_url="https://cdn.example/direct.png",
@@ -59,7 +59,7 @@ class OpponentPortraitSerializerTests(TestCase):
 
     def test_persona_less_opponent_with_portrait_falls_back_to_portrait_media(self) -> None:
         # Generic/ephemeral NPC with no persona but a direct portrait FK (#997).
-        media = PlayerMediaFactory()
+        media = MediaFactory()
         opponent = CombatOpponentFactory(encounter=self.encounter, portrait=media)
 
         data = OpponentSerializer(opponent).data
@@ -68,8 +68,8 @@ class OpponentPortraitSerializerTests(TestCase):
         self.assertIsNone(data["thumbnail_url"])
 
     def test_persona_thumbnail_takes_precedence_over_direct_portrait(self) -> None:
-        persona_media = PlayerMediaFactory()
-        portrait_media = PlayerMediaFactory()
+        persona_media = MediaFactory()
+        portrait_media = MediaFactory()
         persona = PersonaFactory(thumbnail=persona_media, thumbnail_url="")
         opponent = CombatOpponentFactory(
             encounter=self.encounter, persona=persona, portrait=portrait_media

@@ -27,11 +27,13 @@ _OBJECTDB_MODEL = "objects.ObjectDB"
 
 
 class MediaType(models.TextChoices):
-    """Media type choices for player uploads."""
+    """Media type choices for both player uploads and staff-authored game art."""
 
     PHOTO = "photo", "Photo"
     PORTRAIT = "portrait", "Character Portrait"
     GALLERY = "gallery", "Gallery Image"
+    BACKGROUND = "background", "Background"
+    ILLUSTRATION = "illustration", "Illustration"
 
 
 class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
@@ -91,7 +93,7 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
 
     # Media settings
     profile_picture = models.ForeignKey(
-        "PlayerMedia",
+        "Media",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -216,13 +218,31 @@ class Artist(SharedMemoryModel):
         verbose_name_plural = "Artists"
 
 
-class PlayerMedia(SharedMemoryModel):
-    """Media files uploaded by players."""
+class Media(NaturalKeyMixin, SharedMemoryModel):
+    """Cloudinary-backed image: player-uploaded media or staff-authored game art.
+
+    Player-owned rows set ``player_data`` and leave ``slug`` null (created live
+    via the player upload endpoint). Staff-authored rows leave ``player_data``
+    null and set ``slug`` — addressed by natural key from the lore-repo content
+    pipeline (#2408). "Owned by a player" is derived from ``player_data_id is
+    not None``; there is deliberately no separate boolean/type flag for it.
+    """
 
     player_data = models.ForeignKey(
         PlayerData,
+        null=True,
+        blank=True,
         on_delete=models.CASCADE,
         related_name="media",
+        help_text="Owning player, for player-uploaded rows. Null for staff-authored art.",
+    )
+    slug = models.CharField(
+        max_length=255,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text="Natural-key identifier for staff-authored, content-pipeline-sourced rows. "
+        "Null for player-uploaded media (never addressed by natural key).",
     )
     cloudinary_public_id = models.CharField(
         max_length=255,
@@ -247,13 +267,61 @@ class PlayerMedia(SharedMemoryModel):
     uploaded_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["slug"]
+
+    def __str__(self) -> str:
         title = self.title or "Untitled"
-        return f"{self.media_type} for {self.player_data.account.username} ({title})"
+        owner = self.player_data.account.username if self.player_data_id else "staff"
+        return f"{self.media_type} for {owner} ({title})"
 
     class Meta:
         ordering = ["-uploaded_date"]
         indexes = [models.Index(fields=["player_data", "media_type"])]
+
+
+class PageBackgroundSlot(models.TextChoices):
+    """Named page/area that can carry a staff-set background image."""
+
+    HOMEPAGE = "homepage", "Homepage"
+    ROSTER = "roster", "Roster"
+    CG_STAGE = "cg_stage", "Character Creation"
+    GAME_CLIENT = "game_client", "Game Client"
+
+
+class PageBackground(NaturalKeyMixin, SharedMemoryModel):
+    """Maps a named page slot to a background Media row (#2408).
+
+    One row per slot; ``art`` is null-safe everywhere it's read (missing art
+    falls back to the existing gradient-placeholder convention on the frontend).
+    """
+
+    slot = models.CharField(
+        max_length=20,
+        choices=PageBackgroundSlot.choices,
+        unique=True,
+    )
+    art = models.ForeignKey(
+        "Media",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="page_backgrounds",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["slot"]
+
+    def __str__(self) -> str:
+        return f"PageBackground({self.slot})"
+
+    class Meta:
+        verbose_name = "Page Background"
+        verbose_name_plural = "Page Backgrounds"
 
 
 class ObjectDisplayData(SharedMemoryModel):
@@ -298,7 +366,7 @@ class ObjectDisplayData(SharedMemoryModel):
 
     # Visual representation
     thumbnail = models.ForeignKey(
-        PlayerMedia,
+        Media,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

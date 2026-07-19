@@ -8,7 +8,7 @@ from evennia_extensions.models import ObjectDisplayData
 from flows.factories import SceneDataManagerFactory
 from flows.helpers.payloads import build_room_state_payload
 from flows.service_functions.communication import send_room_state
-from world.roster.factories import PlayerMediaFactory
+from world.roster.factories import MediaFactory
 from world.scenes.factories import SceneFactory
 
 
@@ -30,13 +30,13 @@ class RoomStateTests(TestCase):
             location=self.room,
         )
 
-        room_media = PlayerMediaFactory()
+        room_media = MediaFactory()
         ObjectDisplayData.objects.create(object=self.room, thumbnail=room_media)
-        char_media = PlayerMediaFactory()
+        char_media = MediaFactory()
         ObjectDisplayData.objects.create(object=self.caller, thumbnail=char_media)
-        item_media = PlayerMediaFactory()
+        item_media = MediaFactory()
         ObjectDisplayData.objects.create(object=self.item, thumbnail=item_media)
-        exit_media = PlayerMediaFactory()
+        exit_media = MediaFactory()
         ObjectDisplayData.objects.create(object=self.exit, thumbnail=exit_media)
 
         self.context = SceneDataManagerFactory()

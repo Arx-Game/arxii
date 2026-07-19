@@ -25,8 +25,10 @@ import { Gender, GENDER_LABELS } from '@/world/character_sheets/types';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { Link } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
+import { usePageBackgrounds, pageBackgroundStyle } from '@/hooks/usePageBackgrounds';
 
 export function RosterListPage() {
+  const { data: backgrounds } = usePageBackgrounds();
   const { data: rosters, isLoading: rostersLoading } = useRostersQuery();
   const account = useAccount();
   const [activeRoster, setActiveRoster] = useState<string>('');
@@ -61,7 +63,10 @@ export function RosterListPage() {
   if (!rosters || rosters.length === 0) return <p className="p-4">No rosters found.</p>;
 
   return (
-    <div className="container mx-auto space-y-4 p-4">
+    <div
+      className="container mx-auto space-y-4 p-4"
+      style={pageBackgroundStyle(backgrounds, 'roster', 'Roster')}
+    >
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Roster</h1>
         {account?.can_create_characters && (
