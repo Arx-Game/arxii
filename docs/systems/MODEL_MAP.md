@@ -1872,6 +1872,8 @@
   - art -> evennia_extensions.Media [FK] (nullable)
   - prerequisites -> codex.CodexEntry [M2M]
 **Pointed to by:**
+  - species <- species.Species
+  - resonances <- magic.Resonance
   - gifts <- magic.Gift
   - techniques <- magic.Technique
   - crossing_options <- magic.CrossingOption
@@ -4250,8 +4252,8 @@
 **Foreign Keys:**
   - affinity -> magic.Affinity [FK]
   - opposite -> magic.Resonance [OneToOne] (nullable)
-  - properties -> mechanics.Property [M2M]
   - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - properties -> mechanics.Property [M2M]
 **Pointed to by:**
   - opposite_of <- magic.Resonance
   - gifts <- magic.Gift
@@ -7854,8 +7856,8 @@
 ### Species
 **Foreign Keys:**
   - parent -> species.Species [FK] (nullable)
-  - starting_languages -> species.Language [M2M]
   - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - starting_languages -> species.Language [M2M]
 **Pointed to by:**
   - character_sheets <- character_sheets.CharacterSheet
   - children <- species.Species
