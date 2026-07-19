@@ -212,6 +212,66 @@ class CanPuppetForSeanceTests(TestCase):
         can_puppet, _reason = account.can_puppet_for_seance(sheet.character)
         self.assertFalse(can_puppet)
 
+    def _retired_sheet_with_accepted_open_offer(self):
+        """Build a retired, dead CharacterSheet owned (via tenure) by a real
+        account, with an ACCEPTED SeanceManifestationOffer whose ceremony is
+        still OPEN. Mirrors RespondToSeanceOfferTests in
+        world/ceremonies/tests/test_services.py."""
+        from django.utils import timezone
+
+        from world.ceremonies.constants import CeremonyTypeKey
+        from world.ceremonies.factories import CeremonyTypeFactory
+        from world.ceremonies.services import open_ceremony, respond_to_seance_offer
+        from world.roster.factories import PlayerDataFactory
+        from world.vitals.constants import CharacterLifeState
+        from world.worship.factories import WorshippedBeingFactory
+        from world.worship.models import WorshipDeclaration
+
+        sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=sheet, life_state=CharacterLifeState.DEAD)
+        sheet.vitals.retired_at = timezone.now()
+        sheet.vitals.save(update_fields=["retired_at"])
+
+        player_data = PlayerDataFactory()
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, player_data=player_data)
+        account = player_data.account
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.SEANCE, name="Seance")
+        from evennia_extensions.factories import RoomProfileFactory
+
+        location = RoomProfileFactory()
+
+        officiant_sheet = CharacterSheetFactory()
+        officiant_persona = officiant_sheet.primary_persona
+        being = WorshippedBeingFactory()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=being)
+
+        ceremony = open_ceremony(
+            officiant_persona=officiant_persona,
+            type_key=CeremonyTypeKey.SEANCE,
+            honoree_sheets=[sheet],
+            location_profile=location,
+        )
+        offer = ceremony.honorees.get(honoree_sheet=sheet).seance_offer
+        respond_to_seance_offer(offer, account=account, accept=True)
+
+        return sheet, account
+
+    def test_grants_retired_character_with_accepted_open_offer(self) -> None:
+        sheet, account = self._retired_sheet_with_accepted_open_offer()
+        can_puppet, reason = account.can_puppet_for_seance(sheet.character)
+        self.assertTrue(can_puppet)
+        self.assertEqual(reason, "")
+
+    def test_denies_wrong_account(self) -> None:
+        from world.roster.factories import PlayerDataFactory
+
+        sheet, _account = self._retired_sheet_with_accepted_open_offer()
+        stranger = PlayerDataFactory().account
+        can_puppet, _reason = stranger.can_puppet_for_seance(sheet.character)
+        self.assertFalse(can_puppet)
+
 
 # Silence unused-import warning for Account; imported for IDE/type clarity.
 _ = Account
