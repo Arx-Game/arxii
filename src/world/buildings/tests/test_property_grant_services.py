@@ -1,7 +1,5 @@
 """Tests for the PropertyGrantProfile model and world.buildings.property_grant_services."""
 
-import unittest
-
 from django.test import TestCase
 
 from world.areas.constants import AreaLevel
@@ -158,7 +156,6 @@ class StartBuildingActivationTests(TestCase):
         with self.assertRaises(RoomBuildError):
             start_building_activation(persona=persona, building=building)
 
-    @unittest.skip("implemented in Task 6")
     def test_already_activated_refused(self):
         from world.buildings.property_grant_services import (
             complete_building_activation,
@@ -178,3 +175,39 @@ class StartBuildingActivationTests(TestCase):
         start_building_activation(persona=persona, building=building)
         with self.assertRaises(RoomBuildError):
             start_building_activation(persona=persona, building=building)
+
+
+class CompleteBuildingActivationTests(TestCase):
+    def test_completion_sets_tier_and_stamps_activated_at(self):
+        from world.buildings.property_grant_services import (
+            complete_building_activation,
+            start_building_activation,
+        )
+
+        persona, building = _owned_building_with_persona()
+        project = start_building_activation(persona=persona, building=building)
+        complete_building_activation(project)
+        building.refresh_from_db()
+        assert building.condition_tier == ConditionTier.RAMSHACKLE
+        assert building.property_activated_at is not None
+
+    def test_completion_is_idempotent(self):
+        from world.buildings.property_grant_services import (
+            complete_building_activation,
+            start_building_activation,
+        )
+
+        persona, building = _owned_building_with_persona()
+        project = start_building_activation(persona=persona, building=building)
+        complete_building_activation(project)
+        first_stamp = building.__class__.objects.get(pk=building.pk).property_activated_at
+        complete_building_activation(project)
+        second_stamp = building.__class__.objects.get(pk=building.pk).property_activated_at
+        assert first_stamp == second_stamp
+
+    def test_handler_registered_for_building_activation_kind(self):
+        from world.projects.constants import ProjectKind
+        from world.projects.services import get_kind_handler
+
+        handler = get_kind_handler(ProjectKind.BUILDING_ACTIVATION)
+        assert handler.__name__ == "complete_building_activation"

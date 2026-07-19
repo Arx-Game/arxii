@@ -155,3 +155,26 @@ def start_building_activation(*, persona: Persona, building: Building) -> Projec
             target_tier=profile.activation_target_tier,
         )
     return project
+
+
+def complete_building_activation(project, outcome_tier: object | None = None) -> None:  # noqa: ARG001
+    """Kind handler: set the building's condition_tier to the snapshotted target, exactly once.
+
+    Registered with register_kind_handler at app-ready time; signature matches
+    the framework's KindHandler (project, outcome_tier). Idempotent via the
+    applied_at claim-filter, mirroring complete_building_renovation.
+    """
+    from world.buildings.models import BuildingActivationDetails  # noqa: PLC0415
+    from world.buildings.upkeep_services import set_condition_tier  # noqa: PLC0415
+
+    with transaction.atomic():
+        claimed = BuildingActivationDetails.objects.filter(
+            project=project, applied_at__isnull=True
+        ).update(applied_at=timezone.now())
+        if not claimed:
+            return
+        details = BuildingActivationDetails.objects.get(project=project)
+        building = details.building
+        set_condition_tier(building, details.target_tier)
+        building.property_activated_at = timezone.now()
+        building.save(update_fields=["property_activated_at"])
