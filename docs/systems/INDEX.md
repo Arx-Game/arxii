@@ -3605,7 +3605,11 @@ holder is never notified a claim exists.
     a gem and unset, embeds it (clears holder), and adds its worth to the host's `lore_value` so the
     wired `appraise()` reflects it. `adorned_materials(host)` is the queryable "materials on this
     piece" seam magic reads. Exceptions: `AdornmentCapacityExceeded` / `NotAGem` / `GemAlreadyAdorned`.
-    Safe craft-time path only; risky prying/re-set defers to the cut slice.
+    Safe craft-time path only. **Risky prying** (`pry_adornment`, Build 0b slice 6): the risky
+    end of the lifecycle — a `perform_check` (skill feeds the roll) removes a set gem; the stone
+    leaves the piece either way (host `lore_value` drops by its worth), freed to the pryer's
+    inventory on success or **shattered** on a botch (same shatter spine as gem cutting).
+    Returns `PryResult`; spends AP up front.
   - **Gem mining engine** (`world.items.gems.mining.roll_gem_haul`, Build 0b slice 4) — the pure,
     deterministic (injected `roll` seam) haul generator. One mine cycle → a common-gem **aggregate
     value** (`GemHaul.common_value`, never instanced) plus, rarely, a few **Rare-Find** gem
