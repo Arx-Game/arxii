@@ -14,6 +14,7 @@ from world.roster.factories import (
     RosterTenureFactory,
 )
 from world.roster.models import RosterType
+from world.vitals.factories import CharacterVitalsFactory
 
 
 def _patch_super_puppet(account, fake) -> object:
@@ -199,6 +200,17 @@ class UnpuppetBroadcastTests(TestCase):
             assert payload["session_id"] == 10
             assert payload["character_id"] is None
             assert payload["character_name"] is None
+
+
+class CanPuppetForSeanceTests(TestCase):
+    """Account.can_puppet_for_seance (#2393) — narrow retired-login bypass."""
+
+    def test_denies_non_retired_character(self) -> None:
+        account = AccountFactory()
+        sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=sheet)
+        can_puppet, _reason = account.can_puppet_for_seance(sheet.character)
+        self.assertFalse(can_puppet)
 
 
 # Silence unused-import warning for Account; imported for IDE/type clarity.
