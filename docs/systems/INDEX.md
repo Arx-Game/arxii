@@ -1844,7 +1844,11 @@ action consent flow, and a three-mode non-combat round framework.
   (per-round ledger; `is_immediate=True` for OPEN/POSE_ORDER actions, `is_immediate=False` for STRICT
   deferred declarations; carries `target_persona` FK; multiple rows per participant per round up to
   `max_actions_per_round`; `succor_target` FK (`SceneRoundParticipant`) + `succor_resolution` (float,
-  cached graded outcome) for the scene-round Succor sibling, #1744), `SceneRoundParticipant`
+  cached graded outcome) for the scene-round Succor sibling, #1744), `SceneRoundParticipant`,
+  `Boon` (#2540, `boon_models.py` — the payload of a structured social ask, 1:1 with its
+  `SceneActionRequest`: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`,
+  `item_instance`, `deed_text`, `fulfilled_at`; `boon_services.fulfill_boon` moves the asked
+  thing on a granted ask — MONEY wired via `currency.transfer`, other kinds are follow-up slices)
 - **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance).
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).

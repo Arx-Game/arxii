@@ -1,5 +1,6 @@
 """Boon fulfillment (#2540): a granted MONEY ask moves coppers target -> asker."""
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.currency.services import get_or_create_purse
@@ -49,3 +50,11 @@ class FulfillBoonTests(TestCase):
         self.assertFalse(fulfill_boon(boon))
         boon.refresh_from_db()
         self.assertIsNotNone(boon.fulfilled_at)  # still marked resolved
+
+    def test_targetless_request_is_rejected(self) -> None:
+        request = SceneActionRequestFactory(target_persona=None)
+        boon = Boon.objects.create(action_request=request, kind=BoonKind.MONEY, amount=100)
+        with self.assertRaises(ValidationError):
+            fulfill_boon(boon)
+        boon.refresh_from_db()
+        self.assertIsNone(boon.fulfilled_at)  # never claimed as fulfilled
