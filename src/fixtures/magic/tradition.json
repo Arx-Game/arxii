@@ -1,0 +1,164 @@
+[
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "Unbound",
+      "description": "You have no formal magical training. Whether self-taught through experimentation, awakened by accident, or simply never taken under a mentor's wing, your magic is raw and unrefined. The Unbound suffer a 50% penalty to magical development, but may shed this limitation by finding a tradition willing to accept them during play.",
+      "is_active": true,
+      "sort_order": 99
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "Smiling Shadows",
+      "description": "The Smiling Shadows are shadow-wielding practitioners who channel darkness as a tool — not metaphysical evil, but pragmatic manipulation of shadow as a substance. The \"smile\" is the audacity: they use shadow openly, confidently, even theatrically. Their magic draws from the interplay of light and dark, treating shadow as something alive and responsive.",
+      "is_active": true,
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "The Vigil",
+      "description": "No one living can say when the Vigil began; its origins are one more thing the order keeps. What made it is plain enough: a thousand years of keeping faith with Death's own city, and the rules the Penitent set down and never once explained. Their magic has grown quiet and solemn: communion with the lingering dead, protective wards drawn from rites older than any nation outside the Shroud, and a bone-deep steadiness born of keeping vigil over a city that should have fallen long ago. It is the Vigil that tends the Tree of Souls, keeps the Great Archive, and performs the Ritual of the Penitent by which the worthy may walk into a story. Their magic has a distinctly spooky, witchy quality that unnerves outsiders — and since the Vanishing took their masters, every student of the Vigil is finishing an interrupted lesson.",
+      "is_active": true,
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "Masque",
+      "description": "The forbidden magical tradition of Luxen’s underworld, practiced by those who defy the Church of the Shepherd’s monopoly on sanctioned magic. The Masque hides its practitioners behind theatrical personas and illusory art — their magic is misdirection, disguise, and bold defiance made manifest. Not inherently dark, but certainly unsanctioned, with both primal and abyssal adherents among its ranks.",
+      "is_active": true,
+      "sort_order": 3
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "Umbral Guard",
+      "description": "The military magical tradition of the Umbral Empire, popular among meritocracy commoners who serve the noble houses, militant nobles, and sellswords. The Umbral Guard channels shadow with military discipline — solid formations of darkness, fear as a tactical weapon, and the unshakeable steadiness of soldiers who fight in shadow as naturally as others fight in daylight.",
+      "is_active": true,
+      "sort_order": 4
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "The Silken Thread",
+      "description": "A secret society of darker magic shared between the Umbral Empire, the vampiric courts of Ariwn, the corsair courts of Inferna, and certain human gentry of Luxen who never abandoned the old ways. The Silken Thread teaches magic as domination — silk-thin threads of will that bind, control, and manipulate. Their motifs are spiders, webs, and silk: beautiful, intricate, and lethal. A mix of primal cunning and abyssal ambition.",
+      "is_active": true,
+      "sort_order": 5
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "Sanguinus",
+      "description": "A tradition founded by the Blood Patriarch of Ariwn, the Sanguinus are the foremost experts in blood magic and hemomancy. Popular among the Dhampir nobility, their craft treats blood as both fuel and medium — burning with vital energy, carrying the practitioner’s will through every vein. Their magic pulses with life, heat, and the fierce passion of those who understand that power flows in the blood.",
+      "is_active": true,
+      "sort_order": 6
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "Furyborn",
+      "description": "The berserker tradition shared between the Lycan clans of Ariwn and the Northlanders of Aythirmok. The Furyborn channel primal rage into magical power — their bodies become weapons, their fury becomes armor, and the beast within becomes an ally. Wild and ferocious, this is magic stripped of ceremony and refinement, powered by instinct and the savage joy of the hunt.",
+      "is_active": true,
+      "sort_order": 7
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "Late Cardian",
+      "description": "A scholarly tradition of primal magic practiced across Luxen, Umbros, Ariwn, and Inferna. The Late Cardian school studies the legacy of the ancient dragons through academic rigor — draconic formulae, fire-bright constructs, and the precise geometry of dragonfire. Neutral and respected, this tradition attracts scholars who prefer precision over passion, though their magic tends toward fire nonetheless.",
+      "is_active": true,
+      "sort_order": 8
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "Envalan",
+      "description": "The magical tradition built around the worship of Envala, Goddess of Corruption, practiced openly in the Grand Principality of Inferna. The Envalan channel their goddess’s gifts through emerald witchfire, corrupting influence, and the seductive beauty of decay. Their magic is unapologetically abyssal — treacherous, alluring, and ultimately destructive, wielded by those who believe corruption is simply another form of transformation.",
+      "is_active": true,
+      "sort_order": 9
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "Metallic Order",
+      "description": "The oldest living magical tradition in the world, carried into Arx by the evacuation and handed down by rote and reverence ever since. This was Platinum's order — researchers, wardens, and peacemakers of the deep ages, broken as a force by betrayal and war long before the Shroud rose. Its surviving craft is foundational and principled: wards and bindings, the shaping of enduring things, magic built the way bridges are built — to hold for ages, and to hold others up. Outside the Shroud, scholars know the Metallic Order only as myth from the deep ages; that a living lineage still teaches it is, to Shroudwatch Academy, very nearly unbelievable.",
+      "is_active": true,
+      "sort_order": 10
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "Fractals of the Abyss",
+      "description": "Born in lost Caer'alfar, when Queen Primeria's followers first passed bodily through a mirror into the Abyss and returned changed, the Fractal craft is the disciplined study of abyssal power: mirror-work, reflection, and the geometry of the self as seen from outside. Arx — Death's own city — chose to tend that dangerous knowledge rather than burn it. Its students learn behind more wards than any other tradition in the city, and every lesson opens with the same warning, older than the Shroud: the mirror studies you back.",
+      "is_active": true,
+      "sort_order": 11
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "The Red Feast",
+      "description": "The priesthood of the Fleshreaper — lord of slaughter, savagery, and the feast that follows — shared between the Lycan war clans of Ariwn and the harder hearths of Aythirmok. His clergy preach that flesh is the only honest offering and battle the only honest prayer; in the Packstone fortresses the floors of his shrine-rooms are shaped to drain blood, and in the Northlands his devout are the ones who smile when the thaw comes. The faith is as grim as the god — skull masks, spiked harness, trophies worn without a shred of subtlety — though nothing in the creed actually requires it: the Fleshreaper chooses whom he chooses, and the rare devotee who serves him cheerfully is entirely within their rights, however much they baffle the rest of the congregation.",
+      "is_active": true,
+      "sort_order": 12
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "The Old Troth",
+      "description": "The eldest craft of the Northlands: a troth — a pledged faith — sworn between the Aythir and the spirits of storm, sky, land, and beast. Its keepers buy power with geasa, binding vows and taboos that are both the price and the proof of their craft: the wind answers a sworn voice, beasts carry a sworn word, the thaw is read like a page. Break the geas and the troth breaks with it — the spirits turn away, and the magic dies with the vow. Druidic and patient, older than any southern school, kept alive because in Aythirmok a promise is the only wall that never needs rebuilding.",
+      "is_active": true,
+      "sort_order": 13
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "Order of the Lys",
+      "description": "The paladins of the old Kingdom: knights sworn to crown and commons alike, whose celestial craft made them the terror of demons and the safety of everyone else. The Order rode against Afflictions the Church only preached about, ransomed the poor from their own landlords, and was — by every honest account that survives — exactly what it claimed to be. The revolution burned the Order root and branch in its first month, and the Church's propaganda has spent five years teaching Luxen that the paladins were devils in white. Nothing of them remains but confiscated banners, a proverb about trusting beautiful armor, and the fact, quietly known in the underside, that not one of the Order's accusers has ever produced a single victim.",
+      "is_active": false,
+      "sort_order": 14
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "The Lumenaires",
+      "description": "The kindly mages of the old court: masters of radiant craft whose light was a weapon against the Abyss and a mercy everywhere else. Lumenaires burned Afflictions out of villages and then stayed to heal the survivors; their lamps over the palace gates meant, for a hundred years, that Salvation had watchers the dark could not pass. Their craft was older than the Church's Radiance and looked too much like it — the Radiance tolerates no rival glow — and so the revolution's fires took the light-bearers first, in squares their own lamps had lit. The Church teaches that the Lumenaires' light was a glamour over rot. The people who remember being healed by it keep quiet, and keep the lamps.",
+      "is_active": false,
+      "sort_order": 15
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "La Chasse",
+      "description": "The royal hunt of the old Kingdom: hound-speech, beast-lore, and pursuit-craft that could follow a quarry across a realm — pointed, always, at the things that eat men. The huntsmen-mages of La Chasse ran down the monsters the Church only sermonized about, and their arrival in a terrorized village was the happiest sight in Luxen. The revolution burned the masters and kept the methods: what the Honest use to run down escaped Sinners is a stolen, half-understood echo of La Chasse, turned from the defense of the helpless to the hunting of them. Its last practitioners would have called that the only heresy worth the word.",
+      "is_active": false,
+      "sort_order": 16
+    }
+  },
+  {
+    "model": "magic.tradition",
+    "fields": {
+      "name": "Deathspeakers",
+      "description": "An order given wholly to the dead: to hearing them, and to settling their accounts. Deathspeakers learn the speech of what lingers — the battlefield's unquiet, the murdered under the floorboards, the hold lost to the thaw whose names no one recorded — and their craft is fed by vengeance itself: a Deathspeaker who takes up a dead man's grievance carries his strength until it is settled, and the older and colder the wrong, the greater the power in avenging it. In the Northlands this makes them holy and dangerous at once: every hold wants its dead spoken for, and no one wants to be what a Deathspeaker comes to settle. Against the Deadlands the order is wrath itself — every legion that marches is ten thousand stolen corpses, and the dead inside them are all owed.",
+      "is_active": true,
+      "sort_order": 18
+    }
+  }
+]

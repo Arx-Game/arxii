@@ -32,7 +32,9 @@ from world.mechanics.constants import DifficultyIndicator
 from world.mechanics.factories import (
     ApplicationFactory,
     ChallengeApproachFactory,
+    ChallengeTemplateConsequenceFactory,
     ChallengeTemplateFactory,
+    ObjectPropertyFactory,
     PropertyFactory,
 )
 from world.mechanics.models import ChallengeInstance
@@ -893,3 +895,229 @@ class TestDispatchPlayerActionUnknownRef(django.test.TestCase):
             dispatch_player_action(self.character, ref, {})
 
         self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
+
+
+# ---------------------------------------------------------------------------
+# Test: WORLD_INTERACTION backend — bare-object affordances (#2503)
+# ---------------------------------------------------------------------------
+
+
+class TestGetPlayerActionsWorldInteractionBackend(django.test.TestCase):
+    """A synthesized bare-object affordance surfaces alongside an authored CHALLENGE.
+
+    Reproduces the CRITICAL review finding this task fixes: before it,
+    ``_avail_to_player_action`` unconditionally built a CHALLENGE ``ActionRef``, and
+    ``ActionRef.__post_init__`` raises ``ValueError`` for CHALLENGE with
+    ``challenge_instance_id=None`` — so ``get_player_actions`` crashed the moment a
+    synthesized affordance existed. Both backends must now coexist in one call.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.room = ObjectDBFactory(db_key="WorldInteractionRoom")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = _set_character_location(cls.sheet.character, cls.room)
+
+        # Authored CHALLENGE instance — the existing machinery, proving it still
+        # surfaces alongside the new synthesized backend in one get_player_actions() call.
+        cls.challenge_instance, cls.approach, cls.capability, cls.check_type = (
+            _make_challenge_setup(cls.sheet, cls.room)
+        )
+
+        # Bare-object affordance: a torch with a flammable property and no authored
+        # ChallengeInstance — synthesized from Application.default_template (#2503).
+        # Shares cls.capability so the same technique grant qualifies both.
+        cls.torch = ObjectDBFactory(db_key="Torch", location=cls.room)
+        cls.prop_flammable = PropertyFactory(name="flammable_wi")
+        cls.wi_template = ChallengeTemplateFactory(name="Ignite Torch WI", severity=3)
+        cls.wi_application = ApplicationFactory(
+            name="Ignite WI",
+            capability=cls.capability,
+            target_property=cls.prop_flammable,
+            default_template=cls.wi_template,
+        )
+        cls.wi_approach = ChallengeApproachFactory(
+            challenge_template=cls.wi_template,
+            application=cls.wi_application,
+            display_name="Ignite it",
+        )
+        ObjectPropertyFactory(object=cls.torch, property=cls.prop_flammable)
+
+    def setUp(self) -> None:
+        self._difficulty_patch = _MODERATE_DIFFICULTY_PATCH
+        self._difficulty_patch.start()
+
+    def tearDown(self) -> None:
+        self._difficulty_patch.stop()
+
+    def test_synthesized_affordance_surfaces_without_crash(self) -> None:
+        """get_player_actions returns both a CHALLENGE and a WORLD_INTERACTION entry."""
+        from actions.player_interface import get_player_actions
+
+        actions = get_player_actions(self.character)
+
+        challenge_actions = [a for a in actions if a.backend == ActionBackend.CHALLENGE]
+        wi_actions = [a for a in actions if a.backend == ActionBackend.WORLD_INTERACTION]
+        self.assertTrue(challenge_actions, "authored CHALLENGE action must still surface")
+        self.assertEqual(len(wi_actions), 1)
+
+    def test_world_interaction_ref_fields(self) -> None:
+        """WORLD_INTERACTION ActionRef carries application_id + target_object_id."""
+        from actions.player_interface import get_player_actions
+
+        actions = get_player_actions(self.character)
+        wi_actions = [a for a in actions if a.backend == ActionBackend.WORLD_INTERACTION]
+        self.assertEqual(len(wi_actions), 1)
+        ref = wi_actions[0].ref
+        self.assertEqual(ref.backend, ActionBackend.WORLD_INTERACTION)
+        self.assertEqual(ref.application_id, self.wi_application.pk)
+        self.assertEqual(ref.target_object_id, self.torch.pk)
+        self.assertIsNone(ref.challenge_instance_id)
+
+
+class TestDispatchPlayerActionWorldInteraction(django.test.TestCase):
+    """WORLD_INTERACTION dispatch: mint + resolve_challenge end-to-end (#2503).
+
+    No mocking of resolve_challenge itself — only ``perform_check`` (the dice-roll
+    seam, mirroring ``test_challenge_resolution.ResolveFullTests``) is patched, so
+    the real effect-handler pipeline runs and actually mutates state: a successful
+    Ignite adds the ``lit`` property to the torch (not the acting character).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.checks.constants import EffectTarget, EffectType
+        from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+        from world.traits.factories import CheckOutcomeFactory
+
+        cls.room = ObjectDBFactory(db_key="WIDispatchRoom")
+        cls.elsewhere = ObjectDBFactory(db_key="WIDispatchElsewhere")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = _set_character_location(cls.sheet.character, cls.room)
+
+        _, _, cls.capability, _ = _make_challenge_setup(cls.sheet, cls.room)
+
+        cls.torch = ObjectDBFactory(db_key="DispatchTorch", location=cls.room)
+        cls.prop_flammable = PropertyFactory(name="flammable_wi_dispatch")
+        cls.prop_lit = PropertyFactory(name="lit_wi_dispatch")
+        cls.template = ChallengeTemplateFactory(name="Ignite Torch WI Dispatch", severity=3)
+        cls.application = ApplicationFactory(
+            name="Ignite WI Dispatch",
+            capability=cls.capability,
+            target_property=cls.prop_flammable,
+            default_template=cls.template,
+        )
+        cls.approach = ChallengeApproachFactory(
+            challenge_template=cls.template,
+            application=cls.application,
+            display_name="Ignite it",
+        )
+        ObjectPropertyFactory(object=cls.torch, property=cls.prop_flammable)
+
+        cls.outcome_success = CheckOutcomeFactory(name="Success_wi", success_level=1)
+        cls.consequence = ConsequenceFactory(
+            outcome_tier=cls.outcome_success,
+            label="Torch catches fire",
+        )
+        ChallengeTemplateConsequenceFactory(
+            challenge_template=cls.template,
+            consequence=cls.consequence,
+        )
+        ConsequenceEffectFactory(
+            consequence=cls.consequence,
+            effect_type=EffectType.ADD_PROPERTY,
+            target=EffectTarget.TARGET,
+            property=cls.prop_lit,
+            property_value=1,
+        )
+
+    def setUp(self) -> None:
+        self._difficulty_patch = _MODERATE_DIFFICULTY_PATCH
+        self._difficulty_patch.start()
+
+    def tearDown(self) -> None:
+        self._difficulty_patch.stop()
+
+    def _get_synthesized_ref(self):
+        from actions.player_interface import get_player_actions
+
+        actions = get_player_actions(self.character)
+        wi_actions = [
+            a
+            for a in actions
+            if a.backend == ActionBackend.WORLD_INTERACTION
+            and a.ref.target_object_id == self.torch.pk
+        ]
+        self.assertEqual(len(wi_actions), 1)
+        return wi_actions[0].ref
+
+    def test_dispatch_mints_instance_and_applies_success_effect(self) -> None:
+        """Dispatch mints a ChallengeInstance, resolves it, and success adds 'lit'."""
+        from actions.player_interface import dispatch_player_action
+        from world.checks.types import CheckResult
+        from world.mechanics.models import ChallengeInstance, ObjectProperty
+        from world.mechanics.types import ChallengeResolutionResult
+
+        ref = self._get_synthesized_ref()
+
+        with patch(
+            "world.mechanics.challenge_resolution.perform_check",
+            return_value=CheckResult(
+                check_type=self.approach.check_type,
+                outcome=self.outcome_success,
+                chart=None,
+                roller_rank=None,
+                target_rank=None,
+                rank_difference=0,
+                trait_points=0,
+                aspect_bonus=0,
+                total_points=0,
+            ),
+        ):
+            result = dispatch_player_action(self.character, ref, {})
+
+        self.assertFalse(result.deferred)
+        self.assertEqual(result.backend, ActionBackend.WORLD_INTERACTION)
+        self.assertIsInstance(result.detail, ChallengeResolutionResult)
+
+        # Existence alone proves the mint (instantiate_challenge) ran; is_active is
+        # irrelevant here — ChallengeTemplateConsequenceFactory defaults resolution_type
+        # to DESTROY, so a successful resolve correctly deactivates it (#2503 doesn't
+        # change that resolution-type semantics, only the mint + target-threading).
+        ChallengeInstance.objects.get(template=self.template, target_object=self.torch)
+
+        self.assertTrue(
+            ObjectProperty.objects.filter(
+                object=self.torch,
+                property=self.prop_lit,
+                value=1,
+            ).exists(),
+            "success consequence must add 'lit' to the target object, not the character",
+        )
+
+    def test_dispatch_after_object_left_room_is_clean_ineligible(self) -> None:
+        """Object no longer at the location → UNKNOWN_ACTION_REF; no instance minted."""
+        from actions.player_interface import dispatch_player_action
+        from world.mechanics.models import ChallengeInstance
+
+        ref = self._get_synthesized_ref()
+
+        ObjectDB.objects.filter(pk=self.torch.pk).update(db_location=self.elsewhere)
+        ObjectDB.flush_cached_instance(self.torch)
+        # get_available_actions reads location.contents (Evennia's in-memory
+        # ContentsHandler cache on the room instance) — a raw SQL update doesn't
+        # invalidate it, so force a re-query or the room "sees" the torch still there.
+        self.room.contents_cache.init()
+
+        with self.assertRaises(ActionDispatchError) as cm:
+            dispatch_player_action(self.character, ref, {})
+
+        self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
+        minted = ChallengeInstance.objects.filter(
+            template=self.template,
+            target_object=self.torch,
+        )
+        self.assertFalse(
+            minted.exists(),
+            "no instance should be minted once the object is no longer eligible",
+        )

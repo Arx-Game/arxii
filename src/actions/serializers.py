@@ -2,7 +2,7 @@
 
 Wire shape for PlayerAction:
 {
-    "backend": "challenge" | "combat" | "registry",
+    "backend": "challenge" | "combat" | "registry" | "world_interaction",
     "display_name": "Slash with Burning Sword",
     "description": "...",
     "difficulty": "moderate" | null,
@@ -18,6 +18,11 @@ Wire shape for PlayerAction:
         "registry_key": null
     }
 }
+
+A WORLD_INTERACTION ref (bare-object affordance, #2503) carries
+``application_id``/``target_object_id`` instead of ``challenge_instance_id``/
+``approach_id``: ``{"backend": "world_interaction", "application_id": 12,
+"target_object_id": 88}``.
 """
 
 from __future__ import annotations
@@ -67,6 +72,8 @@ class ActionRefSerializer(serializers.Serializer):
     action_slot = serializers.CharField(allow_null=True, required=False)
     position_id = serializers.IntegerField(allow_null=True, required=False)
     blueprint_id = serializers.IntegerField(allow_null=True, required=False)
+    application_id = serializers.IntegerField(allow_null=True, required=False)
+    target_object_id = serializers.IntegerField(allow_null=True, required=False)
 
 
 class SoulfrayWarningSerializer(serializers.Serializer):
@@ -202,6 +209,8 @@ class _DispatchRefSerializer(serializers.Serializer):
     action_slot = serializers.CharField(allow_null=True, required=False, default=None)
     position_id = serializers.IntegerField(allow_null=True, required=False, default=None)
     blueprint_id = serializers.IntegerField(allow_null=True, required=False, default=None)
+    application_id = serializers.IntegerField(allow_null=True, required=False, default=None)
+    target_object_id = serializers.IntegerField(allow_null=True, required=False, default=None)
 
 
 class DispatchActionSerializer(serializers.Serializer):
@@ -248,6 +257,8 @@ class DispatchActionSerializer(serializers.Serializer):
                 action_slot=ref_data.get("action_slot"),
                 position_id=ref_data.get("position_id"),
                 blueprint_id=ref_data.get("blueprint_id"),
+                application_id=ref_data.get("application_id"),
+                target_object_id=ref_data.get("target_object_id"),
             )
         except ValueError:
             raise serializers.ValidationError(

@@ -1,0 +1,786 @@
+[
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Paralytic Poison",
+      "category": [
+        "Poison"
+      ],
+      "description": "A toxin that progressively shuts down motor functions, leading to full paralysis.",
+      "player_description": "Numbness spreads through your limbs. The poison is working its way through your system.",
+      "observer_description": "moves stiffly, their coordination failing as poison takes hold.",
+      "default_duration_type": "permanent",
+      "default_duration_value": 0,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "intensity",
+      "has_progression": true,
+      "can_be_dispelled": true,
+      "cure_check_type": [
+        "Medicine",
+        "Exploration"
+      ],
+      "cure_difficulty": 15,
+      "icon": "skull",
+      "color_hex": "#8B008B",
+      "display_priority": 85,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditionstage",
+    "fields": {
+      "condition": [
+        "Paralytic Poison"
+      ],
+      "stage_order": 1,
+      "name": "Numbness",
+      "description": "Tingling and numbness in the extremities. Fine motor control begins to fail.",
+      "rounds_to_next": 3,
+      "resist_check_type": [
+        "Endurance",
+        "Survival"
+      ],
+      "resist_difficulty": 12,
+      "severity_multiplier": "1.00"
+    }
+  },
+  {
+    "model": "conditions.conditionstage",
+    "fields": {
+      "condition": [
+        "Paralytic Poison"
+      ],
+      "stage_order": 2,
+      "name": "Weakness",
+      "description": "Limbs feel heavy and unresponsive. Movement becomes difficult.",
+      "rounds_to_next": 3,
+      "resist_check_type": [
+        "Endurance",
+        "Survival"
+      ],
+      "resist_difficulty": 15,
+      "severity_multiplier": "1.50"
+    }
+  },
+  {
+    "model": "conditions.conditionstage",
+    "fields": {
+      "condition": [
+        "Paralytic Poison"
+      ],
+      "stage_order": 3,
+      "name": "Paralysis",
+      "description": "Complete motor function failure. Unable to move or speak, though still conscious.",
+      "rounds_to_next": null,
+      "resist_check_type": null,
+      "resist_difficulty": 0,
+      "severity_multiplier": "2.00"
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Paralytic Poison",
+        1
+      ],
+      "check_type": [
+        "Melee Attack",
+        "Combat"
+      ],
+      "modifier_value": -10,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Paralytic Poison",
+        1
+      ],
+      "check_type": [
+        "Ranged Attack",
+        "Combat"
+      ],
+      "modifier_value": -10,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Paralytic Poison",
+        1
+      ],
+      "capability": [
+        "limb_use"
+      ],
+      "value": -25
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Paralytic Poison",
+        2
+      ],
+      "capability": [
+        "movement"
+      ],
+      "value": -50
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Paralytic Poison",
+        2
+      ],
+      "capability": [
+        "limb_use"
+      ],
+      "value": -50
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Paralytic Poison",
+        2
+      ],
+      "check_type": [
+        "Melee Attack",
+        "Combat"
+      ],
+      "modifier_value": -25,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Paralytic Poison",
+        2
+      ],
+      "check_type": [
+        "Athletics",
+        "Exploration"
+      ],
+      "modifier_value": -25,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Paralytic Poison",
+        3
+      ],
+      "capability": [
+        "movement"
+      ],
+      "value": -100
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Paralytic Poison",
+        3
+      ],
+      "capability": [
+        "communication"
+      ],
+      "value": -100
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Paralytic Poison",
+        3
+      ],
+      "capability": [
+        "limb_use"
+      ],
+      "value": -100
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Paralytic Poison",
+        3
+      ],
+      "capability": [
+        "melee_attack"
+      ],
+      "value": -100
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Lethal Poison",
+      "category": [
+        "Poison"
+      ],
+      "description": "A deadly toxin that causes increasing damage and eventual death if untreated.",
+      "player_description": "Fire burns through your veins. This poison will kill you if not treated.",
+      "observer_description": "is visibly suffering, their skin taking on a deathly pallor as poison ravages their system.",
+      "default_duration_type": "permanent",
+      "default_duration_value": 0,
+      "is_stackable": true,
+      "max_stacks": 3,
+      "stack_behavior": "intensity",
+      "has_progression": true,
+      "can_be_dispelled": true,
+      "cure_check_type": [
+        "Medicine",
+        "Exploration"
+      ],
+      "cure_difficulty": 20,
+      "icon": "skull-crossbones",
+      "color_hex": "#660066",
+      "display_priority": 95,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditionstage",
+    "fields": {
+      "condition": [
+        "Lethal Poison"
+      ],
+      "stage_order": 1,
+      "name": "Infected",
+      "description": "The poison enters the bloodstream. Mild discomfort and weakness.",
+      "rounds_to_next": 3,
+      "resist_check_type": [
+        "Endurance",
+        "Survival"
+      ],
+      "resist_difficulty": 15,
+      "severity_multiplier": "1.00"
+    }
+  },
+  {
+    "model": "conditions.conditionstage",
+    "fields": {
+      "condition": [
+        "Lethal Poison"
+      ],
+      "stage_order": 2,
+      "name": "Deteriorating",
+      "description": "Organs begin to fail. Severe pain and accelerating damage.",
+      "rounds_to_next": 3,
+      "resist_check_type": [
+        "Endurance",
+        "Survival"
+      ],
+      "resist_difficulty": 20,
+      "severity_multiplier": "2.00"
+    }
+  },
+  {
+    "model": "conditions.conditionstage",
+    "fields": {
+      "condition": [
+        "Lethal Poison"
+      ],
+      "stage_order": 3,
+      "name": "Critical",
+      "description": "Death is imminent without immediate intervention. Massive internal damage.",
+      "rounds_to_next": null,
+      "resist_check_type": null,
+      "resist_difficulty": 0,
+      "severity_multiplier": "3.00"
+    }
+  },
+  {
+    "model": "conditions.conditiondamageovertime",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Lethal Poison",
+        1
+      ],
+      "damage_type": [
+        "Poison"
+      ],
+      "base_damage": 3,
+      "scales_with_severity": true,
+      "scales_with_stacks": true,
+      "tick_timing": "end"
+    }
+  },
+  {
+    "model": "conditions.conditiondamageovertime",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Lethal Poison",
+        2
+      ],
+      "damage_type": [
+        "Poison"
+      ],
+      "base_damage": 8,
+      "scales_with_severity": true,
+      "scales_with_stacks": true,
+      "tick_timing": "end"
+    }
+  },
+  {
+    "model": "conditions.conditiondamageovertime",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Lethal Poison",
+        3
+      ],
+      "damage_type": [
+        "Poison"
+      ],
+      "base_damage": 15,
+      "scales_with_severity": true,
+      "scales_with_stacks": true,
+      "tick_timing": "end"
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Lethal Poison",
+        2
+      ],
+      "check_type": [
+        "Concentration",
+        "Mental"
+      ],
+      "modifier_value": -20,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Lethal Poison",
+        3
+      ],
+      "check_type": [
+        "Concentration",
+        "Mental"
+      ],
+      "modifier_value": -40,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Hallucinogenic Poison",
+      "category": [
+        "Poison"
+      ],
+      "description": "A mind-altering toxin that causes vivid hallucinations and confusion.",
+      "player_description": "Reality warps and shifts. You can't tell what's real anymore.",
+      "observer_description": "stares at things that aren't there, muttering and reacting to unseen stimuli.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 10,
+      "is_stackable": true,
+      "max_stacks": 3,
+      "stack_behavior": "both",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "cure_check_type": [
+        "Medicine",
+        "Exploration"
+      ],
+      "cure_difficulty": 12,
+      "icon": "eye",
+      "color_hex": "#FF00FF",
+      "display_priority": 70,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Hallucinogenic Poison"
+      ],
+      "stage": null,
+      "check_type": [
+        "Perception",
+        "Exploration"
+      ],
+      "modifier_value": -30,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Hallucinogenic Poison"
+      ],
+      "stage": null,
+      "check_type": [
+        "Insight",
+        "Mental"
+      ],
+      "modifier_value": -25,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Hallucinogenic Poison"
+      ],
+      "stage": null,
+      "check_type": [
+        "Ranged Attack",
+        "Combat"
+      ],
+      "modifier_value": -20,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": [
+        "Hallucinogenic Poison"
+      ],
+      "stage": null,
+      "capability": [
+        "awareness"
+      ],
+      "value": -40
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Sedative Poison",
+      "category": [
+        "Poison"
+      ],
+      "description": "A toxin that induces drowsiness and eventually unconsciousness.",
+      "player_description": "Your eyelids grow heavy. Fighting to stay awake becomes harder with each passing moment.",
+      "observer_description": "sways drowsily, their movements sluggish and unfocused.",
+      "default_duration_type": "permanent",
+      "default_duration_value": 0,
+      "is_stackable": true,
+      "max_stacks": 3,
+      "stack_behavior": "intensity",
+      "has_progression": true,
+      "can_be_dispelled": true,
+      "cure_check_type": [
+        "Medicine",
+        "Exploration"
+      ],
+      "cure_difficulty": 10,
+      "icon": "moon",
+      "color_hex": "#4444AA",
+      "display_priority": 65,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditionstage",
+    "fields": {
+      "condition": [
+        "Sedative Poison"
+      ],
+      "stage_order": 1,
+      "name": "Drowsy",
+      "description": "Mild sleepiness. Reactions slowed.",
+      "rounds_to_next": 3,
+      "resist_check_type": [
+        "Willpower",
+        "Mental"
+      ],
+      "resist_difficulty": 10,
+      "severity_multiplier": "1.00"
+    }
+  },
+  {
+    "model": "conditions.conditionstage",
+    "fields": {
+      "condition": [
+        "Sedative Poison"
+      ],
+      "stage_order": 2,
+      "name": "Stupor",
+      "description": "Barely conscious. Struggling to stay awake.",
+      "rounds_to_next": 2,
+      "resist_check_type": [
+        "Willpower",
+        "Mental"
+      ],
+      "resist_difficulty": 15,
+      "severity_multiplier": "1.50"
+    }
+  },
+  {
+    "model": "conditions.conditionstage",
+    "fields": {
+      "condition": [
+        "Sedative Poison"
+      ],
+      "stage_order": 3,
+      "name": "Unconscious",
+      "description": "Completely unconscious. Helpless.",
+      "rounds_to_next": null,
+      "resist_check_type": null,
+      "resist_difficulty": 0,
+      "severity_multiplier": "2.00"
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Sedative Poison",
+        1
+      ],
+      "check_type": [
+        "Initiative",
+        "Combat"
+      ],
+      "modifier_value": -15,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Sedative Poison",
+        1
+      ],
+      "check_type": [
+        "Perception",
+        "Exploration"
+      ],
+      "modifier_value": -10,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Sedative Poison",
+        2
+      ],
+      "check_type": [
+        "Initiative",
+        "Combat"
+      ],
+      "modifier_value": -30,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Sedative Poison",
+        2
+      ],
+      "capability": [
+        "movement"
+      ],
+      "value": -50
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Sedative Poison",
+        2
+      ],
+      "scales_with_severity": false,
+      "check_type": [
+        "Concentration",
+        "Mental"
+      ],
+      "modifier_value": -375
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Sedative Poison",
+        3
+      ],
+      "capability": [
+        "movement"
+      ],
+      "value": -100
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Sedative Poison",
+        3
+      ],
+      "capability": [
+        "awareness"
+      ],
+      "value": -100
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": null,
+      "stage": [
+        "Sedative Poison",
+        3
+      ],
+      "capability": [
+        "defense"
+      ],
+      "value": -100
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Antidote",
+      "category": [
+        "Buff"
+      ],
+      "description": "Protected against poisons. Existing poisons are neutralized, new ones resisted.",
+      "player_description": "The antidote courses through your system, burning away toxins.",
+      "observer_description": "flushes as the antidote takes effect.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 5,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": false,
+      "icon": "flask",
+      "color_hex": "#00FF00",
+      "display_priority": 60,
+      "is_visible_to_others": false
+    }
+  },
+  {
+    "model": "conditions.conditionresistancemodifier",
+    "fields": {
+      "condition": [
+        "Antidote"
+      ],
+      "stage": null,
+      "damage_type": [
+        "Poison"
+      ],
+      "modifier_value": 100
+    }
+  },
+  {
+    "model": "conditions.conditionconditioninteraction",
+    "fields": {
+      "condition": [
+        "Antidote"
+      ],
+      "other_condition": [
+        "Paralytic Poison"
+      ],
+      "trigger": "on_self_applied",
+      "outcome": "remove_other",
+      "result_condition": null,
+      "priority": 10
+    }
+  },
+  {
+    "model": "conditions.conditionconditioninteraction",
+    "fields": {
+      "condition": [
+        "Antidote"
+      ],
+      "other_condition": [
+        "Lethal Poison"
+      ],
+      "trigger": "on_self_applied",
+      "outcome": "remove_other",
+      "result_condition": null,
+      "priority": 10
+    }
+  },
+  {
+    "model": "conditions.conditionconditioninteraction",
+    "fields": {
+      "condition": [
+        "Antidote"
+      ],
+      "other_condition": [
+        "Hallucinogenic Poison"
+      ],
+      "trigger": "on_self_applied",
+      "outcome": "remove_other",
+      "result_condition": null,
+      "priority": 10
+    }
+  },
+  {
+    "model": "conditions.conditionconditioninteraction",
+    "fields": {
+      "condition": [
+        "Antidote"
+      ],
+      "other_condition": [
+        "Sedative Poison"
+      ],
+      "trigger": "on_self_applied",
+      "outcome": "remove_other",
+      "result_condition": null,
+      "priority": 10
+    }
+  }
+]

@@ -283,6 +283,8 @@ class ActionRegistryTests(TestCase):
             "end_encounter",
             "pause_encounter",
             "preview_opponent_defaults",
+            "stage_prop",
+            "stage_property",
             "remove_encounter_participant",
             "resolve_encounter_round",
             "set_active_persona",

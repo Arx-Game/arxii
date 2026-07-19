@@ -1,0 +1,17 @@
+[
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Smitten"
+      ],
+      "stage": null,
+      "scales_with_severity": false,
+      "check_type": [
+        "Melee Defense",
+        "Combat"
+      ],
+      "modifier_value": -10
+    }
+  }
+]

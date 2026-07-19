@@ -1,0 +1,37 @@
+[
+  {
+    "model": "magic.affinity",
+    "fields": {
+      "name": "Primal (Tideborne)",
+      "description": "The Primal (Tideborne) affinity."
+    }
+  },
+  {
+    "model": "magic.affinity",
+    "fields": {
+      "name": "Primal",
+      "description": "Magic of the world itself. Elements, animals, natural forces, abstract concepts."
+    }
+  },
+  {
+    "model": "magic.affinity",
+    "fields": {
+      "name": "Abyssal",
+      "description": "Magic that wants to be used. Easy power, constant temptation, poor control."
+    }
+  },
+  {
+    "model": "magic.affinity",
+    "fields": {
+      "name": "Social",
+      "description": "The Social affinity."
+    }
+  },
+  {
+    "model": "magic.affinity",
+    "fields": {
+      "name": "Celestial",
+      "description": "Magic of divine ideals and impossible virtue. High control, never backfires, demands paragon lifestyle."
+    }
+  }
+]

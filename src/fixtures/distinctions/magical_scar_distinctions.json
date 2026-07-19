@@ -1,0 +1,29 @@
+[
+  {
+    "model": "distinctions.distinctiontag",
+    "fields": {
+      "name": "Magical Scar",
+      "slug": "magical-scar"
+    }
+  },
+  {
+    "model": "distinctions.distinction",
+    "fields": {
+      "name": "Magical Scar",
+      "slug": "magical-scar",
+      "description": "Through a Glimpse, magical mishap, or other supernatural event, you bear a scar that resonates with magic. Choose one of your facets to be your 'scarred' facet - it provides an enhanced resonance bonus. (TODO: Enhanced facet bonus system not yet implemented)",
+      "category": [
+        "arcane"
+      ],
+      "cost_per_rank": 5,
+      "max_rank": 3,
+      "is_active": true,
+      "allow_other": false,
+      "tags": [
+        [
+          "magical-scar"
+        ]
+      ]
+    }
+  }
+]

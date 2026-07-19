@@ -526,6 +526,47 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         return list(self.interaction_bindings.select_related("interaction_type").all())
 
 
+class ItemTemplateProperty(NaturalKeyMixin, SharedMemoryModel):
+    """Declares a Property this item template carries by default.
+
+    Mirrors ``mechanics.ChallengeTemplateProperty`` and ``mechanics.ObjectProperty``:
+    a magnitude-carrying Property attachment, but authored on the template (every
+    instance minted from it starts with these) rather than granted at runtime.
+    This is the bridge-object half of #2503 — a bare object's affordances come
+    from its template's declared Properties, read by the same oracle that reads
+    granted-technique Properties.
+    """
+
+    item_template = models.ForeignKey(
+        ItemTemplate,
+        on_delete=models.CASCADE,
+        related_name="default_properties",
+    )
+    property = models.ForeignKey(
+        "mechanics.Property",
+        on_delete=models.CASCADE,
+        related_name="item_template_defaults",
+    )
+    value = models.PositiveIntegerField(default=1)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["item_template", "property"]
+        dependencies = ["items.ItemTemplate", "mechanics.Property"]
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_template", "property"],
+                name="items_template_property_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.item_template.name}: {self.property.name} ({self.value})"
+
+
 class TemplateSlot(SharedMemoryModel):
     """
     Declares which body region + equipment layer an item template occupies.

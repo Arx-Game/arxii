@@ -1,0 +1,1164 @@
+[
+  {
+    "model": "codex.codexcategory",
+    "fields": {
+      "name": "Magic",
+      "description": "The magical arts of Arx and the wider world. Resonance, traditions, and the forces that shape practitioners.",
+      "display_order": 0
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": null,
+      "name": "Resonance",
+      "description": "What resonance is and how it shapes magic.",
+      "display_order": 0
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": null,
+      "name": "The Durance",
+      "description": "The journey of magical self-discovery that awakens a practitioner's gift.",
+      "display_order": 1
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": null,
+      "name": "Traditions",
+      "description": "Schools of magic and how practitioners are trained.",
+      "display_order": 2
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Smiling Shadows",
+      "description": "The shadow-wielding tricksters who treat darkness as a tool and a stage.",
+      "display_order": 0
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "The Vigil",
+      "description": "The solemn wardens of ancient rites who tend the city beneath the Shroud.",
+      "display_order": 1
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Masque",
+      "description": "The forbidden tradition of Luxen's underworld, hidden behind theatrical personas.",
+      "display_order": 2
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Umbral Guard",
+      "description": "The military magical tradition of the Umbral Empire.",
+      "display_order": 3
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "The Silken Thread",
+      "description": "A secret society of domination magic shared between empires.",
+      "display_order": 4
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Sanguinus",
+      "description": "The foremost practitioners of blood magic, founded by the Blood Patriarch.",
+      "display_order": 5
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Furyborn",
+      "description": "The berserker tradition of primal rage and savage instinct.",
+      "display_order": 6
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Late Cardian",
+      "description": "The scholarly tradition studying the legacy of ancient dragons.",
+      "display_order": 7
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Envalan",
+      "description": "Worshippers of the Goddess of Corruption who wield emerald witchfire.",
+      "display_order": 8
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Unbound",
+      "description": "Self-taught practitioners with no formal tradition, raw and unrefined.",
+      "display_order": 99
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        null,
+        "Resonance"
+      ],
+      "name": "Understanding Resonance",
+      "summary": "Resonance is the living pulse that connects all magic, the frequency at which a practitioner's soul vibrates in harmony with the world.",
+      "lore_content": "All magic in the world flows from Resonance — the fundamental vibration that connects practitioner to power. Every mage attunes to one or more resonant frequencies during their Durance, and these attunements shape the character of their magic forever after.\n\nResonance is not merely an academic concept. It is felt in the bones, tasted on the tongue, seen in the shimmer of spellwork. A practitioner attuned to Insidia feels their shadows lengthen and dance; one attuned to Vita senses the pulse of living things around them. The resonance chooses the mage as much as the mage discovers the resonance.\n\nScholars have identified several distinct resonant frequencies, each associated with different aspects of reality: shadow, life, death, fire, will, and corruption among them. Most traditions favor certain resonances over others, though exceptional practitioners sometimes bridge unexpected combinations.",
+      "mechanics_content": "Resonance determines which magical effects a character can learn and how powerful they become. Each tradition grants starting resonance attunements, and additional resonances can be discovered through play.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        null,
+        "The Durance"
+      ],
+      "name": "The Path of Awakening",
+      "summary": "The Durance is the transformative ordeal through which latent magical potential is kindled into true power.",
+      "lore_content": "Every practitioner remembers their Durance — the pivotal moment when raw potential crystallized into genuine magical ability. It is part trial, part revelation, and part surrender. The Durance is not a single event but a journey: days, weeks, sometimes months of escalating challenge that strips away pretense and forces the aspirant to confront what they truly are.\n\nFor some, the Durance is guided by a mentor within their tradition. For others, it strikes unbidden — a crisis of survival, a moment of transcendent emotion, or an encounter with something beyond mortal understanding. The Durance reshapes the practitioner's relationship with Resonance, forging attunements that will define their magical identity.\n\nThose who emerge from the Durance are changed. Their senses are sharper, their awareness of the invisible currents of magic permanent and undeniable. They carry the mark of their awakening in subtle ways: a shadow that moves wrong, eyes that catch light strangely, or a voice that resonates just a half-step deeper than it should.",
+      "mechanics_content": "The Durance is represented in character creation through the magic stage, where players select their tradition, path-specific gift, and anima ritual. These choices reflect how the character's magical awakening unfolded.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Schools of Magic",
+      "summary": "Traditions are the schools and lineages through which magical knowledge is preserved, refined, and passed to new practitioners.",
+      "lore_content": "Magic is wild by nature, but tradition gives it shape. Across the known world, practitioners organize themselves into traditions — schools of practice united by shared techniques, philosophies, and resonant affinities. Each tradition carries centuries of accumulated knowledge, hard-won through experimentation and sacrifice.\n\nA tradition is more than a curriculum. It is a community, a lineage, and often a secret kept from outsiders. Practitioners learn not just spells and techniques, but ways of seeing the world — how to interpret resonance, how to channel emotion into power, and what boundaries should never be crossed.\n\nSome traditions are openly practiced and widely respected. Others exist in shadow, their members hidden behind masks or oaths of silence. A few span multiple nations and species, while others are rooted in the culture of a single people. What they share is purpose: the disciplined cultivation of magical power in a world where undisciplined magic is as dangerous to the wielder as to anyone nearby.",
+      "mechanics_content": "Your tradition determines your starting resonance attunements, available gifts, and the thematic flavor of your magic. Each tradition favors certain paths and resonances.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Smiling Shadows"
+      ],
+      "name": "The Smiling Shadows",
+      "summary": "Shadow-wielding tricksters who channel darkness with audacity and theatrical flair.",
+      "lore_content": "The Smiling Shadows are shadow-wielding practitioners who channel darkness as a tool — not metaphysical evil, but pragmatic manipulation of shadow as a substance. The \"smile\" is the audacity: they use shadow openly, confidently, even theatrically. Their magic draws from the interplay of light and dark, treating shadow as something alive and responsive.",
+      "mechanics_content": "The Smiling Shadows favor Insidia resonance, excelling at stealth, misdirection, and shadow manipulation. Their gifts tend toward agility and cunning.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Smiling Shadows"
+      ],
+      "name": "Secrets of the Smiling Shadows",
+      "summary": "The deeper mysteries of shadow manipulation known only to initiated members.",
+      "lore_content": "Those who walk long enough with the Smiling Shadows learn that their art is older than any living practitioner suspects. The first Shadows did not learn to manipulate darkness — they bargained with it. In the deep places beneath the world, where light has never reached, something answered their call. The smile they wear is not merely audacity; it is the face they show to keep the dark amused. For the Shadows know a truth their apprentices are not told: the darkness smiles back.",
+      "mechanics_content": null,
+      "share_cost": 10,
+      "learn_cost": 10,
+      "learn_difficulty": 15,
+      "learn_threshold": 20,
+      "display_order": 1,
+      "is_public": false,
+      "modifier_type": null,
+      "prerequisites": [
+        [
+          "Magic",
+          [
+            "Magic",
+            null,
+            "Traditions"
+          ],
+          "Smiling Shadows",
+          "The Smiling Shadows"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "The Vigil"
+      ],
+      "name": "The Vigil",
+      "summary": "Solemn wardens of the Tree of Souls and the Great Archive, whose eerie magic has sustained Death's city beneath the Shroud for a thousand years.",
+      "lore_content": "No one living can say when the Vigil began; its origins are one more thing the order keeps. What made it is plain enough: a thousand years of keeping faith with Death's own city, and the rules the Penitent set down and never once explained. Their magic has grown quiet and solemn: communion with the lingering dead, protective wards drawn from rites older than any nation outside the Shroud, and a bone-deep steadiness born of keeping vigil over a city that should have fallen long ago. It is the Vigil that tends the Tree of Souls, keeps the Great Archive, and performs the Ritual of the Penitent by which the worthy may walk into a story. Their magic has a distinctly spooky, witchy quality that unnerves outsiders — and since the Vanishing took their masters, every student of the Vigil is finishing an interrupted lesson.",
+      "mechanics_content": "The Vigil draws on resonances tied to death, protection, communion, and knowledge. Its magic favors willpower and steadfast endurance over flashy displays.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Masque"
+      ],
+      "name": "The Masque",
+      "summary": "Forbidden practitioners who hide behind theatrical personas, wielding misdirection and defiance as weapons.",
+      "lore_content": "The forbidden magical tradition of Luxen's underworld, practiced by those who defy the Church of the Shepherd's monopoly on sanctioned magic. The Masque hides its practitioners behind theatrical personas and illusory art — their magic is misdirection, disguise, and bold defiance made manifest. Not inherently dark, but certainly unsanctioned, with both primal and abyssal adherents among its ranks.",
+      "mechanics_content": "The Masque blends primal and abyssal resonances, specializing in illusion, charm, and misdirection. Their gifts favor social manipulation and deceptive magic.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Masque"
+      ],
+      "name": "Secrets of the Masque",
+      "summary": "The true origins of the Masque and the face behind every mask.",
+      "lore_content": "The Church of the Shepherd hunts the Masque not because their magic is inherently corrupt, but because the Masque remembers what the Church has tried to erase. Before the Shepherd's faith rose to dominance, Luxen was a city of a thousand gods, and the Masque were their priests. Each theatrical persona is not mere disguise — it is an echo of a forgotten deity, worn like a second skin. When a Masque practitioner dons their mask, they do not merely hide. They become a vessel for something that the Church declared never existed.",
+      "mechanics_content": null,
+      "share_cost": 10,
+      "learn_cost": 10,
+      "learn_difficulty": 15,
+      "learn_threshold": 20,
+      "display_order": 1,
+      "is_public": false,
+      "modifier_type": null,
+      "prerequisites": [
+        [
+          "Magic",
+          [
+            "Magic",
+            null,
+            "Traditions"
+          ],
+          "Masque",
+          "The Masque"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Umbral Guard"
+      ],
+      "name": "The Umbral Guard",
+      "summary": "Disciplined shadow warriors who channel darkness with military precision and tactical fury.",
+      "lore_content": "The military magical tradition of the Umbral Empire, popular among meritocracy commoners who serve the noble houses, militant nobles, and sellswords. The Umbral Guard channels shadow with military discipline — solid formations of darkness, fear as a tactical weapon, and the unshakeable steadiness of soldiers who fight in shadow as naturally as others fight in daylight.",
+      "mechanics_content": "The Umbral Guard favors shadow and martial resonances, excelling at defensive magic, fear effects, and shadow-enhanced combat. Their gifts tend toward stamina and disciplined force.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Umbral Guard"
+      ],
+      "name": "Inner Mysteries of the Umbral Guard",
+      "summary": "The shadow-forged oath that binds every Guard to something deeper than duty.",
+      "lore_content": "The Umbral Guard's training culminates in the Binding — a ritual never spoken of to outsiders, where the recruit's shadow is severed, reshaped, and reattached. After the Binding, a Guard's shadow is no longer truly their own. It moves with purpose independent of its caster, watches when the soldier sleeps, and fights with a will that is almost — but not quite — the soldier's own. Veterans whisper that the shadows remember every Guard who has ever fallen, and in the deepest battles, the dead fight alongside the living.",
+      "mechanics_content": null,
+      "share_cost": 10,
+      "learn_cost": 10,
+      "learn_difficulty": 15,
+      "learn_threshold": 20,
+      "display_order": 1,
+      "is_public": false,
+      "modifier_type": null,
+      "prerequisites": [
+        [
+          "Magic",
+          [
+            "Magic",
+            null,
+            "Traditions"
+          ],
+          "Umbral Guard",
+          "The Umbral Guard"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "The Silken Thread"
+      ],
+      "name": "The Silken Thread",
+      "summary": "A secret society of silk and spider-thread magic that teaches domination as an art form.",
+      "lore_content": "A secret society of darker magic shared between the Umbral Empire, the vampiric courts of Ariwn, the corsair courts of Inferna, and certain human gentry of Luxen who never abandoned the old ways. The Silken Thread teaches magic as domination — silk-thin threads of will that bind, control, and manipulate. Their motifs are spiders, webs, and silk: beautiful, intricate, and lethal. A mix of primal cunning and abyssal ambition.",
+      "mechanics_content": "The Silken Thread blends primal and abyssal resonances, specializing in domination, binding, and subtle control. Their gifts favor intellect and willpower.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "The Silken Thread"
+      ],
+      "name": "Secrets of the Silken Thread",
+      "summary": "The web beneath the web, and the spider at its center.",
+      "lore_content": "The Silken Thread's founding myth speaks of the First Web — a pattern woven before the world had form, when the primordial forces were still being shaped. The Silken Thread does not merely use spider imagery; they believe they are continuing the work of the original Weaver, an entity that existed before gods or mortals. Every thread of domination magic they spin adds to this cosmic web, and the most senior members of the Silken Thread claim they can feel it — a vast, patient intelligence at the web's center, waiting for the pattern to be complete.",
+      "mechanics_content": null,
+      "share_cost": 10,
+      "learn_cost": 10,
+      "learn_difficulty": 15,
+      "learn_threshold": 20,
+      "display_order": 1,
+      "is_public": false,
+      "modifier_type": null,
+      "prerequisites": [
+        [
+          "Magic",
+          [
+            "Magic",
+            null,
+            "Traditions"
+          ],
+          "The Silken Thread",
+          "The Silken Thread"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Sanguinus"
+      ],
+      "name": "The Sanguinus",
+      "summary": "Masters of blood magic who understand that true power flows through every vein.",
+      "lore_content": "A tradition founded by the Blood Patriarch of Ariwn, the Sanguinus are the foremost experts in blood magic and hemomancy. Popular among the Dhampir nobility, their craft treats blood as both fuel and medium — burning with vital energy, carrying the practitioner's will through every vein. Their magic pulses with life, heat, and the fierce passion of those who understand that power flows in the blood.",
+      "mechanics_content": "The Sanguinus favor vita and sanguine resonances, excelling at blood-fueled enhancement, vitality manipulation, and passionate displays of power. Their gifts tend toward presence and stamina.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Sanguinus"
+      ],
+      "name": "Secrets of the Sanguinus",
+      "summary": "The Blood Patriarch's original covenant and the price of hemomancy.",
+      "lore_content": "The Blood Patriarch did not discover hemomancy. He stole it. The oldest Sanguinus texts — hidden from all but the inner circle — describe a being of pure vital essence that the Patriarch encountered in the depths beneath Ariwn. He did not bargain with it or worship it. He bled it. The first blood magic was performed with stolen divine ichor, and every hemomantic working since carries an echo of that original theft. The Sanguinus do not speak of this, because the being the Patriarch bled is not dead. It is merely patient, and its blood remembers the way home.",
+      "mechanics_content": null,
+      "share_cost": 10,
+      "learn_cost": 10,
+      "learn_difficulty": 15,
+      "learn_threshold": 20,
+      "display_order": 1,
+      "is_public": false,
+      "modifier_type": null,
+      "prerequisites": [
+        [
+          "Magic",
+          [
+            "Magic",
+            null,
+            "Traditions"
+          ],
+          "Sanguinus",
+          "The Sanguinus"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Furyborn"
+      ],
+      "name": "The Furyborn",
+      "summary": "Berserker mages who forge primal rage into raw magical power, their fury an ally and their body a weapon.",
+      "lore_content": "The berserker tradition shared between the Lycan clans of Ariwn and the Northlanders of Aythirmok. The Furyborn channel primal rage into magical power — their bodies become weapons, their fury becomes armor, and the beast within becomes an ally. Wild and ferocious, this is magic stripped of ceremony and refinement, powered by instinct and the savage joy of the hunt.",
+      "mechanics_content": "The Furyborn favor primal and bestial resonances, excelling at physical enhancement, berserker fury, and predatory instinct. Their gifts tend toward stamina and raw physical power.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Furyborn"
+      ],
+      "name": "Secrets of the Furyborn",
+      "summary": "The truth behind the beast within and the ancient pact with the wild.",
+      "lore_content": "The Furyborn tell their apprentices that the beast within is a metaphor — primal instinct given magical form through rage. This is a lie. The beast is real. In the earliest days, when the boundary between flesh and spirit was thin, the first Furyborn did not learn to channel rage. They were chosen by something vast and hungry that lives in the marrow of the world. It curls inside each Furyborn like a second heartbeat, lending them its strength and savagery. The oldest Furyborn elders know that with each generation, the beast grows stronger, and some wonder whether the Furyborn are channeling it — or it is channeling them.",
+      "mechanics_content": null,
+      "share_cost": 10,
+      "learn_cost": 10,
+      "learn_difficulty": 15,
+      "learn_threshold": 20,
+      "display_order": 1,
+      "is_public": false,
+      "modifier_type": null,
+      "prerequisites": [
+        [
+          "Magic",
+          [
+            "Magic",
+            null,
+            "Traditions"
+          ],
+          "Furyborn",
+          "The Furyborn"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Late Cardian"
+      ],
+      "name": "The Late Cardian",
+      "summary": "Scholars of draconic legacy who pursue magic through academic rigor and precise geometric formulae.",
+      "lore_content": "A scholarly tradition of primal magic practiced across Luxen, Umbros, Ariwn, and Inferna. The Late Cardian school studies the legacy of the ancient dragons through academic rigor — draconic formulae, fire-bright constructs, and the precise geometry of dragonfire. Neutral and respected, this tradition attracts scholars who prefer precision over passion, though their magic tends toward fire nonetheless.",
+      "mechanics_content": "The Late Cardian favor fire and draconic resonances, excelling at precise constructs, elemental manipulation, and scholarly magic. Their gifts tend toward intellect and careful study.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Late Cardian"
+      ],
+      "name": "Secrets of the Late Cardian",
+      "summary": "The true nature of draconic formulae and what the ancient dragons were calculating.",
+      "lore_content": "Late Cardian scholars believe they are studying the magical legacy of extinct dragons. The innermost circle knows better. The draconic formulae are not spells left behind by dead creatures — they are fragments of a calculation that the dragons were performing when they vanished. The mathematics are incomplete, but what has been reconstructed suggests the dragons were attempting to solve something: a problem woven into the fabric of reality itself. The most gifted Late Cardian mathematicians have glimpsed the shape of the full equation, and what it describes is not a spell. It is a key. What it unlocks, no one has yet dared to calculate.",
+      "mechanics_content": null,
+      "share_cost": 10,
+      "learn_cost": 10,
+      "learn_difficulty": 15,
+      "learn_threshold": 20,
+      "display_order": 1,
+      "is_public": false,
+      "modifier_type": null,
+      "prerequisites": [
+        [
+          "Magic",
+          [
+            "Magic",
+            null,
+            "Traditions"
+          ],
+          "Late Cardian",
+          "The Late Cardian"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Envalan"
+      ],
+      "name": "The Envalan",
+      "summary": "Devotees of the Goddess of Corruption who wield emerald witchfire and the seductive beauty of decay.",
+      "lore_content": "The magical tradition built around the worship of Envala, Goddess of Corruption, practiced openly in the Grand Principality of Inferna. The Envalan channel their goddess's gifts through emerald witchfire, corrupting influence, and the seductive beauty of decay. Their magic is unapologetically abyssal — treacherous, alluring, and ultimately destructive, wielded by those who believe corruption is simply another form of transformation.",
+      "mechanics_content": "The Envalan favor abyssal and corruption resonances, excelling at corrupting magic, witchfire, and seductive manipulation. Their gifts tend toward charm and destructive transformation.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Unbound"
+      ],
+      "name": "The Unbound",
+      "summary": "Those who walk the path of magic alone, without tradition or mentor, forging power from sheer will and raw instinct.",
+      "lore_content": "You have no formal magical training. Whether self-taught through experimentation, awakened by accident, or simply never taken under a mentor's wing, your magic is raw and unrefined. The Unbound suffer a 50% penalty to magical development, but may shed this limitation by finding a tradition willing to accept them during play.\n\nThe Unbound are not a tradition in the conventional sense — they are the absence of one. Where other practitioners inherit centuries of accumulated technique, the Unbound must discover everything firsthand. Their resonances are unpredictable, their methods idiosyncratic, and their potential simultaneously limited and limitless.\n\nSome Unbound are survivors whose Durance struck without warning, leaving them to piece together what happened alone. Others are outcasts, rejected by traditions for reasons ranging from politics to genuine danger. A rare few chose this path deliberately, distrusting the constraints that traditions impose on how magic should be practiced.",
+      "mechanics_content": "The Unbound begin with a 50% penalty to magical development, reflecting their lack of formal training. This penalty can be removed during play by finding and joining a tradition. Unbound characters have no starting resonance attunements from a tradition and must discover them through roleplay.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Unbound"
+      ],
+      "name": "Secrets of the Unbound",
+      "summary": "What happens when magic grows without a gardener's hand.",
+      "lore_content": "The traditions will never admit it, but they fear the Unbound. Not because untrained mages are dangerous — though they are — but because the Unbound occasionally produce something that no tradition can explain. Without the careful pruning of formal training, magic sometimes grows in directions that centuries of accumulated wisdom insist are impossible. The traditions call these anomalies. The Unbound, when they survive long enough to compare notes, call them breakthroughs.\n\nThere is a reason the traditions recruit so aggressively. It is not charity. It is containment.",
+      "mechanics_content": null,
+      "share_cost": 10,
+      "learn_cost": 10,
+      "learn_difficulty": 15,
+      "learn_threshold": 20,
+      "display_order": 1,
+      "is_public": false,
+      "modifier_type": null,
+      "prerequisites": [
+        [
+          "Magic",
+          [
+            "Magic",
+            null,
+            "Traditions"
+          ],
+          "Unbound",
+          "The Unbound"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Metallic Order",
+      "description": "The oldest living magical tradition in the world, preserved unchanged in Arx since before the Shroud rose.",
+      "display_order": 10
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Fractals of the Abyss",
+      "description": "The warded study of mirror and Abyss, tended in Death's city rather than burned.",
+      "display_order": 11
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Metallic Order"
+      ],
+      "name": "The Metallic Order",
+      "summary": "The elder craft of Platinum's order, handed down unchanged in Arx by rote and reverence.",
+      "lore_content": "The oldest living magical tradition in the world, carried into Arx by the evacuation and handed down by rote and reverence ever since. This was Platinum's order — researchers, wardens, and peacemakers of the deep ages, broken as a force by betrayal and war long before the Shroud rose. Its surviving craft is foundational and principled: wards and bindings, the shaping of enduring things, magic built the way bridges are built — to hold for ages, and to hold others up. Outside the Shroud, scholars know the Metallic Order only as myth from the deep ages; that a living lineage still teaches it is, to Shroudwatch Academy, very nearly unbelievable.",
+      "mechanics_content": "The Metallic Order favors wards, bindings, and enduring workings — magic built to hold for ages, and to hold others up.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Fractals of the Abyss"
+      ],
+      "name": "The Fractals of the Abyss",
+      "summary": "The disciplined, heavily warded study of mirror-work and abyssal power, kept alive in Death's city.",
+      "lore_content": "Born in lost Caer'alfar, when Queen Primeria's followers first passed bodily through a mirror into the Abyss and returned changed, the Fractal craft is the disciplined study of abyssal power: mirror-work, reflection, and the geometry of the self as seen from outside. Arx — Death's own city — chose to tend that dangerous knowledge rather than burn it. Its students learn behind more wards than any other tradition in the city, and every lesson opens with the same warning, older than the Shroud: the mirror studies you back.",
+      "mechanics_content": "Fractal craft draws on reflection and abyssal resonance. Its students learn behind heavy wards, and every working carries the same warning: the mirror studies you back.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "The Red Feast",
+      "description": "The priesthood of the Fleshreaper, shared between the Lycan war clans of Ariwn and the Northlands.",
+      "display_order": 12
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "The Old Troth",
+      "description": "Keepers of the geas-sworn troth between the Aythir and the spirits of storm, sky, land, and beast.",
+      "display_order": 13
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "The Red Feast"
+      ],
+      "name": "The Red Feast",
+      "summary": "Clergy of the Fleshreaper, for whom flesh is the only honest offering and battle the only honest prayer.",
+      "lore_content": "The priesthood of the Fleshreaper — lord of slaughter, savagery, and the feast that follows — shared between the Lycan war clans of Ariwn and the harder hearths of Aythirmok. His clergy preach that flesh is the only honest offering and battle the only honest prayer; in the Packstone fortresses the floors of his shrine-rooms are shaped to drain blood, and in the Northlands his devout are the ones who smile when the thaw comes. The faith is as grim as the god — skull masks, spiked harness, trophies worn without a shred of subtlety — though nothing in the creed actually requires it: the Fleshreaper chooses whom he chooses, and the rare devotee who serves him cheerfully is entirely within their rights, however much they baffle the rest of the congregation.",
+      "mechanics_content": "The Red Feast favors savage battle-magic and blood offering — fury, carnage, and consecrated slaughter. Its gifts tend toward melee ferocity and terrifying presence.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "The Old Troth"
+      ],
+      "name": "The Old Troth",
+      "summary": "The geas-sworn druidic craft of the Northlands — storms, spirits, beasts, and binding vows.",
+      "lore_content": "The eldest craft of the Northlands: a troth — a pledged faith — sworn between the Aythir and the spirits of storm, sky, land, and beast. Its keepers buy power with geasa, binding vows and taboos that are both the price and the proof of their craft: the wind answers a sworn voice, beasts carry a sworn word, the thaw is read like a page. Break the geas and the troth breaks with it — the spirits turn away, and the magic dies with the vow. Druidic and patient, older than any southern school, kept alive because in Aythirmok a promise is the only wall that never needs rebuilding.",
+      "mechanics_content": "The Old Troth favors primal resonances of storm, sky, and beast. Its gifts are covenants — weather-craft, beast-speech, and wardings whose power holds only while the practitioner's geasa hold.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Order of the Lys",
+      "description": "The extinguished paladin order of the old Kingdom of Luxen, burned by the Holy Revolution.",
+      "display_order": 14
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "The Lumenaires",
+      "description": "The old court's kindly radiant mages, first to burn in the revolution.",
+      "display_order": 15
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "La Chasse",
+      "description": "The royal hunt's monster-hunting craft, extinguished — and stolen — by the revolution.",
+      "display_order": 16
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Order of the Lys"
+      ],
+      "name": "The Order of the Lys",
+      "summary": "The paladins of the old Kingdom — by every honest account, exactly what they claimed to be.",
+      "lore_content": "The paladins of the old Kingdom: knights sworn to crown and commons alike, whose celestial craft made them the terror of demons and the safety of everyone else. The Order rode against Afflictions the Church only preached about, ransomed the poor from their own landlords, and was — by every honest account that survives — exactly what it claimed to be. The revolution burned the Order root and branch in its first month, and the Church's propaganda has spent five years teaching Luxen that the paladins were devils in white. Nothing of them remains but confiscated banners, a proverb about trusting beautiful armor, and the fact, quietly known in the underside, that not one of the Order's accusers has ever produced a single victim.",
+      "mechanics_content": "Celestial weapon-craft: binding oaths, wards against the abyssal, and smiting force. Extinguished — no living teachers; access exists only through rare story means.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "The Lumenaires"
+      ],
+      "name": "The Lumenaires",
+      "summary": "Kindly mages whose light fought the Abyss and healed what it touched.",
+      "lore_content": "The kindly mages of the old court: masters of radiant craft whose light was a weapon against the Abyss and a mercy everywhere else. Lumenaires burned Afflictions out of villages and then stayed to heal the survivors; their lamps over the palace gates meant, for a hundred years, that Salvation had watchers the dark could not pass. Their craft was older than the Church's Radiance and looked too much like it — the Radiance tolerates no rival glow — and so the revolution's fires took the light-bearers first, in squares their own lamps had lit. The Church teaches that the Lumenaires' light was a glamour over rot. The people who remember being healed by it keep quiet, and keep the lamps.",
+      "mechanics_content": "Radiant craft turned against the Abyss: burning light, wards the dark cannot pass, and true healing. Extinguished — no living teachers; access exists only through rare story means.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "La Chasse"
+      ],
+      "name": "La Chasse",
+      "summary": "The royal hunt that ran down the things that eat men — its craft now a stolen echo in crueler hands.",
+      "lore_content": "The royal hunt of the old Kingdom: hound-speech, beast-lore, and pursuit-craft that could follow a quarry across a realm — pointed, always, at the things that eat men. The huntsmen-mages of La Chasse ran down the monsters the Church only sermonized about, and their arrival in a terrorized village was the happiest sight in Luxen. The revolution burned the masters and kept the methods: what the Honest use to run down escaped Sinners is a stolen, half-understood echo of La Chasse, turned from the defense of the helpless to the hunting of them. Its last practitioners would have called that the only heresy worth the word.",
+      "mechanics_content": "Pursuit-craft aimed at monsters: hound-speech, beast-lore, and tracking no quarry escapes. Extinguished — the Honest wield a debased echo; the true craft has no living teachers.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  },
+  {
+    "model": "codex.codexsubject",
+    "fields": {
+      "category": [
+        "Magic"
+      ],
+      "parent": [
+        "Magic",
+        null,
+        "Traditions"
+      ],
+      "name": "Deathspeakers",
+      "description": "The order that speaks to the dead, and avenges them, and is fed by the avenging.",
+      "display_order": 18
+    }
+  },
+  {
+    "model": "codex.codexentry",
+    "fields": {
+      "subject": [
+        "Magic",
+        [
+          "Magic",
+          null,
+          "Traditions"
+        ],
+        "Deathspeakers"
+      ],
+      "name": "The Deathspeakers",
+      "summary": "Speakers for the dead whose power grows in the settling of the dead's accounts.",
+      "lore_content": "An order given wholly to the dead: to hearing them, and to settling their accounts. Deathspeakers learn the speech of what lingers — the battlefield's unquiet, the murdered under the floorboards, the hold lost to the thaw whose names no one recorded — and their craft is fed by vengeance itself: a Deathspeaker who takes up a dead man's grievance carries his strength until it is settled, and the older and colder the wrong, the greater the power in avenging it. In the Northlands this makes them holy and dangerous at once: every hold wants its dead spoken for, and no one wants to be what a Deathspeaker comes to settle. Against the Deadlands the order is wrath itself — every legion that marches is ten thousand stolen corpses, and the dead inside them are all owed.",
+      "mechanics_content": "Deathspeakers favor spirit-speech and vengeance-fueled craft: a taken-up grievance lends the dead's strength until it is settled, and the older the wrong, the greater the power. Wrath incarnate against the risen legions.",
+      "share_cost": 5,
+      "learn_cost": 5,
+      "learn_difficulty": 10,
+      "learn_threshold": 10,
+      "display_order": 0,
+      "is_public": true,
+      "modifier_type": null,
+      "prerequisites": []
+    }
+  }
+]

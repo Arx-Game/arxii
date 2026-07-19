@@ -1,0 +1,497 @@
+[
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Vulnerable",
+      "category": [
+        "Combat State"
+      ],
+      "description": "Defenses compromised. Taking increased damage from attacks.",
+      "player_description": "Your guard is down. You're exposed.",
+      "observer_description": "is off-balance, their defenses compromised.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 1,
+      "is_stackable": true,
+      "max_stacks": 3,
+      "stack_behavior": "intensity",
+      "has_progression": false,
+      "can_be_dispelled": false,
+      "icon": "shield-slash",
+      "color_hex": "#FF4444",
+      "display_priority": 80,
+      "is_visible_to_others": true,
+      "draws_aggro": true,
+      "aggro_priority": 10
+    }
+  },
+  {
+    "model": "conditions.conditionresistancemodifier",
+    "fields": {
+      "condition": [
+        "Vulnerable"
+      ],
+      "stage": null,
+      "damage_type": null,
+      "modifier_value": -25
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Vulnerable"
+      ],
+      "stage": null,
+      "check_type": [
+        "Physical Defense",
+        "Combat"
+      ],
+      "modifier_value": -15,
+      "scales_with_severity": true
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Exposed",
+      "category": [
+        "Combat State"
+      ],
+      "description": "An opening has been created. Bonus damage on next attack against this target.",
+      "player_description": "You've left yourself wide open. The next hit will hurt.",
+      "observer_description": "has left a critical opening in their defense.",
+      "default_duration_type": "until_used",
+      "default_duration_value": 0,
+      "is_stackable": true,
+      "max_stacks": 3,
+      "stack_behavior": "intensity",
+      "has_progression": false,
+      "can_be_dispelled": false,
+      "icon": "bullseye",
+      "color_hex": "#FF0000",
+      "display_priority": 85,
+      "is_visible_to_others": true,
+      "draws_aggro": true,
+      "aggro_priority": 15
+    }
+  },
+  {
+    "model": "conditions.conditionresistancemodifier",
+    "fields": {
+      "condition": [
+        "Exposed"
+      ],
+      "stage": null,
+      "damage_type": null,
+      "modifier_value": -40
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Guarded",
+      "category": [
+        "Combat State"
+      ],
+      "description": "In a defensive stance. Reduced offense but enhanced defense.",
+      "player_description": "You hold your guard high, ready to deflect incoming attacks.",
+      "observer_description": "has adopted a defensive posture, shield raised.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 1,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": false,
+      "icon": "shield-alt",
+      "color_hex": "#4444FF",
+      "display_priority": 50,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Guarded"
+      ],
+      "stage": null,
+      "check_type": [
+        "Physical Defense",
+        "Combat"
+      ],
+      "modifier_value": 25,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Guarded"
+      ],
+      "stage": null,
+      "check_type": [
+        "Melee Attack",
+        "Combat"
+      ],
+      "modifier_value": -15,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Channeling",
+      "category": [
+        "Channeling"
+      ],
+      "description": "Preparing a powerful ability. Interruptible and draws enemy attention.",
+      "player_description": "Power builds within you as you channel your attack.",
+      "observer_description": "is gathering power, energy swirling around them as they prepare something devastating.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 2,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": true,
+      "icon": "bolt",
+      "color_hex": "#8844FF",
+      "display_priority": 90,
+      "is_visible_to_others": true,
+      "draws_aggro": true,
+      "aggro_priority": 25
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Channeling"
+      ],
+      "stage": null,
+      "check_type": [
+        "Concentration",
+        "Mental"
+      ],
+      "modifier_value": -20,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Channeling"
+      ],
+      "stage": null,
+      "check_type": [
+        "Physical Defense",
+        "Combat"
+      ],
+      "modifier_value": -15,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Flanked",
+      "category": [
+        "Combat State"
+      ],
+      "description": "Enemies on multiple sides. Difficult to defend against all angles.",
+      "player_description": "They're all around you. You can't watch every direction.",
+      "observer_description": "is surrounded, struggling to defend from multiple directions.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 1,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": false,
+      "icon": "users",
+      "color_hex": "#FF8844",
+      "display_priority": 65,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Flanked"
+      ],
+      "stage": null,
+      "check_type": [
+        "Physical Defense",
+        "Combat"
+      ],
+      "modifier_value": -20,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditionresistancemodifier",
+    "fields": {
+      "condition": [
+        "Flanked"
+      ],
+      "stage": null,
+      "damage_type": [
+        "Physical"
+      ],
+      "modifier_value": -15
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Off-Balance",
+      "category": [
+        "Combat State"
+      ],
+      "description": "Footing compromised. Reduced accuracy and defense.",
+      "player_description": "You stumble, fighting to regain your balance.",
+      "observer_description": "staggers, struggling to maintain their footing.",
+      "default_duration_type": "rounds",
+      "default_duration_value": 1,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": false,
+      "icon": "balance-scale",
+      "color_hex": "#FFAA44",
+      "display_priority": 55,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Off-Balance"
+      ],
+      "stage": null,
+      "check_type": [
+        "Melee Attack",
+        "Combat"
+      ],
+      "modifier_value": -15,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Off-Balance"
+      ],
+      "stage": null,
+      "check_type": [
+        "Physical Defense",
+        "Combat"
+      ],
+      "modifier_value": -15,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Off-Balance"
+      ],
+      "stage": null,
+      "check_type": [
+        "Acrobatics",
+        "Exploration"
+      ],
+      "modifier_value": -20,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Disarmed",
+      "category": [
+        "Combat State"
+      ],
+      "description": "Weapon knocked away. Must fight unarmed or retrieve weapon.",
+      "player_description": "Your weapon clatters to the ground, out of reach.",
+      "observer_description": "has been disarmed, their weapon on the ground.",
+      "default_duration_type": "until_cured",
+      "default_duration_value": 0,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": false,
+      "icon": "hand-paper",
+      "color_hex": "#AA6644",
+      "display_priority": 70,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Disarmed"
+      ],
+      "stage": null,
+      "check_type": [
+        "Melee Attack",
+        "Combat"
+      ],
+      "modifier_value": -30,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Grappled",
+      "category": [
+        "Control"
+      ],
+      "description": "Restrained by an enemy. Movement blocked, limited actions.",
+      "player_description": "Strong arms hold you tight. You struggle to break free.",
+      "observer_description": "is held fast, grappled by their opponent.",
+      "default_duration_type": "until_cured",
+      "default_duration_value": 0,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": false,
+      "icon": "hand-rock",
+      "color_hex": "#884422",
+      "display_priority": 75,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": [
+        "Grappled"
+      ],
+      "stage": null,
+      "capability": [
+        "movement"
+      ],
+      "value": -100
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": [
+        "Grappled"
+      ],
+      "stage": null,
+      "capability": [
+        "ranged_attack"
+      ],
+      "value": -100
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Grappled"
+      ],
+      "stage": null,
+      "check_type": [
+        "Physical Defense",
+        "Combat"
+      ],
+      "modifier_value": -20,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditiontemplate",
+    "fields": {
+      "name": "Prone",
+      "category": [
+        "Combat State"
+      ],
+      "description": "Knocked to the ground. Disadvantage to attacks, must use action to stand.",
+      "player_description": "You hit the ground hard. Getting up will cost you.",
+      "observer_description": "lies on the ground, struggling to rise.",
+      "default_duration_type": "until_cured",
+      "default_duration_value": 0,
+      "is_stackable": false,
+      "max_stacks": 1,
+      "stack_behavior": "duration",
+      "has_progression": false,
+      "can_be_dispelled": false,
+      "icon": "level-down",
+      "color_hex": "#886644",
+      "display_priority": 60,
+      "is_visible_to_others": true
+    }
+  },
+  {
+    "model": "conditions.conditioncapabilityeffect",
+    "fields": {
+      "condition": [
+        "Prone"
+      ],
+      "stage": null,
+      "capability": [
+        "movement"
+      ],
+      "value": -75
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Prone"
+      ],
+      "stage": null,
+      "check_type": [
+        "Melee Attack",
+        "Combat"
+      ],
+      "modifier_value": -25,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditioncheckmodifier",
+    "fields": {
+      "condition": [
+        "Prone"
+      ],
+      "stage": null,
+      "check_type": [
+        "Physical Defense",
+        "Combat"
+      ],
+      "modifier_value": -20,
+      "scales_with_severity": false
+    }
+  },
+  {
+    "model": "conditions.conditionresistancemodifier",
+    "fields": {
+      "condition": [
+        "Prone"
+      ],
+      "stage": null,
+      "damage_type": [
+        "Physical"
+      ],
+      "modifier_value": -15
+    }
+  }
+]

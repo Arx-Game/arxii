@@ -18,7 +18,7 @@ from world.mechanics.factories import (
     PropertyDamageModifierFactory,
     PropertyFactory,
 )
-from world.mechanics.models import CharacterModifier
+from world.mechanics.models import CharacterModifier, ObjectProperty
 from world.mechanics.services import (
     covenant_role_bonus,
     create_distinction_modifiers,
@@ -27,6 +27,7 @@ from world.mechanics.services import (
     get_modifier_total,
     passive_facet_bonuses,
     property_damage_bonus,
+    stage_property,
     update_distinction_rank,
 )
 
@@ -1059,3 +1060,28 @@ class PropertyDamageBonusTest(TestCase):
         PropertyDamageModifierFactory(property=cursed, damage_type=fire, modifier_value=10)
 
         self.assertEqual(property_damage_bonus(character, None), 0)
+
+
+class StagePropertyTests(TestCase):
+    """``stage_property`` -- the GM improv attach/refresh service function (#2503)."""
+
+    def test_creates_new_object_property(self) -> None:
+        target = ObjectDBFactory(db_key="StagePropertyTarget")
+        locked = PropertyFactory(name="locked-stage-test")
+
+        obj_prop = stage_property(target, locked)
+
+        self.assertEqual(obj_prop.object, target)
+        self.assertEqual(obj_prop.property, locked)
+        self.assertEqual(obj_prop.value, 1)
+
+    def test_reapplying_upserts_instead_of_duplicating(self) -> None:
+        target = ObjectDBFactory(db_key="StagePropertyTarget2")
+        locked = PropertyFactory(name="locked-stage-test-2")
+
+        stage_property(target, locked, value=2)
+        stage_property(target, locked, value=5)
+
+        rows = ObjectProperty.objects.filter(object=target, property=locked)
+        self.assertEqual(rows.count(), 1)
+        self.assertEqual(rows.get().value, 5)

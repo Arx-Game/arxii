@@ -45,7 +45,10 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # character_sheets
         "character_sheets.gender",
         # checks
+        "checks.checkcategory",
+        "checks.checktype",
         "checks.checktypecapabilitymodifier",
+        "checks.checktypetrait",
         # classes
         "classes.aspect",
         "classes.path",
@@ -87,6 +90,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "forms.formtraitoption",
         "forms.heightband",
         "forms.speciesformtrait",
+        # items
+        "items.itemtemplateproperty",
         # magic
         "magic.affinity",
         "magic.effecttype",
@@ -111,11 +116,23 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.traditiongiftgrant",
         # mechanics
         "mechanics.application",
+        "mechanics.challengeapproach",
+        "mechanics.challengecategory",
+        "mechanics.challengetemplate",
         "mechanics.modifiercategory",
         "mechanics.modifiertarget",
         "mechanics.prerequisite",
         "mechanics.property",
         "mechanics.propertycategory",
+        # missions
+        "missions.missioncategory",
+        "missions.missiontemplate",
+        "missions.missionnode",
+        "missions.missionoption",
+        "missions.missionoptionroute",
+        "missions.missionoptionroutecandidate",
+        "missions.missionoptionroutereward",
+        "missions.missionrenownaward",
         # realms
         "realms.realm",
         # skills

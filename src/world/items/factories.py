@@ -19,6 +19,7 @@ from world.items.models import (
     ItemInstance,
     ItemStyle,
     ItemTemplate,
+    ItemTemplateProperty,
     Mantle,
     MantleLevelClearance,
     MantleLevelDefinition,
@@ -29,7 +30,7 @@ from world.items.models import (
     TemplateSlot,
     Trendsetter,
 )
-from world.mechanics.factories import ModifierTargetFactory
+from world.mechanics.factories import ModifierTargetFactory, PropertyFactory
 
 # SubFactory import path, extracted to satisfy S1192.
 _SOCIETY_FACTORY = "world.societies.factories.SocietyFactory"
@@ -102,6 +103,18 @@ class ItemTemplateFactory(factory.django.DjangoModelFactory):
             base_armor_soak=3,
             max_durability=30,
         )
+
+
+class ItemTemplatePropertyFactory(factory.django.DjangoModelFactory):
+    """Factory for ItemTemplateProperty."""
+
+    class Meta:
+        model = ItemTemplateProperty
+        django_get_or_create = ("item_template", "property")
+
+    item_template = factory.SubFactory(ItemTemplateFactory)
+    property = factory.SubFactory(PropertyFactory)
+    value = 1
 
 
 class ItemInstanceFactory(factory.django.DjangoModelFactory):

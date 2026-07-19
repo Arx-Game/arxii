@@ -159,6 +159,70 @@ class ContentExportTests(TestCase):
         """Clue became exportable content once it carried a natural key (#2451)."""
         assert "clues.clue" in CONTENT_MODELS
 
+    def test_mission_graph_round_trips(self) -> None:
+        """A small authored mission graph exports and reloads as a no-op (#2470).
+
+        Exercises 2+ MissionOptionRouteReward rows and 2+ MissionRenownAward
+        rows sharing the same parent route, plus a MissionOptionRouteCandidate,
+        so all three natural keys round-trip.
+
+        NOTE (re-review, #2470): this test verifies pipeline SHAPE only — rows
+        here are created before export and never deleted before reimport, so
+        ``load_entries``'s ``update_or_create(**lookup, defaults=fields)``
+        always matches an existing row and takes the UPDATE branch.
+        ``save()``'s ``if self.pk is None:`` guard (the actual sequence
+        auto-assign fix in models.py) is a no-op on updates, so this test does
+        NOT exercise it and would pass identically against the pre-fix
+        formula. The real proof that save() auto-assigns correctly under the
+        adversarial explicit-then-auto-assign ordering lives in
+        ``world/missions/tests/test_sequence_auto_assign.py``, which calls
+        save() directly and does not go through this pipeline. This test is
+        kept as legitimate (if narrower) coverage that multiple rows per
+        parent survive an export/import round trip unchanged.
+        """
+        from world.missions.factories import (
+            MissionNodeFactory,
+            MissionOptionFactory,
+            MissionOptionRouteCandidateFactory,
+            MissionOptionRouteFactory,
+            MissionOptionRouteRewardFactory,
+            MissionTemplateFactory,
+        )
+        from world.missions.models import MissionRenownAward
+        from world.societies.constants import RenownMagnitude, RenownRisk
+
+        template = MissionTemplateFactory(name="Round Trip Prelude Template")
+        node = MissionNodeFactory(template=template, key="entry", is_entry=True)
+        option = MissionOptionFactory(node=node, key="entry-option")
+        route = MissionOptionRouteFactory(
+            option=option, outcome_tier=None, target_node=None, is_random_set=True
+        )
+        MissionOptionRouteRewardFactory(route=route, amount=50)
+        MissionOptionRouteRewardFactory(route=route, amount=75)
+        MissionOptionRouteCandidateFactory(route=route)
+        MissionRenownAward.objects.create(
+            route=route, magnitude=RenownMagnitude.MODERATE, risk=RenownRisk.NONE
+        )
+        MissionRenownAward.objects.create(
+            route=route, magnitude=RenownMagnitude.HIGH, risk=RenownRisk.LOW
+        )
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        # Re-run to prove idempotency isn't order-dependent luck: a second
+        # import of the same export must also create nothing.
+        load_result_again = build_all(self.root)
+        created_again, _updated_again = load_entries(load_result_again)
+        assert created_again == 0, (
+            f"Second round-trip created {created_again} new records (expected 0)"
+        )
+
     def test_content_models_all_have_natural_key(self) -> None:
         """Every model in the allowlist must have NaturalKeyMixin."""
         from django.apps import apps

@@ -1429,6 +1429,8 @@ def get_available_actions(
             character, ci, template, challenge_property_ids, cap_id_to_sources, actions
         )
 
+    actions.extend(_bare_object_actions(character, location, cap_id_to_sources))
+
     return actions
 
 
@@ -1448,7 +1450,8 @@ def _build_action_for_source(  # noqa: PLR0913
     reasons: list[str] = []
     prereq_met = _evaluate_prerequisites(
         character,
-        ci,
+        ci.target_object,
+        ci.location,
         app,
         source,
         cap_prereq_cache,
@@ -1524,9 +1527,231 @@ def _match_approaches(  # noqa: PLR0913
                 actions.append(action)
 
 
+def _bare_object_actions(
+    character: ObjectDB,
+    location: ObjectDB,
+    cap_id_to_sources: dict[int, list[CapabilitySource]],
+) -> list[AvailableAction]:
+    """Synthesize AvailableActions from ObjectProperty tags on objects at *location*.
+
+    The second availability source (#2503): a flammable torch with no authored
+    ChallengeInstance still presents "Ignite" to a character with a generation
+    capability source, via ``Application.default_template`` (Task 1's curated
+    gate — only Applications an author explicitly wired to a world-interaction
+    template synthesize a bare-object action). Candidate objects are
+    ``location.contents`` plus the location itself (a room can carry its own
+    properties, e.g. "dark").
+
+    Query discipline: one ObjectProperty fetch, one Application fetch (with the
+    default_template's approaches prefetched), one ChallengeInstance fetch for
+    dedup — none of them inside a loop over objects/applications.
+    """
+    candidate_objs = [*location.contents, location]
+    objects_by_id = {obj.id: obj for obj in candidate_objs}
+
+    property_ids_by_object = _object_property_ids(candidate_objs)
+    if not property_ids_by_object:
+        return []
+
+    all_property_ids = {pid for prop_ids in property_ids_by_object.values() for pid in prop_ids}
+    applications = _bare_object_candidate_applications(cap_id_to_sources, all_property_ids)
+    if not applications:
+        return []
+
+    active_pairs = set(
+        ChallengeInstance.objects.filter(
+            location=location,
+            is_active=True,
+            target_object_id__in=objects_by_id,
+        ).values_list("target_object_id", "template_id")
+    )
+
+    actions: list[AvailableAction] = []
+    for obj_id, prop_ids in property_ids_by_object.items():
+        actions.extend(
+            _bare_object_actions_for_object(
+                character,
+                location,
+                objects_by_id[obj_id],
+                prop_ids,
+                applications,
+                active_pairs,
+                cap_id_to_sources,
+            )
+        )
+
+    return actions
+
+
+def _object_property_ids(candidate_objs: list[ObjectDB]) -> dict[int, set[int]]:
+    """Batch-fetch ObjectProperty rows for *candidate_objs* in one query.
+
+    Returns a mapping of object pk -> set of property pks carried by that object.
+    """
+    object_properties = ObjectProperty.objects.filter(object__in=candidate_objs).select_related(
+        "property", "object"
+    )
+    property_ids_by_object: dict[int, set[int]] = {}
+    for op in object_properties:
+        property_ids_by_object.setdefault(op.object_id, set()).add(op.property_id)
+    return property_ids_by_object
+
+
+def _bare_object_candidate_applications(
+    cap_id_to_sources: dict[int, list[CapabilitySource]],
+    property_ids: set[int],
+) -> list[Application]:
+    """Fetch Applications eligible for bare-object synthesis, one query + prefetch.
+
+    Gated to Applications with a curated ``default_template`` (Task 1), whose
+    ``target_property`` is present among *property_ids*, and whose capability
+    the character has a source for.
+    """
+    return list(
+        Application.objects.filter(
+            default_template__isnull=False,
+            target_property_id__in=property_ids,
+            capability_id__in=list(cap_id_to_sources),
+        )
+        .select_related(
+            "default_template",
+            "capability",
+            "target_property",
+            "required_effect_property",
+        )
+        .prefetch_related(
+            Prefetch(
+                "default_template__approaches",
+                queryset=ChallengeApproach.objects.select_related(
+                    "application__capability",
+                    "application__target_property",
+                    "application__required_effect_property",
+                    "check_type",
+                    "required_effect_property",
+                    "action_template",
+                    "action_template__check_type",
+                ),
+                to_attr="cached_approaches",
+            ),
+        )
+    )
+
+
+def _bare_object_actions_for_object(  # noqa: PLR0913
+    character: ObjectDB,
+    location: ObjectDB,
+    obj: ObjectDB,
+    prop_ids: set[int],
+    applications: list[Application],
+    active_pairs: set[tuple[int, int]],
+    cap_id_to_sources: dict[int, list[CapabilitySource]],
+) -> list[AvailableAction]:
+    """Match one candidate object's properties against candidate Applications."""
+    # Fresh per-object cache: capability-level prerequisites evaluate against the
+    # real target object, so a cache shared across objects would be wrong.
+    cap_prereq_cache: dict[int, PrerequisiteEvaluation | None] = {}
+    actions: list[AvailableAction] = []
+
+    for app in applications:
+        if app.target_property_id not in prop_ids:
+            continue
+
+        template = app.default_template
+        if (obj.id, template.id) in active_pairs:
+            continue  # an authored ChallengeInstance already covers this affordance
+
+        matching_approach = next(
+            (a for a in template.cached_approaches if a.application_id == app.id),
+            None,
+        )
+        if matching_approach is None:
+            continue
+
+        for source in cap_id_to_sources.get(app.capability_id, []):
+            action = _build_bare_object_action(
+                character, location, obj, template, matching_approach, app, source, cap_prereq_cache
+            )
+            if action is not None:
+                actions.append(action)
+
+    return actions
+
+
+def _build_bare_object_action(  # noqa: PLR0913
+    character: ObjectDB,
+    location: ObjectDB,
+    target_object: ObjectDB,
+    template: ChallengeTemplate,
+    approach: ChallengeApproach,
+    app: Application,
+    source: CapabilitySource,
+    cap_prereq_cache: dict[int, PrerequisiteEvaluation | None],
+) -> AvailableAction | None:
+    """Build the synthesized AvailableAction for one (object, approach, source), or None.
+
+    Mirrors ``_build_action_for_source`` (same effect-requirement/prerequisite/
+    difficulty evaluation) but has no ChallengeInstance yet — dispatch mints one
+    via ``instantiate_challenge(template, location, target_object)`` (Task 4).
+    """
+    if not _source_meets_effect_requirements(app, approach, source):
+        return None
+
+    reasons: list[str] = []
+    prereq_met = _evaluate_prerequisites(
+        character,
+        target_object,
+        location,
+        app,
+        source,
+        cap_prereq_cache,
+        reasons,
+    )
+
+    difficulty = None
+    if prereq_met:
+        difficulty = _get_difficulty_indicator_for_check(
+            character,
+            approach.check_type,
+            template.severity,
+        )
+        if difficulty == DifficultyIndicator.IMPOSSIBLE:
+            return None
+
+    override_template = approach.action_template  # may be None (null FK)
+    if override_template is not None:
+        resolved_check_type = override_template.check_type
+        resolved_action_template = override_template
+    else:
+        resolved_check_type = approach.check_type
+        resolved_action_template = None
+
+    return AvailableAction(
+        application_id=app.id,
+        application_name=app.name,
+        capability_source=source,
+        challenge_instance_id=None,
+        challenge_name=template.name,
+        approach_id=approach.id,
+        check_type_name=approach.check_type.name,
+        display_name=approach.display_name or app.name,
+        custom_description=approach.custom_description,
+        difficulty_indicator=difficulty,
+        prerequisite_met=prereq_met,
+        prerequisite_reasons=reasons,
+        resolved_check_type=resolved_check_type,
+        resolved_action_template=resolved_action_template,
+        # No ChallengeInstance yet — dispatch mints one from the fields below.
+        resolved_challenge_instance=None,
+        resolved_challenge_approach=approach,
+        target_object=target_object,
+        resolved_default_template=template,
+    )
+
+
 def _evaluate_prerequisites(  # noqa: PLR0913
     character: ObjectDB,
-    ci: ChallengeInstance,
+    target_object: ObjectDB,
+    location: ObjectDB,
     app: Application,
     source: CapabilitySource,
     cap_prereq_cache: dict[int, PrerequisiteEvaluation | None],
@@ -1536,6 +1761,11 @@ def _evaluate_prerequisites(  # noqa: PLR0913
 
     Returns True if all prerequisites are met. Appends failure reasons.
     Uses cap_prereq_cache to avoid re-evaluating the same capability prerequisite.
+    ``cap_prereq_cache`` must be scoped to a single ``target_object``/``location``
+    pair (capability-level prerequisites evaluate against the real target, so a
+    cache shared across different targets would be incorrect) — callers with
+    a fixed ``ci`` (one target per challenge) or a fixed bare object (one target
+    per outer loop iteration) already satisfy this.
 
     Note: source-level prerequisites each trigger an ObjectProperty query.
     For future optimization, consider bulk-fetching ObjectProperty records
@@ -1550,8 +1780,8 @@ def _evaluate_prerequisites(  # noqa: PLR0913
         if cap_prereq is not None:
             cap_prereq_cache[cap_id] = cap_prereq.evaluate(
                 character,
-                ci.target_object,
-                ci.location,
+                target_object,
+                location,
             )
         else:
             cap_prereq_cache[cap_id] = None
@@ -1565,8 +1795,8 @@ def _evaluate_prerequisites(  # noqa: PLR0913
     if source.prerequisite is not None:
         src_result = source.prerequisite.evaluate(
             character,
-            ci.target_object,
-            ci.location,
+            target_object,
+            location,
         )
         if not src_result.met:
             reasons.append(src_result.reason)
@@ -1711,6 +1941,23 @@ def volatile_object_property(target: ObjectDB) -> ObjectProperty | None:
         .select_related("property__detonation__consequence_pool")
         .first()
     )
+
+
+def stage_property(target: ObjectDB, property_: Property, value: int = 1) -> ObjectProperty:
+    """GM improv: attach or refresh a Property on ``target`` (#2503).
+
+    Mirrors ``actions.effects.effect_handlers._add_property``'s upsert convention
+    (``update_or_create`` keyed on ``object``+``property``) as a directly-callable
+    service — a GM narrating "this door looks locked" outside any authored
+    consequence chain. Idempotent: re-staging the same property on the same
+    target updates its value rather than duplicating the row.
+    """
+    obj_prop, _ = ObjectProperty.objects.update_or_create(
+        object=target,
+        property=property_,
+        defaults={"value": value},
+    )
+    return obj_prop
 
 
 def prerequisites_met(prereqs: Iterable[Prerequisite], caster: ObjectDB, target: ObjectDB) -> bool:

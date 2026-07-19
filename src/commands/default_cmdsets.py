@@ -89,6 +89,7 @@ from commands.functionary import CmdFunctionary
 from commands.gemit import CmdGemit
 from commands.gift_learning import CmdLearn
 from commands.gm_ops import CmdGMDashboard, CmdGMIdle
+from commands.gm_props import CmdStage
 from commands.gm_tables import CmdGMTable
 from commands.gmtrust import CmdGMTrust
 from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
@@ -432,6 +433,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdLabStation,
             # #2177 — exit/room defense (bars/ward/alarm) install/upgrade/fund namespace.
             CmdDefense,
+            # #2503 — GM improv stage-prop namespace (conjure a prop / tag a property).
+            CmdStage,
             CmdMarket,
             # #1832 — ship commission/upgrade/repair/status namespace.
             CmdShip,

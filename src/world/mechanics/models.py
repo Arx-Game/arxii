@@ -733,6 +733,17 @@ class Application(NaturalKeyMixin, SharedMemoryModel):
         related_name="required_by_applications",
         help_text="Effect Property the source must carry to use this Application.",
     )
+    default_template = models.ForeignKey(
+        "mechanics.ChallengeTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="default_for_applications",
+        help_text=(
+            "Authored world-interaction template minted when this Application fires "
+            "against a bare object; null = no bare-object affordance"
+        ),
+    )
     description = models.TextField(blank=True)
 
     objects = NaturalKeyManager()
@@ -952,12 +963,17 @@ class ChallengeTemplateConsequence(SharedMemoryModel):
         return f"{self.challenge_template.name}: {self.consequence.label}"
 
 
-class ChallengeApproach(SharedMemoryModel):
+class ChallengeApproach(NaturalKeyMixin, SharedMemoryModel):
     """
     A way to resolve a Challenge, linking an Application to a check type.
 
     This is where the system connects 'what you can do' (Application) with
     'how to resolve it' (CheckType) for a specific Challenge.
+
+    NK is (challenge_template, application) — the existing
+    ``challenge_approach_unique_per_template`` constraint already enforces this
+    as the true minimal uniqueness (a Challenge offers at most one approach per
+    Application), so no new DB constraint was needed to add the natural key.
     """
 
     challenge_template = models.ForeignKey(
@@ -1007,6 +1023,8 @@ class ChallengeApproach(SharedMemoryModel):
         ),
     )
 
+    objects = NaturalKeyManager()
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -1014,6 +1032,10 @@ class ChallengeApproach(SharedMemoryModel):
                 name="challenge_approach_unique_per_template",
             ),
         ]
+
+    class NaturalKeyConfig:
+        fields = ["challenge_template", "application"]
+        dependencies = ["mechanics.ChallengeTemplate", "mechanics.Application"]
 
     def __str__(self) -> str:
         return self.display_name or self.application.name

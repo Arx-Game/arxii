@@ -1,0 +1,237 @@
+[
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Pyromancy",
+      "description": "Fire as substrate: flame called, shaped, worn, and loosed.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Geomancy",
+      "description": "Earth as substrate: stone, metal, weight, and the patience of both.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Cryomancy",
+      "description": "Cold as substrate: frost, ice, stillness, preservation.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Stormcalling",
+      "description": "The sky's moods borrowed or bargained: lightning, gale, fog, unseasonable frost.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Wildcraft",
+      "description": "Beasts and the hunt: beast-speech, pack-sense, the unlosable trail, the hunter's patience made supernatural.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Flesh-Shaping",
+      "description": "The body as clay: shifting, toughening, growing claw and hide, mending flesh by remaking it.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Hemomancy",
+      "description": "Blood as fuel and medium: read, moved, spent, hardened, stilled.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Fury",
+      "description": "Rage as substrate: wrath fed into the body until the body is the weapon and the fury is the armor.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Necromancy",
+      "description": "The craft of the dead and what lingers: laying, binding, warding, speaking-with — and unbinding the risen.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Shadowcraft",
+      "description": "Shadow as substance and ally: concealment, the unseen angle, dread given form.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Dominion",
+      "description": "Will bound by will: compulsion, silk-thin threads, puppetry, the mind laid open.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Corruption",
+      "description": "Decay as transformation: venom, blight, witchfire, the seductive breaking of rigid forms.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Glamour",
+      "description": "Seeming and misdirection: illusion, disguise, the stage that appears where none was.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Resonant Chorus",
+      "description": "Magic amplified through voice, gesture, and presence: sound as force, song as ward, the crowd as instrument.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Radiance",
+      "description": "Light as substrate: burning the abyssal, warding the dark, blessing, true healing.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Glyphwork",
+      "description": "Magic encoded: inscribed formulae, spoken true names, sigils that hold force in patient reserve.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Oathcraft",
+      "description": "Binding words: geasa, pacts, covenants, oaths that both parties feel holding.",
+      "kind": "MAJOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Mirrorwalking",
+      "description": "Step through an open mirror here and out of its twin elsewhere.",
+      "kind": "MINOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": [
+        [
+          "Reflection"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Vanguard Vow",
+      "description": "Combat techniques granted by the Vanguard covenant vow.",
+      "kind": "MINOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Bulwark Vow",
+      "description": "Combat techniques granted by the Bulwark covenant vow.",
+      "kind": "MINOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  },
+  {
+    "model": "magic.gift",
+    "fields": {
+      "name": "Luminary Vow",
+      "description": "Combat techniques granted by the Luminary covenant vow.",
+      "kind": "MINOR",
+      "creator": null,
+      "codex_entry": null,
+      "resonances": []
+    }
+  }
+]

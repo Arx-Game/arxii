@@ -109,7 +109,7 @@ class MissionCategory(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class MissionTemplate(SharedMemoryModel):
+class MissionTemplate(NaturalKeyMixin, SharedMemoryModel):
     """An authored mission: the static graph plus its availability metadata.
 
     A template owns one graph of :class:`MissionNode` rows (entered at the
@@ -247,11 +247,16 @@ class MissionTemplate(SharedMemoryModel):
         self.clean()
         super().save(*args, **kwargs)
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
     def __str__(self) -> str:
         return self.name
 
 
-class MissionNode(SharedMemoryModel):
+class MissionNode(NaturalKeyMixin, SharedMemoryModel):
     """One decision point in a mission graph.
 
     Exactly one node per template is the ``is_entry`` node. Multi-participant
@@ -385,6 +390,12 @@ class MissionNode(SharedMemoryModel):
         ),
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["template", "key"]
+        dependencies = ["missions.MissionTemplate"]
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -465,7 +476,7 @@ class MissionNode(SharedMemoryModel):
         return f"{self.template.name}:{self.key}"
 
 
-class MissionOption(SharedMemoryModel):
+class MissionOption(NaturalKeyMixin, SharedMemoryModel):
     """One choice available at a :class:`MissionNode`.
 
     An option is either AUTHORED (hand-written) or CHALLENGE (references a
@@ -483,6 +494,16 @@ class MissionOption(SharedMemoryModel):
     order = models.PositiveSmallIntegerField(
         help_text="Display/evaluation order within the node (no Meta.ordering — "
         "callers order explicitly).",
+    )
+    key = models.SlugField(
+        max_length=100,
+        default="",
+        help_text=(
+            "Stable per-node authoring key (unique within the node), independent "
+            "of order — reordering options for display must never change their "
+            "identity. Required for real authored content; the '' default only "
+            "exists so this schema migration doesn't need a data backfill."
+        ),
     )
     option_kind = models.CharField(
         max_length=12,
@@ -691,6 +712,9 @@ class MissionOption(SharedMemoryModel):
             raise ValidationError(errors)
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["node", "key"], name="unique_missionoption_node_key"),
+        ]
         # Partial index — see MissionNode.Meta.indexes for the rationale.
         indexes = [
             models.Index(
@@ -699,6 +723,12 @@ class MissionOption(SharedMemoryModel):
                 name="mo_flag_partial_idx",
             ),
         ]
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["node", "key"]
+        dependencies = ["missions.MissionNode"]
 
     def save(self, *args: object, **kwargs: object) -> None:
         # Runs the scalar clean() invariants on the real write path so
@@ -710,7 +740,7 @@ class MissionOption(SharedMemoryModel):
         return f"{self.node}#{self.order}"
 
 
-class MissionOptionRoute(SharedMemoryModel):
+class MissionOptionRoute(NaturalKeyMixin, SharedMemoryModel):
     """Where a :class:`MissionOption` leads.
 
     For a CHECK option there is one route per resolved ``traits.CheckOutcome``
@@ -795,6 +825,12 @@ class MissionOptionRoute(SharedMemoryModel):
         ),
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["option", "outcome_tier"]
+        dependencies = ["missions.MissionOption"]
+
     class Meta:
         # Partial index — see MissionNode.Meta.indexes for the rationale.
         indexes = [
@@ -810,7 +846,7 @@ class MissionOptionRoute(SharedMemoryModel):
         return f"{self.option} [{tier}]"
 
 
-class MissionOptionRouteCandidate(SharedMemoryModel):
+class MissionOptionRouteCandidate(NaturalKeyMixin, SharedMemoryModel):
     """One weighted destination in a randomized :class:`MissionOptionRoute`.
 
     When the parent route's ``is_random_set`` is true the engine picks one
@@ -862,7 +898,19 @@ class MissionOptionRouteCandidate(SharedMemoryModel):
         ),
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["route", "target_node"]
+        dependencies = ["missions.MissionOptionRoute"]
+
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["route", "target_node"],
+                name="unique_missionoptionroutecandidate_route_target",
+            ),
+        ]
         # Partial index — see MissionNode.Meta.indexes for the rationale.
         indexes = [
             models.Index(
@@ -876,7 +924,7 @@ class MissionOptionRouteCandidate(SharedMemoryModel):
         return f"{self.route} → {self.target_node} ({self.weight})"
 
 
-class MissionOptionRouteReward(SharedMemoryModel):
+class MissionOptionRouteReward(NaturalKeyMixin, SharedMemoryModel):
     """Authored reward template attached to a route OR a route candidate.
 
     Phase 5b.0 closed the Phase-3 gap that left no authored source for
@@ -999,6 +1047,24 @@ class MissionOptionRouteReward(SharedMemoryModel):
             "distribute per the template's reward_group_rule."
         ),
     )
+    sequence = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "NK discriminator only — reward lines have no display order (nothing "
+            "ever reorders them). 0 is a pure 'unassigned' sentinel, never a stored "
+            "value: save() assigns 1, 2, 3... per parent (route or candidate) when "
+            "left at 0, so a legitimately-first row can never be mistaken for "
+            "'still needs assignment' on a later re-import in a different order. "
+            "Pass an explicit value ≥1 only for fixture round-trip / deliberate "
+            "override — see save()."
+        ),
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["route", "candidate", "sequence"]
+        dependencies = ["missions.MissionOptionRoute", "missions.MissionOptionRouteCandidate"]
 
     class Meta:
         constraints = [
@@ -1012,6 +1078,20 @@ class MissionOptionRouteReward(SharedMemoryModel):
                     | (Q(route__isnull=True) & Q(candidate__isnull=False))
                 ),
                 name="missionoptionroutereward_exactly_one_parent",
+            ),
+            # Partial: route/candidate are XOR-nullable, and a plain composite
+            # UniqueConstraint would never dedupe across NULLs under Postgres
+            # (each NULL is distinct) — these two partial constraints are what
+            # actually enforce "sequence unique per non-null parent" (#2470).
+            models.UniqueConstraint(
+                fields=["route", "sequence"],
+                condition=Q(route__isnull=False),
+                name="unique_reward_route_sequence",
+            ),
+            models.UniqueConstraint(
+                fields=["candidate", "sequence"],
+                condition=Q(candidate__isnull=False),
+                name="unique_reward_candidate_sequence",
             ),
         ]
 
@@ -1079,6 +1159,16 @@ class MissionOptionRouteReward(SharedMemoryModel):
                 raise ValidationError({"sink": msg})
 
     def save(self, *args: object, **kwargs: object) -> None:
+        if self.pk is None and self.sequence == 0:
+            parent_field, parent_id = (
+                ("route", self.route_id)
+                if self.route_id is not None
+                else ("candidate", self.candidate_id)
+            )
+            max_seq = MissionOptionRouteReward.objects.filter(
+                **{parent_field: parent_id}
+            ).aggregate(models.Max("sequence"))["sequence__max"]
+            self.sequence = (max_seq or 0) + 1
         self.clean()
         super().save(*args, **kwargs)
 
@@ -1103,7 +1193,7 @@ class MissionOptionRouteReward(SharedMemoryModel):
         return option.node.template
 
 
-class MissionRenownAward(SharedMemoryModel):
+class MissionRenownAward(NaturalKeyMixin, SharedMemoryModel):
     """Authored Renown award bundle attached to a route OR a route candidate.
 
     Parallel to ``MissionOptionRouteReward`` (which handles flat money /
@@ -1172,6 +1262,40 @@ class MissionRenownAward(SharedMemoryModel):
             "reward_group_rule, same semantics as MissionOptionRouteReward."
         ),
     )
+    sequence = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "NK discriminator only — same rationale as "
+            "MissionOptionRouteReward.sequence: 0 is a pure 'unassigned' sentinel, "
+            "never a stored value — save() assigns 1, 2, 3... per route when left "
+            "at 0."
+        ),
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["route", "sequence"]
+        dependencies = ["missions.MissionOptionRoute"]
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["route", "sequence"], name="unique_renownaward_route_sequence"
+            ),
+        ]
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        # Deliberately does NOT call self.clean() — clean()'s legend-risk-floor
+        # check is pre-existing validation that is not enforced on save() today
+        # (only ever called explicitly in tests); adding that enforcement here
+        # would be an unrelated behavior change, out of scope for #2470.
+        if self.pk is None and self.sequence == 0:
+            max_seq = MissionRenownAward.objects.filter(route_id=self.route_id).aggregate(
+                models.Max("sequence")
+            )["sequence__max"]
+            self.sequence = (max_seq or 0) + 1
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         mag = self.get_magnitude_display() if self.magnitude else "—"

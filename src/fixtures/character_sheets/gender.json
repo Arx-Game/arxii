@@ -1,0 +1,42 @@
+[
+  {
+    "model": "character_sheets.gender",
+    "fields": {
+      "key": "unspecified",
+      "display_name": "Unspecified",
+      "is_default": true
+    }
+  },
+  {
+    "model": "character_sheets.gender",
+    "fields": {
+      "key": "male",
+      "display_name": "Male",
+      "is_default": false
+    }
+  },
+  {
+    "model": "character_sheets.gender",
+    "fields": {
+      "key": "female",
+      "display_name": "Female",
+      "is_default": false
+    }
+  },
+  {
+    "model": "character_sheets.gender",
+    "fields": {
+      "key": "non_binary",
+      "display_name": "Non-Binary",
+      "is_default": false
+    }
+  },
+  {
+    "model": "character_sheets.gender",
+    "fields": {
+      "key": "nonbinary",
+      "display_name": "Non-binary/Other",
+      "is_default": true
+    }
+  }
+]

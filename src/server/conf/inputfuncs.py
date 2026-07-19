@@ -101,6 +101,8 @@ def _build_action_ref(kwargs: dict) -> object:
                 technique_id=ref_dict.get("technique_id"),
                 registry_key=ref_dict.get("registry_key"),
                 position_id=ref_dict.get("position_id"),
+                application_id=ref_dict.get("application_id"),
+                target_object_id=ref_dict.get("target_object_id"),
             )
         except ValueError:
             return unknown_err

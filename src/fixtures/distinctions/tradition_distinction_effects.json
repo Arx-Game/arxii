@@ -1,0 +1,28 @@
+[
+  {
+    "model": "distinctions.distinctioneffect",
+    "pk": 146,
+    "fields": {
+      "distinction": 57,
+      "target": 89,
+      "value_per_rank": 5,
+      "scaling_values": null,
+      "amplifies_sources_by": null,
+      "grants_immunity_to_negative": false,
+      "description": "Training in predatory instincts."
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "pk": 147,
+    "fields": {
+      "distinction": 57,
+      "target": 95,
+      "value_per_rank": 5,
+      "scaling_values": null,
+      "amplifies_sources_by": null,
+      "grants_immunity_to_negative": false,
+      "description": "Training in deception and subterfuge."
+    }
+  }
+]

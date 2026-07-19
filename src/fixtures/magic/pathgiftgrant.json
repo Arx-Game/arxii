@@ -1,0 +1,2350 @@
+[
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Pyromancy"
+      ],
+      "starter_techniques": [
+        [
+          "Pyromancy",
+          "Burning Strike"
+        ],
+        [
+          "Pyromancy",
+          "Kindled Edge"
+        ],
+        [
+          "Pyromancy",
+          "Cinder Guard"
+        ],
+        [
+          "Pyromancy",
+          "Ember Step"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Whispers"
+      ],
+      "gift": [
+        "Pyromancy"
+      ],
+      "starter_techniques": [
+        [
+          "Pyromancy",
+          "Smoke Screen"
+        ],
+        [
+          "Pyromancy",
+          "Dancing Spark"
+        ],
+        [
+          "Pyromancy",
+          "Ember Step"
+        ],
+        [
+          "Pyromancy",
+          "Firebrand"
+        ],
+        [
+          "Pyromancy",
+          "Candle Discipline"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Pyromancy"
+      ],
+      "starter_techniques": [
+        [
+          "Pyromancy",
+          "Trancefire"
+        ],
+        [
+          "Pyromancy",
+          "Kindled Hearts"
+        ],
+        [
+          "Pyromancy",
+          "Incendiary Word"
+        ],
+        [
+          "Pyromancy",
+          "Scalding Rebuke"
+        ],
+        [
+          "Pyromancy",
+          "Ember Servant"
+        ],
+        [
+          "Pyromancy",
+          "Cinder Guard"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Pyromancy"
+      ],
+      "starter_techniques": [
+        [
+          "Pyromancy",
+          "Pyre Blessing"
+        ],
+        [
+          "Pyromancy",
+          "Flame Ward"
+        ],
+        [
+          "Pyromancy",
+          "Warmth of the Hearth"
+        ],
+        [
+          "Pyromancy",
+          "Firebrand"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Pyromancy"
+      ],
+      "starter_techniques": [
+        [
+          "Pyromancy",
+          "Reading the Ash"
+        ],
+        [
+          "Pyromancy",
+          "Ignition Calculus"
+        ],
+        [
+          "Pyromancy",
+          "Candle Discipline"
+        ],
+        [
+          "Pyromancy",
+          "Firebrand"
+        ],
+        [
+          "Pyromancy",
+          "Heat Shimmer"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Geomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Geomancy",
+          "Stonefist Strike"
+        ],
+        [
+          "Geomancy",
+          "Iron Skin"
+        ],
+        [
+          "Geomancy",
+          "Sure Footing"
+        ],
+        [
+          "Geomancy",
+          "Shard Throw"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Whispers"
+      ],
+      "gift": [
+        "Geomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Geomancy",
+          "Tremor Sense"
+        ],
+        [
+          "Geomancy",
+          "Dust Veil"
+        ],
+        [
+          "Geomancy",
+          "Shard Throw"
+        ],
+        [
+          "Geomancy",
+          "Earthen Grasp"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Geomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Geomancy",
+          "Voice of the Foundations"
+        ],
+        [
+          "Geomancy",
+          "Fault Line"
+        ],
+        [
+          "Geomancy",
+          "Word of Weight"
+        ],
+        [
+          "Geomancy",
+          "Stone Face"
+        ],
+        [
+          "Geomancy",
+          "Clay Servant"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Geomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Geomancy",
+          "Blessing of the Bedrock"
+        ],
+        [
+          "Geomancy",
+          "Broken Ground"
+        ],
+        [
+          "Geomancy",
+          "Shard Throw"
+        ],
+        [
+          "Geomancy",
+          "Iron Skin"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Geomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Geomancy",
+          "Mason's Eye"
+        ],
+        [
+          "Geomancy",
+          "Sealed Door"
+        ],
+        [
+          "Geomancy",
+          "Shard Throw"
+        ],
+        [
+          "Geomancy",
+          "Iron Skin"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Cryomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Cryomancy",
+          "Frostbite Edge"
+        ],
+        [
+          "Cryomancy",
+          "Rime Mail"
+        ],
+        [
+          "Cryomancy",
+          "Winter's Grip"
+        ],
+        [
+          "Cryomancy",
+          "Ice Dart"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Whispers"
+      ],
+      "gift": [
+        "Cryomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Cryomancy",
+          "Hush of Snow"
+        ],
+        [
+          "Cryomancy",
+          "Breathless Chill"
+        ],
+        [
+          "Cryomancy",
+          "Ice Dart"
+        ],
+        [
+          "Cryomancy",
+          "Snow-Blind"
+        ],
+        [
+          "Cryomancy",
+          "Rime Mail"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Cryomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Cryomancy",
+          "Chilling Word"
+        ],
+        [
+          "Cryomancy",
+          "Let Go"
+        ],
+        [
+          "Cryomancy",
+          "Heartfrost"
+        ],
+        [
+          "Cryomancy",
+          "Winter's Composure"
+        ],
+        [
+          "Cryomancy",
+          "Rime Servant"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Cryomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Cryomancy",
+          "Frozen Vigil"
+        ],
+        [
+          "Cryomancy",
+          "Killing Frost"
+        ],
+        [
+          "Cryomancy",
+          "Winter's Grip"
+        ],
+        [
+          "Cryomancy",
+          "Rime Mail"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Cryomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Cryomancy",
+          "Preserver's Touch"
+        ],
+        [
+          "Cryomancy",
+          "Clear Ice Lens"
+        ],
+        [
+          "Cryomancy",
+          "Ice Dart"
+        ],
+        [
+          "Cryomancy",
+          "Rime Mail"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Stormcalling"
+      ],
+      "starter_techniques": [
+        [
+          "Stormcalling",
+          "Static Edge"
+        ],
+        [
+          "Stormcalling",
+          "Gale Step"
+        ],
+        [
+          "Stormcalling",
+          "Squall Shield"
+        ],
+        [
+          "Stormcalling",
+          "Thunderclap"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Whispers"
+      ],
+      "gift": [
+        "Stormcalling"
+      ],
+      "starter_techniques": [
+        [
+          "Stormcalling",
+          "Fogbank"
+        ],
+        [
+          "Stormcalling",
+          "Pressure Drop"
+        ],
+        [
+          "Stormcalling",
+          "Wind's Warning"
+        ],
+        [
+          "Stormcalling",
+          "Static Edge"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Stormcalling"
+      ],
+      "starter_techniques": [
+        [
+          "Stormcalling",
+          "Thunderclap"
+        ],
+        [
+          "Stormcalling",
+          "Voice of the Gale"
+        ],
+        [
+          "Stormcalling",
+          "Rallying Thunder"
+        ],
+        [
+          "Stormcalling",
+          "Gale Servant"
+        ],
+        [
+          "Stormcalling",
+          "Squall Shield"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Stormcalling"
+      ],
+      "starter_techniques": [
+        [
+          "Stormcalling",
+          "Called Bolt"
+        ],
+        [
+          "Stormcalling",
+          "Sky Omen"
+        ],
+        [
+          "Stormcalling",
+          "Squall Shield"
+        ],
+        [
+          "Stormcalling",
+          "Rallying Thunder"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Stormcalling"
+      ],
+      "starter_techniques": [
+        [
+          "Stormcalling",
+          "Storm Reading"
+        ],
+        [
+          "Stormcalling",
+          "Charged Air"
+        ],
+        [
+          "Stormcalling",
+          "Called Bolt"
+        ],
+        [
+          "Stormcalling",
+          "Squall Shield"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Wildcraft"
+      ],
+      "starter_techniques": [
+        [
+          "Wildcraft",
+          "Predator's Lunge"
+        ],
+        [
+          "Wildcraft",
+          "Thick Pelt"
+        ],
+        [
+          "Wildcraft",
+          "Fang and Claw"
+        ],
+        [
+          "Wildcraft",
+          "Pack Sense"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Whispers"
+      ],
+      "gift": [
+        "Wildcraft"
+      ],
+      "starter_techniques": [
+        [
+          "Wildcraft",
+          "Unlosable Trail"
+        ],
+        [
+          "Wildcraft",
+          "Hunter's Patience"
+        ],
+        [
+          "Wildcraft",
+          "Warning Hackles"
+        ],
+        [
+          "Wildcraft",
+          "Predator's Lunge"
+        ],
+        [
+          "Wildcraft",
+          "Beast's Eye"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Wildcraft"
+      ],
+      "starter_techniques": [
+        [
+          "Wildcraft",
+          "Beast Command"
+        ],
+        [
+          "Wildcraft",
+          "First Friend"
+        ],
+        [
+          "Wildcraft",
+          "Herd Words"
+        ],
+        [
+          "Wildcraft",
+          "Master of Hounds"
+        ],
+        [
+          "Wildcraft",
+          "Hound's Tongue"
+        ],
+        [
+          "Wildcraft",
+          "Fang and Claw"
+        ],
+        [
+          "Wildcraft",
+          "Thick Pelt"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Wildcraft"
+      ],
+      "starter_techniques": [
+        [
+          "Wildcraft",
+          "Mark of the Hunt"
+        ],
+        [
+          "Wildcraft",
+          "Warning Hackles"
+        ],
+        [
+          "Wildcraft",
+          "Fang and Claw"
+        ],
+        [
+          "Wildcraft",
+          "Hound's Tongue"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Flesh-Shaping"
+      ],
+      "starter_techniques": [
+        [
+          "Flesh-Shaping",
+          "Claw Growth"
+        ],
+        [
+          "Flesh-Shaping",
+          "Hide Like Horn"
+        ],
+        [
+          "Flesh-Shaping",
+          "Lengthened Stride"
+        ],
+        [
+          "Flesh-Shaping",
+          "Anatomist's Cut"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Whispers"
+      ],
+      "gift": [
+        "Flesh-Shaping"
+      ],
+      "starter_techniques": [
+        [
+          "Flesh-Shaping",
+          "Soft Steps"
+        ],
+        [
+          "Flesh-Shaping",
+          "Borrowed Features"
+        ],
+        [
+          "Flesh-Shaping",
+          "Claw Growth"
+        ],
+        [
+          "Flesh-Shaping",
+          "Iron Stomach"
+        ],
+        [
+          "Flesh-Shaping",
+          "Hide Like Horn"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Flesh-Shaping"
+      ],
+      "starter_techniques": [
+        [
+          "Flesh-Shaping",
+          "Mender's Hands"
+        ],
+        [
+          "Flesh-Shaping",
+          "Knit Flesh"
+        ],
+        [
+          "Flesh-Shaping",
+          "Hide Like Horn"
+        ],
+        [
+          "Flesh-Shaping",
+          "Claw Growth"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Flesh-Shaping"
+      ],
+      "starter_techniques": [
+        [
+          "Flesh-Shaping",
+          "Anatomist's Cut"
+        ],
+        [
+          "Flesh-Shaping",
+          "Reading the Body"
+        ],
+        [
+          "Flesh-Shaping",
+          "Knit Flesh"
+        ],
+        [
+          "Flesh-Shaping",
+          "Hide Like Horn"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Hemomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Hemomancy",
+          "Blood Edge"
+        ],
+        [
+          "Hemomancy",
+          "Coagulate"
+        ],
+        [
+          "Hemomancy",
+          "Blood Rush"
+        ],
+        [
+          "Hemomancy",
+          "Crimson Fang"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Whispers"
+      ],
+      "gift": [
+        "Hemomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Hemomancy",
+          "Pulse Track"
+        ],
+        [
+          "Hemomancy",
+          "Crimson Fang"
+        ],
+        [
+          "Hemomancy",
+          "Crimson Cloak"
+        ],
+        [
+          "Hemomancy",
+          "Quiet Pulse"
+        ],
+        [
+          "Hemomancy",
+          "Blood Sight"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Hemomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Hemomancy",
+          "Blood Fever"
+        ],
+        [
+          "Hemomancy",
+          "Quickened Heart"
+        ],
+        [
+          "Hemomancy",
+          "Vitality Surge"
+        ],
+        [
+          "Hemomancy",
+          "Blood Offering"
+        ],
+        [
+          "Hemomancy",
+          "Coagulate"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Hemomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Hemomancy",
+          "Blood Offering"
+        ],
+        [
+          "Hemomancy",
+          "Sanguine Shield"
+        ],
+        [
+          "Hemomancy",
+          "Vitality Surge"
+        ],
+        [
+          "Hemomancy",
+          "Coagulate"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Hemomancy"
+      ],
+      "starter_techniques": [
+        [
+          "Hemomancy",
+          "Hemorrhage"
+        ],
+        [
+          "Hemomancy",
+          "Plasma Ward"
+        ],
+        [
+          "Hemomancy",
+          "Vital Lens"
+        ],
+        [
+          "Hemomancy",
+          "Blood Sight"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Fury"
+      ],
+      "starter_techniques": [
+        [
+          "Fury",
+          "Savage Strike"
+        ],
+        [
+          "Fury",
+          "Shrug It Off"
+        ],
+        [
+          "Fury",
+          "Red Veil"
+        ],
+        [
+          "Fury",
+          "Last to Fall"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Fury"
+      ],
+      "starter_techniques": [
+        [
+          "Fury",
+          "Battle Howl"
+        ],
+        [
+          "Fury",
+          "Alpha Presence"
+        ],
+        [
+          "Fury",
+          "Blood-Up"
+        ],
+        [
+          "Fury",
+          "Savage Strike"
+        ],
+        [
+          "Fury",
+          "Shrug It Off"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Fury"
+      ],
+      "starter_techniques": [
+        [
+          "Fury",
+          "Righteous Wrath"
+        ],
+        [
+          "Fury",
+          "Unbowed"
+        ],
+        [
+          "Fury",
+          "Savage Strike"
+        ],
+        [
+          "Fury",
+          "Red Veil"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Fury"
+      ],
+      "starter_techniques": [
+        [
+          "Fury",
+          "Calculated Fury"
+        ],
+        [
+          "Fury",
+          "Cold Anger"
+        ],
+        [
+          "Fury",
+          "Shrug It Off"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Necromancy"
+      ],
+      "starter_techniques": [
+        [
+          "Necromancy",
+          "Grave Strike"
+        ],
+        [
+          "Necromancy",
+          "Bone Ward"
+        ],
+        [
+          "Necromancy",
+          "Death March"
+        ],
+        [
+          "Necromancy",
+          "Pallbearers"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Whispers"
+      ],
+      "gift": [
+        "Necromancy"
+      ],
+      "starter_techniques": [
+        [
+          "Necromancy",
+          "Ghoul's Touch"
+        ],
+        [
+          "Necromancy",
+          "Shroud Walk"
+        ],
+        [
+          "Necromancy",
+          "Grave Sight"
+        ],
+        [
+          "Necromancy",
+          "Bone Ward"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Necromancy"
+      ],
+      "starter_techniques": [
+        [
+          "Necromancy",
+          "Ancestral Voice"
+        ],
+        [
+          "Necromancy",
+          "Grave Servant"
+        ],
+        [
+          "Necromancy",
+          "Wailing Hex"
+        ],
+        [
+          "Necromancy",
+          "Grievance Spoken"
+        ],
+        [
+          "Necromancy",
+          "Spirit Veil"
+        ],
+        [
+          "Necromancy",
+          "Grave Bolt"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Necromancy"
+      ],
+      "starter_techniques": [
+        [
+          "Necromancy",
+          "Grave Bolt"
+        ],
+        [
+          "Necromancy",
+          "Bone Circle"
+        ],
+        [
+          "Necromancy",
+          "Spirit Communion"
+        ],
+        [
+          "Necromancy",
+          "Spirit Veil"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Necromancy"
+      ],
+      "starter_techniques": [
+        [
+          "Necromancy",
+          "Death's Calculation"
+        ],
+        [
+          "Necromancy",
+          "Warding Glyph"
+        ],
+        [
+          "Necromancy",
+          "Seance Lens"
+        ],
+        [
+          "Necromancy",
+          "Grave Sight"
+        ],
+        [
+          "Necromancy",
+          "Grave Bolt"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Shadowcraft"
+      ],
+      "starter_techniques": [
+        [
+          "Shadowcraft",
+          "Shadow Blade"
+        ],
+        [
+          "Shadowcraft",
+          "Umbral Bulwark"
+        ],
+        [
+          "Shadowcraft",
+          "Unseen Edge"
+        ],
+        [
+          "Shadowcraft",
+          "Shadow's Grasp"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Whispers"
+      ],
+      "gift": [
+        "Shadowcraft"
+      ],
+      "starter_techniques": [
+        [
+          "Shadowcraft",
+          "Silent Passage"
+        ],
+        [
+          "Shadowcraft",
+          "Blur Step"
+        ],
+        [
+          "Shadowcraft",
+          "Shadow Blade"
+        ],
+        [
+          "Shadowcraft",
+          "Lampblack"
+        ],
+        [
+          "Shadowcraft",
+          "Dark Adaption"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Shadowcraft"
+      ],
+      "starter_techniques": [
+        [
+          "Shadowcraft",
+          "Dread Presence"
+        ],
+        [
+          "Shadowcraft",
+          "Shadow Servant"
+        ],
+        [
+          "Shadowcraft",
+          "Doubt's Touch"
+        ],
+        [
+          "Shadowcraft",
+          "Shadow Blade"
+        ],
+        [
+          "Shadowcraft",
+          "Blur Step"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Shadowcraft"
+      ],
+      "starter_techniques": [
+        [
+          "Shadowcraft",
+          "Night Watch"
+        ],
+        [
+          "Shadowcraft",
+          "Umbral Bulwark"
+        ],
+        [
+          "Shadowcraft",
+          "Shadow's Grasp"
+        ],
+        [
+          "Shadowcraft",
+          "Shadow Blade"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Shadowcraft"
+      ],
+      "starter_techniques": [
+        [
+          "Shadowcraft",
+          "Shadow Theory"
+        ],
+        [
+          "Shadowcraft",
+          "Dark Adaption"
+        ],
+        [
+          "Shadowcraft",
+          "Shadow Blade"
+        ],
+        [
+          "Shadowcraft",
+          "Blur Step"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Whispers"
+      ],
+      "gift": [
+        "Dominion"
+      ],
+      "starter_techniques": [
+        [
+          "Dominion",
+          "Quiet Suggestion"
+        ],
+        [
+          "Dominion",
+          "Reading the Strings"
+        ],
+        [
+          "Dominion",
+          "Puppet's Stumble"
+        ],
+        [
+          "Dominion",
+          "Mind Lance"
+        ],
+        [
+          "Dominion",
+          "Iron Resolve"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Dominion"
+      ],
+      "starter_techniques": [
+        [
+          "Dominion",
+          "Word of Command"
+        ],
+        [
+          "Dominion",
+          "Presence of the Spider"
+        ],
+        [
+          "Dominion",
+          "Silk Thread"
+        ],
+        [
+          "Dominion",
+          "Mind Lance"
+        ],
+        [
+          "Dominion",
+          "Iron Resolve"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Dominion"
+      ],
+      "starter_techniques": [
+        [
+          "Dominion",
+          "Web of Attention"
+        ],
+        [
+          "Dominion",
+          "Reading the Strings"
+        ],
+        [
+          "Dominion",
+          "Mind Lance"
+        ],
+        [
+          "Dominion",
+          "Iron Resolve"
+        ],
+        [
+          "Dominion",
+          "Held Gaze"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Corruption"
+      ],
+      "starter_techniques": [
+        [
+          "Corruption",
+          "Venomed Edge"
+        ],
+        [
+          "Corruption",
+          "Witchfire Shield"
+        ],
+        [
+          "Corruption",
+          "Witchfire Bolt"
+        ],
+        [
+          "Corruption",
+          "Blight Mark"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Whispers"
+      ],
+      "gift": [
+        "Corruption"
+      ],
+      "starter_techniques": [
+        [
+          "Corruption",
+          "Venomed Edge"
+        ],
+        [
+          "Corruption",
+          "Rot's Patience"
+        ],
+        [
+          "Corruption",
+          "Blight Mark"
+        ],
+        [
+          "Corruption",
+          "Witchfire Shield"
+        ],
+        [
+          "Corruption",
+          "Caustic Spray"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Corruption"
+      ],
+      "starter_techniques": [
+        [
+          "Corruption",
+          "Honeyed Word"
+        ],
+        [
+          "Corruption",
+          "Laughing Curse"
+        ],
+        [
+          "Corruption",
+          "Witchfire Bolt"
+        ],
+        [
+          "Corruption",
+          "Witchfire Shield"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Corruption"
+      ],
+      "starter_techniques": [
+        [
+          "Corruption",
+          "Sweet Decay"
+        ],
+        [
+          "Corruption",
+          "Emerald Balm"
+        ],
+        [
+          "Corruption",
+          "Witchfire Bolt"
+        ],
+        [
+          "Corruption",
+          "Blight Mark"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Corruption"
+      ],
+      "starter_techniques": [
+        [
+          "Corruption",
+          "Toxin Lore"
+        ],
+        [
+          "Corruption",
+          "Caustic Spray"
+        ],
+        [
+          "Corruption",
+          "Witchfire Shield"
+        ],
+        [
+          "Corruption",
+          "Rot's Patience"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Glamour"
+      ],
+      "starter_techniques": [
+        [
+          "Glamour",
+          "Glass Dagger"
+        ],
+        [
+          "Glamour",
+          "Mirror Guard"
+        ],
+        [
+          "Glamour",
+          "Stage Exit"
+        ],
+        [
+          "Glamour",
+          "Upstaged"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Whispers"
+      ],
+      "gift": [
+        "Glamour"
+      ],
+      "starter_techniques": [
+        [
+          "Glamour",
+          "Face of the Hour"
+        ],
+        [
+          "Glamour",
+          "Curtain"
+        ],
+        [
+          "Glamour",
+          "Glass Dagger"
+        ],
+        [
+          "Glamour",
+          "Mirror Guard"
+        ],
+        [
+          "Glamour",
+          "Upstaged"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Glamour"
+      ],
+      "starter_techniques": [
+        [
+          "Glamour",
+          "Limelight"
+        ],
+        [
+          "Glamour",
+          "Standing Ovation"
+        ],
+        [
+          "Glamour",
+          "Heckler's Curse"
+        ],
+        [
+          "Glamour",
+          "Glass Dagger"
+        ],
+        [
+          "Glamour",
+          "Mirror Guard"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Glamour"
+      ],
+      "starter_techniques": [
+        [
+          "Glamour",
+          "Critic's Eye"
+        ],
+        [
+          "Glamour",
+          "Set Dressing"
+        ],
+        [
+          "Glamour",
+          "The Prop"
+        ],
+        [
+          "Glamour",
+          "Glass Dagger"
+        ],
+        [
+          "Glamour",
+          "Mirror Guard"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Resonant Chorus"
+      ],
+      "starter_techniques": [
+        [
+          "Resonant Chorus",
+          "Drumbeat March"
+        ],
+        [
+          "Resonant Chorus",
+          "War Chant"
+        ],
+        [
+          "Resonant Chorus",
+          "Shattering Chorus"
+        ],
+        [
+          "Resonant Chorus",
+          "Resonant Ward"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Resonant Chorus"
+      ],
+      "starter_techniques": [
+        [
+          "Resonant Chorus",
+          "Shattering Chorus"
+        ],
+        [
+          "Resonant Chorus",
+          "Resonant Ward"
+        ],
+        [
+          "Resonant Chorus",
+          "Inspiring Refrain"
+        ],
+        [
+          "Resonant Chorus",
+          "Sweet Nothings"
+        ],
+        [
+          "Resonant Chorus",
+          "Discordant Note"
+        ],
+        [
+          "Resonant Chorus",
+          "Lullaby"
+        ],
+        [
+          "Resonant Chorus",
+          "Carrying Voice"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Resonant Chorus"
+      ],
+      "starter_techniques": [
+        [
+          "Resonant Chorus",
+          "Hymn of the Door"
+        ],
+        [
+          "Resonant Chorus",
+          "Litany Against Fear"
+        ],
+        [
+          "Resonant Chorus",
+          "Shattering Chorus"
+        ],
+        [
+          "Resonant Chorus",
+          "Resonant Ward"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Resonant Chorus"
+      ],
+      "starter_techniques": [
+        [
+          "Resonant Chorus",
+          "Harmonic Theory"
+        ],
+        [
+          "Resonant Chorus",
+          "Counterpoint"
+        ],
+        [
+          "Resonant Chorus",
+          "Shattering Chorus"
+        ],
+        [
+          "Resonant Chorus",
+          "Resonant Ward"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Radiance"
+      ],
+      "starter_techniques": [
+        [
+          "Radiance",
+          "Sunblade"
+        ],
+        [
+          "Radiance",
+          "Dawnplate"
+        ],
+        [
+          "Radiance",
+          "Smiting Light"
+        ],
+        [
+          "Radiance",
+          "Blessing of Strength"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Radiance"
+      ],
+      "starter_techniques": [
+        [
+          "Radiance",
+          "Beacon Cry"
+        ],
+        [
+          "Radiance",
+          "Word of Absolution"
+        ],
+        [
+          "Radiance",
+          "Smiting Light"
+        ],
+        [
+          "Radiance",
+          "Sacred Ward"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Radiance"
+      ],
+      "starter_techniques": [
+        [
+          "Radiance",
+          "Smiting Light"
+        ],
+        [
+          "Radiance",
+          "Sacred Ward"
+        ],
+        [
+          "Radiance",
+          "Blessing of Strength"
+        ],
+        [
+          "Radiance",
+          "Gentle Mending"
+        ],
+        [
+          "Radiance",
+          "Judgment's Weight"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Radiance"
+      ],
+      "starter_techniques": [
+        [
+          "Radiance",
+          "Lumen Script"
+        ],
+        [
+          "Radiance",
+          "Revealing Light"
+        ],
+        [
+          "Radiance",
+          "Undying Lamp"
+        ],
+        [
+          "Radiance",
+          "Smiting Light"
+        ],
+        [
+          "Radiance",
+          "Sacred Ward"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Glyphwork"
+      ],
+      "starter_techniques": [
+        [
+          "Glyphwork",
+          "Warded Blade"
+        ],
+        [
+          "Glyphwork",
+          "Shieldwright's Mark"
+        ],
+        [
+          "Glyphwork",
+          "Force Sigil"
+        ],
+        [
+          "Glyphwork",
+          "Empowering Glyph"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Whispers"
+      ],
+      "gift": [
+        "Glyphwork"
+      ],
+      "starter_techniques": [
+        [
+          "Glyphwork",
+          "Thief's Mark"
+        ],
+        [
+          "Glyphwork",
+          "Inkless Cipher"
+        ],
+        [
+          "Glyphwork",
+          "Force Sigil"
+        ],
+        [
+          "Glyphwork",
+          "Arcane Barrier"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Glyphwork"
+      ],
+      "starter_techniques": [
+        [
+          "Glyphwork",
+          "True Name, Spoken"
+        ],
+        [
+          "Glyphwork",
+          "Sealing Word"
+        ],
+        [
+          "Glyphwork",
+          "Force Sigil"
+        ],
+        [
+          "Glyphwork",
+          "Arcane Barrier"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Glyphwork"
+      ],
+      "starter_techniques": [
+        [
+          "Glyphwork",
+          "Binding Chalk"
+        ],
+        [
+          "Glyphwork",
+          "Empowering Glyph"
+        ],
+        [
+          "Glyphwork",
+          "Force Sigil"
+        ],
+        [
+          "Glyphwork",
+          "Arcane Barrier"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Glyphwork"
+      ],
+      "starter_techniques": [
+        [
+          "Glyphwork",
+          "Force Sigil"
+        ],
+        [
+          "Glyphwork",
+          "Arcane Barrier"
+        ],
+        [
+          "Glyphwork",
+          "Patient Sigil"
+        ],
+        [
+          "Glyphwork",
+          "Scribe's Eye"
+        ],
+        [
+          "Glyphwork",
+          "Unraveling Hex"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Steel"
+      ],
+      "gift": [
+        "Oathcraft"
+      ],
+      "starter_techniques": [
+        [
+          "Oathcraft",
+          "Sworn Blade"
+        ],
+        [
+          "Oathcraft",
+          "Oathkeeper's Stand"
+        ],
+        [
+          "Oathcraft",
+          "Champion's Charge"
+        ],
+        [
+          "Oathcraft",
+          "Retribution Clause"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Voice"
+      ],
+      "gift": [
+        "Oathcraft"
+      ],
+      "starter_techniques": [
+        [
+          "Oathcraft",
+          "Word of Witness"
+        ],
+        [
+          "Oathcraft",
+          "Liar's Sting"
+        ],
+        [
+          "Oathcraft",
+          "Promise's Weight"
+        ],
+        [
+          "Oathcraft",
+          "Covenant Ward"
+        ],
+        [
+          "Oathcraft",
+          "Binding Handshake"
+        ],
+        [
+          "Oathcraft",
+          "Retribution Clause"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of the Chosen"
+      ],
+      "gift": [
+        "Oathcraft"
+      ],
+      "starter_techniques": [
+        [
+          "Oathcraft",
+          "Vowsight"
+        ],
+        [
+          "Oathcraft",
+          "Champion's Charge"
+        ],
+        [
+          "Oathcraft",
+          "Covenant Ward"
+        ],
+        [
+          "Oathcraft",
+          "Liar's Sting"
+        ],
+        [
+          "Oathcraft",
+          "Retribution Clause"
+        ]
+      ]
+    }
+  },
+  {
+    "model": "magic.pathgiftgrant",
+    "fields": {
+      "path": [
+        "Path of Tomes"
+      ],
+      "gift": [
+        "Oathcraft"
+      ],
+      "starter_techniques": [
+        [
+          "Oathcraft",
+          "Contract Law"
+        ],
+        [
+          "Oathcraft",
+          "Escrow Seal"
+        ],
+        [
+          "Oathcraft",
+          "Retribution Clause"
+        ],
+        [
+          "Oathcraft",
+          "Covenant Ward"
+        ]
+      ]
+    }
+  }
+]

@@ -80,6 +80,10 @@ class ActionBackend(models.TextChoices):
     COMBAT = "combat", "Combat"
     REGISTRY = "registry", "Registry"
     SCENE_ADAPTIVE = "scene_adaptive", "Scene-adaptive"
+    # Bare-object affordance (#2503): a synthesized action with no ChallengeInstance
+    # yet — dispatch mints one from (application_id, target_object_id) before
+    # resolving through the same CHALLENGE pipeline. See ActionRef's docstring.
+    WORLD_INTERACTION = "world_interaction", "World interaction"
 
 
 class ActionCategory(models.TextChoices):

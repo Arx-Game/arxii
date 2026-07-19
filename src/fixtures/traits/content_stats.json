@@ -1,0 +1,11 @@
+[
+  {
+    "model": "traits.trait",
+    "fields": {
+      "name": "presence",
+      "trait_type": "stat",
+      "category": "social",
+      "description": "PLACEHOLDER Force of personality — the weight a person carries into a room."
+    }
+  }
+]
