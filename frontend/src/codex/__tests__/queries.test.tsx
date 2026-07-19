@@ -117,6 +117,7 @@ describe('Codex Query Hooks', () => {
           ],
           display_order: 1,
           knowledge_status: null,
+          art_url: null,
         },
         {
           id: 2,
@@ -132,6 +133,7 @@ describe('Codex Query Hooks', () => {
           ],
           display_order: 2,
           knowledge_status: null,
+          art_url: null,
         },
       ];
       vi.mocked(api.getEntries).mockResolvedValue(mockEntries);
@@ -164,6 +166,7 @@ describe('Codex Query Hooks', () => {
           ],
           display_order: 1,
           knowledge_status: null,
+          art_url: null,
         },
       ];
       vi.mocked(api.getEntries).mockResolvedValue(mockEntries);
@@ -203,6 +206,7 @@ describe('Codex Query Hooks', () => {
         knowledge_status: null,
         learn_threshold: 10,
         research_progress: null,
+        art_url: null,
       };
       vi.mocked(api.getEntry).mockResolvedValue(mockEntry);
 
@@ -250,6 +254,7 @@ describe('Codex Query Hooks', () => {
           subject_path: [{ type: 'category' as const, id: 1, name: 'Magic' }],
           display_order: 1,
           knowledge_status: null,
+          art_url: null,
         },
       ];
       vi.mocked(api.searchEntries).mockResolvedValue(mockResults);

@@ -40,7 +40,8 @@ function makeEntry(
   id: number,
   name: string,
   loreContent: string,
-  links: CodexEntryDetail['lore_links']
+  links: CodexEntryDetail['lore_links'],
+  artUrl: string | null = null
 ): CodexEntryDetail {
   return {
     id,
@@ -61,6 +62,7 @@ function makeEntry(
     knowledge_status: 'known' as const,
     learn_threshold: 10,
     research_progress: null,
+    art_url: artUrl,
   };
 }
 
@@ -149,5 +151,44 @@ describe('CodexModal navigation', () => {
 
     // Forward button should now be visible
     expect(screen.getByLabelText('Go forward')).toBeInTheDocument();
+  });
+
+  it('renders the entry art when art_url is present', async () => {
+    const entry = makeEntry(
+      1,
+      'The Shroud',
+      'A veil between worlds.',
+      [],
+      'https://example.com/shroud.jpg'
+    );
+
+    vi.mocked(api.getEntry).mockResolvedValue(entry);
+
+    render(<CodexModal entryId={1} open={true} onOpenChange={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('The Shroud')).toBeInTheDocument();
+    });
+
+    const img = screen.getByRole('img', { name: /The Shroud/i });
+    expect(img).toHaveAttribute('src', 'https://example.com/shroud.jpg');
+  });
+
+  it('renders nothing extra when art_url is null', async () => {
+    const entry = makeEntry(2, 'The Flickering', 'Something dim.', [], null);
+
+    vi.mocked(api.getEntry).mockResolvedValue(entry);
+
+    render(<CodexModal entryId={2} open={true} onOpenChange={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('The Flickering')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 });
