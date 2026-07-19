@@ -136,6 +136,32 @@ def transfer(  # noqa: PLR0913 - source/destination pairs are co-equal by design
         )
 
 
+def withdraw_from_treasury(
+    *, organization: Organization, persona: Persona, amount: int, reason: str = ""
+) -> CurrencyTransfer:
+    """A spend-authorized member draws ``amount`` coppers from the org treasury to their purse.
+
+    The discretionary-spend primitive for house distribution (#2540): the treasury→member
+    outflow that #930 never built (every other treasury outflow is treasury→treasury). Gated by
+    ``can_spend_treasury`` — an active membership at rank tier <= ``spend_rank_max`` (the head /
+    top rank by default). Because it is action-driven it is inherently piloted-only; it must
+    never be automated, so a non-piloted NPC head has no path to drain the coffers.
+
+    Raises ``ValidationError`` if the persona lacks spend authority (or ``transfer`` rejects the
+    amount / insufficient funds).
+    """
+    treasury = get_or_create_treasury(organization)
+    if not can_spend_treasury(treasury, persona):
+        msg = "You do not have the standing to spend from this treasury."
+        raise ValidationError(msg)
+    return transfer(
+        amount=amount,
+        reason=reason or f"treasury withdrawal by {persona}",
+        from_treasury=treasury,
+        to_purse=get_or_create_purse(persona.character_sheet),
+    )
+
+
 def _instrument_template(denomination: str):
     """Lazy ItemTemplate per denomination (repo bans seed migrations).
 
