@@ -206,7 +206,7 @@ def _serialize_ambient_lines(lines, room_fixture_by_pk: dict) -> list[dict]:
             "trigger_resonance": (row.trigger_resonance.name if row.trigger_resonance_id else None),
             "trigger_minimum_value": row.trigger_minimum_value,
             "trigger_distinction": (
-                row.trigger_distinction.name if row.trigger_distinction_id else None
+                row.trigger_distinction.slug if row.trigger_distinction_id else None
             ),
             "trigger_min_fame_tier": row.trigger_min_fame_tier or None,
             "trigger_perceiving_society": (

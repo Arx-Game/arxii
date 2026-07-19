@@ -227,3 +227,28 @@ class GridExportTests(TestCase):
         self.assertEqual(line["room"], "arx-city/golden-hart-taproom")
         self.assertEqual(line["trigger_type"], "none")
         self.assertEqual(line["arriver_body"], "The taproom's low murmur greets you.")
+
+    def test_ambient_line_distinction_trigger_serialized_by_slug(self) -> None:
+        from world.distinctions.factories import DistinctionFactory
+        from world.narrative.constants import AmbientTriggerType
+        from world.narrative.factories import AmbientEmoteLineFactory
+
+        distinction = DistinctionFactory(name="Blooded Duelist", slug="blooded-duelist")
+        AmbientEmoteLineFactory(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.taproom,
+            area=None,
+            trigger_type=AmbientTriggerType.DISTINCTION,
+            trigger_distinction=distinction,
+            arriver_body="A hush falls as the duelist enters.",
+        )
+
+        result = export_grid_bundles(self.root)
+
+        self.assertEqual(result.errors, [])
+        bundle = self._load_bundle("arx-city")
+        self.assertEqual(len(bundle["ambient_lines"]), 1)
+        line = bundle["ambient_lines"][0]
+        self.assertEqual(line["trigger_type"], "distinction")
+        self.assertEqual(line["trigger_distinction"], distinction.slug)
+        self.assertNotEqual(line["trigger_distinction"], distinction.name)
