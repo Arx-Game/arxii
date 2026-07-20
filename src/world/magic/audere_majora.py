@@ -440,9 +440,54 @@ def maybe_create_audere_majora_offer(
     )
 
     if created:
-        _broadcast_manifestation(character, threshold.manifestation_text)
+        variant = maybe_apply_audere_faith_coupling(sheet, threshold, offer)
+        if variant is not None:
+            _broadcast_manifestation(character, variant.manifestation_text)
+        else:
+            _broadcast_manifestation(character, threshold.manifestation_text)
 
     return offer
+
+
+def maybe_apply_audere_faith_coupling(
+    sheet: CharacterSheet,
+    threshold: AudereMajoraThreshold,
+    offer: PendingAudereMajoraOffer,
+) -> AudereMajoraFaithVariant | None:
+    """Select and persist a faith variant on the offer if the character qualifies.
+
+    Does NOT spend the pool — pool spend is deferred to ``cross_threshold``.
+    Returns the selected variant, or None. If a variant is selected, its
+    ``manifestation_text`` replaces the generic threshold broadcast.
+    """
+    from world.worship.models import DevotionStanding  # noqa: PLC0415
+
+    variants = AudereMajoraFaithVariant.objects.filter(
+        threshold=threshold,
+        is_active=True,
+    ).select_related("being")
+
+    best_variant = None
+    best_favor = 0
+    for variant in variants:
+        standing = DevotionStanding.objects.filter(
+            character_sheet=sheet,
+            being=variant.being,
+        ).first()
+        if standing is None or standing.favor < variant.favor_threshold:
+            continue
+        if variant.being.resonance_pool < variant.resonance_pool_cost:
+            continue
+        if standing.favor > best_favor:
+            best_variant = variant
+            best_favor = standing.favor
+
+    if best_variant is None:
+        return None
+
+    offer.faith_variant = best_variant
+    offer.save(update_fields=["faith_variant"])
+    return best_variant
 
 
 # =============================================================================
@@ -585,6 +630,7 @@ def cross_threshold(
     chosen_path,
     *,
     declaration_text: str,
+    offer: PendingAudereMajoraOffer | None = None,
 ) -> AudereMajoraCrossingResult:
     """Execute the crossing inside the caller's transaction.
 
@@ -652,6 +698,27 @@ def cross_threshold(
     else:
         declaration_id = None
 
+    # Faith coupling bonus (#2360): apply variant conditions + spend pool at crossing.
+    faith_coupling_applied = False
+    faith_being_name = ""
+    if offer is not None and offer.faith_variant_id is not None:
+        variant = offer.faith_variant
+        being = variant.being
+        # Re-check pool (staleness guard — offer was created at cast time).
+        if being.resonance_pool >= variant.resonance_pool_cost:
+            from world.worship.services import spend_worship_pool  # noqa: PLC0415
+
+            for row in variant.condition_applications.select_related("condition"):
+                apply_condition(
+                    target=character,
+                    condition=row.condition,
+                    severity=row.base_severity,
+                    duration_rounds=row.base_duration_rounds,
+                )
+            spend_worship_pool(being, variant.resonance_pool_cost, reason="audere_faith_coupling")
+            faith_coupling_applied = True
+            faith_being_name = being.name
+
     return AudereMajoraCrossingResult(
         accepted=True,
         level_before=level_before,
@@ -659,6 +726,8 @@ def cross_threshold(
         chosen_path_name=chosen_path.name,
         advisory_text=advisory,
         declaration_interaction_id=declaration_id,
+        faith_coupling_applied=faith_coupling_applied,
+        faith_being_name=faith_being_name,
     )
 
 
@@ -720,6 +789,7 @@ def resolve_audere_majora_offer(
             threshold,
             chosen_path,
             declaration_text=declaration_text,
+            offer=locked,
         )
         locked.delete()
 
