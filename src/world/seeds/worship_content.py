@@ -160,3 +160,7 @@ def seed_worship_content() -> None:
     ensure_ceremony_check_type(seeded["skill"])
     ensure_favorite_achievements()
     ensure_traditions_and_beings(seeded["specs"])
+
+    from world.worship.factories import wire_miracle_content  # noqa: PLC0415
+
+    wire_miracle_content()

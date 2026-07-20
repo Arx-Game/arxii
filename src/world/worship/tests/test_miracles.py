@@ -3,7 +3,7 @@
 from django.test import TestCase
 
 from world.worship.constants import MiracleTrigger
-from world.worship.factories import WorshippedBeingFactory
+from world.worship.factories import WorshippedBeingFactory, wire_miracle_content
 from world.worship.models import (
     DivineInterventionConfig,
     Miracle,
@@ -225,4 +225,34 @@ class TriggerLifecycleTests(TestCase):
                 obj=self.sheet.character,
                 trigger_definition__name="divine_intervention_on_incapacitated",
             ).exists()
+        )
+
+
+class WireMiracleContentTests(TestCase):
+    """Tests for wire_miracle_content seed (#2360)."""
+
+    def test_seeds_trigger_and_config(self) -> None:
+        wire_miracle_content()
+
+        from flows.models import TriggerDefinition
+
+        self.assertTrue(
+            TriggerDefinition.objects.filter(name="divine_intervention_on_incapacitated").exists()
+        )
+
+        from world.conditions.models import ConditionTemplate
+
+        self.assertTrue(
+            ConditionTemplate.objects.filter(name="Divine Intervention Cooldown").exists()
+        )
+
+    def test_idempotent(self) -> None:
+        wire_miracle_content()
+        wire_miracle_content()
+
+        from flows.models import TriggerDefinition
+
+        self.assertEqual(
+            TriggerDefinition.objects.filter(name="divine_intervention_on_incapacitated").count(),
+            1,
         )
