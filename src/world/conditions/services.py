@@ -12,7 +12,7 @@ Design principles:
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -195,6 +195,43 @@ def get_active_conditions(
 
     if condition:
         qs = qs.filter(condition=condition)
+
+    # #2537: lazy IC-time expiry. Remove any instances whose expires_at has
+    # passed before returning them as "active." Removal is always safe
+    # (CONDITION_REMOVED event + deferred-death resolution fire via the
+    # teardown helper). Uses _teardown_removed_condition_instance directly
+    # (not remove_condition) to avoid re-entrancy: remove_condition calls
+    # get_condition_instance → get_active_conditions, which would re-enter
+    # this function. The instance is already in hand, so the direct teardown
+    # (the same path remove_conditions_by_category and clear_all_conditions
+    # use) is correct and avoids the loop.
+    #
+    # Only sweep conditions whose template duration_type is INGAME_TIME.
+    # The ``expires_at`` field is also used by the wake-arc system
+    # (``_stamp_unconscious_wake_deadline``) as a force-wake backstop on
+    # conditions with OTHER duration types (e.g. Unconscious, which is
+    # UNTIL_CURED). Sweeping those would remove them before the wake system
+    # can process the guaranteed-wake deadline (#2287).
+    instances = list(qs)
+    if instances:
+        now = timezone.now()
+        expired = [
+            inst
+            for inst in instances
+            if inst.expires_at is not None
+            and now >= inst.expires_at
+            and inst.condition.default_duration_type == DurationType.INGAME_TIME
+        ]
+        if expired:
+            for inst in expired:
+                _teardown_removed_condition_instance(inst.target, inst)
+            # Re-query to exclude removed instances. pk__in is already filtered
+            # (derived from the post-filter instances list above), so the
+            # category/condition/suppressed filters don't need re-applying.
+            surviving_pks = [inst.pk for inst in instances if inst not in expired]
+            qs = ConditionInstance.objects.filter(pk__in=surviving_pks).select_related(
+                "condition", "condition__category", "current_stage"
+            )
 
     return qs
 
@@ -587,6 +624,39 @@ def _process_interactions_from_context(
     return result
 
 
+def _compute_ingame_time_expires(template: ConditionTemplate) -> datetime | None:
+    """Compute the real-time ``expires_at`` for an INGAME_TIME condition.
+
+    For ``DurationType.INGAME_TIME``, ``default_duration_value`` is interpreted
+    as IC hours. The real-time expiration is ``ic_duration / time_ratio`` from
+    now, where ``time_ratio`` is IC seconds per real second (default 3.0).
+
+    Returns ``None`` if no game clock exists or the duration value is falsy —
+    the condition simply won't expire by IC time (degrades to PERMANENT-like).
+
+    Args:
+        template: The condition template (must have ``default_duration_type ==
+            INGAME_TIME``).
+
+    Returns:
+        A real-time datetime for expiration, or ``None``.
+    """
+    ic_hours = template.default_duration_value or 0
+    if ic_hours <= 0:
+        return None
+
+    from world.game_clock.models import GameClock  # noqa: PLC0415
+
+    clock = GameClock.get_active()
+    if clock is None:
+        return None
+
+    # time_ratio = IC seconds per real second (default 3.0).
+    # real_duration = ic_duration / time_ratio.
+    real_seconds = (ic_hours * 3600) / clock.time_ratio
+    return timezone.now() + timedelta(seconds=real_seconds)
+
+
 def _create_instance_from_context(
     template: ConditionTemplate,
     params: _ApplyConditionParams,
@@ -596,6 +666,12 @@ def _create_instance_from_context(
     """Create a new condition instance using pre-fetched stage data."""
     rounds = params.duration_rounds or template.default_duration_value
     rounds_remaining = rounds if template.default_duration_type == DurationType.ROUNDS else None
+
+    expires_at = (
+        _compute_ingame_time_expires(template)
+        if template.default_duration_type == DurationType.INGAME_TIME
+        else None
+    )
 
     first_stage = ctx.first_stages.get(template.pk) if template.has_progression else None
     stage_rounds = (
@@ -610,6 +686,7 @@ def _create_instance_from_context(
         severity=params.severity,
         stacks=1,
         rounds_remaining=rounds_remaining,
+        expires_at=expires_at,
         current_stage=first_stage,
         stage_rounds_remaining=stage_rounds,
         source_character=params.source_character,
@@ -729,6 +806,8 @@ def _handle_refresh(
     rounds = params.duration_rounds or template.default_duration_value
     if template.default_duration_type == DurationType.ROUNDS:
         existing.rounds_remaining = rounds
+    elif template.default_duration_type == DurationType.INGAME_TIME:
+        existing.expires_at = _compute_ingame_time_expires(template)
     existing.save()
 
     return ApplyConditionResult(

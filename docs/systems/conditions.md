@@ -11,7 +11,7 @@ Persistent states on targets (characters, objects, rooms) that modify capabiliti
 
 ```python
 from world.conditions.constants import (
-    DurationType,                  # ROUNDS, UNTIL_CURED, UNTIL_USED, UNTIL_END_OF_COMBAT, SCENE, PERMANENT
+    DurationType,                  # ROUNDS, UNTIL_CURED, UNTIL_USED, UNTIL_END_OF_COMBAT, SCENE, INGAME_TIME, PERMANENT
     StackBehavior,                 # INTENSITY, DURATION, BOTH
     DamageTickTiming,              # START_OF_ROUND, END_OF_ROUND, ON_ACTION
     ConditionInteractionTrigger,   # ON_OTHER_APPLIED, ON_SELF_APPLIED, WHILE_BOTH_PRESENT
