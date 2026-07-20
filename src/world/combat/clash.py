@@ -207,6 +207,19 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         )
         raise ValueError(msg)
 
+    # 0b. Resolve the CombatParticipant so the round context (#2536 Task 4 review
+    #     fix) can be threaded into use_technique below, same participant lookup
+    #     the step-9 Interaction-recording block already performs later — moved
+    #     up here so both consumers share it. None-guarded: legacy fixtures /
+    #     isolated unit tests that do not wire a CombatParticipant degrade
+    #     gracefully (situation_ctx=None, exactly as a non-combat cast).
+    from world.combat.models import CombatParticipant  # noqa: PLC0415
+
+    participant = CombatParticipant.objects.filter(
+        encounter_id=clash.encounter_id,
+        character_sheet=character_sheet,
+    ).first()
+
     # 1. Resolve the check via the shared cast-check rule (ADR-0096): the
     #    caster's personal magic check when provisioned, else the template's.
     template = technique.action_template
@@ -287,6 +300,8 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
     #    ``lethal`` is threaded from the encounter's risk level (consistent with
     #    ``resolve_combat_technique``) so a non-lethal encounter caps soulfray the
     #    same way through the clash path as through the standard technique path (#1182).
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+
     technique_use_result = use_technique(
         character=objectdb,
         technique=technique,
@@ -296,6 +311,15 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         confirm_soulfray_risk=True,
         power_intensity_bonus=power_intensity_bonus,
         lethal=clash.encounter.is_lethal,
+        # #2536 Task 4 review fix: thread the live round context (when a
+        # CombatParticipant resolves — see step 0b above) so situational-perk
+        # POWER_BONUS providers can read combat-positioning situations
+        # (AT_RANGE/IN_MELEE/SURROUNDED/...) for clash contributions too, not
+        # only the direct-attack round path. No explicit target concept exists
+        # for a clash contribution in production (see
+        # ``vow_situational_power_term``'s docstring) — target_sheet is not
+        # threaded here.
+        situation_ctx=CombatRoundContext(participant) if participant is not None else None,
     )
 
     # 5. Guard against unconfirmed result (confirm_soulfray_risk=True should
@@ -338,20 +362,15 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
     )
 
     # 9. Record the canonical strain audit on an ACTION-mode Interaction.
-    #    The participant is resolved from clash.encounter + character_sheet so
-    #    commit_to_clash callers don't need to thread it explicitly. When the
-    #    participant lookup fails (legacy fixtures, isolated unit tests that do
-    #    not wire a CombatParticipant), skip Interaction creation rather than
+    #    ``participant`` was already resolved in step 0b above (reused here so
+    #    commit_to_clash callers still don't need to thread it explicitly). When
+    #    the participant lookup fails (legacy fixtures, isolated unit tests that
+    #    do not wire a CombatParticipant), skip Interaction creation rather than
     #    fail the whole pipeline.
     from world.combat.interaction_services import (  # noqa: PLC0415
         create_action_interaction,
     )
-    from world.combat.models import CombatParticipant  # noqa: PLC0415
 
-    participant = CombatParticipant.objects.filter(
-        encounter_id=clash.encounter_id,
-        character_sheet=character_sheet,
-    ).first()
     recorded_interaction = None
     if participant is not None:
         clash_interaction = create_action_interaction(

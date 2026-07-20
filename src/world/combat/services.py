@@ -1031,6 +1031,41 @@ def _build_affected_targets(
     return targets
 
 
+def _resolve_primary_target_sheet(action: CombatRoundAction) -> CharacterSheet | None:
+    """Resolve the cast's primary target's ``CharacterSheet`` for situational perks (#2536).
+
+    Mirrors ``_build_affected_targets``'s ordering (opponent target takes
+    precedence over ally target when a technique somehow declares both — the
+    dispatcher never actually does this, but the ordering is kept consistent).
+    Only a PC/sheet-backed target can populate a ``CharacterSheet``:
+
+    - ``focused_ally_target`` → ``CombatParticipant.character_sheet`` (always
+      a real ``CharacterSheet`` — every ``CombatParticipant`` is a PC).
+    - ``focused_opponent_target`` → a ``CombatOpponent`` is NPC-only and has
+      no ``CharacterSheet`` FK of its own, UNLESS it is a "story NPC" linked
+      to a persistent ``scenes.Persona`` (``CombatOpponent.persona``, see
+      ``world/combat/escalation.py``'s ``opponent.persona.character_sheet``
+      for the same resolution pattern) — that gives a real ``CharacterSheet``
+      target-keyed situations can read. A bare (non-persona) NPC opponent
+      correctly resolves to ``None``: target-keyed situations (
+      ``TARGET_DISTRACTED``/``TARGET_SWAYED_BY_ALLY``/
+      ``TARGET_FOCUSED_ELSEWHERE``/``TARGET_FAVORABLY_DISPOSED``) simply
+      never hold against it, same as any other targetless cast.
+
+    For a multi-target/AoE cast only this single primary target is resolved
+    — per-target perk evaluation for AoE is a legitimate slice-2+
+    refinement (see ``vow_situational_power_term``'s docstring).
+    """
+    if action.focused_opponent_target_id:
+        opponent = action.focused_opponent_target
+        if opponent.persona_id is not None:
+            return opponent.persona.character_sheet
+        return None
+    if action.focused_ally_target_id:
+        return action.focused_ally_target.character_sheet
+    return None
+
+
 def _check_combat_target_prerequisites(
     technique: Technique, caster_od: ObjectDB, targets: list[ObjectDB]
 ) -> None:
@@ -1240,6 +1275,11 @@ def resolve_combat_technique(
         # just wraps the already-resolved participant (its encounter rides the
         # SharedMemoryModel identity map), no extra query.
         situation_ctx=CombatRoundContext(participant),
+        # #2536 Task 4 review fix: thread the cast's primary target's
+        # CharacterSheet so target-keyed situational-perk POWER_BONUS
+        # providers (TARGET_DISTRACTED/TARGET_SWAYED_BY_ALLY/
+        # TARGET_FOCUSED_ELSEWHERE/TARGET_FAVORABLY_DISPOSED) can fire.
+        target_sheet=_resolve_primary_target_sheet(action),
     )
 
     return _build_combat_result(

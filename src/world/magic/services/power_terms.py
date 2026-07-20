@@ -53,12 +53,26 @@ class PowerTermContext:
     ``DURING_NEGOTIATION``, ...) hold regardless. Defaulted so every existing
     constructor (non-combat call sites, every test fixture) stays valid
     unchanged.
+
+    ``target_sheet`` (#2536, Task 4 review fix): the cast's primary target's
+    ``CharacterSheet``, or ``None`` when the cast has no target (SELF casts,
+    non-combat casts, an NPC-only opponent with no linked ``CharacterSheet``).
+    Threaded straight through to ``perks.services.applicable_perks``'s
+    ``target=`` kwarg via ``vow_situational_power_term`` below — this is what
+    lets the four target-keyed situations (``TARGET_DISTRACTED``,
+    ``TARGET_SWAYED_BY_ALLY``, ``TARGET_FOCUSED_ELSEWHERE``,
+    ``TARGET_FAVORABLY_DISPOSED``) fire for ``POWER_BONUS``. For a
+    multi-target/AoE cast, only the FIRST/primary resolved target is threaded
+    — per-target perk evaluation for AoE casts is a legitimate slice-2+
+    refinement, not built here. Defaulted so every existing constructor stays
+    valid unchanged.
     """
 
     sheet: CharacterSheet
     technique: Technique | None
     applicable_threads: Sequence[ApplicableThread]
     situation_ctx: object | None = None
+    target_sheet: object | None = None
 
 
 PowerTermProvider = Callable[[PowerTermContext], int]
@@ -375,21 +389,41 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
 
     ``resolution=ctx.situation_ctx`` — the live ``CombatRoundContext`` in
     combat (threaded by ``resolve_combat_technique``,
-    ``world/combat/services.py``), or ``None`` outside combat; DB-state
+    ``world/combat/services.py``, and by ``commit_to_clash``,
+    ``world/combat/clash.py``), or ``None`` outside combat; DB-state
     situations still evaluate correctly with ``None`` (see
     ``SituationContext``'s docstring).
 
-    ``target=None`` — **slice-1 limitation, documented deliberately**: no
-    ``PowerTermContext`` construction site threads the cast's target sheet
-    (``_derive_power``/``use_technique`` take a ``targets: list[ObjectDB]``
-    for reactive-event/AoE purposes, but never forward it into the TERM
-    stage). Target-keyed situations (``TARGET_DISTRACTED``,
-    ``TARGET_SWAYED_BY_ALLY``, ``TARGET_FOCUSED_ELSEWHERE``,
-    ``TARGET_FAVORABLY_DISPOSED``) therefore CANNOT fire for ``POWER_BONUS``
-    in slice 1 — a perk authored with one of those as its only situation is
-    inert for power bonuses until a future slice threads a target sheet
-    through this seam. Non-target situations (``AT_RANGE``/``IN_MELEE``/
-    ``SURROUNDED``/``ALLY_LOW_HEALTH``/``DURING_NEGOTIATION``) are unaffected.
+    ``target=ctx.target_sheet`` (#2536 Task 4 review fix): the cast's primary
+    target's ``CharacterSheet``, threaded from the combat round path
+    (``resolve_combat_technique`` resolves it from ``action
+    .focused_ally_target``/``.focused_opponent_target.persona`` — see
+    ``world/combat/services.py``'s ``_resolve_primary_target_sheet``) or
+    ``None`` outside combat / for a SELF cast / for an NPC-only opponent with
+    no linked ``CharacterSheet``. This is what lets the four target-keyed
+    situations (``TARGET_DISTRACTED``, ``TARGET_SWAYED_BY_ALLY``,
+    ``TARGET_FOCUSED_ELSEWHERE``, ``TARGET_FAVORABLY_DISPOSED``) fire for
+    ``POWER_BONUS`` — previously hard-inert with ``target=None`` always
+    passed, now live whenever the resolver can name a PC/sheet-backed
+    primary target. For a multi-target/AoE cast only the FIRST/primary
+    resolved target is threaded (see ``PowerTermContext.target_sheet``'s
+    docstring) — per-target perk evaluation for AoE is deferred to a future
+    slice. Non-target situations (``AT_RANGE``/``IN_MELEE``/``SURROUNDED``/
+    ``ALLY_LOW_HEALTH``/``DURING_NEGOTIATION``) are unaffected either way.
+
+    **Clash contributions (#2536 Task 4 review fix):** ``commit_to_clash``
+    threads ``situation_ctx`` (a real ``CombatRoundContext`` built from the
+    clash's resolved ``CombatParticipant``) but NOT ``target_sheet`` — a
+    clash contribution's production caller (``run_clash_round``) never
+    supplies an explicit target (a clash is a PC-vs-clash-meter contribution
+    against an NPC threat, not a cast at a specific character), so
+    target-keyed situations correctly read ``False`` there via
+    ``target=None``, exactly as they do for any other targetless cast.
+    ``commit_to_clash``'s pre-existing ``targets:`` parameter is forwarded to
+    ``use_technique`` unchanged (reactive-event purposes only) but does not
+    feed ``target_sheet`` — no production caller populates it, so wiring it
+    up now would be speculative; a future clash target concept can extend
+    this the same way the round path was extended here.
 
     ATTRIBUTABILITY (ruling 1): this provider's ledger TERM-stage label is the
     static ``_power_term_label``-derived string ("vow situational power"),
@@ -402,6 +436,8 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     power ledger. See this task's report for the precise slice-2 refactor
     this implies if the ledger ever needs dynamic per-source TERM labels.
     """
+    from decimal import Decimal  # noqa: PLC0415
+
     from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
     from world.covenants.perks.services import applicable_perks  # noqa: PLC0415
     from world.magic.services.threads import (  # noqa: PLC0415
@@ -420,7 +456,7 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
         ctx.sheet,
         effect_kind=PerkEffectKind.POWER_BONUS,
         resolution=ctx.situation_ctx,
-        target=None,
+        target=ctx.target_sheet,
     )
     if not fired:
         return 0
@@ -428,8 +464,6 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     total_threads = total_thread_level_across_all_kinds(ctx.sheet)
     if total_threads == 0:
         return 0
-
-    from decimal import Decimal  # noqa: PLC0415
 
     total = Decimal(0)
     for firing in fired:

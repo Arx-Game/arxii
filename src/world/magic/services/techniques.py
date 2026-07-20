@@ -303,6 +303,7 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     applicable_threads: Sequence[ApplicableThread] | None = None,
     environment: ResonanceEnvironmentEffect | None = None,
     situation_ctx: object | None = None,
+    target_sheet: CharacterSheet | None = None,
 ) -> PowerLedger:
     """Derive effective power as an ordered ledger. NEVER stored — recomputed each cast.
 
@@ -312,6 +313,12 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     (``resolve_combat_technique`` → ``use_technique`` → here), ``None``
     otherwise. Defaulted so every existing caller (non-combat casts, every
     test in ``test_power_derivation.py``) is unaffected.
+
+    ``target_sheet`` (#2536, Task 4 review fix): forwarded unchanged into
+    ``PowerTermContext`` for the same TERM-stage provider — the cast's
+    primary target's ``CharacterSheet``, or ``None`` for a targetless cast /
+    an NPC-only target with no linked ``CharacterSheet``. Defaulted so every
+    existing caller is unaffected.
 
     The returned :class:`PowerLedger` records every contribution as an entry; its
     ``total`` is the effective power (floored at 0). The numerics are identical to
@@ -379,6 +386,7 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
         technique=technique,
         applicable_threads=applicable_threads or [],
         situation_ctx=situation_ctx,
+        target_sheet=target_sheet,
     )
     for provider in get_power_term_providers():
         builder.add(PowerStage.TERM, _power_term_label(provider), provider(ctx))
@@ -939,6 +947,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     apply_variant: bool = True,
     preferred_resonance=None,
     situation_ctx: object | None = None,
+    target_sheet: CharacterSheet | None = None,
 ) -> TechniqueUseResult:
     """Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.
 
@@ -969,6 +978,14 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     to ``_derive_power`` for the situational-perk TERM-stage provider — a
     ``CombatRoundContext`` from the combat cast path, ``None`` otherwise.
     Defaults to ``None`` so every existing caller is unaffected.
+
+    ``target_sheet`` (#2536, Task 4 review fix) is the cast's primary
+    target's ``CharacterSheet``, forwarded unchanged to ``_derive_power`` for
+    the same situational-perk TERM-stage provider — lets target-keyed
+    situations (``TARGET_DISTRACTED``, ...) fire for ``POWER_BONUS``.
+    Defaults to ``None`` so every existing caller is unaffected; decoupled
+    from ``targets``/``pull_target`` on purpose, same rationale as
+    ``pull_target`` above (different downstream consumers, different shapes).
 
     ``pull_target`` is the live cast target forwarded to ``_charge_cast_pull`` (which
     threads it onto ``PullActionContext.target`` for ``court_regard_modulation``,
@@ -1047,6 +1064,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
         applicable_threads=applicable_threads,
         environment=environment_effect,
         situation_ctx=situation_ctx,
+        target_sheet=target_sheet,
     )
     pre_payload = TechniquePreCastPayload(
         caster=character,

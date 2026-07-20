@@ -1281,7 +1281,7 @@ class VowSituationalPowerTermTests(TestCase):
         self.character = CharacterFactory()
         self.sheet = CharacterSheetFactory(character=self.character)
 
-    def _ctx(self, technique=None, situation_ctx=None):
+    def _ctx(self, technique=None, situation_ctx=None, target_sheet=None):
         from world.magic.services.power_terms import PowerTermContext
 
         return PowerTermContext(
@@ -1289,6 +1289,7 @@ class VowSituationalPowerTermTests(TestCase):
             technique=technique,
             applicable_threads=[],
             situation_ctx=situation_ctx,
+            target_sheet=target_sheet,
         )
 
     def _thread(self, level):
@@ -1509,3 +1510,62 @@ class VowSituationalPowerTermTests(TestCase):
         ctx = self._ctx(technique, situation_ctx=CombatRoundContext(subject_participant))
         # 6 * 10 / 10 = 6 -- proves the mate's COVENANT_ALLIES perk fired for the subject
         self.assertEqual(vow_situational_power_term(ctx), 6)
+
+    def _favorably_disposed_setup(self, *, disposed: bool):
+        """Shared rig for the two target-keyed tests below: a TARGET_FAVORABLY_DISPOSED
+        perk on the subject's engaged role, plus (when ``disposed``) an NPCStanding row
+        recording the target's affection toward the subject at/above the perk's
+        threshold. Returns the target CharacterSheet."""
+        from world.covenants.factories import (
+            VowSituationalPerkFactory,
+            VowSituationalPerkSituationFactory,
+        )
+        from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+        from world.npc_services.factories import NPCStandingFactory
+
+        target_sheet = CharacterSheetFactory()
+
+        role = self._engage_role()
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            magnitude_tenths=14,
+        )
+        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.TARGET_FAVORABLY_DISPOSED)
+
+        if disposed:
+            NPCStandingFactory(
+                persona=self.sheet.primary_persona,
+                npc_persona=target_sheet.primary_persona,
+                affection=1,
+            )
+
+        return target_sheet
+
+    def test_target_keyed_perk_fires_when_target_threaded(self):
+        """TARGET_FAVORABLY_DISPOSED (a target-keyed situation) fires for POWER_BONUS
+        once ``target_sheet`` is threaded onto the context (#2536, Task 4 review
+        fix — previously hard-inert with ``target=None`` always passed to
+        ``applicable_perks``). 5 * 14 / 10 = 7.0 -> 7."""
+        from world.magic.services.power_terms import vow_situational_power_term
+
+        target_sheet = self._favorably_disposed_setup(disposed=True)
+        self._thread(level=5)
+        technique = TechniqueFactory()
+        ctx = self._ctx(technique, target_sheet=target_sheet)
+        self.assertEqual(vow_situational_power_term(ctx), 7)
+
+    def test_target_keyed_perk_returns_zero_without_target(self):
+        """Same TARGET_FAVORABLY_DISPOSED perk + the disposition row that would make
+        it fire, but no ``target_sheet`` threaded onto the context (the non-combat
+        cast shape) -> the situation evaluates False (per ``SituationContext``'s
+        "missing field -> False" convention), not an exception, and the perk
+        contributes 0."""
+        from world.magic.services.power_terms import vow_situational_power_term
+
+        self._favorably_disposed_setup(disposed=True)
+        self._thread(level=5)
+        technique = TechniqueFactory()
+        ctx = self._ctx(technique, target_sheet=None)
+        self.assertEqual(vow_situational_power_term(ctx), 0)
