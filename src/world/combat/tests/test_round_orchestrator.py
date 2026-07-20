@@ -1189,13 +1189,14 @@ class OffenseCheckSourceTests(TestCase):
         def inner(*args, **kwargs):  # type: ignore[no-untyped-def]
             return MagicMock(success_level=2)
 
-        def check_fn(character, check_type, extra_modifiers=0, fatigue_penalty=0):
+        def check_fn(character, check_type, extra_modifiers=0, fatigue_penalty=0, **kwargs):
             captured.append(check_type)
             return inner(
                 character,
                 check_type,
                 extra_modifiers=extra_modifiers,
                 fatigue_penalty=fatigue_penalty,
+                **kwargs,
             )
 
         return check_fn

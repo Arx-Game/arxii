@@ -53,6 +53,26 @@ class PenetrationContestTests(TestCase):
         mock_pen.assert_called_once()
         self.assertEqual(mock_pen.call_args.kwargs["target_difficulty"], 7)
 
+    def test_situation_ctx_threaded_with_live_round_context(self) -> None:
+        """#2536 Task 5 review fix: _apply_penetration must thread a
+        SituationContext into perform_check — the same class/participant as
+        the wired _roll_check, so a future CHECK_BONUS perk scoped to the
+        penetration CheckType can actually fire."""
+        from world.combat.round_context import CombatRoundContext
+        from world.covenants.perks.context import SituationContext
+
+        resolver = _build_resolver(barrier_strength=7)
+        with patch("world.combat.services.perform_check") as mock_pen:
+            mock_pen.return_value = MagicMock(success_level=1)  # full
+            resolver(power=20, ledger=_ledger(20))
+
+        situation_ctx = mock_pen.call_args.kwargs["situation_ctx"]
+        self.assertIsInstance(situation_ctx, SituationContext)
+        self.assertEqual(situation_ctx.holder, resolver.participant.character_sheet)
+        self.assertEqual(situation_ctx.subject, resolver.participant.character_sheet)
+        self.assertIsInstance(situation_ctx.resolution, CombatRoundContext)
+        self.assertEqual(situation_ctx.resolution.participant, resolver.participant)
+
     # --- 2. Partial penetration scales power down ---------------------------
 
     def test_partial_penetration_reduces_power_and_damage(self) -> None:

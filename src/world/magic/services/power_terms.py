@@ -40,11 +40,39 @@ class ApplicableThread:
 
 @dataclass(frozen=True)
 class PowerTermContext:
-    """Immutable snapshot of cast context passed to every power term provider."""
+    """Immutable snapshot of cast context passed to every power term provider.
+
+    ``situation_ctx`` (#2536, Task 4): the SUBJECT's live resolution context —
+    a ``CombatRoundContext`` (``world/combat/round_context.py``) when the cast
+    is resolving inside combat, or ``None`` for a non-combat/standalone cast.
+    Threaded straight through from ``_derive_power``'s own ``situation_ctx``
+    parameter to ``perks.services.applicable_perks`` via
+    ``vow_situational_power_term`` below — combat-positioning situations
+    (``AT_RANGE``/``IN_MELEE``/...) only ever hold when this is a real
+    ``CombatRoundContext``; DB-state situations (``TARGET_DISTRACTED``,
+    ``DURING_NEGOTIATION``, ...) hold regardless. Defaulted so every existing
+    constructor (non-combat call sites, every test fixture) stays valid
+    unchanged.
+
+    ``target_sheet`` (#2536, Task 4 review fix): the cast's primary target's
+    ``CharacterSheet``, or ``None`` when the cast has no target (SELF casts,
+    non-combat casts, an NPC-only opponent with no linked ``CharacterSheet``).
+    Threaded straight through to ``perks.services.applicable_perks``'s
+    ``target=`` kwarg via ``vow_situational_power_term`` below — this is what
+    lets the four target-keyed situations (``TARGET_DISTRACTED``,
+    ``TARGET_SWAYED_BY_ALLY``, ``TARGET_FOCUSED_ELSEWHERE``,
+    ``TARGET_FAVORABLY_DISPOSED``) fire for ``POWER_BONUS``. For a
+    multi-target/AoE cast, only the FIRST/primary resolved target is threaded
+    — per-target perk evaluation for AoE casts is a legitimate slice-2+
+    refinement, not built here. Defaulted so every existing constructor stays
+    valid unchanged.
+    """
 
     sheet: CharacterSheet
     technique: Technique | None
     applicable_threads: Sequence[ApplicableThread]
+    situation_ctx: object | None = None
+    target_sheet: object | None = None
 
 
 PowerTermProvider = Callable[[PowerTermContext], int]
@@ -342,6 +370,119 @@ def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
     return int(total)
 
 
+def vow_situational_power_term(ctx: PowerTermContext) -> int:
+    """Per-vow situational-perk power boost (#2536 slice 1, Layer 4).
+
+    Σ over every fired ``POWER_BONUS`` perk (self + engaged covenant-mate
+    beneficiaries — see ``perks.services.applicable_perks``) of
+    ``total_thread_level_across_all_kinds(ctx.sheet) × magnitude_tenths /
+    10``, int-truncated — mirrors ``covenant_role_specialty_power_term``'s
+    arithmetic exactly (same thread-level scaling, same integer truncation
+    after summing in ``Decimal``).
+
+    Guards: no technique → 0 (perks are cast-scoped); no engaged role on the
+    subject → 0 (cheap exit before the resolution query —
+    ``applicable_perks``'s own ``_ally_candidates`` also requires the subject
+    to hold at least one engaged role before an ally's ``WHOLE_GROUP``/
+    ``COVENANT_ALLIES`` perk can reach them, so this guard never skips a case
+    ``applicable_perks`` would otherwise have fired).
+
+    ``resolution=ctx.situation_ctx`` — the live ``CombatRoundContext`` in
+    combat (threaded by ``resolve_combat_technique``,
+    ``world/combat/services.py``, and by ``commit_to_clash``,
+    ``world/combat/clash.py``), or ``None`` outside combat; DB-state
+    situations still evaluate correctly with ``None`` (see
+    ``SituationContext``'s docstring).
+
+    ``target=ctx.target_sheet`` (#2536 Task 4 review fix): the cast's primary
+    target's ``CharacterSheet``, threaded from the combat round path
+    (``resolve_combat_technique`` resolves it from ``action
+    .focused_ally_target``/``.focused_opponent_target.persona`` — see
+    ``world/combat/services.py``'s ``_resolve_primary_target_sheet``) or
+    ``None`` outside combat / for a SELF cast / for an NPC-only opponent with
+    no linked ``CharacterSheet``. This is what lets the four target-keyed
+    situations (``TARGET_DISTRACTED``, ``TARGET_SWAYED_BY_ALLY``,
+    ``TARGET_FOCUSED_ELSEWHERE``, ``TARGET_FAVORABLY_DISPOSED``) fire for
+    ``POWER_BONUS`` — previously hard-inert with ``target=None`` always
+    passed, now live whenever the resolver can name a PC/sheet-backed
+    primary target. For a multi-target/AoE cast only the FIRST/primary
+    resolved target is threaded (see ``PowerTermContext.target_sheet``'s
+    docstring) — per-target perk evaluation for AoE is deferred to a future
+    slice. Non-target situations (``AT_RANGE``/``IN_MELEE``/``SURROUNDED``/
+    ``ALLY_LOW_HEALTH``/``DURING_NEGOTIATION``) are unaffected either way.
+
+    **Clash contributions (#2536 Task 4 review fix):** ``commit_to_clash``
+    threads ``situation_ctx`` (a real ``CombatRoundContext`` built from the
+    clash's resolved ``CombatParticipant``) but NOT ``target_sheet`` — a
+    clash contribution's production caller (``run_clash_round``) never
+    supplies an explicit target (a clash is a PC-vs-clash-meter contribution
+    against an NPC threat, not a cast at a specific character), so
+    target-keyed situations correctly read ``False`` there via
+    ``target=None``, exactly as they do for any other targetless cast.
+    ``commit_to_clash``'s pre-existing ``targets:`` parameter is forwarded to
+    ``use_technique`` unchanged (reactive-event purposes only) but does not
+    feed ``target_sheet`` — no production caller populates it, so wiring it
+    up now would be speculative; a future clash target concept can extend
+    this the same way the round path was extended here.
+
+    ATTRIBUTABILITY (ruling 1): this provider's ledger TERM-stage label is the
+    static ``_power_term_label``-derived string ("vow situational power"),
+    the SAME limitation every other multi-source provider in this file has
+    (the TERM loop in ``_derive_power`` calls ``_power_term_label(provider)``
+    once per provider function, not per return value — there is no channel
+    for a provider to report which of its several internal contributions
+    produced the total). The per-perk NAME the player sees comes from the
+    announce path (#2536 Task 6: ``perks.services.announce_fired_perks``,
+    called below right after ``fired`` is known — not the power ledger).
+    See ADR-0151 (the slice-1 machinery ADR) for the precise slice-2
+    refactor this implies if the ledger ever needs dynamic per-source TERM
+    labels.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
+    from world.covenants.perks.services import (  # noqa: PLC0415
+        announce_fired_perks,
+        applicable_perks,
+    )
+    from world.magic.services.threads import (  # noqa: PLC0415
+        total_thread_level_across_all_kinds,
+    )
+
+    if ctx.technique is None:
+        return 0
+    character = ctx.sheet.character
+    if not hasattr(character, "covenant_roles"):
+        return 0
+    if not character.covenant_roles.currently_engaged_roles():
+        return 0
+
+    fired = applicable_perks(
+        ctx.sheet,
+        effect_kind=PerkEffectKind.POWER_BONUS,
+        resolution=ctx.situation_ctx,
+        target=ctx.target_sheet,
+    )
+    if not fired:
+        return 0
+
+    # #2536 Task 6: announce here, not inside applicable_perks — this
+    # provider is the single production entry point for a cast's power
+    # derivation (use_technique calls _derive_power exactly once), so this
+    # is the ONE place a POWER_BONUS firing can be announced without risking
+    # a double-announce. See announce_fired_perks's docstring.
+    announce_fired_perks(fired, subject=ctx.sheet, location=character.location)
+
+    total_threads = total_thread_level_across_all_kinds(ctx.sheet)
+    if total_threads == 0:
+        return 0
+
+    total = Decimal(0)
+    for firing in fired:
+        total += Decimal(total_threads) * firing.magnitude_tenths / 10
+    return int(total)
+
+
 _PROVIDERS: list[PowerTermProvider] = [
     level_power_term,
     aura_power_term,
@@ -350,6 +491,7 @@ _PROVIDERS: list[PowerTermProvider] = [
     enhancement_overlap_term,
     covenant_role_blend_power_term,
     covenant_role_specialty_power_term,
+    vow_situational_power_term,
 ]
 
 

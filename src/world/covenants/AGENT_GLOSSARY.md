@@ -86,6 +86,22 @@ compatible-armor bucket once in `apply_equipped_armor_soak` (#1174). Superseded 
 as the mechanism for a vow's defense to substitute for gear rather than stack with it.
 _Avoid_: gear profile, armor profile, VowGearScaling (removed model).
 
+**Situation**:
+A code-defined label (`world.covenants.perks.constants.Situation`, a `TextChoices`) naming a precise, testable game-state condition a `VowSituationalPerk` can key on — e.g. `AT_RANGE`, `TARGET_DISTRACTED`, `ALLY_LOW_HEALTH`. Each value has exactly one registered evaluator (`world.covenants.perks.evaluators.SITUATION_EVALUATORS`, signature `(SituationContext) -> bool`). Adding a new Situation to the library is a code change (one enum value + one evaluator); attaching an existing Situation to a perk is a content edit forever after (#2536, ADR-0151, ruling 5).
+_Avoid_: condition (that's `conditions.ConditionInstance`, a different, stateful applied-effect system a Situation evaluator may READ but never IS), trigger (Situations are polled/evaluated, not event-subscribed).
+
+**Situational Perk**:
+`VowSituationalPerk` — a `CovenantRole`-authored, deterministic bonus that fires when its attached Situations all hold (AND composition) for the ACTING character's resolution moment (a cast or a check), never on the perk-holder's own timer — **Layer 4** of ADR-0149's four-layer vow-power model, "the point of vows." Carries a `beneficiary` (SELF/COVENANT_ALLIES/WHOLE_GROUP — group-granting perks are first-class, not an edge case), an `effect_kind` (POWER_BONUS/CHECK_BONUS live in slice 1; TIER_FLOOR/BOTCH_IMMUNITY are schema-only, wired in slice 2), and an `announce_template`. Valid on both primary roles and sub-roles — a sub-role's perks ADD to the anchor's, mirroring Technique Specialty's ADD semantics, never Layer 1's anchor-only rule. No negative magnitudes anywhere (`PositiveIntegerField` — structural): a vow's weakness is the absence of a beneficial perk in that situation, never a malus. (#2536, ADR-0151.)
+_Avoid_: proc, buff (both imply chance or unconditional — a Situational Perk is deterministic and conditional by design), trait.
+
+**Perk Rung**:
+`VowSituationalPerkRung` — an escalation tier on top of a `VowSituationalPerk`'s base Situations (e.g. a defense perk that intensifies further when allies are hurt, further still against Abyssal attackers). Resolution is strictly cumulative: rung N's required Situations = the perk's base Situations ∪ the extra Situations of rungs 1..N, so a higher rung can never fire without every lower rung's condition also holding; the highest qualifying rung's `magnitude_tenths` REPLACES the base value (never sums with it). (#2536, ADR-0151.)
+_Avoid_: tier (ambiguous with power/opposition tiers elsewhere), level (that's thread level, a different scaling axis Perk Rungs sit on top of, not instead of).
+
+**Beneficiary (perk)**:
+The `PerkBeneficiary` axis on a `VowSituationalPerk` (SELF / COVENANT_ALLIES / WHOLE_GROUP) deciding who benefits when the perk fires at ANOTHER character's resolution moment: SELF fires only for the perk-owning holder's own actions; COVENANT_ALLIES fires for an engaged covenant-mate's action but structurally excludes the holder's own; WHOLE_GROUP fires for both. "Covenant-mate" here means an ENGAGED role in a shared covenant AND physical co-presence for this resolution (same combat encounter / same active Scene) — a member sharing a covenant but not engaged, or engaged but not present, does not extend or receive group-beneficiary perks (#2536, ADR-0151 — see `world.covenants.perks.services`'s module docstring for the deliberately different provenance-situation rule).
+_Avoid_: recipient, target (Situation's own `target` field is the acting character's action target, an unrelated concept — do not conflate).
+
 **Covenant Rank**:
 The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals / request-gm. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).
 _Avoid_: role, level.

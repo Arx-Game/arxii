@@ -725,3 +725,149 @@ class CombatAoETargetPrerequisitesPreFlightTest(TestCase):
         hit_opponent_ids = {r.opponent_id for r in result.damage_results}
         self.assertIn(opponent_b.pk, hit_opponent_ids)
         self.assertNotIn(opponent_a.pk, hit_opponent_ids)
+
+
+class TargetKeyedSituationalPerkCombatTest(TestCase):
+    """resolve_combat_technique threads the cast's primary target's CharacterSheet
+    end-to-end so a target-keyed situational perk fires for POWER_BONUS (#2536,
+    Task 4 review fix — previously hard-inert, target=None always passed to
+    applicable_perks regardless of the real combat target).
+    """
+
+    def test_target_favorably_disposed_perk_fires_against_persona_backed_opponent(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+            VowSituationalPerkFactory,
+            VowSituationalPerkSituationFactory,
+        )
+        from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+        from world.magic.factories import ThreadFactory
+        from world.npc_services.factories import NPCStandingFactory
+
+        participant, action, _opponent, _anima, _technique, _room = _setup_pc_attacking_mook(
+            technique_intensity=5,
+            technique_control=10,
+            technique_anima_cost=2,
+        )
+        subject_sheet = participant.character_sheet
+
+        # Re-target the action at a "story NPC" opponent (persona-backed) so
+        # _resolve_primary_target_sheet has a real CharacterSheet to resolve.
+        # Use the target sheet's own PRIMARY persona — persona_for_character
+        # (which TARGET_FAVORABLY_DISPOSED's evaluator calls) always reads
+        # sheet.primary_persona, not an arbitrary ESTABLISHED face.
+        target_sheet = CharacterSheetFactory()
+        target_persona = target_sheet.primary_persona
+        target_opponent = CombatOpponentFactory(
+            encounter=participant.encounter, persona=target_persona
+        )
+        action.focused_opponent_target = target_opponent
+        action.save()
+
+        role = CovenantRoleFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=subject_sheet,
+            covenant=CovenantFactory(),
+            covenant_role=role,
+            engaged=True,
+        )
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            magnitude_tenths=20,
+        )
+        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.TARGET_FAVORABLY_DISPOSED)
+        NPCStandingFactory(
+            persona=subject_sheet.primary_persona,
+            npc_persona=target_persona,
+            affection=1,
+        )
+        ThreadFactory(owner=subject_sheet, level=5)
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            result = resolve_combat_technique(
+                participant=participant,
+                action=action,
+                fatigue_category=ActionCategory.PHYSICAL,
+                offense_check_type=MagicMock(),
+                offense_check_fn=None,
+            )
+
+        vow_entries = [
+            entry
+            for entry in result.power_ledger.entries
+            if entry.source_label == "vow situational power"
+        ]
+        self.assertEqual(len(vow_entries), 1)
+        # 5 * 20 / 10 = 10
+        self.assertEqual(vow_entries[0].amount, 10)
+
+    def test_target_favorably_disposed_perk_absent_against_bare_npc_opponent(self) -> None:
+        """Same perk/thread/disposition setup, but the opponent is a bare
+        (non-persona) NPC — _resolve_primary_target_sheet correctly returns
+        None for it, so the target-keyed situation never holds and the ledger
+        carries no 'vow situational power' contribution at all."""
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+            VowSituationalPerkFactory,
+            VowSituationalPerkSituationFactory,
+        )
+        from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+        from world.magic.factories import ThreadFactory
+        from world.npc_services.factories import NPCStandingFactory
+        from world.scenes.factories import PersonaFactory
+
+        participant, action, opponent, _anima, _technique, _room = _setup_pc_attacking_mook(
+            technique_intensity=5,
+            technique_control=10,
+            technique_anima_cost=2,
+        )
+        subject_sheet = participant.character_sheet
+        self.assertIsNone(opponent.persona_id)  # bare NPC, no linked CharacterSheet
+
+        role = CovenantRoleFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=subject_sheet,
+            covenant=CovenantFactory(),
+            covenant_role=role,
+            engaged=True,
+        )
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            magnitude_tenths=20,
+        )
+        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.TARGET_FAVORABLY_DISPOSED)
+        # Even with a disposed target persona floating around unrelated to the
+        # actual opponent, the bare NPC opponent can never resolve to it.
+        NPCStandingFactory(
+            persona=subject_sheet.primary_persona,
+            npc_persona=PersonaFactory(),
+            affection=1,
+        )
+        ThreadFactory(owner=subject_sheet, level=5)
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            result = resolve_combat_technique(
+                participant=participant,
+                action=action,
+                fatigue_category=ActionCategory.PHYSICAL,
+                offense_check_type=MagicMock(),
+                offense_check_fn=None,
+            )
+
+        vow_entries = [
+            entry
+            for entry in result.power_ledger.entries
+            if entry.source_label == "vow situational power"
+        ]
+        self.assertEqual(vow_entries, [])

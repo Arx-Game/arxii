@@ -707,6 +707,155 @@ class CovenantRoleContentExportTests(TestCase):
         assert profile.gear_additive_tenths == 3
 
 
+class VowSituationalPerkContentExportTests(TestCase):
+    """Round-trip coverage for the situational-perk authoring models (#2536).
+
+    ``covenants.vowsituationalperk`` / ``vowsituationalperkrung`` /
+    ``vowsituationalperksituation`` were added to ``CONTENT_MODELS`` with
+    natural keys — verify the ``covenant_role``/``perk`` FKs, the nullable
+    ``check_type`` FK-NK (scoped to ``checks.CheckType``, itself NK-resolvable
+    per #2503), and the choice fields all survive export -> import identity-stable.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def _build_rows(self):
+        """Create one perk + situation + rung, keyed on a fresh role + check_type."""
+        from world.checks.factories import CheckTypeFactory
+        from world.covenants.factories import (
+            CovenantRoleFactory,
+            VowSituationalPerkFactory,
+            VowSituationalPerkRungFactory,
+            VowSituationalPerkSituationFactory,
+        )
+        from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+
+        role = CovenantRoleFactory(name="Round Trip Scout", slug="round-trip-scout", sword_weight=1)
+        check_type = CheckTypeFactory(name="Round Trip Perception")
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            name="Scout's Instinct",
+            beneficiary=PerkBeneficiary.WHOLE_GROUP,
+            effect_kind=PerkEffectKind.CHECK_BONUS,
+            magnitude_tenths=15,
+            announce_template="{holder} reveals a trap!",
+            check_type=check_type,
+        )
+        situation = VowSituationalPerkSituationFactory(perk=perk, situation=Situation.AT_RANGE)
+        rung = VowSituationalPerkRungFactory(
+            perk=perk,
+            rung_number=1,
+            extra_situation=Situation.ALLY_LOW_HEALTH,
+            magnitude_tenths=25,
+        )
+        return role, check_type, perk, situation, rung
+
+    def _assert_exported_fixtures(self) -> None:
+        from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+
+        perk_path = self.root / "fixtures" / "covenants" / "vowsituationalperk.json"
+        situation_path = self.root / "fixtures" / "covenants" / "vowsituationalperksituation.json"
+        rung_path = self.root / "fixtures" / "covenants" / "vowsituationalperkrung.json"
+        assert perk_path.exists()
+        assert situation_path.exists()
+        assert rung_path.exists()
+
+        perk_records = json.loads(perk_path.read_text(encoding="utf-8"))
+        assert len(perk_records) == 1
+        perk_record = perk_records[0]
+        assert "pk" not in perk_record
+        assert perk_record["fields"]["covenant_role"] == ["round-trip-scout"]
+        assert perk_record["fields"]["name"] == "Scout's Instinct"
+        assert perk_record["fields"]["beneficiary"] == PerkBeneficiary.WHOLE_GROUP
+        assert perk_record["fields"]["effect_kind"] == PerkEffectKind.CHECK_BONUS
+        assert perk_record["fields"]["magnitude_tenths"] == 15
+        # Natural-key identity for the nullable check_type FK, not a raw pk.
+        assert isinstance(perk_record["fields"]["check_type"], list)
+        assert all(not isinstance(v, int) for v in perk_record["fields"]["check_type"])
+
+        situation_records = json.loads(situation_path.read_text(encoding="utf-8"))
+        assert len(situation_records) == 1
+        assert "pk" not in situation_records[0]
+        assert situation_records[0]["fields"]["perk"] == ["round-trip-scout", "Scout's Instinct"]
+        assert situation_records[0]["fields"]["situation"] == Situation.AT_RANGE
+
+        rung_records = json.loads(rung_path.read_text(encoding="utf-8"))
+        assert len(rung_records) == 1
+        assert "pk" not in rung_records[0]
+        assert rung_records[0]["fields"]["perk"] == ["round-trip-scout", "Scout's Instinct"]
+        assert rung_records[0]["fields"]["rung_number"] == 1
+        assert rung_records[0]["fields"]["extra_situation"] == Situation.ALLY_LOW_HEALTH
+        assert rung_records[0]["fields"]["magnitude_tenths"] == 25
+
+    def test_perk_situation_and_rung_round_trip(self) -> None:
+        from world.covenants.perks.constants import Situation
+
+        role, check_type, perk, situation, rung = self._build_rows()
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+        self._assert_exported_fixtures()
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        perk.refresh_from_db()
+        assert perk.covenant_role_id == role.pk
+        assert perk.check_type_id == check_type.pk
+        assert perk.magnitude_tenths == 15
+
+        situation.refresh_from_db()
+        assert situation.perk_id == perk.pk
+        assert situation.situation == Situation.AT_RANGE
+
+        rung.refresh_from_db()
+        assert rung.perk_id == perk.pk
+        assert rung.rung_number == 1
+        assert rung.magnitude_tenths == 25
+
+    def test_perk_with_null_check_type_round_trips(self) -> None:
+        """A POWER_BONUS perk (no check_type) also round-trips cleanly."""
+        from world.covenants.factories import CovenantRoleFactory, VowSituationalPerkFactory
+        from world.covenants.perks.constants import PerkEffectKind
+
+        role = CovenantRoleFactory(
+            name="Round Trip Vanguard 2536",
+            slug="round-trip-vanguard-2536",
+            sword_weight=1,
+        )
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            name="Backline Bulwark",
+            effect_kind=PerkEffectKind.POWER_BONUS,
+        )
+        assert perk.check_type is None
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        perk_path = self.root / "fixtures" / "covenants" / "vowsituationalperk.json"
+        records = {
+            r["fields"]["name"]: r for r in json.loads(perk_path.read_text(encoding="utf-8"))
+        }
+        record = records["Backline Bulwark"]
+        assert record["fields"]["check_type"] is None
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0
+
+        perk.refresh_from_db()
+        assert perk.check_type is None
+
+
 class TechniqueFunctionTagContentExportTests(TestCase):
     """Round-trip coverage for TechniqueFunctionTag (#2443).
 
