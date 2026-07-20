@@ -4,8 +4,9 @@
  * Covers:
  *   1. Unions the anchor role's and resolved role's technique_specialties.
  *   2. Dedups by function when the same function appears on both anchor and
- *      resolved (sub-role) rows — the resolved (sub-role) row's multiplier wins,
- *      since sub-role rows are the escalation layered on top of the anchor.
+ *      resolved (sub-role) rows — the two rows' multipliers SUM, matching
+ *      `covenant_role_specialty_power_term`, which sums both rows rather than
+ *      letting one win.
  *   3. Returns an empty list when neither role carries any specialty rows.
  *   4. Formats the multiplier as ×<tenths/10>, including whole-number values
  *      (multiplier_tenths 10 -> ×1, not ×1.0).
@@ -32,7 +33,7 @@ describe('specialtySummaryForMembership', () => {
     expect(chips.map((c) => c.function).sort()).toEqual(['barrier', 'charm']);
   });
 
-  it('dedups by function, preferring the resolved (sub-role) row on collision', () => {
+  it('dedups by function, summing the anchor and resolved (sub-role) rows on collision', () => {
     const chips = specialtySummaryForMembership({
       covenant_role: {
         technique_specialties: [
@@ -46,7 +47,7 @@ describe('specialtySummaryForMembership', () => {
       },
     });
     expect(chips).toHaveLength(1);
-    expect(chips[0]).toEqual({ function: 'charm', label: 'Charm ×2' });
+    expect(chips[0]).toEqual({ function: 'charm', label: 'Charm ×3.5' });
   });
 
   it('returns an empty list when neither role has specialty rows', () => {

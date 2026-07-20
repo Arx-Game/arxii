@@ -1118,6 +1118,29 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
         # 10*10/10 (WEAKEN) + 10*10/10 (DAMAGE_BUFF_SELF) = 10 + 10 = 20
         self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 20)
 
+    def test_two_engaged_roles_sum(self):
+        """Two SEPARATELY engaged CovenantRole memberships (different covenants) each
+        contribute their own matching specialty row — the ``Σ over engaged_roles`` outer
+        loop in ``covenant_role_specialty_power_term`` must sum across roles, not just
+        within one role's row set (#2443 spec's Testing section: "multi-row + multi-role
+        sums")."""
+        from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
+        from world.magic.services.power_terms import covenant_role_specialty_power_term
+
+        self._thread(level=10)
+        role_a = self._engage_role()
+        role_b = self._engage_role()
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role_a, function=TechniqueFunction.WEAKEN, multiplier_tenths=10
+        )
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role_b, function=TechniqueFunction.WEAKEN, multiplier_tenths=15
+        )
+        technique = TechniqueFactory()
+        TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
+        # role_a: 10*10/10=10, role_b: 10*15/10=15 -> 10 + 15 = 25
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 25)
+
     def test_sub_role_row_adds_to_anchor_row(self):
         """A qualifying COVENANT_ROLE thread promotes the engaged role to its sub-role
         (per ``currently_engaged_roles``'s resolution — the membership row stays on the

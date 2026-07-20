@@ -118,6 +118,6 @@ across anchor+sub-role.
 `Prefetch(..., to_attr="cached_technique_specialties")`) exposes the rows on both the
 `covenant_role` (resolved) and `anchor_role` (stored parent) fields of
 `CharacterCovenantRoleSerializer`; the frontend's `specialtySummaryForMembership`
-(`frontend/src/covenants/pages/CovenantDetailPage.tsx`) unions the two, with the resolved
-sub-role's row winning on a same-function collision (display only — the power term itself
-sums both, per above).
+(`frontend/src/covenants/pages/CovenantDetailPage.tsx`) unions the two, summing the
+anchor and resolved sub-role's `multiplier_tenths` on a same-function collision — matching
+the power term's own summed payout, so the displayed chip is never an understatement.

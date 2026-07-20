@@ -149,8 +149,11 @@ export interface TechniqueSpecialtyChip {
  * unlike the combat-identity blend, a sub-role's rows do not replace the
  * parent's, so a specialized (promoted) member should see BOTH inherited
  * (anchor) and their own (resolved sub-role) specialties. When the same
- * function appears on both, the resolved role's row wins for the displayed
- * multiplier — sub-role rows are the escalation layered on top of the anchor.
+ * function appears on both, the displayed multiplier SUMS the anchor and
+ * resolved rows' `multiplier_tenths` — this mirrors
+ * `covenant_role_specialty_power_term`, which sums every matching row rather
+ * than letting one win, so the chip matches the character's actual in-game
+ * bonus.
  */
 export function specialtySummaryForMembership(membership: {
   covenant_role: { technique_specialties: TechniqueSpecialty[] };
@@ -160,9 +163,19 @@ export function specialtySummaryForMembership(membership: {
   for (const row of membership.anchor_role?.technique_specialties ?? []) {
     byFunction.set(row.function, row);
   }
-  // Resolved (sub-role) rows win on collision — they're the escalation.
+  // Resolved (sub-role) rows SUM onto the anchor's on collision — both rows
+  // contribute, matching the power term's summed payout.
   for (const row of membership.covenant_role.technique_specialties ?? []) {
-    byFunction.set(row.function, row);
+    const existing = byFunction.get(row.function);
+    byFunction.set(
+      row.function,
+      existing
+        ? {
+            ...row,
+            multiplier_tenths: existing.multiplier_tenths + row.multiplier_tenths,
+          }
+        : row
+    );
   }
   return Array.from(byFunction.values()).map((row) => ({
     function: row.function,
