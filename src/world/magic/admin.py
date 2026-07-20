@@ -17,6 +17,7 @@ from world.magic.models import (
     CharacterThreadWeavingUnlock,
     CharacterTradition,
     CompromiseActType,
+    CovenantRoleBlendConfig,
     CrossingChoice,
     CrossingOption,
     DistinctionResonanceRankThreshold,
@@ -210,8 +211,9 @@ class TechniqueAdmin(admin.ModelAdmin):
         "intensity",
         "control",
         "anima_cost",
+        "archetype_alignment",
     ]
-    list_filter = ["style", "effect_type", "gift"]
+    list_filter = ["style", "effect_type", "gift", "archetype_alignment"]
     filter_horizontal = ["restrictions", "target_prerequisites"]
     search_fields = ["name", "description"]
     readonly_fields = ["get_tier"]
@@ -516,6 +518,19 @@ class LevelPowerConfigAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return not LevelPowerConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(CovenantRoleBlendConfig)
+class CovenantRoleBlendConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for the covenant-role blend power term (#2529)."""
+
+    list_display = ("pk", "multiplier_tenths")
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not CovenantRoleBlendConfig.objects.exists()
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False

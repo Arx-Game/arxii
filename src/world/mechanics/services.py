@@ -988,78 +988,19 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
     return total
 
 
-def vow_gear_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
-    """Sum the vow-driven equipment effectiveness bonus (#2022).
-
-    For each equipped item, looks up the ``VowGearScaling`` row matching the
-    item's ``gear_archetype`` and the engaged role's ``role_archetype``. If
-    found, adds ``int(gear_stat * thread_level * multiplier)`` — the vow
-    amplifies how much the gear contributes. When the vow dims, the
-    equipment's contribution reverts to base.
-    """
-    from decimal import Decimal  # noqa: PLC0415
-
-    from world.covenants.models import VowGearScaling  # noqa: PLC0415
-    from world.covenants.services import _covenant_role_thread_level  # noqa: PLC0415
-
-    char = sheet.character
-    if not hasattr(char, "covenant_roles") or not hasattr(char, "equipped_items"):
-        return 0
-    engaged_roles = char.covenant_roles.currently_engaged_roles()
-    if not engaged_roles:
-        return 0
-
-    # Batch-fetch all relevant VowGearScaling rows for the engaged roles' archetypes
-    role_archetypes = {role.archetype for role in engaged_roles if role.archetype}
-    if not role_archetypes:
-        return 0
-
-    scaling_map: dict[tuple[str, str], VowGearScaling] = {}
-    for row in VowGearScaling.objects.filter(role_archetype__in=role_archetypes):
-        scaling_map[(row.gear_archetype, row.role_archetype)] = row
-    if not scaling_map:
-        return 0
-
-    # Map role archetype → thread level (max across engaged roles of that archetype)
-    archetype_thread_levels: dict[str, int] = {}
-    for role in engaged_roles:
-        if not role.archetype:
-            continue
-        level = _covenant_role_thread_level(sheet, role)
-        archetype_thread_levels[role.archetype] = max(
-            archetype_thread_levels.get(role.archetype, 0), level
-        )
-
-    total = 0
-    for equipped in char.equipped_items:
-        item = equipped.item_instance
-        gear_stat = item_mundane_stat_for_target(item, target)
-        if gear_stat == 0:
-            continue
-        archetype = item.template.gear_archetype
-        total += _gear_scaling_for_item(
-            archetype, gear_stat, archetype_thread_levels, scaling_map, Decimal
-        )
-    return total
-
-
-def _gear_scaling_for_item(
-    archetype: str,
-    gear_stat: int,
-    archetype_thread_levels: dict[str, int],
-    scaling_map: dict[tuple[str, str], object],
-    decimal_cls,
+def vow_gear_scaling_bonus(
+    sheet: object,  # noqa: ARG001
+    target: ModifierTarget,  # noqa: ARG001
 ) -> int:
-    """Compute the vow gear scaling bonus for one equipped item."""
-    item_total = 0
-    for role_archetype, thread_level in archetype_thread_levels.items():
-        scaling = scaling_map.get((archetype, role_archetype))
-        if scaling is None or scaling.thread_level_multiplier == 0:
-            continue
-        item_total += int(
-            decimal_cls(gear_stat) * decimal_cls(thread_level) * scaling.thread_level_multiplier
-        )
-    return item_total
+    """Vow-driven equipment amplification — inert pending Layer 3 (#2533).
+
+    ``VowGearScaling`` has never been seeded, so this consumer has always
+    returned 0 in real games; it also keyed on the removed
+    ``CovenantRole.archetype``. #2529 short-circuits it to its actual runtime
+    behavior; #2533 (per-vow defense styles + gear substitution) decides the
+    model's real fate. Do not wire it back up without that design.
+    """
+    return 0
 
 
 def item_mundane_stat_for_target(item: ItemInstance, target: ModifierTarget) -> int:

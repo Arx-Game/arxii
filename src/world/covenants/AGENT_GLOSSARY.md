@@ -61,8 +61,8 @@ _Avoid_: regard bonus (ambiguous — regard itself is signed, but the polarity
 match is what gates empowerment, not the raw value).
 
 **Covenant Role**:
-The combat-power axis of membership: a role's archetype (Sword / Shield / Crown), speed_rank, role bonuses, and COVENANT_ROLE Thread-pull eligibility. Orthogonal to authority.
-_Avoid_: rank, position, office.
+The combat-power axis of membership: a role's Sword/Shield/Crown combat-identity blend (`sword_weight`/`shield_weight`/`crown_weight`, summing to 1 on primary roles — not a single archetype pick, #2529, ADR-0149), speed_rank, role bonuses, and COVENANT_ROLE Thread-pull eligibility. Orthogonal to authority.
+_Avoid_: rank, position, office, archetype (retired single-enum field).
 
 **Covenant Rank**:
 The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals / request-gm. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).

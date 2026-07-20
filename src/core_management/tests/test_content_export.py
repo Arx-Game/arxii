@@ -558,3 +558,109 @@ class SpeciesFormTraitContentExportTests(TestCase):
         # The options themselves round-tripped and re-attach to their traits.
         assert {opt.name for opt in reloaded_hair.options.all()} == {"black", "silver"}
         assert {opt.name for opt in reloaded_eye.options.all()} == {"violet"}
+
+
+class CovenantRoleContentExportTests(TestCase):
+    """Round-trip coverage for CovenantRole + CovenantRoleActionScaling (#2529).
+
+    ``covenants.covenantrole``/``covenants.covenantroleactionscaling`` were added
+    to ``CONTENT_MODELS`` with natural keys (``CovenantRole`` -> ``["slug"]``;
+    ``CovenantRoleActionScaling`` -> ``["covenant_role", "action_key"]``) but no
+    test round-tripped actual rows through export -> import, leaving the
+    ``parent_role`` self-FK, the ``resonance`` FK (sub-roles), and the blend-weight
+    Decimal fields unexercised in the pipeline.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_covenant_role_and_action_scaling_round_trip(self) -> None:
+        """A blended primary role + its scaling + a sub-role survive export -> import."""
+        from decimal import Decimal
+
+        from world.covenants.factories import (
+            CovenantRoleActionScalingFactory,
+            CovenantRoleFactory,
+            SubroleCovenantRoleFactory,
+        )
+
+        primary = CovenantRoleFactory(
+            name="Round Trip Vanguard",
+            slug="round-trip-vanguard",
+            sword_weight=Decimal("0.3"),
+            shield_weight=Decimal("0.1"),
+            crown_weight=Decimal("0.6"),
+        )
+        primary.full_clean()  # proves the blend is a valid primary-role state
+        scaling = CovenantRoleActionScalingFactory(
+            covenant_role=primary,
+            action_key="combat_interpose",
+            thread_level_multiplier=Decimal("0.125"),
+        )
+        sub_role = SubroleCovenantRoleFactory(
+            parent_role=primary,
+            name="Round Trip Vanguard (Ember)",
+            slug="round-trip-vanguard-ember",
+            unlock_thread_level=2,
+        )
+        sub_role.full_clean()  # proves the all-zero-weight sub-role is valid too
+        original_resonance_id = sub_role.resonance_id
+        assert original_resonance_id is not None
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        role_path = self.root / "fixtures" / "covenants" / "covenantrole.json"
+        scaling_path = self.root / "fixtures" / "covenants" / "covenantroleactionscaling.json"
+        assert role_path.exists()
+        assert scaling_path.exists()
+
+        role_records = {
+            r["fields"]["slug"]: r for r in json.loads(role_path.read_text(encoding="utf-8"))
+        }
+        for record in role_records.values():
+            assert "pk" not in record
+
+        primary_record = role_records["round-trip-vanguard"]
+        assert primary_record["fields"]["parent_role"] is None
+        assert Decimal(str(primary_record["fields"]["sword_weight"])) == Decimal("0.3")
+        assert Decimal(str(primary_record["fields"]["shield_weight"])) == Decimal("0.1")
+        assert Decimal(str(primary_record["fields"]["crown_weight"])) == Decimal("0.6")
+
+        sub_record = role_records["round-trip-vanguard-ember"]
+        # Natural-key identity, not raw pks: parent_role/resonance are lists.
+        assert sub_record["fields"]["parent_role"] == ["round-trip-vanguard"]
+        assert isinstance(sub_record["fields"]["resonance"], list)
+        assert all(not isinstance(v, int) for v in sub_record["fields"]["resonance"])
+        assert sub_record["fields"]["unlock_thread_level"] == 2
+        assert Decimal(str(sub_record["fields"]["sword_weight"])) == 0
+
+        scaling_records = json.loads(scaling_path.read_text(encoding="utf-8"))
+        assert len(scaling_records) == 1
+        assert "pk" not in scaling_records[0]
+        assert scaling_records[0]["fields"]["covenant_role"] == ["round-trip-vanguard"]
+        assert Decimal(str(scaling_records[0]["fields"]["thread_level_multiplier"])) == Decimal(
+            "0.125"
+        )
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        primary.refresh_from_db()
+        assert primary.sword_weight == Decimal("0.300")
+        assert primary.shield_weight == Decimal("0.100")
+        assert primary.crown_weight == Decimal("0.600")
+
+        sub_role.refresh_from_db()
+        assert sub_role.parent_role_id == primary.pk
+        assert sub_role.resonance_id == original_resonance_id
+        assert sub_role.unlock_thread_level == 2
+
+        scaling.refresh_from_db()
+        assert scaling.covenant_role_id == primary.pk
+        assert scaling.thread_level_multiplier == Decimal("0.125")

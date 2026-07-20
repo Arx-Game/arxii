@@ -32921,16 +32921,6 @@ components:
       description: |-
         * `major` - Major Arcana
         * `minor` - Minor Arcana
-    ArchetypeEnum:
-      enum:
-      - sword
-      - shield
-      - crown
-      type: string
-      description: |-
-        * `sword` - Sword
-        * `shield` - Shield
-        * `crown` - Crown
     ArchitecturalStyle:
       type: object
       description: |-
@@ -38297,19 +38287,25 @@ components:
         covenant_type_display:
           type: string
           readOnly: true
-        archetype:
-          allOf:
-          - $ref: '#/components/schemas/ArchetypeEnum'
-          readOnly: true
-          description: |-
-            Foundational archetype: Sword (offense), Shield (defense), Crown (support).
-
-            * `sword` - Sword
-            * `shield` - Shield
-            * `crown` - Crown
-        archetype_display:
+        sword_weight:
           type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,3})?$
           readOnly: true
+          description: SWORD axis of the combat-identity blend (0-1). Weights are
+            stored on primary roles only; sub-roles read the parent's blend (#2529).
+        shield_weight:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,3})?$
+          readOnly: true
+          description: SHIELD axis of the combat-identity blend (0-1).
+        crown_weight:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,3})?$
+          readOnly: true
+          description: CROWN axis of the combat-identity blend (0-1).
         speed_rank:
           type: integer
           readOnly: true
@@ -38325,16 +38321,17 @@ components:
           nullable: true
           description: Null for primary roles. Set for sub-roles.
       required:
-      - archetype
-      - archetype_display
       - covenant_type
       - covenant_type_display
+      - crown_weight
       - description
       - id
       - name
       - parent_role
+      - shield_weight
       - slug
       - speed_rank
+      - sword_weight
     CovenantTypeEnum:
       enum:
       - durance

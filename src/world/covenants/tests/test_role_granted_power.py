@@ -156,7 +156,7 @@ class ComboSlotArchetypeTests(TestCase):
         cov = CovenantFactory(name="ArchComboCov", covenant_type=CovenantType.DURANCE)
         sword_role = CovenantRoleFactory(
             covenant_type=CovenantType.DURANCE,
-            archetype=RoleArchetype.SWORD,
+            sword_weight=1,
         )
         from evennia_extensions.factories import ObjectDBFactory
         from world.covenants.services import set_engaged_membership
@@ -219,3 +219,41 @@ class ComboSlotArchetypeTests(TestCase):
         available = detect_available_combos(encounter, 1)
         # Should be available — sword_participant fills slot 1 (SWORD), plain fills slot 2.
         self.assertEqual(len(available), 1)
+
+    def test_dual_axis_role_satisfies_both_sword_and_crown_slots(self):
+        """A role blending sword+crown weight satisfies BOTH a SWORD and a CROWN slot (#2529).
+
+        ``_participant_has_archetype`` (the ``ComboSlot.required_archetype`` check) reads
+        ``blend_weight_for`` per axis, independently — a role with nonzero weight on
+        multiple axes can fill slots requiring either one, unlike the old single-value
+        ``archetype`` field which could only ever match one.
+        """
+        from decimal import Decimal
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.services import _participant_has_archetype
+        from world.covenants.services import set_engaged_membership
+        from world.scenes.constants import RoundStatus
+
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
+        sheet = CharacterSheetFactory()
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+
+        cov = CovenantFactory(name="DualAxisCov", covenant_type=CovenantType.DURANCE)
+        dual_role = CovenantRoleFactory(
+            covenant_type=CovenantType.DURANCE,
+            sword_weight=Decimal("0.5"),
+            crown_weight=Decimal("0.5"),
+        )
+        membership = CharacterCovenantRoleFactory(
+            character_sheet=sheet, covenant=cov, covenant_role=dual_role
+        )
+        # Need a second covenant member for Durance engage.
+        other_membership = CharacterCovenantRoleFactory(covenant=cov, covenant_role=dual_role)
+
+        set_engaged_membership(membership=membership)
+        set_engaged_membership(membership=other_membership)
+
+        self.assertTrue(_participant_has_archetype(participant, RoleArchetype.SWORD))
+        self.assertTrue(_participant_has_archetype(participant, RoleArchetype.CROWN))
+        self.assertFalse(_participant_has_archetype(participant, RoleArchetype.SHIELD))

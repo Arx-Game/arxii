@@ -1,10 +1,17 @@
-"""Role catalog seed for vows as combat roles (#2022).
+"""Role catalog seed for vows as combat roles (#2022, updated #2529).
 
-Seeds the granted gifts, granted capabilities, and archetype action scaling
+Seeds the granted gifts, granted capabilities, and per-role action scaling
 rows for the three canonical covenant roles (Vanguard/SWORD, Bulwark/SHIELD,
 Harmonizer/CROWN). The role rows themselves are created by
 ``seed_gear_archetype_compatibility`` in the items seed; this module
 attaches the combat-power layer.
+
+Re-keyed by #2529 on ``slug`` rather than the retired single-archetype enum
+(roles now carry a SWORD/SHIELD/CROWN blend, not one archetype). The
+Vanguard's old ``cast_technique`` scaling row is NOT recreated — that
+scaling moved to the blend power term (``covenant_role_blend_power_term``);
+only Bulwark (interpose) and Luminary (rally) get a
+``CovenantRoleActionScaling`` row.
 
 All writes are idempotent (get_or_create throughout). Safe to call repeatedly.
 """
@@ -18,37 +25,30 @@ if TYPE_CHECKING:
 
 
 def seed_role_catalog_content() -> None:
-    """Attach granted gifts, capabilities, and archetype scaling to the 3 roles.
+    """Attach granted gifts, capabilities, and action scaling to the 3 roles.
 
     Called after ``seed_gear_archetype_compatibility()`` has created the role
     rows. For each role:
     - 1 granted Gift (MINOR) with 2 starter Techniques
     - 2 granted CapabilityTypes
-    - 1 ArchetypeActionScaling row for the role's signature action
+    - a ``CovenantRoleActionScaling`` row for the role's signature action
+      (Bulwark/Luminary only — Vanguard's cast-technique scaling lives in
+      the blend power term instead, #2529)
 
     All idempotent via get_or_create.
     """
 
-    from world.covenants.constants import RoleArchetype  # noqa: PLC0415
-    from world.covenants.models import (  # noqa: PLC0415
-        CovenantRole,
-    )
+    from world.covenants.models import CovenantRole  # noqa: PLC0415
 
-    roles_by_slug = {
-        "sword-vanguard": RoleArchetype.SWORD,
-        "shield-bulwark": RoleArchetype.SHIELD,
-        "crown-luminary": RoleArchetype.CROWN,
+    slugs = ["sword-vanguard", "shield-bulwark", "crown-luminary"]
+    roles_by_slug: dict[str, CovenantRole] = {
+        role.slug: role for role in CovenantRole.objects.filter(slug__in=slugs)
     }
 
-    for slug, archetype in roles_by_slug.items():
-        try:
-            role = CovenantRole.objects.get(slug=slug)
-        except CovenantRole.DoesNotExist:
-            continue
-
+    for slug, role in roles_by_slug.items():
         _ensure_role_gift_and_techniques(role)
-        _ensure_role_capabilities(role, archetype)
-        _ensure_archetype_scaling(archetype)
+        _ensure_role_capabilities(role, slug)
+        _ensure_role_action_scaling(role, slug)
 
 
 def _ensure_role_gift_and_techniques(role: CovenantRole) -> None:
@@ -115,16 +115,16 @@ def _ensure_role_gift_and_techniques(role: CovenantRole) -> None:
         )
 
 
-def _ensure_role_capabilities(role: CovenantRole, archetype: str) -> None:
+def _ensure_role_capabilities(role: CovenantRole, slug: str) -> None:
     """Attach 2 granted capability types to the role."""
     from world.conditions.models import CapabilityType  # noqa: PLC0415
 
     capability_names = {
-        "sword": ["melee_attack", "ranged_attack"],
-        "shield": ["melee_attack", "defense"],
-        "crown": ["support", "leadership"],
+        "sword-vanguard": ["melee_attack", "ranged_attack"],
+        "shield-bulwark": ["melee_attack", "defense"],
+        "crown-luminary": ["support", "leadership"],
     }
-    for cap_name in capability_names.get(archetype, []):
+    for cap_name in capability_names.get(slug, []):
         cap, _ = CapabilityType.objects.get_or_create(
             name=cap_name,
             defaults={"description": f"Capability granted by the {role.name} vow."},
@@ -132,24 +132,29 @@ def _ensure_role_capabilities(role: CovenantRole, archetype: str) -> None:
         role.granted_capabilities.add(cap)
 
 
-def _ensure_archetype_scaling(archetype: str) -> None:
-    """Create the ArchetypeActionScaling row for this role's signature action."""
+def _ensure_role_action_scaling(role: CovenantRole, slug: str) -> None:
+    """Create the CovenantRoleActionScaling row for this role's signature action.
+
+    Re-keyed on ``covenant_role`` (was ``role_archetype``) by #2529. The old
+    Vanguard (``sword-vanguard``) ``cast_technique`` row is NOT recreated — cast
+    scaling moved to the blend power term (``covenant_role_blend_power_term``);
+    only Bulwark (interpose) and Luminary (rally) get a row here.
+    """
     from decimal import Decimal  # noqa: PLC0415
 
-    from world.covenants.models import ArchetypeActionScaling  # noqa: PLC0415
+    from world.covenants.models import CovenantRoleActionScaling  # noqa: PLC0415
 
-    # Each archetype's signature action:
+    # Signature action per role (sword-vanguard intentionally absent):
     action_keys = {
-        "sword": "cast_technique",
-        "shield": "combat_interpose",
-        "crown": "combat_rally",
+        "shield-bulwark": "combat_interpose",
+        "crown-luminary": "combat_rally",
     }
-    action_key = action_keys.get(archetype)
+    action_key = action_keys.get(slug)
     if action_key is None:
         return
 
-    ArchetypeActionScaling.objects.get_or_create(
+    CovenantRoleActionScaling.objects.get_or_create(
+        covenant_role=role,
         action_key=action_key,
-        role_archetype=archetype,
         defaults={"thread_level_multiplier": Decimal("0.10")},
     )

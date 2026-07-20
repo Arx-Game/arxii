@@ -20011,13 +20011,6 @@ export interface components {
      */
     ArcanaTypeEnum: 'major' | 'minor';
     /**
-     * @description * `sword` - Sword
-     *     * `shield` - Shield
-     *     * `crown` - Crown
-     * @enum {string}
-     */
-    ArchetypeEnum: 'sword' | 'shield' | 'crown';
-    /**
      * @description An authorable architectural style for the builder picker (#1882).
      *
      *     The player-facing lore lives in the linked ``CodexSubject`` — knowing that
@@ -22431,14 +22424,20 @@ export interface components {
       readonly covenant_type: components['schemas']['CovenantTypeEnum'];
       readonly covenant_type_display: string;
       /**
-       * @description Foundational archetype: Sword (offense), Shield (defense), Crown (support).
-       *
-       *     * `sword` - Sword
-       *     * `shield` - Shield
-       *     * `crown` - Crown
+       * Format: decimal
+       * @description SWORD axis of the combat-identity blend (0-1). Weights are stored on primary roles only; sub-roles read the parent's blend (#2529).
        */
-      readonly archetype: components['schemas']['ArchetypeEnum'];
-      readonly archetype_display: string;
+      readonly sword_weight: string;
+      /**
+       * Format: decimal
+       * @description SHIELD axis of the combat-identity blend (0-1).
+       */
+      readonly shield_weight: string;
+      /**
+       * Format: decimal
+       * @description CROWN axis of the combat-identity blend (0-1).
+       */
+      readonly crown_weight: string;
       /** @description Combat resolution order. Lower is faster (1 = fastest). */
       readonly speed_rank: number;
       /** @description Player-facing description of the role's identity and combat style. */

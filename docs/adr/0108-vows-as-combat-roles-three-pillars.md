@@ -2,6 +2,18 @@
 
 ## Status
 
+Superseded by ADR-0149 (#2529) — the single `CovenantRole.archetype` enum this ADR's
+three pillars keyed off of is replaced by a SWORD/SHIELD/CROWN weighted blend
+(`sword_weight`/`shield_weight`/`crown_weight`, `blend_weight_for(axis)`). The
+**stat pillar** (`VowStatScaling`/`vow_stat_scaling_bonus`) is unaffected and stays
+live. The **gear pillar** (`VowGearScaling`/`vow_gear_scaling_bonus`) is
+short-circuited to 0 pending ADR-0149's Layer 3 (#2533). The **technique pillar**
+(`ArchetypeActionScaling`) is replaced by `CovenantRoleActionScaling`
+(per-role, not per-archetype) plus a new always-on blend power term
+(`covenant_role_blend_power_term`) for `cast_technique`. See ADR-0149 for the
+four-layer model this collapses into. The role-source variant resolution and
+capability-grant-wiring decisions below are unaffected and remain accurate.
+
 Accepted — 2026-07-09
 
 ## Context

@@ -111,7 +111,7 @@ still live for non-distinction sources (facet/mantle/motif-coherence passive bon
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `intensity`, `control`, `anima_cost`, `creator`, `target_type`, `reach`. Natural key `(gift, name)`, backed by `unique_technique_gift_name` (#2474 — `name` alone is not globally unique; lore reuse or a player-crafted technique can share a name across gifts). Unique per `(gift, name)` |
+| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `intensity`, `control`, `anima_cost`, `creator`, `target_type`, `reach`, `archetype_alignment` (#2529 — `RoleArchetype` choices, default CROWN, migration-seeded from `effect_type.category`: attack→sword, defense→shield, else→crown; which SWORD/SHIELD/CROWN blend axis of an engaged covenant role boosts this technique's cast). Natural key `(gift, name)`, backed by `unique_technique_gift_name` (#2474 — `name` alone is not globally unique; lore reuse or a player-crafted technique can share a name across gifts). Unique per `(gift, name)` |
 
 Key fields: `intensity` (base power), `control` (base safety/precision), `level` (progression
 gate, derives tier), `target_type` (per-technique cardinality — see below).
@@ -399,6 +399,25 @@ versa) raises `InvalidConsequencePoolChoice`. The catalog listing endpoint
 **This catalog applies to standalone casts only** — combat ROUND resolution never reads
 `ActionTemplate.consequence_pool` (see "Combat" doc's note on `wire_melee_attack_action_template`
 and ADR-0130).
+
+### Covenant-Role Blend Power Term (#2529, ADR-0149) [BUILT & WIRED]
+
+`_derive_power` (cast power resolution) sums a list of independent power-term providers
+registered in `world.magic.services.power_terms._PROVIDERS`, each `(PowerTermContext) ->
+int`. `covenant_role_blend_power_term` is the always-on **Layer 1** baseline for
+`covenants`' four-layer vow-power model (see `docs/systems/covenants.md`'s "Vow power,
+four-layer model" and ADR-0149): for every `character.covenant_roles.currently_engaged_roles()`
+row, it adds `total_thread_level_across_all_kinds(sheet) × role.blend_weight_for(technique.archetype_alignment)
+× CovenantRoleBlendConfig.multiplier_tenths / 10`, floored at 0 when the technique or
+character has no engaged role. `total_thread_level_across_all_kinds(sheet)` (`world.magic.services.threads`)
+sums raw `thread.level` across **every** thread kind the character has (TECHNIQUE, GIFT,
+COVENANT_ROLE, SANCTUM, ...) — not the bucketed `thread_level_multiplier`
+`survivability_baseline` uses. `CovenantRoleBlendConfig` (pk=1 singleton,
+`get_covenant_role_blend_config()`, lazy-created) holds the tunable
+`multiplier_tenths` (default 10 = ×1.0). Kept as its own provider (not folded into an
+existing term) so the contribution stays attributable in cast breakdowns — a future
+presentation contract (#2536) needs to show "this much came from your vow" as a
+distinct line.
 
 ### Targeting Model (#1321) [BUILT & WIRED]
 

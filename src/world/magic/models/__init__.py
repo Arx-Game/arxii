@@ -145,7 +145,12 @@ from world.magic.models.motifs import (
     MotifResonanceStyle,
 )
 from world.magic.models.portals import PortalAnchor, PortalAnchorKind
-from world.magic.models.power_config import AuraPowerConfig, LevelPowerConfig, StandingCapBand
+from world.magic.models.power_config import (
+    AuraPowerConfig,
+    CovenantRoleBlendConfig,
+    LevelPowerConfig,
+    StandingCapBand,
+)
 from world.magic.models.progression_milestone import MagicProgressionMilestone
 from world.magic.models.reincarnation import Reincarnation
 from world.magic.models.relationship_bond_pull_tuning import RelationshipBondPullTuning
@@ -280,6 +285,8 @@ __all__ = [
     "ConversionType",
     # corruption config (Scope 7 §2.3)
     "CorruptionConfig",
+    # covenant-role blend power term tuning (#2529)
+    "CovenantRoleBlendConfig",
     "CrossingChoice",
     "CrossingOption",
     # currency-knob sidecar (#1834)

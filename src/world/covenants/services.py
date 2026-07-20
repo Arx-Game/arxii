@@ -866,29 +866,27 @@ def is_gear_compatible(role: CovenantRole, archetype: str) -> bool:
     ).exists()
 
 
-def archetype_action_scaling_bonus(character: object, action_key: str) -> float:
-    """Return the archetype-driven scaling bonus for a combat action (#2022).
+def covenant_role_action_scaling_bonus(character: object, action_key: str) -> float:
+    """Return the per-role scaling bonus for a combat action (#2529, was #2022).
 
-    Reads the ``ArchetypeActionScaling`` row for ``(action_key, role_archetype)``
-    matching the character's engaged ``CovenantRole.archetype``, multiplied by
-    the COVENANT_ROLE thread level. Returns 0.0 when no row exists or the
-    character has no engaged role.
+    Sums ``thread_level × multiplier`` across the character's engaged roles
+    that have a ``CovenantRoleActionScaling`` row for ``action_key``. Rows and
+    COVENANT_ROLE threads key on the ANCHOR (parent) role — engaged roles are
+    resolved sub-roles (ADR-0055), so normalize before lookup. Returns 0.0
+    when no engaged role has a row.
 
     The returned float is a multiplier bonus — callers add it to the action's
-    base effect. E.g., a SHIELD role's interpose: the partial-block damage
-    reduction scales by ``1.0 + bonus`` (a deeper vow blocks more damage).
+    base effect (e.g. interpose partial-block divisor = ``2 + bonus``).
     """
     from decimal import Decimal  # noqa: PLC0415
 
-    from world.covenants.models import ArchetypeActionScaling  # noqa: PLC0415
+    from world.covenants.models import CovenantRoleActionScaling  # noqa: PLC0415
 
     if not hasattr(character, "covenant_roles"):
         return 0.0
     engaged_roles = character.covenant_roles.currently_engaged_roles()
     if not engaged_roles:
         return 0.0
-
-    # Resolve the CharacterSheet — needed for _covenant_role_thread_level.
     try:
         sheet = character.sheet_data
     except AttributeError:
@@ -896,25 +894,19 @@ def archetype_action_scaling_bonus(character: object, action_key: str) -> float:
     if sheet is None:
         return 0.0
 
-    # Map role archetype → thread level (max across engaged roles of that archetype)
-    archetype_thread_levels: dict[str, int] = {}
+    anchors = []
     for role in engaged_roles:
-        if not role.archetype:
-            continue
-        level = _covenant_role_thread_level(sheet, role)
-        archetype_thread_levels[role.archetype] = max(
-            archetype_thread_levels.get(role.archetype, 0), level
-        )
-    if not archetype_thread_levels:
-        return 0.0
+        anchor = role.parent_role if role.parent_role_id is not None else role
+        if anchor not in anchors:
+            anchors.append(anchor)
 
-    scalings = ArchetypeActionScaling.objects.filter(
+    scalings = CovenantRoleActionScaling.objects.filter(
         action_key=action_key,
-        role_archetype__in=archetype_thread_levels.keys(),
+        covenant_role__in=anchors,
     )
     total = Decimal(0)
     for scaling in scalings:
-        thread_level = archetype_thread_levels.get(scaling.role_archetype, 0)
+        thread_level = _covenant_role_thread_level(sheet, scaling.covenant_role)
         total += Decimal(thread_level) * scaling.thread_level_multiplier
     return float(total)
 

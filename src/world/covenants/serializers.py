@@ -23,7 +23,6 @@ class CovenantRoleSerializer(serializers.ModelSerializer):
     covenant_type_display = serializers.CharField(
         source="get_covenant_type_display", read_only=True
     )
-    archetype_display = serializers.CharField(source="get_archetype_display", read_only=True)
 
     class Meta:
         model = CovenantRole
@@ -33,8 +32,9 @@ class CovenantRoleSerializer(serializers.ModelSerializer):
             "slug",
             "covenant_type",
             "covenant_type_display",
-            "archetype",
-            "archetype_display",
+            "sword_weight",
+            "shield_weight",
+            "crown_weight",
             "speed_rank",
             "description",
             "parent_role",

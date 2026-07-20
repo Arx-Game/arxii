@@ -7,6 +7,7 @@ from django.core.validators import MaxValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from world.magic.constants import StandingCapMode
 
 
@@ -114,3 +115,29 @@ class StandingCapBand(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"StandingCapBand(L{self.min_level}+, cap={self.cap}, {self.mode})"
+
+
+class CovenantRoleBlendConfig(SharedMemoryModel):
+    """Singleton (pk=1) tuning for the covenant-role blend power term (#2529).
+
+    Baseline bonus = total_thread_level × blend_weight × multiplier_tenths / 10,
+    summed over engaged roles. ``multiplier_tenths`` is integer-tenths
+    (10 = ×1.0). Lazy-created via ``get_covenant_role_blend_config()`` in
+    ``services/power_terms.py``. Tuning frame (#2529 amendment 2): an engaged
+    vow's baseline should read as a visibly higher effective tier; Layer 4
+    perks target ≈2× this baseline.
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    multiplier_tenths = models.PositiveIntegerField(
+        default=10,
+        help_text="Blend multiplier in integer-tenths (10 = ×1.0).",
+    )
+
+    class Meta:
+        verbose_name = "Covenant Role Blend Config"
+        verbose_name_plural = "Covenant Role Blend Config"
+
+    def __str__(self) -> str:
+        return "Covenant Role Blend Config"

@@ -118,4 +118,4 @@ class RolePowersCatalogTests(TestCase):
         self.assertIsNone(role.resonance_id)
         self.assertEqual(role.unlock_thread_level, 0)
         fetched = CovenantRole.objects.get(pk=role.pk)
-        self.assertEqual(fetched.archetype, "sword")
+        self.assertEqual(fetched.sword_weight, 1)

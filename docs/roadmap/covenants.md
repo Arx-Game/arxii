@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; exit lifecycle — voluntary leave + leader-gated kick + below-2 auto-dissolve, soft-only (#519) — shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate still post-MVP; rank ladder — `CovenantRank` per-covenant authority tier, two-axis `CovenantRole`/`CovenantRank` model, rank management services, `CovenantRankViewSet` API, rank-ladder UI (#1027) — shipped; covenant-role armor-soak gate — compatible→additive, incompatible→`max(physical, resonant pool)`, level-scaled; #1174 — shipped; resonance sub-role runtime resolution (derive-on-read via `resolve_effective_role` + `fire_subrole_discoveries` discovery beat; `discovery_achievement`/`codex_entry` FKs on sub-role `CovenantRole`; `anchor_role` API field; #1277) — shipped; telnet membership lifecycle — `CmdCovenant` (`covenant engage/disengage/leave/kick/rank/transfer/standdown`), seven `action.run()` REGISTRY Actions in `actions/definitions/covenants.py`, `world.covenants.selectors` shared by Actions + viewsets, covenant induction + banner-call rise via `CmdRitual` adapter registry (`commands/ritual_adapters.py` — `CovenantInductionAdapter` + `BannerCallAdapter`) (#1346) — shipped)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; exit lifecycle — voluntary leave + leader-gated kick + below-2 auto-dissolve, soft-only (#519) — shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate still post-MVP; rank ladder — `CovenantRank` per-covenant authority tier, two-axis `CovenantRole`/`CovenantRank` model, rank management services, `CovenantRankViewSet` API, rank-ladder UI (#1027) — shipped; covenant-role armor-soak gate — compatible→additive, incompatible→`max(physical, resonant pool)`, level-scaled; #1174 — shipped; resonance sub-role runtime resolution (derive-on-read via `resolve_effective_role` + `fire_subrole_discoveries` discovery beat; `discovery_achievement`/`codex_entry` FKs on sub-role `CovenantRole`; `anchor_role` API field; #1277) — shipped; telnet membership lifecycle — `CmdCovenant` (`covenant engage/disengage/leave/kick/rank/transfer/standdown`), seven `action.run()` REGISTRY Actions in `actions/definitions/covenants.py`, `world.covenants.selectors` shared by Actions + viewsets, covenant induction + banner-call rise via `CmdRitual` adapter registry (`commands/ritual_adapters.py` — `CovenantInductionAdapter` + `BannerCallAdapter`) (#1346) — shipped; combat-identity blend — `CovenantRole.archetype` single-enum replaced by `sword_weight`/`shield_weight`/`crown_weight` (sum to 1 on primaries, sub-roles delegate via `blend_weight_for`), `CovenantRoleActionScaling` replacing `ArchetypeActionScaling`, always-on `covenant_role_blend_power_term` baseline cast power term — Layer 1 of ADR-0149's four-layer vow-power model (#2529) — shipped; Layers 2-4 tracked in #2443/#2533/#2536)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -117,16 +117,14 @@ endpoints also landed in Slice B. Mission-driven engagement is post-MVP.
 
 ### Foundational Role Archetypes (for Durance covenants)
 
-Three archetypes capture combat identity:
-
-- **Sword** (offense)
-- **Shield** (defense)
-- **Crown** (support)
-
-At early levels players pick from these three. As the covenant or members
-level up, specialized sub-roles unlock within each archetype (e.g., Vanguard,
-Sentinel, Arbiter). Battle covenants and other types may have their own role
-sets. Specific role names are authored content (`CovenantRole` rows).
+Three axes capture combat identity — **Sword** (offense), **Shield** (defense), **Crown**
+(support). As of #2529 (ADR-0149) a role does not pick exactly one of these; it carries a
+`sword_weight`/`shield_weight`/`crown_weight` blend (summing to 1 on primary roles) so a
+role can be meaningfully hybrid. As the covenant or members level up, specialized
+sub-roles unlock within a role's blend (e.g., Vanguard, Sentinel, Arbiter) — sub-roles
+carry no weights of their own and delegate to their parent's blend via
+`blend_weight_for(axis)`. Battle covenants and other types may have their own role sets.
+Specific role names are authored content (`CovenantRole` rows).
 
 ### Combat Integration
 
@@ -218,7 +216,8 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
     Design Decision: Sworn Objective" below), `formed_at`, `dissolved_at`.
     SharedMemoryModel.
   - `CovenantRole` — staff-authored lookup (SharedMemoryModel) with
-    `name`, `slug`, `covenant_type`, `archetype`, `speed_rank`, `description`.
+    `name`, `slug`, `covenant_type`, `sword_weight`/`shield_weight`/`crown_weight`
+    (combat-identity blend, #2529, ADR-0149), `speed_rank`, `description`.
     Unique `(covenant_type, name)`.
   - `CharacterCovenantRole` — per-character membership row.
     `character_sheet`, `covenant` FK (PROTECT, related_name=`memberships`),
@@ -487,8 +486,9 @@ This is a standing invariant — do not add `is_leadership` or any authority fla
 back to `CovenantRole`, and do not encode combat/role bonuses onto `CovenantRank`.
 
 - **`CovenantRole`** = the **power** a member wields on behalf of the covenant
-  (Sword/Shield/Crown combat archetype, `speed_rank`, `CovenantRoleBonus` Thread
-  pulls). `CovenantRole` has no `is_leadership` field — authority is on `CovenantRank`.
+  (Sword/Shield/Crown combat-identity blend weights, `speed_rank`, `CovenantRoleBonus`
+  Thread pulls). `CovenantRole` has no `is_leadership` field — authority is on
+  `CovenantRank`.
 - **`CovenantRank`** (new in #1027) = **administrative authority** over the
   covenant. Per-covenant, player-named ordered tiers with integer `tier`
   (1 = top authority), capability flags (`can_invite`, `can_kick`, `can_manage_ranks`),
