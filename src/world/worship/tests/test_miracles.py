@@ -256,3 +256,39 @@ class WireMiracleContentTests(TestCase):
             TriggerDefinition.objects.filter(name="divine_intervention_on_incapacitated").count(),
             1,
         )
+
+
+class MiracleAPITests(TestCase):
+    """Tests for the staff-facing MiracleViewSet (#2360)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from django.contrib.auth import get_user_model
+
+        cls.being = WorshippedBeingFactory()
+        Miracle.objects.create(
+            name="Test Miracle",
+            being=cls.being,
+            resonance_pool_cost=100,
+            intervention_trigger=MiracleTrigger.INCAPACITATED,
+            narrative_text="A miracle.",
+        )
+        User = get_user_model()
+        cls.staff_user = User.objects.create_user(username="staff", password="pass", is_staff=True)
+        cls.player_user = User.objects.create_user(username="player", password="pass")
+
+    def test_staff_can_list_miracles(self) -> None:
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.force_authenticate(user=self.staff_user)
+        response = client.get("/api/worship/miracles/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_non_staff_cannot_access(self) -> None:
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.force_authenticate(user=self.player_user)
+        response = client.get("/api/worship/miracles/")
+        self.assertEqual(response.status_code, 403)

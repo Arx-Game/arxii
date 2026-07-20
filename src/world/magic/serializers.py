@@ -2477,11 +2477,17 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
     character_sheet_id = serializers.IntegerField(read_only=True)
     boundary_level = serializers.IntegerField(source="threshold.boundary_level", read_only=True)
     target_stage_display = serializers.SerializerMethodField()
-    vision_text = serializers.CharField(source="threshold.vision_text", read_only=True)
+    vision_text = serializers.SerializerMethodField()
     advisory_text = serializers.SerializerMethodField()
     risk_text = serializers.SerializerMethodField()
     eligible_paths = serializers.SerializerMethodField()
     intended_path_id = serializers.SerializerMethodField()
+
+    def get_vision_text(self, obj) -> str:
+        """Return faith variant vision text if set, else the threshold's."""
+        if obj.faith_variant_id is not None:
+            return obj.faith_variant.vision_text
+        return obj.threshold.vision_text
 
     class Meta:
         from world.magic.audere_majora import PendingAudereMajoraOffer  # noqa: PLC0415
@@ -2496,6 +2502,7 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
             "boundary_level",
             "target_stage_display",
             "vision_text",
+            "faith_variant_id",
             "advisory_text",
             "risk_text",
             "eligible_paths",
@@ -2630,6 +2637,8 @@ class AudereMajoraCrossingResultSerializer(serializers.Serializer):
     chosen_path_name = serializers.CharField(allow_blank=True)
     advisory_text = serializers.CharField(allow_blank=True)
     declaration_interaction_id = serializers.IntegerField(allow_null=True)
+    faith_coupling_applied = serializers.BooleanField(default=False)
+    faith_being_name = serializers.CharField(allow_blank=True, default="")
 
 
 class CrossXPLockSerializer(serializers.Serializer):
