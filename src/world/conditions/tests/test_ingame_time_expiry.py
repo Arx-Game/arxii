@@ -233,6 +233,40 @@ class LazyExpiryTests(EvenniaTestCase):
 
         self.assertIn(inst, result)
 
+    def test_non_ingame_time_with_past_expires_at_not_swept(self):
+        """A non-INGAME_TIME condition (e.g. UNTIL_CURED) with a past
+        expires_at is NOT removed by the lazy sweep — the expires_at field
+        is also used by the wake-arc system as a force-wake backstop (#2287),
+        so only INGAME_TIME conditions are eligible for IC-time expiry."""
+        from world.conditions.constants import DurationType
+        from world.conditions.factories import (
+            ConditionInstanceFactory,
+            ConditionTemplateFactory,
+        )
+        from world.conditions.services import get_active_conditions
+        from world.scenes.factories import PersonaFactory
+
+        persona = PersonaFactory()
+        target = persona.character_sheet.character
+        # UNTIL_CURED condition (like Unconscious) with a past expires_at
+        # — the wake system uses this as a force-wake deadline
+        until_cured_tmpl = ConditionTemplateFactory(
+            name="Unconscious-like",
+            default_duration_type=DurationType.UNTIL_CURED,
+            default_duration_value=0,
+        )
+        inst = ConditionInstanceFactory(
+            target=target,
+            condition=until_cured_tmpl,
+            rounds_remaining=None,
+            expires_at=timezone.now() - timedelta(hours=1),
+        )
+
+        result = get_active_conditions(target)
+
+        # The condition survives — the lazy sweep only targets INGAME_TIME
+        self.assertIn(inst, result)
+
     def test_afk_safety_condition_lingers_until_read(self):
         """An expired INGAME_TIME condition lingers in DB until
         get_active_conditions is called (not swept by time alone)."""

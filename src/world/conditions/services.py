@@ -205,11 +205,22 @@ def get_active_conditions(
     # this function. The instance is already in hand, so the direct teardown
     # (the same path remove_conditions_by_category and clear_all_conditions
     # use) is correct and avoids the loop.
+    #
+    # Only sweep conditions whose template duration_type is INGAME_TIME.
+    # The ``expires_at`` field is also used by the wake-arc system
+    # (``_stamp_unconscious_wake_deadline``) as a force-wake backstop on
+    # conditions with OTHER duration types (e.g. Unconscious, which is
+    # UNTIL_CURED). Sweeping those would remove them before the wake system
+    # can process the guaranteed-wake deadline (#2287).
     instances = list(qs)
     if instances:
         now = timezone.now()
         expired = [
-            inst for inst in instances if inst.expires_at is not None and now >= inst.expires_at
+            inst
+            for inst in instances
+            if inst.expires_at is not None
+            and now >= inst.expires_at
+            and inst.condition.default_duration_type == DurationType.INGAME_TIME
         ]
         if expired:
             for inst in expired:
