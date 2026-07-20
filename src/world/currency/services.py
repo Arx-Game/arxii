@@ -1738,8 +1738,8 @@ def run_purse_drains() -> int:
                 send_narrative_message(
                     recipients=[row.character_sheet],
                     body=(
-                        f"PLACEHOLDER: {format_coppers(amount)} has slipped through your "
-                        "fingers again — gone by week's end, as it always is."
+                        f"{format_coppers(amount)} was frittered away, or lost in "
+                        "mishaps. Such is life."
                     ),
                     category=NarrativeCategory.SYSTEM,
                 )

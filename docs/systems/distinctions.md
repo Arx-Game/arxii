@@ -258,6 +258,10 @@ Deliberately untouched: physical minted coin (`CurrencyInstrumentDetails`, an `I
 possession), org treasuries, and coin held by anyone else — the laundering routes are the
 concept being played, not defects. See the #2613 issue spec.
 
+Seeded (idempotent `get_or_create`) by `ensure_somehow_always_broke_distinction`
+(`world/seeds/character_creation.py`, in the `character_creation` cluster): the `Distinction`
+(Personality category, `-50`) and its `DistinctionPurseDrain` row (`100% / floor 0`).
+
 ---
 
 ## Profile Visibility — relocated into Secrets (#1109 → #1334)
