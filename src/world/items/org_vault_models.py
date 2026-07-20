@@ -19,7 +19,7 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.items.constants import OrgVaultEventKind
+from world.items.constants import OrgVaultEventKind, VaultTransitResolution
 
 
 class OrganizationVault(SharedMemoryModel):
@@ -74,6 +74,54 @@ class VaultHolding(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"item {self.item_instance_id} in {self.vault}"
+
+
+class VaultTransit(SharedMemoryModel):
+    """An item collected on the org's behalf, in a carrier's hands, owed to the vault.
+
+    The gems return leg (#2540 ruling 2026-07-20): collection delivers everything into
+    the collector's hands and mints one of these per item; depositing at the vault
+    resolves it DEPOSITED (converting to a ``VaultHolding``), while the consent-gated
+    embezzlement branch resolves it KEPT — the stone stays with the carrier and NO
+    vault event is booked (the crime doesn't write itself into the org's ledger; the
+    resolved transit row is the staff-side record, and the gap between the collection
+    tally and the deposits is the in-world discovery hook). In-transit loss effects
+    were considered and deliberately NOT built — loss lives in the collection roll.
+    """
+
+    vault = models.ForeignKey(
+        OrganizationVault,
+        on_delete=models.CASCADE,
+        related_name="transits",
+    )
+    item_instance = models.OneToOneField(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="vault_transit",
+    )
+    carrier_character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="vault_transits",
+        help_text="The collector currently holding the item (sheet-scoped, like holders).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolution = models.CharField(
+        max_length=20,
+        choices=VaultTransitResolution.choices,
+        blank=True,
+        default="",
+        help_text="Blank while in transit; DEPOSITED or KEPT once resolved.",
+    )
+
+    class Meta:
+        app_label = "items"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        state = self.resolution or "open"
+        return f"transit item {self.item_instance_id} for {self.vault} ({state})"
 
 
 class OrgVaultEvent(SharedMemoryModel):

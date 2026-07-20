@@ -83,6 +83,19 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         ConsentMode.FRIENDS_WHITELIST,
     ),
     (
+        "embezzlement",
+        "Embezzlement",
+        # PLACEHOLDER (agent-drafted player-facing copy — Apostate to rewrite, #2540):
+        "Whether a collector may skim your house's collection on its way to the vault. "
+        "Checked against the piloted Head of House; the collecting player must also "
+        "deliberately opt in — it never happens by accident.",
+        27,
+        # Inherits All Antagonism (FRIENDS_WHITELIST); own value kept opt-in so an
+        # orphaned row stays gated. Dedicated category (not theft) — Apostate's
+        # ruling 2026-07-20.
+        ConsentMode.FRIENDS_WHITELIST,
+    ),
+    (
         "secret-investigation",
         "Secret Investigation",
         # PLACEHOLDER (agent-drafted player-facing copy — Apostate to rewrite, #2289):
@@ -143,6 +156,7 @@ _CATEGORY_PARENTS: dict[str, str] = {
     "hostile": "antagonism",
     "blackmail": "antagonism",
     "boon": "antagonism",
+    "embezzlement": "antagonism",
     "manipulative": "antagonism",
     "theft": "antagonism",
     "secret-investigation": "antagonism",

@@ -14,12 +14,21 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
-from world.items.constants import OrgVaultEventKind
+from world.items.constants import OrgVaultEventKind, VaultTransitResolution
 from world.items.models import ItemInstance
-from world.items.org_vault_models import OrganizationVault, OrgVaultEvent, VaultHolding
+from world.items.org_vault_models import (
+    OrganizationVault,
+    OrgVaultEvent,
+    VaultHolding,
+    VaultTransit,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
+
+    from world.roster.models import RosterTenure
     from world.scenes.models import Persona
     from world.societies.models import Organization
 
@@ -92,6 +101,111 @@ def deposit_item_to_vault(
         reason=reason,
     )
     return holding
+
+
+def _persona_tenure(persona: Persona | None) -> RosterTenure | None:
+    """persona → character_sheet → roster_entry → current_tenure, or None on any gap."""
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    if persona is None:
+        return None
+    try:
+        entry = persona.character_sheet.roster_entry
+    except (AttributeError, ObjectDoesNotExist):
+        return None
+    return entry.current_tenure if entry is not None else None
+
+
+def can_embezzle_from(organization: Organization, carrier_persona: Persona) -> bool:
+    """The head-side half of the embezzlement double-gate (#2540 ruling 2026-07-20).
+
+    True only when the org has at least one **piloted** leader (an active
+    ``can_manage_ranks`` member with a controlling account) and NO piloted leader's
+    ``embezzlement`` consent blocks the carrier — an NPC-run house can never be
+    embezzled, and one objecting piloted head vetoes. (Strict-all across multiple
+    piloted heads is a PLACEHOLDER semantic — Apostate may relax to any-one-allows.)
+    The carrier-side half of the gate is simply opting in via ``keep_item_ids``.
+    """
+    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
+    from world.consent.services import consent_blocks_targeting  # noqa: PLC0415
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    category = SocialConsentCategory.objects.filter(key="embezzlement").first()
+    if category is None:
+        return False  # unseeded resolves strict, mirroring theft's fallback
+    carrier_tenure = _persona_tenure(carrier_persona)
+    leaders = OrganizationMembership.objects.filter(
+        organization=organization,
+        left_at__isnull=True,
+        exiled_at__isnull=True,
+        rank__can_manage_ranks=True,
+    ).select_related("persona__character_sheet__character__db_account")
+    piloted_head_seen = False
+    for membership in leaders:
+        head = membership.persona
+        if head.character_sheet.character.db_account is None:
+            continue  # non-piloted head — no one to consent
+        piloted_head_seen = True
+        head_tenure = _persona_tenure(head)
+        if head_tenure is None or consent_blocks_targeting(
+            owner_tenure=head_tenure, category=category, actor_tenure=carrier_tenure
+        ):
+            return False
+    return piloted_head_seen
+
+
+@transaction.atomic
+def resolve_vault_transit(
+    *,
+    organization: Organization,
+    carrier_persona: Persona,
+    keep_item_ids: Collection[int] = (),
+) -> list[VaultTransit]:
+    """Complete the collection mission's return leg for one carrier (#2540 ruling).
+
+    Every open transit row the carrier holds for this org's vault resolves: items in
+    ``keep_item_ids`` resolve KEPT (embezzled — requires the consent double-gate; the
+    stone stays in the carrier's hands and NO vault event is booked), the rest resolve
+    DEPOSITED (custody converts to a ``VaultHolding`` + audited DEPOSIT event).
+    Raises ``ValidationError`` when a keep is requested but the double-gate fails.
+    """
+    vault = get_or_create_org_vault(organization)
+    keep_ids = set(keep_item_ids)
+    if keep_ids and not can_embezzle_from(organization, carrier_persona):
+        msg = "Skimming this house's collection is not on the table."
+        raise ValidationError(msg)
+    transits = list(
+        VaultTransit.objects.filter(
+            vault=vault,
+            carrier_character_sheet=carrier_persona.character_sheet,
+            resolved_at__isnull=True,
+        ).select_related("item_instance")
+    )
+    now = timezone.now()
+    for transit in transits:
+        item = ItemInstance.objects.select_for_update().get(pk=transit.item_instance_id)
+        if item.pk in keep_ids:
+            transit.resolution = VaultTransitResolution.KEPT
+        else:
+            if item.game_object is not None:
+                item.game_object.delete()
+                item.game_object = None
+            item.holder_character_sheet = None
+            item.save(update_fields=["holder_character_sheet", "game_object"])
+            VaultHolding.objects.create(
+                vault=vault, item_instance=item, deposited_by=carrier_persona
+            )
+            OrgVaultEvent.objects.create(
+                vault=vault,
+                item_instance=item,
+                kind=OrgVaultEventKind.DEPOSIT,
+                actor_persona=carrier_persona,
+                reason="collection deposit",
+            )
+            transit.resolution = VaultTransitResolution.DEPOSITED
+        transit.resolved_at = now
+        transit.save(update_fields=["resolution", "resolved_at"])
+    return transits
 
 
 @transaction.atomic

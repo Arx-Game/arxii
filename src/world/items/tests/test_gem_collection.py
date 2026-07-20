@@ -96,6 +96,19 @@ class GemCollectionTests(TestCase):
         self.assertEqual(result.gem_value_landed, 900)  # gems net of graft
         self.assertEqual(self._stock_value(), 900)
 
+    def test_delivered_stones_are_minted_as_vault_transit(self) -> None:
+        # #2540 ruling: collection is a mission with a return leg — every stone that
+        # reaches the collector's hands is owed to the house vault via a transit row.
+        from world.items.org_vault_models import VaultTransit
+
+        self._collect(1)  # 3 of 4 stones survive to the collector
+        transits = VaultTransit.objects.filter(
+            vault__organization=self.org, resolved_at__isnull=True
+        )
+        self.assertEqual(transits.count(), 3)
+        for transit in transits:
+            self.assertEqual(transit.carrier_character_sheet_id, self.collector_sheet.pk)
+
     def test_stock_accumulates_across_collections(self) -> None:
         self._collect(1)
         # A second cycle accrues more common value (mutate-then-save, as accrual does — an
