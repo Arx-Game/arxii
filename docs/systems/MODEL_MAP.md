@@ -805,6 +805,7 @@
   - clue -> clues.Clue [FK]
 
 ### Service Functions
+- `charm_into_asset(*, charmer_persona: 'Persona', target_persona: 'Persona', role_context: 'str') -> 'NPCAsset' — Extract a charmed NPC as a CHARM ``NPCAsset`` (#2502).`
 - `coerce_into_asset(*, coercer_persona: 'Persona', target_persona: 'Persona', role_context: 'str') -> 'NPCAsset' — Extract a blackmailed NPC as a COERCION ``NPCAsset`` (#1680).`
 - `introduce_asset(*, introducer_persona: 'Persona', ally_persona: 'Persona', asset: 'NPCAsset') -> 'NPCAsset' — Introduce an owned asset to a co-present ally, creating co-ownership (#2295).`
 - `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction') -> 'None' — Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
@@ -1791,6 +1792,16 @@
   - durance_training_sites <- progression.DuranceTrainingSite
   - path_intents <- progression.PathIntent
   - character_selections <- progression.CharacterPathHistory
+  - traitrequirement_requirements <- progression.TraitRequirement
+  - levelrequirement_requirements <- progression.LevelRequirement
+  - classlevelrequirement_requirements <- progression.ClassLevelRequirement
+  - multiclassrequirement_requirements <- progression.MultiClassRequirement
+  - achievementrequirement_requirements <- progression.AchievementRequirement
+  - relationshiprequirement_requirements <- progression.RelationshipRequirement
+  - legendrequirement_requirements <- progression.LegendRequirement
+  - tierrequirement_requirements <- progression.TierRequirement
+  - itemrequirement_requirements <- progression.ItemRequirement
+  - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - allowed_styles <- magic.TechniqueStyle
   - gift_unlocks <- magic.GiftUnlock
@@ -2421,6 +2432,7 @@
 - `materialize_companion_as_combat_opponent(companion: 'Companion', encounter: 'CombatEncounter', *, threat_pool: 'ThreatPool | None' = None) -> 'CombatOpponent' — Bridge a persistent Companion into a duel-scale CombatOpponent (#1873).`
 - `mount_companion(sheet: 'CharacterSheet', companion: 'Companion') -> 'Companion' — Mount *sheet* on *companion* — applies the Mounted condition to the rider.`
 - `order_companion(*, companion: 'Companion', order_kind: 'str', round_number: 'int', encounter: 'CombatEncounter | None' = None, battle: 'Battle | None' = None, target_opponent=None, target_unit=None, ability=None, defending_participant=None, target_ally=None) — Validate and upsert a CompanionOrder directive (#1921).`
+- `promote_summon_to_companion(*, caster_sheet: 'CharacterSheet', combat_opponent: 'CombatOpponent', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' — Promote an ephemeral summon or charmed enemy into a persistent Companion (#2502).`
 - `release_companion(companion: 'Companion') -> 'None' — Release a bonded companion: destroy its live object, keep the row.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' — Resolve a bridged companion's defeat consequence (#1873).`
 - `stables_capacity_bonus_for_sheet(character_sheet: 'CharacterSheet') -> 'int' — Flat Companion Capacity bonus from all Stables the sheet has standing in.`
@@ -6257,23 +6269,27 @@
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
   - trait -> traits.Trait [FK]
 
 ### LevelRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
 
 ### ClassLevelRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
   - character_class -> classes.CharacterClass [FK]
 
 ### MultiClassRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
   - required_classes -> classes.CharacterClass [M2M]
 **Pointed to by:**
   - class_levels <- progression.MultiClassLevel
@@ -6287,28 +6303,33 @@
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
   - achievement -> achievements.Achievement [FK]
 
 ### RelationshipRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
   - required_track_kind -> relationships.RelationshipTrack [FK] (nullable)
 
 ### LegendRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
 
 ### TierRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
 
 ### ItemRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
   - item_template -> items.ItemTemplate [FK] (nullable)
   - min_touchstone_tier -> magic.ResonanceTier [FK] (nullable)
   - min_quality_tier -> items.QualityTier [FK] (nullable)
@@ -6317,6 +6338,7 @@
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
 
 ### CharacterUnlock
 **Foreign Keys:**
