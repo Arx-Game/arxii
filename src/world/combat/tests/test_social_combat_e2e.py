@@ -1,5 +1,7 @@
 """E2E tests for social/mental combat verbs (#2015)."""
 
+from unittest.mock import MagicMock, patch
+
 from django.test import TestCase
 
 from world.combat.constants import (
@@ -130,3 +132,37 @@ class ResolveSocialVerbTests(TestCase):
         ).first()
         self.assertIsNotNone(record, "Taunt must create/increment a ThreatRecord")
         self.assertEqual(record.threat_value, TAUNT_THREAT_PER_LEVEL)
+
+
+class ResolveSocialCheckSituationContextTests(TestCase):
+    """#2536 Task 5 review fix: `_resolve_social_check` (the shared Rally/
+    Demoralize/Taunt/Parley roll seam) must thread a SituationContext into
+    perform_check so a future CHECK_BONUS perk scoped to one of these social
+    CheckTypes can actually fire, mirroring CombatTechniqueResolver._roll_check.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        ensure_social_combat_content()
+        self.encounter = CombatEncounterFactory(round_number=1, status=RoundStatus.DECLARING)
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+
+    def test_situation_ctx_threaded_with_live_round_context(self) -> None:
+        from world.combat.round_context import CombatRoundContext
+        from world.combat.services import _resolve_social_check
+        from world.covenants.perks.context import SituationContext
+
+        # _resolve_social_check re-imports `perform_check` locally from
+        # world.checks.services (services.py:5600ish) rather than using the
+        # module-level name — patch the source, not world.combat.services.
+        with patch("world.checks.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=1)
+            _resolve_social_check(self.participant, "Rally", 0)
+
+        situation_ctx = mock_perform.call_args.kwargs["situation_ctx"]
+        self.assertIsInstance(situation_ctx, SituationContext)
+        self.assertEqual(situation_ctx.holder, self.participant.character_sheet)
+        self.assertEqual(situation_ctx.subject, self.participant.character_sheet)
+        self.assertIsNone(situation_ctx.target)
+        self.assertIsInstance(situation_ctx.resolution, CombatRoundContext)
+        self.assertEqual(situation_ctx.resolution.participant, self.participant)

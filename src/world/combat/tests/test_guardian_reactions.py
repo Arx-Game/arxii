@@ -406,3 +406,76 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
             100,
             "a forced clean success must zero the damage reaching the ally",
         )
+
+    def test_situation_ctx_threaded_with_live_round_context(self) -> None:
+        """#2536 Task 5 review fix: `_try_technique_interpose` must thread a
+        SituationContext into the guardian's own cast check —
+        ``action.participant`` is already dereferenced elsewhere in the
+        function (``current_position``), so this plumbing must not be
+        skipped, or a future CHECK_BONUS perk scoped to the guardian's
+        protective-technique CheckType would silently never fire.
+
+        Calls ``_try_technique_interpose`` directly (rather than the full
+        ``apply_damage_to_participant`` dispatch chain the sibling test
+        above exercises) to keep this a focused unit test of the threading.
+        """
+        from types import SimpleNamespace
+
+        from evennia import create_object
+
+        from flows.events.payloads import DamagePreApplyPayload, DamageSource
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.round_context import CombatRoundContext
+        from world.combat.services import _try_technique_interpose
+        from world.covenants.perks.context import SituationContext
+        from world.magic.effect_palette_content import FORCE_FIELD_TECHNIQUE_NAME
+        from world.magic.factories import CharacterAnimaFactory
+        from world.magic.models import CharacterTechnique, Technique
+
+        room = create_object("typeclasses.rooms.Room", key="TechGuardianSituationRoom", nohome=True)
+        encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=1, room=room)
+
+        guardian_sheet = CharacterSheetFactory()
+        guardian_participant = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=guardian_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        guardian = guardian_sheet.character
+        guardian.db_location = room
+        guardian.save(update_fields=["db_location"])
+
+        ally_sheet = CharacterSheetFactory()
+        ally = ally_sheet.character
+
+        aegis_field = Technique.objects.get(name=FORCE_FIELD_TECHNIQUE_NAME)
+        CharacterTechnique.objects.create(character=guardian_sheet, technique=aegis_field)
+        CharacterAnimaFactory(character=guardian, current=10, maximum=10)
+
+        action = CombatRoundAction.objects.create(
+            participant=guardian_participant,
+            round_number=1,
+            maneuver=CombatManeuver.INTERPOSE,
+            focused_action=aegis_field,
+            is_ready=True,
+        )
+        pre_payload = DamagePreApplyPayload(
+            target=ally,
+            amount=40,
+            damage_type=None,
+            source=DamageSource(type="character", ref=ally),
+        )
+
+        with patch(
+            "world.combat.services.perform_check",
+            return_value=SimpleNamespace(success_level=2),
+        ) as mock_perform:
+            _try_technique_interpose(action, guardian, ally, pre_payload)
+
+        situation_ctx = mock_perform.call_args.kwargs["situation_ctx"]
+        self.assertIsInstance(situation_ctx, SituationContext)
+        self.assertEqual(situation_ctx.holder, guardian_participant.character_sheet)
+        self.assertEqual(situation_ctx.subject, guardian_participant.character_sheet)
+        self.assertIsNone(situation_ctx.target)
+        self.assertIsInstance(situation_ctx.resolution, CombatRoundContext)
+        self.assertEqual(situation_ctx.resolution.participant, guardian_participant)

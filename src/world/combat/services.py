@@ -834,11 +834,26 @@ class CombatTechniqueResolver:
             pen_check_type,
             scene=self.participant.encounter.scene,
         )
+        # #2536 Task 5 review fix: thread the same live round context the
+        # offense check gets (_roll_check) — same class, same self.participant,
+        # same target resolution. A future CHECK_BONUS perk scoped to the
+        # penetration CheckType must not silently never fire just because this
+        # sibling roll skipped the seam every other combat check now honors.
+        from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+        from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+
+        situation_ctx = SituationContext(
+            holder=self.participant.character_sheet,
+            subject=self.participant.character_sheet,
+            target=_resolve_primary_target_sheet(self.action),
+            resolution=CombatRoundContext(self.participant),
+        )
         pen_result = perform_check(
             caster,
             pen_check_type,
             target_difficulty=ward,
             extra_modifiers=pen_breakdown.total,
+            situation_ctx=situation_ctx,
         )
         factor = get_penetration_factor(pen_result.success_level)
         builder = PowerLedgerBuilder.from_ledger(combat_ledger)
@@ -5583,6 +5598,8 @@ def _resolve_social_check(
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import collect_check_modifiers, perform_check  # noqa: PLC0415
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
 
     check_type = CheckType.objects.filter(name=check_type_name, is_active=True).first()
     if check_type is None:
@@ -5592,11 +5609,24 @@ def _resolve_social_check(
     breakdown = collect_check_modifiers(
         participant.character_sheet, check_type, scene=participant.encounter.scene
     )
+    # #2536 Task 5 review fix: thread the live round context so CHECK_BONUS
+    # situational perks can fire on Rally/Demoralize/Taunt/Parley — this
+    # shared helper only receives `participant` (no per-caller opponent/ally
+    # target is passed through), so `target` is None; the resolution context
+    # (the plumbing every caller has available) is what a future perk scoped
+    # to one of these social CheckTypes needs to not silently never fire.
+    situation_ctx = SituationContext(
+        holder=participant.character_sheet,
+        subject=participant.character_sheet,
+        target=None,
+        resolution=CombatRoundContext(participant),
+    )
     result = perform_check(
         character,
         check_type,
         target_difficulty=target_difficulty,
         extra_modifiers=breakdown.total,
+        situation_ctx=situation_ctx,
     )
     return result.success_level or 0
 
@@ -7730,11 +7760,28 @@ def _try_technique_interpose(
         # same pairing) — fail safe like the resolved-is-None branch above:
         # no roll, no cost, damage proceeds to the next protection layer.
         return
+    # #2536 Task 5 review fix: thread the live round context — action.participant
+    # is already dereferenced elsewhere in this function (current_position below),
+    # so the plumbing a CHECK_BONUS perk needs is trivially available; skipping it
+    # would silently strand a future perk scoped to the guardian's protective
+    # technique CheckType. No natural offense `target` exists on a reactive
+    # protective roll (there is no opposing actor being checked against), so
+    # target stays None — only holder/subject/resolution-keyed situations apply.
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+
+    situation_ctx = SituationContext(
+        holder=action.participant.character_sheet,
+        subject=action.participant.character_sheet,
+        target=None,
+        resolution=CombatRoundContext(action.participant),
+    )
     check_result = perform_check(
         interposer,
         check_type,
         target_difficulty=severity,
         extra_modifiers=extra_modifiers,
+        situation_ctx=situation_ctx,
     )
 
     # Debit on fire (any non-fizzle resolution) — anima, not fatigue.
