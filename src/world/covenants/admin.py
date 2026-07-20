@@ -10,6 +10,7 @@ from world.covenants.models import (
     CovenantRole,
     CovenantRoleActionScaling,
     CovenantRoleBonus,
+    CovenantRoleDefenseProfile,
     CovenantRoleTechniqueSpecialty,
 )
 
@@ -19,6 +20,11 @@ class CovenantRoleTechniqueSpecialtyInline(admin.TabularInline):
 
     model = CovenantRoleTechniqueSpecialty
     extra = 1
+
+
+class CovenantRoleDefenseProfileInline(admin.StackedInline):
+    model = CovenantRoleDefenseProfile
+    extra = 0
 
 
 @admin.register(CovenantRole)
@@ -35,7 +41,7 @@ class CovenantRoleAdmin(admin.ModelAdmin):
     list_filter = ["covenant_type"]
     search_fields = ["name", "slug"]
     prepopulated_fields = {"slug": ("name",)}
-    inlines = [CovenantRoleTechniqueSpecialtyInline]
+    inlines = [CovenantRoleTechniqueSpecialtyInline, CovenantRoleDefenseProfileInline]
 
 
 @admin.register(CovenantRoleActionScaling)
@@ -49,6 +55,13 @@ class CovenantRoleActionScalingAdmin(admin.ModelAdmin):
 class CovenantRoleTechniqueSpecialtyAdmin(admin.ModelAdmin):
     list_display = ("function", "covenant_role", "multiplier_tenths")
     list_filter = ("function",)
+    autocomplete_fields = ("covenant_role",)
+
+
+@admin.register(CovenantRoleDefenseProfile)
+class CovenantRoleDefenseProfileAdmin(admin.ModelAdmin):
+    list_display = ("covenant_role", "style", "gear_additive_tenths")
+    list_filter = ("style",)
     autocomplete_fields = ("covenant_role",)
 
 

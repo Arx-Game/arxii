@@ -11,6 +11,7 @@ from world.covenants.constants import (
     MENTOR_BOND_BAND_WIDTH,
     MENTOR_BOND_MAX_SIDEKICKS,
     CovenantType,
+    DefenseStyle,
     MentorBondAdjusted,
 )
 from world.covenants.models import (
@@ -25,6 +26,7 @@ from world.covenants.models import (
     CovenantRole,
     CovenantRoleActionScaling,
     CovenantRoleBonus,
+    CovenantRoleDefenseProfile,
     CovenantRoleTechniqueSpecialty,
     GearArchetypeCompatibility,
     MentorBond,
@@ -122,6 +124,18 @@ class CovenantRoleTechniqueSpecialtyFactory(factory_django.DjangoModelFactory):
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     function = TechniqueFunction.DAMAGE_BUFF_SELF
     multiplier_tenths = 10
+
+
+class CovenantRoleDefenseProfileFactory(factory_django.DjangoModelFactory):
+    """Factory for CovenantRoleDefenseProfile (#2533)."""
+
+    class Meta:
+        model = CovenantRoleDefenseProfile
+        django_get_or_create = ("covenant_role",)
+
+    covenant_role = factory.SubFactory(CovenantRoleFactory)
+    style = DefenseStyle.GEAR_SOAK
+    gear_additive_tenths = 10
 
 
 class CovenantFactory(factory_django.DjangoModelFactory):

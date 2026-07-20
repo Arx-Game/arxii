@@ -1,1 +1,1 @@
-0030_covenantroletechniquespecialty
+0031_covenantroledefenseprofile

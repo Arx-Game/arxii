@@ -665,6 +665,47 @@ class CovenantRoleContentExportTests(TestCase):
         assert scaling.covenant_role_id == primary.pk
         assert scaling.thread_level_multiplier == Decimal("0.125")
 
+    def test_covenant_role_defense_profile_round_trips(self) -> None:
+        """CovenantRoleDefenseProfile (#2533) survives export -> import via its NK.
+
+        NK is ``["covenant_role"]`` (the FK's own natural key, a single-element
+        list holding the role's slug) — unexercised until now.
+        """
+        from world.covenants.constants import DefenseStyle
+        from world.covenants.factories import CovenantRoleDefenseProfileFactory, CovenantRoleFactory
+
+        role = CovenantRoleFactory(name="Defense Profile Role", slug="defense-profile-role")
+        profile = CovenantRoleDefenseProfileFactory(
+            covenant_role=role,
+            style=DefenseStyle.EVASION,
+            gear_additive_tenths=3,
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        profile_path = self.root / "fixtures" / "covenants" / "covenantroledefenseprofile.json"
+        assert profile_path.exists()
+
+        records = json.loads(profile_path.read_text(encoding="utf-8"))
+        assert len(records) == 1
+        record = records[0]
+        assert "pk" not in record
+        assert record["fields"]["covenant_role"] == ["defense-profile-role"]
+        assert record["fields"]["style"] == DefenseStyle.EVASION
+        assert record["fields"]["gear_additive_tenths"] == 3
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        profile.refresh_from_db()
+        assert profile.covenant_role_id == role.pk
+        assert profile.style == DefenseStyle.EVASION
+        assert profile.gear_additive_tenths == 3
+
 
 class TechniqueFunctionTagContentExportTests(TestCase):
     """Round-trip coverage for TechniqueFunctionTag (#2443).

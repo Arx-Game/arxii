@@ -25,6 +25,7 @@ from world.covenants.constants import (
     BattleBinding,
     CommandTier,
     CovenantType,
+    DefenseStyle,
     MentorBondAdjusted,
     RoleArchetype,
 )
@@ -1021,6 +1022,56 @@ class CovenantRoleTechniqueSpecialty(NaturalKeyMixin, SharedMemoryModel):
             f"{self.covenant_role.name} + {self.get_function_display()}: "
             f"×{self.multiplier_tenths / 10}"
         )
+
+
+class CovenantRoleDefenseProfileManager(NaturalKeyManager):
+    """Manager for CovenantRoleDefenseProfile with natural key support."""
+
+
+class CovenantRoleDefenseProfile(NaturalKeyMixin, SharedMemoryModel):
+    """Per-role defense style + gear-substitution tuning (#2533, Layer 3).
+
+    One row per ``CovenantRole`` — including sub-roles. This model imposes no
+    parent/sub-role constraint: whether a sub-role's row replaces or extends
+    its parent's defense profile is a resolution-time decision (Task 3's
+    resolution helper), not a model-level restriction.
+
+    ``style`` is the vow's ``DefenseStyle`` (how it defends). Combat resolution
+    reads ``gear_additive_tenths`` when blending the vow's own defense with the
+    character's COMPATIBLE armor soak: 10 (the default) keeps the legacy
+    fully-additive behavior; lower values dial gear soak down for roles whose
+    defense style is meant to substitute for gear rather than stack with it.
+    """
+
+    covenant_role = models.OneToOneField(
+        CovenantRole,
+        on_delete=models.CASCADE,
+        related_name="defense_profile",
+    )
+    style = models.CharField(
+        max_length=20,
+        choices=DefenseStyle.choices,
+        help_text="How this role's vow defends (#2533).",
+    )
+    gear_additive_tenths = models.PositiveIntegerField(
+        default=10,
+        help_text=(
+            "Fraction of COMPATIBLE armor soak that stays additive with the vow's "
+            "own defense; 10 = fully additive (legacy behavior)."
+        ),
+    )
+
+    objects = CovenantRoleDefenseProfileManager()
+
+    class Meta:
+        ordering = ["covenant_role__slug"]
+
+    class NaturalKeyConfig:
+        fields = ["covenant_role"]
+        dependencies = ["covenants.CovenantRole"]
+
+    def __str__(self) -> str:
+        return f"{self.covenant_role.name}: {self.get_style_display()}"
 
 
 class CovenantRoleGiftGrant(SharedMemoryModel):
