@@ -52,12 +52,18 @@ def eligible_advanced_paths_for(sheet: CharacterSheet) -> list[Path]:
     Mirrors the gate in advance_class_level_via_session's semi-crossing resolver
     (pre-fire semantics: target stage = stage_for_level(current_level + 1)).
     Empty when not at a stage boundary / no current path.
+
+    Paths with authored TraitRequirements the character does not meet are
+    filtered out (#2538). Fail-open: a path with no requirements is always eligible.
     """
+    from world.progression.services.spends import check_requirements_for_path  # noqa: PLC0415
+
     current = current_path_for_character(sheet.character)
     if current is None:
         return []
     target_stage = stage_for_level(sheet.current_level + 1)
-    return list(current.child_paths.filter(stage=target_stage, is_active=True))
+    candidates = current.child_paths.filter(stage=target_stage, is_active=True)
+    return [path for path in candidates if check_requirements_for_path(sheet.character, path)[0]]
 
 
 def resolve_advanced_path_by_name(sheet: CharacterSheet, name: str) -> Path | None:

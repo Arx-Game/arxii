@@ -239,11 +239,17 @@ def eligible_paths_for_threshold(character: ObjectDB, threshold: AudereMajoraThr
     """Return active child paths at the threshold's target stage reachable from the current path.
 
     Returns an empty list when the character has no path history or no valid child paths.
+
+    Paths with authored TraitRequirements the character does not meet are filtered
+    out (#2538). Fail-open: a path with no requirements is always eligible.
     """
+    from world.progression.services.spends import check_requirements_for_path  # noqa: PLC0415
+
     path = current_path_for_character(character)
     if path is None:
         return []
-    return list(path.child_paths.filter(stage=threshold.target_stage, is_active=True))
+    candidates = path.child_paths.filter(stage=threshold.target_stage, is_active=True)
+    return [p for p in candidates if check_requirements_for_path(character, p)[0]]
 
 
 def _check_class_level_unlock_gate(character: ObjectDB) -> bool:
