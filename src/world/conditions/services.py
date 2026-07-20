@@ -12,7 +12,7 @@ Design principles:
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -587,6 +587,39 @@ def _process_interactions_from_context(
     return result
 
 
+def _compute_ingame_time_expires(template: ConditionTemplate) -> datetime | None:
+    """Compute the real-time ``expires_at`` for an INGAME_TIME condition.
+
+    For ``DurationType.INGAME_TIME``, ``default_duration_value`` is interpreted
+    as IC hours. The real-time expiration is ``ic_duration / time_ratio`` from
+    now, where ``time_ratio`` is IC seconds per real second (default 3.0).
+
+    Returns ``None`` if no game clock exists or the duration value is falsy —
+    the condition simply won't expire by IC time (degrades to PERMANENT-like).
+
+    Args:
+        template: The condition template (must have ``default_duration_type ==
+            INGAME_TIME``).
+
+    Returns:
+        A real-time datetime for expiration, or ``None``.
+    """
+    ic_hours = template.default_duration_value or 0
+    if ic_hours <= 0:
+        return None
+
+    from world.game_clock.models import GameClock  # noqa: PLC0415
+
+    clock = GameClock.get_active()
+    if clock is None:
+        return None
+
+    # time_ratio = IC seconds per real second (default 3.0).
+    # real_duration = ic_duration / time_ratio.
+    real_seconds = (ic_hours * 3600) / clock.time_ratio
+    return timezone.now() + timedelta(seconds=real_seconds)
+
+
 def _create_instance_from_context(
     template: ConditionTemplate,
     params: _ApplyConditionParams,
@@ -596,6 +629,12 @@ def _create_instance_from_context(
     """Create a new condition instance using pre-fetched stage data."""
     rounds = params.duration_rounds or template.default_duration_value
     rounds_remaining = rounds if template.default_duration_type == DurationType.ROUNDS else None
+
+    expires_at = (
+        _compute_ingame_time_expires(template)
+        if template.default_duration_type == DurationType.INGAME_TIME
+        else None
+    )
 
     first_stage = ctx.first_stages.get(template.pk) if template.has_progression else None
     stage_rounds = (
@@ -610,6 +649,7 @@ def _create_instance_from_context(
         severity=params.severity,
         stacks=1,
         rounds_remaining=rounds_remaining,
+        expires_at=expires_at,
         current_stage=first_stage,
         stage_rounds_remaining=stage_rounds,
         source_character=params.source_character,
