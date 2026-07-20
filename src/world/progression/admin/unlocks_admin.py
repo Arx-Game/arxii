@@ -141,16 +141,25 @@ class RequirementInline(GenericTabularInline):
 class TraitRequirementAdmin(admin.ModelAdmin):
     """Admin interface for TraitRequirement."""
 
-    list_display = ["trait", "minimum_value_display", "class_level_unlock", "is_active"]
+    list_display = [
+        "trait",
+        "minimum_value_display",
+        "class_level_unlock",
+        "thread_crossing_threshold",
+        "path",
+        "is_active",
+    ]
     list_filter = [
         "trait__trait_type",
         "is_active",
         "class_level_unlock__character_class",
+        "path",
     ]
     search_fields = [
         "trait__name",
         "description",
         "class_level_unlock__character_class__name",
+        "path__name",
     ]
 
     def minimum_value_display(self, obj):
