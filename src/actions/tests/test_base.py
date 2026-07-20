@@ -400,6 +400,8 @@ class ActionRegistryTests(TestCase):
             "order_companion",
             "mount_companion",
             "dismount_companion",
+            "promote_summon",
+            "charm_asset",
             "lock_exit",
             "unlock_exit",
             "pick_lock",

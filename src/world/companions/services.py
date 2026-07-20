@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.utils import timezone
 from evennia.utils.create import create_object
 
@@ -381,6 +382,138 @@ def resolve_companion_defeat(companion: Companion, risk_level: str) -> bool:
             return False
 
     return False
+
+
+class PromoteSummonError(Exception):
+    """Raised when a summon/combatant cannot be promoted to a Companion (#2502)."""
+
+    def __init__(self, message: str, user_message: str | None = None):
+        super().__init__(message)
+        self.user_message = user_message or message
+
+
+def _is_charmed_by_caster(opponent, caster_character) -> bool:
+    """Check if opponent's objectdb has an active Charmed condition sourced by caster.
+
+    Uses get_active_conditions + ConditionInstance.source_character FK check —
+    NOT just condition-name presence (which would let any charmer acquire
+    another charmer's target).
+    """
+    from world.conditions.constants import CHARM_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+
+    if opponent.objectdb_id is None:
+        return False
+    charm_template = ConditionTemplate.objects.filter(name=CHARM_CONDITION_NAME).first()
+    if charm_template is None:
+        return False
+    active = get_active_conditions(opponent.objectdb, condition=charm_template)
+    return any(inst.source_character_id == caster_character.pk for inst in active)
+
+
+@transaction.atomic
+def promote_summon_to_companion(
+    *,
+    caster_sheet: CharacterSheet,
+    combat_opponent: CombatOpponent,
+    archetype: CompanionArchetype,
+    granting_gift: Gift,
+    name: str,
+) -> Companion:
+    """Promote an ephemeral summon or charmed enemy into a persistent Companion (#2502).
+
+    Two validation paths:
+    - Summon path: combat_opponent.summoned_by == caster_sheet AND
+      allegiance == ALLY AND status == ACTIVE.
+    - Charmed-enemy path: combat_opponent.objectdb has an active Charmed
+      condition whose source_character is the caster's character. Stored
+      allegiance stays ENEMY for charmed foes (derived-on-read via
+      derive_allegiance).
+
+    On the charmed-enemy path, bind_difficulty is reduced by
+    archetype.charm_difficulty_reduction, and the charm condition is consumed
+    on successful bind.
+
+    Does NOT transfer the CombatOpponent.objectdb — bind_companion creates a
+    fresh CompanionObject (the summon's objectdb is a CombatNPC typeclass,
+    wrong for companion behavior). Does NOT remove the CombatOpponent row;
+    encounter cleanup handles that.
+
+    Args:
+        caster_sheet: The promoting character's sheet.
+        combat_opponent: The summon or charmed enemy to promote.
+        archetype: The CompanionArchetype to bind as.
+        granting_gift: The Gift whose Thread capacity pool is charged.
+        name: The companion's name.
+
+    Returns:
+        The newly created Companion.
+
+    Raises:
+        PromoteSummonError: If the opponent is not a valid promotion target,
+            capacity is exceeded, or the bind check fails.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.combat.constants import CombatAllegiance, OpponentStatus  # noqa: PLC0415
+    from world.companions.content import BIND_ATTEMPT_CHECK_NAME  # noqa: PLC0415
+    from world.conditions.constants import CHARM_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import remove_condition  # noqa: PLC0415
+
+    caster_character = caster_sheet.character
+
+    # --- Validate promotion target (two paths) ---
+    is_summon = (
+        combat_opponent.summoned_by_id == caster_sheet.pk
+        and combat_opponent.allegiance == CombatAllegiance.ALLY
+        and combat_opponent.status == OpponentStatus.ACTIVE
+    )
+    is_charmed_enemy = (
+        not is_summon
+        and combat_opponent.status == OpponentStatus.ACTIVE
+        and _is_charmed_by_caster(combat_opponent, caster_character)
+    )
+    if not is_summon and not is_charmed_enemy:
+        msg = "That target cannot be promoted to a companion."
+        raise PromoteSummonError(msg, msg)
+
+    # --- Validate Companion Capacity ---
+    capacity = companion_capacity(caster_sheet, granting_gift)
+    used = used_companion_capacity(caster_sheet, granting_gift)
+    if used + archetype.capacity_cost > capacity:
+        msg = "You don't have enough Companion Capacity for another companion."
+        raise PromoteSummonError(msg, msg)
+
+    # --- Determine bind difficulty (charm modifier on charmed-enemy path) ---
+    bind_difficulty = archetype.bind_difficulty
+    charm_applied = is_charmed_enemy and archetype.charm_difficulty_reduction > 0
+    if charm_applied:
+        bind_difficulty = max(0, bind_difficulty - archetype.charm_difficulty_reduction)
+
+    # --- Roll the bind check ---
+    check_type = CheckType.objects.get(name=BIND_ATTEMPT_CHECK_NAME)
+    result = perform_check(caster_character, check_type, target_difficulty=bind_difficulty)
+    if result.outcome is None or result.outcome.success_level < 0:
+        msg = f"The {archetype.name} resists your attempt to bind it."
+        raise PromoteSummonError(msg, msg)
+
+    # --- Bind (creates fresh CompanionObject) ---
+    companion = bind_companion(
+        owner=caster_sheet,
+        archetype=archetype,
+        granting_gift=granting_gift,
+        name=name,
+    )
+
+    # --- Consume charm on the charmed-enemy path ---
+    if charm_applied and combat_opponent.objectdb is not None:
+        charm_template = ConditionTemplate.get_by_name(CHARM_CONDITION_NAME)
+        if charm_template is not None:
+            remove_condition(combat_opponent.objectdb, charm_template)
+
+    return companion
 
 
 class CompanionOrderError(Exception):

@@ -21,6 +21,8 @@ class AssetAcquisitionSource(models.TextChoices):
     COERCION = "coercion", "Coercion"
     # #2295 — voluntary sharing: a PC introduces their asset to a co-present ally.
     INTRODUCTION = "introduction", "Introduction"
+    # #2502 — charm-sourced acquisition: charmed NPC extracted as an asset.
+    CHARM = "charm", "Charm"
 
 
 class AssetRoleContext(models.TextChoices):

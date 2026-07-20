@@ -42,6 +42,14 @@ class CompanionArchetype(NaturalKeyMixin, SharedMemoryModel):
     capacity_cost = models.PositiveSmallIntegerField(
         help_text="Companion Capacity consumed while this archetype is bonded.",
     )
+    charm_difficulty_reduction = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Reduction to bind_difficulty when binding a charmed target. "
+            "0 = no charm bonus; equal to bind_difficulty = auto-success. "
+            "Per-archetype staff-tunable knob (#2502)."
+        ),
+    )
     # Combat stats for bridging into encounters/battles (#1873).
     max_health = models.PositiveSmallIntegerField(
         default=30,
