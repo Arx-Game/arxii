@@ -114,6 +114,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.techniquecapabilitygrant",
         "magic.techniquecapabilityrequirement",
         "magic.techniquedamageprofile",
+        "magic.techniquefunctiontag",
         "magic.techniqueoutcomemodifier",
         "magic.techniqueremovedcondition",
         "magic.techniquestyle",

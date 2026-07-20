@@ -17,6 +17,29 @@ class TechniqueCategory(models.TextChoices):
     UTILITY = "utility", "Utility"
 
 
+class TechniqueFunction(models.TextChoices):
+    """Fine-grained technique job labels (#2443, Layer 2 of the vow-power model).
+
+    The SHARED vocabulary both per-vow specialties (#2443) and situational
+    perks (#2536) target. Code-defined so data can link to labels with stable,
+    validated meanings; WHICH labels a technique carries is content (lore repo).
+    Extending this list is a deliberate one-line code change.
+    """
+
+    DAMAGE_BUFF_SELF = "damage_buff_self", "Self Damage Buff"
+    DAMAGE_BUFF_ALLY = "damage_buff_ally", "Ally Damage Buff"
+    DEFENSE_BUFF = "defense_buff", "Defense Buff"
+    BARRIER = "barrier", "Barrier"
+    CLEANSE = "cleanse", "Cleanse"
+    MOBILITY = "mobility", "Mobility"
+    CHARM = "charm", "Charm"
+    DISTRACTION = "distraction", "Distraction"
+    FEAR = "fear", "Fear"
+    WEAKEN = "weaken", "Weaken"
+    PERCEPTION = "perception", "Perception"
+    CONCEALMENT = "concealment", "Concealment"
+
+
 class StandingCapMode(models.TextChoices):
     """Mode for a StandingCapBand: hard clamp vs. soft diminish (#853)."""
 

@@ -11,7 +11,7 @@ Submodules (see Scope 6 §4.4):
 - gifts: Gift, CharacterGift, Tradition, CharacterTradition
 - techniques: EffectType, TechniqueStyle, Restriction, IntensityTier, Technique,
   TechniqueAppliedCondition, TechniqueCapabilityGrant, TechniqueCapabilityRequirement,
-  TechniqueDamageProfile, CharacterTechnique, TechniqueOutcomeModifier
+  TechniqueDamageProfile, TechniqueFunctionTag, CharacterTechnique, TechniqueOutcomeModifier
 - technique_draft: TechniqueDraft, TechniqueDraftCapabilityGrant,
   TechniqueDraftDamageProfile, TechniqueDraftAppliedCondition
 - specialization: TechniqueVariant, TechniqueVariantCapabilityGrant,
@@ -213,6 +213,8 @@ from world.magic.models.techniques import (
     TechniqueCapabilityGrant,
     TechniqueCapabilityRequirement,
     TechniqueDamageProfile,
+    TechniqueFunctionTag,
+    TechniqueFunctionTagManager,
     TechniqueOutcomeModifier,
     TechniqueRemovedCondition,
     TechniqueStyle,
@@ -418,6 +420,9 @@ __all__ = [
     "TechniqueDraftCapabilityGrant",
     "TechniqueDraftDamageProfile",
     "TechniqueDraftRemovedCondition",
+    # fine-grained technique function tags (#2443)
+    "TechniqueFunctionTag",
+    "TechniqueFunctionTagManager",
     "TechniqueGrant",
     "TechniqueOutcomeModifier",
     "TechniqueRemovedCondition",

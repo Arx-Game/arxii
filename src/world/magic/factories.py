@@ -31,6 +31,7 @@ from world.magic.constants import (
     ResonanceValence,
     RitualExecutionKind,
     TargetKind,
+    TechniqueFunction,
     VitalBonusTarget,
 )
 from world.magic.models import (
@@ -81,6 +82,7 @@ from world.magic.models import (
     TechniqueCapabilityGrant,
     TechniqueCapabilityRequirement,
     TechniqueDamageProfile,
+    TechniqueFunctionTag,
     TechniqueOutcomeModifier,
     TechniqueRemovedCondition,
     TechniqueStyle,
@@ -413,6 +415,16 @@ class TechniqueCapabilityRequirementFactory(factory.django.DjangoModelFactory):
     technique = factory.SubFactory(TechniqueFactory)
     capability = factory.SubFactory(_CAPABILITY_TYPE_FACTORY)
     minimum_value = 1
+
+
+class TechniqueFunctionTagFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueFunctionTag — fine-grained function labels (#2443)."""
+
+    class Meta:
+        model = TechniqueFunctionTag
+
+    technique = factory.SubFactory(TechniqueFactory)
+    function = TechniqueFunction.DAMAGE_BUFF_SELF
 
 
 class TechniqueAppliedConditionFactory(factory.django.DjangoModelFactory):

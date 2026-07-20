@@ -664,3 +664,64 @@ class CovenantRoleContentExportTests(TestCase):
         scaling.refresh_from_db()
         assert scaling.covenant_role_id == primary.pk
         assert scaling.thread_level_multiplier == Decimal("0.125")
+
+
+class TechniqueFunctionTagContentExportTests(TestCase):
+    """Round-trip coverage for TechniqueFunctionTag (#2443).
+
+    ``magic.techniquefunctiontag`` was added to ``CONTENT_MODELS`` with natural
+    key ``["technique", "function"]`` — verify a technique carrying two function
+    tags survives export -> import identity-stable.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_technique_function_tags_round_trip(self) -> None:
+        from world.magic.constants import TechniqueFunction
+        from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
+
+        technique = TechniqueFactory(name="Round Trip Cinder Lash")
+        weaken_tag = TechniqueFunctionTagFactory(
+            technique=technique, function=TechniqueFunction.WEAKEN
+        )
+        buff_tag = TechniqueFunctionTagFactory(
+            technique=technique, function=TechniqueFunction.DAMAGE_BUFF_SELF
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        tag_path = self.root / "fixtures" / "magic" / "techniquefunctiontag.json"
+        assert tag_path.exists()
+
+        records = json.loads(tag_path.read_text(encoding="utf-8"))
+        assert len(records) == 2
+        for record in records:
+            assert "pk" not in record
+            # Natural-key identity, not a raw pk: technique serializes as
+            # [gift_name, technique_name], not an integer FK id.
+            technique_key = record["fields"]["technique"]
+            assert isinstance(technique_key, list)
+            assert technique_key[-1] == "Round Trip Cinder Lash"
+            assert all(not isinstance(v, int) for v in technique_key)
+            assert not isinstance(record["fields"]["function"], int)
+
+        functions = {r["fields"]["function"] for r in records}
+        assert functions == {TechniqueFunction.WEAKEN, TechniqueFunction.DAMAGE_BUFF_SELF}
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        weaken_tag.refresh_from_db()
+        assert weaken_tag.technique_id == technique.pk
+        assert weaken_tag.function == TechniqueFunction.WEAKEN
+
+        buff_tag.refresh_from_db()
+        assert buff_tag.technique_id == technique.pk
+        assert buff_tag.function == TechniqueFunction.DAMAGE_BUFF_SELF
