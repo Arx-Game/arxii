@@ -423,11 +423,29 @@ class CombatTechniqueResolver:
             extra_contributions=extra_contributions,
         )
         extra_modifiers = breakdown.total
+
+        # #2536 Task 5: thread the live round context so CHECK_BONUS situational
+        # perks can fire on the technique's own offense check — the check-side
+        # sibling of resolve_combat_technique's POWER_BONUS threading above.
+        # holder/subject are both the checking character's own sheet (perform_check
+        # only reads .resolution/.target off this); target mirrors the cast's
+        # POWER_BONUS target resolution (_resolve_primary_target_sheet) so the same
+        # target-keyed situations are reachable for CHECK_BONUS perks too.
+        from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+        from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+
+        situation_ctx = SituationContext(
+            holder=self.participant.character_sheet,
+            subject=self.participant.character_sheet,
+            target=_resolve_primary_target_sheet(self.action),
+            resolution=CombatRoundContext(self.participant),
+        )
         return check_fn(
             character,
             self.offense_check_type,
             extra_modifiers=extra_modifiers,
             fatigue_penalty=penalty,
+            situation_ctx=situation_ctx,
         )
 
     def _sum_intensity_bump_pulls(self) -> int:

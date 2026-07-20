@@ -279,6 +279,24 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
     captured_power: int = 0
     captured_ledger: PowerLedger | None = None
 
+    # #2536 Task 5: build the check-side situational context once, shared by
+    # resolve_fn's perform_check below and the use_technique threading further
+    # down — mirrors the POWER_BONUS situation_ctx already threaded there
+    # (Task 4 review fix). None-guarded: a clash contribution with no resolved
+    # CombatParticipant (legacy fixtures / isolated unit tests) degrades to
+    # situation_ctx=None, exactly like a non-combat check.
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+
+    round_ctx = CombatRoundContext(participant) if participant is not None else None
+    check_situation_ctx = (
+        SituationContext(
+            holder=character_sheet, subject=character_sheet, target=None, resolution=round_ctx
+        )
+        if round_ctx is not None
+        else None
+    )
+
     def resolve_fn(*, power: int, ledger: PowerLedger, extra_modifiers: int = 0) -> object:
         nonlocal captured_power, captured_ledger
         captured_power = power
@@ -291,6 +309,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
             check_type,
             target_difficulty=0,
             extra_modifiers=check_extra_modifiers + extra_modifiers,
+            situation_ctx=check_situation_ctx,
         )
 
     # 4. Route through the full magic pipeline (anima cost, Soulfray, mishap,
@@ -300,8 +319,6 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
     #    ``lethal`` is threaded from the encounter's risk level (consistent with
     #    ``resolve_combat_technique``) so a non-lethal encounter caps soulfray the
     #    same way through the clash path as through the standard technique path (#1182).
-    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
-
     technique_use_result = use_technique(
         character=objectdb,
         technique=technique,
@@ -318,8 +335,9 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         # only the direct-attack round path. No explicit target concept exists
         # for a clash contribution in production (see
         # ``vow_situational_power_term``'s docstring) — target_sheet is not
-        # threaded here.
-        situation_ctx=CombatRoundContext(participant) if participant is not None else None,
+        # threaded here. Reuses ``round_ctx`` (built above for the check-side
+        # CHECK_BONUS threading, #2536 Task 5) rather than re-resolving it.
+        situation_ctx=round_ctx,
     )
 
     # 5. Guard against unconfirmed result (confirm_soulfray_risk=True should

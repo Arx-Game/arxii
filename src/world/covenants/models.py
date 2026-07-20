@@ -1621,9 +1621,11 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
     ``check_type`` scopes ``CHECK_BONUS`` perks to a single ``checks.CheckType``;
     null means "any check" (mirrors ``CheckTypeCapabilityModifier``'s optional
     scoping precedent, ``checks/models.py:119``). Only meaningful when
-    ``effect_kind=CHECK_BONUS`` — no clean() restriction ties the two together
-    this slice; the resolution service is effect_kind-scoped, so a stray
-    ``check_type`` on a non-CHECK_BONUS row is simply inert, not invalid.
+    ``effect_kind=CHECK_BONUS`` — now that CHECK_BONUS is live (#2536, Task 5),
+    ``clean()`` rejects a ``check_type`` authored on a non-CHECK_BONUS row as a
+    content-authoring guard (a stray scope on a POWER_BONUS/TIER_FLOOR/
+    BOTCH_IMMUNITY perk can never be read by any resolution service, so it is
+    caught at author time rather than silently ignored).
     """
 
     covenant_role = models.ForeignKey(
@@ -1668,6 +1670,13 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
     class NaturalKeyConfig:
         fields = ["covenant_role", "name"]
         dependencies = ["covenants.CovenantRole"]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.check_type_id is not None and self.effect_kind != PerkEffectKind.CHECK_BONUS:
+            raise ValidationError(
+                {"check_type": "check_type is only meaningful when effect_kind=CHECK_BONUS."}
+            )
 
     def __str__(self) -> str:
         return f"{self.covenant_role.name}: {self.name}"

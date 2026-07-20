@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType, CheckTypeCapabilityModifier, Consequence
+    from world.covenants.perks.context import SituationContext
     from world.mechanics.models import CharacterChallengeRecord
     from world.scenes.models import Interaction, Scene
     from world.skills.models import Specialization
@@ -41,6 +42,8 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     effort_level: str | None = None,
     fatigue_penalty: int = 0,
     specialization: "Specialization | None" = None,
+    *,
+    situation_ctx: "SituationContext | None" = None,
 ) -> CheckResult:
     """
     Main check resolution function.
@@ -61,6 +64,17 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
         extra_modifiers: Additional modifiers from caller (goals, magic, etc.).
         effort_level: Optional EffortLevel value. Applies effort check modifier.
         fatigue_penalty: Penalty from fatigue zone (caller-computed, typically negative).
+        situation_ctx: (#2536, Task 5) the checking character's own
+            ``SituationContext`` — only ``.resolution`` (a ``CombatRoundContext``
+            or ``None``) and ``.target`` are read; ``.holder``/``.subject`` are
+            unused here (the checking character's ``CharacterSheet`` is
+            resolved from ``character`` directly). ``None`` (the default) is
+            byte-identical to pre-#2536 behavior — no query, no perk lookup.
+            When provided, fires ``CHECK_BONUS`` situational perks
+            (``world.covenants.perks``) scoped to ``check_type`` (or
+            scope-less perks) and folds their thread-level-scaled magnitude
+            into the same total ``extra_modifiers`` feeds — see
+            ``_situational_perk_check_bonus``.
     """
     # Test-rig seam (NOT a production code path).
     from world.checks.test_helpers import _consume_forced_outcome, _record_capture  # noqa: PLC0415
@@ -78,6 +92,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             effort_level=effort_level,
             fatigue_penalty=fatigue_penalty,
             specialization=specialization,
+            situation_ctx=situation_ctx,
         )
 
     breakdown = _compute_check_breakdown(
@@ -88,6 +103,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
         effort_level=effort_level,
         fatigue_penalty=fatigue_penalty,
         specialization=specialization,
+        situation_ctx=situation_ctx,
     )
 
     roll = random.randint(1, 100)  # noqa: S311
@@ -107,6 +123,7 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
     effort_level: str | None,
     fatigue_penalty: int,
     specialization: "Specialization | None" = None,
+    situation_ctx: "SituationContext | None" = None,
 ) -> CheckResult:
     """Build a synthetic CheckResult for the test-rig forced-outcome path.
 
@@ -122,6 +139,7 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
         effort_level=effort_level,
         fatigue_penalty=fatigue_penalty,
         specialization=specialization,
+        situation_ctx=situation_ctx,
     )
     return _check_result(check_type, forced_outcome, breakdown)
 
@@ -149,6 +167,7 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     effort_level: str | None,
     fatigue_penalty: int,
     specialization: "Specialization | None",
+    situation_ctx: "SituationContext | None" = None,
 ) -> _CheckBreakdown:
     """Compute stat + skill + specialization + aspect points, ranks, and chart (no dice roll).
 
@@ -163,12 +182,14 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     specialization_points = _calculate_specialization_points(character, check_type, specialization)
     aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
     capability_points = _calculate_capability_points(character, check_type)
+    perk_bonus = _situational_perk_check_bonus(character, check_type, situation_ctx)
     total_points = (
         trait_points
         + specialization_points
         + aspect_bonus
         + capability_points
         + extra_modifiers
+        + perk_bonus
         + effort_modifier
         + fatigue_penalty
     )
@@ -191,6 +212,63 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
         rank_difference=rank_difference,
         chart=chart,
     )
+
+
+def _situational_perk_check_bonus(
+    character: "ObjectDB",
+    check_type: "CheckType",
+    situation_ctx: "SituationContext | None",
+) -> int:
+    """Σ fired ``CHECK_BONUS`` situational perks scaled by thread level (#2536, Task 5).
+
+    Mirrors ``vow_situational_power_term``'s arithmetic exactly (same
+    thread-level scaling, same integer truncation after summing in
+    ``Decimal``) but scopes fired perks to ``check_type``: a perk with
+    ``check_type=None`` fires on any check; a perk scoped to a specific
+    ``CheckType`` fires only when it matches THIS check.
+
+    Returns 0 with no query beyond resolving the character's
+    ``CharacterSheet`` when ``situation_ctx`` is ``None`` — the
+    byte-identical default every pre-#2536 ``perform_check`` caller takes.
+    A character with no ``CharacterSheet`` (``sheet_data``) also contributes
+    0 and never raises — mirrors the guard in ``_calculate_capability_points``.
+    """
+    if situation_ctx is None:
+        return 0
+
+    try:
+        sheet = character.sheet_data  # type: ignore[attr-defined] — ObjectDB typeclass extension
+    except (ObjectDoesNotExist, AttributeError):
+        return 0
+
+    from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
+    from world.covenants.perks.services import applicable_perks  # noqa: PLC0415
+    from world.magic.services.threads import (  # noqa: PLC0415
+        total_thread_level_across_all_kinds,
+    )
+
+    fired = applicable_perks(
+        sheet,
+        effect_kind=PerkEffectKind.CHECK_BONUS,
+        resolution=situation_ctx.resolution,
+        target=situation_ctx.target,
+    )
+    scoped = [
+        firing
+        for firing in fired
+        if firing.perk.check_type_id is None or firing.perk.check_type_id == check_type.pk
+    ]
+    if not scoped:
+        return 0
+
+    total_threads = total_thread_level_across_all_kinds(sheet)
+    if total_threads == 0:
+        return 0
+
+    total = Decimal(0)
+    for firing in scoped:
+        total += Decimal(total_threads) * firing.magnitude_tenths / 10
+    return int(total)
 
 
 def compute_check_rating(

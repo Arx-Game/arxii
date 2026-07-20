@@ -123,6 +123,26 @@ class VowSituationalPerkModelTests(TestCase):
         reloaded = VowSituationalPerk.objects.get(pk=perk_pk)
         self.assertIsNone(reloaded.check_type)
 
+    def test_check_type_rejected_on_non_check_bonus_perk(self) -> None:
+        """#2536 Task 5 content-authoring guard: check_type is only meaningful
+        on a CHECK_BONUS perk — clean() rejects it on any other effect_kind."""
+        check_type = CheckTypeFactory(name="Perception")
+        perk = VowSituationalPerkFactory.build(
+            effect_kind=PerkEffectKind.POWER_BONUS, check_type=check_type
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            perk.full_clean()
+        self.assertIn("check_type", ctx.exception.message_dict)
+
+    def test_check_type_allowed_on_check_bonus_perk_clean(self) -> None:
+        """Sanity: the guard does not block the legitimate CHECK_BONUS+check_type
+        pairing — full_clean() passes cleanly."""
+        check_type = CheckTypeFactory(name="Perception")
+        perk = VowSituationalPerkFactory(
+            effect_kind=PerkEffectKind.CHECK_BONUS, check_type=check_type
+        )
+        perk.full_clean()
+
     def test_no_negative_magnitude(self) -> None:
         """PositiveIntegerField structurally forbids negative magnitudes."""
         perk = VowSituationalPerkFactory.build(magnitude_tenths=-5)
