@@ -215,6 +215,11 @@ def target_distracted(ctx: SituationContext) -> bool:
 def target_swayed_by_ally(ctx: SituationContext) -> bool:
     """Same condition as TARGET_DISTRACTED, applied by holder or a covenant-mate.
 
+    Deliberately reads HISTORY via ``shares_covenant_with`` (ACTIVE membership
+    only), NOT the engaged+co-present "covenant-mate" rule ``perks.services``
+    uses for beneficiary group membership — see that module's docstring
+    ("What counts as a covenant-mate") for why the two questions differ.
+
     Data source, verified: ``ConditionInstance.source_character``
     (``world/conditions/models.py:1230`` — "Character who applied this
     condition", an ``ObjectDB`` FK) + ``Character.shares_covenant_with``
