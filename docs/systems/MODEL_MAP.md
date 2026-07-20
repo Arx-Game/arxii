@@ -1614,6 +1614,7 @@
   - mantle_clearances <- items.MantleLevelClearance
   - recipe_knowledge <- items.CharacterRecipeKnowledge
   - common_gem_buckets <- items.CommonGemBucket
+  - vault_transits <- items.VaultTransit
   - reclamation_claims <- items.ReclamationClaim
   - original_reclamation_claims <- items.ReclamationClaim
   - fatigue <- fatigue.FatiguePool
@@ -3790,6 +3791,7 @@
   - ware_listing <- items.WareListing
   - market_sales <- items.MarketSale
   - vault_holding <- items.VaultHolding
+  - vault_transit <- items.VaultTransit
   - org_vault_events <- items.OrgVaultEvent
   - reclamation_claims <- items.ReclamationClaim
   - bequests <- estates.Bequest
@@ -4074,6 +4076,7 @@
   - organization -> societies.Organization [OneToOne]
 **Pointed to by:**
   - holdings <- items.VaultHolding
+  - transits <- items.VaultTransit
   - events <- items.OrgVaultEvent
 
 ### VaultHolding
@@ -4081,6 +4084,12 @@
   - vault -> items.OrganizationVault [FK]
   - item_instance -> items.ItemInstance [OneToOne]
   - deposited_by -> scenes.Persona [FK] (nullable)
+
+### VaultTransit
+**Foreign Keys:**
+  - vault -> items.OrganizationVault [FK]
+  - item_instance -> items.ItemInstance [OneToOne]
+  - carrier_character_sheet -> character_sheets.CharacterSheet [FK]
 
 ### OrgVaultEvent
 **Foreign Keys:**

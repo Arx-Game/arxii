@@ -1932,6 +1932,7 @@ from world.items.org_vault_models import (  # noqa: E402,F401
     OrganizationVault,
     OrgVaultEvent,
     VaultHolding,
+    VaultTransit,
 )
 
 

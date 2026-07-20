@@ -134,9 +134,20 @@ def collect_org_gems(
     # Stones ride the same net rate as coin: band scales, graft eats its cut.
     surviving = len(stones) * band_pct * (100 - graft_pct) // 10000
     survivors, losers = stones[:surviving], stones[surviving:]
-    for stone in survivors:
-        stone.holder_character_sheet = collector_sheet
-        stone.save(update_fields=["holder_character_sheet"])
+    if survivors:
+        # #2540 ruling: collection is a mission with a return leg. Each delivered stone
+        # is owed to the house vault — mint an in-transit custody row alongside the
+        # physical delivery; resolve_vault_transit completes (or embezzles) it.
+        from world.items.org_vault_models import VaultTransit  # noqa: PLC0415
+        from world.items.services.org_vault import get_or_create_org_vault  # noqa: PLC0415
+
+        vault = get_or_create_org_vault(organization)
+        for stone in survivors:
+            stone.holder_character_sheet = collector_sheet
+            stone.save(update_fields=["holder_character_sheet"])
+            VaultTransit.objects.create(
+                vault=vault, item_instance=stone, carrier_character_sheet=collector_sheet
+            )
     for stone in losers:
         stone.delete()
     return GemCollectionResult(

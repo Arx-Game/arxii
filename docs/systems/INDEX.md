@@ -3779,9 +3779,21 @@ holder is never notified a claim exists.
   `withdraw_rank_max`), `deposit_item_to_vault` (any active member, must hold the item; holder
   goes null + `game_object` dematerialized — custody is the row, not the prop),
   `withdraw_item_from_vault` (rank-gated; `to_persona` directs the item elsewhere — the
-  VAULT_ITEM boon shape, its first live caller). WHERE deposit/withdraw may be performed (bank
-  room / bank-access room feature) is a follow-up action-layer prerequisite gate; distinct from
-  the physical room-feature VAULT (#2179), which secures loose items in a room.
+  VAULT_ITEM boon shape, its first live caller). **Collection return leg (#2540 ruling
+  2026-07-20):** `VaultTransit` — collection is a mission; `collect_org_gems` mints one
+  in-transit custody row per stone delivered to the collector's hands, and
+  `resolve_vault_transit(organization, carrier_persona, keep_item_ids)` completes the mission:
+  unlisted items resolve DEPOSITED (→ `VaultHolding` + audited event, reason "collection
+  deposit"), `keep_item_ids` resolve KEPT (embezzled) behind the **double gate** —
+  `can_embezzle_from` requires at least one *piloted* org leader whose dedicated
+  `embezzlement` consent category (seeded under `antagonism`) admits the carrier (strict-all
+  across piloted heads, PLACEHOLDER semantic), AND the carrier's explicit keep list is the
+  opt-in. A KEPT stone stays in the carrier's hands and books NO vault event — the resolved
+  transit row is the staff-side record; the tally-vs-deposits gap is the in-world discovery
+  hook. In-transit loss deliberately not built (loss lives in the collection roll). WHERE
+  deposit/withdraw may be performed (bank room / bank-access room feature) is a follow-up
+  action-layer prerequisite gate; distinct from the physical room-feature VAULT (#2179),
+  which secures loose items in a room.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
