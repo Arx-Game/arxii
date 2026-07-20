@@ -21,6 +21,7 @@ from world.items.models import (
     ItemTemplate,
     ItemTemplateAppearanceEffect,
     MaterialCategory,
+    OrgGemStock,
     OwnershipEvent,
     PendingRareFind,
     QualityTier,
@@ -82,6 +83,13 @@ class StreamCommonGemPoolAdmin(admin.ModelAdmin):
 class PendingRareFindAdmin(admin.ModelAdmin):
     list_display = ["gem_instance", "income_stream", "accrued_at"]
     raw_id_fields = ["income_stream", "gem_instance"]  # large tables
+
+
+@admin.register(OrgGemStock)
+class OrgGemStockAdmin(admin.ModelAdmin):
+    list_display = ["organization", "tier", "value"]
+    list_filter = ["tier"]
+    raw_id_fields = ["organization"]  # large Organization table
 
 
 @admin.register(QualityTier)

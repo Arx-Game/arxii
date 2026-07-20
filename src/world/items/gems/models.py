@@ -294,3 +294,39 @@ class PendingRareFind(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"pending rare find {self.gem_instance_id} on stream {self.income_stream_id}"
+
+
+class OrgGemStock(SharedMemoryModel):
+    """An organization's *collected* common-gem value, per tier (Build 0b).
+
+    The house-level shared stock that members craft from (the B ownership model). Mining
+    accrues into per-stream ``StreamCommonGemPool``s; an active ``collect_org_income``
+    dispatch delivers the net (after the same band + graft the coin rides) here.
+    """
+
+    organization = models.ForeignKey(
+        "societies.Organization",
+        on_delete=models.CASCADE,
+        related_name="gem_stocks",
+    )
+    tier = models.ForeignKey(
+        "items.MaterialCategory",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    value = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Collected common-gem value the house holds, in coppers.",
+    )
+
+    class Meta:
+        app_label = "items"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "tier"],
+                name="items_orggemstock_org_tier_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"org {self.organization_id} {self.tier}: {self.value}"
