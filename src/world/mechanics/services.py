@@ -365,7 +365,6 @@ def equipment_walk_total(
         + covenant_role_bonus(character, target, level_override=level_override)
         + covenant_level_bonus(character, target)
         + vow_stat_scaling_bonus(character, target)
-        + vow_gear_scaling_bonus(character, target)
         + passive_mantle_bonuses(character, target)
         + passive_mantle_crossing_bonuses(character, target)
         + passive_motif_style_bonuses(character, target)
@@ -877,7 +876,6 @@ def equipment_walk_total_unblended(sheet: object, target: ModifierTarget) -> int
         + covenant_role_base_total(sheet, target)
         + covenant_level_bonus(sheet, target)
         + vow_stat_scaling_bonus(sheet, target)
-        + vow_gear_scaling_bonus(sheet, target)
         + passive_mantle_bonuses(sheet, target)
         + passive_mantle_crossing_bonuses(sheet, target)
         + passive_motif_style_bonuses(sheet, target)
@@ -986,21 +984,6 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
         thread_level = _covenant_role_thread_level(sheet, config.covenant_role)
         total += thread_level * config.bonus_per_level
     return total
-
-
-def vow_gear_scaling_bonus(
-    sheet: object,  # noqa: ARG001
-    target: ModifierTarget,  # noqa: ARG001
-) -> int:
-    """Vow-driven equipment amplification — inert pending Layer 3 (#2533).
-
-    ``VowGearScaling`` has never been seeded, so this consumer has always
-    returned 0 in real games; it also keyed on the removed
-    ``CovenantRole.archetype``. #2529 short-circuits it to its actual runtime
-    behavior; #2533 (per-vow defense styles + gear substitution) decides the
-    model's real fate. Do not wire it back up without that design.
-    """
-    return 0
 
 
 def item_mundane_stat_for_target(item: ItemInstance, target: ModifierTarget) -> int:

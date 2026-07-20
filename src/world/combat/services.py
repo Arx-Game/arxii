@@ -8938,28 +8938,36 @@ def _split_armor_soak_by_compatibility(
 
 
 def apply_equipped_armor_soak(character: Character, damage: int) -> int:
-    """Reduce ``damage`` by role-gated equipped-armor soak (#1174).
+    """Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533).
 
-    Worn armor is split by covenant-role compatibility. The resonant soak pool
-    (covenant role base + facet + mantle + motif + covenant-level, un-blended) competes
-    with *incompatible* armor via ``max``; *compatible* armor adds on top:
+    Worn armor is split by covenant-role compatibility. Compatible soak is then scaled
+    by ``gear_additive_fraction`` (#2533) — the character's engaged defense profile(s)
+    dial how much of their COMPATIBLE armor stays additive with their vow's own
+    defense; 1 (no profile, or every engaged profile at the default 10 tenths) is the
+    legacy fully-additive behavior. The resonant soak pool (covenant role base + facet
+    + mantle + motif + covenant-level, un-blended) then competes with *incompatible*
+    armor via ``max``; the (possibly scaled) compatible armor adds on top:
 
-        soak = compat_physical + max(incompat_physical, resonant)
+        compat_soak = int(compat_soak * gear_additive_fraction(character))
+        soak = compat_soak + max(incompat_physical, resonant)
 
     Because ``resonant`` scales on character level and physical armor does not, a role
     incompatible with heavy armor sees its resonant protection overtake platemail past
     low levels. Durability wears only on armor whose physical soak contributes to the
-    result (all compatible pieces; incompatible pieces only when they win the ``max``).
-    Returns post-soak damage, floored at 0.
+    result (all compatible pieces, regardless of the scaled soak's magnitude; incompatible
+    pieces only when they win the ``max`` — unchanged by the #2533 fraction). Returns
+    post-soak damage, floored at 0.
     """
     if damage <= 0:
         return damage
 
+    from world.covenants.services import gear_additive_fraction  # noqa: PLC0415
     from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
 
     compat_soak, incompat_soak, compat_pieces, incompat_pieces = _split_armor_soak_by_compatibility(
         character
     )
+    compat_soak = int(compat_soak * gear_additive_fraction(character))
     resonant = _resonant_armor_soak(character)
 
     incompatible_wins = incompat_soak >= resonant

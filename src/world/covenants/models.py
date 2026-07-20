@@ -886,56 +886,6 @@ class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
         )
 
 
-class VowGearScaling(SharedMemoryModel):
-    """Authored vow-driven equipment effectiveness multiplier (#2022).
-
-    Extends ``GearArchetypeCompatibility`` from a gate (which equipment you can
-    use) to a multiplier (how much your equipped gear contributes). Keyed by
-    ``(gear_archetype, role_archetype)`` — the scaling applies to any engaged
-    role whose archetype matches, regardless of the specific role.
-
-    A SHIELD-role character wearing heavy armor gets ``base + thread_level *
-    multiplier`` from the armor; an unroled character gets only ``base``. When
-    the vow dims, the equipment's contribution reverts to base — the character
-    is still wearing the gear, but it's not empowered by the vow.
-    """
-
-    gear_archetype = models.CharField(
-        max_length=20,
-        choices=GearArchetype.choices,
-    )
-    role_archetype = models.CharField(
-        max_length=20,
-        choices=RoleArchetype.choices,
-    )
-    thread_level_multiplier = models.DecimalField(
-        max_digits=5,
-        decimal_places=3,
-        default=0,
-        help_text=(
-            "How much each COVENANT_ROLE thread level adds to the equipment's "
-            "effective contribution. 0 = no scaling (gear works at base). "
-            "The bonus is additive: effective = base * (1 + thread_level * multiplier)."
-        ),
-    )
-
-    class Meta:
-        ordering = ["role_archetype", "gear_archetype"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["gear_archetype", "role_archetype"],
-                name="vow_gear_scaling_unique_archetypes",
-            ),
-        ]
-
-    def __str__(self) -> str:
-        return (
-            f"{self.get_role_archetype_display()} + "
-            f"{self.get_gear_archetype_display()}: "
-            f"×{self.thread_level_multiplier}/level"
-        )
-
-
 class CovenantRoleActionScalingManager(NaturalKeyManager):
     """Manager for CovenantRoleActionScaling with natural key support."""
 

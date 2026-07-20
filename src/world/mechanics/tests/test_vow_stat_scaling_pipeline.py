@@ -39,7 +39,9 @@ class VowStatScalingEquipmentWalkTotalTests(TestCase):
         cls.category = ModifierCategoryFactory(name="stat")
         cls.target = ModifierTargetFactory(name="vow_wiring_target", category=cls.category)
 
-        cls.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
+        cls.role = CovenantRoleFactory(
+            covenant_type=CovenantType.DURANCE, sword_weight=1, crown_weight=0
+        )
         cls.membership = make_engaged_member(character_sheet=cls.sheet, covenant_role=cls.role)
 
         VowStatScaling.objects.create(

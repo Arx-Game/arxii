@@ -1,16 +1,20 @@
-"""Tests for vow-driven stat scaling, gear scaling, per-role action scaling,
-role-source variant resolution, and capability grant wiring (#2022 completion).
+"""Tests for vow-driven stat scaling, per-role action scaling, role-source variant
+resolution, and capability grant wiring (#2022 completion).
 
 Covers the spec items that were missing from the prematurely-merged PR #2106:
 1. VowStatScaling — thread-level stat scaling in the modifier pipeline
-2. VowGearScaling — equipment effectiveness multiplier, short-circuited to 0
-   pending #2533 (#2529 Layer 1); see ``VowGearScalingTests`` below
-3. Role-source variant resolution — COVENANT_ROLE thread level for role-granted techniques
-4. Capability grant wiring — CovenantRole.granted_capabilities M2M read by the handler
-5. CovenantRoleActionScaling — interpose partial-block scaling per engaged role
+2. Role-source variant resolution — COVENANT_ROLE thread level for role-granted techniques
+3. Capability grant wiring — CovenantRole.granted_capabilities M2M read by the handler
+4. CovenantRoleActionScaling — interpose partial-block scaling per engaged role
    (was ArchetypeActionScaling; #2529 Task 2 rewrites the consumer,
    ``covenant_role_action_scaling_bonus``, against the blend + re-keyed model)
-6. Enhancement overlap — flat bonus when enhancement technique overlaps existing kit
+5. Enhancement overlap — flat bonus when enhancement technique overlaps existing kit
+
+The former archetype-keyed "gear scaling" equipment-effectiveness multiplier model and
+its always-0 consumer function (#2022) were removed by #2533 — replaced by the
+defense-profile gear-substitution fraction at the armor-soak seam (see
+``world.covenants.services.gear_additive_fraction`` and
+``world.combat.tests.test_armor_soak_role_gate``).
 """
 
 from decimal import Decimal
@@ -99,27 +103,6 @@ class VowStatScalingTests(TestCase):
 
         bonus = vow_stat_scaling_bonus(sheet, target)
         self.assertEqual(bonus, 30)  # 10 * 3
-
-
-class VowGearScalingTests(TestCase):
-    """VowGearScaling is deferred pending #2533 (#2529 Task 2, Layer 1)."""
-
-    def test_short_circuits_to_zero_pending_2533(self):
-        """``vow_gear_scaling_bonus`` unconditionally returns 0 (mechanics/services.py:991-1003).
-
-        #2529 short-circuited this function ahead of the VowGearScaling model's
-        eventual fate; #2533 decides whether the model is reworked or removed.
-        Engagement/config-row state has no bearing on the result today, so this
-        test asserts the constant directly rather than building setup that the
-        function no longer reads.
-        """
-        from world.mechanics.services import vow_gear_scaling_bonus
-
-        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
-        membership = CharacterCovenantRoleFactory(covenant_role=role)
-        sheet = membership.character_sheet
-
-        self.assertEqual(vow_gear_scaling_bonus(sheet, None), 0)
 
 
 class CovenantRoleActionScalingTests(TestCase):
