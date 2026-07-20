@@ -2264,10 +2264,14 @@ General-purpose IC message delivery — GM/Staff/automated messages to character
 - **Integrates with:** stories (beat completions + episode resolutions emit messages via `stories.services.narrative`), character_sheets (recipient), accounts (sender)
 - **Ambient room reactions (#2471 v2):** `AmbientEmoteLine` (authored prose + weight/cooldown/
   fire-chance) + `AmbientEmoteCondition` (0+ leaf conditions per line, AND/OR-composed) — species/
-  resonance-threshold/distinction/fame-tier conditions compile (`world.narrative.ambient_content
+  resonance-threshold/distinction/fame-tier/legend-deed conditions compile (`world.narrative.ambient_content
   .compile_line_filter`) to real Trigger-system filter conditions, extending the DSL's existing
   method-dispatch pattern (`Character.has_property`/`has_capability`/`shares_covenant_with`) with
-  three new methods (`has_resonance_at_least`/`has_public_distinction`/`fame_tier_at_least`).
+  four methods (`has_resonance_at_least`/`has_public_distinction`/`fame_tier_at_least`/
+  `has_legend_deeds`). The `LEGEND_DEED` condition (#2523) gates on the entering persona having
+  common-knowledge, non-secret deeds (via `Persona.legend_murmur` handler, cached). Lines with
+  `{name}`/`{deeds}` placeholders in their body are dynamically templated from the entering
+  persona's display name and deed titles (`_render_body`); static lines pass through unchanged.
   Dispatched via the existing Flows/Triggers `MOVED` event: at grid-bundle import
   (`core_management.grid_import._install_ambient_triggers`), lines are grouped by their compiled,
   identical condition set, and each distinct group gets one DERIVED `TriggerDefinition`/

@@ -16,6 +16,7 @@ from __future__ import annotations
 from datetime import timedelta
 import random
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from world.narrative.constants import ConditionConnector, ConditionType, NarrativeCategory
@@ -52,6 +53,12 @@ def _compile_condition_leaf(condition: AmbientEmoteCondition) -> dict:
                 ),
             },
         }
+    if condition.condition_type == ConditionType.LEGEND_DEED:
+        return {
+            "path": "character",
+            "op": "has_legend_deeds",
+            "value": None,  # no parameter — the op is a presence check
+        }
     msg = f"Unknown condition_type: {condition.condition_type}"
     raise ValueError(msg)
 
@@ -71,7 +78,52 @@ def compile_line_filter(line: AmbientEmoteLine) -> dict | None:
 
 
 def _has_renown_condition(line: AmbientEmoteLine) -> bool:
-    return line.conditions.filter(condition_type=ConditionType.RENOWN_MIN).exists()
+    """True when the line's category should be RENOWN (fame-tier or legend-deed gated)."""
+    return line.conditions.filter(
+        condition_type__in=[ConditionType.RENOWN_MIN, ConditionType.LEGEND_DEED]
+    ).exists()
+
+
+def _format_deed_list(titles: list[str]) -> str:
+    """Join deed titles into a natural-language fragment for the {deeds} placeholder.
+
+    - 0 titles: "" (the line won't have fired — LEGEND_DEED gate ensures >= 1)
+    - 1 title: the title itself
+    - 2 titles: "X and Y"
+    - 3+ titles: "X, Y, and Z" (Oxford comma; handler caps at 3)
+    """
+    if not titles:
+        return ""
+    if len(titles) == 1:
+        return titles[0]
+    if len(titles) == 2:  # noqa: PLR2004
+        return f"{titles[0]} and {titles[1]}"
+    return f"{', '.join(titles[:-1])}, and {titles[-1]}"
+
+
+def _render_body(body: str, character: object) -> str:
+    """Substitute {name}/{deeds} placeholders from the entering persona's deeds.
+
+    Static lines (no placeholders) pass through unchanged — zero overhead for
+    existing #2471 lines.
+    """
+    if "{name}" not in body and "{deeds}" not in body:
+        return body
+    sheet = character.character_sheet
+    if sheet is None:
+        return body
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    try:
+        persona = active_persona_for_sheet(sheet)
+    except ObjectDoesNotExist:
+        return body
+    if persona is None:
+        return body
+    name = persona.display_ic()
+    deeds = persona.legend_murmur.deed_titles
+    deeds_str = _format_deed_list(deeds)
+    return body.replace("{name}", name).replace("{deeds}", deeds_str)
 
 
 def _deliver_line(line: AmbientEmoteLine, character: object, room: object) -> None:
@@ -80,7 +132,9 @@ def _deliver_line(line: AmbientEmoteLine, character: object, room: object) -> No
     category = (
         NarrativeCategory.RENOWN if _has_renown_condition(line) else NarrativeCategory.ATMOSPHERE
     )
-    if line.bystander_body:
+    bystander_body = _render_body(line.bystander_body, character)
+    arriver_body = _render_body(line.arriver_body, character)
+    if bystander_body:
         bystander_sheets = []
         for obj in room.contents:
             if obj.pk == character.pk:
@@ -91,16 +145,16 @@ def _deliver_line(line: AmbientEmoteLine, character: object, room: object) -> No
         if bystander_sheets:
             send_narrative_message(
                 recipients=bystander_sheets,
-                body=line.bystander_body,
+                body=bystander_body,
                 category=category,
                 ooc_note="Ambient room reaction (bystander register, #2471).",
             )
-    if line.arriver_body:
+    if arriver_body:
         arriver_sheet = character.character_sheet
         if arriver_sheet is not None:
             send_narrative_message(
                 recipients=[arriver_sheet],
-                body=line.arriver_body,
+                body=arriver_body,
                 category=category,
                 ooc_note="Ambient room reaction (arriver register, #2471).",
             )

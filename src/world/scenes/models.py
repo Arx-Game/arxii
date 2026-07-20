@@ -35,6 +35,7 @@ from world.societies.constants import FameTier
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
+    from world.scenes.legend_murmur_handler import PersonaLegendMurmurHandler
     from world.scenes.persona_handlers import ScenePersonaHandler
     from world.scenes.place_models import InteractionReceiver
 
@@ -298,7 +299,7 @@ class SceneUnseenObserver(SharedMemoryModel):
         return f"unseen observer on {self.scene_id} ({self.source_label})"
 
 
-class Persona(SharedMemoryModel):
+class Persona(CachedPropertiesMixin, SharedMemoryModel):
     """A face the character shows the world.
 
     Every character has at least one primary persona (their 'real' identity).
@@ -458,6 +459,13 @@ class Persona(SharedMemoryModel):
     def is_established_or_primary(self) -> bool:
         """Whether this persona can have relationships, reputation, legend."""
         return self.persona_type in (PersonaType.PRIMARY, PersonaType.ESTABLISHED)
+
+    @cached_property
+    def legend_murmur(self) -> PersonaLegendMurmurHandler:
+        """Cached handler for this persona's legend-murmur deed data (#2523)."""
+        from world.scenes.legend_murmur_handler import PersonaLegendMurmurHandler  # noqa: PLC0415
+
+        return PersonaLegendMurmurHandler(self)
 
     def display_ic(self) -> str:
         """Persona name only — what IC observers see."""

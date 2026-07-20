@@ -37,6 +37,7 @@ OP_SHARES_COVENANT = "shares_covenant"
 OP_HAS_RESONANCE_AT_LEAST = "has_resonance_at_least"
 OP_HAS_PUBLIC_DISTINCTION = "has_public_distinction"
 OP_FAME_TIER_AT_LEAST = "fame_tier_at_least"
+OP_HAS_LEGEND_DEEDS = "has_legend_deeds"
 
 # Filter DSL self-reference token and dotted prefix
 SELF_TOKEN = "self"  # noqa: S105
@@ -86,6 +87,7 @@ METHOD_OPERATORS: dict[str, str] = {
     OP_HAS_RESONANCE_AT_LEAST: "has_resonance_at_least",
     OP_HAS_PUBLIC_DISTINCTION: "has_public_distinction",
     OP_FAME_TIER_AT_LEAST: "fame_tier_at_least",
+    OP_HAS_LEGEND_DEEDS: "has_legend_deeds",
 }
 
 
