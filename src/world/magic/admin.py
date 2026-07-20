@@ -269,6 +269,7 @@ class GlimpseTagAdmin(admin.ModelAdmin):
     list_filter = ["axis", "is_active"]
     search_fields = ["name", "slug"]
     prepopulated_fields = {"slug": ("name",)}
+    filter_horizontal = ["paths"]
 
 
 @admin.register(GlimpseTagDistinctionSuggestion)
