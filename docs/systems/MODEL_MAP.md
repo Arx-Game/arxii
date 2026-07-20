@@ -1540,6 +1540,7 @@
   - stylepresentationendorsement_received <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
   - fall_redemption_records <- magic.FallRedemptionRecord
+  - ghost_tutelages <- magic.GhostTutelage
   - gift_unlocks <- magic.CharacterGiftUnlock
   - resonance_grants <- magic.ResonanceGrant
   - motif <- magic.Motif
@@ -3102,6 +3103,7 @@
 - `accrue_income_stream(stream: 'OrgIncomeStream') -> 'int' — One weekly cycle: the gross amasses in the uncollected pool (#930).`
 - `accrue_monthly_interest(organization: 'Organization') -> 'int' — One month's interest lands in arrears (#927). Returns total accrued.`
 - `can_spend_treasury(treasury: 'OrganizationTreasury', persona: 'Persona') -> 'bool' — Spend authority: an active membership at tier <= spend_rank_max.`
+- `collect_and_distribute(*, organization: 'Organization', character) -> 'DistributionResult' — The full collection-distribution dispatch (#2540, ruled 2026-07-20).`
 - `collect_asset_income(*, asset, character_sheet) -> 'CollectionResult' — One active collection of a personal asset's accumulated income (#2294).`
 - `collect_org_income(*, organization: 'Organization', character) -> 'CollectionResult' — One active collection dispatch across every pooled stream of ``organization`` (#930).`
 - `deliver_mission_money(*, recipient_sheet: 'CharacterSheet', amount: 'int', ref: 'str', reason_label: 'str' = 'mission reward') -> 'None' — Reward money lands in the purse (#932 — replaces the Phase 5b stub).`
@@ -3125,6 +3127,7 @@
 - `run_business_week(business: 'Business', *, fortune: 'int') -> 'int' — One week's business result (#929). ``fortune`` is -100..100.`
 - `run_weekly_economy() -> 'dict[str, int]' — The Sunday-rollover economy pass (#932, reshaped by #930). Per-phase counts.`
 - `run_weekly_employment(employment: 'CharacterEmployment', *, was_active: 'bool') -> 'int' — One week's automated wages for a held job (#929).`
+- `service_debt_principal(*, organization: 'Organization', basis: 'int') -> 'int' — Pay a flat share of ``basis`` (the collection's gross) toward debt principal.`
 - `settle_contract_cycle(contract: 'Contract') -> 'list[CurrencyTransfer]' — Run one settlement cycle for an ACTIVE notarized contract (#928).`
 - `settle_obligations(organization: 'Organization') -> 'list[CurrencyTransfer]' — Settle all active obligations against unsettled declared income (#926).`
 - `sign_contract(contract: 'Contract') -> 'Contract' — The consent moment (#928): counterparty accepts the fixed terms.`
@@ -4490,6 +4493,7 @@
   - available_beginnings <- character_creation.Beginnings
   - beginning_traditions <- character_creation.BeginningTradition
   - character_traditions <- magic.CharacterTradition
+  - ghost_tutelages <- magic.GhostTutelage
   - gift_grants <- magic.TraditionGiftGrant
   - ritual_grants <- magic.TraditionRitualGrant
   - teaching_organizations <- societies.Organization
@@ -4807,6 +4811,11 @@
 ### ResonanceGainConfig
 **Foreign Keys:**
   - updated_by -> accounts.AccountDB [FK] (nullable)
+
+### GhostTutelage
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - tradition -> magic.Tradition [FK]
 
 ### GiftUnlock
 **Foreign Keys:**

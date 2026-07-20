@@ -902,6 +902,9 @@ def _charge_cast_pull(
     beseech_bonus_thread_id = None
     applied_bonus = 0
     if cast_pull.beseech_bonus > 0:
+        # Non-combat petition: no combat positioning exists, so no
+        # `situation_ctx` is threaded (#2536). Combat-positioning situational
+        # perks simply never hold here; DB-state perks are unaffected.
         beseech_bonus_thread_id, applied_bonus = _resolve_emergency_draw(pull_sheet, cast_pull)
 
     pull_result = spend_resonance_for_pull(

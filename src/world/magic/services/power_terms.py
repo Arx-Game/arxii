@@ -434,7 +434,7 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     produced the total). The per-perk NAME the player sees comes from the
     announce path (#2536 Task 6: ``perks.services.announce_fired_perks``,
     called below right after ``fired`` is known — not the power ledger).
-    See ADR-0150 (the slice-1 machinery ADR) for the precise slice-2
+    See ADR-0151 (the slice-1 machinery ADR) for the precise slice-2
     refactor this implies if the ledger ever needs dynamic per-source TERM
     labels.
     """

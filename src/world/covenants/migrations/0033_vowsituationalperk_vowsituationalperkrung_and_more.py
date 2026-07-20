@@ -9,7 +9,7 @@ import core.natural_keys
 class Migration(migrations.Migration):
     dependencies = [
         ("checks", "0026_alter_consequenceoutcomemodifier_source_kind"),
-        ("covenants", "0030_covenantroletechniquespecialty"),
+        ("covenants", "0032_delete_vowgearscaling"),
     ]
 
     operations = [

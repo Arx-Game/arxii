@@ -416,7 +416,7 @@ COVENANT_ROLE, SANCTUM, ...) — not the bucketed `thread_level_multiplier`
 `get_covenant_role_blend_config()`, lazy-created) holds the tunable
 `multiplier_tenths` (default 10 = ×1.0). Kept as its own provider (not folded into an
 existing term) so the contribution stays attributable in cast breakdowns — Layer 4's
-presentation contract (#2536 slice 1, ADR-0150, now built — see "Vow Situational Power
+presentation contract (#2536 slice 1, ADR-0151, now built — see "Vow Situational Power
 Term" below) shows "this much came from your vow" as a distinct announced line.
 
 ### Covenant-Role Technique Specialty Power Term (#2443, ADR-0149 amendment) [BUILT & WIRED]
@@ -440,11 +440,11 @@ normalized away** — the opposite of the anchor-only rule
 `covenant_role_action_scaling_bonus` uses; a promoted (specialized) member reads as
 strictly more specialized than an unpromoted one.
 
-### Vow Situational Power Term (#2536 slice 1, ADR-0150) [BUILT & WIRED]
+### Vow Situational Power Term (#2536 slice 1, ADR-0151) [BUILT & WIRED]
 
 `vow_situational_power_term` is a conditional `_PROVIDERS` entry — **Layer 4** of
 `covenants`' four-layer vow-power model ("the point of vows", see
-`docs/systems/covenants.md`'s "Layer 4: Situational Perks" and ADR-0150). Unlike Layers
+`docs/systems/covenants.md`'s "Layer 4: Situational Perks" and ADR-0151). Unlike Layers
 1-2 (always-on), this term is 0 unless a `POWER_BONUS` `VowSituationalPerk` actually fires
 for the cast — see `world.covenants.perks.services.applicable_perks` for the full
 beneficiary/situation resolution.
@@ -477,7 +477,7 @@ multi-source provider in this file gets (`_derive_power`'s TERM loop labels once
 provider, not once per return value) — a cast boosted by two different firing perks shows
 one summed "vow situational power" line, not two named lines. The per-perk name reaches
 the player through `announce_fired_perks`'s dual-dispatch line instead, which is where
-ruling 1's "loud, visible moment" actually needs to land. See ADR-0150 for the reasoning.
+ruling 1's "loud, visible moment" actually needs to land. See ADR-0151 for the reasoning.
 
 `CHECK_BONUS`'s parallel seam lives in `world.checks.services._situational_perk_check_bonus`
 (`docs/systems/covenants.md` covers the shared delivery contract) — `perform_check` gains

@@ -103,7 +103,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `covenant_role_specialty_power_term` (`world.magic.services.power_terms`, see
   `docs/systems/magic.md`). Lore-repo content
   (`covenants.covenantroletechniquespecialty` in `CONTENT_MODELS`).
-- **`VowSituationalPerk`** (#2536, ADR-0150; **Layer 4** of the vow-power model — "the point of
+- **`VowSituationalPerk`** (#2536, ADR-0151; **Layer 4** of the vow-power model — "the point of
   vows") — the authoring model for deterministic, situational bonuses: `covenant_role` FK
   (anchor OR sub-role, ADD semantics like `CovenantRoleTechniqueSpecialty` above — no restriction
   to primary-only), `name` (the announced label, e.g. "Scout's Instinct"), `beneficiary`
@@ -164,7 +164,7 @@ clients. `announce_fired_perks` dual-dispatches per firing — a persisted, Narr
 resolved via `get_active_scene(location)` — so a perk announce appears in scene-log replay like
 the precedent it's modeled on) PLUS a direct `location.msg_contents(text)` text companion so bare
 telnet renders the identical line. `broadcast_action_outcome` alone is WS-only and was verified
-insufficient for this path — see ADR-0150 for why it isn't reused as-is. The telnet companion
+insufficient for this path — see ADR-0151 for why it isn't reused as-is. The telnet companion
 calls `location.msg_contents` directly rather than `flows.service_functions.communication
 .message_location` — `message_location` resolves its broadcast room from its caller's own
 location, not from an explicit `location` argument, and this function has no single acting
@@ -174,7 +174,7 @@ own docstring; a review cycle initially shipped this seam building a caller stat
 Narrator's own persona, whose location is unrelated to `location` and broke telnet delivery
 silently — never repeat that shape). Each rendered line is `"{perk.name}: {announce_template
 rendered with holder/subject}"`. Called from inside each delivery provider (never from
-`applicable_perks` itself) exactly once per real resolution — see ADR-0150's "call-site
+`applicable_perks` itself) exactly once per real resolution — see ADR-0151's "call-site
 discipline" section for the no-double-announce proof.
 
 - **`CovenantRoleGiftGrant`** (#2022) — through model for

@@ -4034,7 +4034,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `covenant_role_specialty_power_term` (`world.magic.services.power_terms`).
     Lore-repo content.
   - `VowSituationalPerk` / `VowSituationalPerkSituation` / `VowSituationalPerkRung`
-    (#2536 slice 1, ADR-0150; **Layer 4** of the vow-power model — "the point of vows")
+    (#2536 slice 1, ADR-0151; **Layer 4** of the vow-power model — "the point of vows")
     — deterministic, situational bonuses. `VowSituationalPerk` (NK `(covenant_role,
     name)`): `beneficiary` (SELF/COVENANT_ALLIES/WHOLE_GROUP), `effect_kind`
     (POWER_BONUS/CHECK_BONUS live this slice; TIER_FLOOR/BOTCH_IMMUNITY schema-only),
@@ -4049,8 +4049,9 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     situation to the library is code. `world.covenants.perks.services
     .applicable_perks(subject, *, effect_kind, resolution, target)` is the beneficiary
     evaluation point every delivery seam calls; `announce_fired_perks` is the
-    dual-dispatch (WS + telnet `message_location`) presentation-contract seam — see
-    `docs/systems/covenants.md`'s "Layer 4: Situational Perks" and ADR-0150 for the
+    dual-dispatch (WS + a direct telnet `location.msg_contents()` call, NOT
+    `message_location`) presentation-contract seam — see
+    `docs/systems/covenants.md`'s "Layer 4: Situational Perks" and ADR-0151 for the
     full design (registry pattern, query ceiling, why `broadcast_action_outcome`
     alone was insufficient for telnet parity). Delivery: `POWER_BONUS` via
     `vow_situational_power_term` (`world.magic.services.power_terms`, see the Magic
