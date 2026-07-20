@@ -419,6 +419,27 @@ existing term) so the contribution stays attributable in cast breakdowns — a f
 presentation contract (#2536) needs to show "this much came from your vow" as a
 distinct line.
 
+### Covenant-Role Technique Specialty Power Term (#2443, ADR-0149 amendment) [BUILT & WIRED]
+
+`covenant_role_specialty_power_term` is another always-on `_PROVIDERS` entry — **Layer
+2** of `covenants`' four-layer vow-power model (see `docs/systems/covenants.md`'s "Vow
+power, four-layer model" and ADR-0149's 2026-07-20 amendment). It rewards a vow for
+casting techniques that match what the role specializes in, keyed on the shared
+`TechniqueFunction` vocabulary (`constants.py`, 12-value `TextChoices` — also consumed
+by Layer 4's situational perks, #2536) rather than the coarser SWORD/SHIELD/CROWN axis
+Layer 1 reads.
+
+For each of `character.covenant_roles.currently_engaged_roles()`, the term collects
+`covenants.CovenantRoleTechniqueSpecialty` rows from the anchor role **plus** the
+resolved sub-role's own rows when it differs (both role ids go into one lookup), filtered
+to functions the cast technique carries (`technique.cached_function_tags`), and sums
+`total_thread_level_across_all_kinds(sheet) × row.multiplier_tenths / 10` per matching
+row. Returns 0 when the technique carries no `TechniqueFunctionTag`, no role is engaged,
+or no specialty row matches. **Sub-role rows ADD to the anchor's — they are never
+normalized away** — the opposite of the anchor-only rule
+`covenant_role_action_scaling_bonus` uses; a promoted (specialized) member reads as
+strictly more specialized than an unpromoted one.
+
 ### Targeting Model (#1321) [BUILT & WIRED]
 
 Standalone casts now validate targets, resolve AoE expansion, apply conditions, and route
@@ -1729,9 +1750,10 @@ Cached accessors (never query directly):
 The full magic catalog is lore-repo-authorable content, not admin-only data: `Affinity`,
 `Resonance`, `Facet`, `Gift`, `Tradition`, `IntensityTier`, `Technique` + its payload rows
 (`TechniqueCapabilityGrant`/`TechniqueCapabilityRequirement`/`TechniqueDamageProfile`/
-`TechniqueOutcomeModifier`/`TechniqueAppliedCondition`/`TechniqueRemovedCondition`),
-`TechniqueStyle`, `Restriction`, `EffectType`, `PortalAnchorKind`, `PathGiftGrant`,
-`TraditionGiftGrant`, plus `species.SpeciesGiftGrant` — all listed in `CONTENT_MODELS`
+`TechniqueOutcomeModifier`/`TechniqueAppliedCondition`/`TechniqueRemovedCondition`/
+`TechniqueFunctionTag`), `TechniqueStyle`, `Restriction`, `EffectType`, `PortalAnchorKind`,
+`PathGiftGrant`, `TraditionGiftGrant`, plus `species.SpeciesGiftGrant` — all listed in
+`CONTENT_MODELS`
 (`core_management/content_export.py`) and exported/imported by the shared
 `content_export.py`/`content_fixtures.py` pipeline (see `docs/systems/INDEX.md`'s
 "Content-repo load" entry for the driver). Every model's natural key is its
