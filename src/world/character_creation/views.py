@@ -31,6 +31,7 @@ from world.character_creation.filters import (
     CGTechniqueOptionFilter,
     FamilyFilter,
     GenderFilter,
+    GlimpseTagFilter,
     PathFilter,
     PronounsFilter,
     SpeciesFilter,
@@ -535,7 +536,7 @@ class CGGlimpseTagViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Small lookup table.
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["axis"]
+    filterset_class = GlimpseTagFilter
 
     def get_queryset(self) -> QuerySet[GlimpseTag]:
         return GlimpseTag.objects.filter(is_active=True).prefetch_related(
