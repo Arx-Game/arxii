@@ -1171,6 +1171,7 @@ class CompromiseActTypeAdmin(admin.ModelAdmin):
 from world.magic.models import (  # noqa: E402
     FallRedemptionConfig,
     FallRedemptionRecord,
+    GhostTutelage,
     ResonanceConversion,
 )
 
@@ -1222,3 +1223,14 @@ class FallRedemptionRecordAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):  # noqa: ARG002
         return False
+
+
+@admin.register(GhostTutelage)
+class GhostTutelageAdmin(admin.ModelAdmin):
+    """Admin for ghost-tutelage records (#2460)."""
+
+    list_display = ("character_sheet", "tradition", "created_at")
+    list_filter = ("tradition",)
+    search_fields = ("character_sheet__roster_entry__character__db_key",)
+    readonly_fields = ("created_at",)
+    autocomplete_fields = ("character_sheet",)

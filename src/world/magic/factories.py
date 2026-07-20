@@ -2715,6 +2715,60 @@ def wire_fall_redemption_content() -> object:
     )
 
 
+def wire_ghost_tutor_content() -> object:
+    """Idempotent seed for the ghost-tutor summoning Ritual (#2460).
+
+    Without this, the summoning ritual that ``ritual draft`` resolves by
+    name does not exist — a character with an orphaned tradition has no
+    in-game way to summon a ghostly tutor.
+
+    Creates (get_or_create on name):
+    - "Summon Ghostly Tutor" Ritual — SERVICE dispatch to
+      ``world.magic.services.ghost_tutor.summon_ghost_tutor``.
+
+    Component requirements (the book/relic consumed on summoning) and
+    site-property gating (Great Archive / Shroudwatch) are content-authorable;
+    this seed creates a framework-proving placeholder with no components
+    and no site gate. Staff add real components + site in admin.
+
+    Returns the Ritual instance.
+    """
+    from world.magic.constants import RitualExecutionKind
+    from world.magic.models import Ritual
+
+    ritual, _ = Ritual.objects.get_or_create(
+        name="Summon Ghostly Tutor",
+        defaults={
+            "description": (
+                "Summon the ghostly tutor of an orphaned tradition. The tutor's "
+                "knowledge becomes available through the Academy's training. "
+                "PLACEHOLDER — real ritual prose is content-authorable."
+            ),
+            "narrative_prose": (
+                "The summoner speaks the old words over the text, and the air "
+                "thickens with the presence of one who walked this path before "
+                "the Vanishing."
+            ),
+            "execution_kind": RitualExecutionKind.SERVICE,
+            "service_function_path": "world.magic.services.ghost_tutor.summon_ghost_tutor",
+            "flow": None,
+            "hedge_accessible": False,
+            "glimpse_eligible": False,
+            "input_schema": {
+                "fields": [
+                    {
+                        "name": "tradition_id",
+                        "label": "Tradition",
+                        "type": "number",
+                        "required": True,
+                    }
+                ]
+            },
+        },
+    )
+    return ritual
+
+
 def author_reference_corruption_content() -> None:
     """Seed 1 Primal + 1 Abyssal reference Corruption content set.
 

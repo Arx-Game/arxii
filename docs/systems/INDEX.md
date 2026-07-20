@@ -2390,6 +2390,21 @@ register as additional kinds.
   character is the lore-repo quest's job, not this seed's. Self-study teaches the shared
   (Path × Gift) pool only — it does **not** restore an orphaned tradition's own signature
   technique list; that recovery is story content, not a mechanical unlock.
+- **Ghost tutors — summoned teachers for orphaned traditions (#2460):** a SERVICE-kind
+  `Ritual` ("Summon Ghostly Tutor") dispatches `world.magic.services.ghost_tutor
+  .summon_ghost_tutor`, which validates the performer has an active
+  `CharacterTradition` membership for the target tradition (members-only) and
+  creates a permanent `GhostTutelage` record. The tutelage extends
+  `_technique_available_to_learner` (`world.npc_services.effects`) so the existing
+  generalist Academy trainer (whose `teaches_tradition=None`) can surface that
+  tradition's signature techniques for the summoning learner — the learner still
+  pays AP + coin + a Golden Hare via the standard TRAIN offer / `charge_and_learn`
+  seam. One summoning unlocks the entire tradition signature list (per-tradition
+  scope); the tutelage is permanent (the story-gate is the summoning ritual's
+  components + site access, not an upkeep loop). This is one route into the broader
+  Path-discovery system (#2603); it does not model the full research/discovery
+  progression that gates Path selection. Seeded by `wire_ghost_tutor_content()`
+  (`world.magic.factories`), called by `seed_magic_dev()`.
 - **SETTLE_OBLIGATION — the Academy Registrar (#2428 whole-branch fix):** closes the gap
   where `societies.obligation_services.settle_obligation` (Task 1) shipped with no live
   caller — an Unbound Prospect had no in-game way to ever pay off their Academy entrance

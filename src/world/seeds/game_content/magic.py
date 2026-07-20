@@ -2599,6 +2599,10 @@ def seed_magic_dev() -> MagicDevSeedResult:
 
     wire_fall_redemption_content()
 
+    from world.magic.factories import wire_ghost_tutor_content  # noqa: PLC0415
+
+    wire_ghost_tutor_content()
+
     return MagicDevSeedResult(
         config=config,
         rituals=rituals,
