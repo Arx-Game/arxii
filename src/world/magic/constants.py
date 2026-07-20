@@ -531,12 +531,13 @@ MAGIC_MODIFIER_CATEGORY_NAME = "magic"
 
 
 class GlimpseTagAxis(models.TextChoices):
-    """Narrative axis of a GlimpseTag (#2427): the four guided glimpse steps."""
+    """Narrative axis of a GlimpseTag (#2427): the guided glimpse steps."""
 
     TONE = "TONE", "Tone"
     CONSEQUENCE = "CONSEQUENCE", "Consequence"
     WITNESS = "WITNESS", "Witness & Secrecy"
     SENSORY = "SENSORY", "Sensory & Discovery"
+    TRIGGER = "TRIGGER", "Trigger"
 
 
 class GlimpseState(models.TextChoices):
@@ -567,4 +568,5 @@ GLIMPSE_AXIS_CONFIG: dict[GlimpseTagAxis, GlimpseAxisRule] = {
     GlimpseTagAxis.CONSEQUENCE: GlimpseAxisRule(multi=True, prose_prompt=False),
     GlimpseTagAxis.WITNESS: GlimpseAxisRule(multi=True, prose_prompt=False),
     GlimpseTagAxis.SENSORY: GlimpseAxisRule(multi=True, prose_prompt=True),
+    GlimpseTagAxis.TRIGGER: GlimpseAxisRule(multi=False, prose_prompt=False),
 }
