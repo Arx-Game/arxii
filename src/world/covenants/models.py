@@ -526,7 +526,11 @@ class CovenantRole(NaturalKeyMixin, AbstractSpecializedVariant, SharedMemoryMode
         return f"{self.name} ({self.get_covenant_type_display()})"
 
 
-class GearArchetypeCompatibility(SharedMemoryModel):
+class GearArchetypeCompatibilityManager(NaturalKeyManager):
+    """Manager for GearArchetypeCompatibility with natural key support."""
+
+
+class GearArchetypeCompatibility(NaturalKeyMixin, SharedMemoryModel):
     """Existence-only join: which roles are compatible with which archetypes.
 
     Spec D §4.4. Row present = role bonuses add to mundane gear stats on
@@ -543,6 +547,8 @@ class GearArchetypeCompatibility(SharedMemoryModel):
         choices=GearArchetype.choices,
     )
 
+    objects = GearArchetypeCompatibilityManager()
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -550,6 +556,10 @@ class GearArchetypeCompatibility(SharedMemoryModel):
                 name="covenants_unique_role_archetype_compat",
             ),
         ]
+
+    class NaturalKeyConfig:
+        fields = ["covenant_role", "gear_archetype"]
+        dependencies = ["covenants.CovenantRole"]
 
     def __str__(self) -> str:
         return f"{self.covenant_role.name} compatible with {self.get_gear_archetype_display()}"
@@ -816,7 +826,11 @@ class CovenantLevelBonus(SharedMemoryModel):
         return f"{self.modifier_target.name}: +{self.bonus_per_level}/level"
 
 
-class VowStatScaling(SharedMemoryModel):
+class VowStatScalingManager(NaturalKeyManager):
+    """Manager for VowStatScaling with natural key support."""
+
+
+class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
     """Authored vow-driven stat scaling keyed by (covenant_role, modifier_target) (#2022).
 
     Unlike ``CovenantRoleBonus`` (which scales by character level), this model
@@ -850,6 +864,8 @@ class VowStatScaling(SharedMemoryModel):
         ),
     )
 
+    objects = VowStatScalingManager()
+
     class Meta:
         ordering = ["covenant_role", "modifier_target"]
         constraints = [
@@ -858,6 +874,10 @@ class VowStatScaling(SharedMemoryModel):
                 name="vow_stat_scaling_unique_role_target",
             ),
         ]
+
+    class NaturalKeyConfig:
+        fields = ["covenant_role", "modifier_target"]
+        dependencies = ["covenants.CovenantRole", "mechanics.ModifierTarget"]
 
     def __str__(self) -> str:
         return (
@@ -1112,7 +1132,11 @@ class CovenantRoleGiftGrant(SharedMemoryModel):
         return f"{self.covenant_role.name} → {self.gift.name} (≥L{self.unlock_thread_level})"
 
 
-class CovenantRoleBonus(SharedMemoryModel):
+class CovenantRoleBonusManager(NaturalKeyManager):
+    """Manager for CovenantRoleBonus with natural key support."""
+
+
+class CovenantRoleBonus(NaturalKeyMixin, SharedMemoryModel):
     """Authored config: per-(role, target) covenant role bonus scaling with the
     holder's character level (#985, Spec D §5.6).
 
@@ -1141,6 +1165,8 @@ class CovenantRoleBonus(SharedMemoryModel):
         ),
     )
 
+    objects = CovenantRoleBonusManager()
+
     class Meta:
         ordering = ["covenant_role", "modifier_target"]
         constraints = [
@@ -1149,6 +1175,10 @@ class CovenantRoleBonus(SharedMemoryModel):
                 name="covenant_role_bonus_unique_role_target",
             ),
         ]
+
+    class NaturalKeyConfig:
+        fields = ["covenant_role", "modifier_target"]
+        dependencies = ["covenants.CovenantRole", "mechanics.ModifierTarget"]
 
     def __str__(self) -> str:
         return (
