@@ -1,13 +1,64 @@
-"""Boon fulfillment (#2540): a granted MONEY ask moves coppers target -> asker."""
+"""Boon slice 2 (#2540): ask validation, NPC cost band, resolver fulfillment, affection.
+
+The E2E class drives the real consent pipeline (``create_action_request`` →
+NPC auto-accept → the registered ``boon`` resolver) with only the check roll mocked,
+mirroring ``test_action_services``' pattern.
+"""
+
+from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
+from actions.constants import ResolutionPhase
+from actions.types import PendingActionResolution, StepResult
+from evennia_extensions.factories import AccountFactory
 from world.currency.services import get_or_create_purse
+from world.relationships.models import AffectionShift
 from world.scenes.action_constants import BoonKind
+from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_services import create_action_request
 from world.scenes.boon_models import Boon
-from world.scenes.boon_services import fulfill_boon
-from world.scenes.factories import SceneActionRequestFactory
+from world.scenes.boon_services import (
+    BOON_AFFECTION_COST,
+    BoonAsk,
+    fulfill_boon,
+    npc_boon_tier_shift,
+)
+from world.scenes.factories import PersonaFactory, SceneActionRequestFactory, SceneFactory
+
+
+def _fund(sheet, amount: int) -> None:
+    purse = get_or_create_purse(sheet)
+    purse.balance = amount
+    purse.save(update_fields=["balance"])
+
+
+def _balance(sheet) -> int:
+    purse = get_or_create_purse(sheet)
+    purse.refresh_from_db()
+    return purse.balance
+
+
+def _pilot(persona) -> None:
+    """Attach an account so the persona reads as a PC."""
+    character = persona.character_sheet.character
+    character.db_account = AccountFactory()
+    character.save(update_fields=["db_account"])
+
+
+def _success_resolution(success: bool = True) -> PendingActionResolution:
+    check_result = MagicMock()
+    check_result.success_level = 1 if success else -1
+    check_result.outcome_name = "Success" if success else "Failure"
+    return PendingActionResolution(
+        template_id=1,
+        character_id=1,
+        target_difficulty=45,
+        resolution_context_data={"character_id": 1, "challenge_instance_id": None},
+        current_phase=ResolutionPhase.COMPLETE,
+        main_result=StepResult(step_label="main", check_result=check_result, consequence_id=None),
+    )
 
 
 class FulfillBoonTests(TestCase):
@@ -16,40 +67,30 @@ class FulfillBoonTests(TestCase):
         self.asker_sheet = self.request.initiator_persona.character_sheet
         self.target_sheet = self.request.target_persona.character_sheet
 
-    def _fund_target(self, amount: int) -> None:
-        purse = get_or_create_purse(self.target_sheet)
-        purse.balance = amount
-        purse.save(update_fields=["balance"])
-
-    def _balance(self, sheet) -> int:
-        purse = get_or_create_purse(sheet)
-        purse.refresh_from_db()
-        return purse.balance
-
     def test_money_boon_moves_coppers_target_to_asker(self) -> None:
-        self._fund_target(500)
+        _fund(self.target_sheet, 500)
         boon = Boon.objects.create(action_request=self.request, kind=BoonKind.MONEY, amount=200)
-        moved = fulfill_boon(boon)
-        self.assertTrue(moved)
-        self.assertEqual(self._balance(self.target_sheet), 300)
-        self.assertEqual(self._balance(self.asker_sheet), 200)
+        self.assertTrue(fulfill_boon(boon))
+        self.assertEqual(_balance(self.target_sheet), 300)
+        self.assertEqual(_balance(self.asker_sheet), 200)
         boon.refresh_from_db()
         self.assertIsNotNone(boon.fulfilled_at)
 
     def test_fulfillment_is_idempotent(self) -> None:
-        self._fund_target(500)
+        _fund(self.target_sheet, 500)
         boon = Boon.objects.create(action_request=self.request, kind=BoonKind.MONEY, amount=200)
-        fulfill_boon(boon)
+        self.assertTrue(fulfill_boon(boon))  # this call fulfilled it
         self.assertFalse(fulfill_boon(boon))  # second call is a no-op
-        self.assertEqual(self._balance(self.asker_sheet), 200)  # not doubled
+        self.assertEqual(_balance(self.asker_sheet), 200)  # not doubled
 
-    def test_deed_boon_is_rp_only_and_moves_nothing(self) -> None:
+    def test_deed_boon_fulfills_without_moving_value(self) -> None:
         boon = Boon.objects.create(
             action_request=self.request, kind=BoonKind.DEED, deed_text="Guard the gate"
         )
-        self.assertFalse(fulfill_boon(boon))
+        self.assertTrue(fulfill_boon(boon))  # newly fulfilled (RP-only)
+        self.assertEqual(_balance(self.asker_sheet), 0)  # nothing moved
         boon.refresh_from_db()
-        self.assertIsNotNone(boon.fulfilled_at)  # still marked resolved
+        self.assertIsNotNone(boon.fulfilled_at)
 
     def test_targetless_request_is_rejected(self) -> None:
         request = SceneActionRequestFactory(target_persona=None)
@@ -58,3 +99,173 @@ class FulfillBoonTests(TestCase):
             fulfill_boon(boon)
         boon.refresh_from_db()
         self.assertIsNone(boon.fulfilled_at)  # never claimed as fulfilled
+
+
+class BoonAskValidationTests(TestCase):
+    """Dial 1 — ask-time eligibility: ineligible asks never create a request."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.asker = PersonaFactory()
+        cls.target = PersonaFactory()
+
+    def _ask(self, **kwargs) -> SceneActionRequest:
+        return create_action_request(
+            scene=self.scene,
+            initiator_persona=self.asker,
+            target_persona=self.target,
+            action_key="boon",
+            boon=BoonAsk(**kwargs),
+        )
+
+    def test_uncoverable_money_ask_rejected_with_no_orphan_request(self) -> None:
+        _fund(self.target.character_sheet, 50)
+        with self.assertRaises(ValidationError):
+            self._ask(kind=BoonKind.MONEY, amount=100)
+        self.assertFalse(SceneActionRequest.objects.exists())  # no orphan row
+
+    def test_coverable_money_ask_attaches_the_payload(self) -> None:
+        _fund(self.target.character_sheet, 500)
+        request = self._ask(kind=BoonKind.MONEY, amount=100)
+        self.assertEqual(request.boon.amount, 100)  # target sees the ask pre-consent
+
+    def test_held_item_ask_requires_the_target_to_hold_it(self) -> None:
+        with self.assertRaises(ValidationError):
+            self._ask(kind=BoonKind.HELD_ITEM, item_instance_id=999999)
+
+    def test_vault_ask_is_stubbed_until_the_org_vault(self) -> None:
+        with self.assertRaises(ValidationError):
+            self._ask(kind=BoonKind.VAULT_ITEM)
+
+    def test_deed_ask_requires_text(self) -> None:
+        with self.assertRaises(ValidationError):
+            self._ask(kind=BoonKind.DEED, deed_text="  ")
+
+    def test_targetless_boon_ask_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            create_action_request(
+                scene=self.scene,
+                initiator_persona=self.asker,
+                target_persona=None,
+                action_key="boon",
+                boon=BoonAsk(kind=BoonKind.DEED, deed_text="x"),
+            )
+
+
+class NpcBoonBandTests(TestCase):
+    """Dial 2 — the mandatory NPC-side relative-cost band; piloted targets unshifted."""
+
+    def _request_with_money_boon(self, *, amount: int, balance: int) -> SceneActionRequest:
+        request = SceneActionRequestFactory(action_key="boon")
+        _fund(request.target_persona.character_sheet, balance)
+        Boon.objects.create(action_request=request, kind=BoonKind.MONEY, amount=amount)
+        return request
+
+    def test_trivial_ask_adds_no_tiers(self) -> None:
+        request = self._request_with_money_boon(amount=40, balance=1000)  # 4%
+        self.assertEqual(npc_boon_tier_shift(request), 0)
+
+    def test_painful_ask_adds_tiers(self) -> None:
+        request = self._request_with_money_boon(amount=400, balance=1000)  # 40%
+        self.assertEqual(npc_boon_tier_shift(request), 2)
+
+    def test_ruinous_ask_adds_the_top_band(self) -> None:
+        request = self._request_with_money_boon(amount=1000, balance=1000)  # 100%
+        self.assertEqual(npc_boon_tier_shift(request), 3)
+
+    def test_piloted_target_is_never_band_shifted(self) -> None:
+        request = self._request_with_money_boon(amount=1000, balance=1000)
+        _pilot(request.target_persona)  # their difficulty choice rules
+        self.assertEqual(npc_boon_tier_shift(request), 0)
+
+    def test_non_boon_request_is_unshifted(self) -> None:
+        request = SceneActionRequestFactory(action_key="persuade")
+        self.assertEqual(npc_boon_tier_shift(request), 0)
+
+
+class BoonResolverE2ETests(TestCase):
+    """The full consent path: dispatch → NPC auto-accept → resolver fulfills + charges."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.seeds.checks import seed_check_resolution_tables
+        from world.seeds.relationship_scale import seed_relationship_scale_content
+        from world.seeds.social_actions import seed_social_action_content
+        from world.seeds.social_checks import seed_social_check_content
+        from world.seeds.social_relationships import seed_social_relationship_content
+
+        seed_check_resolution_tables()
+        seed_social_check_content()
+        seed_social_relationship_content()
+        seed_social_action_content()  # seeds the "Boon" ActionTemplate
+        seed_relationship_scale_content()  # Regard/Friction system tracks
+        cls.scene = SceneFactory()
+
+    def setUp(self) -> None:
+        self.asker = PersonaFactory()
+        self.npc_target = PersonaFactory()  # no db_account → NPC, auto-accepts
+        _fund(self.npc_target.character_sheet, 1000)
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
+        self.addCleanup(self.accrue_patcher.stop)
+
+    def _dispatch(self, *, success: bool, amount: int = 100) -> SceneActionRequest:
+        with patch(
+            "world.scenes.action_services.start_action_resolution",
+            return_value=_success_resolution(success=success),
+        ):
+            return create_action_request(
+                scene=self.scene,
+                initiator_persona=self.asker,
+                target_persona=self.npc_target,
+                action_key="boon",
+                boon=BoonAsk(kind=BoonKind.MONEY, amount=amount),
+            )
+
+    def test_granted_boon_fulfills_and_charges_affection(self) -> None:
+        request = self._dispatch(success=True)
+        self.assertEqual(_balance(self.asker.character_sheet), 100)
+        self.assertEqual(_balance(self.npc_target.character_sheet), 900)
+        request.boon.refresh_from_db()
+        self.assertIsNotNone(request.boon.fulfilled_at)
+        shift = AffectionShift.objects.get(boon=request.boon)
+        self.assertEqual(shift.amount, -BOON_AFFECTION_COST)
+        self.assertEqual(
+            shift.relationship.source_id, self.npc_target.character_sheet_id
+        )  # the granter's regard for the asker is what drops
+
+    def test_failed_roll_moves_nothing(self) -> None:
+        request = self._dispatch(success=False)
+        self.assertEqual(_balance(self.asker.character_sheet), 0)
+        request.boon.refresh_from_db()
+        self.assertIsNone(request.boon.fulfilled_at)
+        self.assertFalse(AffectionShift.objects.exists())
+
+    def test_serial_boons_in_one_scene_stack_the_affection_cost(self) -> None:
+        self._dispatch(success=True, amount=50)
+        self._dispatch(success=True, amount=50)
+        self.assertEqual(_balance(self.asker.character_sheet), 100)
+        self.assertEqual(AffectionShift.objects.count(), 2)  # per-Boon dedup — both landed
+
+
+class BoonSeedTests(TestCase):
+    """The Boon template + consent category seed and wire together."""
+
+    def test_boon_template_seeded_with_boon_consent_category(self) -> None:
+        from actions.models import ActionTemplate
+        from world.seeds.checks import seed_check_resolution_tables
+        from world.seeds.consent import seed_social_consent_categories
+        from world.seeds.social_actions import seed_social_action_content
+        from world.seeds.social_checks import seed_social_check_content
+        from world.seeds.social_relationships import seed_social_relationship_content
+
+        seed_check_resolution_tables()
+        seed_social_check_content()
+        seed_social_relationship_content()
+        seed_social_action_content()
+        seed_social_consent_categories()
+
+        template = ActionTemplate.objects.get(name="Boon")
+        self.assertEqual(template.consent_category.key, "boon")
+        self.assertEqual(template.consent_category.parent.key, "antagonism")

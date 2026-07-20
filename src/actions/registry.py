@@ -368,6 +368,7 @@ from actions.definitions.signature import (
 from actions.definitions.situations import SetSituationAction
 from actions.definitions.social import (
     blackmail,
+    boon,
     deceive,
     entrance,
     flirt,
@@ -666,6 +667,7 @@ _ALL_ACTIONS: list[Action] = [
     flirt,
     seduce,
     blackmail,
+    boon,
     coerce,
     reveal_secret,
     mint_accusation,

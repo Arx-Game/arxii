@@ -1847,8 +1847,16 @@ action consent flow, and a three-mode non-combat round framework.
   cached graded outcome) for the scene-round Succor sibling, #1744), `SceneRoundParticipant`,
   `Boon` (#2540, `boon_models.py` — the payload of a structured social ask, 1:1 with its
   `SceneActionRequest`: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`,
-  `item_instance`, `deed_text`, `fulfilled_at`; `boon_services.fulfill_boon` moves the asked
-  thing on a granted ask — MONEY wired via `currency.transfer`, other kinds are follow-up slices)
+  `item_instance`, `deed_text`, `fulfilled_at`. Slice 2 wired the full loop (`boon_services`):
+  `BoonAsk` + `validate_boon_ask` (dial-1 ask-time eligibility — uncoverable money, unheld item,
+  empty deed, and vault-stub asks are rejected before any row exists), the `boon` action key on
+  `BoonAction` (`actions/definitions/social.py`) + `ActionTemplate`/`boon`-consent-category seeds,
+  `npc_boon_tier_shift` (the mandatory dial-2 NPC relative-cost band, fed into
+  `resolved_base_difficulty(extra_tier_modifier=…)`; piloted defenders are never band-shifted),
+  and the `boon` resolver (`register_resolver`) — fulfillment + the per-Boon stacking affection
+  cost (`BOON_AFFECTION_COST`, PLACEHOLDER) fire on BOTH consent paths, never via `execute()`.
+  MONEY fulfillment moves coppers via `currency.transfer`; HELD_ITEM/VAULT_ITEM transfer are
+  follow-up slices)
 - **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance).
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).
@@ -5165,15 +5173,20 @@ writeup kudos/complaint feedback.
   Persona pk). Foreign sheet renders `ForeignRelationshipTimeline` — the `?about_character=`
   arm only, type-tagged, deliberately no numeric fields (`RelationshipTimelineEntry` itself
   carries none).
-- **Automatic affection shifts (#1697):** `AffectionShift` model +
-  `apply_affection_shift(*, source, target, scene, effect, amount)` — the generic
+- **Automatic affection shifts (#1697, boon mode #2540):** `AffectionShift` model +
+  `apply_affection_shift(*, source, target, scene, effect, amount, boon=None)` — the generic
   valence-signed success consequence (`EffectType.SHIFT_AFFECTION`, handler in
   `world/mechanics/effect_handlers.py`, `ConsequenceEffect.affection_amount`): a
   successful Flirt (+5) / Seduce (+50, PLACEHOLDER) moves the TARGET's regard toward
-  the actor on the system tracks; future gated offensive actions (insult/taunt) carry
-  negative amounts onto Friction. `UniqueConstraint(relationship, scene, effect)` is
-  the diminishing-returns rule — first success per scene per pair shifts, repeats
-  no-op. Seeded in `world/seeds/social_actions.py`.
+  the actor on the system tracks; gated offensive actions carry
+  negative amounts onto Friction. Two provenance modes, exactly one per row
+  (`affection_shift_has_provenance` CheckConstraint): effect-keyed rows keep the
+  `UniqueConstraint(relationship, scene, effect)` diminishing-returns rule — first success
+  per scene per pair shifts, repeats no-op — while boon-keyed rows (a granted Boon's
+  `-BOON_AFFECTION_COST` drain, charged by the `boon` resolver) dedup on the Boon
+  OneToOne itself, so serial granted boons stack even within one scene. Shifted points
+  never decay — the drain persists until rebuilt through play (Apostate's ≥3-months
+  ruling is automatic). Seeded in `world/seeds/social_actions.py`.
 - **Affection-tier difficulty ladder (#1697):** `resolved_base_difficulty`
   (`world/scenes/social_difficulty.py`) derives its bands from the #1699 system-track
   `RelationshipTier` thresholds (Regard for warm, Friction for hostile) — one tier

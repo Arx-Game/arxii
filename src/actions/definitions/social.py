@@ -250,6 +250,21 @@ class BlackmailAction(_SocialTemplateAction):
 
 
 @dataclass
+class BoonAction(_SocialTemplateAction):
+    key: str = "boon"
+    name: str = "Boon"
+    icon: str = "gift"
+    template_name: str = "Boon"
+    description: str = (
+        "Press someone to grant you a boon — money, an item, or a deed, named up front."
+    )
+    # Fulfillment does NOT live in execute(): the consent paths never call it (the
+    # Blackmail mint asymmetry). The `boon` resolver registered by
+    # world.scenes.boon_services fires on both the NPC auto-accept and the piloted
+    # accept paths, fulfilling the ask and charging the per-Boon affection cost.
+
+
+@dataclass
 class PerformAction(_SocialTemplateAction):
     key: str = "perform"
     name: str = "Perform"
@@ -816,6 +831,7 @@ deceive = DeceiveAction()
 flirt = FlirtAction()
 seduce = SeduceAction()
 blackmail = BlackmailAction()
+boon = BoonAction()
 perform = PerformAction()
 entrance = EntranceAction()
 restore_sense = RestoreSenseAction()

@@ -3065,6 +3065,7 @@
 - `collect_asset_income(*, asset, character_sheet) -> 'CollectionResult' — One active collection of a personal asset's accumulated income (#2294).`
 - `collect_org_income(*, organization: 'Organization', character) -> 'CollectionResult' — One active collection dispatch across every pooled stream of ``organization`` (#930).`
 - `deliver_mission_money(*, recipient_sheet: 'CharacterSheet', amount: 'int', ref: 'str', reason_label: 'str' = 'mission reward') -> 'None' — Reward money lands in the purse (#932 — replaces the Phase 5b stub).`
+- `distribute_allowance(*, organization: 'Organization', surplus: 'int') -> 'AllowanceResult' — Auto-split a share of ``surplus`` among the org's active piloted members (#2540).`
 - `extend_loan(*, creditor: 'Organization', debtor: 'Organization', principal: 'int', interest_bps_monthly: 'int' = 50, fiat: 'bool' = False) -> 'DebtInstrument' — Create a loan: principal moves creditor→debtor, instrument records it (#927).`
 - `format_coppers(amount: int) -> str — Canonical mixed display: ``1234`` → ``"12g 3s 4c"``.`
 - `fund_fame_display(persona: 'Persona', *, amount: 'int') -> 'int' — Spend money maintaining fame against decay (#932 fame churn).`
@@ -3089,6 +3090,7 @@
 - `sign_contract(contract: 'Contract') -> 'Contract' — The consent moment (#928): counterparty accepts the fixed terms.`
 - `transfer(*, amount: 'int', reason: 'str', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None, to_purse: 'CharacterPurse | None' = None, to_treasury: 'OrganizationTreasury | None' = None) -> 'CurrencyTransfer' — Move ``amount`` coppers; null source = mint (faucet), null dest = sink.`
 - `treat_servants(organization: 'Organization', *, payment: 'int', graft_reduction: 'int') -> 'OrgEconomicsProfile' — Spend treasury money treating servants to buy graft down (#926).`
+- `withdraw_from_treasury(*, organization: 'Organization', persona: 'Persona', amount: 'int', reason: 'str' = '') -> 'CurrencyTransfer' — A spend-authorized member draws ``amount`` coppers from the org treasury to their purse.`
 - `work_chore(employment: 'CharacterEmployment', *, ap_spent: 'int') -> 'int' — Active on-grid chore work (#929): spend AP now, roll, earn up to 2×.`
 
 
@@ -6529,7 +6531,8 @@
 **Foreign Keys:**
   - relationship -> relationships.CharacterRelationship [FK]
   - scene -> scenes.Scene [FK]
-  - effect -> checks.ConsequenceEffect [FK]
+  - effect -> checks.ConsequenceEffect [FK] (nullable)
+  - boon -> scenes.Boon [OneToOne] (nullable)
 
 ### RelationshipChange
 **Foreign Keys:**
@@ -6563,7 +6566,7 @@
 
 ### Service Functions
 - `add_relationship_condition(*, source: 'CharacterSheet', target: 'CharacterSheet', condition: 'RelationshipCondition', duration: 'timedelta | None' = None) -> 'None' — Add a ``RelationshipCondition`` to the directed ``source → target`` relationship (#1697).`
-- `apply_affection_shift(*, source: 'CharacterSheet', target: 'CharacterSheet', scene: 'Scene', effect: 'ConsequenceEffect', amount: 'int') -> 'AffectionShift | None' — Apply a social action's automatic affection shift, first-per-scene only (#1697).`
+- `apply_affection_shift(*, source: 'CharacterSheet', target: 'CharacterSheet', scene: 'Scene', effect: 'ConsequenceEffect | None', amount: 'int', boon: 'Boon | None' = None) -> 'AffectionShift | None' — Apply a social action's automatic affection shift (#1697, boon mode #2540).`
 - `apply_relationship_bump(*, source: 'CharacterSheet', target: 'CharacterSheet', interaction: 'Interaction', valence: 'int', source_emoji: 'ReactionEmoji | None' = None) -> 'RelationshipBump' — Apply an ambient ±1 bump to source's regard toward target (#1699).`
 - `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: evennia.objects.models.ObjectDB | None = None) -> world.progression.types.AwardResult — Award kudos to an account with full audit trail.`
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' — Award XP to an account.`
@@ -7257,6 +7260,8 @@
 **Foreign Keys:**
   - action_request -> scenes.SceneActionRequest [OneToOne]
   - item_instance -> items.ItemInstance [FK] (nullable)
+**Pointed to by:**
+  - affection_shift <- relationships.AffectionShift
 
 ### Place
 **Foreign Keys:**
