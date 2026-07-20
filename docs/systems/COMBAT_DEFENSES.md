@@ -77,3 +77,10 @@ Flat damage reduction applied after evasion and barrier.
 - **Armor soak:** `apply_equipped_armor_soak`
   (`world/combat/services.py`). Role-gated — compatible covenant-role armor
   adds on top; incompatible armor competes with a resonant pool via `max`.
+  As of #2533, the compatible bucket is scaled once by
+  `gear_additive_fraction(character)` (`world.covenants.services`) — the MAX
+  `CovenantRoleDefenseProfile.gear_additive_tenths` fraction across the
+  character's engaged roles, `1` (fully additive) with no profile. A vow whose
+  `DefenseStyle` is EVASION or BARRIER rather than GEAR_SOAK can author a lower
+  fraction so its own defense substitutes for gear instead of stacking with it.
+  See `docs/systems/covenants.md`'s "Defense styles + gear substitution" for detail.

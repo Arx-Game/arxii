@@ -68,6 +68,24 @@ _Avoid_: rank, position, office, archetype (retired single-enum field).
 A role's per-vow reward for casting techniques carrying a specific `magic.TechniqueFunction` label (`CovenantRoleTechniqueSpecialty`, NK `(covenant_role, function)`, `multiplier_tenths`) — **Layer 2** of ADR-0149's four-layer vow-power model. Unlike the combat-identity blend above, valid on both primary roles AND sub-roles, and a sub-role's rows ADD to the parent's rather than replacing them (a specialized/promoted member reads as strictly more specialized). Read by `covenant_role_specialty_power_term` (`world.magic.services.power_terms`). See the magic app glossary's "Technique Function" for the shared vocabulary. (#2443, ADR-0149's 2026-07-20 amendment.)
 _Avoid_: conflating with the combat-identity blend (a coarser SWORD/SHIELD/CROWN axis) or with role-granted specialized technique *variants* (`CharacterTechnique.role_source`, a different #2022 mechanism).
 
+**Defense Style**:
+`DefenseStyle` (`world.covenants.constants`, #2533, ADR-0149 Layer 3) — how a covenant vow
+defends: GEAR_SOAK (armor is the defense), EVASION (not being there is the defense), BARRIER
+(force/warding is the defense). Code-defined vocabulary, not lore-repo content — Layer 4's
+situational perks (#2536) key on these labels, and each style must have a distinct
+shine-situation in that perk set (2026-07-20 niche ruling; exact tuning numbers are secondary).
+_Avoid_: defense type, defense mode, archetype.
+
+**Defense Profile**:
+`CovenantRoleDefenseProfile` (#2533) — the per-`CovenantRole` row carrying a role's Defense
+Style plus `gear_additive_tenths`, the fraction of COMPATIBLE armor soak that stays additive
+with the vow's own defense (default 10 = fully additive/legacy). Read via
+`gear_additive_fraction(character)`, which takes the MAX fraction across a character's engaged
+roles' resolved profiles (sub-role's own profile when present, else its anchor's) and scales the
+compatible-armor bucket once in `apply_equipped_armor_soak` (#1174). Superseded `VowGearScaling`
+as the mechanism for a vow's defense to substitute for gear rather than stack with it.
+_Avoid_: gear profile, armor profile, VowGearScaling (removed model).
+
 **Covenant Rank**:
 The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals / request-gm. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).
 _Avoid_: role, level.

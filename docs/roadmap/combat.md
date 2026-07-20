@@ -311,18 +311,22 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   the role is a SWORD/SHIELD/CROWN weighted blend, not a single archetype pick, driving an
   always-on baseline cast power term plus **stat power** scaling with the COVENANT_ROLE thread
   level (`VowStatScaling`, unchanged); role-granted **specialized techniques** that resolve
-  variants by the vow's depth (`CharacterTechnique.role_source`) also shipped under #2022 and
   are unaffected. **Layer 2** (#2443, shipped): per-vow technique specialty —
   `CovenantRoleTechniqueSpecialty` rewards casts matching a role's specialized
   `TechniqueFunction`s (a shared, code-defined vocabulary also consumed by Layer 4) via the
   always-on `covenant_role_specialty_power_term`; unlike the blend/action-scaling anchor-only
-  rule, sub-role rows ADD to the parent's. Layer 3 (#2533, defense
-  styles + gear substitution — **equipment effectiveness** scaling via `VowGearScaling` is
-  short-circuited to 0 pending this layer), and Layer 4 (#2536, deterministic situational
-  perks — "the point of vows", consuming the same `TechniqueFunction` vocabulary Layer 2
-  introduced) are tracked separately. When the vow dims (#2051), the engaged
-  flag drops and every shipped layer's contribution returns to 0 — which is why soloing legend
-  content is lethal.
+  rule, sub-role rows ADD to the parent's. **Layer 3** (#2533, shipped): each engaged vow
+  authors a `DefenseStyle` (GEAR_SOAK/EVASION/BARRIER) plus a
+  `CovenantRoleDefenseProfile.gear_additive_tenths` fraction — `gear_additive_fraction(character)`
+  (MAX fraction across engaged roles) scales the compatible bucket in
+  `apply_equipped_armor_soak`, once, so a vow whose defense style isn't gear can dial down how
+  much armor stacks on top of it. `VowGearScaling` (the never-seeded per-archetype gear
+  multiplier short-circuited to 0 by #2529) is removed — subsumed by the single authored
+  fraction. Layer 4 (#2536, deterministic situational perks — "the point of vows", consuming
+  the same `TechniqueFunction` vocabulary Layer 2 introduced; its first perk set must give every
+  `DefenseStyle` a distinct shine-situation per the 2026-07-20 niche ruling) is tracked
+  separately — the only layer left. When the vow dims (#2051), the engaged flag drops and every
+  shipped layer's contribution returns to 0 — which is why soloing legend content is lethal.
 - Magic is predominant; relationship bonuses matter; **difficulty scales on party size + average level
   only** (ADR-0037); combat merits Legend, never XP (ADR-0036).
 
