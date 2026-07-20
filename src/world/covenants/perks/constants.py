@@ -89,11 +89,11 @@ class Situation(models.TextChoices):
 class PerkEffectKind(models.TextChoices):
     """What a firing situational perk actually does (#2536 spec §3).
 
-    All four values ship in slice 1's schema. ``POWER_BONUS``/``CHECK_BONUS``
-    are wired into their resolution seams within this slice (Tasks 4-5).
-    ``TIER_FLOOR``/``BOTCH_IMMUNITY`` are SCHEMA-ONLY this slice — rows may be
-    authored but nothing reads them yet; the outcome-guarantee resolution
-    logic (ruling 3, Apostate's can't-botch principle) ships in slice 2.
+    All four values are live. ``POWER_BONUS``/``CHECK_BONUS`` are wired into
+    their resolution seams (Tasks 4-5). ``TIER_FLOOR``/``BOTCH_IMMUNITY``
+    (#2536 slice 2) fire in ``perform_check``'s outcome resolution: both are
+    absolute (never thread-scaled) and ungated, and announce only when they
+    actually alter the resolved outcome.
 
     - ``POWER_BONUS`` — flat power delta added to a qualifying technique
       cast, scaled by thread level, delivered via a new conditional
@@ -101,10 +101,12 @@ class PerkEffectKind(models.TextChoices):
     - ``CHECK_BONUS`` — flat modifier added to a qualifying check, delivered
       via ``perform_check``'s optional ``situation_ctx`` threading, scoped
       by the perk's ``check_type`` (null = any check).
-    - ``TIER_FLOOR`` — result-tier override: the check/cast cannot resolve
-      below tier X. SLICE 2.
-    - ``BOTCH_IMMUNITY`` — botch/critical-failure suppressed, downgraded to
-      a plain failure. SLICE 2.
+    - ``TIER_FLOOR`` — result-tier override: the resolved outcome cannot land
+      below the perk's authored ``floor_success_level`` (canonical -10..+10
+      scale).
+    - ``BOTCH_IMMUNITY`` — a botch/critical failure (``success_level`` ≤
+      ``world.checks.constants.BOTCH_SUCCESS_LEVEL_MAX``) is downgraded to
+      the least-bad non-botch outcome instead.
     """
 
     POWER_BONUS = "power_bonus", "Power Bonus"

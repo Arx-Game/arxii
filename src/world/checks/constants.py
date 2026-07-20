@@ -2,6 +2,11 @@
 
 from django.db import models
 
+BOTCH_SUCCESS_LEVEL_MAX = -2
+"""Canonical -10..+10 outcome scale: a CheckOutcome whose success_level is at or
+below this is a botch / critical failure. Single source for the boundary that
+world.magic.services.sanctum_install previously declared locally."""
+
 
 class EffectType(models.TextChoices):
     """Type of mechanical effect applied by a consequence."""

@@ -134,12 +134,18 @@ class FiredPerk:
 def applicable_perks(
     subject: CharacterSheet,
     *,
-    effect_kind: str,
+    effect_kind: str | tuple[str, ...],
     resolution: object | None,
     target: CharacterSheet | None,
 ) -> list[FiredPerk]:
     """Return every ``VowSituationalPerk`` of ``effect_kind`` that fires for
     ``subject``'s resolution right now (#2536 spec §2, Task 3).
+
+    ``effect_kind`` accepts a single kind (unchanged behavior) or a tuple of
+    kinds — a tuple fetches every listed kind in ONE call (added for the
+    outcome-guarantee seam, #2536 slice 2, which needs ``TIER_FLOOR`` +
+    ``BOTCH_IMMUNITY`` together without doubling queries; same 3-query
+    candidate-perk ceiling either way).
 
     ``resolution`` is the SUBJECT's live resolution context (a
     ``CombatRoundContext`` in combat, a check-pipeline context otherwise, or
@@ -151,8 +157,9 @@ def applicable_perks(
     if not candidates:
         return []
 
+    kinds = (effect_kind,) if isinstance(effect_kind, str) else tuple(effect_kind)
     role_ids = {role_id for role_id, _holder, _beneficiaries in candidates}
-    perks_by_role = _fetch_candidate_perks(role_ids, effect_kind)
+    perks_by_role = _fetch_candidate_perks(role_ids, kinds)
     if not perks_by_role:
         return []
 
@@ -349,18 +356,20 @@ def _group_sheet_ids(subject: CharacterSheet, resolution: object | None) -> list
 
 
 def _fetch_candidate_perks(
-    role_ids: set[int], effect_kind: str
+    role_ids: set[int], effect_kinds: tuple[str, ...]
 ) -> dict[int, list[VowSituationalPerk]]:
-    """Every candidate perk of ``effect_kind`` on ``role_ids``, keyed by role.
+    """Every candidate perk of the requested kinds on ``role_ids``, keyed by role.
 
     ONE query + 2 prefetch queries (``situations``, ``rungs``) — 3 total,
-    independent of how many perks/situations/rungs match (the module
-    docstring's query-discipline contract).
+    independent of how many perks/situations/rungs match, and independent of
+    how many kinds are requested (the module docstring's query-discipline
+    contract; ``effect_kind__in`` costs the same one query as a single
+    ``effect_kind=`` would).
     """
     from world.covenants.models import VowSituationalPerk  # noqa: PLC0415
 
     perks = VowSituationalPerk.objects.filter(
-        covenant_role_id__in=role_ids, effect_kind=effect_kind
+        covenant_role_id__in=role_ids, effect_kind__in=effect_kinds
     ).prefetch_related("situations", "rungs")  # noqa: PREFETCH_STRING
 
     by_role: dict[int, list[VowSituationalPerk]] = {}

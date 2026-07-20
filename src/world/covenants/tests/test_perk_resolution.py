@@ -107,6 +107,28 @@ class SelfPerkTests(TestCase):
         )
         self.assertEqual(fired, [])
 
+    def test_tuple_effect_kind_fetches_both_kinds_in_one_call(self) -> None:
+        """(TIER_FLOOR, BOTCH_IMMUNITY) as a tuple returns firings of both kinds."""
+        tier_floor_perk = VowSituationalPerkFactory(
+            covenant_role=self.role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.TIER_FLOOR,
+            floor_success_level=1,
+        )
+        botch_immunity_perk = VowSituationalPerkFactory(
+            covenant_role=self.role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.BOTCH_IMMUNITY,
+        )
+        fired = applicable_perks(
+            self.subject_sheet,
+            effect_kind=(PerkEffectKind.TIER_FLOOR, PerkEffectKind.BOTCH_IMMUNITY),
+            resolution=None,
+            target=None,
+        )
+        fired_perks = {firing.perk for firing in fired}
+        self.assertEqual(fired_perks, {tier_floor_perk, botch_immunity_perk})
+
 
 class BeneficiaryScopingTests(TestCase):
     """COVENANT_ALLIES/WHOLE_GROUP scoping across a co-present engaged group.
