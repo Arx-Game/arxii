@@ -65,6 +65,17 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   row; the Vanguard's old `cast_technique` row is not recreated — that scaling moved to
   the always-on `covenant_role_blend_power_term` power term
   (`world.magic.services.power_terms`, see `docs/systems/magic.md`).
+- **`CovenantRoleTechniqueSpecialty`** (#2443, ADR-0149's 2026-07-20 amendment; **Layer 2**
+  of the vow-power model) — one row per `(covenant_role, function)`, `function` drawn
+  from `magic.TechniqueFunction` (a shared fine-grained vocabulary also consumed by
+  Layer 4's situational perks, #2536). `multiplier_tenths` (integer-tenths, default 10 =
+  ×1.0) scales the boost for that function while the role is engaged. Unlike the blend
+  weights, rows are valid on **both primary roles and sub-roles** — a sub-role's rows ADD
+  to the parent's rather than replacing them, so a specialized (promoted) member reads as
+  strictly more specialized than an unpromoted one. Read by
+  `covenant_role_specialty_power_term` (`world.magic.services.power_terms`, see
+  `docs/systems/magic.md`). Lore-repo content
+  (`covenants.covenantroletechniquespecialty` in `CONTENT_MODELS`).
 - **`CovenantRoleGiftGrant`** (#2022) — through model for
   `CovenantRole.granted_gifts` M2M to `magic.Gift`. Carries
   `unlock_thread_level` — the COVENANT_ROLE thread level at which the gift's
@@ -515,6 +526,12 @@ Graduation: when the adjusted party's real primary level re-enters the band,
     `resolve_effective_role`.
   - `anchor_role` — the **stored parent (anchor) role** on the membership row, ignoring
     sub-role resolution. Consumers that need to key on thread identity use this field.
+
+  Both `covenant_role` and `anchor_role` nest `technique_specialties` (#2443, Layer 2) —
+  the role's `CovenantRoleTechniqueSpecialty` rows, prefetched via
+  `Prefetch(..., to_attr="cached_technique_specialties")` on the ViewSet queryset. The
+  frontend's `specialtySummaryForMembership` (`CovenantDetailPage.tsx`) unions both,
+  with the resolved (`covenant_role`) row winning on a same-function collision.
 - `GET|POST /api/covenants/ranks/` — list / create ranks
 - `GET|PATCH|DELETE /api/covenants/ranks/{pk}/` — retrieve / update / delete
 - `POST /api/covenants/ranks/reorder/` — bulk tier reorder
@@ -534,10 +551,13 @@ Graduation: when the adjusted party's real primary level re-enters the band,
   per-instance authored roles, and active capability surge were deliberately NOT built in #1589;
   they are follow-up design items.
 - **Vow power, four-layer model (ADR-0149)** — #2529 shipped Layer 1 (the SWORD/SHIELD/
-  CROWN blend + always-on baseline power term) only. Layer 2 (per-vow technique
-  specialty, #2443), Layer 3 (defense styles + gear substitution, `VowGearScaling`'s
-  real fate, #2533), and Layer 4 (deterministic situational perks — "the point of
-  vows", #2536) are tracked separately.
+  CROWN blend + always-on baseline power term); #2443 shipped **Layer 2**
+  (`CovenantRoleTechniqueSpecialty` + `covenant_role_specialty_power_term`, keyed on
+  the shared `magic.TechniqueFunction` vocabulary — see ADR-0149's 2026-07-20 amendment
+  and `docs/systems/magic.md`). Layer 3 (defense styles + gear substitution,
+  `VowGearScaling`'s real fate, #2533) and Layer 4 (deterministic situational perks —
+  "the point of vows", #2536, which consumes the same `TechniqueFunction` vocabulary
+  Layer 2 introduced) are tracked separately.
 
 ## Integrates With
 

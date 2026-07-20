@@ -23,7 +23,7 @@ from core.managers import CachedAllMixin
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.achievements.models import DiscoverableContent
 from world.covenants.constants import RoleArchetype
-from world.magic.constants import TechniqueCategory, TechniqueReach
+from world.magic.constants import TechniqueCategory, TechniqueFunction, TechniqueReach
 from world.magic.models.gifts import Gift
 
 
@@ -553,6 +553,14 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         """
         return list(self.target_prerequisites.all())
 
+    @cached_property
+    def cached_function_tags(self) -> list:
+        """Fine-grained TechniqueFunction labels for this technique (#2443).
+
+        Supports Prefetch(to_attr=). To invalidate: ``del instance.cached_function_tags``.
+        """
+        return list(self.function_tags.all())
+
     def has_property(self, name: str) -> bool:
         """Return True if this technique carries the named Property tag."""
         return self.properties.filter(name=name).exists()
@@ -592,6 +600,43 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         condition is found.
         """
         return self.condition_applications.filter(condition__is_clash_lock=True).exists()
+
+
+class TechniqueFunctionTagManager(NaturalKeyManager):
+    """Natural-key manager for TechniqueFunctionTag."""
+
+
+class TechniqueFunctionTag(NaturalKeyMixin, SharedMemoryModel):
+    """One fine-grained function label carried by a technique (#2443).
+
+    Content row (lore repo): links a Technique to a TechniqueFunction value.
+    A technique may carry several (a damage+weaken cast carries WEAKEN).
+    Consumed by per-vow specialties (#2443) and situational perks (#2536).
+    """
+
+    technique = models.ForeignKey(
+        Technique,
+        on_delete=models.CASCADE,
+        related_name="function_tags",
+    )
+    function = models.CharField(max_length=32, choices=TechniqueFunction.choices)
+
+    objects = TechniqueFunctionTagManager()
+
+    class Meta:
+        ordering = ["technique__name", "function"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["technique", "function"],
+                name="unique_function_per_technique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["technique", "function"]
+
+    def __str__(self) -> str:
+        return f"{self.technique.name}: {self.get_function_display()}"
 
 
 class AbstractCapabilityGrant(SharedMemoryModel):

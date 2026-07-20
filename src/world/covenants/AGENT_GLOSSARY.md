@@ -64,6 +64,10 @@ match is what gates empowerment, not the raw value).
 The combat-power axis of membership: a role's Sword/Shield/Crown combat-identity blend (`sword_weight`/`shield_weight`/`crown_weight`, summing to 1 on primary roles — not a single archetype pick, #2529, ADR-0149), speed_rank, role bonuses, and COVENANT_ROLE Thread-pull eligibility. Orthogonal to authority.
 _Avoid_: rank, position, office, archetype (retired single-enum field).
 
+**Technique Specialty**:
+A role's per-vow reward for casting techniques carrying a specific `magic.TechniqueFunction` label (`CovenantRoleTechniqueSpecialty`, NK `(covenant_role, function)`, `multiplier_tenths`) — **Layer 2** of ADR-0149's four-layer vow-power model. Unlike the combat-identity blend above, valid on both primary roles AND sub-roles, and a sub-role's rows ADD to the parent's rather than replacing them (a specialized/promoted member reads as strictly more specialized). Read by `covenant_role_specialty_power_term` (`world.magic.services.power_terms`). See the magic app glossary's "Technique Function" for the shared vocabulary. (#2443, ADR-0149's 2026-07-20 amendment.)
+_Avoid_: conflating with the combat-identity blend (a coarser SWORD/SHIELD/CROWN axis) or with role-granted specialized technique *variants* (`CharacterTechnique.role_source`, a different #2022 mechanism).
+
 **Covenant Rank**:
 The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals / request-gm. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).
 _Avoid_: role, level.

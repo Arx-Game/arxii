@@ -25,11 +25,13 @@ from world.covenants.models import (
     CovenantRole,
     CovenantRoleActionScaling,
     CovenantRoleBonus,
+    CovenantRoleTechniqueSpecialty,
     GearArchetypeCompatibility,
     MentorBond,
     MentorBondConfig,
 )
 from world.items.constants import GearArchetype
+from world.magic.constants import TechniqueFunction
 
 CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
 
@@ -108,6 +110,18 @@ class CovenantRoleActionScalingFactory(factory_django.DjangoModelFactory):
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     action_key = "combat_interpose"
     thread_level_multiplier = 0
+
+
+class CovenantRoleTechniqueSpecialtyFactory(factory_django.DjangoModelFactory):
+    """Factory for CovenantRoleTechniqueSpecialty (#2443)."""
+
+    class Meta:
+        model = CovenantRoleTechniqueSpecialty
+        django_get_or_create = ("covenant_role", "function")
+
+    covenant_role = factory.SubFactory(CovenantRoleFactory)
+    function = TechniqueFunction.DAMAGE_BUFF_SELF
+    multiplier_tenths = 10
 
 
 class CovenantFactory(factory_django.DjangoModelFactory):

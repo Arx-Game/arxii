@@ -74,3 +74,50 @@ role-source-variant-resolution decisions are unaffected by #2529 and remain accu
 > Status: accepted · Source: issue #2529 · Supersedes: ADR-0108 · Related: ADR-0055
 > (sub-role specialization engine), ADR-0013 (no data migrations pre-production —
 > narrow exception documented above), #2443/#2533/#2536 (Layers 2-4)
+
+## Amendment (2026-07-20, #2443 implementation)
+
+All claims below were verified against `src/world/magic/` and `src/world/covenants/` on
+this branch before writing. **Layer 2 (per-vow technique specialty) has shipped.**
+
+**Shared `TechniqueFunction` vocabulary — the decision worth recording.** Layer 2 needed
+a fine-grained "what job does this technique do" label (damage buff, barrier, weaken,
+fear, ...) to key specialty rows on — a technique's `archetype_alignment`
+(SWORD/SHIELD/CROWN, Layer 1) is too coarse for "this vow rewards Weaken casts
+specifically." Rather than authoring that vocabulary as free-text or duplicating it
+per consumer, `TechniqueFunction` (`world.magic.constants`, a 12-value `TextChoices`:
+`DAMAGE_BUFF_SELF`/`DAMAGE_BUFF_ALLY`/`DEFENSE_BUFF`/`BARRIER`/`CLEANSE`/`MOBILITY`/
+`CHARM`/`DISTRACTION`/`FEAR`/`WEAKEN`/`PERCEPTION`/`CONCEALMENT`) is **one code-defined
+vocabulary shared by two independent consumers**: Layer 2's per-vow specialty
+(`CovenantRoleTechniqueSpecialty`, this ADR) and Layer 4's situational perks (#2536,
+tracked separately). `TechniqueFunctionTag` (`world.magic.models.techniques`, NK
+`(technique, function)`) is the content-authored join — *which* labels a technique
+carries is lore-repo data (`CONTENT_MODELS`), same as `archetype_alignment`; the
+vocabulary itself stays a code enum so both consumers can validate against stable,
+extensible values instead of drifting free-text tags. Extending the list is a
+deliberate one-line code change, same posture as `RoleArchetype`.
+
+**`CovenantRoleTechniqueSpecialty`** (`world.covenants.models`, NK `(covenant_role,
+function)`, `CONTENT_MODELS` content) carries `multiplier_tenths` (integer-tenths,
+default 10 = ×1.0) and is valid on **both primary roles and sub-roles** — unlike the
+Layer 1 blend weights, which sub-roles must leave at zero and delegate to the parent via
+`blend_weight_for`, there is no such restriction here. `covenant_role_specialty_power_term`
+(`world.magic.services.power_terms._PROVIDERS`) is the new always-on power-term provider:
+for each engaged (resolved) role, it collects the anchor role's own specialty rows **plus**
+the resolved sub-role's own rows when it differs, and sums
+`total_thread_level_across_all_kinds(sheet) × row.multiplier_tenths / 10` over every row
+matching one of the cast technique's `TechniqueFunctionTag`s. **Sub-role rows ADD to the
+anchor's, they never replace it** — the opposite of the anchor-only normalization
+`covenant_role_action_scaling_bonus` uses (Layer 1's action-scaling sibling). This is a
+deliberate divergence, not an oversight: a specialized (promoted) member should read as
+strictly more specialized than an unpromoted one, whereas action-scaling and the blend
+weights are shape properties of the anchor role itself and would double-count if summed
+across anchor+sub-role.
+
+`CovenantRoleSerializer.technique_specialties` (prefetched via
+`Prefetch(..., to_attr="cached_technique_specialties")`) exposes the rows on both the
+`covenant_role` (resolved) and `anchor_role` (stored parent) fields of
+`CharacterCovenantRoleSerializer`; the frontend's `specialtySummaryForMembership`
+(`frontend/src/covenants/pages/CovenantDetailPage.tsx`) unions the two, summing the
+anchor and resolved sub-role's `multiplier_tenths` on a same-function collision — matching
+the power term's own summed payout, so the displayed chip is never an understatement.

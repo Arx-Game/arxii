@@ -292,6 +292,56 @@ def covenant_role_blend_power_term(ctx: PowerTermContext) -> int:
     return int(total)
 
 
+def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
+    """Per-vow technique-specialty boost (#2443, Layer 2).
+
+    Always-on flat bonus when the cast technique carries a TechniqueFunction
+    the engaged vow specializes in: Σ over engaged roles, over matching
+    specialty rows, of total_thread_level × row.multiplier_tenths / 10.
+
+    Row collection per engaged (resolved) role: the ANCHOR role's rows PLUS
+    the resolved sub-role's own rows when it differs — sub-roles build upward
+    (add), never replace (#2443 spec §3; contrast the anchor-only rule in
+    covenant_role_action_scaling_bonus).
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.covenants.models import CovenantRoleTechniqueSpecialty  # noqa: PLC0415
+    from world.magic.services.threads import (  # noqa: PLC0415
+        total_thread_level_across_all_kinds,
+    )
+
+    if ctx.technique is None:
+        return 0
+    character = ctx.sheet.character
+    if not hasattr(character, "covenant_roles"):
+        return 0
+    engaged_roles = character.covenant_roles.currently_engaged_roles()
+    if not engaged_roles:
+        return 0
+    functions = {tag.function for tag in ctx.technique.cached_function_tags}
+    if not functions:
+        return 0
+    total_threads = total_thread_level_across_all_kinds(ctx.sheet)
+    if total_threads == 0:
+        return 0
+
+    role_ids: set[int] = set()
+    for role in engaged_roles:
+        role_ids.add(role.pk)
+        if role.parent_role_id is not None:
+            role_ids.add(role.parent_role_id)
+
+    rows = CovenantRoleTechniqueSpecialty.objects.filter(
+        covenant_role_id__in=role_ids,
+        function__in=functions,
+    )
+    total = Decimal(0)
+    for row in rows:
+        total += Decimal(total_threads) * row.multiplier_tenths / 10
+    return int(total)
+
+
 _PROVIDERS: list[PowerTermProvider] = [
     level_power_term,
     aura_power_term,
@@ -299,6 +349,7 @@ _PROVIDERS: list[PowerTermProvider] = [
     touchstone_power_term,
     enhancement_overlap_term,
     covenant_role_blend_power_term,
+    covenant_role_specialty_power_term,
 ]
 
 

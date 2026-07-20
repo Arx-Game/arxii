@@ -7,11 +7,13 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import DamageTypeFactory
+from world.covenants.factories import CovenantRoleTechniqueSpecialtyFactory
 from world.distinctions.factories import (
     CharacterDistinctionFactory,
     DistinctionEffectFactory,
     DistinctionFactory,
 )
+from world.magic.constants import TechniqueFunction
 from world.magic.factories import ResonanceFactory, TechniqueDamageProfileFactory, TechniqueFactory
 from world.magic.services.techniques import _derive_power
 from world.mechanics.constants import POWER_CATEGORY_NAME
@@ -1036,6 +1038,211 @@ class CovenantRoleBlendPowerTermTests(TestCase):
         config.multiplier_tenths = 20
         config.save()
         self.assertEqual(covenant_role_blend_power_term(self._ctx(technique)), 12)
+
+
+class CovenantRoleSpecialtyPowerTermTests(TestCase):
+    """covenant_role_specialty_power_term: per-vow technique-specialty boost (#2443)."""
+
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+
+    def _ctx(self, technique=None):
+        from world.magic.services.power_terms import PowerTermContext
+
+        return PowerTermContext(sheet=self.sheet, technique=technique, applicable_threads=[])
+
+    def _thread(self, level):
+        from world.magic.factories import ThreadFactory
+
+        return ThreadFactory(owner=self.sheet, level=level)
+
+    def _engage_role(self, role=None, *, engaged=True, covenant=None):
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+
+        role = role or CovenantRoleFactory(sword_weight=0, shield_weight=0, crown_weight=1)
+        CharacterCovenantRoleFactory(
+            character_sheet=self.sheet,
+            covenant=covenant or CovenantFactory(),
+            covenant_role=role,
+            engaged=engaged,
+        )
+        return role
+
+    def test_matching_tag_boosted(self):
+        from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
+        from world.magic.services.power_terms import covenant_role_specialty_power_term
+
+        self._thread(level=10)
+        role = self._engage_role()
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role, function=TechniqueFunction.WEAKEN, multiplier_tenths=15
+        )
+        technique = TechniqueFactory()
+        TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 15)
+
+    def test_untagged_technique_returns_zero(self):
+        from world.magic.factories import TechniqueFactory
+        from world.magic.services.power_terms import covenant_role_specialty_power_term
+
+        self._thread(level=10)
+        role = self._engage_role()
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role, function=TechniqueFunction.WEAKEN, multiplier_tenths=15
+        )
+        technique = TechniqueFactory()  # no function_tags at all
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 0)
+
+    def test_two_matching_tags_compound(self):
+        from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
+        from world.magic.services.power_terms import covenant_role_specialty_power_term
+
+        self._thread(level=10)
+        role = self._engage_role()
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role, function=TechniqueFunction.WEAKEN, multiplier_tenths=10
+        )
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role, function=TechniqueFunction.DAMAGE_BUFF_SELF, multiplier_tenths=10
+        )
+        technique = TechniqueFactory()
+        TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
+        TechniqueFunctionTagFactory(
+            technique=technique, function=TechniqueFunction.DAMAGE_BUFF_SELF
+        )
+        # 10*10/10 (WEAKEN) + 10*10/10 (DAMAGE_BUFF_SELF) = 10 + 10 = 20
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 20)
+
+    def test_two_engaged_roles_sum(self):
+        """Two SEPARATELY engaged CovenantRole memberships (different covenants) each
+        contribute their own matching specialty row — the ``Σ over engaged_roles`` outer
+        loop in ``covenant_role_specialty_power_term`` must sum across roles, not just
+        within one role's row set (#2443 spec's Testing section: "multi-row + multi-role
+        sums")."""
+        from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
+        from world.magic.services.power_terms import covenant_role_specialty_power_term
+
+        self._thread(level=10)
+        role_a = self._engage_role()
+        role_b = self._engage_role()
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role_a, function=TechniqueFunction.WEAKEN, multiplier_tenths=10
+        )
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role_b, function=TechniqueFunction.WEAKEN, multiplier_tenths=15
+        )
+        technique = TechniqueFactory()
+        TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
+        # role_a: 10*10/10=10, role_b: 10*15/10=15 -> 10 + 15 = 25
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 25)
+
+    def test_sub_role_row_adds_to_anchor_row(self):
+        """A qualifying COVENANT_ROLE thread promotes the engaged role to its sub-role
+        (per ``currently_engaged_roles``'s resolution — the membership row stays on the
+        parent). The specialty term must then sum BOTH the parent's row and the
+        resolved sub-role's own row, not replace one with the other (#2443 spec §3)."""
+        from world.covenants.factories import (
+            CovenantRoleFactory,
+            SubroleCovenantRoleFactory,
+        )
+        from world.magic.constants import TargetKind
+        from world.magic.factories import (
+            ResonanceFactory,
+            TechniqueFactory,
+            TechniqueFunctionTagFactory,
+            ThreadFactory,
+        )
+        from world.magic.services.power_terms import covenant_role_specialty_power_term
+
+        resonance = ResonanceFactory()
+        parent = CovenantRoleFactory(sword_weight=0, shield_weight=0, crown_weight=1)
+        sub_role = SubroleCovenantRoleFactory(
+            parent_role=parent, resonance=resonance, unlock_thread_level=3
+        )
+        self._engage_role(role=parent)  # membership row stays on the parent
+        ThreadFactory(
+            owner=self.sheet,
+            resonance=resonance,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=parent,
+            target_trait=None,
+            level=10,
+        )
+        self.character.threads.invalidate()
+        self.character.covenant_roles.invalidate()
+
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=parent, function=TechniqueFunction.WEAKEN, multiplier_tenths=10
+        )
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=sub_role, function=TechniqueFunction.WEAKEN, multiplier_tenths=5
+        )
+        technique = TechniqueFactory()
+        TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
+        # anchor row (parent, 10*10/10=10) + sub-role's own row (10*5/10=5) = 15
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 15)
+
+    def test_non_engaged_role_returns_zero(self):
+        from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
+        from world.magic.services.power_terms import covenant_role_specialty_power_term
+
+        self._thread(level=10)
+        role = self._engage_role(engaged=False)
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role, function=TechniqueFunction.WEAKEN, multiplier_tenths=15
+        )
+        technique = TechniqueFactory()
+        TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 0)
+
+    def test_retired_threads_excluded(self):
+        from django.utils import timezone
+
+        from world.magic.factories import (
+            TechniqueFactory,
+            TechniqueFunctionTagFactory,
+            ThreadFactory,
+        )
+        from world.magic.services.power_terms import covenant_role_specialty_power_term
+
+        self._thread(level=10)
+        ThreadFactory(owner=self.sheet, level=100, retired_at=timezone.now())  # ignored
+        role = self._engage_role()
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role, function=TechniqueFunction.WEAKEN, multiplier_tenths=10
+        )
+        technique = TechniqueFactory()
+        TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
+        # Only the level-10 thread counts: 10*10/10 = 10, not (110)*10/10 = 110.
+        self.assertEqual(covenant_role_specialty_power_term(self._ctx(technique)), 10)
+
+    def test_specialty_at_default_multiplier_not_more_than_blend_at_weight_one(self):
+        """Ratified 0.5-1.0x-of-baseline frame: specialty <= blend for the same character
+        when blend weight is 1.0 and specialty uses the default 1.0x multiplier (#2443)."""
+        from world.covenants.factories import CovenantRoleFactory
+        from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
+        from world.magic.services.power_terms import (
+            covenant_role_blend_power_term,
+            covenant_role_specialty_power_term,
+        )
+
+        self._thread(level=10)
+        role = CovenantRoleFactory(sword_weight=1, shield_weight=0, crown_weight=0)
+        self._engage_role(role=role)
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role, function=TechniqueFunction.WEAKEN, multiplier_tenths=10
+        )
+        technique = TechniqueFactory(archetype_alignment="sword")
+        TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
+
+        blend = covenant_role_blend_power_term(self._ctx(technique))
+        specialty = covenant_role_specialty_power_term(self._ctx(technique))
+        self.assertLessEqual(specialty, blend)
 
 
 class TotalThreadLevelAcrossAllKindsTests(TestCase):

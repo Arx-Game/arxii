@@ -720,6 +720,45 @@ class CovenantRoleViewTests(CovenantsViewTestCase):
         self.assertNotIn("is_leadership", response.data)
 
 
+class CovenantRoleTechniqueSpecialtyFieldTests(CovenantsViewTestCase):
+    """Tests for CovenantRoleSerializer's nested technique_specialties field (#2443)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        from world.covenants.factories import CovenantRoleTechniqueSpecialtyFactory
+        from world.magic.constants import TechniqueFunction
+
+        cls.role = CovenantRoleFactory(name="Specialty Role")
+        cls.specialty = CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=cls.role,
+            function=TechniqueFunction.CHARM,
+            multiplier_tenths=15,
+        )
+
+    def test_role_payload_includes_technique_specialties(self) -> None:
+        """The role payload exposes a technique_specialties list."""
+        response = self.client.get(f"/api/covenants/roles/{self.role.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("technique_specialties", response.data)
+        self.assertEqual(len(response.data["technique_specialties"]), 1)
+
+    def test_technique_specialty_row_shape(self) -> None:
+        """Each row exposes function, function_display, and multiplier_tenths."""
+        response = self.client.get(f"/api/covenants/roles/{self.role.pk}/")
+        row = response.data["technique_specialties"][0]
+        self.assertEqual(row["function"], "charm")
+        self.assertEqual(row["function_display"], "Charm")
+        self.assertEqual(row["multiplier_tenths"], 15)
+
+    def test_role_without_specialties_returns_empty_list(self) -> None:
+        """A role with no CovenantRoleTechniqueSpecialty rows returns an empty list."""
+        bare_role = CovenantRoleFactory(name="Bare Role")
+        response = self.client.get(f"/api/covenants/roles/{bare_role.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["technique_specialties"], [])
+
+
 class CharacterCovenantRoleRankFieldTests(CovenantsViewTestCase):
     """Verify the membership serializer exposes rank and viewer_capabilities."""
 

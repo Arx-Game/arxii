@@ -38320,6 +38320,11 @@ components:
           readOnly: true
           nullable: true
           description: Null for primary roles. Set for sub-roles.
+        technique_specialties:
+          type: array
+          items:
+            $ref: '#/components/schemas/CovenantRoleTechniqueSpecialty'
+          readOnly: true
       required:
       - covenant_type
       - covenant_type_display
@@ -38332,6 +38337,27 @@ components:
       - slug
       - speed_rank
       - sword_weight
+      - technique_specialties
+    CovenantRoleTechniqueSpecialty:
+      type: object
+      description: Read-only nested serializer for a role's per-vow technique specialty
+        rows (#2443).
+      properties:
+        function:
+          allOf:
+          - $ref: '#/components/schemas/FunctionEnum'
+          readOnly: true
+        function_display:
+          type: string
+          readOnly: true
+        multiplier_tenths:
+          type: integer
+          readOnly: true
+          description: Integer-tenths scaling factor for this function (10 = ×1.0).
+      required:
+      - function
+      - function_display
+      - multiplier_tenths
     CovenantTypeEnum:
       enum:
       - durance
@@ -42090,6 +42116,34 @@ components:
       required:
       - friend
       - viewer
+    FunctionEnum:
+      enum:
+      - damage_buff_self
+      - damage_buff_ally
+      - defense_buff
+      - barrier
+      - cleanse
+      - mobility
+      - charm
+      - distraction
+      - fear
+      - weaken
+      - perception
+      - concealment
+      type: string
+      description: |-
+        * `damage_buff_self` - Self Damage Buff
+        * `damage_buff_ally` - Ally Damage Buff
+        * `defense_buff` - Defense Buff
+        * `barrier` - Barrier
+        * `cleanse` - Cleanse
+        * `mobility` - Mobility
+        * `charm` - Charm
+        * `distraction` - Distraction
+        * `fear` - Fear
+        * `weaken` - Weaken
+        * `perception` - Perception
+        * `concealment` - Concealment
     FundWardResult:
       type: object
       properties:

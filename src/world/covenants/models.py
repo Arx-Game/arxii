@@ -29,6 +29,7 @@ from world.covenants.constants import (
     RoleArchetype,
 )
 from world.items.constants import GearArchetype
+from world.magic.constants import TechniqueFunction
 from world.magic.specialization.models import AbstractSpecializedVariant
 
 if TYPE_CHECKING:
@@ -968,6 +969,57 @@ class CovenantRoleActionScaling(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self) -> str:
         return (
             f"{self.action_key} + {self.covenant_role.name}: ×{self.thread_level_multiplier}/level"
+        )
+
+
+class CovenantRoleTechniqueSpecialtyManager(NaturalKeyManager):
+    """Manager for CovenantRoleTechniqueSpecialty with natural key support."""
+
+
+class CovenantRoleTechniqueSpecialty(NaturalKeyMixin, SharedMemoryModel):
+    """Per-vow finer-technique specialty: a role rewards a specific technique function.
+
+    #2443, Layer 2 of the vow-power model. Keyed by ``(covenant_role, function)``.
+    ``multiplier_tenths`` (integer-tenths, default 10 = ×1.0) scales the specialty's
+    effect for that function label when the role is engaged; the consumer that reads
+    this table is future wiring.
+
+    Rows are valid on BOTH primary roles and sub-roles — unlike the SWORD/SHIELD/CROWN
+    blend weights (which sub-roles must leave at zero), a sub-role may carry its own
+    technique specialty rows that ADD on top of anything inherited from the parent
+    role. No clean() restriction ties this table to primary-vs-sub-role shape.
+    """
+
+    covenant_role = models.ForeignKey(
+        CovenantRole,
+        on_delete=models.CASCADE,
+        related_name="technique_specialties",
+    )
+    function = models.CharField(max_length=32, choices=TechniqueFunction.choices)
+    multiplier_tenths = models.PositiveIntegerField(
+        default=10,
+        help_text="Integer-tenths scaling factor for this function (10 = ×1.0).",
+    )
+
+    objects = CovenantRoleTechniqueSpecialtyManager()
+
+    class Meta:
+        ordering = ["function", "covenant_role__slug"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["covenant_role", "function"],
+                name="covenant_role_technique_specialty_unique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["covenant_role", "function"]
+        dependencies = ["covenants.CovenantRole"]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.covenant_role.name} + {self.get_function_display()}: "
+            f"×{self.multiplier_tenths / 10}"
         )
 
 

@@ -126,6 +126,64 @@ export function blendSummaryForMembership(membership: {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: summarize a role's per-vow technique specialties for display (#2443)
+// ---------------------------------------------------------------------------
+
+interface TechniqueSpecialty {
+  function: string;
+  function_display: string;
+  multiplier_tenths: number;
+}
+
+export interface TechniqueSpecialtyChip {
+  function: string;
+  label: string;
+}
+
+/**
+ * Summarize a membership's per-vow technique specialties as a deduped list of
+ * display chips, unioning the anchor (parent) role's specialty rows with the
+ * resolved role's own rows.
+ *
+ * Technique specialty rows are additive across parent and sub-role (#2443) —
+ * unlike the combat-identity blend, a sub-role's rows do not replace the
+ * parent's, so a specialized (promoted) member should see BOTH inherited
+ * (anchor) and their own (resolved sub-role) specialties. When the same
+ * function appears on both, the displayed multiplier SUMS the anchor and
+ * resolved rows' `multiplier_tenths` — this mirrors
+ * `covenant_role_specialty_power_term`, which sums every matching row rather
+ * than letting one win, so the chip matches the character's actual in-game
+ * bonus.
+ */
+export function specialtySummaryForMembership(membership: {
+  covenant_role: { technique_specialties: TechniqueSpecialty[] };
+  anchor_role?: { technique_specialties: TechniqueSpecialty[] } | null;
+}): TechniqueSpecialtyChip[] {
+  const byFunction = new Map<string, TechniqueSpecialty>();
+  for (const row of membership.anchor_role?.technique_specialties ?? []) {
+    byFunction.set(row.function, row);
+  }
+  // Resolved (sub-role) rows SUM onto the anchor's on collision — both rows
+  // contribute, matching the power term's summed payout.
+  for (const row of membership.covenant_role.technique_specialties ?? []) {
+    const existing = byFunction.get(row.function);
+    byFunction.set(
+      row.function,
+      existing
+        ? {
+            ...row,
+            multiplier_tenths: existing.multiplier_tenths + row.multiplier_tenths,
+          }
+        : row
+    );
+  }
+  return Array.from(byFunction.values()).map((row) => ({
+    function: row.function,
+    label: `${row.function_display} ×${row.multiplier_tenths / 10}`,
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // Member row
 // ---------------------------------------------------------------------------
 
@@ -210,6 +268,11 @@ function MemberRow({
           <Badge variant="outline" className="text-xs">
             {blendSummaryForMembership(membership)}
           </Badge>
+          {specialtySummaryForMembership(membership).map((chip) => (
+            <Badge key={chip.function} variant="outline" className="text-xs">
+              {chip.label}
+            </Badge>
+          ))}
           {membership.engaged && (
             <Badge variant="default" className="text-xs">
               Engaged

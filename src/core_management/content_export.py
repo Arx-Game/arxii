@@ -80,6 +80,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # covenants
         "covenants.covenantrole",
         "covenants.covenantroleactionscaling",
+        "covenants.covenantroletechniquespecialty",
         # distinctions
         "distinctions.distinction",
         "distinctions.distinctioncategory",
@@ -114,6 +115,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.techniquecapabilitygrant",
         "magic.techniquecapabilityrequirement",
         "magic.techniquedamageprofile",
+        "magic.techniquefunctiontag",
         "magic.techniqueoutcomemodifier",
         "magic.techniqueremovedcondition",
         "magic.techniquestyle",

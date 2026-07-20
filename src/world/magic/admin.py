@@ -60,6 +60,7 @@ from world.magic.models import (
     StandingCapBand,
     Technique,
     TechniqueCapabilityGrant,
+    TechniqueFunctionTag,
     TechniqueGrant,
     TechniqueOutcomeModifier,
     TechniqueRemovedCondition,
@@ -199,6 +200,13 @@ class TechniqueRemovedConditionInline(admin.TabularInline):
     autocomplete_fields = ["condition"]
 
 
+class TechniqueFunctionTagInline(admin.TabularInline):
+    """Inline fine-grained function labels on the Technique admin (#2443)."""
+
+    model = TechniqueFunctionTag
+    extra = 1
+
+
 @admin.register(Technique)
 class TechniqueAdmin(admin.ModelAdmin):
     list_display = [
@@ -219,7 +227,11 @@ class TechniqueAdmin(admin.ModelAdmin):
     readonly_fields = ["get_tier"]
     autocomplete_fields = ["creator", "effect_type", "gift", "style"]
     list_select_related = ["gift", "style", "effect_type"]
-    inlines = [TechniqueCapabilityGrantInline, TechniqueRemovedConditionInline]
+    inlines = [
+        TechniqueCapabilityGrantInline,
+        TechniqueRemovedConditionInline,
+        TechniqueFunctionTagInline,
+    ]
 
     @admin.display(description="Tier")
     def get_tier(self, obj: Technique) -> int:

@@ -2807,6 +2807,7 @@
   - character_assignments <- covenants.CharacterCovenantRole
   - vow_stat_scalings <- covenants.VowStatScaling
   - action_scalings <- covenants.CovenantRoleActionScaling
+  - technique_specialties <- covenants.CovenantRoleTechniqueSpecialty
   - gift_grants <- covenants.CovenantRoleGiftGrant
   - role_bonuses <- covenants.CovenantRoleBonus
   - combat_participations <- combat.CombatParticipant
@@ -2844,6 +2845,10 @@
 ### VowGearScaling
 
 ### CovenantRoleActionScaling
+**Foreign Keys:**
+  - covenant_role -> covenants.CovenantRole [FK]
+
+### CovenantRoleTechniqueSpecialty
 **Foreign Keys:**
   - covenant_role -> covenants.CovenantRole [FK]
 
@@ -4476,6 +4481,7 @@
   - target_prerequisites -> mechanics.Prerequisite [M2M]
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
+  - function_tags <- magic.TechniqueFunctionTag
   - capability_grants <- magic.TechniqueCapabilityGrant
   - capability_requirements <- magic.TechniqueCapabilityRequirement
   - character_grants <- magic.CharacterTechnique
@@ -4497,6 +4503,10 @@
   - battle_declarations <- battles.BattleActionDeclaration
   - battle_property_affinities <- battles.TechniquePropertyAffinity
   - train_offers <- npc_services.TrainOfferDetails
+
+### TechniqueFunctionTag
+**Foreign Keys:**
+  - technique -> magic.Technique [FK]
 
 ### TechniqueCapabilityGrant
 **Foreign Keys:**

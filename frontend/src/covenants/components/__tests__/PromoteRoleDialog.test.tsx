@@ -87,6 +87,7 @@ const makeSubrole = (overrides: Partial<CovenantRoleWithParent> = {}): CovenantR
   speed_rank: 1,
   description: 'Carries the host into the breach.',
   parent_role: 7,
+  technique_specialties: [],
   ...overrides,
 });
 
