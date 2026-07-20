@@ -18,6 +18,7 @@ from django.utils import timezone
 
 from world.currency.constants import (
     ACTIVE_WEEK_LOGIN_DAYS,
+    ALLOWANCE_SURPLUS_PCT,
     BUSINESS_BASE_WEEKLY_PER_LEVEL,
     BUSINESS_FORTUNE_MAX,
     BUSINESS_FORTUNE_MIN,
@@ -50,15 +51,24 @@ from world.currency.models import (
     OrgIncomeStream,
     OrgObligation,
 )
-from world.currency.types import CollectionResult, ImprovementResult
+from world.currency.types import AllowanceResult, CollectionResult, ImprovementResult
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
+    from evennia.accounts.models import AccountDB
+
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.scenes.models import Persona
     from world.societies.models import Organization
+
+
+def _account_active_since(account: AccountDB | None, cutoff: datetime) -> bool:
+    """A piloted account counts as active when it logged in on/after ``cutoff`` (#929/#932)."""
+    return account is not None and account.last_login is not None and account.last_login >= cutoff
 
 
 def get_or_create_purse(character_sheet: CharacterSheet) -> CharacterPurse:
@@ -134,6 +144,32 @@ def transfer(  # noqa: PLR0913 - source/destination pairs are co-equal by design
             amount=amount,
             reason=reason,
         )
+
+
+def withdraw_from_treasury(
+    *, organization: Organization, persona: Persona, amount: int, reason: str = ""
+) -> CurrencyTransfer:
+    """A spend-authorized member draws ``amount`` coppers from the org treasury to their purse.
+
+    The discretionary-spend primitive for house distribution (#2540): the treasury→member
+    outflow that #930 never built (every other treasury outflow is treasury→treasury). Gated by
+    ``can_spend_treasury`` — an active membership at rank tier <= ``spend_rank_max`` (the head /
+    top rank by default). Because it is action-driven it is inherently piloted-only; it must
+    never be automated, so a non-piloted NPC head has no path to drain the coffers.
+
+    Raises ``ValidationError`` if the persona lacks spend authority (or ``transfer`` rejects the
+    amount / insufficient funds).
+    """
+    treasury = get_or_create_treasury(organization)
+    if not can_spend_treasury(treasury, persona):
+        msg = "You do not have the standing to spend from this treasury."
+        raise ValidationError(msg)
+    return transfer(
+        amount=amount,
+        reason=reason or f"treasury withdrawal by {persona}",
+        from_treasury=treasury,
+        to_purse=get_or_create_purse(persona.character_sheet),
+    )
 
 
 def _instrument_template(denomination: str):
@@ -554,6 +590,63 @@ def collect_org_income(*, organization: Organization, character) -> CollectionRe
         process_income_stream(stream, share)
     return CollectionResult(
         gathered=gathered, landed=net, graft_leak=graft_leak, success_level=success_level
+    )
+
+
+@transaction.atomic
+def distribute_allowance(*, organization: Organization, surplus: int) -> AllowanceResult:
+    """Auto-split a share of ``surplus`` among the org's active piloted members (#2540).
+
+    The **non-discretionary allowance** rail — the head cannot withhold it. Meant to fire off the
+    collection event (the future domain dispatch calls ``collect_org_income`` then this with the
+    net as ``surplus``), so the baseline reaches players without anyone having to coerce the head.
+    A PLACEHOLDER share (``ALLOWANCE_SURPLUS_PCT``) of surplus splits equally among members whose
+    account logged in within ``ACTIVE_WEEK_LOGIN_DAYS`` — pure NPCs have no ``db_account`` and are
+    excluded for free, and a member is paid once even across multiple member personas. Paid from
+    the treasury (where the collected surplus sits); the pool is capped at the treasury balance so
+    it never overdraws. Whole-copper division; the remainder simply stays in the treasury.
+    """
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    if surplus <= 0:
+        return AllowanceResult(total_distributed=0, per_member=0, member_count=0)
+    treasury = get_or_create_treasury(organization)
+    # Read the balance under the same row lock the transfers below take, so a concurrent
+    # withdrawal can't shrink it between the pool cap and the payouts (which would abort
+    # the whole distribution instead of distributing the smaller pool).
+    treasury = OrganizationTreasury.objects.select_for_update().get(pk=treasury.pk)
+    pool = min(surplus * ALLOWANCE_SURPLUS_PCT // 100, treasury.balance)
+    if pool <= 0:
+        return AllowanceResult(total_distributed=0, per_member=0, member_count=0)
+
+    cutoff = timezone.now() - timedelta(days=ACTIVE_WEEK_LOGIN_DAYS)
+    active_sheets: dict[int, CharacterSheet] = {}
+    memberships = OrganizationMembership.objects.filter(
+        organization=organization, left_at__isnull=True, exiled_at__isnull=True
+    ).select_related("persona__character_sheet__character__db_account")
+    for membership in memberships:
+        sheet = membership.persona.character_sheet
+        if sheet is None or sheet.pk in active_sheets:
+            continue
+        if _account_active_since(sheet.character.db_account, cutoff):
+            active_sheets[sheet.pk] = sheet
+    if not active_sheets:
+        return AllowanceResult(total_distributed=0, per_member=0, member_count=0)
+
+    per_member = pool // len(active_sheets)
+    if per_member <= 0:
+        return AllowanceResult(total_distributed=0, per_member=0, member_count=len(active_sheets))
+    distributed = 0
+    for sheet in active_sheets.values():
+        transfer(
+            amount=per_member,
+            reason="house allowance",
+            from_treasury=treasury,
+            to_purse=get_or_create_purse(sheet),
+        )
+        distributed += per_member
+    return AllowanceResult(
+        total_distributed=distributed, per_member=per_member, member_count=len(active_sheets)
     )
 
 
@@ -1326,12 +1419,7 @@ def _weekly_wages() -> int:
     ):
         try:
             account = employment.character_sheet.character.db_account
-            was_active = bool(
-                account is not None
-                and account.last_login is not None
-                and account.last_login >= cutoff
-            )
-            run_weekly_employment(employment, was_active=was_active)
+            run_weekly_employment(employment, was_active=_account_active_since(account, cutoff))
             count += 1
         except Exception:
             logger.exception("weekly economy: wages failed for employment %s", employment.pk)

@@ -28,6 +28,19 @@ class CollectionResult:
 
 
 @dataclass(frozen=True)
+class AllowanceResult:
+    """Outcome of one non-discretionary allowance distribution (#2540).
+
+    ``total_distributed`` is the coppers that left the treasury; ``per_member`` is each active
+    piloted member's equal share; ``member_count`` is how many received it.
+    """
+
+    total_distributed: int
+    per_member: int
+    member_count: int
+
+
+@dataclass(frozen=True)
 class ImprovementResult:
     """Outcome of one domain-investment attempt."""
 

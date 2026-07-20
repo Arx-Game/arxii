@@ -2621,7 +2621,14 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   (weekly pool growth), `collect_org_income` (the dispatch: check → band pct → graft →
   per-stream proportional landing), `improve_org_domain` (Domain Investment check → gross
   bump + graft crackdown), `process_income_stream(stream, amount)` (landing path),
-  `settle_obligations`, `run_weekly_economy` (Sunday rollover phases)
+  `settle_obligations`, `run_weekly_economy` (Sunday rollover phases),
+  `withdraw_from_treasury(*, organization, persona, amount)` (#2540 — the discretionary-spend
+  primitive: a `can_spend_treasury`-authorized member draws treasury→purse; the treasury→member
+  outflow #930 never built. Action-driven, so inherently piloted-only; never automate it),
+  `distribute_allowance(*, organization, surplus)` (#2540 — the non-discretionary allowance rail:
+  a PLACEHOLDER `ALLOWANCE_SURPLUS_PCT` share of surplus auto-splits treasury→purse among *active
+  piloted* members [account login within `ACTIVE_WEEK_LOGIN_DAYS`; pure NPCs excluded], the head
+  cannot withhold it. Meant to fire off the collection event via the future domain dispatch)
 - **Checks (#930):** Tax Collection / Household Command (presence + Leadership + Stewardship) and Domain
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
 - **Books surface:** `GET /api/currency/org-books/{org}/` (`OrgBooksViewSet`) — treasury,
