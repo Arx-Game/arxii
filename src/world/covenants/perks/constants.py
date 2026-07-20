@@ -59,8 +59,9 @@ class Situation(models.TextChoices):
     - ``TARGET_FOCUSED_ELSEWHERE`` — the target's declared action this round
       targets someone other than the subject. Reads ``subject`` + ``target``
       + ``resolution``; False outside combat.
-    - ``ALLY_LOW_HEALTH`` — at least one of the holder's engaged
-      covenant-mates is below a module-constant health fraction (the "Last
+    - ``ALLY_LOW_HEALTH`` — at least one of the holder's co-present
+      covenant-mates (mate's own engagement irrelevant, Tehom's 2026-07-20
+      reversal) is below a module-constant health fraction (the "Last
       Bulwark" rung-1 calibration from the worked examples). Reads
       ``holder`` + ``resolution`` (group roster); False outside a resolvable
       group context.
@@ -120,8 +121,9 @@ class PerkBeneficiary(models.TextChoices):
     (Task 3).
 
     - ``SELF`` — fires only for the perk-owning vow-holder's own actions.
-    - ``COVENANT_ALLIES`` — fires for an engaged covenant-mate's action;
-      excludes the holder's own actions.
+    - ``COVENANT_ALLIES`` — fires for a co-present covenant-mate's action
+      (membership + co-presence — the mate's OWN engagement is irrelevant,
+      Tehom's 2026-07-20 reversal); excludes the holder's own actions.
     - ``WHOLE_GROUP`` — fires for anyone in the group, including the holder.
     """
 

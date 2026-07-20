@@ -216,9 +216,10 @@ def target_swayed_by_ally(ctx: SituationContext) -> bool:
     """Same condition as TARGET_DISTRACTED, applied by holder or a covenant-mate.
 
     Deliberately reads HISTORY via ``shares_covenant_with`` (ACTIVE membership
-    only), NOT the engaged+co-present "covenant-mate" rule ``perks.services``
-    uses for beneficiary group membership — see that module's docstring
-    ("What counts as a covenant-mate") for why the two questions differ.
+    only), NOT the membership+co-presence "covenant-mate" rule
+    ``perks.services`` uses for beneficiary group membership — see that
+    module's docstring ("What counts as a covenant-mate") for why the two
+    questions differ.
 
     Data source, verified: ``ConditionInstance.source_character``
     (``world/conditions/models.py:1230`` — "Character who applied this
@@ -308,17 +309,21 @@ def target_focused_elsewhere(ctx: SituationContext) -> bool:
 
 @register(Situation.ALLY_LOW_HEALTH)
 def ally_low_health(ctx: SituationContext) -> bool:
-    """Any ENGAGED covenant-mate of the holder is below ALLY_LOW_HEALTH_FRACTION.
+    """Any covenant-mate of the holder is below ALLY_LOW_HEALTH_FRACTION.
 
-    "Ally" scoping rule (explicit per #2536's ruling that perks are a benefit
-    of ACTIVE vows): a candidate mate counts only if they hold an ENGAGED
-    (``CharacterCovenantRole.engaged=True``, ``world/covenants/models.py:649``)
-    role in a covenant the holder is also actively a member of. This matches
-    Task 3's group definition (``currently_engaged_roles`` /
-    ``CharacterCovenantRole.engaged``) — an unengaged covenant-mate is "in
-    civilian garb" and does not count as a group member for perk purposes,
-    even though ``Character.shares_covenant_with`` would still say they
-    share a covenant.
+    "Ally" scoping rule (Tehom's 2026-07-20 reversal of #2536's slice-1
+    ruling): a candidate mate counts if they hold a non-departed
+    (``CharacterCovenantRole.left_at__isnull=True``,
+    ``world/covenants/models.py:649``) role in a covenant the HOLDER is also
+    actively engaged in AND are co-present in the same encounter roster
+    (below) — the mate's OWN ``engaged`` flag is irrelevant. A KO'd or
+    disengaged covenant-mate still in the fight keeps counting toward this
+    situation — Last Bulwark-style perks must fire hardest exactly when mates
+    are going down, not stop firing the moment they do (no death-spiral). This
+    matches ``services._ally_candidates``'s group definition, which this
+    function deliberately mirrors. Leaving the encounter (FLED/REMOVED) still
+    drops a mate — that's the co-presence half of the roster query below, not
+    the covenant-membership query, and is unchanged by this reversal.
 
     Data source, verified: ``CharacterVitals.health_percentage``
     (``world/vitals/models.py:100``) for every ACTIVE ``CombatParticipant`` in
@@ -330,8 +335,8 @@ def ally_low_health(ctx: SituationContext) -> bool:
     ids (``Character.active_covenant_ids()`` — no query once the handler is
     warm), and one single BATCHED ``CharacterCovenantRole`` query across
     every candidate mate's ``character_sheet`` (filtered to the holder's
-    covenant ids + ``engaged=True``) to build the engaged-mate set, compared
-    in Python against each mate's health. Three queries total, fixed.
+    covenant ids + non-departed) to build the mate set, compared in Python
+    against each mate's health. Three queries total, fixed.
     """
     participant = _resolution_participant(ctx.resolution)
     if participant is None or ctx.holder is None:
@@ -358,19 +363,18 @@ def ally_low_health(ctx: SituationContext) -> bool:
         .select_related("character_sheet__vitals")
     )
 
-    engaged_mate_sheet_ids = set(
+    mate_sheet_ids = set(
         CharacterCovenantRole.objects.filter(
             character_sheet_id__in=[m.character_sheet_id for m in mates],
             covenant_id__in=holder_covenant_ids,
-            engaged=True,
             left_at__isnull=True,
         ).values_list("character_sheet_id", flat=True)
     )
-    if not engaged_mate_sheet_ids:
+    if not mate_sheet_ids:
         return False
 
     for mate in mates:
-        if mate.character_sheet_id not in engaged_mate_sheet_ids:
+        if mate.character_sheet_id not in mate_sheet_ids:
             continue
         try:
             vitals = mate.character_sheet.vitals

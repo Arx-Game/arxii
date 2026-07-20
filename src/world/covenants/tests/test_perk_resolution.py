@@ -13,6 +13,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.constants import ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.round_context import CombatRoundContext
 from world.conditions.factories import ConditionInstanceFactory
@@ -202,14 +203,47 @@ class BeneficiaryScopingTests(TestCase):
         self.assertEqual([f.perk for f in fired_for_subject], [perk])
         self.assertEqual(fired_for_subject[0].holder, self.mate_sheet)
 
-    def test_unengaged_mate_perk_does_not_fire(self) -> None:
-        """The ruling: an unengaged covenant-mate is 'in civilian garb'."""
+    def test_unengaged_mate_perk_still_fires(self) -> None:
+        """Reversal (Tehom 2026-07-20): holder engagement is IRRELEVANT for ally
+        group-perks. A KO'd/disengaged covenant-mate still in the encounter keeps
+        contributing their group perks — membership + co-presence is the scope,
+        so losing allies mid-fight never weakens the survivors (no death-spiral).
+        The SUBJECT's own engaged vow is still required (see
+        test_unengaged_role_grants_no_perks — the stark-power rule, untouched).
+        """
         self._mate_membership(engaged=False)
+        perk = VowSituationalPerkFactory(
+            covenant_role=self.role,
+            beneficiary=PerkBeneficiary.COVENANT_ALLIES,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+        )
+        # Subject acting: mate's COVENANT_ALLIES perk fires (mate benefits subject).
+        fired = self._fire()
+        self.assertEqual([f.perk for f in fired], [perk])
+        self.assertEqual(fired[0].holder, self.mate_sheet)
+
+        # Mate acting on themselves: their own COVENANT_ALLIES perk does NOT fire.
+        mate_resolution = CombatRoundContext(self.mate_participant)
+        fired_for_mate = applicable_perks(
+            self.mate_sheet,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            resolution=mate_resolution,
+            target=None,
+        )
+        self.assertEqual(fired_for_mate, [])
+
+    def test_mate_who_left_encounter_perk_does_not_fire(self) -> None:
+        """Co-presence still gates: a mate who FLED/was REMOVED from the
+        encounter is no longer grouped with the subject, so their perk does
+        not contribute even though membership + engagement are unaffected."""
+        self._mate_membership(engaged=True)
         VowSituationalPerkFactory(
             covenant_role=self.role,
             beneficiary=PerkBeneficiary.COVENANT_ALLIES,
             effect_kind=PerkEffectKind.POWER_BONUS,
         )
+        self.mate_participant.status = ParticipantStatus.FLED
+        self.mate_participant.save()
         fired = self._fire()
         self.assertEqual(fired, [])
 
