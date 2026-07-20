@@ -1267,3 +1267,245 @@ class TotalThreadLevelAcrossAllKindsTests(TestCase):
         from world.magic.services.threads import total_thread_level_across_all_kinds
 
         self.assertEqual(total_thread_level_across_all_kinds(self.sheet), 0)
+
+
+class VowSituationalPowerTermTests(TestCase):
+    """vow_situational_power_term: per-vow situational-perk POWER_BONUS (#2536, Task 4).
+
+    Built in ``setUp`` rather than ``setUpTestData`` — factories here create
+    Evennia ``ObjectDB`` instances (``DbHolder``, not deepcopyable), the same
+    rationale as ``test_perk_resolution.py``/``test_perk_evaluators.py``.
+    """
+
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+
+    def _ctx(self, technique=None, situation_ctx=None):
+        from world.magic.services.power_terms import PowerTermContext
+
+        return PowerTermContext(
+            sheet=self.sheet,
+            technique=technique,
+            applicable_threads=[],
+            situation_ctx=situation_ctx,
+        )
+
+    def _thread(self, level):
+        from world.magic.factories import ThreadFactory
+
+        return ThreadFactory(owner=self.sheet, level=level)
+
+    def _engage_role(self, *, sheet=None, engaged=True, covenant=None, role=None):
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+
+        role = role or CovenantRoleFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=sheet or self.sheet,
+            covenant=covenant or CovenantFactory(),
+            covenant_role=role,
+            engaged=engaged,
+        )
+        return role
+
+    def _combat_room_with_positions(self):
+        from evennia import create_object
+
+        from world.areas.positioning.services import connect_positions, create_position
+
+        room = create_object("typeclasses.rooms.Room", key="VowPerkCombatRoom", nohome=True)
+        pos_a = create_position(room, "pos_a")
+        pos_b = create_position(room, "pos_b")
+        connect_positions(pos_a, pos_b, is_passable=True)
+        return room, pos_a, pos_b
+
+    def test_no_technique_returns_zero(self):
+        from world.magic.services.power_terms import vow_situational_power_term
+
+        self._thread(level=10)
+        self._engage_role()
+        self.assertEqual(vow_situational_power_term(self._ctx(None)), 0)
+
+    def test_no_engaged_roles_returns_zero(self):
+        from world.magic.services.power_terms import vow_situational_power_term
+
+        self._thread(level=10)
+        technique = TechniqueFactory()
+        self.assertEqual(vow_situational_power_term(self._ctx(technique)), 0)
+
+    def test_perk_fires_with_combat_situation_ctx_exact_arithmetic(self):
+        """AT_RANGE (a combat-positioning situation) holds; the fired perk's
+        magnitude scales by the subject's total thread level, int-truncated —
+        7 * 13 / 10 = 9.1 -> 9 (mirrors covenant_role_specialty_power_term's
+        truncation style)."""
+        from world.areas.positioning.services import place_in_position
+        from world.combat.factories import (
+            CombatOpponentFactory,
+            CombatParticipantFactory,
+            EngagementLockFactory,
+        )
+        from world.combat.models import CombatEncounter
+        from world.combat.round_context import CombatRoundContext
+        from world.covenants.factories import (
+            VowSituationalPerkFactory,
+            VowSituationalPerkSituationFactory,
+        )
+        from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+        from world.magic.services.power_terms import vow_situational_power_term
+        from world.scenes.factories import SceneFactory
+
+        room, pos_a, pos_b = self._combat_room_with_positions()
+        self.character.location = room
+        self.character.save()
+        place_in_position(self.character, pos_a)
+
+        scene = SceneFactory(location=room)
+        encounter = CombatEncounter.objects.create(scene=scene, room=room)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+
+        opponent = CombatOpponentFactory(encounter=encounter)
+        place_in_position(opponent.objectdb, pos_b)  # not adjacent -> AT_RANGE
+        EngagementLockFactory(encounter=encounter, participant=participant, opponent=opponent)
+
+        role = self._engage_role()
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            magnitude_tenths=13,
+        )
+        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.AT_RANGE)
+
+        self._thread(level=7)
+        technique = TechniqueFactory()
+        ctx = self._ctx(technique, situation_ctx=CombatRoundContext(participant))
+        self.assertEqual(vow_situational_power_term(ctx), 9)
+
+    def test_situations_unmet_returns_zero(self):
+        """Same perk as above, but the opponent shares the subject's position
+        (IN_MELEE, not AT_RANGE) -> the perk's base situation never holds."""
+        from world.areas.positioning.services import place_in_position
+        from world.combat.factories import (
+            CombatOpponentFactory,
+            CombatParticipantFactory,
+            EngagementLockFactory,
+        )
+        from world.combat.models import CombatEncounter
+        from world.combat.round_context import CombatRoundContext
+        from world.covenants.factories import (
+            VowSituationalPerkFactory,
+            VowSituationalPerkSituationFactory,
+        )
+        from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+        from world.magic.services.power_terms import vow_situational_power_term
+        from world.scenes.factories import SceneFactory
+
+        room, pos_a, _pos_b = self._combat_room_with_positions()
+        self.character.location = room
+        self.character.save()
+        place_in_position(self.character, pos_a)
+
+        scene = SceneFactory(location=room)
+        encounter = CombatEncounter.objects.create(scene=scene, room=room)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+
+        opponent = CombatOpponentFactory(encounter=encounter)
+        place_in_position(opponent.objectdb, pos_a)  # adjacent -> IN_MELEE, not AT_RANGE
+        EngagementLockFactory(encounter=encounter, participant=participant, opponent=opponent)
+
+        role = self._engage_role()
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            magnitude_tenths=13,
+        )
+        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.AT_RANGE)
+
+        self._thread(level=7)
+        technique = TechniqueFactory()
+        ctx = self._ctx(technique, situation_ctx=CombatRoundContext(participant))
+        self.assertEqual(vow_situational_power_term(ctx), 0)
+
+    def test_non_combat_cast_with_db_state_situation_still_fires(self):
+        """DURING_NEGOTIATION is a DB-state situation (an active Scene, no combat
+        resolution) -> fires even with ``situation_ctx=None``."""
+        from evennia import create_object
+
+        from world.covenants.factories import (
+            VowSituationalPerkFactory,
+            VowSituationalPerkSituationFactory,
+        )
+        from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+        from world.magic.services.power_terms import vow_situational_power_term
+        from world.scenes.factories import SceneFactory
+
+        room = create_object("typeclasses.rooms.Room", key="VowPerkNegotiationRoom", nohome=True)
+        self.character.location = room
+        self.character.save()
+        SceneFactory(location=room)
+
+        role = self._engage_role()
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            magnitude_tenths=20,
+        )
+        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.DURING_NEGOTIATION)
+
+        self._thread(level=5)
+        technique = TechniqueFactory()
+        ctx = self._ctx(technique, situation_ctx=None)
+        # 5 * 20 / 10 = 10
+        self.assertEqual(vow_situational_power_term(ctx), 10)
+
+    def test_ally_beneficiary_perk_boosts_subject_cast(self):
+        """A COVENANT_ALLIES perk held by an engaged covenant-mate, co-present in
+        the same encounter, fires on the SUBJECT's cast (scaled by the SUBJECT's
+        own thread level, not the mate's)."""
+        from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+        from world.combat.round_context import CombatRoundContext
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+            VowSituationalPerkFactory,
+        )
+        from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind
+        from world.magic.services.power_terms import vow_situational_power_term
+
+        covenant = CovenantFactory()
+        mate_role = CovenantRoleFactory(covenant_type=covenant.covenant_type)
+        subject_role = CovenantRoleFactory(covenant_type=covenant.covenant_type)
+        mate_sheet = CharacterSheetFactory()
+
+        encounter = CombatEncounterFactory()
+        subject_participant = CombatParticipantFactory(
+            encounter=encounter, character_sheet=self.sheet
+        )
+        CombatParticipantFactory(encounter=encounter, character_sheet=mate_sheet)
+
+        # Subject needs SOME engaged role (in this covenant) before an ally's
+        # perk can reach them at all — see applicable_perks' _ally_candidates.
+        self._engage_role(sheet=self.sheet, covenant=covenant, role=subject_role)
+        CharacterCovenantRoleFactory(
+            character_sheet=mate_sheet, covenant=covenant, covenant_role=mate_role, engaged=True
+        )
+
+        VowSituationalPerkFactory(
+            covenant_role=mate_role,
+            beneficiary=PerkBeneficiary.COVENANT_ALLIES,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            magnitude_tenths=10,
+        )
+
+        self._thread(level=6)  # subject's own thread level, not the mate's
+        technique = TechniqueFactory()
+        ctx = self._ctx(technique, situation_ctx=CombatRoundContext(subject_participant))
+        # 6 * 10 / 10 = 6 -- proves the mate's COVENANT_ALLIES perk fired for the subject
+        self.assertEqual(vow_situational_power_term(ctx), 6)

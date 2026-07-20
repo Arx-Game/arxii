@@ -40,11 +40,25 @@ class ApplicableThread:
 
 @dataclass(frozen=True)
 class PowerTermContext:
-    """Immutable snapshot of cast context passed to every power term provider."""
+    """Immutable snapshot of cast context passed to every power term provider.
+
+    ``situation_ctx`` (#2536, Task 4): the SUBJECT's live resolution context —
+    a ``CombatRoundContext`` (``world/combat/round_context.py``) when the cast
+    is resolving inside combat, or ``None`` for a non-combat/standalone cast.
+    Threaded straight through from ``_derive_power``'s own ``situation_ctx``
+    parameter to ``perks.services.applicable_perks`` via
+    ``vow_situational_power_term`` below — combat-positioning situations
+    (``AT_RANGE``/``IN_MELEE``/...) only ever hold when this is a real
+    ``CombatRoundContext``; DB-state situations (``TARGET_DISTRACTED``,
+    ``DURING_NEGOTIATION``, ...) hold regardless. Defaulted so every existing
+    constructor (non-combat call sites, every test fixture) stays valid
+    unchanged.
+    """
 
     sheet: CharacterSheet
     technique: Technique | None
     applicable_threads: Sequence[ApplicableThread]
+    situation_ctx: object | None = None
 
 
 PowerTermProvider = Callable[[PowerTermContext], int]
@@ -342,6 +356,87 @@ def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
     return int(total)
 
 
+def vow_situational_power_term(ctx: PowerTermContext) -> int:
+    """Per-vow situational-perk power boost (#2536 slice 1, Layer 4).
+
+    Σ over every fired ``POWER_BONUS`` perk (self + engaged covenant-mate
+    beneficiaries — see ``perks.services.applicable_perks``) of
+    ``total_thread_level_across_all_kinds(ctx.sheet) × magnitude_tenths /
+    10``, int-truncated — mirrors ``covenant_role_specialty_power_term``'s
+    arithmetic exactly (same thread-level scaling, same integer truncation
+    after summing in ``Decimal``).
+
+    Guards: no technique → 0 (perks are cast-scoped); no engaged role on the
+    subject → 0 (cheap exit before the resolution query —
+    ``applicable_perks``'s own ``_ally_candidates`` also requires the subject
+    to hold at least one engaged role before an ally's ``WHOLE_GROUP``/
+    ``COVENANT_ALLIES`` perk can reach them, so this guard never skips a case
+    ``applicable_perks`` would otherwise have fired).
+
+    ``resolution=ctx.situation_ctx`` — the live ``CombatRoundContext`` in
+    combat (threaded by ``resolve_combat_technique``,
+    ``world/combat/services.py``), or ``None`` outside combat; DB-state
+    situations still evaluate correctly with ``None`` (see
+    ``SituationContext``'s docstring).
+
+    ``target=None`` — **slice-1 limitation, documented deliberately**: no
+    ``PowerTermContext`` construction site threads the cast's target sheet
+    (``_derive_power``/``use_technique`` take a ``targets: list[ObjectDB]``
+    for reactive-event/AoE purposes, but never forward it into the TERM
+    stage). Target-keyed situations (``TARGET_DISTRACTED``,
+    ``TARGET_SWAYED_BY_ALLY``, ``TARGET_FOCUSED_ELSEWHERE``,
+    ``TARGET_FAVORABLY_DISPOSED``) therefore CANNOT fire for ``POWER_BONUS``
+    in slice 1 — a perk authored with one of those as its only situation is
+    inert for power bonuses until a future slice threads a target sheet
+    through this seam. Non-target situations (``AT_RANGE``/``IN_MELEE``/
+    ``SURROUNDED``/``ALLY_LOW_HEALTH``/``DURING_NEGOTIATION``) are unaffected.
+
+    ATTRIBUTABILITY (ruling 1): this provider's ledger TERM-stage label is the
+    static ``_power_term_label``-derived string ("vow situational power"),
+    the SAME limitation every other multi-source provider in this file has
+    (the TERM loop in ``_derive_power`` calls ``_power_term_label(provider)``
+    once per provider function, not per return value — there is no channel
+    for a provider to report which of its several internal contributions
+    produced the total). The per-perk NAME the player sees must come from the
+    announce path (Task 6: ``perks.services.announce_fired_perks``), not the
+    power ledger. See this task's report for the precise slice-2 refactor
+    this implies if the ledger ever needs dynamic per-source TERM labels.
+    """
+    from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
+    from world.covenants.perks.services import applicable_perks  # noqa: PLC0415
+    from world.magic.services.threads import (  # noqa: PLC0415
+        total_thread_level_across_all_kinds,
+    )
+
+    if ctx.technique is None:
+        return 0
+    character = ctx.sheet.character
+    if not hasattr(character, "covenant_roles"):
+        return 0
+    if not character.covenant_roles.currently_engaged_roles():
+        return 0
+
+    fired = applicable_perks(
+        ctx.sheet,
+        effect_kind=PerkEffectKind.POWER_BONUS,
+        resolution=ctx.situation_ctx,
+        target=None,
+    )
+    if not fired:
+        return 0
+
+    total_threads = total_thread_level_across_all_kinds(ctx.sheet)
+    if total_threads == 0:
+        return 0
+
+    from decimal import Decimal  # noqa: PLC0415
+
+    total = Decimal(0)
+    for firing in fired:
+        total += Decimal(total_threads) * firing.magnitude_tenths / 10
+    return int(total)
+
+
 _PROVIDERS: list[PowerTermProvider] = [
     level_power_term,
     aura_power_term,
@@ -350,6 +445,7 @@ _PROVIDERS: list[PowerTermProvider] = [
     enhancement_overlap_term,
     covenant_role_blend_power_term,
     covenant_role_specialty_power_term,
+    vow_situational_power_term,
 ]
 
 

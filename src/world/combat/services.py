@@ -1184,6 +1184,7 @@ def resolve_combat_technique(
     - NARRATIVE_ONLY: cosmetic surfacing
     - VITAL_BONUS: already wired through recompute_max_health_with_threads
     """
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.magic.services import use_technique  # noqa: PLC0415
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
 
@@ -1233,6 +1234,12 @@ def resolve_combat_technique(
             + sig_intensity_delta
             + _vulnerability_intensity_bonus(action)
         ),
+        # #2536 Task 4: thread the live round context so situational-perk
+        # POWER_BONUS providers can read combat-positioning situations
+        # (AT_RANGE/IN_MELEE/SURROUNDED/...). Cheap to build — CombatRoundContext
+        # just wraps the already-resolved participant (its encounter rides the
+        # SharedMemoryModel identity map), no extra query.
+        situation_ctx=CombatRoundContext(participant),
     )
 
     return _build_combat_result(
