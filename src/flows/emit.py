@@ -78,21 +78,33 @@ def _gather_triggers(event_name: str, location: Any) -> list[Any]:
 
 
 def _trigger_should_fire(trigger: Any, payload: Any, event_name: str) -> bool:
-    """Whether ``trigger`` passes its filter and is under its dispatch usage cap."""
+    """Whether ``trigger`` passes its base + additional filters and is under its dispatch usage cap.
+
+    Evaluates two filters with AND semantics:
+    - ``trigger_definition.base_filter_condition`` — authored on the definition,
+      the base gate every derived trigger inherits.
+    - ``additional_filter_condition`` — per-instance conditions that further
+      refine when this specific trigger activates (the field's help_text:
+      "Optional JSON condition to further refine when this trigger activates").
+
+    Both use ``evaluate_filter()`` (the live DSL), not the dead
+    ``FlowEvent.matches_conditions()`` simple-dict-equality path.
+    """
+    base = trigger.trigger_definition.base_filter_condition
+    additional = trigger.additional_filter_condition
     try:
-        matched = evaluate_filter(
-            trigger.additional_filter_condition,
-            payload,
-            self_ref=trigger.obj,
-        )
+        if base is not None:
+            if not evaluate_filter(base, payload, self_ref=trigger.obj):
+                return False
+        if additional is not None:
+            if not evaluate_filter(additional, payload, self_ref=trigger.obj):
+                return False
     except FilterPathError:
         logger.warning(
             "FilterPathError on trigger %s during dispatch of %s",
             trigger.pk,
             event_name,
         )
-        return False
-    if not matched:
         return False
 
     handler = trigger.obj.trigger_handler
