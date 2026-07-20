@@ -183,3 +183,10 @@ ACTIVE_WEEK_LOGIN_DAYS = 8
 # House allowance (#2540): the non-discretionary share of a collection's surplus that
 # auto-splits among active piloted members. PLACEHOLDER — magnitude is Apostate's tuning call.
 ALLOWANCE_SURPLUS_PCT = 50
+
+# Distribution dispatch (#2540, ruled 2026-07-20): debt principal services FIRST as a
+# flat share of the collection's gross — a mandatory allowance to the creditor — before
+# the member allowance draws from the post-debt remainder. Complements (does not
+# replace) the weekly at-source ARREARS withholding (#927): arrears = interest, this =
+# principal. PLACEHOLDER — magnitude is Apostate's tuning call.
+DEBT_PRINCIPAL_GROSS_PCT = 13

@@ -2663,7 +2663,13 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   `distribute_allowance(*, organization, surplus)` (#2540 — the non-discretionary allowance rail:
   a PLACEHOLDER `ALLOWANCE_SURPLUS_PCT` share of surplus auto-splits treasury→purse among *active
   piloted* members [account login within `ACTIVE_WEEK_LOGIN_DAYS`; pure NPCs excluded], the head
-  cannot withhold it. Meant to fire off the collection event via the future domain dispatch)
+  cannot withhold it),
+  `collect_and_distribute(*, organization, character)` (#2540, ruled 2026-07-20 — THE distribution
+  dispatch: collect → `service_debt_principal` [a mandatory PLACEHOLDER `DEBT_PRINCIPAL_GROSS_PCT`
+  of GROSS toward debt principal, oldest first, diverting debts skipped, capped by treasury; a
+  catastrophe funds no debt service; complements the weekly at-source ARREARS/interest withholding
+  #927] → `distribute_allowance` on the post-debt remainder of what landed; each phase
+  independently atomic; the rest stays in the treasury. Returns `DistributionResult`)
 - **Checks (#930):** Tax Collection / Household Command (presence + Leadership + Stewardship) and Domain
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
 - **Books surface:** `GET /api/currency/org-books/{org}/` (`OrgBooksViewSet`) — treasury,
