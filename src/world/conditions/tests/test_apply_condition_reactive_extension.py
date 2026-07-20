@@ -62,9 +62,10 @@ class ApplyConditionInstallsTriggersTests(TestCase):
 
         self.assertEqual(Trigger.objects.filter(obj=sheet.character).count(), 2)
 
-    def test_base_filter_condition_copied_to_installed_trigger(self):
-        """_install_reactive_side_effects copies TriggerDefinition.base_filter_condition
-        to Trigger.additional_filter_condition so emit_event can evaluate it."""
+    def test_base_filter_condition_available_via_trigger_definition(self):
+        """_install_reactive_side_effects creates Triggers whose base_filter_condition
+        is accessible via trigger_definition — emit_event evaluates it directly
+        (#2531: two-stage base + additional filter evaluation, no copy needed)."""
         condition = ConditionTemplateFactory(name="T10 filter copy test")
         flow = FlowDefinitionFactory(name="T10 filter copy flow")
         filter_cond = {"path": "target", "op": "==", "value": "self"}
@@ -81,11 +82,16 @@ class ApplyConditionInstallsTriggersTests(TestCase):
 
         self.assertTrue(result.success)
         trigger = Trigger.objects.get(obj=sheet.character, trigger_definition=trigger_def)
+        # The base filter lives on the definition, not copied to additional_filter_condition.
         self.assertEqual(
-            trigger.additional_filter_condition,
+            trigger.trigger_definition.base_filter_condition,
             filter_cond,
-            "base_filter_condition must be copied to Trigger.additional_filter_condition"
-            " on auto-install",
+            "base_filter_condition must be set on the TriggerDefinition",
+        )
+        self.assertIsNone(
+            trigger.additional_filter_condition,
+            "additional_filter_condition should be None when no per-instance filter is set"
+            " (#2531: base filter is read from the definition, not copied)",
         )
 
 
