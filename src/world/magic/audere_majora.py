@@ -19,6 +19,10 @@ from world.magic.audere import (
     AbstractPendingOffer,
     _check_intensity_gate,
 )
+from world.magic.models.techniques import (
+    AbstractAppliedCondition,
+    AbstractCapabilityGrant,
+)
 from world.progression.models.advancement import AbstractClassLevelAdvancement
 from world.progression.selectors import current_path_for_character
 from world.societies.renown_config import RenownAwardConfig
@@ -98,6 +102,14 @@ class PendingAudereMajoraOffer(AbstractPendingOffer):
         AudereMajoraThreshold,
         on_delete=models.PROTECT,
         related_name="pending_offers",
+    )
+    faith_variant = models.ForeignKey(
+        "AudereMajoraFaithVariant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pending_offers",
+        help_text="Faith variant selected at offer creation; null = no faith coupling.",
     )
 
     class Meta:
@@ -517,6 +529,8 @@ class AudereMajoraCrossingResult:
     chosen_path_name: str = ""
     advisory_text: str = ""
     declaration_interaction_id: int | None = None
+    faith_coupling_applied: bool = False
+    faith_being_name: str = ""
 
 
 def _primary_class_level(character: ObjectDB):
@@ -728,3 +742,96 @@ def end_audere_majora(character: ObjectDB) -> None:
     if template is None:
         return
     remove_condition(character, template)
+
+
+# =============================================================================
+# Faith Variant (#2360)
+# =============================================================================
+
+
+class AudereMajoraFaithVariant(SharedMemoryModel):
+    """Faith-specific ceremony override for a crossing threshold (#2360).
+
+    When a crossing character has high devotion to a being whose pool is
+    sufficient, this variant overrides the threshold's vision_text and
+    manifestation_text and grants a mechanical bonus (condition payload).
+    Pool is spent at crossing time (not offer creation), so a declined
+    offer costs nothing.
+    """
+
+    threshold = models.ForeignKey(
+        AudereMajoraThreshold,
+        on_delete=models.CASCADE,
+        related_name="faith_variants",
+    )
+    being = models.ForeignKey(
+        "worship.WorshippedBeing",
+        on_delete=models.PROTECT,
+        related_name="audere_majora_faith_variants",
+    )
+    vision_text = models.TextField(
+        help_text="Shown ONLY to the crossing player. Spoiler-private.",
+    )
+    manifestation_text = models.TextField(
+        help_text="Broadcast to the room when the offer fires.",
+    )
+    resonance_pool_cost = models.PositiveIntegerField(
+        help_text="Spent from being.resonance_pool when this variant fires (at crossing time).",
+    )
+    favor_threshold = models.PositiveIntegerField(default=50)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["threshold", "being"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["threshold", "being"],
+                name="unique_faith_variant_per_threshold_being",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"FaithVariant({self.threshold} / {self.being})"
+
+
+class AudereMajoraFaithVariantCapabilityGrant(AbstractCapabilityGrant):
+    """Capability grant payload for an AudereMajoraFaithVariant (#2360).
+
+    INERT until a capability-read-path issue is built — mirrors
+    SignatureMotifBonusCapabilityGrant inertness.
+    """
+
+    faith_variant = models.ForeignKey(
+        AudereMajoraFaithVariant,
+        on_delete=models.CASCADE,
+        related_name="capability_grants",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["faith_variant", "capability"],
+                name="faith_variant_cap_grant_unique",
+            ),
+        ]
+
+
+class AudereMajoraFaithVariantAppliedCondition(AbstractAppliedCondition):
+    """Applied condition payload for an AudereMajoraFaithVariant (#2360).
+
+    The MVP mechanical bonus surface for faith-colored crossings.
+    """
+
+    faith_variant = models.ForeignKey(
+        AudereMajoraFaithVariant,
+        on_delete=models.CASCADE,
+        related_name="condition_applications",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["faith_variant", "condition", "target_kind"],
+                name="faith_variant_applied_condition_unique",
+            ),
+        ]
