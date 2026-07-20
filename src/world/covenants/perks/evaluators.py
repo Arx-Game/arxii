@@ -92,6 +92,13 @@ def _melee_state(ctx: SituationContext) -> bool | None:
     for every locked opponent's position at once (never one query per lock —
     "no queries in loops"). Three total queries: current_position, the lock
     list, the batched opponent-position lookup.
+
+    Caveat: ``EngagementLock.opponent`` FKs to ``CombatOpponent``, an
+    NPC-only model (``world/combat/models.py:378``) — no PC-vs-PC
+    ``EngagementLock`` row shape exists; PvP tracks engagement via the
+    separate ``Clash``/``ClashContribution`` family instead. So AT_RANGE and
+    IN_MELEE are silently NPC-opponent-only, matching how the combat
+    engagement model works today.
     """
     participant = _resolution_participant(ctx.resolution)
     if participant is None:
@@ -144,6 +151,12 @@ def surrounded(ctx: SituationContext) -> bool:
     EngagementLock IS the queryable "currently fighting me" relation and
     stays a single ``.count()`` query; the heavier position-graph batch that
     AT_RANGE/IN_MELEE already pay for is not duplicated here. One query.
+
+    Caveat: like AT_RANGE/IN_MELEE (see ``_melee_state``), ``EngagementLock``
+    only ever tracks PC-vs-NPC engagement (``.opponent`` FKs to the NPC-only
+    ``CombatOpponent`` model) — PvP uses ``Clash`` instead. SURROUNDED is
+    silently NPC-opponent-only, even though "surrounded" reads as a general
+    term.
     """
     participant = _resolution_participant(ctx.resolution)
     if participant is None:
@@ -168,7 +181,9 @@ def _distraction_condition_instance(target_character: object) -> ConditionInstan
     per-vow specialties (#2443) and situational perks (#2536) target",
     ``world/magic/constants.py:20``). An active (``resolved_at`` null)
     condition on *target_character* whose applying technique carries the
-    DISTRACTION or CHARM ``TechniqueFunction`` tag. One query.
+    DISTRACTION or CHARM ``TechniqueFunction`` tag. One query. ``.distinct()``
+    guards against the M2M-shaped join (``function_tags``) returning
+    duplicate ``ConditionInstance`` rows when a technique carries both tags.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.magic.constants import TechniqueFunction  # noqa: PLC0415
@@ -183,6 +198,7 @@ def _distraction_condition_instance(target_character: object) -> ConditionInstan
             ],
         )
         .select_related("source_character")
+        .distinct()
         .first()
     )
 
@@ -287,15 +303,30 @@ def target_focused_elsewhere(ctx: SituationContext) -> bool:
 
 @register(Situation.ALLY_LOW_HEALTH)
 def ally_low_health(ctx: SituationContext) -> bool:
-    """Any of the holder's engaged covenant-mates is below ALLY_LOW_HEALTH_FRACTION.
+    """Any ENGAGED covenant-mate of the holder is below ALLY_LOW_HEALTH_FRACTION.
+
+    "Ally" scoping rule (explicit per #2536's ruling that perks are a benefit
+    of ACTIVE vows): a candidate mate counts only if they hold an ENGAGED
+    (``CharacterCovenantRole.engaged=True``, ``world/covenants/models.py:649``)
+    role in a covenant the holder is also actively a member of. This matches
+    Task 3's group definition (``currently_engaged_roles`` /
+    ``CharacterCovenantRole.engaged``) — an unengaged covenant-mate is "in
+    civilian garb" and does not count as a group member for perk purposes,
+    even though ``Character.shares_covenant_with`` would still say they
+    share a covenant.
 
     Data source, verified: ``CharacterVitals.health_percentage``
     (``world/vitals/models.py:100``) for every ACTIVE ``CombatParticipant`` in
     the subject's resolution encounter (the only queryable roster available
-    off ``resolution``), filtered to covenant-mates of ``holder`` via
-    ``Character.shares_covenant_with`` (cached-handler read, no extra query
-    per candidate). One query for the roster (with ``select_related`` to
-    avoid N+1 on vitals); ``shares_covenant_with`` reads the cached handler.
+    off ``resolution``). Membership is resolved with a FIXED number of
+    queries regardless of roster size (never a query inside a Python loop —
+    "no queries in loops"): one roster query (``select_related`` to avoid
+    N+1 on vitals), one cached-handler read of the holder's active covenant
+    ids (``Character.active_covenant_ids()`` — no query once the handler is
+    warm), and one single BATCHED ``CharacterCovenantRole`` query across
+    every candidate mate's ``character_sheet`` (filtered to the holder's
+    covenant ids + ``engaged=True``) to build the engaged-mate set, compared
+    in Python against each mate's health. Three queries total, fixed.
     """
     participant = _resolution_participant(ctx.resolution)
     if participant is None or ctx.holder is None:
@@ -304,21 +335,37 @@ def ally_low_health(ctx: SituationContext) -> bool:
     if holder_character is None:
         return False
 
+    holder_covenant_ids = holder_character.active_covenant_ids()
+    if not holder_covenant_ids:
+        return False
+
     from world.combat.constants import ParticipantStatus  # noqa: PLC0415
     from world.combat.models import CombatParticipant as _CombatParticipant  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
 
-    mates = (
+    mates = list(
         _CombatParticipant.objects.filter(
             encounter_id=participant.encounter_id,
             status=ParticipantStatus.ACTIVE,
         )
         .exclude(character_sheet=ctx.holder)
-        .select_related("character_sheet__vitals", "character_sheet__character")
+        .select_related("character_sheet__vitals")
     )
+
+    engaged_mate_sheet_ids = set(
+        CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=[m.character_sheet_id for m in mates],
+            covenant_id__in=holder_covenant_ids,
+            engaged=True,
+            left_at__isnull=True,
+        ).values_list("character_sheet_id", flat=True)
+    )
+    if not engaged_mate_sheet_ids:
+        return False
+
     for mate in mates:
-        mate_character = mate.character_sheet.character
-        if mate_character is None or not holder_character.shares_covenant_with(mate_character):
+        if mate.character_sheet_id not in engaged_mate_sheet_ids:
             continue
         try:
             vitals = mate.character_sheet.vitals

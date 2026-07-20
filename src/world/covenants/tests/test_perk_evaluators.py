@@ -12,7 +12,9 @@ would break ``setUpTestData``'s deepcopy (same rationale as
 
 from __future__ import annotations
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from evennia import create_object
 
 from world.areas.positioning.services import connect_positions, create_position, place_in_position
@@ -259,7 +261,13 @@ class TargetFocusedElsewhereEvaluatorTests(TestCase):
 
 
 class AllyLowHealthEvaluatorTests(TestCase):
-    """ALLY_LOW_HEALTH: an engaged covenant-mate's health falls below the fraction."""
+    """ALLY_LOW_HEALTH: an ENGAGED covenant-mate's health falls below the fraction.
+
+    "Ally" is scoped to a covenant-mate holding an ENGAGED role in a covenant
+    the holder is also actively a member of (#2536 ruling: perks are a
+    benefit of ACTIVE vows — an unengaged covenant-mate is "in civilian
+    garb" and does not count).
+    """
 
     def setUp(self) -> None:
         self.covenant = CovenantFactory()
@@ -268,9 +276,6 @@ class AllyLowHealthEvaluatorTests(TestCase):
         self.mate_sheet = CharacterSheetFactory()
         CharacterCovenantRoleFactory(
             character_sheet=self.holder_sheet, covenant=self.covenant, covenant_role=self.role
-        )
-        CharacterCovenantRoleFactory(
-            character_sheet=self.mate_sheet, covenant=self.covenant, covenant_role=self.role
         )
         self.encounter = CombatEncounterFactory()
         self.holder_participant = CombatParticipantFactory(
@@ -284,17 +289,95 @@ class AllyLowHealthEvaluatorTests(TestCase):
             holder=self.holder_sheet, subject=self.holder_sheet, target=None, resolution=resolution
         )
 
-    def test_true_when_mate_below_fraction(self) -> None:
+    def _mate_membership(self, *, engaged: bool) -> None:
+        CharacterCovenantRoleFactory(
+            character_sheet=self.mate_sheet,
+            covenant=self.covenant,
+            covenant_role=self.role,
+            engaged=engaged,
+        )
+
+    def test_true_when_engaged_mate_below_fraction(self) -> None:
+        self._mate_membership(engaged=True)
         CharacterVitals.objects.create(character_sheet=self.mate_sheet, health=10, max_health=100)
         self.assertTrue(evaluators.ally_low_health(self._ctx(self.resolution)))
 
     def test_false_when_mate_healthy(self) -> None:
+        self._mate_membership(engaged=True)
         CharacterVitals.objects.create(character_sheet=self.mate_sheet, health=90, max_health=100)
         self.assertFalse(evaluators.ally_low_health(self._ctx(self.resolution)))
 
+    def test_false_when_mate_unengaged(self) -> None:
+        """An unengaged covenant-mate ("civilian garb") does not count as an ally."""
+        self._mate_membership(engaged=False)
+        CharacterVitals.objects.create(character_sheet=self.mate_sheet, health=10, max_health=100)
+        self.assertFalse(evaluators.ally_low_health(self._ctx(self.resolution)))
+
     def test_missing_context_returns_false(self) -> None:
+        self._mate_membership(engaged=True)
         CharacterVitals.objects.create(character_sheet=self.mate_sheet, health=10, max_health=100)
         self.assertFalse(evaluators.ally_low_health(self._ctx(None)))
+
+
+class AllyLowHealthQueryBudgetTests(TestCase):
+    """ALLY_LOW_HEALTH resolves membership with a FIXED query count (Task 2 review Important #1).
+
+    Regression test for the N+1 previously caused by calling
+    ``shares_covenant_with`` once per candidate mate inside the evaluator's
+    loop — the query count must not scale with the number of mates.
+    """
+
+    def setUp(self) -> None:
+        self.covenant = CovenantFactory()
+        self.role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
+        self.holder_sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=self.holder_sheet, covenant=self.covenant, covenant_role=self.role
+        )
+        self.encounter = CombatEncounterFactory()
+        self.holder_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.holder_sheet
+        )
+        self.resolution = CombatRoundContext(self.holder_participant)
+
+    def _ctx(self) -> SituationContext:
+        return SituationContext(
+            holder=self.holder_sheet,
+            subject=self.holder_sheet,
+            target=None,
+            resolution=self.resolution,
+        )
+
+    def _add_engaged_mates(self, count: int) -> None:
+        for _ in range(count):
+            mate_sheet = CharacterSheetFactory()
+            CharacterCovenantRoleFactory(
+                character_sheet=mate_sheet,
+                covenant=self.covenant,
+                covenant_role=self.role,
+                engaged=True,
+            )
+            CombatParticipantFactory(encounter=self.encounter, character_sheet=mate_sheet)
+            CharacterVitals.objects.create(character_sheet=mate_sheet, health=90, max_health=100)
+
+    def _count_queries(self) -> int:
+        with CaptureQueriesContext(connection) as ctx:
+            evaluators.ally_low_health(self._ctx())
+        return len(ctx)
+
+    def test_query_count_fixed_regardless_of_mate_count(self) -> None:
+        # Warm the holder's covenant-roles handler cache first, so both
+        # measurements below start from the same (warm) state and compare
+        # only the queries that genuinely run per evaluation.
+        evaluators.ally_low_health(self._ctx())
+
+        self._add_engaged_mates(2)
+        count_with_two = self._count_queries()
+
+        self._add_engaged_mates(3)  # 5 total mates now
+        count_with_five = self._count_queries()
+
+        self.assertEqual(count_with_two, count_with_five)
 
 
 class DuringNegotiationEvaluatorTests(TestCase):
