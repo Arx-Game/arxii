@@ -18,6 +18,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `Gift`, `CharacterGift`, `Technique`, `CharacterTechnique`,
     `TechniqueStyle`, `EffectType`, `Restriction`, `IntensityTier`,
     `TechniqueCapabilityGrant`,
+    `TechniqueFunctionTag` (#2443, NK `(technique, function)`, lore-repo content —
+    which fine-grained `TechniqueFunction` labels a technique carries; see
+    `constants.TechniqueFunction`, a 12-value code-defined vocabulary shared by
+    Layer 2 per-vow specialties (`covenants.CovenantRoleTechniqueSpecialty`) and
+    Layer 4 situational perks (#2536)),
     `AbstractCapabilityGrant` / `AbstractDamageProfile` / `AbstractAppliedCondition`
     (abstract payload bases shared by `Technique*` and `TechniqueDraft*` rows),
     `TechniqueDraft` (one-per-CharacterSheet in-progress design workbench —
@@ -3960,6 +3965,13 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     one row per `(covenant_role, action_key)` with `thread_level_multiplier`. Read by
     `covenant_role_action_scaling_bonus(character, action_key)`, anchor-role
     normalized. Lore-repo content.
+  - `CovenantRoleTechniqueSpecialty` (#2443, ADR-0149's 2026-07-20 amendment; **Layer 2**
+    of the vow-power model) — one row per `(covenant_role, function)` keyed on
+    `magic.TechniqueFunction`, `multiplier_tenths` (default 10 = ×1.0). Valid on both
+    primary roles AND sub-roles — sub-role rows ADD to the parent's (unlike the blend
+    weights/action-scaling anchor-only rule). Read by
+    `covenant_role_specialty_power_term` (`world.magic.services.power_terms`).
+    Lore-repo content.
   - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
     compatible with which `GearArchetype` values (read-only authored content)
   - `CovenantRoleBonus` — authored config: one row per
