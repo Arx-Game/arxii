@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from http import HTTPMethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import QuerySet
@@ -24,10 +24,11 @@ from world.conditions.constants import TARGET_EFFECT_ALTERATION, TARGET_EFFECT_C
 from world.magic.exceptions import MagicError
 from world.magic.types.pull import CastPullDeclaration
 from world.magic.views_actor import PuppetActorMixin
-from world.scenes.action_constants import ActionRequestStatus
+from world.scenes.action_constants import ActionRequestStatus, BoonSumTier
 from world.scenes.action_filters import SceneActionRequestFilter, SceneActionTargetFilter
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 from world.scenes.action_serializers import (
+    BoonOptionsSerializer,
     CastableTechniqueSerializer,
     ConsentResponseSerializer,
     EnhancedSceneActionResultSerializer,
@@ -45,6 +46,9 @@ from world.scenes.cast_services import request_technique_cast
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import Persona, Scene
 from world.scenes.services import active_persona_for_sheet
+
+if TYPE_CHECKING:
+    from world.scenes.boon_services import BoonAsk
 
 # Repeated API error detail strings. Centralized to avoid the duplicated-literal
 # SonarCloud smell (python:S1192).
@@ -72,6 +76,21 @@ def _build_pull_from_validated(validated_data: dict) -> CastPullDeclaration | No
         resonance=pull_data["resonance"],
         tier=pull_data["tier"],
         threads=tuple(pull_data["threads"]),
+    )
+
+
+def _build_boon_from_validated(validated_data: dict) -> BoonAsk | None:
+    """Build a BoonAsk from validated serializer data (#2540), or None when absent."""
+    boon_payload = validated_data.get("boon")
+    if not boon_payload:
+        return None
+    from world.scenes.boon_services import BoonAsk  # noqa: PLC0415
+
+    return BoonAsk(
+        kind=boon_payload["kind"],
+        sum_tier=boon_payload.get("sum_tier", ""),
+        item_instance_id=boon_payload.get("item_instance_id"),
+        deed_text=boon_payload.get("deed_text", ""),
     )
 
 
@@ -379,6 +398,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 delivery_receivers=delivery_receivers,
                 additional_target_personas=additional,
                 pull=_build_pull_from_validated(serializer.validated_data),
+                boon=_build_boon_from_validated(serializer.validated_data),
                 **treat_condition_kwargs,
             )
         except DjangoValidationError as exc:
@@ -748,6 +768,50 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
 
         techniques = [ct.technique for ct in char_techniques]
         return Response(CastableTechniqueSerializer(techniques, many=True).data)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(name="target_persona", type=int, required=True),
+        ],
+        responses={200: BoonOptionsSerializer},
+    )
+    @action(
+        detail=False,
+        methods=[HTTPMethod.GET],
+        url_path="boon-options",
+        pagination_class=None,
+    )
+    def boon_options(self, request: Request) -> Response:
+        """Boon money-sum options against a prospective target (#2540 ruling display seam).
+
+        Returns each ``BoonSumTier`` with the concrete coppers it means against THIS
+        target — the ask UI renders 'Minor (50g)' / 'Fair (200g)' / 'Great (500g)'.
+        An empty list means the target presents no money-boon option at all (a
+        penniless target — the option never shows, so 'no because I can't' never
+        happens). The OOC reveal of these values is accepted per the ruling.
+        """
+        from world.scenes.boon_services import boon_sum_values  # noqa: PLC0415
+
+        target_id_str = request.query_params.get("target_persona")  # noqa: USE_FILTERSET
+        if not target_id_str:
+            return Response(
+                {"detail": "target_persona query parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            target_id = int(target_id_str)
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "target_persona must be an integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        target = get_object_or_404(Persona, pk=target_id)
+        values = boon_sum_values(target.character_sheet)
+        sum_tiers = [
+            {"tier": tier, "label": BoonSumTier(tier).label, "coppers": coppers}
+            for tier, coppers in values.items()
+        ]
+        return Response({"sum_tiers": sum_tiers})
 
 
 class SceneActionTargetViewSet(viewsets.ReadOnlyModelViewSet):

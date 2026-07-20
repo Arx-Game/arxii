@@ -17,7 +17,7 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.scenes.action_constants import BoonKind
+from world.scenes.action_constants import BoonKind, BoonSumTier
 
 
 class Boon(SharedMemoryModel):
@@ -29,7 +29,20 @@ class Boon(SharedMemoryModel):
         related_name="boon",
     )
     kind = models.CharField(max_length=20, choices=BoonKind.choices)
-    amount = models.PositiveBigIntegerField(default=0, help_text="Coppers asked, for MONEY boons.")
+    sum_tier = models.CharField(
+        max_length=20,
+        choices=BoonSumTier.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "The relative sum asked, for MONEY boons (#2540 ruling) — minor/fair/great "
+            "*to the target*. The concrete coppers freeze into ``amount`` at ask time."
+        ),
+    )
+    amount = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Coppers asked, for MONEY boons — derived from sum_tier at ask time.",
+    )
     item_instance = models.ForeignKey(
         "items.ItemInstance",
         on_delete=models.SET_NULL,
