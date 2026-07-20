@@ -889,12 +889,14 @@ class AffectionShift(SharedMemoryModel):
     """A social action's automatic affection shift on its target's regard (#1697).
 
     The generic, valence-signed success consequence (SHIFT_AFFECTION): a
-    successful Flirt (+5) or Seduce (+50) — and future gated offensive actions
+    successful Flirt (+5) or Seduce (+50) — and gated offensive actions
     with negative amounts — moves the TARGET's relationship toward the actor
-    on the Regard/Friction system tracks. The unique constraint per
-    (relationship, scene, effect) is the diminishing-returns rule: only the
-    first success of a given effect per scene per pair shifts; repeats no-op
-    (conditions still refresh).
+    on the Regard/Friction system tracks. Two provenance modes (#2540):
+    effect-keyed rows keep the per-(relationship, scene, effect)
+    diminishing-returns rule — only the first success of a given effect per
+    scene per pair shifts; repeats no-op (conditions still refresh) — while
+    boon-keyed rows dedup on the Boon itself, so serial granted boons stack
+    even within one scene (each ask wears out more welcome).
     """
 
     relationship = models.ForeignKey(
@@ -912,8 +914,18 @@ class AffectionShift(SharedMemoryModel):
     effect = models.ForeignKey(
         "checks.ConsequenceEffect",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="affection_shifts",
         help_text="The SHIFT_AFFECTION effect row that fired (dedup key + provenance)",
+    )
+    boon = models.OneToOneField(
+        "scenes.Boon",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="affection_shift",
+        help_text="The granted Boon this shift charges (#2540) — per-Boon dedup, stacking",
     )
     amount = models.IntegerField(
         help_text="Signed points applied: positive → Regard, negative → Friction",
@@ -925,7 +937,12 @@ class AffectionShift(SharedMemoryModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["relationship", "scene", "effect"],
+                condition=models.Q(boon__isnull=True),
                 name="unique_affection_shift_per_scene",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(effect__isnull=False) | models.Q(boon__isnull=False),
+                name="affection_shift_has_provenance",
             ),
         ]
 

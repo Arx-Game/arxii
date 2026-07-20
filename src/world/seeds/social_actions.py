@@ -29,6 +29,11 @@ _SOCIAL_ACTION_TEMPLATES = [
     # success BlackmailAction mints Leverage founded on the pressed secret (#1680).
     ("Blackmail", "Intimidation", "single", "lock", 0),
     ("Persuade", "Persuasion", "single", "handshake", 0),
+    # Boon (#2540): the structured social ask — a named payload (money / held item / vault
+    # item / deed) riding the request, gated by the `boon` consent category; fulfillment
+    # fires via the `boon` action resolver on a successful roll. Reuses the Persuasion
+    # check; the con/seduce/intimidate ask flavors are a follow-up slice.
+    ("Boon", "Persuasion", "single", "gift", 0),
     ("Deceive", "Deceive", "single", "mask", 0),
     ("Flirt", "Seduction", "single", "heart", 0),
     ("Seduce", "Seduction", "single", "flame", 1),
@@ -54,6 +59,11 @@ _POOL_CONSEQUENCES: dict[str, list[tuple[str, str, int]]] = {
         ("Failure", "Argument dismissed outright", 1),
         ("Partial Success", "Target intrigued but unconvinced", 2),
         ("Success", "Target fully persuaded", 1),
+    ],
+    "Boon": [
+        ("Failure", "The ask lands badly", 1),
+        ("Partial Success", "They hesitate, unmoved", 2),
+        ("Success", "They grant the boon", 1),
     ],
     "Deceive": [
         ("Failure", "Lie detected immediately", 1),

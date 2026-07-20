@@ -109,11 +109,15 @@ def resolved_base_difficulty(
     action_request: SceneActionRequest,
     difficulty_choice: str,
     target_sheet: CharacterSheet | None,
+    extra_tier_modifier: int = 0,
 ) -> int:
     """Base difficulty before resist-effort: affection-derived for social actions, else absolute.
 
     For a social action it is ``affection_base + (difficulty_choice relative to NORMAL) +
-    difficulty_tier_modifier`` in tier space, clamped. Callers add the resist-effort increment.
+    difficulty_tier_modifier + extra_tier_modifier`` in tier space, clamped. Callers add
+    the resist-effort increment. ``extra_tier_modifier`` is the request-specific shift a
+    caller computes from the ask itself — today the boon relative-cost band for NPC
+    targets (#2540); ignored on the non-social branch.
 
     For a non-social targeted action, only ``exploitable_tiers`` easing applies (a
     Smitten target is easier to exploit in ALL ways, not just socially) — the
@@ -143,6 +147,12 @@ def resolved_base_difficulty(
 
     base_index = _affection_base_index(affection)
     defender_shift = _TIER_ORDER.index(DifficultyChoice(difficulty_choice)) - _NORMAL_INDEX
-    shifted = base_index + defender_shift + template.difficulty_tier_modifier - exploitable_easing
+    shifted = (
+        base_index
+        + defender_shift
+        + template.difficulty_tier_modifier
+        + extra_tier_modifier
+        - exploitable_easing
+    )
     final_index = max(0, min(len(_TIER_ORDER) - 1, shifted))
     return DIFFICULTY_VALUES[_TIER_ORDER[final_index]]

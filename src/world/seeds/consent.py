@@ -71,6 +71,18 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         ConsentMode.FRIENDS_WHITELIST,
     ),
     (
+        "boon",
+        "Boon Asks",
+        # PLACEHOLDER (agent-drafted player-facing copy — Apostate to rewrite, #2540):
+        "Whether others may press you for a boon — a structured ask for money, an item, "
+        "or a deed, backed by a social roll. The roll to extract is the antagonistic act; "
+        "you can always simply be asked, and simply say no.",
+        26,
+        # Inherits All Antagonism (FRIENDS_WHITELIST); own value kept opt-in so an
+        # orphaned row stays gated (mirrors blackmail, #2540).
+        ConsentMode.FRIENDS_WHITELIST,
+    ),
+    (
         "secret-investigation",
         "Secret Investigation",
         # PLACEHOLDER (agent-drafted player-facing copy — Apostate to rewrite, #2289):
@@ -130,6 +142,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
 _CATEGORY_PARENTS: dict[str, str] = {
     "hostile": "antagonism",
     "blackmail": "antagonism",
+    "boon": "antagonism",
     "manipulative": "antagonism",
     "theft": "antagonism",
     "secret-investigation": "antagonism",
@@ -141,6 +154,7 @@ _TEMPLATE_CATEGORY_MAP: dict[str, str] = {
     "Flirt": "romantic",
     "Intimidate": "hostile",
     "Blackmail": "blackmail",
+    "Boon": "boon",
     "Deceive": "manipulative",
     "Persuade": "manipulative",
     "Perform": "general",

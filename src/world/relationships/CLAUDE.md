@@ -48,17 +48,22 @@ Four ways to add points:
    notified. Seeds: `relationship_scale` cluster (tracks + 25/100/500/2000 tier
    bands + starter emoji catalog, PLACEHOLDER names).
 
-5. **Automatic Affection Shifts** (#1697) — A social action's success moves its
-   TARGET's regard toward the actor: `apply_affection_shift` writes the signed
-   amount onto the system tracks (capstone write-shape), recorded as an
-   `AffectionShift` row whose `UniqueConstraint(relationship, scene, effect)` is
-   the diminishing-returns rule (first success per scene per pair shifts; repeats
-   no-op while conditions still refresh). Driven by the `SHIFT_AFFECTION`
-   `ConsequenceEffect` (`affection_amount`, handler in
-   `world/mechanics/effect_handlers.py`); Flirt +5 / Seduce +50 (PLACEHOLDER,
-   seeded in `world/seeds/social_actions.py`). The generic valence-signed family:
-   future consent-gated offensive actions (insult/taunt between rivals) reuse it
-   with negative amounts — affection falls while absolute value grows.
+5. **Automatic Affection Shifts** (#1697, boon mode #2540) — A social action's
+   success moves its TARGET's regard toward the actor: `apply_affection_shift`
+   writes the signed amount onto the system tracks (capstone write-shape),
+   recorded as an `AffectionShift` row. Two provenance modes, exactly one per row
+   (`affection_shift_has_provenance` CheckConstraint): **effect-keyed** rows keep
+   the `UniqueConstraint(relationship, scene, effect)` diminishing-returns rule
+   (first success per scene per pair shifts; repeats no-op while conditions still
+   refresh) — driven by the `SHIFT_AFFECTION` `ConsequenceEffect`
+   (`affection_amount`, handler in `world/mechanics/effect_handlers.py`); Flirt +5
+   / Seduce +50 (PLACEHOLDER, seeded in `world/seeds/social_actions.py`).
+   **Boon-keyed** rows (#2540 — a granted Boon's negative drain, charged by the
+   `boon` resolver in `world/scenes/boon_services.py`) dedup on the Boon OneToOne
+   itself, so serial granted boons stack even within one scene. Shifted points
+   never decay; a drain persists until rebuilt through play. The generic
+   valence-signed family: consent-gated offensive actions reuse it with negative
+   amounts — affection falls while absolute value grows.
 
 ## Models
 

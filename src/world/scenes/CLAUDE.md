@@ -82,14 +82,26 @@ the unified Persona identity system, and non-combat scene rounds.
   clears `SceneRoundDefaultsConfig.sudden_harm_interpose_threshold`; resolved and deleted by
   `world.scenes.sudden_harm.resolve_pending_interpose_harm` at that round's resolution.
 
-- **`Boon`** (#2540, `boon_models.py`): the payload of a structured social ask ("ask a head/NPC for
-  a thing, backed by a persuade/con/seduce/intimidate roll"), attached 1:1 to a `SceneActionRequest`.
+- **`Boon`** (#2540, `boon_models.py` + `boon_services.py`): the payload of a structured social ask
+  ("ask a head/NPC for a thing, backed by a social roll"), attached 1:1 to a `SceneActionRequest`.
   Fields: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`, `item_instance`, `deed_text`,
-  `fulfilled_at`. On a successful roll `boon_services.fulfill_boon` moves the asked thing — **MONEY is
-  wired** (via `currency.transfer`, target→asker purse); HELD_ITEM (needs an item-ownership-transfer
-  seam), VAULT_ITEM (needs the bank/vault system), and DEED (RP-only) are follow-up slices. Mirrors
-  `BlackmailAction`'s payload+success-effect shape. The `BoonAction` ActionTemplate wiring, the `boon`
-  consent category, and the per-Boon (stacking) affection cost are follow-up slices — see spec #2540.
+  `fulfilled_at`. **Slice 2 wired the full loop:** `create_action_request(boon=BoonAsk(...))`
+  validates eligibility up front (`validate_boon_ask`, dial 1 — uncoverable money / unheld item /
+  empty deed / vault-stub asks are rejected before any row exists) and persists the `Boon` row
+  BEFORE NPC auto-resolve, so the defender sees the ask pre-consent. The `boon` **resolver**
+  (`register_resolver`, imported by `ScenesConfig.ready`) fires on both consent paths — NPC
+  auto-accept and piloted accept — fulfilling on success (`fulfill_boon`; MONEY via
+  `currency.transfer`, VAULT_ITEM via the org vault's audited `withdraw_item_from_vault` with the
+  target as authority and the asker as recipient, DEED RP-only, HELD_ITEM transfer is the one
+  remaining follow-up) and charging
+  the per-Boon **stacking** affection cost (`BOON_AFFECTION_COST` PLACEHOLDER, boon-keyed
+  `AffectionShift` — serial asks wear out welcome; the hit never decays). **Fulfillment must NOT
+  ride `BoonAction.execute()`** (consent paths never call it — the Blackmail-mint asymmetry) nor a
+  seeded `SHIFT_AFFECTION` effect (the consent path's `ResolutionContext` is sceneless).
+  `npc_boon_tier_shift` is the mandatory dial-2 NPC relative-cost band
+  (`resolved_base_difficulty(extra_tier_modifier=…)`); a piloted defender's difficulty choice
+  rules — never band-shifted. Seeds: `Boon` template (`world/seeds/social_actions.py`) + `boon`
+  consent category under `antagonism` (`world/seeds/consent.py`).
 
 ### `constants.py`
 - **`BoonKind`** (`TextChoices`, `action_constants.py`): what a Boon asks for (MONEY / HELD_ITEM /

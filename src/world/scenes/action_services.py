@@ -157,6 +157,7 @@ if TYPE_CHECKING:
     from world.magic.models import FuryTier, PendingAlteration, Technique, Thread
     from world.magic.types.pull import CastPullDeclaration
     from world.roster.models import RosterTenure
+    from world.scenes.boon_services import BoonAsk
     from world.scenes.place_models import Place
 
 
@@ -268,7 +269,7 @@ def _dispatch_action_effects(
     action_obj.dispatch_effects(actor, target)
 
 
-def create_action_request(  # noqa: PLR0913
+def create_action_request(  # noqa: PLR0913, C901 - the one dispatch orchestrator
     *,
     scene: Scene,
     initiator_persona: Persona,
@@ -288,6 +289,7 @@ def create_action_request(  # noqa: PLR0913
     target_condition_instance: ConditionInstance | None = None,
     target_pending_alteration: PendingAlteration | None = None,
     thread_used: Thread | None = None,
+    boon: BoonAsk | None = None,
 ) -> SceneActionRequest:
     """Create a pending action request for consent.
 
@@ -337,6 +339,10 @@ def create_action_request(  # noqa: PLR0913
         target_condition_instance: Optional ConditionInstance being treated.
         target_pending_alteration: Optional PendingAlteration being treated.
         thread_used: Optional bond Thread paying a treatment's cost.
+        boon: Optional structured-ask payload (#2540, boon action only). Validated
+            up front (ask-time eligibility, dial 1) and persisted as the request's
+            ``Boon`` row BEFORE NPC auto-resolve fires, so the payload exists for
+            the pending-consent UI and the NPC-side cost band alike.
 
     Returns:
         The created SceneActionRequest. Status is PENDING when the primary
@@ -361,6 +367,13 @@ def create_action_request(  # noqa: PLR0913
             action_key=action_key,
             character_id=initiator_persona.character_sheet_id,
         )
+
+    # #2540: validate the boon ask BEFORE creating any rows — an ineligible ask
+    # (uncoverable amount, item not held, vault stub) must not leave an orphan request.
+    if boon is not None:
+        from world.scenes.boon_services import validate_boon_ask  # noqa: PLC0415
+
+        validate_boon_ask(ask=boon, target_persona=target_persona)
 
     # Validate only the EXPLICIT override here — the template default is
     # resolved at resolution time (the template FK is attached later in the
@@ -408,6 +421,12 @@ def create_action_request(  # noqa: PLR0913
             tier=pull.tier,
         )
         decl.threads.set(pull.threads)
+    # #2540: persist the boon payload BEFORE auto-resolving NPC targets so the ask
+    # exists when the NPC-side cost band and the boon resolver fire during auto-resolve.
+    if boon is not None:
+        from world.scenes.boon_services import create_boon_for_request  # noqa: PLC0415
+
+        create_boon_for_request(request, boon)
     # #2214: always attempt auto-resolve — a lone NPC primary target (no additional
     # rows) must resolve too, not just the multi-target case. The result is stashed as
     # a transient attribute (mirrors interaction_services.py's _active_scene_cache
@@ -476,12 +495,16 @@ def _compute_difficulty_override_for_primary(
     from actions.constants import ActionCategory  # noqa: PLC0415
     from world.checks.services import compute_resist_increment  # noqa: PLC0415
     from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+    from world.scenes.boon_services import npc_boon_tier_shift  # noqa: PLC0415
     from world.scenes.social_difficulty import resolved_base_difficulty  # noqa: PLC0415
 
     base = resolved_base_difficulty(
         action_request=action_request,
         difficulty_choice=action_request.difficulty_choice,
         target_sheet=action_request.target_persona.character_sheet,
+        # #2540 dial 2: the mandatory NPC-side relative-cost band for boon asks —
+        # 0 for every other request and for piloted targets (their choice rules).
+        extra_tier_modifier=npc_boon_tier_shift(action_request),
     )
     if resist_effort:
         increment = compute_resist_increment(

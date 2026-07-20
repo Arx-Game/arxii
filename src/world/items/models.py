@@ -1925,6 +1925,15 @@ from world.items.market.models import (  # noqa: E402,F401
     WareListing,
 )
 
+# ---------------------------------------------------------------------------
+# Org vault (#2540 Layer 4) — logical org custody of items
+# ---------------------------------------------------------------------------
+from world.items.org_vault_models import (  # noqa: E402,F401
+    OrganizationVault,
+    OrgVaultEvent,
+    VaultHolding,
+)
+
 
 class ReclamationClaim(SharedMemoryModel):
     """A wronged party's live claim on a stolen item (#2368).

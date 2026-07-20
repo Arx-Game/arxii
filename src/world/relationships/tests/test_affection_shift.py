@@ -132,6 +132,68 @@ class ApplyAffectionShiftTests(TestCase):
         self.assertEqual(relationship.affection, 10)
 
 
+class BoonProvenanceShiftTests(TestCase):
+    """Boon-keyed shifts (#2540): per-Boon dedup — serial boons stack within one scene."""
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper.models import flush_cache
+
+        flush_cache()
+        seed_relationship_scale_content()
+        self.granter = CharacterSheetFactory()
+        self.asker = CharacterSheetFactory()
+        self.scene = SceneFactory()
+
+    def _boon(self):
+        from world.scenes.action_constants import BoonKind
+        from world.scenes.boon_models import Boon
+        from world.scenes.factories import SceneActionRequestFactory
+
+        request = SceneActionRequestFactory(scene=self.scene, action_key="boon")
+        return Boon.objects.create(action_request=request, kind=BoonKind.DEED, deed_text="x")
+
+    def test_two_boons_in_one_scene_both_shift(self) -> None:
+        first = apply_affection_shift(
+            source=self.granter,
+            target=self.asker,
+            scene=self.scene,
+            effect=None,
+            boon=self._boon(),
+            amount=-15,
+        )
+        second = apply_affection_shift(
+            source=self.granter,
+            target=self.asker,
+            scene=self.scene,
+            effect=None,
+            boon=self._boon(),
+            amount=-15,
+        )
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        relationship = CharacterRelationship.objects.get(source=self.granter, target=self.asker)
+        self.assertEqual(relationship.affection, -30)  # stacks — serial asks wear out welcome
+
+    def test_provenance_is_exactly_one_of_effect_or_boon(self) -> None:
+        with self.assertRaises(ValueError):
+            apply_affection_shift(
+                source=self.granter,
+                target=self.asker,
+                scene=self.scene,
+                effect=None,
+                amount=-15,
+            )
+        with self.assertRaises(ValueError):
+            apply_affection_shift(
+                source=self.granter,
+                target=self.asker,
+                scene=self.scene,
+                effect=_shift_effect(-15),
+                boon=self._boon(),
+                amount=-15,
+            )
+
+
 class ShiftAffectionSeedTests(TestCase):
     """Flirt/Seduce success consequences carry the SHIFT_AFFECTION effects."""
 

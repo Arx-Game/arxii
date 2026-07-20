@@ -64,6 +64,7 @@ if TYPE_CHECKING:
     from world.npc_services.models import NpcRegardEvent
     from world.relationships.constants import FirstImpressionColoring
     from world.relationships.models import BondCombatConfig, GrievanceOption, RelationshipTrack
+    from world.scenes.boon_models import Boon
     from world.scenes.models import Interaction, ReactionEmoji, Scene
 
 logger = logging.getLogger(__name__)
@@ -375,24 +376,30 @@ def apply_relationship_bump(
     return bump
 
 
-def apply_affection_shift(
+def apply_affection_shift(  # noqa: PLR0913 - two provenance modes share one write-shape
     *,
     source: CharacterSheet,
     target: CharacterSheet,
     scene: Scene,
-    effect: ConsequenceEffect,
+    effect: ConsequenceEffect | None,
     amount: int,
+    boon: Boon | None = None,
 ) -> AffectionShift | None:
-    """Apply a social action's automatic affection shift, first-per-scene only (#1697).
+    """Apply a social action's automatic affection shift (#1697, boon mode #2540).
 
     Moves ``source``'s relationship toward ``target`` by ``amount`` on the
     Regard (positive) or Friction (negative) system track, using the capstone
     write-shape (capacity + developed together — the same as ambient bumps).
-    Returns ``None`` on the dedup no-op: only the first success of a given
-    effect per scene per pair shifts (the diminishing-returns rule); repeats
-    leave points untouched. Direction note: callers pass the social action's
-    TARGET as ``source`` — it is *their* regard for the actor that moves.
+    Provenance is ``effect`` (a SHIFT_AFFECTION ConsequenceEffect — deduped
+    first-per-scene-per-pair, the diminishing-returns rule) or ``boon`` (a
+    granted Boon — deduped on the Boon itself, so serial boons stack within a
+    scene); exactly one must be passed. Returns ``None`` on the dedup no-op.
+    Direction note: callers pass the social action's TARGET as ``source`` —
+    it is *their* regard for the actor that moves.
     """
+    if (effect is None) == (boon is None):
+        msg = "An affection shift carries exactly one provenance: effect or boon."
+        raise ValueError(msg)
     if amount == 0 or source.pk == target.pk:
         return None
     key = TrackSystemKey.REGARD if amount > 0 else TrackSystemKey.FRICTION
@@ -411,6 +418,7 @@ def apply_affection_shift(
                 relationship=relationship,
                 scene=scene,
                 effect=effect,
+                boon=boon,
                 amount=amount,
             )
             progress, _ = RelationshipTrackProgress.objects.select_for_update().get_or_create(
