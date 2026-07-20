@@ -34,6 +34,7 @@ from actions.definitions.ceremonies import (
     OpenCeremonyAction,
     RespondSeanceOfferAction,
 )
+from actions.definitions.charm_asset import CharmAssetAction
 from actions.definitions.coercion import coerce, reveal_secret
 from actions.definitions.collect_food import CollectFoodAction
 from actions.definitions.combat_maneuvers import (
@@ -71,6 +72,7 @@ from actions.definitions.companions import (
     DismountCompanionAction,
     MountCompanionAction,
     OrderCompanionAction,
+    PromoteSummonAction,
     ReleaseCompanionAction,
 )
 from actions.definitions.conditions import treat_condition
@@ -668,6 +670,7 @@ _ALL_ACTIONS: list[Action] = [
     blackmail,
     coerce,
     reveal_secret,
+    CharmAssetAction(),
     mint_accusation,
     SmearAction(),
     RefuteAccusationAction(),
@@ -725,6 +728,7 @@ _ALL_ACTIONS: list[Action] = [
     VacateDomainOfficeAction(),
     MountCompanionAction(),
     DismountCompanionAction(),
+    PromoteSummonAction(),
     # #1866 — door lock/unlock telnet coverage.
     LockAction(),
     UnlockAction(),

@@ -151,6 +151,74 @@ def coerce_into_asset(
     )
 
 
+class CharmError(Exception):
+    """A charm-acquisition could not proceed (carries a user-facing message)."""
+
+    def __init__(self, message: str, *, user_message: str | None = None) -> None:
+        super().__init__(message)
+        self.user_message = user_message or message
+
+
+@transaction.atomic
+def charm_into_asset(
+    *,
+    charmer_persona: Persona,
+    target_persona: Persona,
+    role_context: str,
+) -> NPCAsset:
+    """Extract a charmed NPC as a CHARM ``NPCAsset`` (#2502).
+
+    Mirrors ``coerce_into_asset``: the charmed state is the leverage. The
+    target must currently be Charmed **by the charmer** (verified via
+    ``ConditionInstance.source_character``, not just condition-name presence —
+    prevents Player A from acquiring an NPC Player B charmed). Charm is NOT
+    consumed — the charmed state is the gate, and the asset persists beyond
+    the condition's duration (mirrors coercion: leverage is the gate, asset
+    persists).
+
+    Raises ``CharmError`` if the target is not charmed by the charmer, or the
+    target is already under a charm-acquired asset (one CHARM NPCAsset per NPC).
+    """
+    from world.assets.constants import AssetAcquisitionSource  # noqa: PLC0415
+    from world.assets.models import NPCAsset  # noqa: PLC0415
+    from world.conditions.constants import CHARM_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+
+    target_character = target_persona.character_sheet.character
+    if target_character is None:
+        msg = "There's no one there to charm into service."
+        raise CharmError(msg, user_message=msg)
+
+    # Verify the target is charmed BY THE CHARMER (source_character check).
+    charm_template = ConditionTemplate.objects.filter(name=CHARM_CONDITION_NAME).first()
+    if charm_template is None:
+        msg = "They are not charmed by you."
+        raise CharmError(msg, user_message=msg)
+
+    charmer_character = charmer_persona.character_sheet.character
+    active = get_active_conditions(target_character, condition=charm_template)
+    is_charmed_by_charmer = any(inst.source_character_id == charmer_character.pk for inst in active)
+    if not is_charmed_by_charmer:
+        msg = "They are not charmed by you."
+        raise CharmError(msg, user_message=msg)
+
+    # One CHARM asset per NPC.
+    if NPCAsset.objects.filter(
+        asset_persona=target_persona,
+        acquisition_source=AssetAcquisitionSource.CHARM,
+    ).exists():
+        msg = "They already answer to someone under charm."
+        raise CharmError(msg, user_message=msg)
+
+    return NPCAsset.objects.create(
+        promoter_persona=charmer_persona,
+        asset_persona=target_persona,
+        role_context=role_context,
+        acquisition_source=AssetAcquisitionSource.CHARM,
+    )
+
+
 @transaction.atomic
 def introduce_asset(
     *,

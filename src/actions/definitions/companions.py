@@ -373,3 +373,67 @@ class OrderCompanionAction(Action):
             success=False,
             message="You are not in active combat or a battle.",
         )
+
+
+@dataclass
+class PromoteSummonAction(Action):
+    """Promote an ephemeral summon or charmed enemy into a Companion (#2502).
+
+    Resolves a CombatOpponent from combat_opponent_id and an archetype from
+    archetype_id. Two validation paths (see promote_summon_to_companion):
+    summon-path (summoned_by + ALLY) or charmed-enemy-path (Charmed condition
+    + source_character check). Charm difficulty reduction applies on the
+    charmed-enemy path.
+    """
+
+    key: str = "promote_summon"
+    name: str = "Promote Summon"
+    icon: str = "sparkles"
+    category: str = "companions"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [HasCompanionCapacityPrerequisite()]
+
+    def execute(self, actor, context=None, **kwargs) -> ActionResult:
+        from world.combat.models import CombatOpponent  # noqa: PLC0415
+        from world.companions.models import CompanionArchetype  # noqa: PLC0415
+        from world.companions.services import (  # noqa: PLC0415
+            PromoteSummonError,
+            promote_summon_to_companion,
+        )
+        from world.magic.models.gifts import Gift  # noqa: PLC0415
+
+        opponent_id = kwargs.get("combat_opponent_id")
+        archetype_id = kwargs.get("archetype_id")
+        gift_id = kwargs.get("gift_id")
+        name = kwargs.get("name")
+        if not opponent_id or not archetype_id or not gift_id or not name:
+            return ActionResult(
+                success=False,
+                message="Pick a target, a gift, an archetype, and a name.",
+            )
+
+        opponent = CombatOpponent.objects.filter(pk=opponent_id).first()
+        if opponent is None:
+            return ActionResult(success=False, message="No such combat target.")
+        archetype = CompanionArchetype.objects.get(pk=archetype_id)
+        gift = Gift.objects.get(pk=gift_id)
+        sheet = actor.sheet_data
+
+        try:
+            companion = promote_summon_to_companion(
+                caster_sheet=sheet,
+                combat_opponent=opponent,
+                archetype=archetype,
+                granting_gift=gift,
+                name=name,
+            )
+        except PromoteSummonError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"{name} the {archetype.name} is now bonded to you.",
+            data={"companion_id": companion.pk},
+        )
