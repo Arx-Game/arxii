@@ -31,7 +31,11 @@ from world.covenants.models import (
     GearArchetypeCompatibility,
     MentorBond,
     MentorBondConfig,
+    VowSituationalPerk,
+    VowSituationalPerkRung,
+    VowSituationalPerkSituation,
 )
+from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
 from world.items.constants import GearArchetype
 from world.magic.constants import TechniqueFunction
 
@@ -136,6 +140,46 @@ class CovenantRoleDefenseProfileFactory(factory_django.DjangoModelFactory):
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     style = DefenseStyle.GEAR_SOAK
     gear_additive_tenths = 10
+
+
+class VowSituationalPerkFactory(factory_django.DjangoModelFactory):
+    """Factory for VowSituationalPerk (#2536)."""
+
+    class Meta:
+        model = VowSituationalPerk
+        django_get_or_create = ("covenant_role", "name")
+
+    covenant_role = factory.SubFactory(CovenantRoleFactory)
+    name = factory.Sequence(lambda n: f"Perk {n}")
+    beneficiary = PerkBeneficiary.SELF
+    effect_kind = PerkEffectKind.POWER_BONUS
+    magnitude_tenths = 10
+    announce_template = "{holder}'s vow answers!"
+    check_type = None
+
+
+class VowSituationalPerkSituationFactory(factory_django.DjangoModelFactory):
+    """Factory for VowSituationalPerkSituation (#2536)."""
+
+    class Meta:
+        model = VowSituationalPerkSituation
+        django_get_or_create = ("perk", "situation")
+
+    perk = factory.SubFactory(VowSituationalPerkFactory)
+    situation = Situation.AT_RANGE
+
+
+class VowSituationalPerkRungFactory(factory_django.DjangoModelFactory):
+    """Factory for VowSituationalPerkRung (#2536)."""
+
+    class Meta:
+        model = VowSituationalPerkRung
+        django_get_or_create = ("perk", "rung_number")
+
+    perk = factory.SubFactory(VowSituationalPerkFactory)
+    rung_number = 1
+    extra_situation = Situation.ALLY_LOW_HEALTH
+    magnitude_tenths = 20
 
 
 class CovenantFactory(factory_django.DjangoModelFactory):

@@ -12,6 +12,9 @@ from world.covenants.models import (
     CovenantRoleBonus,
     CovenantRoleDefenseProfile,
     CovenantRoleTechniqueSpecialty,
+    VowSituationalPerk,
+    VowSituationalPerkRung,
+    VowSituationalPerkSituation,
 )
 
 
@@ -104,3 +107,26 @@ class CovenantRoleBonusAdmin(admin.ModelAdmin):
 @admin.register(CovenantLevelBonus)
 class CovenantLevelBonusAdmin(admin.ModelAdmin):
     list_display = ("modifier_target", "bonus_per_level")
+
+
+class VowSituationalPerkSituationInline(admin.TabularInline):
+    """Inline AND-composed situations on the perk admin (#2536)."""
+
+    model = VowSituationalPerkSituation
+    extra = 1
+
+
+class VowSituationalPerkRungInline(admin.TabularInline):
+    """Inline escalation rungs on the perk admin (#2536)."""
+
+    model = VowSituationalPerkRung
+    extra = 0
+
+
+@admin.register(VowSituationalPerk)
+class VowSituationalPerkAdmin(admin.ModelAdmin):
+    list_display = ("name", "covenant_role", "effect_kind", "beneficiary", "magnitude_tenths")
+    list_filter = ("effect_kind", "beneficiary")
+    search_fields = ("name", "covenant_role__name")
+    autocomplete_fields = ("covenant_role", "check_type")
+    inlines = [VowSituationalPerkSituationInline, VowSituationalPerkRungInline]

@@ -29,6 +29,7 @@ from world.covenants.constants import (
     MentorBondAdjusted,
     RoleArchetype,
 )
+from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
 from world.items.constants import GearArchetype
 from world.magic.constants import TechniqueFunction
 from world.magic.specialization.models import AbstractSpecializedVariant
@@ -1585,3 +1586,182 @@ class CourtPact(SharedMemoryModel):
     def __str__(self) -> str:
         state = "active" if self.released_at is None else "released"
         return f"CourtPact({self.servant_sheet} → {self.covenant}, {state})"
+
+
+# =============================================================================
+# VowSituationalPerk — per-vow situational perks (#2536, Layer 4)
+# =============================================================================
+
+
+class VowSituationalPerkManager(NaturalKeyManager):
+    """Manager for VowSituationalPerk with natural key support."""
+
+
+class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
+    """Authored per-vow situational perk: a conditional bonus that fires when
+    its attached situations hold (#2536, Layer 4 of the vow-power model).
+
+    Keyed by ``(covenant_role, name)``. Rows are valid on BOTH primary roles
+    and sub-roles — like ``CovenantRoleTechniqueSpecialty``, a sub-role's
+    perks ADD to whatever the anchor (parent) role's rows grant; there is no
+    clean() restriction tying this table to primary-vs-sub-role shape.
+
+    ``beneficiary`` decides who benefits when this perk fires at ANOTHER
+    character's resolution moment (``perks.services.applicable_perks``, Task
+    3): SELF perks fire only for the holder's own actions; COVENANT_ALLIES /
+    WHOLE_GROUP perks may fire for an engaged covenant-mate's action too
+    (WHOLE_GROUP includes the holder, COVENANT_ALLIES excludes them).
+
+    ``magnitude_tenths`` is the base numeric contribution (integer-tenths,
+    10 = ×1.0), scaled by the acting character's thread level at resolution
+    time. No negative magnitudes anywhere in this table — ``PositiveIntegerField``
+    makes the no-negative-perks ruling (#2536 decision 2: a vow's weakness is
+    the absence of a perk, never a malus) structural, not just a convention.
+
+    ``check_type`` scopes ``CHECK_BONUS`` perks to a single ``checks.CheckType``;
+    null means "any check" (mirrors ``CheckTypeCapabilityModifier``'s optional
+    scoping precedent, ``checks/models.py:119``). Only meaningful when
+    ``effect_kind=CHECK_BONUS`` — no clean() restriction ties the two together
+    this slice; the resolution service is effect_kind-scoped, so a stray
+    ``check_type`` on a non-CHECK_BONUS row is simply inert, not invalid.
+    """
+
+    covenant_role = models.ForeignKey(
+        COVENANT_ROLE_MODEL,
+        on_delete=models.CASCADE,
+        related_name="situational_perks",
+    )
+    name = models.CharField(
+        max_length=80,
+        help_text="Announced label, e.g. 'Scout's Instinct'.",
+    )
+    beneficiary = models.CharField(max_length=20, choices=PerkBeneficiary.choices)
+    effect_kind = models.CharField(max_length=20, choices=PerkEffectKind.choices)
+    magnitude_tenths = models.PositiveIntegerField(
+        default=10,
+        help_text="Integer-tenths base magnitude (10 = ×1.0) before thread-level scaling.",
+    )
+    announce_template = models.CharField(
+        max_length=200,
+        help_text="Player-facing announce line; {holder}/{subject} placeholders.",
+    )
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="situational_perks",
+        help_text="CHECK_BONUS scope; null = any check.",
+    )
+
+    objects = VowSituationalPerkManager()
+
+    class Meta:
+        ordering = ["covenant_role__slug", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["covenant_role", "name"],
+                name="vow_situational_perk_unique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["covenant_role", "name"]
+        dependencies = ["covenants.CovenantRole"]
+
+    def __str__(self) -> str:
+        return f"{self.covenant_role.name}: {self.name}"
+
+
+class VowSituationalPerkSituationManager(NaturalKeyManager):
+    """Manager for VowSituationalPerkSituation with natural key support."""
+
+
+class VowSituationalPerkSituation(NaturalKeyMixin, SharedMemoryModel):
+    """One AND-composed situation attached to a ``VowSituationalPerk`` (#2536).
+
+    ALL situations attached to a perk must hold simultaneously for the perk's
+    base magnitude to apply (AND semantics — see
+    ``perks.services.applicable_perks``, Task 3). Keyed by ``(perk, situation)``.
+    """
+
+    perk = models.ForeignKey(
+        "covenants.VowSituationalPerk",
+        on_delete=models.CASCADE,
+        related_name="situations",
+    )
+    situation = models.CharField(max_length=32, choices=Situation.choices)
+
+    objects = VowSituationalPerkSituationManager()
+
+    class Meta:
+        ordering = ["perk", "situation"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["perk", "situation"],
+                name="vow_situational_perk_situation_unique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["perk", "situation"]
+        dependencies = ["covenants.VowSituationalPerk"]
+
+    def __str__(self) -> str:
+        return f"{self.perk.name}: {self.get_situation_display()}"
+
+
+class VowSituationalPerkRungManager(NaturalKeyManager):
+    """Manager for VowSituationalPerkRung with natural key support."""
+
+
+class VowSituationalPerkRung(NaturalKeyMixin, SharedMemoryModel):
+    """An escalation rung on a ``VowSituationalPerk`` (#2536, worked-example
+    implication #2 — "perks can escalate in tiers").
+
+    Resolution rule (formalized in the spec, §2): rung N's required
+    situations = the perk's base situations UNION the extra situations of
+    rungs 1..N — strictly cumulative; a higher rung can never fire without
+    every lower rung's ``extra_situation`` also holding. The highest
+    qualifying rung's magnitude REPLACES the base magnitude (never sums with
+    it). Keyed by ``(perk, rung_number)``.
+
+    ``rung_number`` must be >= 1 (enforced in ``clean()`` — ``PositiveIntegerField``
+    alone permits 0). Contiguity is NOT enforced: rung numbers may have gaps —
+    the resolution service walks whatever rungs exist in ``rung_number`` order.
+    """
+
+    perk = models.ForeignKey(
+        "covenants.VowSituationalPerk",
+        on_delete=models.CASCADE,
+        related_name="rungs",
+    )
+    rung_number = models.PositiveIntegerField(help_text="Escalation order; must be >= 1.")
+    extra_situation = models.CharField(max_length=32, choices=Situation.choices)
+    magnitude_tenths = models.PositiveIntegerField(
+        default=10,
+        help_text="Integer-tenths magnitude for this rung; replaces the base when it fires.",
+    )
+
+    objects = VowSituationalPerkRungManager()
+
+    class Meta:
+        ordering = ["perk", "rung_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["perk", "rung_number"],
+                name="vow_situational_perk_rung_unique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["perk", "rung_number"]
+        dependencies = ["covenants.VowSituationalPerk"]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.rung_number is not None and self.rung_number < 1:
+            raise ValidationError({"rung_number": "rung_number must be >= 1."})
+
+    def __str__(self) -> str:
+        return f"{self.perk.name} rung {self.rung_number}: {self.get_extra_situation_display()}"
