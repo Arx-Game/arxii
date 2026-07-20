@@ -312,10 +312,15 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   always-on baseline cast power term plus **stat power** scaling with the COVENANT_ROLE thread
   level (`VowStatScaling`, unchanged); role-granted **specialized techniques** that resolve
   variants by the vow's depth (`CharacterTechnique.role_source`) also shipped under #2022 and
-  are unaffected. Layer 2 (#2443, deeper per-vow technique specialty), Layer 3 (#2533, defense
+  are unaffected. **Layer 2** (#2443, shipped): per-vow technique specialty —
+  `CovenantRoleTechniqueSpecialty` rewards casts matching a role's specialized
+  `TechniqueFunction`s (a shared, code-defined vocabulary also consumed by Layer 4) via the
+  always-on `covenant_role_specialty_power_term`; unlike the blend/action-scaling anchor-only
+  rule, sub-role rows ADD to the parent's. Layer 3 (#2533, defense
   styles + gear substitution — **equipment effectiveness** scaling via `VowGearScaling` is
   short-circuited to 0 pending this layer), and Layer 4 (#2536, deterministic situational
-  perks — "the point of vows") are tracked separately. When the vow dims (#2051), the engaged
+  perks — "the point of vows", consuming the same `TechniqueFunction` vocabulary Layer 2
+  introduced) are tracked separately. When the vow dims (#2051), the engaged
   flag drops and every shipped layer's contribution returns to 0 — which is why soloing legend
   content is lethal.
 - Magic is predominant; relationship bonuses matter; **difficulty scales on party size + average level
