@@ -19,6 +19,7 @@ from world.worship.models import DevotionStanding, WorshipGrant, WorshippedBeing
 if TYPE_CHECKING:
     from world.achievements.models import Achievement
     from world.character_sheets.models import CharacterSheet
+    from world.worship.models import DivineInterventionConfig
 
 
 def grant_worship(
@@ -88,3 +89,34 @@ def bump_devotion(
 
             grant_achievement(achievement, [character_sheet])
     return standing
+
+
+def get_divine_intervention_config() -> "DivineInterventionConfig":
+    """Lazy-create the singleton (pk=1) divine intervention config (#2360)."""
+    from world.worship.models import DivineInterventionConfig  # noqa: PLC0415
+
+    cfg = DivineInterventionConfig.objects.cached_singleton()
+    if cfg is None:
+        cfg = DivineInterventionConfig.objects.create(pk=1)
+    return cfg
+
+
+def spend_worship_pool(being: WorshippedBeing, amount: int, *, reason: str = "") -> bool:  # noqa: ARG001
+    """Deduct ``amount`` from ``being.resonance_pool`` (the spend counterpart to ``grant_worship``).
+
+    Returns ``True`` if the deduction succeeded, ``False`` if the pool was
+    insufficient (no partial spend). Raises ``ValueError`` for non-positive amounts.
+    Does NOT create an audit row — the caller creates ``MiraclePerformance``.
+    """
+    if amount <= 0:
+        msg = "Worship pool spends must be a positive amount."
+        raise ValueError(msg)
+    # Re-fetch with lock to avoid race on concurrent miracles.
+    locked = WorshippedBeing.objects.select_for_update().filter(pk=being.pk).first()
+    if locked is None or locked.resonance_pool < amount:
+        return False
+    locked.resonance_pool -= amount
+    locked.save(update_fields=["resonance_pool"])
+    # Propagate to the in-memory instance the caller holds.
+    being.resonance_pool = locked.resonance_pool
+    return True

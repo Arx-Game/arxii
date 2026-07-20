@@ -9,6 +9,7 @@ from world.worship.models import (
     Miracle,
     MiraclePerformance,
 )
+from world.worship.services import get_divine_intervention_config, spend_worship_pool
 
 
 class MiracleModelTests(TestCase):
@@ -53,3 +54,33 @@ class MiracleModelTests(TestCase):
             trigger_event="character_incapacitated",
         )
         self.assertIn("Test Aegis", str(perf))
+
+
+class SpendWorshipPoolTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.being = WorshippedBeingFactory()
+        cls.being.resonance_pool = 500
+        cls.being.save()
+
+    def test_succeeds_when_sufficient(self) -> None:
+        result = spend_worship_pool(self.being, 100, reason="test")
+        self.assertTrue(result)
+        self.being.refresh_from_db()
+        self.assertEqual(self.being.resonance_pool, 400)
+
+    def test_fails_when_insufficient(self) -> None:
+        result = spend_worship_pool(self.being, 600, reason="test")
+        self.assertFalse(result)
+        self.being.refresh_from_db()
+        self.assertEqual(self.being.resonance_pool, 500)
+
+    def test_rejects_non_positive(self) -> None:
+        with self.assertRaises(ValueError):
+            spend_worship_pool(self.being, 0)
+
+    def test_get_config_creates_singleton(self) -> None:
+        DivineInterventionConfig.objects.all().delete()
+        cfg = get_divine_intervention_config()
+        self.assertEqual(cfg.pk, 1)
+        self.assertEqual(cfg.favor_threshold, 50)
