@@ -92,8 +92,9 @@ the unified Persona identity system, and non-combat scene rounds.
   (`register_resolver`, imported by `ScenesConfig.ready`) fires on both consent paths — NPC
   auto-accept and piloted accept — fulfilling on success (`fulfill_boon`; MONEY via
   `currency.transfer`, VAULT_ITEM via the org vault's audited `withdraw_item_from_vault` with the
-  target as authority and the asker as recipient, DEED RP-only, HELD_ITEM transfer is the one
-  remaining follow-up) and charging
+  target as authority and the asker as recipient, HELD_ITEM via a lean sheet-level hand-over —
+  unequip → object move/dematerialize → holder switch → `OwnershipEvent(TRANSFERRED)` with the
+  scene's presented personas snapshotted — and DEED RP-only; every kind fulfills) and charging
   the per-Boon **stacking** affection cost (`BOON_AFFECTION_COST` PLACEHOLDER, boon-keyed
   `AffectionShift` — serial asks wear out welcome; the hit never decays). **Fulfillment must NOT
   ride `BoonAction.execute()`** (consent paths never call it — the Blackmail-mint asymmetry) nor a

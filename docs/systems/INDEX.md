@@ -1865,8 +1865,10 @@ action consent flow, and a three-mode non-combat round framework.
   `resolved_base_difficulty(extra_tier_modifier=…)`; piloted defenders are never band-shifted),
   and the `boon` resolver (`register_resolver`) — fulfillment + the per-Boon stacking affection
   cost (`BOON_AFFECTION_COST`, PLACEHOLDER) fire on BOTH consent paths, never via `execute()`.
-  MONEY fulfillment moves coppers via `currency.transfer`; HELD_ITEM/VAULT_ITEM transfer are
-  follow-up slices)
+  Every kind fulfills: MONEY via `currency.transfer`, VAULT_ITEM via the org vault's audited
+  withdraw (target as authority, asker as recipient), HELD_ITEM via a lean sheet-level
+  hand-over — unequip → object move/dematerialize → holder switch → `OwnershipEvent(TRANSFERRED)`
+  snapshotting the scene's presented personas — and DEED RP-only)
 - **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance).
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).

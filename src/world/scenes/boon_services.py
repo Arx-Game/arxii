@@ -12,11 +12,13 @@ accept. It must NOT ride ``BoonAction.execute()``: the consent paths never call
 ``SHIFT_AFFECTION`` ``ConsequenceEffect`` either — the consent path resolves with a
 sceneless ``ResolutionContext``, where scene-keyed data effects skip.
 
-Only ``MONEY`` fulfillment moves value in this slice: it routes through the single
-currency mutation point (``transfer``), target purse → asker purse. ``HELD_ITEM``
-awaits an item-ownership-transfer seam, ``VAULT_ITEM`` awaits the org vault (#2540
-Layer 4), and ``DEED`` is RP-only (no mechanical transfer). Idempotent: a fulfilled
-Boon is a no-op (claimed under row lock, so concurrent fulfills cannot double-move).
+Every kind now fulfills: ``MONEY`` through the single currency mutation point
+(``transfer``, target purse → asker purse), ``VAULT_ITEM`` through the org vault's
+audited withdraw (target as authority, asker as recipient), ``HELD_ITEM`` through a
+lean sheet-level hand-over (unequip → object move/dematerialize → holder switch →
+``OwnershipEvent(TRANSFERRED)``), and ``DEED`` is RP-only (no mechanical transfer).
+Idempotent: a fulfilled Boon is a no-op (claimed under row lock, so concurrent
+fulfills cannot double-move).
 """
 
 from __future__ import annotations
@@ -253,11 +255,55 @@ def fulfill_boon(boon: Boon) -> bool:
         )
     elif boon.kind == BoonKind.VAULT_ITEM and boon.item_instance_id is not None:
         _fulfill_vault_item(boon, request)
-    # HELD_ITEM fulfillment: follow-up slice (needs the ownership-transfer seam, #2540).
+    elif boon.kind == BoonKind.HELD_ITEM and boon.item_instance_id is not None:
+        _fulfill_held_item(boon, request)
 
     boon.fulfilled_at = timezone.now()
     boon.save(update_fields=["fulfilled_at"])
     return True
+
+
+def _fulfill_held_item(boon: Boon, request: SceneActionRequest) -> None:
+    """The granted held-item boon: the target hands the named item to the asker.
+
+    A lean sheet-level transfer reusing ``give``'s pieces without its co-location and
+    CharacterState requirements (the grant may resolve at consent time, not from a live
+    command): unequip if worn, move the physical object to the asker when one exists
+    (dematerialize on a failed move — custody is the row, the prop can rematerialize),
+    switch the holder, and book an ``OwnershipEvent(TRANSFERRED)`` snapshotting the
+    personas each side presented in the scene. Raises ``ValidationError`` (surfaced by
+    the resolver's unfulfillable branch) if the target no longer holds the item.
+    """
+    from world.items.constants import OwnershipEventType  # noqa: PLC0415
+    from world.items.models import ItemInstance, OwnershipEvent  # noqa: PLC0415
+    from world.items.services.equip import unequip_item  # noqa: PLC0415
+
+    target_sheet = request.target_persona.character_sheet
+    asker_sheet = request.initiator_persona.character_sheet
+    item = ItemInstance.objects.select_for_update().get(pk=boon.item_instance_id)
+    if item.holder_character_sheet_id != target_sheet.pk:
+        msg = "They no longer hold the asked item."
+        raise ValidationError(msg)
+
+    # Snapshot rows before iteration — unequip_item deletes them as we go (give's pattern).
+    for equipped in list(item.equipped_slots.all()):
+        unequip_item(equipped_item=equipped)
+    if item.game_object is not None:
+        asker_character = asker_sheet.character
+        if not item.game_object.move_to(asker_character, quiet=True):
+            item.game_object.delete()
+            item.game_object = None
+    item.holder_character_sheet = asker_sheet
+    item.save(update_fields=["holder_character_sheet", "game_object"])
+    OwnershipEvent.objects.create(
+        item_instance=item,
+        event_type=OwnershipEventType.TRANSFERRED,
+        from_character_sheet=target_sheet,
+        to_character_sheet=asker_sheet,
+        from_persona_display=request.target_persona,
+        to_persona_display=request.initiator_persona,
+        notes="boon",
+    )
 
 
 def _fulfill_vault_item(boon: Boon, request: SceneActionRequest) -> None:

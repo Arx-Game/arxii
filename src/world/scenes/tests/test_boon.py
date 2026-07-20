@@ -290,6 +290,53 @@ class BoonResolverE2ETests(TestCase):
         request.boon.refresh_from_db()
         self.assertIsNotNone(request.boon.fulfilled_at)
 
+    def test_granted_held_item_boon_hands_the_item_over(self) -> None:
+        from world.items.constants import OwnershipEventType
+        from world.items.factories import ItemInstanceFactory
+        from world.items.models import OwnershipEvent
+
+        item = ItemInstanceFactory(holder_character_sheet=self.npc_target.character_sheet)
+        with patch(
+            "world.scenes.action_services.start_action_resolution",
+            return_value=_success_resolution(success=True),
+        ):
+            request = create_action_request(
+                scene=self.scene,
+                initiator_persona=self.asker,
+                target_persona=self.npc_target,
+                action_key="boon",
+                boon=BoonAsk(kind=BoonKind.HELD_ITEM, item_instance_id=item.pk),
+            )
+        item.refresh_from_db()
+        self.assertEqual(item.holder_character_sheet, self.asker.character_sheet)
+        event = OwnershipEvent.objects.get(event_type=OwnershipEventType.TRANSFERRED)
+        self.assertEqual(event.notes, "boon")
+        self.assertEqual(event.from_persona_display, self.npc_target)  # the presented faces
+        self.assertEqual(event.to_persona_display, self.asker)
+        request.boon.refresh_from_db()
+        self.assertIsNotNone(request.boon.fulfilled_at)
+
+    def test_held_item_gone_by_accept_leaves_boon_unfulfilled(self) -> None:
+        from world.items.factories import ItemInstanceFactory
+        from world.scenes.boon_services import fulfill_boon
+
+        item = ItemInstanceFactory(holder_character_sheet=self.npc_target.character_sheet)
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.asker,
+            target_persona=self.npc_target,
+            action_key="boon",
+        )
+        boon = Boon.objects.create(
+            action_request=request, kind=BoonKind.HELD_ITEM, item_instance=item
+        )
+        item.holder_character_sheet = None  # it left their hands between ask and accept
+        item.save(update_fields=["holder_character_sheet"])
+        with self.assertRaises(ValidationError):
+            fulfill_boon(boon)
+        boon.refresh_from_db()
+        self.assertIsNone(boon.fulfilled_at)
+
 
 class BoonSeedTests(TestCase):
     """The Boon template + consent category seed and wire together."""
