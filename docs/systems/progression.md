@@ -264,6 +264,33 @@ result = get_available_unlocks_for_character(character)
 # Returns: {"available": [...], "locked": [...], "already_unlocked": [...]}
 ```
 
+### Path Requirements (#2538)
+
+`AbstractUnlockRequirement` supports a third polymorphic target FK — `path` —
+alongside `class_level_unlock` and `thread_crossing_threshold` (ADR-0090 pattern).
+`TraitRequirement` rows authored against a `Path` gate both hybrid path entry
+and cross-path technique learning.
+
+```python
+from world.progression.services.spends import check_requirements_for_path
+
+# Check if a character meets a path's TraitRequirements
+all_met, failed_messages = check_requirements_for_path(character, path)
+# Returns: (True, []) when no requirements authored (fail-open)
+```
+
+**Hybrid path entry:** `cross_into_path` calls `check_requirements_for_path`
+before switching, raising `PathRequirementsNotMet` when unmet. The semi-crossing
+catches this for a non-breaking level-only advance; Audere Majora lets it propagate.
+
+**Cross-path technique learning:** `can_learn_technique` checks
+`check_requirements_for_path` against each path in
+`technique.style.allowed_paths` when the character's current path is not in the
+list. Derive-on-read (ADR-0014) — reuses the same requirement rows.
+
+**Eligible-paths selectors:** `eligible_advanced_paths_for` and
+`eligible_paths_for_threshold` filter out paths whose requirements are unmet.
+
 ### CG Conversion (`services.cg_conversion`)
 
 ```python

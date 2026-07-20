@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from world.classes.models import Aspect, Path, PathAspect
 from world.codex.models import PathCodexGrant
+from world.progression.models import TraitRequirement
 from world.skills.models import PathSkillSuggestion
 
 
@@ -26,6 +27,18 @@ class PathSkillSuggestionInline(admin.TabularInline):
     autocomplete_fields = ["skill"]
 
 
+class PathTraitRequirementInline(admin.TabularInline):
+    """Inline for TraitRequirements attached to a Path (#2538).
+
+    Lets staff author stat/skill prerequisites directly on a hybrid Path row.
+    """
+
+    model = TraitRequirement
+    extra = 0
+    fields = ["trait", "minimum_value", "is_active", "description"]
+    autocomplete_fields = ["trait"]
+
+
 @admin.register(Path)
 class PathAdmin(admin.ModelAdmin):
     """Admin for character paths."""
@@ -41,7 +54,12 @@ class PathAdmin(admin.ModelAdmin):
     list_filter = ["stage", "is_active"]
     search_fields = ["name", "description"]
     filter_horizontal = ["parent_paths"]
-    inlines = [PathAspectInline, PathCodexGrantInline, PathSkillSuggestionInline]
+    inlines = [
+        PathAspectInline,
+        PathCodexGrantInline,
+        PathSkillSuggestionInline,
+        PathTraitRequirementInline,
+    ]
     fieldsets = (
         (None, {"fields": ("name", "description", "stage", "minimum_level")}),
         ("Display", {"fields": ("icon_url", "sort_order", "is_active")}),

@@ -85,3 +85,23 @@ class PathAlreadySelectedError(ClassLevelAdvancementError):
         "You have already selected a path. This recovery action is only for "
         "characters with no path on record."
     )
+
+
+class PathRequirementsNotMet(ClassLevelAdvancementError):
+    """The character does not meet the TraitRequirements for a Path (#2538).
+
+    Raised by ``cross_into_path`` when a hybrid Path (or any Path with
+    authored TraitRequirements targeting the ``path`` FK) has unmet
+    stat/skill prerequisites. Carries the failed requirement messages so
+    the caller can surface them. The semi-crossing resolver catches this
+    and treats the path as ineligible (non-breaking level-only advance);
+    Audere Majora lets it propagate, rolling back the crossing.
+    """
+
+    def __init__(self, *, path_name: str, failed_messages: list[str]) -> None:
+        self.path_name = path_name
+        self.failed_messages = failed_messages
+        self.user_message = f"You do not meet the requirements for {path_name}: " + "; ".join(
+            failed_messages
+        )
+        super().__init__(self.user_message)
