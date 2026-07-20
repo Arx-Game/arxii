@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.db.models import QuerySet
+from django.db.models import Prefetch, QuerySet
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
@@ -98,12 +98,24 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = CharacterCovenantRoleFilter
 
     def get_queryset(self) -> QuerySet[CharacterCovenantRole]:
-        qs = CharacterCovenantRole.objects.select_related(
-            "character_sheet",
-            "character_sheet__character",
-            "covenant_role",
-            "covenant",
-        ).order_by("-joined_at")
+        qs = (
+            CharacterCovenantRole.objects.select_related(
+                "character_sheet",
+                "character_sheet__character",
+                "covenant_role",
+                "covenant",
+            )
+            # Serialized twice per row (anchor_role + the resolved covenant_role,
+            # which for non-promoted rows IS the same covenant_role instance) —
+            # prefetch so both reads hit the cache instead of issuing 2 queries (#2443).
+            .prefetch_related(
+                Prefetch(
+                    "covenant_role__technique_specialties",
+                    to_attr="cached_technique_specialties",
+                )
+            )
+            .order_by("-joined_at")
+        )
         if self.request.user.is_staff:
             return qs
         if self.action == "list":

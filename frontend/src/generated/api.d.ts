@@ -22444,6 +22444,14 @@ export interface components {
       readonly description: string;
       /** @description Null for primary roles. Set for sub-roles. */
       readonly parent_role: number | null;
+      readonly technique_specialties: components['schemas']['CovenantRoleTechniqueSpecialty'][];
+    };
+    /** @description Read-only nested serializer for a role's per-vow technique specialty rows (#2443). */
+    CovenantRoleTechniqueSpecialty: {
+      readonly function: components['schemas']['FunctionEnum'];
+      readonly function_display: string;
+      /** @description Integer-tenths scaling factor for this function (10 = ×1.0). */
+      readonly multiplier_tenths: number;
     };
     /**
      * @description * `durance` - Covenant of the Durance
@@ -24263,6 +24271,34 @@ export interface components {
       /** @default false */
       all_characters: boolean;
     };
+    /**
+     * @description * `damage_buff_self` - Self Damage Buff
+     *     * `damage_buff_ally` - Ally Damage Buff
+     *     * `defense_buff` - Defense Buff
+     *     * `barrier` - Barrier
+     *     * `cleanse` - Cleanse
+     *     * `mobility` - Mobility
+     *     * `charm` - Charm
+     *     * `distraction` - Distraction
+     *     * `fear` - Fear
+     *     * `weaken` - Weaken
+     *     * `perception` - Perception
+     *     * `concealment` - Concealment
+     * @enum {string}
+     */
+    FunctionEnum:
+      | 'damage_buff_self'
+      | 'damage_buff_ally'
+      | 'defense_buff'
+      | 'barrier'
+      | 'cleanse'
+      | 'mobility'
+      | 'charm'
+      | 'distraction'
+      | 'fear'
+      | 'weaken'
+      | 'perception'
+      | 'concealment';
     FundWardResult: {
       resonance_reserve: number;
     };

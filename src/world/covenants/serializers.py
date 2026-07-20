@@ -12,9 +12,21 @@ from world.covenants.models import (
     CovenantRank,
     CovenantRite,
     CovenantRole,
+    CovenantRoleTechniqueSpecialty,
     GearArchetypeCompatibility,
 )
 from world.covenants.services import resolve_effective_role
+
+
+class CovenantRoleTechniqueSpecialtySerializer(serializers.ModelSerializer):
+    """Read-only nested serializer for a role's per-vow technique specialty rows (#2443)."""
+
+    function_display = serializers.CharField(source="get_function_display", read_only=True)
+
+    class Meta:
+        model = CovenantRoleTechniqueSpecialty
+        fields = ["function", "function_display", "multiplier_tenths"]
+        read_only_fields = fields
 
 
 class CovenantRoleSerializer(serializers.ModelSerializer):
@@ -23,6 +35,7 @@ class CovenantRoleSerializer(serializers.ModelSerializer):
     covenant_type_display = serializers.CharField(
         source="get_covenant_type_display", read_only=True
     )
+    technique_specialties = serializers.SerializerMethodField()
 
     class Meta:
         model = CovenantRole
@@ -38,8 +51,26 @@ class CovenantRoleSerializer(serializers.ModelSerializer):
             "speed_rank",
             "description",
             "parent_role",
+            "technique_specialties",
         ]
         read_only_fields = fields
+
+    @extend_schema_field(CovenantRoleTechniqueSpecialtySerializer(many=True))
+    def get_technique_specialties(self, obj: CovenantRole) -> list[dict]:
+        """Return the role's technique specialty rows.
+
+        Reads the ``cached_technique_specialties`` prefetch attribute (populated via
+        ``Prefetch(..., to_attr="cached_technique_specialties")``, #2443) when the
+        caller's queryset opted in; falls back to a live query otherwise so callers
+        that didn't prefetch (e.g. the small unpaginated CovenantRoleViewSet lookup
+        list) still work correctly, just without the N+1 guard.
+        """
+        rows = (
+            obj.cached_technique_specialties
+            if hasattr(obj, "cached_technique_specialties")
+            else obj.technique_specialties.all()
+        )
+        return CovenantRoleTechniqueSpecialtySerializer(rows, many=True).data
 
 
 class CovenantRankSerializer(serializers.ModelSerializer):
