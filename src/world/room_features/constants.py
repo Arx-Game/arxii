@@ -27,6 +27,11 @@ class RoomFeatureServiceStrategy(models.TextChoices):
     # same local-tidings reader.
     NOTICE_BOARD = "NOTICE_BOARD", "Notice Board"
     TOWN_CRIER = "TOWN_CRIER", "Town Crier"
+    # Bank access (#2540 Layer 4): the room-side gate for org-vault deposit/withdraw
+    # actions — a bank room on grid or an owner-installed bank-access decor feature.
+    # Reachability-only (COMMAND_CENTER's shape): custody lives in world.items'
+    # OrganizationVault, never in the room.
+    BANK = "BANK", "Bank Access"
     # Owner-upgradeable social hub (#1694): the amplifier layer on top of
     # ``RoomProfile.is_social_hub`` (#1572). Installing it marks the room a hub;
     # its ``level`` scales crowd draw + the fame/prestige earned for actions here.

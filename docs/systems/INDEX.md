@@ -3764,9 +3764,16 @@ holder is never notified a claim exists.
   `withdraw_rank_max`), `deposit_item_to_vault` (any active member, must hold the item; holder
   goes null + `game_object` dematerialized — custody is the row, not the prop),
   `withdraw_item_from_vault` (rank-gated; `to_persona` directs the item elsewhere — the
-  VAULT_ITEM boon shape, its first live caller). WHERE deposit/withdraw may be performed (bank
-  room / bank-access room feature) is a follow-up action-layer prerequisite gate; distinct from
-  the physical room-feature VAULT (#2179), which secures loose items in a room.
+  VAULT_ITEM boon shape, its first live caller). **The WHERE gate is wired:**
+  `VaultDepositAction`/`VaultWithdrawAction` (`actions/definitions/org_vault.py`, keys
+  `vault_deposit`/`vault_withdraw`, REST int kwargs) are performable only where an active
+  **BANK** `RoomFeatureServiceStrategy` feature stands (a bank room on grid or an
+  owner-installed bank-access decor feature — the ratified access surface; reachability-only
+  handler in `room_features`, COMMAND_CENTER's shape). Distinct from the physical
+  room-feature VAULT (#2179), which secures loose items in a room. **Weekly gem accrual is
+  wired**: `run_weekly_economy`'s `gem_mines` phase (`_weekly_mine_accrual`) runs one
+  `accrue_mine_cycle` per configured holding (`common_gem_tier` set) — haul amasses
+  uncollected per ADR-0081; only an active collection delivers it.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)

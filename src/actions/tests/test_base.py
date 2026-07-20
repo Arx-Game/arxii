@@ -236,6 +236,8 @@ class ActionRegistryTests(TestCase):
             "seduce",
             "blackmail",
             "boon",
+            "vault_deposit",
+            "vault_withdraw",
             "coerce",
             "mint_accusation",
             "reveal_secret",
