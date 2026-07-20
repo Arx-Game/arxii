@@ -231,3 +231,102 @@ class CommonGemBucket(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"sheet {self.character_sheet_id} {self.tier}: {self.value}"
+
+
+class StreamCommonGemPool(SharedMemoryModel):
+    """Per-tier uncollected common-gem value amassed by a mine's income stream (Build 0b).
+
+    The gem analogue of ``OrgIncomeStream.uncollected_pool``: a mine cycle accrues common
+    value here, and it rides the *same* active collection dispatch (graft/loss) into the
+    house's collected gem stock. Keyed to the stream + tier (a gem ``MaterialCategory``).
+    """
+
+    income_stream = models.ForeignKey(
+        "currency.OrgIncomeStream",
+        on_delete=models.CASCADE,
+        related_name="common_gem_pools",
+    )
+    tier = models.ForeignKey(
+        "items.MaterialCategory",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    uncollected_value = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Common-gem value awaiting collection. No cap — a hoarded pool is outcome risk.",
+    )
+
+    class Meta:
+        app_label = "items"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["income_stream", "tier"],
+                name="items_streamcommongempool_stream_tier_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"stream {self.income_stream_id} {self.tier}: {self.uncollected_value} uncollected"
+
+
+class PendingRareFind(SharedMemoryModel):
+    """A Rare-Find gem instance a mine has produced but that hasn't been collected yet (Build 0b).
+
+    The stone exists (loose, holder unset) but is pending an active collection dispatch;
+    a bad collection can lose it, a good one delivers it to the collector.
+    """
+
+    income_stream = models.ForeignKey(
+        "currency.OrgIncomeStream",
+        on_delete=models.CASCADE,
+        related_name="pending_rare_finds",
+    )
+    gem_instance = models.OneToOneField(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="pending_rare_find",
+    )
+    accrued_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "items"
+        ordering = ["accrued_at"]
+
+    def __str__(self) -> str:
+        return f"pending rare find {self.gem_instance_id} on stream {self.income_stream_id}"
+
+
+class OrgGemStock(SharedMemoryModel):
+    """An organization's *collected* common-gem value, per tier (Build 0b).
+
+    The house-level shared stock that members craft from (the B ownership model). Mining
+    accrues into per-stream ``StreamCommonGemPool``s; an active ``collect_org_income``
+    dispatch delivers the net (after the same band + graft the coin rides) here.
+    """
+
+    organization = models.ForeignKey(
+        "societies.Organization",
+        on_delete=models.CASCADE,
+        related_name="gem_stocks",
+    )
+    tier = models.ForeignKey(
+        "items.MaterialCategory",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    value = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Collected common-gem value the house holds, in coppers.",
+    )
+
+    class Meta:
+        app_label = "items"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "tier"],
+                name="items_orggemstock_org_tier_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"org {self.organization_id} {self.tier}: {self.value}"

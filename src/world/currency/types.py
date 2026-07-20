@@ -21,6 +21,11 @@ class CollectionResult:
     graft_leak: int
     success_level: int
     catastrophe: bool = False
+    # Gems ride the same dispatch (Build 0b): net common value landed in the house's
+    # OrgGemStock, plus the Rare-Find stones delivered to / lost by the collector.
+    gem_value_landed: int = 0
+    stones_delivered: int = 0
+    stones_lost: int = 0
 
     @property
     def stolen(self) -> int:

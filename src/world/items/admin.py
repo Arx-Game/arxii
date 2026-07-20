@@ -21,8 +21,11 @@ from world.items.models import (
     ItemTemplate,
     ItemTemplateAppearanceEffect,
     MaterialCategory,
+    OrgGemStock,
     OwnershipEvent,
+    PendingRareFind,
     QualityTier,
+    StreamCommonGemPool,
     Style,
     TemplateInteraction,
     TemplateSlot,
@@ -67,6 +70,26 @@ class CommonGemBucketAdmin(admin.ModelAdmin):
     list_display = ["character_sheet", "tier", "value"]
     list_filter = ["tier"]
     raw_id_fields = ["character_sheet"]  # large CharacterSheet table
+
+
+@admin.register(StreamCommonGemPool)
+class StreamCommonGemPoolAdmin(admin.ModelAdmin):
+    list_display = ["income_stream", "tier", "uncollected_value"]
+    list_filter = ["tier"]
+    raw_id_fields = ["income_stream"]  # large OrgIncomeStream table
+
+
+@admin.register(PendingRareFind)
+class PendingRareFindAdmin(admin.ModelAdmin):
+    list_display = ["gem_instance", "income_stream", "accrued_at"]
+    raw_id_fields = ["income_stream", "gem_instance"]  # large tables
+
+
+@admin.register(OrgGemStock)
+class OrgGemStockAdmin(admin.ModelAdmin):
+    list_display = ["organization", "tier", "value"]
+    list_filter = ["tier"]
+    raw_id_fields = ["organization"]  # large Organization table
 
 
 @admin.register(QualityTier)

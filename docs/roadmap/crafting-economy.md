@@ -96,6 +96,26 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   prying/re-set, hard cut skill-cap + consequence-pool narration, and the **domain-cron wiring**
   (Build-1 track).
 
+- **Mine accrual (Build 0b, slice 7) — DONE.** `accrue_mine_cycle()` runs one weekly cycle for a
+  mine holding: `DomainHolding` gains `mine_quality` + `common_gem_tier`, and the cycle accrues the
+  haul into **uncollected** pools on the holding's income stream (`StreamCommonGemPool` for common
+  value, `PendingRareFind` for the stones) — the gem analogue of `OrgIncomeStream.uncollected_pool`.
+  **Design (Apostate):** gems are *lumped with tax collection* — they ride the same active
+  `collect_org_income` dispatch (same band + graft + catastrophe loss) into the house's stock.
+
+- **Mine collection (Build 0b, domain-cron collection) — DONE.** `collect_org_income()` now
+  gathers the org's pending gems alongside coin: the same Tax Collection check, outcome band,
+  graft, and catastrophe apply to both. Net common value lands in the house's shared
+  `OrgGemStock` (`credit_org_gems`); surviving Rare-Find stones ride the same net rate into the
+  collector's hands, and a bad collection loses some (catastrophe loses all). The empty-gate
+  considers gems too, so a mine that accrued gems but no coin still collects
+  (`org_has_pending_gems`). `CollectionResult` grew `gem_value_landed` / `stones_delivered` /
+  `stones_lost`. The gem side lives in `world.items.gems.collection` (a lazy import from the
+  currency dispatch, keeping currency free of an items dependency at load).
+  **Remaining domain-cron sub-slices:** the **crafting draw** (house members craft from the
+  collected `OrgGemStock`), the `game_clock` **scheduling**, and the minister seam (#2239).
+  Plus: the **cut recipe** (slice 3 PR) + refinements.
+
 - **Handler registry** (`CraftingHandler` ABC + `FacetAttachHandler` / `StyleAttachHandler`).
   New kinds (alchemy, wand-crafting, etc.) plug in by authoring a `CraftingRecipe` row +
   registering a thin handler — no schema change required.

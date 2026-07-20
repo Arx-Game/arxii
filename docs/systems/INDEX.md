@@ -3710,8 +3710,8 @@ holder is never notified a claim exists.
     floored above common (type not floored), top-heavy grade distribution (`_grade_index`, roll²).
     Does **not** schedule or wire domains — the weekly cron, the per-holding `mine_quality` field,
     and the schema-only minister-check seam (`OrganizationOffice.feeds_check`, #2239) are the
-    Build-1 wiring that *calls* this; where common value accrues (a per-tier vault bucket) is the
-    caller's concern. All magnitudes PLACEHOLDER.
+    Build-1 wiring that *calls* this; where common value accrues is handled by
+    `accrue_mine_cycle` (below). All magnitudes PLACEHOLDER.
   - **Common-gem value buckets + bulk requirements** (`world.items.gems.buckets`, Build 0b slice 5)
     — `CommonGemBucket` (a crafter's common-gem value per tier — a `MaterialCategory` — never
     instanced; the type-blind bulk source). `credit_common_gems` / `spend_common_gems` /
@@ -3723,6 +3723,24 @@ holder is never notified a claim exists.
     `consume_cost` spends them. Named Rare-Find stones are never auto-consumed — only this fungible
     bulk source is. This is the "gem-covered table, don't care which" path; the primary use is still
     adornment. Common value crediting from mining is the Build-1 cron's job.
+  - **Mine accrual** (`world.items.gems.mining.accrue_mine_cycle`, Build 0b slice 7) — the weekly
+    cycle for a mine holding. `DomainHolding` gains `mine_quality` + `common_gem_tier`; the cycle
+    calls `roll_gem_haul` and accrues the haul into **uncollected** pools on the holding's
+    `OrgIncomeStream` — common value into `StreamCommonGemPool` (per stream/tier; the gem analogue
+    of `OrgIncomeStream.uncollected_pool`), each Rare Find into a `PendingRareFind` (a loose stone
+    awaiting collection). "Lumped with tax collection": both ride the **same** active
+    `collect_org_income` dispatch (same band/graft/catastrophe loss) into the house's stock — see
+    Mine collection (below). A holding with no `common_gem_tier`/stream accrues nothing.
+  - **Mine collection** (`world.items.gems.collection`, Build 0b domain-cron collection) —
+    `collect_org_income` gathers the org's pending gems alongside coin and applies the *same* Tax
+    Collection band + graft + catastrophe. `collect_org_gems` zeros the pools, credits net common
+    value to the shared **`OrgGemStock`** (`organization`+`tier`; `credit_org_gems`, the stock
+    members craft from), delivers `floor(count × band × (1−graft))` of the stones to the collector,
+    and destroys the rest (catastrophe loses all). `org_has_pending_gems` widens the empty-gate so a
+    gems-but-no-coin mine still collects. `CollectionResult` grew `gem_value_landed` /
+    `stones_delivered` / `stones_lost`. Currency reaches this via a lazy import (FK direction
+    preserved — currency stays free of an items dependency at load). Remaining sub-slices: the
+    crafting draw off `OrgGemStock`, the `game_clock` scheduling, and the minister seam (#2239).
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)

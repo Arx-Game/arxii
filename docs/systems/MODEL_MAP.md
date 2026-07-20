@@ -3001,6 +3001,8 @@
   - domain_holding <- societies.DomainHolding
   - declarations <- currency.IncomeDeclaration
   - garnishing_contracts <- currency.Contract
+  - common_gem_pools <- items.StreamCommonGemPool
+  - pending_rare_finds <- items.PendingRareFind
 
 ### IncomeDeclaration
 **Foreign Keys:**
@@ -3761,6 +3763,7 @@
   - gem_instance_details <- items.GemInstanceDetails
   - adornments <- items.Adornment
   - adorned_on <- items.Adornment
+  - pending_rare_find <- items.PendingRareFind
   - ware_listing <- items.WareListing
   - market_sales <- items.MarketSale
   - reclamation_claims <- items.ReclamationClaim
@@ -3979,6 +3982,21 @@
 ### CommonGemBucket
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
+  - tier -> items.MaterialCategory [FK]
+
+### StreamCommonGemPool
+**Foreign Keys:**
+  - income_stream -> currency.OrgIncomeStream [FK]
+  - tier -> items.MaterialCategory [FK]
+
+### PendingRareFind
+**Foreign Keys:**
+  - income_stream -> currency.OrgIncomeStream [FK]
+  - gem_instance -> items.ItemInstance [OneToOne]
+
+### OrgGemStock
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
   - tier -> items.MaterialCategory [FK]
 
 ### MarketSquare
@@ -7577,6 +7595,7 @@
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - captives <- captivity.Captivity
+  - gem_stocks <- items.OrgGemStock
   - hosted_stalls <- items.MarketStall
   - event_invitations <- events.EventInvitation
   - covenant <- covenants.Covenant
@@ -7819,6 +7838,7 @@
   - domain -> societies.Domain [FK]
   - kind -> societies.HoldingKind [FK]
   - income_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
+  - common_gem_tier -> items.MaterialCategory [FK] (nullable)
 **Pointed to by:**
   - improvement_details <- societies.DomainImprovementDetails
 

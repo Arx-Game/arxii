@@ -4,12 +4,13 @@ Given a mine's quality and the overseeing minister's bonus, produce a **haul**: 
 bulk of common gems expressed as an aggregate *value* (never instanced) plus, rarely,
 a few individuated "Rare Find" stones (real ``ItemInstance``s, born uncut).
 
-This module is the pure distribution engine — deterministic when handed an injected
-``roll``, so it is fully testable. It does **not** schedule anything or know about
-domains/vaults/ministers: the weekly cron, the per-holding ``mine_quality`` field, and
-the (schema-only, #2239) minister-check seam are the Build-1 wiring that *calls* this.
-Where the common value accrues (a per-tier bucket on a vault) is likewise the caller's
-concern — this returns the number.
+``roll_gem_haul`` is the pure distribution engine — deterministic when handed an injected
+``roll``, so it is fully testable. ``accrue_mine_cycle`` runs one weekly cycle for a mine
+holding, accruing the haul into the stream's uncollected gem pools (the gem analogue of
+``OrgIncomeStream.uncollected_pool``). What remains for the Build-1 wiring: the *scheduling*
+(a game_clock task calling ``accrue_mine_cycle`` weekly), the active *collection* dispatch
+(``collect_org_income`` delivering the pools with graft/loss), and the (schema-only, #2239)
+minister-check seam.
 
 All magnitudes are PLACEHOLDER (see constants); the *shape* is the deliverable:
 multiplicative axes + independent skewed rolls give the fat "remarkable find" tail for
@@ -23,17 +24,26 @@ from dataclasses import dataclass
 import random
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.items.gems.constants import (
     COMMON_VALUE_PER_QUALITY,
     RARE_FIND_BASE_CHANCE,
     RARE_FIND_MAX_COUNT,
     GemAxis,
 )
-from world.items.gems.models import GemGrade, GemInstanceDetails
+from world.items.gems.models import (
+    GemGrade,
+    GemInstanceDetails,
+    PendingRareFind,
+    StreamCommonGemPool,
+)
 from world.items.models import ItemInstance, ItemTemplate
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from world.societies.houses.models import DomainHolding
 
 # A roll returns a d100 (1-100). Injectable so the engine is deterministic in tests.
 Rng = Callable[[], int]
@@ -131,3 +141,40 @@ def roll_gem_haul(
         purity = purity_grades[_grade_index(roll() + boost, len(purity_grades), 1)]  # floored
         finds.append(_mint_raw_gem(gem_type, size, purity, uncut))
     return GemHaul(common_value=common_value, rare_finds=finds)
+
+
+def accrue_mine_cycle(
+    *,
+    holding: DomainHolding,
+    minister_bonus: int = 0,
+    roll: Rng = _d100,
+) -> GemHaul:
+    """Run one weekly cycle for a mine ``holding``, accruing its haul into the uncollected pools.
+
+    Common value amasses in the stream's ``StreamCommonGemPool`` for the holding's
+    ``common_gem_tier``; each Rare Find becomes a ``PendingRareFind`` on the stream. Both sit
+    uncollected until an active collection dispatch (``collect_org_income``) delivers them with
+    the same graft/loss the coin pool rides. A holding with no income stream or no
+    ``common_gem_tier`` is not a configured gem mine — nothing accrues.
+    """
+    stream = holding.income_stream
+    tier = holding.common_gem_tier
+    if stream is None or tier is None:
+        return GemHaul(common_value=0, rare_finds=[])
+
+    haul = roll_gem_haul(
+        mine_quality=holding.mine_quality, minister_bonus=minister_bonus, roll=roll
+    )
+    with transaction.atomic():
+        if haul.common_value > 0:
+            pool, created = StreamCommonGemPool.objects.get_or_create(
+                income_stream=stream,
+                tier=tier,
+                defaults={"uncollected_value": haul.common_value},
+            )
+            if not created:
+                pool.uncollected_value += haul.common_value
+                pool.save(update_fields=["uncollected_value"])
+        for gem in haul.rare_finds:
+            PendingRareFind.objects.create(income_stream=stream, gem_instance=gem)
+    return haul

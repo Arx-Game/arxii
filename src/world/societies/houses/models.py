@@ -309,6 +309,25 @@ class DomainHolding(SharedMemoryModel):
         related_name="domain_holding",
         help_text="The materialized stream feeding the owner org's books.",
     )
+    mine_quality = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Gem-mining lode quality (Build 0b): drives the weekly haul — raises the "
+            "Rare-Find chance and shifts every axis roll up. 0 = not a gem mine. "
+            "PLACEHOLDER magnitudes."
+        ),
+    )
+    common_gem_tier = models.ForeignKey(
+        "items.MaterialCategory",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The gem tier this mine's common bulk output is denominated in (a "
+            "'semiprecious mine' vs a 'precious mine'). Required to accrue common value."
+        ),
+    )
 
     class Meta:
         ordering = ["domain", "name"]
