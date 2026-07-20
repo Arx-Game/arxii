@@ -725,3 +725,94 @@ class TechniqueFunctionTagContentExportTests(TestCase):
         buff_tag.refresh_from_db()
         assert buff_tag.technique_id == technique.pk
         assert buff_tag.function == TechniqueFunction.DAMAGE_BUFF_SELF
+
+
+class CovenantRoleTechniqueSpecialtyContentExportTests(TestCase):
+    """Round-trip coverage for CovenantRoleTechniqueSpecialty (#2443).
+
+    ``covenants.covenantroletechniquespecialty`` was added to ``CONTENT_MODELS`` with
+    natural key ``["covenant_role", "function"]`` — verify a specialty row attached to
+    a PRIMARY role AND one attached to a SUB-role both survive export -> import
+    identity-stable (specialty rows are valid on both, unlike the blend weights).
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_technique_specialty_round_trip(self) -> None:
+        from world.covenants.factories import (
+            CovenantRoleFactory,
+            CovenantRoleTechniqueSpecialtyFactory,
+            SubroleCovenantRoleFactory,
+        )
+        from world.magic.constants import TechniqueFunction
+
+        primary = CovenantRoleFactory(
+            name="Round Trip Specialist",
+            slug="round-trip-specialist",
+            sword_weight=1,
+            crown_weight=0,
+        )
+        primary.full_clean()
+        primary_specialty = CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=primary,
+            function=TechniqueFunction.WEAKEN,
+            multiplier_tenths=15,
+        )
+
+        sub_role = SubroleCovenantRoleFactory(
+            parent_role=primary,
+            name="Round Trip Specialist (Ember)",
+            slug="round-trip-specialist-ember",
+            unlock_thread_level=2,
+        )
+        sub_role.full_clean()  # sanity: the all-zero-weight sub-role is valid
+        sub_specialty = CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=sub_role,
+            function=TechniqueFunction.PERCEPTION,
+            multiplier_tenths=20,
+        )
+        sub_specialty.full_clean()  # sanity: specialty rows are valid on sub-roles too
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        specialty_path = (
+            self.root / "fixtures" / "covenants" / "covenantroletechniquespecialty.json"
+        )
+        assert specialty_path.exists()
+
+        records = json.loads(specialty_path.read_text(encoding="utf-8"))
+        assert len(records) == 2
+        for record in records:
+            assert "pk" not in record
+            # Natural-key identity, not a raw pk.
+            role_key = record["fields"]["covenant_role"]
+            assert isinstance(role_key, list)
+            assert all(not isinstance(v, int) for v in role_key)
+            assert not isinstance(record["fields"]["function"], int)
+
+        by_function = {r["fields"]["function"]: r for r in records}
+        primary_record = by_function[TechniqueFunction.WEAKEN]
+        assert primary_record["fields"]["covenant_role"] == ["round-trip-specialist"]
+        assert primary_record["fields"]["multiplier_tenths"] == 15
+
+        sub_record = by_function[TechniqueFunction.PERCEPTION]
+        assert sub_record["fields"]["covenant_role"] == ["round-trip-specialist-ember"]
+        assert sub_record["fields"]["multiplier_tenths"] == 20
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        primary_specialty.refresh_from_db()
+        assert primary_specialty.covenant_role_id == primary.pk
+        assert primary_specialty.multiplier_tenths == 15
+
+        sub_specialty.refresh_from_db()
+        assert sub_specialty.covenant_role_id == sub_role.pk
+        assert sub_specialty.multiplier_tenths == 20

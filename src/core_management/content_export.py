@@ -80,6 +80,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # covenants
         "covenants.covenantrole",
         "covenants.covenantroleactionscaling",
+        "covenants.covenantroletechniquespecialty",
         # distinctions
         "distinctions.distinction",
         "distinctions.distinctioncategory",

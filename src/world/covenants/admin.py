@@ -10,7 +10,15 @@ from world.covenants.models import (
     CovenantRole,
     CovenantRoleActionScaling,
     CovenantRoleBonus,
+    CovenantRoleTechniqueSpecialty,
 )
+
+
+class CovenantRoleTechniqueSpecialtyInline(admin.TabularInline):
+    """Inline per-vow technique specialty rows on the CovenantRole admin (#2443)."""
+
+    model = CovenantRoleTechniqueSpecialty
+    extra = 1
 
 
 @admin.register(CovenantRole)
@@ -27,12 +35,20 @@ class CovenantRoleAdmin(admin.ModelAdmin):
     list_filter = ["covenant_type"]
     search_fields = ["name", "slug"]
     prepopulated_fields = {"slug": ("name",)}
+    inlines = [CovenantRoleTechniqueSpecialtyInline]
 
 
 @admin.register(CovenantRoleActionScaling)
 class CovenantRoleActionScalingAdmin(admin.ModelAdmin):
     list_display = ("action_key", "covenant_role", "thread_level_multiplier")
     list_filter = ("action_key",)
+    autocomplete_fields = ("covenant_role",)
+
+
+@admin.register(CovenantRoleTechniqueSpecialty)
+class CovenantRoleTechniqueSpecialtyAdmin(admin.ModelAdmin):
+    list_display = ("function", "covenant_role", "multiplier_tenths")
+    list_filter = ("function",)
     autocomplete_fields = ("covenant_role",)
 
 
