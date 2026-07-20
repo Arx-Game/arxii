@@ -57,10 +57,19 @@ session sees nothing. Reusing it as-is for perk announces would have silently br
 parity for this feature specifically, which is why the spec calls the gap out explicitly.
 `announce_fired_perks` (`world.covenants.perks.services`, Task 6) keeps the same
 persisted-Interaction + WS-broadcast machinery (so the announce still shows up in the scene log
-and pushes over the same channel every other narrated moment uses) but ADDS a `message_location`
-text companion — the precedent for pairing the two is `world.scenes.interaction_views`' pose-
-create view, which sends `message_location` alongside its WS-visible persisted row explicitly
-"for telnet clients (WS parity)." Each rendered line is prefixed with the firing perk's `name`
+and pushes over the same channel every other narrated moment uses) but ADDS a text companion
+delivered by calling `location.msg_contents(text)` directly (a review-cycle fix — the pairing
+precedent `world.scenes.interaction_views`' pose-create view follows, sending
+`flows.service_functions.communication.message_location` alongside its WS-visible persisted row
+"for telnet clients (WS parity)," does NOT transfer here as-is: `message_location` resolves its
+broadcast room from its *caller's own* location, and this seam has no single acting character
+reliably co-located with the room a perk fires in — a group-beneficiary firing may name a
+`holder` elsewhere. The initial Task 6 implementation built a caller state from the singleton
+Narrator persona's own character, whose location is unrelated to the fired-perk room and is
+often unset; that shipped telnet delivery as a silent no-op, caught on the Task 6 review and
+fixed by broadcasting to the caller-supplied `location` directly instead, mirroring
+`world.combat.escalation`'s caller-less room-wide surge narration). Each rendered line is
+prefixed with the firing perk's `name`
 (the model's own "announced label," e.g. "Scout's Instinct") ahead of the templated
 `{holder}`/`{subject}` line, mirroring the spec's presentation example, so two different perks
 firing for one character stay distinguishable in the announce text itself — not only in the

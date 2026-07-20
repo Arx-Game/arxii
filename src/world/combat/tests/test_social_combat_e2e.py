@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.models import CheckType
 from world.combat.constants import (
     FALTER_MORALE_THRESHOLD,
     CombatManeuver,
@@ -20,6 +22,17 @@ from world.combat.services import (
     declare_rally,
     declare_taunt,
 )
+from world.covenants.factories import (
+    CharacterCovenantRoleFactory,
+    CovenantFactory,
+    CovenantRoleFactory,
+    VowSituationalPerkFactory,
+    VowSituationalPerkSituationFactory,
+)
+from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+from world.covenants.perks.evaluators import FAVORABLY_DISPOSED_MIN_AFFECTION
+from world.magic.factories import ThreadFactory
+from world.npc_services.factories import NPCStandingFactory
 from world.scenes.constants import RoundStatus
 
 
@@ -166,3 +179,110 @@ class ResolveSocialCheckSituationContextTests(TestCase):
         self.assertIsNone(situation_ctx.target)
         self.assertIsInstance(situation_ctx.resolution, CombatRoundContext)
         self.assertEqual(situation_ctx.resolution.participant, self.participant)
+
+
+class TargetSituationalPerkFiresThroughSocialCombatTests(TestCase):
+    """#2536 Task 6 review fix (Important finding — untested fold-in): proves
+    a TARGET_* situational perk genuinely fires through the shared
+    ``_resolve_social_check`` CHECK_BONUS path for each verb that resolves
+    against an opposing target (Demoralize/Taunt/Parley — Rally targets an
+    ally, so no TARGET_* situation applies to it, see
+    ``_resolve_social_check``'s docstring). ``ResolveSocialCheckSituationContextTests``
+    above already proves a ``SituationContext`` object of the right SHAPE gets
+    built; this proves a REAL perk actually fires through it end to end (via
+    ``resolve_round``, the real production dispatch path — not a private
+    resolver called directly), asserted the same way
+    ``test_fired_perk_announced_exactly_once``
+    (``world/checks/tests/test_situational_perk_check_bonus.py``) asserts
+    CHECK_BONUS wiring: that ``announce_fired_perks`` receives the perk as a
+    genuine firing.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        ensure_social_combat_content()
+        self.encounter = CombatEncounterFactory(round_number=1, status=RoundStatus.DECLARING)
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+        pool = ThreatPoolFactory()
+        # A "story NPC" opponent (persona-linked) so _resolve_primary_target_sheet
+        # can resolve a real CharacterSheet target — a bare MOOK opponent has no
+        # CharacterSheet and TARGET_FAVORABLY_DISPOSED could never hold for it.
+        self.target_sheet = CharacterSheetFactory()
+        self.opponent = CombatOpponentFactory(
+            encounter=self.encounter,
+            threat_pool=pool,
+            persona=self.target_sheet.primary_persona,
+        )
+        NPCStandingFactory(
+            persona=self.participant.character_sheet.primary_persona,
+            npc_persona=self.target_sheet.primary_persona,
+            affection=FAVORABLY_DISPOSED_MIN_AFFECTION,
+        )
+        self.success = CheckOutcomeFactory(name="SocialTestSuccess", success_level=1)
+
+    def _grant_target_favorably_disposed_perk(self, *, check_type_name: str):
+        check_type = CheckType.objects.get(name=check_type_name)
+        role = CovenantRoleFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=self.participant.character_sheet,
+            covenant=CovenantFactory(),
+            covenant_role=role,
+            engaged=True,
+        )
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.CHECK_BONUS,
+            magnitude_tenths=30,
+            check_type=check_type,
+        )
+        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.TARGET_FAVORABLY_DISPOSED)
+        ThreadFactory(owner=self.participant.character_sheet, level=10)
+        return perk
+
+    def test_demoralize_fires_target_favorably_disposed_perk(self) -> None:
+        perk = self._grant_target_favorably_disposed_perk(check_type_name="Demoralize")
+        declare_demoralize(self.participant, self.opponent)
+
+        with (
+            force_check_outcome(self.success),
+            patch("world.covenants.perks.services.announce_fired_perks") as mock_announce,
+        ):
+            resolve_round(self.encounter)
+
+        assert mock_announce.call_count == 1
+        (fired_arg,), _kwargs = mock_announce.call_args
+        assert any(firing.perk == perk for firing in fired_arg)
+
+    def test_taunt_fires_target_favorably_disposed_perk(self) -> None:
+        perk = self._grant_target_favorably_disposed_perk(check_type_name="Taunt")
+        declare_taunt(self.participant, self.opponent)
+
+        with (
+            force_check_outcome(self.success),
+            patch("world.covenants.perks.services.announce_fired_perks") as mock_announce,
+        ):
+            resolve_round(self.encounter)
+
+        assert mock_announce.call_count == 1
+        (fired_arg,), _kwargs = mock_announce.call_args
+        assert any(firing.perk == perk for firing in fired_arg)
+
+    def test_parley_fires_target_favorably_disposed_perk(self) -> None:
+        # Parley is gated: the opponent must be faltering (or the caller must
+        # hold standing) before declare_parley will accept it (see
+        # test_declare_parley_allows_faltering_opponent above).
+        self.opponent.morale = FALTER_MORALE_THRESHOLD
+        self.opponent.save()
+        perk = self._grant_target_favorably_disposed_perk(check_type_name="Parley")
+        declare_parley(self.participant, self.opponent)
+
+        with (
+            force_check_outcome(self.success),
+            patch("world.covenants.perks.services.announce_fired_perks") as mock_announce,
+        ):
+            resolve_round(self.encounter)
+
+        assert mock_announce.call_count == 1
+        (fired_arg,), _kwargs = mock_announce.call_args
+        assert any(firing.perk == perk for firing in fired_arg)

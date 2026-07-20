@@ -5597,16 +5597,15 @@ def _resolve_social_check(
     modifiers through ``collect_check_modifiers`` (the same seam combat uses),
     then ``perform_check``. Returns ``check_result.success_level``.
 
-    ``target`` (#2536 Task 6 fold-in fix): the acting participant's declared
-    opponent, when this social action has one — threaded into
-    ``SituationContext.target`` so target-keyed CHECK_BONUS perks
-    (``TARGET_DISTRACTED``/``TARGET_SWAYED_BY_ALLY``/
+    ``target`` (#2536 Task 6 fold-in fix, extended to Parley on review): the
+    acting participant's declared opponent, when this social action has one
+    — threaded into ``SituationContext.target`` so target-keyed CHECK_BONUS
+    perks (``TARGET_DISTRACTED``/``TARGET_SWAYED_BY_ALLY``/
     ``TARGET_FOCUSED_ELSEWHERE``/``TARGET_FAVORABLY_DISPOSED``) can fire on
-    Demoralize/Taunt, whose callers resolve
+    Demoralize/Taunt/Parley, whose callers all resolve
     ``_resolve_primary_target_sheet(action)`` and pass it through. Rally
-    (targets an ally, not an opponent) and Parley (deliberately out of this
-    fix's narrow scope — see the #2536 Task 6 report) keep the default
-    ``None``, matching pre-fix behavior for those two verbs.
+    (targets an ally, not an opponent) keeps the default ``None`` — it has no
+    opposing target for a TARGET_* situation to key off.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import collect_check_modifiers, perform_check  # noqa: PLC0415
@@ -5790,7 +5789,9 @@ def _resolve_parley(
         return outcome
 
     target_difficulty = _social_combat_difficulty(target)
-    success_level = _resolve_social_check(participant, "Parley", target_difficulty)
+    success_level = _resolve_social_check(
+        participant, "Parley", target_difficulty, target=_resolve_primary_target_sheet(action)
+    )
 
     if success_level < 1:
         # Failed: mindless targets narrate "it has no mind to reach."

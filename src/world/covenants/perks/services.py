@@ -430,13 +430,28 @@ def announce_fired_perks(
     ``Interaction`` broadcast over the interaction WebSocket payload — the
     same machinery ``combat.interaction_services.broadcast_action_outcome``
     uses (``create_interaction`` + ``_build_interaction_payload`` +
-    ``_broadcast_to_location``) — PLUS a ``message_location`` text companion
-    so bare telnet clients render the identical line. This is the verified
-    gap the spec calls out: ``broadcast_action_outcome`` alone is WS-only
-    (no text companion), so it must NOT be reused as-is for this path; the
-    pairing precedent instead is ``world.scenes.interaction_views``' pose-
-    create view, which sends ``message_location`` alongside its WS-visible
-    persisted row explicitly "for telnet clients (WS parity)".
+    ``_broadcast_to_location``) — PLUS a direct ``location.msg_contents(text)``
+    text companion so bare telnet clients render the identical line. This is
+    the verified gap the spec calls out: ``broadcast_action_outcome`` alone is
+    WS-only (no text companion), so it must NOT be reused as-is for this path.
+
+    **The telnet primitive is ``location.msg_contents``, called directly on
+    the caller-supplied ``location`` — NOT ``flows.service_functions
+    .communication.message_location``.** ``message_location`` resolves its
+    broadcast room internally from ``caller.obj.location`` (an object it is
+    handed), ignoring the ``location`` this function actually received; every
+    existing production caller of it (e.g. ``world.scenes.interaction_views``'
+    pose-create view) supplies a caller who is genuinely standing where the
+    text should land, so that resolution is invisible there. This function has
+    no single "acting character" that is reliably co-located with ``location``
+    (a mate's fired perk, an ally-benefit firing, etc. can legitimately name a
+    ``holder`` elsewhere) — the one value this function is actually handed
+    that is guaranteed to be the right room is ``location`` itself. Calling
+    ``location.msg_contents(text)`` directly (mirroring
+    ``world.combat.escalation``'s room-wide surge narration, the other
+    precedent in the codebase for a caller-less room broadcast) reaches every
+    telnet session physically present in ``location`` — the honest primitive
+    for "broadcast to this room," independent of who or what triggered it.
 
     ``announce_template`` is rendered with the firing's ``holder`` name and
     ``subject``'s name via plain ``str.format`` (the template's documented
@@ -474,18 +489,19 @@ def announce_fired_perks(
 
     No-ops (no query, no dispatch) when ``fired`` is empty or ``location``
     is ``None`` (nowhere to broadcast — mirrors ``message_location``'s and
-    ``push_interaction``'s own "no location, no message" guards).
+    ``push_interaction``'s own "no location, no message" guards; this
+    function's own guard covers ``location.msg_contents`` needing a real
+    room too).
     """
     if not fired or location is None:
         return
 
-    from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
-    from flows.service_functions.communication import message_location  # noqa: PLC0415
     from world.scenes.constants import InteractionMode  # noqa: PLC0415
     from world.scenes.interaction_services import (  # noqa: PLC0415
         _broadcast_to_location,
         _build_interaction_payload,
         create_interaction,
+        get_active_scene,
     )
     from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
 
@@ -493,9 +509,11 @@ def announce_fired_perks(
     subject_name = subject_character.key if subject_character is not None else str(subject)
 
     narrator = get_or_create_narrator_persona()
-    caller_state = SceneDataManager().initialize_state_for_object(
-        narrator.character_sheet.character
-    )
+    # Scene link (Minor review fix, mirrors broadcast_action_outcome's
+    # scene=encounter.scene): resolved from location the same way every other
+    # room-scoped active-scene lookup does, so a perk-announce OUTCOME row
+    # participates in scene-log replay like the precedent it's modeled on.
+    scene = get_active_scene(location)
 
     for firing in fired:
         holder_character = firing.holder.character
@@ -510,7 +528,7 @@ def announce_fired_perks(
         text = f"{firing.perk.name}: {rendered}"
 
         interaction = create_interaction(
-            persona=narrator, content=text, mode=InteractionMode.OUTCOME
+            persona=narrator, content=text, mode=InteractionMode.OUTCOME, scene=scene
         )
         payload = _build_interaction_payload(
             interaction_id=interaction.pk,
@@ -521,4 +539,8 @@ def announce_fired_perks(
             scene_id=interaction.scene_id,
         )
         _broadcast_to_location(location, payload)
-        message_location(caller_state, text)
+        # Telnet companion (CRITICAL review fix — ruling 1, HARD): deliver
+        # directly to `location` via Evennia's own room-broadcast primitive
+        # rather than `message_location` (which would resolve the broadcast
+        # room from an unrelated caller's own location — see docstring).
+        location.msg_contents(text)

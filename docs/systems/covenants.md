@@ -160,13 +160,22 @@ truncate the same way (`Decimal` sum, `int()` truncation).
 **Presentation contract (ruling 1, HARD):** a firing perk must be a loud, visible moment in BOTH
 clients. `announce_fired_perks` dual-dispatches per firing — a persisted, Narrator-authored
 `OUTCOME` `Interaction` broadcast over the WS interaction payload (the same machinery
-`combat.interaction_services.broadcast_action_outcome` uses) PLUS a `message_location` text
-companion so bare telnet renders the identical line. `broadcast_action_outcome` alone is
-WS-only and was verified insufficient for this path — see ADR-0150 for why it isn't reused
-as-is. Each rendered line is `"{perk.name}: {announce_template rendered with holder/subject}"`.
-Called from inside each delivery provider (never from `applicable_perks` itself) exactly once
-per real resolution — see ADR-0150's "call-site discipline" section for the no-double-announce
-proof.
+`combat.interaction_services.broadcast_action_outcome` uses, including its `scene=` link —
+resolved via `get_active_scene(location)` — so a perk announce appears in scene-log replay like
+the precedent it's modeled on) PLUS a direct `location.msg_contents(text)` text companion so bare
+telnet renders the identical line. `broadcast_action_outcome` alone is WS-only and was verified
+insufficient for this path — see ADR-0150 for why it isn't reused as-is. The telnet companion
+calls `location.msg_contents` directly rather than `flows.service_functions.communication
+.message_location` — `message_location` resolves its broadcast room from its caller's own
+location, not from an explicit `location` argument, and this function has no single acting
+character reliably co-located with the room a perk fires in (a group-beneficiary firing may name
+a `holder` elsewhere); `location` itself is the one value guaranteed correct (see the function's
+own docstring; a review cycle initially shipped this seam building a caller state from the
+Narrator's own persona, whose location is unrelated to `location` and broke telnet delivery
+silently — never repeat that shape). Each rendered line is `"{perk.name}: {announce_template
+rendered with holder/subject}"`. Called from inside each delivery provider (never from
+`applicable_perks` itself) exactly once per real resolution — see ADR-0150's "call-site
+discipline" section for the no-double-announce proof.
 
 - **`CovenantRoleGiftGrant`** (#2022) — through model for
   `CovenantRole.granted_gifts` M2M to `magic.Gift`. Carries
