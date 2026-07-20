@@ -30,15 +30,22 @@ class Situation(models.TextChoices):
     here): ``combat_opened_from_parley``, ``ambush_underway``,
     ``ally_intercepted_for_me``, ``attacker_abyssal``.
 
-    - ``AT_RANGE`` — the holder's engagement distance profile this round is
-      ranged (not adjacent to any engaged enemy). Reads ``resolution``
-      (``CombatRoundContext``); False outside combat.
-    - ``IN_MELEE`` — the holder's engagement distance profile this round is
-      melee (adjacent to at least one engaged enemy). Reads ``resolution``;
-      False outside combat.
+    - ``AT_RANGE`` — the SUBJECT's engagement distance profile this round is
+      ranged (has at least one actively-engaged enemy, none of them sharing
+      the subject's ``Position``). ``resolution`` is always the subject's
+      round context (see ``SituationContext`` docstring) — corrected from an
+      earlier "holder's" wording, since the same ``resolution`` object is
+      reused across every candidate holder for one subject resolution. Reads
+      ``resolution``; False outside combat or when unpositioned.
+    - ``IN_MELEE`` — the SUBJECT's engagement distance profile this round is
+      melee (at least one actively-engaged enemy shares the subject's
+      ``Position``). Reads ``resolution``; False outside combat or when
+      unpositioned.
     - ``SURROUNDED`` — the subject is engaged by at least a module-constant
-      threshold of adjacent enemies this round. Reads ``subject`` +
-      ``resolution``; False outside combat.
+      threshold of active ``EngagementLock`` rows this round (adjacency
+      approximated via lock count, not the position graph — see
+      ``perks.evaluators`` for why). Reads ``subject`` + ``resolution``;
+      False outside combat.
     - ``TARGET_DISTRACTED`` — the target carries an applied condition whose
       template links a ``distraction``/``charm`` ``TechniqueFunction`` tag
       (or, absent technique->condition provenance, a name/category match —
