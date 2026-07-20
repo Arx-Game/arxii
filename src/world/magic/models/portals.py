@@ -112,6 +112,17 @@ class PortalAnchor(SharedMemoryModel):
         blank=True,
         help_text="Set when the anchor is dissolved; null = active.",
     )
+    fixture_key = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text=(
+            "Permanent stable identifier for authored (exported) portal anchor installs, "
+            "e.g. 'arx-city/golden-hart-taproom/mirror' (#2451). Set when installed via "
+            "the staff world-builder canvas; NULL for player-installed/test anchors."
+        ),
+    )
 
     objects = PortalAnchorQuerySet.as_manager()
 

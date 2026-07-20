@@ -634,3 +634,15 @@ class AdornmentFactory(factory.django.DjangoModelFactory):
     host_instance = factory.SubFactory(ItemInstanceFactory)
     gem_instance = factory.SubFactory(ItemInstanceFactory)
     narration = ""
+
+
+class CommonGemBucketFactory(factory.django.DjangoModelFactory):
+    """Factory for CommonGemBucket — a crafter's per-tier common-gem value stock."""
+
+    class Meta:
+        model = "items.CommonGemBucket"
+        django_get_or_create = ("character_sheet", "tier")
+
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    tier = factory.SubFactory(MaterialCategoryFactory)
+    value = 0

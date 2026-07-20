@@ -104,9 +104,32 @@ Builder #670, polish/renown-from-dwellings). Root terms live in
   debt (that's the org-scoped `DebtInstrument`).
 - **Refurbish** — `refurbish_building` (#1930): the priced owner action
   restoring `condition_tier` to Excellent (coppers per tier deficit, scaled
-  by `target_size`). _Avoid:_ renovate/renovation (strictly the
-  `BUILDING_RENOVATION` catalog-kind swap), restoration (the deleted #676
-  polish-refill machinery).
+  by `target_size`). Refuses on a property-granted building that hasn't been
+  through `BUILDING_ACTIVATION` yet — the first-time rite lives there, not
+  here. _Avoid:_ renovate/renovation (strictly the `BUILDING_RENOVATION`
+  catalog-kind swap), restoration (the deleted #676 polish-refill machinery).
+- **Property grant profile** — `PropertyGrantProfile`: a reusable catalog row
+  configuring `grant_property_house(persona, profile)`. Generic — not tied to
+  any beginning, ward, or content. A profile with `activation_target_tier`
+  unset grants an already-active Building; one with it set grants an
+  upkeep-exempt Building needing a `BUILDING_ACTIVATION` project to reach
+  that tier. _Avoid:_ starter home, deed (this repo's `estates` app owns
+  "deed"-adjacent inheritance vocabulary; a property grant is unrelated).
+- **Property-granted** — a Building with `property_granted_at` set
+  (`granted_via_profile` non-null): came from `grant_property_house`, not
+  `complete_building_construction`. Orthogonal axis from condition tier — a
+  property-granted building can be at any tier once activated.
+- **Building Activation** — the `BUILDING_ACTIVATION` project kind: the
+  one-time, funded arc that brings a property-granted building from its
+  starting tier to `PropertyGrantProfile.activation_target_tier`, exactly
+  once (`applied_at` idempotency marker, mirrors `BuildingRenovationDetails`).
+  Stamps `Building.property_activated_at`, which lifts the weekly-upkeep
+  exemption and un-blocks `refurbish_building`. _Avoid:_ **restoration**
+  (retired #676 vocabulary — see the Refurbish entry above), **refurbish**
+  (that's the separate priced-instant path for a building that already went
+  through construction or activation; refurbish refuses on a granted-not-yet-
+  activated building specifically so this first-time rite can't be bought
+  around).
 - **Grand Preparation** — the `BUILDING_PREPARATION` project kind (#1930):
   the cleaning / party-preparation loop that pushes a building one tier
   ABOVE Excellent (→ Extravagantly Polished → Immaculate) for a temporary

@@ -36,7 +36,12 @@ class CmdIC(Command):  # ty: ignore[invalid-base]
 
         # Find the character by name
         char_name = self.args.strip()
-        available_chars = self.account.get_available_characters()
+        # #2393 — a retired honoree with an accepted, open seance offer is
+        # reachable too, even though get_available_characters() excludes them.
+        available_chars = (
+            self.account.get_available_characters()
+            + self.account.get_seance_manifestable_characters()
+        )
 
         # Search for matching character
         target_char = None

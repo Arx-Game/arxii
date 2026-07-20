@@ -15,7 +15,6 @@ from django.test import TestCase
 from evennia_extensions.factories import ObjectDBFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
-from world.covenants.constants import RoleArchetype
 from world.covenants.factories import (
     CharacterSheetFactory,
     CovenantFactory,
@@ -646,9 +645,7 @@ class CovenantRiteRolePackageTests(TestCase):
 
     def test_package_for_selects_highest_band_and_falls_back(self) -> None:
         """package_for returns the highest matching band or falls back to granted_condition."""
-        sword = CovenantRoleFactory(
-            name="Sword", slug="sword-pkg-test", archetype=RoleArchetype.SWORD
-        )
+        sword = CovenantRoleFactory(name="Sword", slug="sword-pkg-test", sword_weight=1)
         low = ConditionTemplateFactory(name="fury_i")
         high = ConditionTemplateFactory(name="fury_ii")
         CovenantRiteRolePackageFactory(
@@ -663,9 +660,7 @@ class CovenantRiteRolePackageTests(TestCase):
         # Below lowest band → fallback to granted_condition.
         self.assertEqual(self.rite.package_for(sword, 0), self.rite.granted_condition)
         # Unmapped role → fallback to granted_condition.
-        other = CovenantRoleFactory(
-            name="Crown", slug="crown-pkg-test", archetype=RoleArchetype.CROWN
-        )
+        other = CovenantRoleFactory(name="Crown", slug="crown-pkg-test", crown_weight=1)
         self.assertEqual(self.rite.package_for(other, 5), self.rite.granted_condition)
 
 
@@ -694,7 +689,7 @@ class _RiteTwoRoleTestCase(_RiteSceneTestCase):
         self.role_a = self.role  # alias for clarity
         self.role_b = CovenantRoleFactory(
             covenant_type=CovenantType.DURANCE,
-            archetype=RoleArchetype.SHIELD,
+            shield_weight=1,
             name="TwoRole-Shield",
             slug="tworole-shield",
         )

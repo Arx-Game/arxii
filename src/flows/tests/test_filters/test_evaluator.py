@@ -116,3 +116,46 @@ class FilterEvaluatorTests(TestCase):
         f = {"path": "attacker", "op": "has_capability", "value": "anything"}
         with self.assertRaises(FilterPathError):
             evaluate_filter(f, payload, self_ref=None)
+
+    def test_has_resonance_at_least(self) -> None:
+        payload = SimpleNamespace(
+            attacker=SimpleNamespace(
+                has_resonance_at_least=lambda spec: spec == {"resonance": "Abyssal", "minimum": 50}
+            )
+        )
+        f = {
+            "path": "attacker",
+            "op": "has_resonance_at_least",
+            "value": {"resonance": "Abyssal", "minimum": 50},
+        }
+        self.assertTrue(evaluate_filter(f, payload, self_ref=None))
+
+    def test_has_resonance_at_least_missing_method_raises(self) -> None:
+        payload = SimpleNamespace(attacker=SimpleNamespace())
+        f = {
+            "path": "attacker",
+            "op": "has_resonance_at_least",
+            "value": {"resonance": "Abyssal", "minimum": 50},
+        }
+        with self.assertRaises(FilterPathError):
+            evaluate_filter(f, payload, self_ref=None)
+
+    def test_has_public_distinction(self) -> None:
+        payload = SimpleNamespace(
+            attacker=SimpleNamespace(has_public_distinction=lambda slug: slug == "blooded-duelist")
+        )
+        f = {"path": "attacker", "op": "has_public_distinction", "value": "blooded-duelist"}
+        self.assertTrue(evaluate_filter(f, payload, self_ref=None))
+
+    def test_fame_tier_at_least(self) -> None:
+        payload = SimpleNamespace(
+            attacker=SimpleNamespace(
+                fame_tier_at_least=lambda spec: spec.get("min_tier") == "celebrity"
+            )
+        )
+        f = {
+            "path": "attacker",
+            "op": "fame_tier_at_least",
+            "value": {"min_tier": "celebrity", "perceiving_society": None},
+        }
+        self.assertTrue(evaluate_filter(f, payload, self_ref=None))

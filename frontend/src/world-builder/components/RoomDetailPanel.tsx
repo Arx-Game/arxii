@@ -40,6 +40,8 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { ROOM_ENCLOSURES } from '../types';
 import type { WorldBuilderExit, WorldBuilderRoom } from '../types';
+import { PlaceClueDialog } from './PlaceClueDialog';
+import { PlacePortalAnchorDialog } from './PlacePortalAnchorDialog';
 
 export interface RoomDetailPanelProps {
   room: WorldBuilderRoom;
@@ -73,6 +75,8 @@ export function RoomDetailPanel({
   const [isOutdoor, setIsOutdoor] = useState(room.is_outdoor);
   const [enclosure, setEnclosure] = useState(room.enclosure);
   const [renames, setRenames] = useState<Record<number, string>>({});
+  const [placeClueOpen, setPlaceClueOpen] = useState(false);
+  const [placeAnchorOpen, setPlaceAnchorOpen] = useState(false);
 
   useEffect(() => {
     setName(room.name);
@@ -243,6 +247,78 @@ export function RoomDetailPanel({
       </div>
 
       {!isStory && (
+        <div className="flex flex-col gap-2">
+          <h4 className="text-sm font-semibold">Clues</h4>
+          {room.clues.length === 0 && room.clue_triggers.length === 0 && (
+            <p className="text-xs text-muted-foreground">No clues placed here.</p>
+          )}
+          {room.clues.map((clue) => (
+            <div key={clue.id} className="flex items-center gap-1.5">
+              <span className="flex-1 truncate text-sm">{clue.clue_name}</span>
+              <span className="whitespace-nowrap text-xs text-muted-foreground">
+                difficulty {clue.detect_difficulty}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                data-testid={`remove-clue-${clue.id}`}
+                onClick={() => runAction('staff_remove_clue', { room_clue_id: clue.id })}
+              >
+                ✕
+              </Button>
+            </div>
+          ))}
+          {room.clue_triggers.map((trigger) => (
+            <div key={trigger.id} className="flex items-center gap-1.5">
+              <span className="flex-1 truncate text-sm">{trigger.clue_name}</span>
+              <span className="whitespace-nowrap text-xs text-muted-foreground">on entry</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                data-testid={`remove-clue-trigger-${trigger.id}`}
+                onClick={() =>
+                  runAction('staff_remove_clue_trigger', { clue_trigger_id: trigger.id })
+                }
+              >
+                ✕
+              </Button>
+            </div>
+          ))}
+          <Button size="sm" variant="outline" onClick={() => setPlaceClueOpen(true)}>
+            Place clue
+          </Button>
+        </div>
+      )}
+
+      {!isStory && (
+        <div className="flex flex-col gap-2">
+          <h4 className="text-sm font-semibold">Portal anchors</h4>
+          {room.portal_anchors.length === 0 && (
+            <p className="text-xs text-muted-foreground">No portal anchors here.</p>
+          )}
+          {room.portal_anchors.map((anchor) => (
+            <div key={anchor.id} className="flex items-center gap-1.5">
+              <span className="flex-1 truncate text-sm">{anchor.name}</span>
+              <span className="whitespace-nowrap text-xs text-muted-foreground">
+                {anchor.kind_name}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                data-testid={`remove-portal-anchor-${anchor.id}`}
+                onClick={() => runAction('staff_remove_portal_anchor', { anchor_id: anchor.id })}
+              >
+                ✕
+              </Button>
+            </div>
+          ))}
+          <Button size="sm" variant="outline" onClick={() => setPlaceAnchorOpen(true)}>
+            Place portal anchor
+          </Button>
+        </div>
+      )}
+
+      {!isStory && (
         <div className="flex flex-col gap-2 rounded-md border p-2">
           <h4 className="text-sm font-semibold">Promote</h4>
           <p className="text-xs text-muted-foreground">
@@ -304,6 +380,19 @@ export function RoomDetailPanel({
           </AlertDialogContent>
         </AlertDialog>
       </div>
+
+      <PlaceClueDialog
+        roomId={room.id}
+        open={placeClueOpen}
+        onOpenChange={setPlaceClueOpen}
+        runAction={runAction}
+      />
+      <PlacePortalAnchorDialog
+        roomId={room.id}
+        open={placeAnchorOpen}
+        onOpenChange={setPlaceAnchorOpen}
+        runAction={runAction}
+      />
     </div>
   );
 }

@@ -14,9 +14,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = PROJECT_ROOT / "src"
 
 # RunPython seeds are banned (ADR-0013); seed data lives in seed
-# functions/fixtures. Keep this allowlist empty.
+# functions/fixtures. Keep this allowlist minimal — entries here are schema-
+# transition backfills (deriving/re-keying existing rows during a field
+# rename/split), not authored seed content.
 ALLOWED_MIGRATIONS: set[str] = {
     "world/battles/migrations/0031_populate_military_units.py",
+    # #2529: derives CovenantRole.sword/shield/crown_weight from the removed
+    # archetype field and re-keys ArchetypeActionScaling rows onto the new
+    # CovenantRoleActionScaling model. No-op on empty databases.
+    "world/covenants/migrations/0029_covenantroleactionscaling_and_more.py",
 }
 
 # Patterns that suggest seed data in migrations

@@ -71,6 +71,9 @@ class CharacterDraftFactory(factory_django.DjangoModelFactory):
     selected_area = factory.SubFactory(StartingAreaFactory)
     current_stage = CharacterDraft.Stage.ORIGIN
 
+    # Stage 2: Heritage
+    selected_beginnings = None  # Optional, set in tests as needed
+
     # Stage 5: Path
     selected_path = None  # Optional, set in tests as needed
 

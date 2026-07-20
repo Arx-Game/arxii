@@ -19,6 +19,7 @@ import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useCGExplanations, useUpdateDraft, useWorshippedBeings } from '../queries';
 import type { CharacterDraft } from '../types';
+import { OriginStorySection } from './OriginStorySection';
 
 const NONE_VALUE = 'none';
 
@@ -185,23 +186,8 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
         </div>
       </section>
 
-      {/* Background */}
-      <section className="space-y-4">
-        <h3 className="theme-heading text-lg font-semibold">Background</h3>
-        <div className="space-y-2">
-          <Label htmlFor="background">Character History</Label>
-          <Textarea
-            id="background"
-            {...register('background')}
-            placeholder="Tell us about your character's past..."
-            rows={6}
-            className="resize-y"
-          />
-          <p className="text-xs text-muted-foreground">
-            Your character's history, motivations, and what brought them here.
-          </p>
-        </div>
-      </section>
+      {/* Origin Story (#2478) — replaces free-text Background */}
+      <OriginStorySection draft={draft} />
 
       {/* Worship (#2355) */}
       <section className="space-y-4">

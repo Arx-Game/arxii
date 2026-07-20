@@ -232,6 +232,12 @@ def _seed_building_condition() -> None:
     ensure_preparation_contribution_method()
 
 
+def _seed_property_grants() -> None:
+    from world.buildings.seeds import ensure_placeholder_property_grant_profile  # noqa: PLC0415
+
+    ensure_placeholder_property_grant_profile()
+
+
 def _seed_agriculture() -> None:
     from world.agriculture.seeds import (  # noqa: PLC0415
         ensure_field_granary_kinds,
@@ -270,6 +276,12 @@ def _seed_survivability() -> None:
     from world.vitals.seeds import seed_survivability_content  # noqa: PLC0415
 
     seed_survivability_content()
+
+
+def _seed_ceremonies() -> None:
+    from world.ceremonies.seeds import seed_ceremony_types  # noqa: PLC0415
+
+    seed_ceremony_types()
 
 
 def _seed_gm() -> None:
@@ -436,6 +448,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Building condition: the Grand Preparation AP-check contribution method
     # (#1930). After "governance" (rides its Household Command CheckType).
     "building_condition": _seed_building_condition,
+    # Property grants: a generic placeholder PropertyGrantProfile so
+    # grant_property_house is exercisable on a fresh dev DB before any real
+    # fixture content wires a Beginnings row at a PropertyGrantProfile.
+    "property_grants": _seed_property_grants,
     "agriculture": _seed_agriculture,
     # Kudos: the KudosSourceCategory rows the pose_kudos / spread_assist / social_engagement
     # reaction-kind + weekly-grant paths need, plus the "relationship_writeup" category and the
@@ -449,6 +465,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # After "kudos" (shares the KudosSourceCategory model) and "checks" (the
     # outcome spine); both idempotent either way.
     "survivability": _seed_survivability,
+    # Ceremony types: Funeral/Blessing/Sermon/Seance CeremonyType rows (#2289/#2393).
+    # Without this cluster, opening ANY ceremony fails with "not recognized" on a
+    # fresh database — no other seed or migration ever creates these rows.
+    "ceremonies": _seed_ceremonies,
     # Market: the PLACEHOLDER capital square + NPC stock stall (#2066).
     "market": _seed_market,
     # Kinship: the PLACEHOLDER ducal demo tree + slots/pool + truth-pair (#2062).
@@ -528,7 +548,12 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from actions.models import ActionTemplate, ConsequencePool  # noqa: PLC0415
     from world.agriculture.models import CropType  # noqa: PLC0415
     from world.battles.models import BattleMapBlueprint, BattleUnitTemplate  # noqa: PLC0415
-    from world.buildings.models import BuildingKind, DecorationKind  # noqa: PLC0415
+    from world.buildings.models import (  # noqa: PLC0415
+        BuildingKind,
+        DecorationKind,
+        PropertyGrantProfile,
+    )
+    from world.ceremonies.models import CeremonyType  # noqa: PLC0415
     from world.character_creation.models import (  # noqa: PLC0415
         Beginnings,
         CGExplanation,
@@ -655,6 +680,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Building condition: the Grand Preparation "Direct the Household"
         # ContributionMethod (#1930).
         "building_condition": [ContributionMethod],
+        # Property grants: a generic placeholder PropertyGrantProfile so
+        # grant_property_house is exercisable on a fresh dev DB before any
+        # real fixture content wires a Beginnings row at one.
+        "property_grants": [PropertyGrantProfile],
         # Kudos: 4 KudosSourceCategory rows (pose_kudos/spread_assist/social_engagement/
         # relationship_writeup) + the "xp" KudosClaimCategory; represented by
         # KudosSourceCategory (#2026).
@@ -663,6 +692,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # staged condition + foundational CapabilityTypes + dream room (#2287).
         # Represented by ConsequencePool (the tier pools).
         "survivability": [ConsequencePool],
+        # Ceremony types: the four authored CeremonyType rows (#2289/#2393).
+        "ceremonies": [CeremonyType],
         # Market: the PLACEHOLDER capital square (#2066).
         "market": [MarketSquare],
         # GM trust ladder: the 5 default GMLevelCap rows, one per GMLevel (#2000).

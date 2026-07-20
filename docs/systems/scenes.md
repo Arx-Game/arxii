@@ -497,6 +497,8 @@ from world.scenes.scene_admin_services import finish_scene_full
 
 # Full scene-finish orchestration. Idempotent — returns immediately if already finished.
 # Steps: scene.finish_scene() → on_scene_finished() → deferred fatigue resets →
+#        teardown conjured obstacles/ramparts → revalidate Durance engagements →
+#        clear speaker queue → expire_scene_scoped_conditions(participants) (#2514) →
 #        broadcast_scene_message(scene, SceneAction.END).
 # by_account is accepted for call-site symmetry but is not forwarded downstream.
 finish_scene_full(scene, by_account=None) -> None

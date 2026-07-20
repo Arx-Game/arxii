@@ -219,4 +219,17 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
 
         clear_queue_on_scene_finish(scene)
 
+    # #2514: clear scene-scoped conditions (social moods, etc.) for all
+    # participants. Mirrors the UNTIL_END_OF_COMBAT sweep in combat cleanup
+    # (expire_end_of_combat_conditions). Participant resolution mirrors the
+    # clear_very_attracted pattern in Scene.finish_scene.
+    from world.conditions.services import expire_scene_scoped_conditions  # noqa: PLC0415
+
+    participant_targets = [
+        persona.character_sheet.character
+        for persona in scene.persona_handler.active_participant_personas()
+        if persona.character_sheet is not None and persona.character_sheet.character is not None
+    ]
+    expire_scene_scoped_conditions(participant_targets)
+
     broadcast_scene_message(scene, SceneAction.END)

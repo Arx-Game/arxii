@@ -74,11 +74,27 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   (so `appraise()` reflects it). `adorned_materials()` is the queryable "materials on this piece"
   seam the magic app reads. Safe craft-time path only.
 
+- **Gem cutting (Build 0b, slice 3) — DONE.** `cut_gem()` reuses a `GEM_CUT` `CraftingRecipe` +
+  `perform_check` (skill feeds the roll) and resolves `success_level` to an improved cut `GemGrade`;
+  a botch **shatters** the stone. The risky value-add axis, kept in the crafting family.
+
+- **Risky adornment prying (Build 0b, slice 6) — DONE.** `pry_adornment()` completes the adornment
+  lifecycle: a risky `perform_check` removes a set gem — freed to the pryer on success, **shattered**
+  on a botch (the cut's shatter spine); the host's worth drops either way. High risk, high reward.
+
 - **Gem mining engine (Build 0b, slice 4) — DONE.** `roll_gem_haul()` — the pure, deterministic
   haul generator: one mine cycle yields a common-gem **aggregate value** plus, rarely, a few
   **Rare-Find** gem instances (born uncut). Mine quality + minister bonus raise the Rare-Find
   chance and shift every axis roll up; size/purity floored above common on a find. The multiplicative
   axes give the fat "remarkable find" tail for free.
+
+- **Common-gem value buckets + bulk requirements (Build 0b, slice 5) — DONE.** `CommonGemBucket`
+  holds a crafter's common-gem value per tier (never instanced); `CraftingMaterialRequirement`
+  gains `required_value` — a "N value of {tier}" bulk requirement drawing fungibly from the buckets
+  ("gem-covered table, don't care which"), while named Rare-Find stones are never auto-consumed.
+  The crafting cost path splits value reqs from 0a instance reqs. Remaining 0b work: risky
+  prying/re-set, hard cut skill-cap + consequence-pool narration, and the **domain-cron wiring**
+  (Build-1 track).
 
 - **Mine accrual (Build 0b, slice 7) — DONE.** `accrue_mine_cycle()` runs one weekly cycle for a
   mine holding: `DomainHolding` gains `mine_quality` + `common_gem_tier`, and the cycle accrues the

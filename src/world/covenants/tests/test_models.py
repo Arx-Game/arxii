@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.covenants.constants import CommandTier, CovenantType, RoleArchetype
+from world.covenants.constants import CommandTier, CovenantType
 from world.covenants.factories import (
     CovenantFactory,
     CovenantRankFactory,
@@ -31,7 +31,7 @@ class CovenantRoleTests(TestCase):
             name="Vanguard",
             slug="vanguard",
             covenant_type=CovenantType.DURANCE,
-            archetype=RoleArchetype.SWORD,
+            sword_weight=1,
             speed_rank=1,
         )
         self.assertEqual(role.name, "Vanguard")
@@ -47,7 +47,7 @@ class CovenantRoleTests(TestCase):
             CovenantRole.objects.create(
                 name="Duplicate",
                 slug="vanguard-unique",
-                archetype=RoleArchetype.SWORD,
+                sword_weight=1,
                 speed_rank=2,
             )
 
@@ -57,7 +57,7 @@ class CovenantRoleTests(TestCase):
             name="Vanguard",
             slug="vanguard-durance",
             covenant_type=CovenantType.DURANCE,
-            archetype=RoleArchetype.SWORD,
+            sword_weight=1,
             speed_rank=1,
         )
         # Same name, different type — OK
@@ -65,7 +65,7 @@ class CovenantRoleTests(TestCase):
             name="Vanguard",
             slug="vanguard-battle",
             covenant_type=CovenantType.BATTLE,
-            archetype=RoleArchetype.SWORD,
+            sword_weight=1,
             speed_rank=2,
         )
         # Same name, same type — constraint violation
@@ -74,7 +74,7 @@ class CovenantRoleTests(TestCase):
                 name="Vanguard",
                 slug="vanguard-durance-2",
                 covenant_type=CovenantType.DURANCE,
-                archetype=RoleArchetype.SHIELD,
+                shield_weight=1,
                 speed_rank=3,
             )
 
@@ -231,11 +231,11 @@ class CharacterCovenantRoleConstraintTests(TestCase):
         )
         cls.role_vanguard = CovenantRoleFactory(
             covenant_type=CovenantType.DURANCE,
-            archetype=RoleArchetype.SWORD,
+            sword_weight=1,
         )
         cls.role_sword_battle = CovenantRoleFactory(
             covenant_type=CovenantType.BATTLE,
-            archetype=RoleArchetype.SWORD,
+            sword_weight=1,
         )
         cls.sheet = CharacterSheetFactory()
         cls.rank_a = CovenantRank.objects.create(covenant=cls.cov_a, name="Member", tier=1)

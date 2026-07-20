@@ -306,12 +306,18 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   health pool damaged only by team play (combos + distinct-PC distinct-effect-type hits).
   The combo invariant (#2051, ADR-0107) hard-blocks <2-slot combos at save time and runtime;
   BOSS-tier opponents with legend-paying aftermath require an authored `wall_breaker_combo` FK.
-  **Vows as combat roles** (#2022, ADR-0108): a character's engaged `CovenantRole` drives three
-  pillars of combat power — (1) **stat power** scaling with the COVENANT_ROLE thread level
-  (`VowStatScaling`), (2) **equipment effectiveness** scaling (`VowGearScaling`), and (3)
-  **specialized techniques** granted by the role that resolve variants by the vow's depth
-  (`CharacterTechnique.role_source`). When the vow dims (#2051), all three pillars collapse —
-  which is why soloing legend content is lethal.
+  **Vows as combat roles** (#2022, ADR-0108, re-scoped by ADR-0149): a character's engaged
+  `CovenantRole` drives combat power through a four-layer model. **Layer 1** (#2529, shipped):
+  the role is a SWORD/SHIELD/CROWN weighted blend, not a single archetype pick, driving an
+  always-on baseline cast power term plus **stat power** scaling with the COVENANT_ROLE thread
+  level (`VowStatScaling`, unchanged); role-granted **specialized techniques** that resolve
+  variants by the vow's depth (`CharacterTechnique.role_source`) also shipped under #2022 and
+  are unaffected. Layer 2 (#2443, deeper per-vow technique specialty), Layer 3 (#2533, defense
+  styles + gear substitution — **equipment effectiveness** scaling via `VowGearScaling` is
+  short-circuited to 0 pending this layer), and Layer 4 (#2536, deterministic situational
+  perks — "the point of vows") are tracked separately. When the vow dims (#2051), the engaged
+  flag drops and every shipped layer's contribution returns to 0 — which is why soloing legend
+  content is lethal.
 - Magic is predominant; relationship bonuses matter; **difficulty scales on party size + average level
   only** (ADR-0037); combat merits Legend, never XP (ADR-0036).
 

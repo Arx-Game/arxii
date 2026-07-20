@@ -2671,11 +2671,13 @@ paths:
           enum:
           - blessing
           - funeral
+          - seance
           - sermon
         description: |-
           * `funeral` - Funeral
           * `blessing` - Blessing
           * `sermon` - Sermon
+          * `seance` - Seance
       - in: query
         name: location
         schema:
@@ -2740,6 +2742,99 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Ceremony'
+          description: ''
+  /api/ceremonies/seance-offers/:
+    get:
+      operationId: ceremonies_seance_offers_list
+      description: |-
+        PENDING seance-offer inbox for the requesting account (#2393).
+
+        GET  /api/ceremonies/seance-offers/ — the caller's own PENDING offers,
+        across every character sheet they've ever held (live, dead, or retired).
+        Deliberately no pagination — this list is always small (bounded by how
+        many open Seance ceremonies currently name this account's characters).
+        POST .../{id}/accept/ — accept (mints the location move + retired-puppet grant).
+        POST .../{id}/decline/ — decline.
+      tags:
+      - ceremonies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SeanceManifestationOffer'
+          description: ''
+  /api/ceremonies/seance-offers/{id}/accept/:
+    post:
+      operationId: ceremonies_seance_offers_accept_create
+      description: |-
+        PENDING seance-offer inbox for the requesting account (#2393).
+
+        GET  /api/ceremonies/seance-offers/ — the caller's own PENDING offers,
+        across every character sheet they've ever held (live, dead, or retired).
+        Deliberately no pagination — this list is always small (bounded by how
+        many open Seance ceremonies currently name this account's characters).
+        POST .../{id}/accept/ — accept (mints the location move + retired-puppet grant).
+        POST .../{id}/decline/ — decline.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - ceremonies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeanceManifestationOfferRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeanceManifestationOffer'
+          description: ''
+  /api/ceremonies/seance-offers/{id}/decline/:
+    post:
+      operationId: ceremonies_seance_offers_decline_create
+      description: |-
+        PENDING seance-offer inbox for the requesting account (#2393).
+
+        GET  /api/ceremonies/seance-offers/ — the caller's own PENDING offers,
+        across every character sheet they've ever held (live, dead, or retired).
+        Deliberately no pagination — this list is always small (bounded by how
+        many open Seance ceremonies currently name this account's characters).
+        POST .../{id}/accept/ — accept (mints the location move + retired-puppet grant).
+        POST .../{id}/decline/ — decline.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - ceremonies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeanceManifestationOfferRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeanceManifestationOffer'
           description: ''
   /api/chapters/:
     get:
@@ -4067,6 +4162,58 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-creation/origin-templates/:
+    get:
+      operationId: character_creation_origin_templates_list
+      description: |-
+        List active origin-story templates for the CG guided flow (#2478).
+
+        Filter by ``beginning`` to get templates available for a specific beginning.
+        Mirrors ``CGGlimpseTagViewSet``.
+      parameters:
+      - in: query
+        name: beginning
+        schema:
+          type: integer
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CGOriginTemplate'
+          description: ''
+  /api/character-creation/origin-templates/{id}/:
+    get:
+      operationId: character_creation_origin_templates_retrieve
+      description: |-
+        List active origin-story templates for the CG guided flow (#2478).
+
+        Filter by ``beginning`` to get templates available for a specific beginning.
+        Mirrors ``CGGlimpseTagViewSet``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Origin Template.
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CGOriginTemplate'
+          description: ''
   /api/character-creation/paths/:
     get:
       operationId: character_creation_paths_list
@@ -4420,6 +4567,40 @@ paths:
         Returns character sheet data for a single character. The response
         includes a `can_edit` flag based on whether the requesting user is
         the original creator or staff.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/clear-origin-slot/:
+    post:
+      operationId: character_sheets_clear_origin_slot_create
+      description: Clear a character's origin-story slot answer (#2478).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/character-sheets/{id}/set-origin-slot/:
+    post:
+      operationId: character_sheets_set_origin_slot_create
+      description: Set a character's origin-story slot answer (#2478).
       parameters:
       - in: path
         name: id
@@ -32740,16 +32921,6 @@ components:
       description: |-
         * `major` - Major Arcana
         * `minor` - Minor Arcana
-    ArchetypeEnum:
-      enum:
-      - sword
-      - shield
-      - crown
-      type: string
-      description: |-
-        * `sword` - Sword
-        * `shield` - Shield
-        * `crown` - Crown
     ArchitecturalStyle:
       type: object
       description: |-
@@ -34632,6 +34803,44 @@ components:
       required:
       - id
       - name
+    CGOriginTemplate:
+      type: object
+      description: |-
+        Origin template for the CG guided flow (#2478).
+
+        Backs ``GET /api/character-creation/origin-templates/``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Template name (part of natural key).
+        frame_narrative:
+          type: string
+          readOnly: true
+          description: The fixed frame prose every character with this beginning shares.
+        is_active:
+          type: boolean
+          readOnly: true
+          description: Inactive templates are hidden from CG.
+        sort_order:
+          type: integer
+          readOnly: true
+          description: Display order when multiple templates exist.
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/OriginTemplateSlot'
+          readOnly: true
+      required:
+      - frame_narrative
+      - id
+      - is_active
+      - name
+      - slots
+      - sort_order
     CGPointBudget:
       type: object
       description: Serializer for CG point budget configuration.
@@ -38078,19 +38287,25 @@ components:
         covenant_type_display:
           type: string
           readOnly: true
-        archetype:
-          allOf:
-          - $ref: '#/components/schemas/ArchetypeEnum'
-          readOnly: true
-          description: |-
-            Foundational archetype: Sword (offense), Shield (defense), Crown (support).
-
-            * `sword` - Sword
-            * `shield` - Shield
-            * `crown` - Crown
-        archetype_display:
+        sword_weight:
           type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,3})?$
           readOnly: true
+          description: SWORD axis of the combat-identity blend (0-1). Weights are
+            stored on primary roles only; sub-roles read the parent's blend (#2529).
+        shield_weight:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,3})?$
+          readOnly: true
+          description: SHIELD axis of the combat-identity blend (0-1).
+        crown_weight:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,3})?$
+          readOnly: true
+          description: CROWN axis of the combat-identity blend (0-1).
         speed_rank:
           type: integer
           readOnly: true
@@ -38106,16 +38321,17 @@ components:
           nullable: true
           description: Null for primary roles. Set for sub-roles.
       required:
-      - archetype
-      - archetype_display
       - covenant_type
       - covenant_type_display
+      - crown_weight
       - description
       - id
       - name
       - parent_role
+      - shield_weight
       - slug
       - speed_rank
+      - sword_weight
     CovenantTypeEnum:
       enum:
       - durance
@@ -38881,6 +39097,7 @@ components:
       - until_cured
       - until_used
       - end_combat
+      - scene
       - permanent
       type: string
       description: |-
@@ -38888,6 +39105,7 @@ components:
         * `until_cured` - Until Cured
         * `until_used` - Until Used (consumed on trigger)
         * `end_combat` - Until End of Combat
+        * `scene` - Until End of Scene
         * `permanent` - Permanent (until removed)
     DefendingSideRoleEnum:
       enum:
@@ -48648,6 +48866,39 @@ components:
         * `authored` - Authored (canonical, exported)
         * `story` - GM Story (never exported)
         * `player` - Player-built (never exported)
+    OriginTemplateSlot:
+      type: object
+      description: Slot prompt within an origin template (#2478).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Slot name (part of natural key).
+        prompt:
+          type: string
+          readOnly: true
+          description: The question shown to the player.
+        example:
+          type: string
+          readOnly: true
+          description: Short illustrative answer shown in the guided step.
+        sort_order:
+          type: integer
+          readOnly: true
+        is_required:
+          type: boolean
+          readOnly: true
+          description: Required slots are marked in the post-CG finish-later editor.
+      required:
+      - example
+      - id
+      - is_required
+      - name
+      - prompt
+      - sort_order
     Outcome5d6Enum:
       enum:
       - unresolved
@@ -60423,6 +60674,38 @@ components:
         * `character` - Personal
         * `group` - Group
         * `global` - Global
+    SeanceManifestationOffer:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        honoree_name:
+          type: string
+          readOnly: true
+        ceremony_location_name:
+          type: string
+          readOnly: true
+        ceremony_id:
+          type: integer
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/Status7baEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - ceremony_id
+      - ceremony_location_name
+      - created_at
+      - honoree_name
+      - id
+    SeanceManifestationOfferRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/Status7baEnum'
     SeasonEnum:
       enum:
       - spring
@@ -62626,6 +62909,16 @@ components:
         * `resolving` - Resolving
         * `between_rounds` - Between Rounds
         * `completed` - Completed
+    Status7baEnum:
+      enum:
+      - pending
+      - accepted
+      - declined
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `declined` - Declined
     Status83bEnum:
       enum:
       - pending
@@ -63442,11 +63735,25 @@ components:
           type: string
         occupant_count:
           type: integer
+        clues:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderRoomClue'
+        clue_triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderClueTrigger'
+        portal_anchors:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderPortalAnchor'
         grants:
           type: array
           items:
             type: string
       required:
+      - clue_triggers
+      - clues
       - description
       - enclosure
       - fixture_key
@@ -63461,6 +63768,7 @@ components:
       - name
       - occupant_count
       - origin
+      - portal_anchors
       - size_name
     StrainAvailability:
       type: object
@@ -66393,6 +66701,25 @@ components:
       - area
       - exits
       - rooms
+    WorldBuilderClueTrigger:
+      type: object
+      description: One ClueTrigger placement, nested in a WorldBuilderRoom payload
+        (#2451).
+      properties:
+        id:
+          type: integer
+        clue_name:
+          type: string
+        clue_slug:
+          type: string
+        fixture_key:
+          type: string
+          nullable: true
+      required:
+      - clue_name
+      - clue_slug
+      - fixture_key
+      - id
     WorldBuilderExit:
       type: object
       description: |-
@@ -66424,6 +66751,24 @@ components:
       - to_area_id
       - to_room_id
       - to_room_name
+    WorldBuilderPortalAnchor:
+      type: object
+      description: One active PortalAnchor, nested in a WorldBuilderRoom payload (#2451).
+      properties:
+        id:
+          type: integer
+        kind_name:
+          type: string
+        name:
+          type: string
+        fixture_key:
+          type: string
+          nullable: true
+      required:
+      - fixture_key
+      - id
+      - kind_name
+      - name
     WorldBuilderRoom:
       type: object
       description: |-
@@ -66465,7 +66810,21 @@ components:
           type: string
         occupant_count:
           type: integer
+        clues:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderRoomClue'
+        clue_triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderClueTrigger'
+        portal_anchors:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderPortalAnchor'
       required:
+      - clue_triggers
+      - clues
       - description
       - enclosure
       - fixture_key
@@ -66479,7 +66838,29 @@ components:
       - name
       - occupant_count
       - origin
+      - portal_anchors
       - size_name
+    WorldBuilderRoomClue:
+      type: object
+      description: One RoomClue placement, nested in a WorldBuilderRoom payload (#2451).
+      properties:
+        id:
+          type: integer
+        clue_name:
+          type: string
+        clue_slug:
+          type: string
+        detect_difficulty:
+          type: integer
+        fixture_key:
+          type: string
+          nullable: true
+      required:
+      - clue_name
+      - clue_slug
+      - detect_difficulty
+      - fixture_key
+      - id
     WorshippedBeingRef:
       type: object
       properties:

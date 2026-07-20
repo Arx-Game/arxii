@@ -195,6 +195,44 @@ class Adornment(SharedMemoryModel):
         return f"gem {self.gem_instance_id} set in item {self.host_instance_id}"
 
 
+class CommonGemBucket(SharedMemoryModel):
+    """A crafter's stock of *common* gems as an aggregate value, per tier (Build 0b slice 5).
+
+    Common gems are never instanced — they live as a per-tier value integer that mining
+    credits and bulk crafting spends ("slap 20 semiprecious on the table, don't care
+    which"). Keyed to a CharacterSheet + a gem ``MaterialCategory`` (the tier). This is
+    the type-blind bulk source; specific-type demand still uses real instances.
+    """
+
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="common_gem_buckets",
+    )
+    tier = models.ForeignKey(
+        "items.MaterialCategory",
+        on_delete=models.PROTECT,
+        related_name="common_gem_buckets",
+        help_text="The gem tier (a MaterialCategory) this value is denominated in.",
+    )
+    value = models.PositiveIntegerField(
+        default=0,
+        help_text="Aggregate common-gem value held, in coppers.",
+    )
+
+    class Meta:
+        app_label = "items"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_sheet", "tier"],
+                name="items_commongembucket_sheet_tier_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"sheet {self.character_sheet_id} {self.tier}: {self.value}"
+
+
 class StreamCommonGemPool(SharedMemoryModel):
     """Per-tier uncollected common-gem value amassed by a mine's income stream (Build 0b).
 

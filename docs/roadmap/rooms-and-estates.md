@@ -231,8 +231,9 @@ defenses:
 - **Remaining slices (epic #2436, not built here — separate sub-issues):**
   #2449 (staff world-builder canvas, since built — see `docs/roadmap/tooling.md`),
   #2450 (GM story areas, since built — see `docs/roadmap/tooling.md` and
-  `docs/roadmap/gm-system.md`), #2451 (discovery/portal authoring), #2452 (player
-  room-building constraints, resolved — see docs/roadmap/tooling.md).
+  `docs/roadmap/gm-system.md`), #2451 (discovery/portal authoring, since built —
+  see `docs/roadmap/tooling.md`), #2452 (player room-building constraints,
+  resolved — see docs/roadmap/tooling.md).
 - **Details:** see `docs/systems/INDEX.md`'s "Areas" + "Grid content export/import"
   entries, `docs/adr/0140-grid-content-exports-as-graph-aware-area-bundles.md`.
 

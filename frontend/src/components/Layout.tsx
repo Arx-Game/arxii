@@ -4,6 +4,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import { ThemeBackground } from './theme-background';
 import { PendingAlterationBanner } from '@/magic/components/alterations/PendingAlterationBanner';
+import { SeanceOfferBanner } from '@/ceremonies/SeanceOfferBanner';
 
 interface LayoutProps {
   children: ReactNode;
@@ -26,6 +27,7 @@ export function Layout({ children }: LayoutProps) {
       </a>
       <Header />
       <PendingAlterationBanner />
+      <SeanceOfferBanner />
       {isFullViewport ? (
         <main id="main-content" className="flex min-h-0 flex-1 flex-col">
           {children}

@@ -1029,6 +1029,17 @@ def survivability_baseline(character: ObjectDB, vital_target: str) -> int:
     return _soft_cap(scaled, tuning.cap, tuning.half_saturation)
 
 
+def total_thread_level_across_all_kinds(sheet: CharacterSheet) -> int:
+    """Sum raw ``thread.level`` across ALL of a character's non-retired threads (#2529).
+
+    Formula B for the covenant-role blend baseline: total magical investment
+    across every thread kind (TECHNIQUE, GIFT, COVENANT_ROLE, SANCTUM, ...),
+    reading the cached ``character.threads`` handler. Raw levels, NOT the
+    ``thread_level_multiplier`` bucketing ``survivability_baseline`` uses.
+    """
+    return sum(thread.level for thread in sheet.character.threads.all())
+
+
 def survivability_save_baselines(character: ObjectDB) -> ThreadSurvivabilitySaves:
     """Per-tier survivability save modifiers from thread investment (#1250).
 

@@ -401,8 +401,6 @@
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - portal_anchors <- magic.PortalAnchor
-  - fame_reaction_lines <- societies.FameReactionLine
-  - fame_reaction_cooldowns <- societies.FameReactionCooldown
   - hidden_clues <- clues.RoomClue
   - clue_triggers <- clues.ClueTrigger
   - crime_evidence <- justice.CrimeEvidence
@@ -415,6 +413,7 @@
   - events <- events.Event
   - ceremonies <- ceremonies.Ceremony
   - story_grants <- gm.StoryRoomGrant
+  - ambient_emote_lines <- narrative.AmbientEmoteLine
   - functionaries <- npc_services.Functionary
   - npc_assignments <- npc_services.NPCAssignment
   - entry_for_buildings <- buildings.Building
@@ -648,7 +647,9 @@
   - battles <- battles.Battle
   - city_defense_projects <- battles.CityDefenseDetails
   - story_ownership <- gm.StoryArea
+  - ambient_emote_lines <- narrative.AmbientEmoteLine
   - default_permits_offered <- npc_services.PermitOfferDetails
+  - property_grant_profiles <- buildings.PropertyGrantProfile
   - building_profile <- buildings.Building
   - building_permits_valid_in <- buildings.BuildingPermitDetails
   - construction_projects <- buildings.BuildingConstructionDetails
@@ -1064,10 +1065,19 @@
 **Pointed to by:**
   - allowed_in_wards <- areas.Area
   - offered_by <- npc_services.PermitOfferDetails
+  - property_grant_profiles <- buildings.PropertyGrantProfile
   - buildings <- buildings.Building
   - permits <- buildings.BuildingPermitDetails
   - renovation_targets <- buildings.BuildingRenovationDetails
   - installable_features <- room_features.RoomFeatureKind
+
+### PropertyGrantProfile
+**Foreign Keys:**
+  - building_kind -> buildings.BuildingKind [FK]
+  - ward_area -> areas.Area [FK] (nullable)
+**Pointed to by:**
+  - beginnings <- character_creation.Beginnings
+  - granted_buildings <- buildings.Building
 
 ### BuildingSizeTier
 
@@ -1084,6 +1094,7 @@
   - entry_room -> evennia_extensions.RoomProfile [FK] (nullable)
   - constructed_by_persona -> scenes.Persona [FK] (nullable)
   - source_project -> projects.Project [OneToOne] (nullable)
+  - granted_via_profile -> buildings.PropertyGrantProfile [FK] (nullable)
 **Pointed to by:**
   - bequests <- estates.Bequest
   - battle_fortifications <- battles.Fortification
@@ -1091,6 +1102,7 @@
   - extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - renovation_details <- buildings.BuildingRenovationDetails
+  - activation_details <- buildings.BuildingActivationDetails
   - preparation_details <- buildings.BuildingPreparationDetails
   - upgrade_details <- buildings.BuildingUpgradeDetails
   - design_details <- buildings.InteriorDesignDetails
@@ -1131,6 +1143,11 @@
   - project -> projects.Project [OneToOne]
   - building -> buildings.Building [FK]
   - target_kind -> buildings.BuildingKind [FK]
+
+### BuildingActivationDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - building -> buildings.Building [FK]
 
 ### BuildingPreparationDetails
 **Foreign Keys:**
@@ -1308,6 +1325,7 @@
   - honoree_sheet -> character_sheets.CharacterSheet [FK]
 **Pointed to by:**
   - speeches <- ceremonies.CeremonySpeech
+  - seance_offer <- ceremonies.SeanceManifestationOffer
 
 ### CeremonyOffering
 **Foreign Keys:**
@@ -1323,6 +1341,10 @@
 
 ### CeremonyConfig
 
+### SeanceManifestationOffer
+**Foreign Keys:**
+  - ceremony_honoree -> ceremonies.CeremonyHonoree [OneToOne]
+
 ### Service Functions
 - `abandon_ceremony(*, ceremony: world.ceremonies.models.Ceremony) -> world.ceremonies.models.Ceremony — Decision 12: close the rite awarding nothing; frees the location + ghost window.`
 - `execute_will(character_sheet: 'CharacterSheet') -> None — Execute the deceased's estate — the funeral door of #1985.`
@@ -1330,8 +1352,11 @@
 - `get_ceremony_config() -> world.ceremonies.models.CeremonyConfig — Get-or-create the first CeremonyConfig row (singleton-by-convention).`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None) -> world.ceremonies.models.Ceremony — Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None — The OPEN funeral honoring this character, if any (the ghost container).`
+- `pending_seance_offers_for_account(account: object) -> 'QuerySet[SeanceManifestationOffer]' — PENDING seance offers addressed to any character this account has ever held (#2393).`
 - `record_offering(*, ceremony: world.ceremonies.models.Ceremony, item_instances: 'list[ItemInstance]') -> list[world.ceremonies.models.CeremonyOffering] — Sacrifice items: destroy them, feed the being's pool, log offerings.`
 - `record_speech(*, ceremony: world.ceremonies.models.Ceremony, speaker_persona: 'Persona', target_honoree: world.ceremonies.models.CeremonyHonoree | None = None) -> world.ceremonies.models.CeremonySpeech — Recognize a speaker; their Performance/Oratory roll shapes the tally.`
+- `respond_to_seance_offer(offer: 'SeanceManifestationOffer', *, account: object, accept: bool) -> 'SeanceManifestationOffer' — Accept or decline a pending seance manifestation offer (#2393).`
+- `revoke_seance_manifestations(ceremony: world.ceremonies.models.Ceremony) -> None — Force-unpuppet any manifested RETIRED honoree when a Seance closes (#2393).`
 
 
 ## world.character_creation
@@ -1353,6 +1378,7 @@
   - starting_area -> character_creation.StartingArea [FK]
   - heritage -> character_sheets.Heritage [FK] (nullable)
   - starting_room_override -> objects.ObjectDB [FK] (nullable)
+  - property_grant_profile -> buildings.PropertyGrantProfile [FK] (nullable)
   - prelude_mission -> missions.MissionTemplate [FK] (nullable)
   - allowed_species -> species.Species [M2M]
   - starting_languages -> species.Language [M2M]
@@ -1360,6 +1386,7 @@
   - traditions -> magic.Tradition [M2M]
 **Pointed to by:**
   - beginning_traditions <- character_creation.BeginningTradition
+  - origin_templates <- character_creation.OriginTemplate
   - drafts <- character_creation.CharacterDraft
   - ritual_grants <- magic.BeginningsRitualGrant
   - codex_grants <- codex.BeginningsCodexGrant
@@ -1369,6 +1396,23 @@
   - beginning -> character_creation.Beginnings [FK]
   - tradition -> magic.Tradition [FK]
   - required_distinction -> distinctions.Distinction [FK] (nullable)
+
+### OriginTemplate
+**Foreign Keys:**
+  - beginning -> character_creation.Beginnings [FK]
+**Pointed to by:**
+  - slots <- character_creation.OriginTemplateSlot
+
+### OriginTemplateSlot
+**Foreign Keys:**
+  - template -> character_creation.OriginTemplate [FK]
+**Pointed to by:**
+  - character_rows <- character_creation.CharacterOriginSlot
+
+### CharacterOriginSlot
+**Foreign Keys:**
+  - sheet -> character_sheets.CharacterSheet [FK]
+  - slot -> character_creation.OriginTemplateSlot [FK]
 
 ### CharacterDraft
 **Foreign Keys:**
@@ -1410,17 +1454,21 @@
 ### Service Functions
 - `add_application_comment(application: 'DraftApplication', *, author: 'AbstractBaseUser | AnonymousUser', text: 'str') -> 'DraftApplicationComment' — Add a message comment to an application.`
 - `approve_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str' = '') -> 'None' — Approve an application and finalize the character.`
+- `assemble_origin_prose(sheet: 'CharacterSheet') -> 'str' — Compose the frame narrative + slot answers into prose.`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' — Calculate weight in pounds from height and build.`
 - `can_create_character(account: 'AbstractBaseUser | AnonymousUser') -> 'tuple[bool, str]' — Check if an account can create a new character.`
 - `claim_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser') -> 'None' — Claim a submitted application for staff review.`
+- `clear_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot') -> 'None' — Delete a slot answer and recompute state.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' — Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `deny_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' — Deny an application.`
 - `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False, created_by_account: 'AccountDB | None' = None) -> 'ObjectDB' — Create a Character from a completed CharacterDraft.`
 - `finalize_gm_character(draft: 'CharacterDraft') -> 'tuple[RosterEntry, Story]' — Finalize a GM-initiated draft into a roster character + story.`
 - `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' — Create magic models from the CG-chosen catalog Gift/Techniques during finalization.`
 - `get_accessible_starting_areas(account: 'AbstractBaseUser | AnonymousUser') -> 'QuerySet' — Get all starting areas accessible to an account.`
+- `refresh_origin_story_state(sheet: 'CharacterSheet') -> 'OriginStoryState' — Recompute and persist ``origin_story_state`` from slot rows + prose.`
 - `request_revisions(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' — Request revisions on an application.`
 - `resubmit_draft(application: 'DraftApplication', *, comment: 'str' = '') -> 'None' — Resubmit a draft application after revisions.`
+- `set_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot', value: 'str') -> 'None' — Upsert a character's slot answer, then refresh state.`
 - `submit_draft_for_review(draft: 'CharacterDraft', *, submission_notes: 'str' = '') -> 'DraftApplication' — Submit a character draft for staff review.`
 - `unsubmit_draft(application: 'DraftApplication') -> 'None' — Un-submit a draft application, returning it to editable state.`
 - `withdraw_draft(application: 'DraftApplication') -> 'None' — Withdraw a draft application.`
@@ -1458,6 +1506,7 @@
   - kinsperson <- roster.Kinsperson
   - deferred_kin <- roster.Kinsperson
   - roster_entry <- roster.RosterEntry
+  - origin_slots <- character_creation.CharacterOriginSlot
   - class_level_advancements <- progression.ClassLevelAdvancement
   - officiated_advancements <- progression.ClassLevelAdvancement
   - durance_training_roles <- progression.DuranceTrainingSite
@@ -1563,6 +1612,7 @@
   - fashion_presentations <- items.FashionPresentation
   - mantle_clearances <- items.MantleLevelClearance
   - recipe_knowledge <- items.CharacterRecipeKnowledge
+  - common_gem_buckets <- items.CommonGemBucket
   - reclamation_claims <- items.ReclamationClaim
   - original_reclamation_claims <- items.ReclamationClaim
   - fatigue <- fatigue.FatiguePool
@@ -2611,6 +2661,7 @@
 - `ensure_conditions_content() -> None — Idempotently seed all core conditions content.`
 - `ensure_poison_content() -> None — Idempotently seed poison content (#1050).`
 - `expire_end_of_combat_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all UNTIL_END_OF_COMBAT conditions from the given targets.`
+- `expire_scene_scoped_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all SCENE-duration conditions from the given targets.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
@@ -2755,6 +2806,7 @@
   - gear_compatibilities <- covenants.GearArchetypeCompatibility
   - character_assignments <- covenants.CharacterCovenantRole
   - vow_stat_scalings <- covenants.VowStatScaling
+  - action_scalings <- covenants.CovenantRoleActionScaling
   - gift_grants <- covenants.CovenantRoleGiftGrant
   - role_bonuses <- covenants.CovenantRoleBonus
   - combat_participations <- combat.CombatParticipant
@@ -2791,7 +2843,9 @@
 
 ### VowGearScaling
 
-### ArchetypeActionScaling
+### CovenantRoleActionScaling
+**Foreign Keys:**
+  - covenant_role -> covenants.CovenantRole [FK]
 
 ### CovenantRoleGiftGrant
 **Foreign Keys:**
@@ -2857,7 +2911,6 @@
 ### Service Functions
 - `active_court_pact_for(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet') -> 'CourtPact | None' — Return the single active CourtPact for (covenant, servant_sheet), or None.`
 - `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole') -> 'CharacterCovenantRole' — Create a new active membership row. Atomic.`
-- `archetype_action_scaling_bonus(character: 'object', action_key: 'str') -> 'float' — Return the archetype-driven scaling bonus for a combat action (#2022).`
 - `assert_initiator_can_induct(*, session: 'RitualSession') -> 'None' — Draft-time gate for INDUCTION rituals: the initiator must hold a can_invite`
 - `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole', rank: 'CovenantRank | None' = None) -> 'CharacterCovenantRole' — Create a new active CharacterCovenantRole row. Atomic.`
 - `assign_rank(*, membership: 'CharacterCovenantRole', actor: 'CharacterCovenantRole', rank: 'CovenantRank') -> 'CharacterCovenantRole' — Assign a new rank to a member. Requires can_manage_ranks.`
@@ -2868,6 +2921,7 @@
 - `clear_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Un-engage this membership. Idempotent.`
 - `complete_rites_for_encounter(*, encounter: 'CombatEncounter') -> 'None' — Sweep covenant rite buffs when a combat encounter ends.`
 - `covenant_members_present(*, covenant: 'Covenant', room: 'ObjectDB') -> 'list[CharacterSheet]' — CharacterSheets of active `covenant` members present in `room`.`
+- `covenant_role_action_scaling_bonus(character: 'object', action_key: 'str') -> 'float' — Return the per-role scaling bonus for a combat action (#2529, was #2022).`
 - `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]', battle_binding: 'str' = '', campaign_story: 'Story | None' = None, leader: 'CharacterSheet | None' = None, flat: 'bool' = False) -> 'Covenant' — Create a covenant with its initial set of founder memberships. Atomic.`
 - `create_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on FORMATION fire. Unpacks the session into create_covenant args.`
 - `create_rank(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', name: 'str', tier: 'int', can_invite: 'bool' = False, can_kick: 'bool' = False, can_manage_ranks: 'bool' = False, can_lead_rituals: 'bool' = False) -> 'CovenantRank' — Create a new rank in the covenant's ladder. Requires can_manage_ranks.`
@@ -3631,6 +3685,7 @@
 ### MaterialCategory
 **Pointed to by:**
   - templates <- items.ItemTemplate
+  - common_gem_buckets <- items.CommonGemBucket
 
 ### InteractionType
 **Pointed to by:**
@@ -3923,6 +3978,11 @@
   - host_instance -> items.ItemInstance [FK]
   - gem_instance -> items.ItemInstance [OneToOne]
   - set_by_account -> accounts.AccountDB [FK] (nullable)
+
+### CommonGemBucket
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - tier -> items.MaterialCategory [FK]
 
 ### StreamCommonGemPool
 **Foreign Keys:**
@@ -4829,6 +4889,8 @@
 
 ### StandingCapBand
 
+### CovenantRoleBlendConfig
+
 ### MagicProgressionMilestone
 **Foreign Keys:**
   - codex_entry -> codex.CodexEntry [FK] (nullable)
@@ -5484,7 +5546,7 @@
 - `stage_property(target: 'ObjectDB', property_: 'Property', value: 'int' = 1) -> 'ObjectProperty' — GM improv: attach or refresh a Property on ``target`` (#2503).`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
 - `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' — Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`
-- `vow_gear_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven equipment effectiveness bonus (#2022).`
+- `vow_gear_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Vow-driven equipment amplification — inert pending Layer 3 (#2533).`
 - `vow_stat_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven stat scaling across engaged roles (#2022).`
 - `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' — Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`
 
@@ -5788,6 +5850,21 @@
 ### UserCategoryMute
 **Foreign Keys:**
   - account -> accounts.AccountDB [FK]
+
+### AmbientEmoteLine
+**Foreign Keys:**
+  - area -> areas.Area [FK] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+**Pointed to by:**
+  - conditions <- narrative.AmbientEmoteCondition
+
+### AmbientEmoteCondition
+**Foreign Keys:**
+  - line -> narrative.AmbientEmoteLine [FK]
+  - species -> species.Species [FK] (nullable)
+  - resonance -> magic.Resonance [FK] (nullable)
+  - distinction -> distinctions.Distinction [FK] (nullable)
+  - perceiving_society -> societies.Society [FK] (nullable)
 
 ### Service Functions
 - `broadcast_gemit(*, body: 'str', sender_account: 'AccountDB', reach: 'str' = GemitReach.GAME_WIDE, societies: 'Iterable[Society] | None' = None, organizations: 'Iterable[Organization] | None' = None, related_era: 'Era | None' = None, related_story: 'Story | None' = None) -> 'Gemit' — Create a Gemit and push it to its ``reach`` audience in green (#1450).`
@@ -6270,6 +6347,7 @@
   - building_extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - building_renovation_details <- buildings.BuildingRenovationDetails
+  - building_activation_details <- buildings.BuildingActivationDetails
   - building_preparation_details <- buildings.BuildingPreparationDetails
   - building_upgrade_details <- buildings.BuildingUpgradeDetails
   - interior_design_details <- buildings.InteriorDesignDetails
@@ -6919,7 +6997,6 @@
   - legend_spreads <- societies.LegendSpread
   - legend_stories_written <- societies.LegendDeedStory
   - deed_knowledge <- societies.PersonaDeedKnowledge
-  - fame_reaction_cooldowns <- societies.FameReactionCooldown
   - org_contributions <- currency.ContributionRecord
   - contracts_proposed <- currency.Contract
   - contracts_received <- currency.Contract
@@ -7157,6 +7234,7 @@
 **Pointed to by:**
   - additional_targets <- scenes.SceneActionTarget
   - pull_declaration <- scenes.SceneActionPullDeclaration
+  - boon <- scenes.Boon
 
 ### SceneActionTarget
 **Foreign Keys:**
@@ -7169,6 +7247,11 @@
   - request -> scenes.SceneActionRequest [OneToOne]
   - resonance -> magic.Resonance [FK]
   - threads -> magic.Thread [M2M]
+
+### Boon
+**Foreign Keys:**
+  - action_request -> scenes.SceneActionRequest [OneToOne]
+  - item_instance -> items.ItemInstance [FK] (nullable)
 
 ### Place
 **Foreign Keys:**
@@ -7444,7 +7527,6 @@
   - heard_legend_spreads <- societies.LegendSpread
   - ranking_displays <- societies.RankingDisplay
   - ranking_band_labels <- societies.RankingBandLabel
-  - fame_reaction_lines <- societies.FameReactionLine
   - house_templates <- societies.HouseTemplate
   - exposed_secrets <- secrets.Secret
   - dominant_areas <- areas.Area
@@ -7641,16 +7723,6 @@
 ### RankingBandLabel
 **Foreign Keys:**
   - society -> societies.Society [FK] (nullable)
-
-### FameReactionLine
-**Foreign Keys:**
-  - room -> evennia_extensions.RoomProfile [FK]
-  - society -> societies.Society [FK] (nullable)
-
-### FameReactionCooldown
-**Foreign Keys:**
-  - persona -> scenes.Persona [FK]
-  - room -> evennia_extensions.RoomProfile [FK]
 
 ### CovenantLegendCredit
 **Foreign Keys:**

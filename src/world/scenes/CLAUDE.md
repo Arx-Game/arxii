@@ -82,7 +82,18 @@ the unified Persona identity system, and non-combat scene rounds.
   clears `SceneRoundDefaultsConfig.sudden_harm_interpose_threshold`; resolved and deleted by
   `world.scenes.sudden_harm.resolve_pending_interpose_harm` at that round's resolution.
 
+- **`Boon`** (#2540, `boon_models.py`): the payload of a structured social ask ("ask a head/NPC for
+  a thing, backed by a persuade/con/seduce/intimidate roll"), attached 1:1 to a `SceneActionRequest`.
+  Fields: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`, `item_instance`, `deed_text`,
+  `fulfilled_at`. On a successful roll `boon_services.fulfill_boon` moves the asked thing — **MONEY is
+  wired** (via `currency.transfer`, target→asker purse); HELD_ITEM (needs an item-ownership-transfer
+  seam), VAULT_ITEM (needs the bank/vault system), and DEED (RP-only) are follow-up slices. Mirrors
+  `BlackmailAction`'s payload+success-effect shape. The `BoonAction` ActionTemplate wiring, the `boon`
+  consent category, and the per-Boon (stacking) affection cost are follow-up slices — see spec #2540.
+
 ### `constants.py`
+- **`BoonKind`** (`TextChoices`, `action_constants.py`): what a Boon asks for (MONEY / HELD_ITEM /
+  VAULT_ITEM / DEED).
 - **`SceneRoundMode`** (`TextChoices`): `OPEN` (immediate, unbounded), `POSE_ORDER` (immediate,
   quota-gated — quorum advances the round), `STRICT` (declare-then-batch-resolve).
   Social rounds default to `POSE_ORDER`; danger rounds are `STRICT` (#1466).

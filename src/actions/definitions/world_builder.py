@@ -1,6 +1,7 @@
 """Staff world-builder actions (#2449) — the canvas's dispatch seam.
 
-Eleven REGISTRY actions, all ``category="world_builder"``, ``target_type=SELF``,
+Seventeen REGISTRY actions (eleven original + six discovery/portal-authoring, #2451),
+all ``category="world_builder"``, ``target_type=SELF``,
 gated by ``StaffOnlyPrerequisite`` alone (no ownership/tenancy standing — this is
 staff tooling, not a player-facing builder). Each is a thin wrapper over the
 Task 1+2 substrate: ``world.areas.grid_services`` (room/exit/grid primitives +
@@ -39,6 +40,8 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
     from evennia_extensions.models import RoomProfile
     from world.areas.models import Area
+    from world.clues.models import ClueTrigger, RoomClue
+    from world.magic.models import PortalAnchor
 
 _EXIT_TYPECLASS = "typeclasses.exits.Exit"
 
@@ -59,6 +62,34 @@ def _resolve_room_profile(room_id: Any) -> RoomProfile | None:
     return (
         RoomProfile.objects.filter(objectdb_id=room_id).select_related("objectdb", "area").first()
     )
+
+
+def _resolve_room_clue(room_clue_id: Any) -> RoomClue | None:
+    from world.clues.models import RoomClue  # noqa: PLC0415
+
+    if not room_clue_id:
+        return None
+    return RoomClue.objects.filter(pk=room_clue_id).select_related("room_profile", "clue").first()
+
+
+def _resolve_clue_trigger(clue_trigger_id: Any) -> ClueTrigger | None:
+    from world.clues.models import ClueTrigger  # noqa: PLC0415
+
+    if not clue_trigger_id:
+        return None
+    return (
+        ClueTrigger.objects.filter(pk=clue_trigger_id)
+        .select_related("room_profile", "clue")
+        .first()
+    )
+
+
+def _resolve_portal_anchor(anchor_id: Any) -> PortalAnchor | None:
+    from world.magic.models import PortalAnchor  # noqa: PLC0415
+
+    if not anchor_id:
+        return None
+    return PortalAnchor.objects.active().filter(pk=anchor_id).select_related("room_profile").first()
 
 
 def _resolve_exit(exit_id: Any) -> ObjectDB | None:
@@ -643,3 +674,202 @@ class PromoteAreaAction(_WorldBuilderAction):
         except GridServiceError as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(success=True, message=f"{area.name} promoted as {slug}.")
+
+
+@dataclass
+class StaffPlaceClueAction(_WorldBuilderAction):
+    """Place a ``RoomClue`` in a room. Kwargs: ``room_id``, ``clue_slug``, optional
+    ``detect_difficulty`` (int, default 0), optional ``fixture_key`` (auto-suggested
+    from ``room-<id>/<clue_slug>`` when omitted).
+    """
+
+    key: str = "staff_place_clue"
+    name: str = "Place Room Clue"
+    icon: str = "search"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.clues.models import Clue, RoomClue  # noqa: PLC0415
+
+        room_profile = _resolve_room_profile(kwargs.get("room_id"))
+        if room_profile is None:
+            return ActionResult(success=False, message="No such room.")
+        clue_slug = (kwargs.get("clue_slug") or "").strip()
+        clue = Clue.objects.filter(slug=clue_slug).first() if clue_slug else None
+        if clue is None:
+            return ActionResult(success=False, message="No such clue.")
+        try:
+            detect_difficulty = int(kwargs.get("detect_difficulty") or 0)
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="Detect difficulty must be a number.")
+        fixture_key = kwargs.get("fixture_key") or f"room-{room_profile.objectdb_id}/{clue_slug}"
+        _room_clue, _ = RoomClue.objects.update_or_create(
+            room_profile=room_profile,
+            clue=clue,
+            defaults={"detect_difficulty": detect_difficulty, "fixture_key": fixture_key},
+        )
+        return ActionResult(
+            success=True, message=f"{clue.name} placed in {room_profile.objectdb.db_key}."
+        )
+
+
+@dataclass
+class StaffRemoveClueAction(_WorldBuilderAction):
+    """Remove a ``RoomClue`` placement. Kwarg: ``room_clue_id``."""
+
+    key: str = "staff_remove_clue"
+    name: str = "Remove Room Clue"
+    icon: str = "trash"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        room_clue = _resolve_room_clue(kwargs.get("room_clue_id"))
+        if room_clue is None:
+            return ActionResult(success=False, message="No such clue placement.")
+        room_clue.delete()
+        return ActionResult(success=True, message="Clue placement removed.")
+
+
+@dataclass
+class StaffPlaceClueTriggerAction(_WorldBuilderAction):
+    """Place a ``ClueTrigger`` in a room. Kwargs: ``room_id``, ``clue_slug``, optional
+    ``fixture_key`` (auto-suggested from ``room-<id>/trigger-<clue_slug>`` when omitted).
+    """
+
+    key: str = "staff_place_clue_trigger"
+    name: str = "Place Clue Trigger"
+    icon: str = "zap"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.clues.models import Clue, ClueTrigger  # noqa: PLC0415
+
+        room_profile = _resolve_room_profile(kwargs.get("room_id"))
+        if room_profile is None:
+            return ActionResult(success=False, message="No such room.")
+        clue_slug = (kwargs.get("clue_slug") or "").strip()
+        clue = Clue.objects.filter(slug=clue_slug).first() if clue_slug else None
+        if clue is None:
+            return ActionResult(success=False, message="No such clue.")
+        fixture_key = kwargs.get("fixture_key") or (
+            f"room-{room_profile.objectdb_id}/trigger-{clue_slug}"
+        )
+        ClueTrigger.objects.update_or_create(
+            room_profile=room_profile, clue=clue, defaults={"fixture_key": fixture_key}
+        )
+        return ActionResult(
+            success=True, message=f"{clue.name} trigger placed in {room_profile.objectdb.db_key}."
+        )
+
+
+@dataclass
+class StaffRemoveClueTriggerAction(_WorldBuilderAction):
+    """Remove a ``ClueTrigger`` placement. Kwarg: ``clue_trigger_id``."""
+
+    key: str = "staff_remove_clue_trigger"
+    name: str = "Remove Clue Trigger"
+    icon: str = "trash"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        trigger = _resolve_clue_trigger(kwargs.get("clue_trigger_id"))
+        if trigger is None:
+            return ActionResult(success=False, message="No such clue trigger.")
+        trigger.delete()
+        return ActionResult(success=True, message="Clue trigger removed.")
+
+
+@dataclass
+class StaffPlacePortalAnchorAction(_WorldBuilderAction):
+    """Install a ``PortalAnchor`` from the canvas (staff variant, #2451).
+
+    Kwargs: ``room_id``, ``kind_name``, ``name``, optional ``fixture_key``
+    (auto-suggested from ``room-<id>/<kind_name-slugified>`` when omitted).
+    No standing/cost gate — see ``install_portal_anchor_as_staff``.
+    """
+
+    key: str = "staff_place_portal_anchor"
+    name: str = "Place Portal Anchor"
+    icon: str = "door-open"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.utils.text import slugify  # noqa: PLC0415
+
+        from world.magic.exceptions import PortalAnchorKindAlreadyInstalled  # noqa: PLC0415
+        from world.magic.models import PortalAnchorKind  # noqa: PLC0415
+        from world.magic.services.portal_travel import (  # noqa: PLC0415
+            install_portal_anchor_as_staff,
+        )
+
+        room_profile = _resolve_room_profile(kwargs.get("room_id"))
+        if room_profile is None:
+            return ActionResult(success=False, message="No such room.")
+        kind_name = (kwargs.get("kind_name") or "").strip()
+        kind = PortalAnchorKind.objects.filter(name__iexact=kind_name).first()
+        if kind is None:
+            return ActionResult(success=False, message="No such anchor kind.")
+        anchor_name = (kwargs.get("name") or "").strip()
+        if not anchor_name:
+            return ActionResult(success=False, message="Name the anchor.")
+        fixture_key = kwargs.get("fixture_key") or (
+            f"room-{room_profile.objectdb_id}/{slugify(kind_name)}"
+        )
+        try:
+            install_portal_anchor_as_staff(
+                room=room_profile.objectdb,
+                kind=kind,
+                name=anchor_name,
+                fixture_key=fixture_key,
+            )
+        except PortalAnchorKindAlreadyInstalled:
+            return ActionResult(
+                success=False, message=f"This room already has an active {kind.name} anchor."
+            )
+        return ActionResult(
+            success=True, message=f"{anchor_name} installed in {room_profile.objectdb.db_key}."
+        )
+
+
+@dataclass
+class StaffRemovePortalAnchorAction(_WorldBuilderAction):
+    """Dissolve a ``PortalAnchor`` (soft-delete). Kwarg: ``anchor_id``."""
+
+    key: str = "staff_remove_portal_anchor"
+    name: str = "Dissolve Portal Anchor"
+    icon: str = "door-closed"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.utils import timezone  # noqa: PLC0415
+
+        anchor = _resolve_portal_anchor(kwargs.get("anchor_id"))
+        if anchor is None:
+            return ActionResult(success=False, message="No such active anchor.")
+        anchor.dissolved_at = timezone.now()
+        anchor.save(update_fields=["dissolved_at"])
+        return ActionResult(success=True, message=f"{anchor.name} dissolves.")

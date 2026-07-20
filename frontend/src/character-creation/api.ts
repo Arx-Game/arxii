@@ -33,6 +33,7 @@ import type {
   GlimpseTagOption,
   HeightBand,
   NamingRitualConfig,
+  OriginTemplate,
   Path,
   PathSkillSuggestion,
   Resonance,
@@ -393,6 +394,18 @@ export async function getGlimpseTags(): Promise<GlimpseTagOption[]> {
   const res = await apiFetch(`${BASE_URL}/glimpse-tags/`);
   if (!res.ok) {
     throw new Error('Failed to load glimpse tags');
+  }
+  return res.json();
+}
+
+// =============================================================================
+// Origin Template Catalog API (guided origin-story flow, #2478)
+// =============================================================================
+
+export async function getOriginTemplates(beginningId: number): Promise<OriginTemplate[]> {
+  const res = await apiFetch(`${BASE_URL}/origin-templates/?beginning=${beginningId}`);
+  if (!res.ok) {
+    throw new Error('Failed to load origin templates');
   }
   return res.json();
 }

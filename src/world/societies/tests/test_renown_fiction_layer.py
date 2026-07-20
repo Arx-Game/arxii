@@ -1,9 +1,9 @@
-"""#761 + #881 — the renown fiction layer.
+"""#761 — the renown fiction layer.
 
 Qualitative ranking bands (the world never speaks raw numbers), the
-perception fold into prestige ordering, the player rankings API, and the
-room-entry fame reactions (actor/audience split, per-room/per-society
-authoring, cooldown throttle).
+perception fold into prestige ordering, and the player rankings API.
+Room-entry fame reactions (#881) were retired and generalized into
+world.narrative.AmbientEmoteLine's RENOWN_MIN trigger_type — see #2471.
 """
 
 from __future__ import annotations
@@ -15,12 +15,8 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import (
     AccountFactory,
-    CharacterFactory,
     ObjectDBFactory,
-    RoomProfileFactory,
 )
-from world.character_sheets.factories import CharacterSheetFactory
-from world.narrative.models import NarrativeMessageDelivery
 from world.scenes.factories import PersonaFactory
 from world.societies.constants import FameTier
 from world.societies.factories import (
@@ -28,10 +24,7 @@ from world.societies.factories import (
     OrganizationMembershipFactory,
     SocietyFactory,
 )
-from world.societies.fame_reactions import maybe_emit_fame_reaction
 from world.societies.models import (
-    FameReactionCooldown,
-    FameReactionLine,
     RankingBandLabel,
     RankingDisplay,
 )
@@ -145,96 +138,3 @@ class RankingApiTests(TestCase):
     def test_unknown_display_is_404(self) -> None:
         res = self.client.get("/api/societies/rankings/999999/")
         self.assertEqual(res.status_code, 404)
-
-
-def _room(name: str):
-    room = ObjectDBFactory(db_key=name, db_typeclass_path="typeclasses.rooms.Room")
-    profile = RoomProfileFactory(objectdb=room)
-    return room, profile
-
-
-def _arriver(room, *, fame_tier=FameTier.CELEBRITY):
-    character = CharacterFactory()
-    sheet = CharacterSheetFactory(character=character)
-    persona = sheet.primary_persona
-    persona.fame_tier = fame_tier
-    persona.save(update_fields=["fame_tier"])
-    character.db_location = room
-    character.save(update_fields=["db_location"])
-    return character, persona
-
-
-def _bystander(room):
-    character = CharacterFactory()
-    CharacterSheetFactory(character=character)
-    character.db_location = room
-    character.save(update_fields=["db_location"])
-    return character
-
-
-class FameReactionTests(TestCase):
-    def setUp(self) -> None:
-        self.room, self.profile = _room("Grand Salon")
-
-    def _line(self, **kwargs):
-        defaults = {
-            "room": self.profile,
-            "min_fame_tier": FameTier.CELEBRITY,
-            "bystander_body": "PLACEHOLDER heads turn as someone notable arrives.",
-            "arriver_body": "PLACEHOLDER you feel the salon take notice.",
-        }
-        defaults.update(kwargs)
-        return FameReactionLine.objects.create(**defaults)
-
-    def test_actor_audience_split(self) -> None:
-        self._line()
-        arriver, _ = _arriver(self.room)
-        bystander = _bystander(self.room)
-        self.assertTrue(maybe_emit_fame_reaction(arriver, self.room))
-
-        bystander_msgs = list(
-            NarrativeMessageDelivery.objects.filter(
-                recipient_character_sheet=bystander.sheet_data
-            ).values_list("message__body", flat=True)
-        )
-        arriver_msgs = list(
-            NarrativeMessageDelivery.objects.filter(
-                recipient_character_sheet=arriver.sheet_data
-            ).values_list("message__body", flat=True)
-        )
-        self.assertEqual(bystander_msgs, ["PLACEHOLDER heads turn as someone notable arrives."])
-        self.assertEqual(arriver_msgs, ["PLACEHOLDER you feel the salon take notice."])
-
-    def test_below_threshold_is_silent(self) -> None:
-        self._line()
-        arriver, _ = _arriver(self.room, fame_tier=FameTier.NORMAL)
-        self.assertFalse(maybe_emit_fame_reaction(arriver, self.room))
-
-    def test_insular_society_voice_hears_less(self) -> None:
-        insular = SocietyFactory(name="Insular Voice", fame_perception_offset=-2)
-        self._line(society=insular)
-        # CELEBRITY (index 2) - 2 = NORMAL < CELEBRITY threshold → silent.
-        arriver, _ = _arriver(self.room, fame_tier=FameTier.CELEBRITY)
-        self.assertFalse(maybe_emit_fame_reaction(arriver, self.room))
-        # WORLD_FAMOUS (index 4) - 2 = CELEBRITY → fires.
-        loud, _ = _arriver(self.room, fame_tier=FameTier.WORLD_FAMOUS)
-        self.assertTrue(maybe_emit_fame_reaction(loud, self.room))
-
-    def test_cooldown_blocks_refire(self) -> None:
-        self._line()
-        arriver, persona = _arriver(self.room)
-        self.assertTrue(maybe_emit_fame_reaction(arriver, self.room))
-        self.assertTrue(
-            FameReactionCooldown.objects.filter(persona=persona, room=self.profile).exists()
-        )
-        self.assertFalse(maybe_emit_fame_reaction(arriver, self.room))
-
-    def test_unauthored_room_is_silent(self) -> None:
-        bare_room, _ = _room("Bare Hall")
-        arriver, _ = _arriver(bare_room)
-        self.assertFalse(maybe_emit_fame_reaction(arriver, bare_room))
-
-    def test_sheetless_arriver_is_silent(self) -> None:
-        self._line()
-        sheetless = CharacterFactory()
-        self.assertFalse(maybe_emit_fame_reaction(sheetless, self.room))

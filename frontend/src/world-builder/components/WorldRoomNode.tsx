@@ -40,6 +40,11 @@ function WorldRoomNodeComponent({ data }: NodeProps<WorldRoomNodeType>) {
         <Badge variant={room.origin === 'authored' ? 'default' : 'secondary'}>{room.origin}</Badge>
         {room.fixture_key && <Badge variant="outline">{room.fixture_key}</Badge>}
         {room.occupant_count > 0 && <Badge variant="outline">{room.occupant_count} pc</Badge>}
+        {(room.clues.length > 0 || room.clue_triggers.length > 0) && (
+          <Badge variant="outline" data-testid="world-room-clue-badge">
+            {room.clues.length + room.clue_triggers.length} clues
+          </Badge>
+        )}
       </div>
       {!room.is_public && (
         <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">private</p>

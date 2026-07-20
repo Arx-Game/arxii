@@ -9,8 +9,11 @@ from world.character_creation.models import (
     BeginningTradition,
     CGExplanation,
     CharacterDraft,
+    CharacterOriginSlot,
     DraftApplication,
     DraftApplicationComment,
+    OriginTemplate,
+    OriginTemplateSlot,
     StartingArea,
 )
 from world.codex.models import BeginningsCodexGrant
@@ -121,6 +124,36 @@ class BeginningsAdmin(admin.ModelAdmin):
     def species_count(self, obj):
         """Show count of allowed species."""
         return obj.allowed_species.count()
+
+
+class OriginTemplateSlotInline(admin.TabularInline):
+    """Inline for slot prompts within an origin template (#2478)."""
+
+    model = OriginTemplateSlot
+    extra = 1
+    ordering = ["sort_order"]
+
+
+@admin.register(OriginTemplate)
+class OriginTemplateAdmin(admin.ModelAdmin):
+    """Admin for origin-story templates (#2478)."""
+
+    list_display = ["name", "beginning", "is_active", "sort_order"]
+    list_filter = ["is_active", "beginning__starting_area"]
+    search_fields = ["name", "frame_narrative"]
+    ordering = ["beginning", "sort_order", "name"]
+    inlines = [OriginTemplateSlotInline]
+
+
+@admin.register(CharacterOriginSlot)
+class CharacterOriginSlotAdmin(admin.ModelAdmin):
+    """Read-only admin for character origin-slot answers (#2478)."""
+
+    list_display = ["sheet", "slot", "value"]
+    list_filter = ["slot__template__beginning__starting_area"]
+    search_fields = ["value"]
+    readonly_fields = ["sheet", "slot", "value"]
+    autocomplete_fields = ["sheet"]
 
 
 @admin.register(CharacterDraft)

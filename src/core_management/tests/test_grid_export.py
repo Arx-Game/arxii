@@ -41,6 +41,11 @@ class GridExportTests(TestCase):
         cls.north_exit = grid.north_exit
         cls.south_exit = grid.south_exit
         cls.stray_exit = grid.stray_exit
+        cls.torn_letter = grid.torn_letter
+        cls.room_clue = grid.room_clue
+        cls.clue_trigger = grid.clue_trigger
+        cls.mirror_kind = grid.mirror_kind
+        cls.portal_anchor = grid.portal_anchor
 
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -185,6 +190,90 @@ class GridExportTests(TestCase):
 
         with self.assertRaisesRegex(ContentExportError, "arx-city/homeless-room"):
             export_grid_bundles(self.root)
+
+    def test_bundle_includes_clues_triggers_and_portal_anchors(self) -> None:
+        export_grid_bundles(self.root)
+        bundle = self._load_bundle("arx-city")
+
+        self.assertEqual(
+            bundle["clues"],
+            [
+                {
+                    "fixture_key": "arx-city/golden-hart-taproom/torn-letter",
+                    "room": "arx-city/golden-hart-taproom",
+                    "clue": "torn-letter",
+                    "detect_difficulty": 5,
+                    "eligibility_rule": {},
+                    "is_active": True,
+                }
+            ],
+        )
+        self.assertEqual(
+            bundle["clue_triggers"],
+            [
+                {
+                    "fixture_key": "arx-city/golden-hart-taproom/whisper",
+                    "room": "arx-city/golden-hart-taproom",
+                    "clue": "torn-letter",
+                    "eligibility_rule": {},
+                    "is_active": True,
+                }
+            ],
+        )
+        self.assertEqual(
+            bundle["portal_anchors"],
+            [
+                {
+                    "fixture_key": "arx-city/golden-hart-taproom/mirror",
+                    "room": "arx-city/golden-hart-taproom",
+                    "kind": "Mirror",
+                    "name": "a tall silvered mirror",
+                    "is_network_open": True,
+                }
+            ],
+        )
+
+    def test_bundle_includes_ambient_lines_with_nested_conditions(self) -> None:
+        from world.narrative.constants import ConditionType
+        from world.narrative.factories import AmbientEmoteConditionFactory, AmbientEmoteLineFactory
+        from world.species.factories import SpeciesFactory
+
+        species = SpeciesFactory(name="Infernal")
+        line = AmbientEmoteLineFactory(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.taproom,
+            area=None,
+            bystander_body="A murmur runs through the taproom.",
+        )
+        AmbientEmoteConditionFactory(
+            line=line, condition_type=ConditionType.SPECIES, species=species
+        )
+
+        result = export_grid_bundles(self.root)
+        self.assertEqual(result.errors, [])
+        bundle = self._load_bundle("arx-city")
+
+        self.assertEqual(len(bundle["ambient_lines"]), 1)
+        entry = bundle["ambient_lines"][0]
+        self.assertEqual(entry["parent_type"], LocationParentType.ROOM)
+        self.assertEqual(entry["room"], self.taproom.fixture_key)
+        self.assertEqual(entry["condition_connector"], line.condition_connector)
+        self.assertEqual(entry["bystander_body"], "A murmur runs through the taproom.")
+        self.assertEqual(entry["arriver_body"], line.arriver_body)
+        self.assertEqual(entry["weight"], 1)
+        self.assertEqual(entry["fire_chance"], 100)
+        self.assertEqual(entry["cooldown_minutes"], 0)
+        self.assertTrue(entry["is_active"])
+
+        self.assertEqual(len(entry["conditions"]), 1)
+        condition = entry["conditions"][0]
+        self.assertEqual(condition["condition_type"], ConditionType.SPECIES)
+        self.assertEqual(condition["species"], "Infernal")
+        self.assertIsNone(condition["resonance"])
+        self.assertIsNone(condition["minimum_value"])
+        self.assertIsNone(condition["distinction"])
+        self.assertIsNone(condition["min_fame_tier"])
+        self.assertIsNone(condition["perceiving_society"])
 
     def test_authored_room_in_non_authored_area_raises(self) -> None:
         """An AUTHORED room housed by a non-AUTHORED (e.g. STORY) area is also

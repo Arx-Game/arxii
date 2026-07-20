@@ -5,6 +5,7 @@ from django.contrib import admin
 from world.items.models import (
     Adornment,
     AudacityTuning,
+    CommonGemBucket,
     CurrencyBalance,
     DisguiseKitEffect,
     EquippedItem,
@@ -61,6 +62,13 @@ class AdornmentAdmin(admin.ModelAdmin):
     list_display = ["host_instance", "gem_instance", "set_by_account", "set_at"]
     # host_instance / gem_instance → large ItemInstance table; set_by_account → AccountDB.
     raw_id_fields = ["host_instance", "gem_instance", "set_by_account"]
+
+
+@admin.register(CommonGemBucket)
+class CommonGemBucketAdmin(admin.ModelAdmin):
+    list_display = ["character_sheet", "tier", "value"]
+    list_filter = ["tier"]
+    raw_id_fields = ["character_sheet"]  # large CharacterSheet table
 
 
 @admin.register(StreamCommonGemPool)

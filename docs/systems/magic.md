@@ -111,7 +111,7 @@ still live for non-distinction sources (facet/mantle/motif-coherence passive bon
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `intensity`, `control`, `anima_cost`, `creator`, `target_type`, `reach`. Natural key `(gift, name)`, backed by `unique_technique_gift_name` (#2474 — `name` alone is not globally unique; lore reuse or a player-crafted technique can share a name across gifts). Unique per `(gift, name)` |
+| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `intensity`, `control`, `anima_cost`, `creator`, `target_type`, `reach`, `archetype_alignment` (#2529 — `RoleArchetype` choices, default CROWN, migration-seeded from `effect_type.category`: attack→sword, defense→shield, else→crown; which SWORD/SHIELD/CROWN blend axis of an engaged covenant role boosts this technique's cast). Natural key `(gift, name)`, backed by `unique_technique_gift_name` (#2474 — `name` alone is not globally unique; lore reuse or a player-crafted technique can share a name across gifts). Unique per `(gift, name)` |
 
 Key fields: `intensity` (base power), `control` (base safety/precision), `level` (progression
 gate, derives tier), `target_type` (per-technique cardinality — see below).
@@ -399,6 +399,25 @@ versa) raises `InvalidConsequencePoolChoice`. The catalog listing endpoint
 **This catalog applies to standalone casts only** — combat ROUND resolution never reads
 `ActionTemplate.consequence_pool` (see "Combat" doc's note on `wire_melee_attack_action_template`
 and ADR-0130).
+
+### Covenant-Role Blend Power Term (#2529, ADR-0149) [BUILT & WIRED]
+
+`_derive_power` (cast power resolution) sums a list of independent power-term providers
+registered in `world.magic.services.power_terms._PROVIDERS`, each `(PowerTermContext) ->
+int`. `covenant_role_blend_power_term` is the always-on **Layer 1** baseline for
+`covenants`' four-layer vow-power model (see `docs/systems/covenants.md`'s "Vow power,
+four-layer model" and ADR-0149): for every `character.covenant_roles.currently_engaged_roles()`
+row, it adds `total_thread_level_across_all_kinds(sheet) × role.blend_weight_for(technique.archetype_alignment)
+× CovenantRoleBlendConfig.multiplier_tenths / 10`, floored at 0 when the technique or
+character has no engaged role. `total_thread_level_across_all_kinds(sheet)` (`world.magic.services.threads`)
+sums raw `thread.level` across **every** thread kind the character has (TECHNIQUE, GIFT,
+COVENANT_ROLE, SANCTUM, ...) — not the bucketed `thread_level_multiplier`
+`survivability_baseline` uses. `CovenantRoleBlendConfig` (pk=1 singleton,
+`get_covenant_role_blend_config()`, lazy-created) holds the tunable
+`multiplier_tenths` (default 10 = ×1.0). Kept as its own provider (not folded into an
+existing term) so the contribution stays attributable in cast breakdowns — a future
+presentation contract (#2536) needs to show "this much came from your vow" as a
+distinct line.
 
 ### Targeting Model (#1321) [BUILT & WIRED]
 
@@ -1321,7 +1340,7 @@ before this issue.
 | Model | Purpose |
 |-------|---------|
 | `PortalAnchorKind` | Staff-authored catalog of anchor media (e.g. "Mirror"). `name` (unique), `description`, `arrival_verb`/`departure_verb` (default "steps out of"/"steps into") — narrate travel through anchors of this kind. |
-| `PortalAnchor` | A concrete anchor installed in one room. FK `room_profile` (`evennia_extensions.RoomProfile`, CASCADE), FK `kind` (`PortalAnchorKind`, PROTECT), `name` (descriptive, e.g. "a tall silvered mirror"), `is_network_open` (bool, default True), FK `installed_by` (`scenes.Persona`, SET_NULL), `installed_at`, `dissolved_at` (null = active; soft-delete, mirrors `RoomFeatureInstance.dissolved_at`). `.objects.active()` excludes dissolved rows. Partial `UniqueConstraint(room_profile, kind)` WHERE `dissolved_at IS NULL` — one active anchor per kind per room; dissolving frees the room for a fresh install of the same kind. |
+| `PortalAnchor` | A concrete anchor installed in one room. FK `room_profile` (`evennia_extensions.RoomProfile`, CASCADE), FK `kind` (`PortalAnchorKind`, PROTECT), `name` (descriptive, e.g. "a tall silvered mirror"), `is_network_open` (bool, default True), FK `installed_by` (`scenes.Persona`, SET_NULL), `installed_at`, `dissolved_at` (null = active; soft-delete, mirrors `RoomFeatureInstance.dissolved_at`), nullable-unique `fixture_key` (#2451 — set when installed from the staff world-builder canvas; NULL for player-installed/test anchors; the grid-bundle export/import key, same pattern as `RoomProfile.fixture_key`). `.objects.active()` excludes dissolved rows. Partial `UniqueConstraint(room_profile, kind)` WHERE `dissolved_at IS NULL` — one active anchor per kind per room; dissolving frees the room for a fresh install of the same kind. |
 | `Technique.travel_anchor_kind` | Nullable FK → `PortalAnchorKind` (PROTECT). Set = this technique is a portal-travel technique through this anchor medium; a character "knows" a travel kind by knowing any `CharacterTechnique` whose `Technique.travel_anchor_kind` matches. |
 
 Migration `0101_portalanchorkind_technique_travel_anchor_kind_and_more.py` is the sole
@@ -1360,6 +1379,11 @@ def perform_portal_travel(character: ObjectDB, route: PortalRoute) -> None: ...
 def install_portal_anchor(persona: Persona, room: ObjectDB, kind: PortalAnchorKind, name: str) -> PortalAnchor: ...
     # owner/tenant standing -> no existing active anchor of this kind here -> flat copper
     # debit (settings.PORTAL_ANCHOR_INSTALL_COST) from the persona's purse -> create
+
+def install_portal_anchor_as_staff(room: ObjectDB, kind: PortalAnchorKind, name: str, *, fixture_key: str | None = None) -> PortalAnchor: ...
+    # staff-authoring counterpart (#2451): no owner/tenant standing check, no currency
+    # cost — still enforces PortalAnchorKindAlreadyInstalled. Called from the staff
+    # world-builder canvas via staff_place_portal_anchor.
 
 def dissolve_portal_anchor(persona: Persona, anchor: PortalAnchor) -> None: ...
     # owner-gated soft-delete (dissolved_at=now); no refund
@@ -1412,6 +1436,21 @@ business logic in the command.
 calls `portal_route` then `perform_portal_travel`; shared by telnet `CmdTravel` and the web
 "Go there" buttons (both dispatch `travel_to` unchanged — only the eligibility check inside
 `execute()` is new).
+
+**Staff authoring from the world-builder canvas (#2451, epic #2436 slice 4):**
+`StaffPlacePortalAnchorAction`/`StaffRemovePortalAnchorAction` (keys
+`staff_place_portal_anchor`/`staff_remove_portal_anchor`,
+`src/actions/definitions/world_builder.py`, `category="world_builder"`,
+`StaffOnlyPrerequisite`-gated) call `install_portal_anchor_as_staff`/set
+`dissolved_at` directly, so staff can place and dissolve anchors from the canvas
+without owner/tenant standing or the currency cost. `PortalAnchor.fixture_key`
+makes anchors exportable in the grid bundle's `portal_anchors` sidecar section
+(keyed by `fixture_key`, referencing the room by its `fixture_key` and the kind by
+`PortalAnchorKind.name`). **Ratified behavior:** reimporting an unchanged bundle
+always converges an anchor back to active (`dissolved_at=None`) — bundles are
+authoritative, matching the room/exit reimport precedent. If a GM dissolves an
+anchor in play, staff must re-export before reloading grid content, or the reload
+silently reactivates it; this is intentional, not a bug.
 
 **API** (`world/locations/views.py` + `urls.py` + `serializers.py`, NOT under
 `/api/magic/` — it lives alongside the sibling `ComfortViewSet` in `world.locations`, the app

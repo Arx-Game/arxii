@@ -6,8 +6,8 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("items", "0042_pendingrarefind_streamcommongempool"),
-        ("societies", "0031_domaincrisistype_domaincrisis_chosen_at_and_more"),
+        ("items", "0044_pendingrarefind_streamcommongempool"),
+        ("societies", "0032_remove_famereactionline_room_and_more"),
     ]
 
     operations = [

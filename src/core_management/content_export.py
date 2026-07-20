@@ -42,6 +42,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "character_creation.beginningtradition",
         "character_creation.cgexplanation",
         "character_creation.startingarea",
+        "character_creation.origintemplate",
+        "character_creation.origintemplateslot",
         # character_sheets
         "character_sheets.gender",
         # checks
@@ -53,6 +55,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "classes.aspect",
         "classes.path",
         "classes.pathaspect",
+        # clues
+        "clues.clue",
         # codex
         "codex.codexcategory",
         "codex.codexentry",
@@ -73,6 +77,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "conditions.conditionstage",
         "conditions.conditiontemplate",
         "conditions.damagetype",
+        # covenants
+        "covenants.covenantrole",
+        "covenants.covenantroleactionscaling",
         # distinctions
         "distinctions.distinction",
         "distinctions.distinctioncategory",

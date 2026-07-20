@@ -8,16 +8,22 @@ PLAYER so nothing exports by accident; promotion to AUTHORED is a deliberate sta
 act. Carried by both `Area.origin` and `RoomProfile.origin`.
 _Avoid_: authorship flag, content tier, ownership type
 
-**Fixture key** (#2436/#2448):
+**Fixture key** (#2436/#2448, extended #2451):
 The permanent, slugged identity a `RoomProfile` is assigned once at authoring time
 (e.g. `arx-city/golden-hart-taproom`) — required when `origin=AUTHORED`, NULL for
 runtime (`STORY`/`PLAYER`) rooms. It is the natural key `NaturalKeyMixin` resolves
 on, the upsert key `grid_import.load_grid_bundles()` matches rooms by across
 re-imports, and the stable reference other content fixtures (e.g. `StartingArea`)
 use to point at an authored room without depending on Evennia's `ObjectDB` pk. An
-`Area`'s equivalent permanent identity is its `slug`.
+`Area`'s equivalent permanent identity is its `slug`. The same nullable-unique
+`fixture_key` field (same contract: set when authored from the staff canvas, NULL
+for ad hoc/test rows) was added to `world.clues.RoomClue`/`ClueTrigger` and
+`world.magic.PortalAnchor` (#2451, epic #2436 slice 4) so discovery/portal
+placements can be exported/reimported the same way rooms are — it is the
+`clues`/`clue_triggers`/`portal_anchors` grid-bundle sidecar section's upsert key.
 _Avoid_: room key, natural key (too generic — this is specifically the
-grid-identity field), slug (that's the `Area`-side name for the same idea)
+grid-identity field), slug (that's the `Area`-side name for the same idea, and —
+separately — `Clue`'s own natural key for content-pipeline export, #2451)
 
 **Promote** (#2436/#2449):
 The one-way act of assigning an `Area` or `RoomProfile`'s permanent identity key

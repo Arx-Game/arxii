@@ -29,9 +29,10 @@ from world.buildings.constants import (
     ULTRA_UPKEEP_MULTIPLIER,
     ConditionTier,
 )
-from world.buildings.factories import BuildingFactory
+from world.buildings.factories import BuildingFactory, PropertyGrantProfileFactory
 from world.buildings.models import (
     BuildingPolish,
+    BuildingSizeTier,
     MothballedRoomState,
     PolishCategory,
     ProjectTemplate,
@@ -43,12 +44,20 @@ from world.buildings.mothball_services import (
     unmothball_building,
 )
 from world.buildings.polish_services import apply_project_completion
+from world.buildings.property_grant_services import (
+    complete_building_activation,
+    grant_property_house,
+    start_building_activation,
+)
 from world.buildings.upkeep_services import (
     apply_weekly_upkeep_for_building,
+    building_weekly_upkeep,
     set_condition_tier,
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.currency.services import get_or_create_purse, transfer
+from world.locations.constants import HolderType, LocationParentType
+from world.locations.models import LocationOwnership
 
 
 def _make_persona_with_wallet(gold: int = 0):
@@ -625,3 +634,91 @@ class ConditionJourneyTests(TestCase):
         apply_weekly_upkeep_for_building(building)
         building.refresh_from_db()
         self.assertEqual(building.condition_tier, ConditionTier.EXTRAVAGANT)
+
+
+def _granted_building_with_upkeep(owner, weekly: int = 10, activation_target_tier=None):
+    """A grant_property_house-produced Building given a real weekly upkeep cost.
+
+    Mirrors _building_with_upkeep's ProjectTemplate/apply_project_completion
+    mechanism, but starts from a granted (not BuildingFactory-constructed)
+    Building so the granted_via_profile/property_granted_at provenance is real.
+    """
+    BuildingSizeTier.objects.get_or_create(tier=1, defaults={"name": "Hut", "space_budget": 50})
+    profile = PropertyGrantProfileFactory(activation_target_tier=activation_target_tier)
+    building = grant_property_house(owner, profile)
+    cat = PolishCategory.objects.create(name=f"Opulence-grant-{building.pk}")
+    template = _make_template(f"Hall-grant-{building.pk}", [(cat, 1000)], weekly_upkeep_cost=weekly)
+    apply_project_completion(building, template)
+    return building
+
+
+class GrantedNotActivatedUpkeepExemptionTests(TestCase):
+    def test_granted_not_activated_building_is_exempt_despite_real_upkeep_cost(self):
+        owner = _make_persona_with_wallet(gold=0)
+        building = _granted_building_with_upkeep(
+            owner, weekly=10, activation_target_tier=ConditionTier.RAMSHACKLE
+        )
+        self.assertGreater(building_weekly_upkeep(building), 0)  # precondition: real cost
+
+        paid = apply_weekly_upkeep_for_building(building)
+
+        self.assertTrue(paid)
+        building.refresh_from_db()
+        self.assertEqual(building.upkeep_arrears, 0)
+        self.assertEqual(building.consecutive_missed_upkeep, 0)
+        wallet = _purse(owner)
+        wallet.refresh_from_db()
+        self.assertEqual(wallet.balance, 0)  # never charged despite zero balance + real cost
+
+    def test_activated_granted_building_is_charged_normally(self):
+        owner = _make_persona_with_wallet(gold=0)
+        building = _granted_building_with_upkeep(
+            owner, weekly=10, activation_target_tier=ConditionTier.RAMSHACKLE
+        )
+        LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=building.area,
+            holder_type=HolderType.PERSONA,
+            holder_persona=owner,
+        )
+        project = start_building_activation(persona=owner, building=building)
+        complete_building_activation(project)
+        building.refresh_from_db()
+
+        paid = apply_weekly_upkeep_for_building(building)
+
+        # Activated + broke: this is now an ordinary missed week, not exempt.
+        self.assertFalse(paid)
+        building.refresh_from_db()
+        self.assertEqual(building.consecutive_missed_upkeep, 1)
+
+
+class RefurbishGrantedNotActivatedGuardTests(TestCase):
+    def test_refurbish_refused_on_granted_not_activated_building(self):
+        owner = _make_persona_with_wallet(gold=10_000)
+        building = _granted_building_with_upkeep(
+            owner, weekly=10, activation_target_tier=ConditionTier.RAMSHACKLE
+        )
+        with self.assertRaises(ConditionServiceError) as ctx:
+            refurbish_building(building=building, payer_purse=_purse(owner))
+        assert "activated" in ctx.exception.user_message.lower()
+
+    def test_refurbish_succeeds_once_activated(self):
+        owner = _make_persona_with_wallet(gold=10_000)
+        building = _granted_building_with_upkeep(
+            owner, weekly=10, activation_target_tier=ConditionTier.RAMSHACKLE
+        )
+        LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=building.area,
+            holder_type=HolderType.PERSONA,
+            holder_persona=owner,
+        )
+        project = start_building_activation(persona=owner, building=building)
+        complete_building_activation(project)
+        building.refresh_from_db()
+
+        refurbish_building(building=building, payer_purse=_purse(owner))
+
+        building.refresh_from_db()
+        self.assertEqual(building.condition_tier, ConditionTier.EXCELLENT)

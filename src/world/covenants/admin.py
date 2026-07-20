@@ -8,16 +8,32 @@ from world.covenants.models import (
     CovenantLevelThreshold,
     CovenantRite,
     CovenantRole,
+    CovenantRoleActionScaling,
     CovenantRoleBonus,
 )
 
 
 @admin.register(CovenantRole)
 class CovenantRoleAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug", "covenant_type", "archetype", "speed_rank"]
-    list_filter = ["covenant_type", "archetype"]
+    list_display = [
+        "name",
+        "slug",
+        "covenant_type",
+        "sword_weight",
+        "shield_weight",
+        "crown_weight",
+        "speed_rank",
+    ]
+    list_filter = ["covenant_type"]
     search_fields = ["name", "slug"]
     prepopulated_fields = {"slug": ("name",)}
+
+
+@admin.register(CovenantRoleActionScaling)
+class CovenantRoleActionScalingAdmin(admin.ModelAdmin):
+    list_display = ("action_key", "covenant_role", "thread_level_multiplier")
+    list_filter = ("action_key",)
+    autocomplete_fields = ("covenant_role",)
 
 
 @admin.register(Covenant)

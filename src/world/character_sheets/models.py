@@ -33,6 +33,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.descriptors import ReverseOneToOneOrNone
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.character_creation.constants import OriginStoryState
 from world.character_sheets.types import (
     DECAY_TIER_THRESHOLDS_DAYS,
     ActivityState,
@@ -205,6 +206,17 @@ class CharacterSheet(SharedMemoryModel):
         related_name="sheet_data",
         primary_key=True,
         help_text="The character this sheet belongs to",
+    )
+
+    origin_story_state = models.CharField(
+        max_length=20,
+        choices=OriginStoryState.choices,
+        default=OriginStoryState.NOT_STARTED,
+        help_text=(
+            "Deferral/progress state of the guided origin story (#2478). "
+            "Cache of slot-row truth — maintained by "
+            "world.character_creation.services.origin_story, never written directly."
+        ),
     )
 
     # Basic Identity & Demographics

@@ -100,6 +100,20 @@ export interface CharacterSheetDistinction {
  * `distinctions` and `magic` typed precisely (Tasks 9 & 10); refine the rest as their consuming
  * sections land.
  */
+export interface CharacterSheetOriginSlot {
+  slot_id: number;
+  slot_name: string;
+  slot_prompt: string;
+  value: string;
+}
+
+export interface CharacterSheetStory {
+  background: string;
+  personality: string;
+  origin_story_state: string;
+  origin_slots: CharacterSheetOriginSlot[];
+}
+
 export interface CharacterSheetPayload {
   id: number;
   can_edit: boolean;
@@ -110,7 +124,7 @@ export interface CharacterSheetPayload {
   path: Record<string, unknown> | null;
   distinctions: CharacterSheetDistinction[];
   magic: CharacterSheetMagic | null;
-  story: Record<string, unknown>;
+  story: CharacterSheetStory;
   goals: unknown[];
   personas: unknown[];
   theming: Record<string, unknown>;

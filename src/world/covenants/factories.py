@@ -12,7 +12,6 @@ from world.covenants.constants import (
     MENTOR_BOND_MAX_SIDEKICKS,
     CovenantType,
     MentorBondAdjusted,
-    RoleArchetype,
 )
 from world.covenants.models import (
     CharacterCovenantRole,
@@ -24,6 +23,7 @@ from world.covenants.models import (
     CovenantRite,
     CovenantRiteRolePackage,
     CovenantRole,
+    CovenantRoleActionScaling,
     CovenantRoleBonus,
     GearArchetypeCompatibility,
     MentorBond,
@@ -49,7 +49,9 @@ class CovenantRoleFactory(factory_django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Role {n}")
     slug = factory.Sequence(lambda n: f"role-{n}")
     covenant_type = CovenantType.DURANCE
-    archetype = RoleArchetype.SWORD
+    sword_weight = 0
+    shield_weight = 0
+    crown_weight = 1
     speed_rank = 5
     description = ""
 
@@ -58,7 +60,9 @@ class SubroleCovenantRoleFactory(CovenantRoleFactory):
     """Factory for sub-role CovenantRole instances.
 
     Generates a valid sub-role: parent_role and resonance are both set,
-    and covenant_type/archetype are inherited from the parent.
+    and covenant_type is inherited from the parent. Blend weights stay at
+    the CovenantRoleFactory default of 0 — sub-roles must not set them
+    (#2529; the blend lives on the parent role, see ``blend_weight_for``).
 
     Optional keyword arguments:
         discovery_achievement: Achievement instance (or None).
@@ -74,14 +78,13 @@ class SubroleCovenantRoleFactory(CovenantRoleFactory):
     unlock_thread_level = 3
     discovery_achievement = None
     codex_entry = None
+    sword_weight = 0
+    shield_weight = 0
+    crown_weight = 0
 
     @factory.lazy_attribute
     def covenant_type(self) -> str:
         return self.parent_role.covenant_type
-
-    @factory.lazy_attribute
-    def archetype(self) -> str:
-        return self.parent_role.archetype
 
 
 class GearArchetypeCompatibilityFactory(factory_django.DjangoModelFactory):
@@ -93,6 +96,18 @@ class GearArchetypeCompatibilityFactory(factory_django.DjangoModelFactory):
 
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     gear_archetype = GearArchetype.HEAVY_ARMOR
+
+
+class CovenantRoleActionScalingFactory(factory_django.DjangoModelFactory):
+    """Factory for CovenantRoleActionScaling (#2529, replaces ArchetypeActionScalingFactory)."""
+
+    class Meta:
+        model = CovenantRoleActionScaling
+        django_get_or_create = ("covenant_role", "action_key")
+
+    covenant_role = factory.SubFactory(CovenantRoleFactory)
+    action_key = "combat_interpose"
+    thread_level_multiplier = 0
 
 
 class CovenantFactory(factory_django.DjangoModelFactory):
@@ -341,7 +356,6 @@ def seed_resonance_subrole_slice(
                 "name": f"{parent_role.name} ({res_name})",
                 "slug": f"{parent_role.slug}-res-{idx}",
                 "covenant_type": parent_role.covenant_type,
-                "archetype": parent_role.archetype,
                 "speed_rank": parent_role.speed_rank,
                 "description": f"Resonance sub-role for {res_name}.",
                 "discovery_achievement": achievement,
@@ -493,7 +507,7 @@ def wire_covenant_rite_content() -> CovenantRite:
         defaults={
             "name": "Vanguard",
             "covenant_type": CovenantType.DURANCE,
-            "archetype": RoleArchetype.SWORD,
+            "sword_weight": 1,
             "speed_rank": 2,
         },
     )
@@ -502,7 +516,7 @@ def wire_covenant_rite_content() -> CovenantRite:
         defaults={
             "name": "Bulwark",
             "covenant_type": CovenantType.DURANCE,
-            "archetype": RoleArchetype.SHIELD,
+            "shield_weight": 1,
             "speed_rank": 3,
         },
     )
@@ -511,7 +525,7 @@ def wire_covenant_rite_content() -> CovenantRite:
         defaults={
             "name": "Luminary",
             "covenant_type": CovenantType.DURANCE,
-            "archetype": RoleArchetype.CROWN,
+            "crown_weight": 1,
             "speed_rank": 1,
         },
     )
@@ -665,7 +679,7 @@ def wire_covenant_role_powers_catalog() -> "tuple[CovenantRole, list[CapabilityT
         defaults={
             "name": "Warblade",
             "covenant_type": CovenantType.BATTLE,
-            "archetype": RoleArchetype.SWORD,
+            "sword_weight": 1,
             "speed_rank": 2,
             "description": (
                 "The covenant's drawn edge — those who carry the oath into the killing "
@@ -823,7 +837,7 @@ def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffe
         defaults={
             "name": "Shadowblade",
             "covenant_type": CovenantType.COURT,
-            "archetype": RoleArchetype.SWORD,
+            "sword_weight": 1,
             "speed_rank": 2,
             "description": (
                 "The Court's drawn blade — the servant who answers the master's "
@@ -1066,7 +1080,7 @@ def make_court_with_mission(
         defaults={
             "name": "Sovereign",
             "covenant_type": CovenantType.COURT,
-            "archetype": RoleArchetype.CROWN,
+            "crown_weight": 1,
             "speed_rank": 1,
             "description": "The puissant master a Court is sworn to.",
         },

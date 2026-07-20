@@ -18,8 +18,13 @@ from django.utils import timezone
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.models import PlayerData
-from world.character_creation.constants import ApplicationStatus, CommentType
-from world.character_creation.models import CharacterDraft
+from world.character_creation.constants import ApplicationStatus, CommentType, OriginStoryState
+from world.character_creation.models import (
+    CharacterDraft,
+    CharacterOriginSlot,
+    OriginTemplate,
+    OriginTemplateSlot,
+)
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry, RosterTenure
@@ -177,6 +182,10 @@ def finalize_character(
 
     # Family is already set on CharacterSheet above
 
+    # Property grant: a Beginnings-configured grant profile (if any) hands
+    # the new PC an owned building before other CG side-effects run.
+    _grant_property_house_if_eligible(draft, primary_persona)
+
     # House claim materialization (#1884 Phase D): an approved CG-defined
     # house builds its full package now, BEFORE the kinship bind (the founder
     # node must land in the new family). Runs before draft deletion (the
@@ -242,6 +251,21 @@ def _bind_house_claim(draft: CharacterDraft, sheet: CharacterSheet) -> None:
             claim.pk,
             draft.pk,
         )
+
+
+def _grant_property_house_if_eligible(draft: CharacterDraft, persona: Persona) -> None:
+    """Grant the selected Beginnings' PropertyGrantProfile, if one is configured.
+
+    Generic hook — no specific beginning or grant profile is named here.
+    Content (lore repo) wires Beginnings.property_grant_profile per path.
+    """
+    beginnings = draft.selected_beginnings
+    profile = beginnings.property_grant_profile if beginnings is not None else None
+    if profile is None:
+        return
+    from world.buildings.property_grant_services import grant_property_house  # noqa: PLC0415
+
+    grant_property_house(persona, profile)
 
 
 def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -364,7 +388,28 @@ def _grant_prelude_mission(draft: CharacterDraft, character: ObjectDB, persona: 
     staff_assign_mission(beginnings.prelude_mission, character, persona=persona)
 
 
-def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:  # noqa: C901, PLR0912
+def _finalize_origin_slots(sheet: CharacterSheet, origin_slots: dict[str, str]) -> str:
+    """Upsert CharacterOriginSlot rows from draft_data and assemble prose (#2478).
+
+    Called from ``_apply_sheet_demographics`` when the draft carries
+    ``origin_slots``. Returns the assembled prose for ``Profile.background``.
+    State refresh is deferred to the caller (after ``profile.save()``) so
+    ``refresh_origin_story_state`` sees the final prose value.
+    """
+    for slot_id_str, value in origin_slots.items():
+        try:
+            slot = OriginTemplateSlot.objects.get(pk=int(slot_id_str))
+        except (OriginTemplateSlot.DoesNotExist, ValueError, TypeError):
+            logger.warning(
+                "Origin slot id %s not found during finalize; skipping.",
+                slot_id_str,
+            )
+            continue
+        set_origin_slot(sheet, slot, value)
+    return assemble_origin_prose(sheet)
+
+
+def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:  # noqa: C901, PLR0912, PLR0915
     """
     Populate demographic, heritage, descriptive, and physical fields on a CharacterSheet
     from a CharacterDraft and save it.
@@ -435,7 +480,12 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
 
         profile = Profile.objects.create()
         sheet.true_profile = profile
-    if draft_data.get("background"):
+    # Origin story: assemble prose from structured slots if present (#2478),
+    # otherwise fall back to legacy free-text background for backward compat.
+    origin_slots = draft_data.get("origin_slots")
+    if origin_slots:
+        profile.background = _finalize_origin_slots(sheet, origin_slots)
+    elif draft_data.get("background"):
         profile.background = draft_data["background"]
     if draft_data.get("personality"):
         profile.personality = draft_data["personality"]
@@ -444,6 +494,10 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
     if draft_data.get("quote"):
         profile.quote = draft_data["quote"]
     profile.save()
+
+    # Refresh origin-story state now that the assembled prose is persisted (#2478).
+    if origin_slots:
+        refresh_origin_story_state(sheet)
 
     # Set physical characteristics from draft
     if draft.height_inches:
@@ -1956,3 +2010,71 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
     draft.delete()
 
     return entry, story
+
+
+# =============================================================================
+# Origin-story guided-flow write services (#2478)
+#
+# Single write path for a character's origin story: slot answers and prose
+# assembly. Every mutation recomputes ``CharacterSheet.origin_story_state`` so
+# the cached state never drifts from the slot rows (the field is a cache of
+# truth, mirroring the ``glimpse_state`` precedent, #2427).
+# =============================================================================
+
+
+def refresh_origin_story_state(sheet: CharacterSheet) -> OriginStoryState:
+    """Recompute and persist ``origin_story_state`` from slot rows + prose.
+
+    Mirrors ``refresh_glimpse_state`` (``glimpse.py:28-39``).
+    """
+    has_slots = sheet.origin_slots.exists()
+    has_prose = bool(sheet.background and sheet.background.strip())
+    if has_prose and has_slots:
+        state = OriginStoryState.COMPLETE
+    elif has_slots:
+        state = OriginStoryState.SLOTS_ONLY
+    else:
+        state = OriginStoryState.NOT_STARTED
+    if sheet.origin_story_state != state:
+        sheet.origin_story_state = state
+        sheet.save(update_fields=["origin_story_state"])
+    return state
+
+
+@transaction.atomic
+def set_origin_slot(sheet: CharacterSheet, slot: OriginTemplateSlot, value: str) -> None:
+    """Upsert a character's slot answer, then refresh state.
+
+    Mirrors ``set_glimpse_tags`` (``glimpse.py:42-62``).
+    """
+    CharacterOriginSlot.objects.update_or_create(sheet=sheet, slot=slot, defaults={"value": value})
+    refresh_origin_story_state(sheet)
+
+
+def clear_origin_slot(sheet: CharacterSheet, slot: OriginTemplateSlot) -> None:
+    """Delete a slot answer and recompute state."""
+    CharacterOriginSlot.objects.filter(sheet=sheet, slot=slot).delete()
+    refresh_origin_story_state(sheet)
+
+
+def assemble_origin_prose(sheet: CharacterSheet) -> str:
+    """Compose the frame narrative + slot answers into prose.
+
+    Pure template concatenation — no LLM. Called at finalize and on
+    sheet-editor save. Returns empty string when the sheet has no slots
+    filled.
+    """
+    slots = list(sheet.origin_slots.select_related("slot__template").order_by("slot__sort_order"))
+    if not slots:
+        return ""
+
+    template: OriginTemplate | None = slots[0].slot.template
+    if template is None:
+        return ""
+
+    lines = [template.frame_narrative, ""]
+    for row in slots:
+        lines.append(row.slot.prompt)
+        lines.append(row.value)
+        lines.append("")
+    return "\n".join(lines).strip()

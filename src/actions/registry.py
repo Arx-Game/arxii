@@ -32,6 +32,7 @@ from actions.definitions.ceremonies import (
     CeremonySpeechAction,
     FinishCeremonyAction,
     OpenCeremonyAction,
+    RespondSeanceOfferAction,
 )
 from actions.definitions.coercion import coerce, reveal_secret
 from actions.definitions.collect_food import CollectFoodAction
@@ -221,6 +222,7 @@ from actions.definitions.locations import (
     SetBuildingStyleAction,
     SetPrimaryHomeAction,
     SettleBuildingArrearsAction,
+    StartBuildingActivationAction,
     StartBuildingRenovationAction,
     StartExtensionAction,
     TagRoomResonanceAction,
@@ -432,7 +434,13 @@ from actions.definitions.world_builder import (
     StaffDigRoomAction,
     StaffEditRoomAction,
     StaffLinkRoomsAction,
+    StaffPlaceClueAction,
+    StaffPlaceClueTriggerAction,
+    StaffPlacePortalAnchorAction,
     StaffPlaceRoomAction,
+    StaffRemoveClueAction,
+    StaffRemoveClueTriggerAction,
+    StaffRemovePortalAnchorAction,
     StaffRemoveRoomAction,
     StaffRenameExitAction,
     StaffUnlinkRoomsAction,
@@ -476,6 +484,7 @@ _ALL_ACTIONS: list[Action] = [
     CommissionDecorationAction(),
     StartExtensionAction(),
     StartBuildingRenovationAction(),
+    StartBuildingActivationAction(),
     SettleBuildingArrearsAction(),
     RefurbishBuildingAction(),
     PrepareBuildingAction(),
@@ -777,6 +786,7 @@ _ALL_ACTIONS: list[Action] = [
     CeremonySpeechAction(),
     FinishCeremonyAction(),
     AbandonCeremonyAction(),
+    RespondSeanceOfferAction(),
     # #1985 — estates (the executor's will-reading settlement door).
     WillReadingAction(),
     # #2295 — voluntary asset sharing: introduce an owned asset to a co-present ally.
@@ -811,6 +821,12 @@ _ALL_ACTIONS: list[Action] = [
     StaffRemoveRoomAction(),
     PromoteRoomAction(),
     PromoteAreaAction(),
+    StaffPlaceClueAction(),
+    StaffRemoveClueAction(),
+    StaffPlaceClueTriggerAction(),
+    StaffRemoveClueTriggerAction(),
+    StaffPlacePortalAnchorAction(),
+    StaffRemovePortalAnchorAction(),
     # #2450 — GM story builder: create/edit/remove story areas + dig/edit story rooms.
     CreateStoryAreaAction(),
     EditStoryAreaAction(),

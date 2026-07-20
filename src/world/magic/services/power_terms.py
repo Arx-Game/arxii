@@ -17,7 +17,13 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import AuraPowerConfig, LevelPowerConfig, Technique, Thread
+    from world.magic.models import (
+        AuraPowerConfig,
+        CovenantRoleBlendConfig,
+        LevelPowerConfig,
+        Technique,
+        Thread,
+    )
 
 
 @dataclass(frozen=True)
@@ -240,19 +246,50 @@ def enhancement_overlap_term(ctx: PowerTermContext) -> int:
 _ENHANCEMENT_OVERLAP_BONUS: int = 2
 
 
-def archetype_cast_scaling_term(ctx: PowerTermContext) -> int:
-    """Flat power bonus from archetype action scaling on cast_technique (#2022).
+def get_covenant_role_blend_config() -> CovenantRoleBlendConfig:
+    """Return the CovenantRoleBlendConfig singleton, lazy-creating pk=1."""
+    from world.magic.models import CovenantRoleBlendConfig  # noqa: PLC0415
 
-    A SWORD-role character's declared techniques gain a small flat damage bonus
-    scaling with their COVENANT_ROLE thread level. This reads the
-    ``ArchetypeActionScaling`` row for ``("cast_technique", role_archetype)``
-    and returns ``int(thread_level * multiplier)``.
+    config, _ = CovenantRoleBlendConfig.objects.get_or_create(pk=1)
+    return config
+
+
+def covenant_role_blend_power_term(ctx: PowerTermContext) -> int:
+    """Baseline blend boost for engaged covenant roles (#2529, Layer 1).
+
+    Always-on floor: Σ over engaged roles of
+    ``total_thread_level × blend_weight[technique.archetype_alignment]
+    × multiplier``. Situational perks (Layer 4, #2536) layer on top; this
+    term is the floor that keeps every engaged vow relevant, not the fantasy.
+    Kept as its own provider so the contribution stays attributable
+    (#2536's presentation contract).
     """
-    from world.covenants.services import archetype_action_scaling_bonus  # noqa: PLC0415
+    from decimal import Decimal  # noqa: PLC0415
 
+    from world.magic.services.threads import (  # noqa: PLC0415
+        total_thread_level_across_all_kinds,
+    )
+
+    if ctx.technique is None:
+        return 0
     character = ctx.sheet.character
-    bonus = archetype_action_scaling_bonus(character, "cast_technique")
-    return int(bonus)
+    if not hasattr(character, "covenant_roles"):
+        return 0
+    engaged_roles = character.covenant_roles.currently_engaged_roles()
+    if not engaged_roles:
+        return 0
+    total_threads = total_thread_level_across_all_kinds(ctx.sheet)
+    if total_threads == 0:
+        return 0
+    config = get_covenant_role_blend_config()
+    alignment = ctx.technique.archetype_alignment
+    total = Decimal(0)
+    for role in engaged_roles:
+        weight = role.blend_weight_for(alignment)
+        if not weight:
+            continue
+        total += Decimal(total_threads) * weight * config.multiplier_tenths / 10
+    return int(total)
 
 
 _PROVIDERS: list[PowerTermProvider] = [
@@ -261,7 +298,7 @@ _PROVIDERS: list[PowerTermProvider] = [
     thread_power_term,
     touchstone_power_term,
     enhancement_overlap_term,
-    archetype_cast_scaling_term,
+    covenant_role_blend_power_term,
 ]
 
 

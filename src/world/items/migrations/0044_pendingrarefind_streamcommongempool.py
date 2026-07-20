@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("currency", "0009_favortokendetails"),
-        ("items", "0041_itemtemplateproperty"),
+        ("items", "0043_commongembucket_and_more"),
     ]
 
     operations = [

@@ -325,6 +325,17 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         related_name="beginnings_start",
         help_text="Override starting room for this Beginnings path (e.g., Sleeper wake room)",
     )
+    property_grant_profile = models.ForeignKey(
+        "buildings.PropertyGrantProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="beginnings",
+        help_text=(
+            "Granted automatically at finalize_character when set. "
+            "NULL = no automatic property grant for this path."
+        ),
+    )
     prelude_mission = models.ForeignKey(
         "missions.MissionTemplate",
         on_delete=models.SET_NULL,
@@ -510,6 +521,130 @@ class BeginningTradition(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.beginning} -> {self.tradition}"
+
+
+class OriginTemplateManager(NaturalKeyManager):
+    """Manager for OriginTemplate with natural key support."""
+
+
+class OriginTemplate(NaturalKeyMixin, SharedMemoryModel):
+    """Authored origin-story frame for a Beginning (#2478).
+
+    Content model — authored in the lore repo, exported/imported via
+    ``CONTENT_MODELS``. No factory-seeded catalog. Multiple templates per
+    beginning are allowed (Decision 1); today one active template auto-assigns.
+
+    No slug field — natural key is (beginning, name), mirroring ``Beginnings``
+    itself (``["starting_area", "name"]``) and ``BeginningTradition``
+    (``["beginning", "tradition"]``).
+    """
+
+    beginning = models.ForeignKey(
+        Beginnings,
+        on_delete=models.CASCADE,
+        related_name="origin_templates",
+        help_text="The beginning this origin-story frame belongs to.",
+    )
+    name = models.CharField(max_length=100, help_text="Template name (part of natural key).")
+    frame_narrative = models.TextField(
+        help_text="The fixed frame prose every character with this beginning shares."
+    )
+    is_active = models.BooleanField(
+        default=True, help_text="Inactive templates are hidden from CG."
+    )
+    sort_order = models.PositiveSmallIntegerField(
+        default=0, help_text="Display order when multiple templates exist."
+    )
+
+    objects = OriginTemplateManager()
+
+    class Meta:
+        verbose_name = "Origin Template"
+        verbose_name_plural = "Origin Templates"
+        unique_together = [["beginning", "name"]]
+        ordering = ["beginning", "sort_order", "name"]
+
+    class NaturalKeyConfig:
+        fields = ["beginning", "name"]
+        dependencies = ["character_creation.Beginnings"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class OriginTemplateSlotManager(NaturalKeyManager):
+    """Manager for OriginTemplateSlot with natural key support."""
+
+
+class OriginTemplateSlot(NaturalKeyMixin, SharedMemoryModel):
+    """Authored slot prompt within an origin-story template (#2478).
+
+    Content model — authored in the lore repo. No slug — natural key is
+    (template, name), mirroring ``BeginningTradition``.
+    """
+
+    template = models.ForeignKey(
+        OriginTemplate,
+        on_delete=models.CASCADE,
+        related_name="slots",
+        help_text="The template this slot belongs to.",
+    )
+    name = models.CharField(max_length=100, help_text="Slot name (part of natural key).")
+    prompt = models.TextField(help_text="The question shown to the player.")
+    example = models.TextField(
+        blank=True, help_text="Short illustrative answer shown in the guided step."
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_required = models.BooleanField(
+        default=True,
+        help_text="Required slots are marked in the post-CG finish-later editor.",
+    )
+
+    objects = OriginTemplateSlotManager()
+
+    class Meta:
+        verbose_name = "Origin Template Slot"
+        verbose_name_plural = "Origin Template Slots"
+        unique_together = [["template", "name"]]
+        ordering = ["template", "sort_order", "name"]
+
+    class NaturalKeyConfig:
+        fields = ["template", "name"]
+        dependencies = ["character_creation.OriginTemplate"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class CharacterOriginSlot(SharedMemoryModel):
+    """A character's authored answer to an origin-story slot (#2478).
+
+    Instance data — NOT a content model, never exported. Mirrors
+    ``CharacterGlimpseTag`` (``glimpse.py:65-88``).
+    """
+
+    sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="origin_slots",
+        help_text="The character sheet this slot answer belongs to.",
+    )
+    slot = models.ForeignKey(
+        OriginTemplateSlot,
+        on_delete=models.PROTECT,
+        related_name="character_rows",
+        help_text="The catalog slot this answer fills.",
+    )
+    value = models.TextField(help_text="The player's authored answer.")
+
+    class Meta:
+        verbose_name = "Character Origin Slot"
+        verbose_name_plural = "Character Origin Slots"
+        unique_together = [["sheet", "slot"]]
+        ordering = ["slot__sort_order"]
+
+    def __str__(self) -> str:
+        return f"{self.slot} on {self.sheet}"
 
 
 class CharacterDraft(SharedMemoryModel):

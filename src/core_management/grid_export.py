@@ -196,6 +196,93 @@ def _serialize_modifiers(modifiers, room_fixture_by_pk: dict) -> list[dict]:
     return modifiers_data
 
 
+def _serialize_clues(clues, room_fixture_by_pk: dict) -> list[dict]:
+    clues_data = [
+        {
+            "fixture_key": row.fixture_key,
+            "room": room_fixture_by_pk[row.room_profile_id],
+            "clue": row.clue.slug,
+            "detect_difficulty": row.detect_difficulty,
+            "eligibility_rule": row.eligibility_rule,
+            "is_active": row.is_active,
+        }
+        for row in clues
+    ]
+    clues_data.sort(key=lambda c: c["fixture_key"])
+    return clues_data
+
+
+def _serialize_clue_triggers(triggers, room_fixture_by_pk: dict) -> list[dict]:
+    triggers_data = [
+        {
+            "fixture_key": row.fixture_key,
+            "room": room_fixture_by_pk[row.room_profile_id],
+            "clue": row.clue.slug,
+            "eligibility_rule": row.eligibility_rule,
+            "is_active": row.is_active,
+        }
+        for row in triggers
+    ]
+    triggers_data.sort(key=lambda t: t["fixture_key"])
+    return triggers_data
+
+
+def _serialize_portal_anchors(anchors, room_fixture_by_pk: dict) -> list[dict]:
+    anchors_data = [
+        {
+            "fixture_key": row.fixture_key,
+            "room": room_fixture_by_pk[row.room_profile_id],
+            "kind": row.kind.name,
+            "name": row.name,
+            "is_network_open": row.is_network_open,
+        }
+        for row in anchors
+    ]
+    anchors_data.sort(key=lambda a: a["fixture_key"])
+    return anchors_data
+
+
+def _serialize_ambient_lines(lines, room_fixture_by_pk: dict) -> list[dict]:
+    lines_data = [
+        {
+            "parent_type": row.parent_type,
+            "room": _override_target(row, room_fixture_by_pk),
+            "condition_connector": row.condition_connector,
+            "bystander_body": row.bystander_body,
+            "arriver_body": row.arriver_body,
+            "weight": row.weight,
+            "fire_chance": row.fire_chance,
+            "cooldown_minutes": row.cooldown_minutes,
+            "is_active": row.is_active,
+            "conditions": _serialize_ambient_conditions(row),
+        }
+        for row in lines
+    ]
+    lines_data.sort(key=lambda r: (r["parent_type"], r["room"] or "", r["arriver_body"][:40]))
+    return lines_data
+
+
+def _serialize_ambient_conditions(line) -> list[dict]:
+    conditions_data = [
+        {
+            "condition_type": condition.condition_type,
+            "species": condition.species.name if condition.species_id else None,
+            "resonance": condition.resonance.name if condition.resonance_id else None,
+            "minimum_value": condition.minimum_value,
+            "distinction": condition.distinction.slug if condition.distinction_id else None,
+            "min_fame_tier": condition.min_fame_tier or None,
+            "perceiving_society": (
+                condition.perceiving_society.name if condition.perceiving_society_id else None
+            ),
+        }
+        for condition in line.conditions.select_related(
+            "species", "resonance", "distinction", "perceiving_society"
+        )
+    ]
+    conditions_data.sort(key=lambda c: (c["condition_type"], c["species"] or ""))
+    return conditions_data
+
+
 def _build_area_bundle(area, result: GridExportResult) -> dict:
     """Assemble one area's full bundle dict. Raises ContentExportError on the never-silent
     rules (missing area slug — checked by the caller — or missing room fixture_key)."""
@@ -207,6 +294,7 @@ def _build_area_bundle(area, result: GridExportResult) -> dict:
     from world.areas.constants import GridOrigin  # noqa: PLC0415
     from world.locations.constants import LocationParentType  # noqa: PLC0415
     from world.locations.models import LocationValueModifier, LocationValueOverride  # noqa: PLC0415
+    from world.narrative.models import AmbientEmoteLine  # noqa: PLC0415
 
     rooms = list(
         RoomProfile.objects.filter(area=area, origin=GridOrigin.AUTHORED)
@@ -250,6 +338,26 @@ def _build_area_bundle(area, result: GridExportResult) -> dict:
             sidecar_scope, source__startswith="authored:"
         ).select_related("resonance", "damage_type")
     )
+    ambient_lines = list(AmbientEmoteLine.objects.filter(sidecar_scope))
+
+    from world.clues.models import ClueTrigger, RoomClue  # noqa: PLC0415
+    from world.magic.models import PortalAnchor  # noqa: PLC0415
+
+    clues = list(
+        RoomClue.objects.filter(
+            room_profile_id__in=room_objectdb_ids, fixture_key__isnull=False
+        ).select_related("clue")
+    )
+    clue_triggers = list(
+        ClueTrigger.objects.filter(
+            room_profile_id__in=room_objectdb_ids, fixture_key__isnull=False
+        ).select_related("clue")
+    )
+    portal_anchors = list(
+        PortalAnchor.objects.active()
+        .filter(room_profile_id__in=room_objectdb_ids, fixture_key__isnull=False)
+        .select_related("kind")
+    )
 
     rooms_data = _serialize_rooms(rooms, display_map)
     exits_data = _serialize_exits(exit_qs, room_fixture_by_objectdb_id, result.reports)
@@ -265,6 +373,10 @@ def _build_area_bundle(area, result: GridExportResult) -> dict:
         "exits": exits_data,
         "overrides": overrides_data,
         "modifiers": modifiers_data,
+        "ambient_lines": _serialize_ambient_lines(ambient_lines, room_fixture_by_pk),
+        "clues": _serialize_clues(clues, room_fixture_by_pk),
+        "clue_triggers": _serialize_clue_triggers(clue_triggers, room_fixture_by_pk),
+        "portal_anchors": _serialize_portal_anchors(portal_anchors, room_fixture_by_pk),
     }
 
 

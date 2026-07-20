@@ -42,6 +42,8 @@ from world.character_creation.models import (
     CGPointBudget,
     CharacterDraft,
     DraftApplication,
+    OriginTemplate,
+    OriginTemplateSlot,
     StartingArea,
 )
 from world.character_creation.serializers import (
@@ -49,6 +51,7 @@ from world.character_creation.serializers import (
     CGExplanationsSerializer,
     CGGiftOptionSerializer,
     CGGlimpseTagSerializer,
+    CGOriginTemplateSerializer,
     CGPointBudgetSerializer,
     CGTechniqueOptionSerializer,
     CharacterDraftCreateSerializer,
@@ -541,6 +544,34 @@ class CGGlimpseTagViewSet(viewsets.ReadOnlyModelViewSet):
                 queryset=GlimpseTagDistinctionSuggestion.objects.select_related("distinction"),
                 to_attr="cached_distinction_suggestions",
             )
+        )
+
+
+class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
+    """List active origin-story templates for the CG guided flow (#2478).
+
+    Filter by ``beginning`` to get templates available for a specific beginning.
+    Mirrors ``CGGlimpseTagViewSet``.
+    """
+
+    pagination_class = None  # ADR-0138: opt out of default paginator
+    serializer_class = CGOriginTemplateSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["beginning"]
+
+    def get_queryset(self) -> QuerySet[OriginTemplate]:
+        """Return active templates with prefetched slots, ordered."""
+        return (
+            OriginTemplate.objects.filter(is_active=True)
+            .prefetch_related(
+                Prefetch(
+                    "slots",
+                    queryset=OriginTemplateSlot.objects.order_by("sort_order"),
+                    to_attr="cached_slots",
+                )
+            )
+            .order_by("sort_order", "name")
         )
 
 

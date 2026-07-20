@@ -1750,6 +1750,84 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/ceremonies/seance-offers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description PENDING seance-offer inbox for the requesting account (#2393).
+     *
+     *     GET  /api/ceremonies/seance-offers/ — the caller's own PENDING offers,
+     *     across every character sheet they've ever held (live, dead, or retired).
+     *     Deliberately no pagination — this list is always small (bounded by how
+     *     many open Seance ceremonies currently name this account's characters).
+     *     POST .../{id}/accept/ — accept (mints the location move + retired-puppet grant).
+     *     POST .../{id}/decline/ — decline.
+     */
+    get: operations['ceremonies_seance_offers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/ceremonies/seance-offers/{id}/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description PENDING seance-offer inbox for the requesting account (#2393).
+     *
+     *     GET  /api/ceremonies/seance-offers/ — the caller's own PENDING offers,
+     *     across every character sheet they've ever held (live, dead, or retired).
+     *     Deliberately no pagination — this list is always small (bounded by how
+     *     many open Seance ceremonies currently name this account's characters).
+     *     POST .../{id}/accept/ — accept (mints the location move + retired-puppet grant).
+     *     POST .../{id}/decline/ — decline.
+     */
+    post: operations['ceremonies_seance_offers_accept_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/ceremonies/seance-offers/{id}/decline/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description PENDING seance-offer inbox for the requesting account (#2393).
+     *
+     *     GET  /api/ceremonies/seance-offers/ — the caller's own PENDING offers,
+     *     across every character sheet they've ever held (live, dead, or retired).
+     *     Deliberately no pagination — this list is always small (bounded by how
+     *     many open Seance ceremonies currently name this account's characters).
+     *     POST .../{id}/accept/ — accept (mints the location move + retired-puppet grant).
+     *     POST .../{id}/decline/ — decline.
+     */
+    post: operations['ceremonies_seance_offers_decline_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/chapters/': {
     parameters: {
       query?: never;
@@ -2650,6 +2728,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/origin-templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List active origin-story templates for the CG guided flow (#2478).
+     *
+     *     Filter by ``beginning`` to get templates available for a specific beginning.
+     *     Mirrors ``CGGlimpseTagViewSet``.
+     */
+    get: operations['character_creation_origin_templates_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/origin-templates/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List active origin-story templates for the CG guided flow (#2478).
+     *
+     *     Filter by ``beginning`` to get templates available for a specific beginning.
+     *     Mirrors ``CGGlimpseTagViewSet``.
+     */
+    get: operations['character_creation_origin_templates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/paths/': {
     parameters: {
       query?: never;
@@ -2957,6 +3079,40 @@ export interface paths {
     get: operations['character_sheets_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/clear-origin-slot/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Clear a character's origin-story slot answer (#2478). */
+    post: operations['character_sheets_clear_origin_slot_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/set-origin-slot/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Set a character's origin-story slot answer (#2478). */
+    post: operations['character_sheets_set_origin_slot_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -19855,13 +20011,6 @@ export interface components {
      */
     ArcanaTypeEnum: 'major' | 'minor';
     /**
-     * @description * `sword` - Sword
-     *     * `shield` - Shield
-     *     * `crown` - Crown
-     * @enum {string}
-     */
-    ArchetypeEnum: 'sword' | 'shield' | 'crown';
-    /**
      * @description An authorable architectural style for the builder picker (#1882).
      *
      *     The player-facing lore lives in the linked ``CodexSubject`` — knowing that
@@ -20754,6 +20903,23 @@ export interface components {
       readonly id: number;
       /** @description Display name for this distinction. */
       readonly name: string;
+    };
+    /**
+     * @description Origin template for the CG guided flow (#2478).
+     *
+     *     Backs ``GET /api/character-creation/origin-templates/``.
+     */
+    CGOriginTemplate: {
+      readonly id: number;
+      /** @description Template name (part of natural key). */
+      readonly name: string;
+      /** @description The fixed frame prose every character with this beginning shares. */
+      readonly frame_narrative: string;
+      /** @description Inactive templates are hidden from CG. */
+      readonly is_active: boolean;
+      /** @description Display order when multiple templates exist. */
+      readonly sort_order: number;
+      readonly slots: components['schemas']['OriginTemplateSlot'][];
     };
     /** @description Serializer for CG point budget configuration. */
     CGPointBudget: {
@@ -22258,14 +22424,20 @@ export interface components {
       readonly covenant_type: components['schemas']['CovenantTypeEnum'];
       readonly covenant_type_display: string;
       /**
-       * @description Foundational archetype: Sword (offense), Shield (defense), Crown (support).
-       *
-       *     * `sword` - Sword
-       *     * `shield` - Shield
-       *     * `crown` - Crown
+       * Format: decimal
+       * @description SWORD axis of the combat-identity blend (0-1). Weights are stored on primary roles only; sub-roles read the parent's blend (#2529).
        */
-      readonly archetype: components['schemas']['ArchetypeEnum'];
-      readonly archetype_display: string;
+      readonly sword_weight: string;
+      /**
+       * Format: decimal
+       * @description SHIELD axis of the combat-identity blend (0-1).
+       */
+      readonly shield_weight: string;
+      /**
+       * Format: decimal
+       * @description CROWN axis of the combat-identity blend (0-1).
+       */
+      readonly crown_weight: string;
       /** @description Combat resolution order. Lower is faster (1 = fastest). */
       readonly speed_rank: number;
       /** @description Player-facing description of the role's identity and combat style. */
@@ -22663,10 +22835,17 @@ export interface components {
      *     * `until_cured` - Until Cured
      *     * `until_used` - Until Used (consumed on trigger)
      *     * `end_combat` - Until End of Combat
+     *     * `scene` - Until End of Scene
      *     * `permanent` - Permanent (until removed)
      * @enum {string}
      */
-    DefaultDurationTypeEnum: 'rounds' | 'until_cured' | 'until_used' | 'end_combat' | 'permanent';
+    DefaultDurationTypeEnum:
+      | 'rounds'
+      | 'until_cured'
+      | 'until_used'
+      | 'end_combat'
+      | 'scene'
+      | 'permanent';
     /**
      * @description * `attacker` - Attacker
      *     * `defender` - Defender
@@ -27393,6 +27572,19 @@ export interface components {
      * @enum {string}
      */
     OriginEnum: 'authored' | 'story' | 'player';
+    /** @description Slot prompt within an origin template (#2478). */
+    OriginTemplateSlot: {
+      readonly id: number;
+      /** @description Slot name (part of natural key). */
+      readonly name: string;
+      /** @description The question shown to the player. */
+      readonly prompt: string;
+      /** @description Short illustrative answer shown in the guided step. */
+      readonly example: string;
+      readonly sort_order: number;
+      /** @description Required slots are marked in the post-CG finish-later editor. */
+      readonly is_required: boolean;
+    };
     /**
      * @description * `unresolved` - Unresolved
      *     * `attacker_decisive` - Attacker — decisive
@@ -34013,6 +34205,18 @@ export interface components {
      * @enum {string}
      */
     ScopeA20Enum: 'unassigned' | 'character' | 'group' | 'global';
+    SeanceManifestationOffer: {
+      readonly id: number;
+      readonly honoree_name: string;
+      readonly ceremony_location_name: string;
+      readonly ceremony_id: number;
+      status?: components['schemas']['Status7baEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    SeanceManifestationOfferRequest: {
+      status?: components['schemas']['Status7baEnum'];
+    };
     /**
      * @description * `spring` - Spring
      *     * `summer` - Summer
@@ -35123,6 +35327,13 @@ export interface components {
      * @description * `pending` - Pending
      *     * `accepted` - Accepted
      *     * `declined` - Declined
+     * @enum {string}
+     */
+    Status7baEnum: 'pending' | 'accepted' | 'declined';
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `declined` - Declined
      *     * `withdrawn` - Withdrawn
      * @enum {string}
      */
@@ -35528,6 +35739,9 @@ export interface components {
       fixture_key: string | null;
       origin: string;
       occupant_count: number;
+      clues: components['schemas']['WorldBuilderRoomClue'][];
+      clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
+      portal_anchors: components['schemas']['WorldBuilderPortalAnchor'][];
       grants: string[];
     };
     /** @description Read-only serializer for StrainAvailability — per-character strain cap snapshot. */
@@ -37078,6 +37292,13 @@ export interface components {
       rooms: components['schemas']['WorldBuilderRoom'][];
       exits: components['schemas']['WorldBuilderExit'][];
     };
+    /** @description One ClueTrigger placement, nested in a WorldBuilderRoom payload (#2451). */
+    WorldBuilderClueTrigger: {
+      id: number;
+      clue_name: string;
+      clue_slug: string;
+      fixture_key: string | null;
+    };
     /**
      * @description One directed exit in the staff area-manager payload (#2449).
      *
@@ -37092,6 +37313,13 @@ export interface components {
       to_room_id: number | null;
       to_room_name: string | null;
       to_area_id: number | null;
+    };
+    /** @description One active PortalAnchor, nested in a WorldBuilderRoom payload (#2451). */
+    WorldBuilderPortalAnchor: {
+      id: number;
+      kind_name: string;
+      name: string;
+      fixture_key: string | null;
     };
     /**
      * @description One RoomProfile in the staff area-manager payload (#2449).
@@ -37115,6 +37343,17 @@ export interface components {
       fixture_key: string | null;
       origin: string;
       occupant_count: number;
+      clues: components['schemas']['WorldBuilderRoomClue'][];
+      clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
+      portal_anchors: components['schemas']['WorldBuilderPortalAnchor'][];
+    };
+    /** @description One RoomClue placement, nested in a WorldBuilderRoom payload (#2451). */
+    WorldBuilderRoomClue: {
+      id: number;
+      clue_name: string;
+      clue_slug: string;
+      detect_difficulty: number;
+      fixture_key: string | null;
     };
     WorshippedBeingRef: {
       readonly id: number;
@@ -39446,8 +39685,9 @@ export interface operations {
          * @description * `funeral` - Funeral
          *     * `blessing` - Blessing
          *     * `sermon` - Sermon
+         *     * `seance` - Seance
          */
-        ceremony_type__key?: 'blessing' | 'funeral' | 'sermon';
+        ceremony_type__key?: 'blessing' | 'funeral' | 'seance' | 'sermon';
         location?: number;
         location__objectdb?: number;
         /** @description A page number within the paginated result set. */
@@ -39495,6 +39735,75 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Ceremony'];
+        };
+      };
+    };
+  };
+  ceremonies_seance_offers_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SeanceManifestationOffer'][];
+        };
+      };
+    };
+  };
+  ceremonies_seance_offers_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['SeanceManifestationOfferRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SeanceManifestationOffer'];
+        };
+      };
+    };
+  };
+  ceremonies_seance_offers_decline_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['SeanceManifestationOfferRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SeanceManifestationOffer'];
         };
       };
     };
@@ -40701,6 +41010,49 @@ export interface operations {
       };
     };
   };
+  character_creation_origin_templates_list: {
+    parameters: {
+      query?: {
+        beginning?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGOriginTemplate'][];
+        };
+      };
+    };
+  };
+  character_creation_origin_templates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Origin Template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGOriginTemplate'];
+        };
+      };
+    };
+  };
   character_creation_paths_list: {
     parameters: {
       query?: never;
@@ -40998,6 +41350,46 @@ export interface operations {
     };
   };
   character_sheets_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_clear_origin_slot_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_sheets_set_origin_slot_create: {
     parameters: {
       query?: never;
       header?: never;

@@ -82,3 +82,12 @@ CAST_DIFFICULTY_BANDS: tuple[tuple[int, int], ...] = (
     (8, 60),
     (9999, 75),
 )
+
+
+class BoonKind(models.TextChoices):
+    """What a Boon asks for (#2540). MONEY is wired; the rest are follow-up slices."""
+
+    MONEY = "money", "Money"
+    HELD_ITEM = "held_item", "A held item"  # a named item the target currently carries
+    VAULT_ITEM = "vault_item", "A vault item"  # from the org vault (needs the bank/vault system)
+    DEED = "deed", "A deed"  # do a thing — RP, no mechanical transfer

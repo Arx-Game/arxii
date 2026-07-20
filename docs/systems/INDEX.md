@@ -839,10 +839,24 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
   extracted so buildings, battles, and the new `world-builder/` app
   (`/staff/world-builder`, linked from the profile dropdown + Game Setup hub) render
   off one canvas shell instead of three parallel ones. Not built this slice:
-  `edit_area` UI, clue/portal layers (#2451). **GM story areas (#2450, epic #2436
+  `edit_area` UI. **GM story areas (#2450, epic #2436
   slice 3) BUILT** — a GM's own build-and-run space on the same substrate, gated by
   GM trust rather than the staff flag; see the GM system's "Story areas & story
   rooms" entry above for the full model/service/action/API/telnet rundown.
+  **Discovery/portal authoring (#2451, epic #2436 slice 4) BUILT** — clue/portal
+  layers land in the staff canvas: `RoomDetailPanel` gains staff-only "Clues" and
+  "Portal anchors" sections (`PlaceClueDialog`/`PlacePortalAnchorDialog`),
+  `WorldRoomNode` shows a combined clue+trigger count badge, and `WorldCanvas`
+  renders paired same-kind `PortalAnchor`s as dashed edges (`pairPortalAnchors` +
+  `portalEdges` in `map-canvas/edges.ts`; an unpaired anchor still shows, just with
+  no edge). Six new REGISTRY actions
+  (`staff_place_clue`/`staff_remove_clue`/`staff_place_clue_trigger`/
+  `staff_remove_clue_trigger`/`staff_place_portal_anchor`/`staff_remove_portal_anchor`)
+  and a new staff-authoring service, `install_portal_anchor_as_staff` (no owner/tenant
+  standing check, no currency cost — see magic.md's "Portal travel" section). The
+  grid bundle format gains `clues`/`clue_triggers`/`portal_anchors` sidecar sections;
+  see the "Investigation & Discovery" system entry below for the clue-side
+  model/action detail.
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
@@ -1142,10 +1156,23 @@ a collaborative **research project**.
 - **Models:** `Clue` (DiscriminatorMixin — `target_kind` ∈ CODEX / MISSION / RESCUE / SECRET /
   PERSONA_LINK + a per-kind FK; never exists without a target. PERSONA_LINK (#2120) is the
   documented multi-discriminator exception: `target_persona` + `target_persona_linked`, both
-  FKs → `scenes.Persona`, required together), `CharacterClue` (held-clue, roster-scoped),
-  `RoomClue` (search-anchored placement + `detect_difficulty` + `eligibility_rule`),
-  `ClueTrigger` (passive on-entry placement + `eligibility_rule`), `ResearchProjectDetails`
+  FKs → `scenes.Persona`, required together. Also carries a `NaturalKeyMixin` `slug`
+  (#2451) and is a `CONTENT_MODELS` citizen — a `Clue` now exports/imports as
+  lore-repo content, natural-keyed by slug), `CharacterClue` (held-clue, roster-scoped),
+  `RoomClue` (search-anchored placement + `detect_difficulty` + `eligibility_rule` +
+  `fixture_key`), `ClueTrigger` (passive on-entry placement + `eligibility_rule` +
+  `fixture_key`), `ResearchProjectDetails`
   (the clue a `ProjectKind.RESEARCH` project researches toward)
+- **Staff authoring (#2451, epic #2436 slice 4):** `RoomClue`/`ClueTrigger` both carry
+  a nullable-unique `fixture_key` (same pattern as `RoomProfile.fixture_key`),
+  set when placed from the staff world-builder canvas. `staff_place_clue`/
+  `staff_remove_clue`/`staff_place_clue_trigger`/`staff_remove_clue_trigger`
+  (`src/actions/definitions/world_builder.py`, `category="world_builder"`,
+  `StaffOnlyPrerequisite`-gated) place/hard-delete these rows; the grid bundle
+  format gains `clues`/`clue_triggers` sidecar sections (keyed by `fixture_key`,
+  referencing rooms by their `fixture_key` and the clue by its `slug`), upserted
+  by `grid_import.load_grid_bundles()`'s 5th pass and report-never-deleted when a
+  fixture-keyed row is absent from a reimported bundle.
 - **Key functions (`world/clues/services.py`, `research.py`):** `acquire_clue`,
   `target_already_known`, `search_room` (Search check per hidden clue), `grant_clue_target`
   (AUTOMATIC resolution — codex KNOWN / rescue mission / secret fact / persona-link
@@ -1817,7 +1844,11 @@ action consent flow, and a three-mode non-combat round framework.
   (per-round ledger; `is_immediate=True` for OPEN/POSE_ORDER actions, `is_immediate=False` for STRICT
   deferred declarations; carries `target_persona` FK; multiple rows per participant per round up to
   `max_actions_per_round`; `succor_target` FK (`SceneRoundParticipant`) + `succor_resolution` (float,
-  cached graded outcome) for the scene-round Succor sibling, #1744), `SceneRoundParticipant`
+  cached graded outcome) for the scene-round Succor sibling, #1744), `SceneRoundParticipant`,
+  `Boon` (#2540, `boon_models.py` — the payload of a structured social ask, 1:1 with its
+  `SceneActionRequest`: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`,
+  `item_instance`, `deed_text`, `fulfilled_at`; `boon_services.fulfill_boon` moves the asked
+  thing on a granted ask — MONEY wired via `currency.transfer`, other kinds are follow-up slices)
 - **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance).
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).
@@ -2197,7 +2228,7 @@ GM availability read. ADR-0086 (extends ADR-0024, ADR-0033).
 ### Narrative
 General-purpose IC message delivery — GM/Staff/automated messages to characters. Used by stories for beat and episode-resolution informs; also available for atmosphere, visions, happenstance.
 
-- **Models:** `NarrativeMessage` (body, ooc_note, category, sender_account, optional related_story / related_beat_completion / related_episode_resolution FKs), `NarrativeMessageDelivery` (message + recipient_character_sheet, delivered_at, acknowledged_at)
+- **Models:** `NarrativeMessage` (body, ooc_note, category, sender_account, optional related_story / related_beat_completion / related_episode_resolution FKs), `NarrativeMessageDelivery` (message + recipient_character_sheet, delivered_at, acknowledged_at), `AmbientEmoteLine` (authored prose + weight/cooldown/fire-chance), `AmbientEmoteCondition` (0+ leaf conditions per line, AND/OR-composed)
 - **Categories:** STORY, ATMOSPHERE, VISIONS, HAPPENSTANCE, SYSTEM, COVENANT, RENOWN,
   WEATHER (weather tick emits),
   ABILITY (access-change notifications — gained/lost techniques or capabilities; also used
@@ -2208,6 +2239,19 @@ General-purpose IC message delivery — GM/Staff/automated messages to character
 - **Pattern:** One message fans out to many recipients via NarrativeMessageDelivery rows (e.g., GM sends covenant message to 5 of 8 members — one message, five delivery rows). Messages are immutable; delivery rows track per-recipient state.
 - **API Endpoints:** `GET /api/narrative/my-messages/` (paginated, filterable by category / related_story / acknowledged), `POST /api/narrative/deliveries/{id}/acknowledge/`
 - **Integrates with:** stories (beat completions + episode resolutions emit messages via `stories.services.narrative`), character_sheets (recipient), accounts (sender)
+- **Ambient room reactions (#2471 v2):** `AmbientEmoteLine` (authored prose + weight/cooldown/
+  fire-chance) + `AmbientEmoteCondition` (0+ leaf conditions per line, AND/OR-composed) — species/
+  resonance-threshold/distinction/fame-tier conditions compile (`world.narrative.ambient_content
+  .compile_line_filter`) to real Trigger-system filter conditions, extending the DSL's existing
+  method-dispatch pattern (`Character.has_property`/`has_capability`/`shares_covenant_with`) with
+  three new methods (`has_resonance_at_least`/`has_public_distinction`/`fame_tier_at_least`).
+  Dispatched via the existing Flows/Triggers `MOVED` event: at grid-bundle import
+  (`core_management.grid_import._install_ambient_triggers`), lines are grouped by their compiled,
+  identical condition set, and each distinct group gets one DERIVED `TriggerDefinition`/
+  `FlowDefinition`/`Trigger` (not authored directly, not a fixed config singleton — computed from
+  content, like `RegionWeatherState`). `deliver_ambient_group` only picks among an
+  already-matched group's own lines (weighted + cooldown + fire-chance); it never re-decides
+  whether a condition matched. Supersedes `world.societies.fame_reactions` (#881, retired).
 - **Source:** `src/world/narrative/`
 
 ### Achievements
@@ -2924,6 +2968,38 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   the dependency runs one-way, buildings→battles direction avoided (FK direction
   specific→general, ADR-0010).
 - **Source:** `src/world/buildings/`
+- **Property grants (generic "hand a persona an already-existing Building"
+  primitive):** `PropertyGrantProfile` (catalog: `building_kind`, nullable
+  `ward_area` — falls back to a shared placeholder Ward Area, lazily created;
+  `initial_condition_tier`; nullable `activation_target_tier` — unset means
+  the grant is already active, set means it starts upkeep-exempt and needs a
+  `BUILDING_ACTIVATION` project; `activation_cost_floor_coppers`),
+  `BuildingActivationDetails` (per-project payload: `building`, snapshotted
+  `target_tier`, `applied_at` idempotency marker). `Building` gains
+  `granted_via_profile` / `property_granted_at` / `property_activated_at`.
+  Not content-specific — `character_creation.Beginnings.property_grant_profile`
+  is the only current caller (via `finalize_character`), but
+  `grant_property_house` is callable from anywhere (a future GM/story grant
+  needs no new plumbing). **Key functions**
+  (`world.buildings.property_grant_services`): `grant_property_house(persona,
+  profile) -> Building` (creates the Area/Building/entry-room shape
+  `complete_building_construction` produces, minus the permit/project),
+  `start_building_activation(*, persona, building) -> Project` (owner-gated,
+  `BUILDING_ACTIVATION` kind, `SINGLE_THRESHOLD`, cost = `profile.
+  activation_cost_floor_coppers × building.target_size`), `complete_building_
+  activation(project, outcome_tier=None)` (kind handler — sets
+  `condition_tier` to the snapshotted target, stamps `property_activated_at`,
+  idempotent via `applied_at`). Weekly upkeep (`apply_weekly_upkeep_for_
+  building`) exempts a granted-not-activated building the same way it exempts
+  a mothballed one; `refurbish_building` refuses on one (typed
+  `ConditionServiceError`) — the first-time bring-to-life arc is deliberately
+  the `BUILDING_ACTIVATION` project, not the instant purse-priced refurbish
+  path. Action: `StartBuildingActivationAction` (`"start_building_activation"`,
+  owner-gated via `IsRoomOwnerPrerequisite`, same family as the #1930
+  condition actions). Dev seed: `world.buildings.seeds.ensure_placeholder_
+  property_grant_profile` (cluster `"property_grants"`) — a generic
+  placeholder profile/kind so the feature is exercisable before real content
+  wires a `Beginnings` row at it.
 
 ### Ships (#1832)
 Persistent upgrades + repair + ship-as-sanctum + covenant-scale combat bridge, the
@@ -3605,7 +3681,20 @@ holder is never notified a claim exists.
     a gem and unset, embeds it (clears holder), and adds its worth to the host's `lore_value` so the
     wired `appraise()` reflects it. `adorned_materials(host)` is the queryable "materials on this
     piece" seam magic reads. Exceptions: `AdornmentCapacityExceeded` / `NotAGem` / `GemAlreadyAdorned`.
-    Safe craft-time path only; risky prying/re-set defers to the cut slice.
+    Safe craft-time path only. **Risky prying** (`pry_adornment`, Build 0b slice 6): the risky
+    end of the lifecycle — a `perform_check` (skill feeds the roll) removes a set gem; the stone
+    leaves the piece either way (host `lore_value` drops by its worth), freed to the pryer's
+    inventory on success or **shattered** on a botch (same shatter spine as gem cutting).
+    Returns `PryResult`; spends AP up front.
+  - **Gem cutting** (`world.items.gems.services.cut_gem`, Build 0b slice 3) — the risky value-add
+    axis, "very much crafting": reuses a `CraftingRecipe` (`CraftingRecipeKind.GEM_CUT`) config +
+    the `perform_check` primitive (crafter's `skill_trait` feeds the roll), spends the recipe's AP,
+    and resolves `success_level` **directly to an improved cut `GemGrade`** (`resolve_cut_grade` —
+    no `QualityTier` detour, since the framework's outcome type doesn't fit a gem grade). A botch
+    (`success_level < min`) **shatters** the stone (deleted); success advances the cut ladder and
+    worth recomputes. Returns `CutResult`. Deferred: a hard skill-value cap (`CraftingSkillCap`
+    style) and the consequence-pool narrative outcomes; risky adornment prying reuses this shatter
+    spine.
   - **Gem mining engine** (`world.items.gems.mining.roll_gem_haul`, Build 0b slice 4) — the pure,
     deterministic (injected `roll` seam) haul generator. One mine cycle → a common-gem **aggregate
     value** (`GemHaul.common_value`, never instanced) plus, rarely, a few **Rare-Find** gem
@@ -3616,6 +3705,17 @@ holder is never notified a claim exists.
     and the schema-only minister-check seam (`OrganizationOffice.feeds_check`, #2239) are the
     Build-1 wiring that *calls* this; where common value accrues is handled by
     `accrue_mine_cycle` (below). All magnitudes PLACEHOLDER.
+  - **Common-gem value buckets + bulk requirements** (`world.items.gems.buckets`, Build 0b slice 5)
+    — `CommonGemBucket` (a crafter's common-gem value per tier — a `MaterialCategory` — never
+    instanced; the type-blind bulk source). `credit_common_gems` / `spend_common_gems` /
+    `common_gem_value` (canonical mutate-then-save, not `F()`; `InsufficientCommonGems`).
+    `CraftingMaterialRequirement.required_value` (nullable, category-only, DB-constrained) is a
+    "N value of {tier}" **bulk** requirement: `stage_and_assert_affordable` splits value reqs from
+    instance reqs — instance reqs go through `gather_consumable_pks` (0a, unchanged), value reqs are
+    aggregated per tier and checked against the crafter's buckets (via `StagedCost.bucket_spends`);
+    `consume_cost` spends them. Named Rare-Find stones are never auto-consumed — only this fungible
+    bulk source is. This is the "gem-covered table, don't care which" path; the primary use is still
+    adornment. Common value crediting from mining is the Build-1 cron's job.
   - **Mine accrual** (`world.items.gems.mining.accrue_mine_cycle`, Build 0b slice 7) — the weekly
     cycle for a mine holding. `DomainHolding` gains `mine_quality` + `common_gem_tier`; the cycle
     calls `roll_gem_haul` and accrues the haul into **uncollected** pools on the holding's
@@ -3823,18 +3923,27 @@ Magically-empowered group oaths with roles, gear compatibility, a per-covenant r
 ladder, a Mentor's Vow bond system for level-mismatched parties (#1165), and a Covenant
 of the Court type for master/servant pacts (#1589).
 
-**Standing invariant:** `CovenantRole` = combat power (archetype, speed_rank,
-Thread pulls). `CovenantRank` = administrative authority (invite/kick/manage).
-These two axes are orthogonal — never re-merge them.
+**Standing invariant:** `CovenantRole` = combat power (SWORD/SHIELD/CROWN blend
+weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
+(invite/kick/manage). These two axes are orthogonal — never re-merge them.
 
 - **Models:**
   - `CharacterCovenantRole` — per-character membership row; `left_at IS NULL` =
     currently active. Fields include `covenant` FK, `covenant_role` FK, `engaged`
     boolean, `rank` FK → `CovenantRank`.
+  - `CovenantRole.sword_weight`/`.shield_weight`/`.crown_weight` (#2529, ADR-0149) —
+    Decimal weights forming the combat-identity blend; stored on primary roles only
+    (sum to 1), sub-roles delegate via `blend_weight_for(axis) -> Decimal`. Replaced
+    the single-value `archetype` enum. Lore-repo content (`NaturalKeyMixin`,
+    `CONTENT_MODELS`).
   - `CovenantRole` sub-role fields — `parent_role` (self-FK), `resonance` (FK →
     `magic.Resonance`), `unlock_thread_level` (PositiveInt, 0 for primary / >0 for sub-roles),
     `discovery_achievement` (FK → `achievements.Achievement`, nullable, sub-roles only),
     `codex_entry` (FK → `codex.CodexEntry`, nullable, sub-roles only).
+  - `CovenantRoleActionScaling` (#2529, ADR-0149; replaced `ArchetypeActionScaling`) —
+    one row per `(covenant_role, action_key)` with `thread_level_multiplier`. Read by
+    `covenant_role_action_scaling_bonus(character, action_key)`, anchor-role
+    normalized. Lore-repo content.
   - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
     compatible with which `GearArchetype` values (read-only authored content)
   - `CovenantRoleBonus` — authored config: one row per
@@ -3896,6 +4005,10 @@ These two axes are orthogonal — never re-merge them.
   - `is_gear_compatible(role, archetype) -> bool`
   - `role_base_bonus_for_target(role, target, char_level) -> int` (in
     `world.mechanics.services`)
+  - `covenant_role_action_scaling_bonus(character, action_key) -> float` (#2529,
+    ADR-0149; replaces `archetype_action_scaling_bonus`) — sums `thread_level ×
+    multiplier` across engaged roles' `CovenantRoleActionScaling` rows, anchor-role
+    normalized
   - **Rank management** — all require `actor.rank.can_manage_ranks=True`:
     `create_rank`, `rename_rank`, `set_rank_capabilities`, `reorder_ranks`,
     `delete_rank`, `assign_rank`, `transfer_top`. Lock-out invariant:
@@ -4807,8 +4920,9 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `secret_worship` → `_create_worship_declaration` at finalization. Seeds: `worship` cluster
   (Rites skill + 4 specs, Ceremony Rites CheckType, Devotion aspect for Path of the Chosen,
   achievements, PLACEHOLDER beings); `secret-investigation` consent category in the consent seed.
-- **Ceremony models** (`world/ceremonies`): `CeremonyType` (Funeral/Blessing/Sermon rows),
-  `Ceremony` (officiant Persona, TRUE `being` vs `presented_being` — player surfaces render
+- **Ceremony models** (`world/ceremonies`): `CeremonyType` (Funeral/Blessing/Sermon/Seance
+  rows — seeded via the `"ceremonies"` cluster, #2393), `Ceremony` (officiant Persona, TRUE
+  `being` vs `presented_being` — player surfaces render
   presented ONLY, one-OPEN-per-location constraint, nullable scene/event FKs, `quality_level`),
   `CeremonyHonoree`, `CeremonyOffering` (item destroyed; snapshot), `CeremonySpeech`,
   `CeremonyConfig` singleton (`get_ceremony_config`, PLACEHOLDER magnitudes).
@@ -4819,8 +4933,18 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `abandon_ceremony`, `open_funeral_for` (ghost container); `run_twisted_rite_leak`
   (`ceremonies/leak.py` — consent-gated Search roll → clue on the worship Secret).
   Exceptions: `CeremonyError` (user_message).
-- **Integration**: `GhostWindowPrerequisite` third container (open funeral at the ghost's
-  location); `_dead_owner_trusts` corpse-handler exemption (`flows/service_functions/
+- **Seance (#2393)**: `SeanceManifestationOffer` (one per honoree, PENDING/ACCEPTED/DECLINED)
+  — created by `open_ceremony` for a SEANCE-type ceremony. `respond_to_seance_offer`
+  (account-scoped accept/decline; accept moves the honoree's character to the ceremony's
+  location), `pending_seance_offers_for_account`, `revoke_seance_manifestations` (called from
+  `finish_ceremony`/`abandon_ceremony`, unpuppets any manifested RETIRED honoree). Retired-login
+  bypass lives on `Account.can_puppet_for_seance` — deliberately NOT merged into
+  `can_puppet_character`/`get_available_characters` (see ADR-0147). Actions:
+  `seance_offer_respond`; telnet `seance` (offers/accept/decline); API
+  `/api/ceremonies/seance-offers/` (list + accept/decline); frontend `SeanceOfferBanner`.
+- **Integration**: `GhostWindowPrerequisite` third container (open funeral, or an open
+  ACCEPTED seance, at the ghost's location, #2393); `_dead_owner_trusts` corpse-handler
+  exemption (`flows/service_functions/
   inventory.py`); `ceremonies.auto_abandon` hourly cron. Actions `ceremony_open`/`_offering`/
   `_speech`/`_finish`/`_abandon`; telnet `ceremony` family; API `/api/worship/beings/` +
   `/api/ceremonies/ceremonies/` (both paginated read-only); game-view `CeremonyRoomCard`.

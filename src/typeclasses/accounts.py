@@ -193,6 +193,10 @@ class Account(DefaultAccount):
         """Returns characters this player can currently control."""
         return self.player_data.get_available_characters()
 
+    def get_seance_manifestable_characters(self):
+        """Retired characters this account can manifest via an accepted, open seance (#2393)."""
+        return self.player_data.get_seance_manifestable_characters()
+
     def get_puppeted_characters(self):
         """Returns list of characters currently being puppeted by any session."""
         return [session.puppet for session in self.sessions.all() if session.puppet]
@@ -229,6 +233,43 @@ class Account(DefaultAccount):
 
         return True, ""
 
+    def can_puppet_for_seance(self, character):
+        """Narrow bypass of the retired-login gate for an accepted seance offer (#2393).
+
+        True only when the character is retired, THIS account is their own
+        controlling account (resolved via ``account_for_sheet``'s current-tenure
+        walk — ``tenure.end_date IS NULL`` — not "currently available"; retiring
+        a character does not end their tenure, so this still resolves correctly
+        for a retired honoree, unlike ``get_available_characters()``, which
+        additionally filters out anything ``is_retired``), and an ACCEPTED
+        SeanceManifestationOffer exists for them whose ceremony is still OPEN.
+        Deliberately separate from can_puppet_character — the general login
+        gate never learns about seances.
+        """
+        from django.core.exceptions import ObjectDoesNotExist
+
+        from world.ceremonies.constants import CeremonyStatus, SeanceOfferStatus
+        from world.ceremonies.models import SeanceManifestationOffer
+        from world.magic.services.gain import account_for_sheet
+        from world.vitals.services import is_retired
+
+        try:
+            sheet = character.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return False, "That character has no sheet."
+        if not is_retired(sheet):
+            return False, "That character isn't retired."
+        if account_for_sheet(sheet) != self:
+            return False, "That isn't your character."
+        has_offer = SeanceManifestationOffer.objects.filter(
+            ceremony_honoree__honoree_sheet=sheet,
+            status=SeanceOfferStatus.ACCEPTED,
+            ceremony_honoree__ceremony__status=CeremonyStatus.OPEN,
+        ).exists()
+        if not has_offer:
+            return False, "No open seance is calling you back."
+        return True, ""
+
     def _broadcast_puppet_changed(self, session, character) -> None:
         """Notify all of this account's sessions that a puppet swap occurred.
 
@@ -263,7 +304,11 @@ class Account(DefaultAccount):
         """Puppet a character in a specific session."""
         can_puppet, reason = self.can_puppet_character(character)
         if not can_puppet:
-            return False, reason
+            can_puppet, reason = self.can_puppet_for_seance(character)
+            if not can_puppet:
+                return False, reason
+            if character in self.get_puppeted_characters():
+                return False, "You are already controlling that character in another session."
 
         # If session is already puppeting something, unpuppet first
         if session.puppet:

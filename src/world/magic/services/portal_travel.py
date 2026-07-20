@@ -21,6 +21,9 @@ Public functions:
 - ``install_portal_anchor(persona, room, kind, name)`` /
   ``dissolve_portal_anchor(persona, anchor)`` — standing-gated anchor
   lifecycle management.
+- ``install_portal_anchor_as_staff(room, kind, name, *, fixture_key=None)`` —
+  staff world-building variant (#2451): no owner/tenant standing check, no
+  currency cost.
 """
 
 from __future__ import annotations
@@ -330,6 +333,39 @@ def install_portal_anchor(
         kind=kind,
         name=name,
         installed_by=persona,
+    )
+
+
+def install_portal_anchor_as_staff(
+    room: ObjectDB,
+    kind: PortalAnchorKind,
+    name: str,
+    *,
+    fixture_key: str | None = None,
+) -> PortalAnchor:
+    """Install a ``PortalAnchor`` from the staff world-builder canvas (#2451).
+
+    A genuine staff variant of ``install_portal_anchor`` — same model write, but
+    skips the owner/tenant standing check and the ``PORTAL_ANCHOR_INSTALL_COST``
+    debit entirely (staff authoring, not a player action; mirrors slice 2's
+    budget-free staff sibling for ``dig_room``). Still enforces the one
+    real data invariant: no two active anchors of the same ``kind`` in one room
+    (``PortalAnchorKindAlreadyInstalled``, same as the player path).
+    """
+    room_profile = _room_profile_for(room)
+    if room_profile is None:
+        msg = f"room={room.pk} has no RoomProfile."
+        raise PortalAnchorStandingRequired(msg)
+
+    if PortalAnchor.objects.active().filter(room_profile=room_profile, kind=kind).exists():
+        msg = f"room_profile={room_profile.pk} already has an active anchor of kind={kind.pk}."
+        raise PortalAnchorKindAlreadyInstalled(msg)
+
+    return PortalAnchor.objects.create(
+        room_profile=room_profile,
+        kind=kind,
+        name=name,
+        fixture_key=fixture_key,
     )
 
 

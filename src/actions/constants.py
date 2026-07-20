@@ -7,7 +7,7 @@ from django.db import models
 # #2287 — the ghost interlude: a dead character keeps the puppet (spectator
 # perception + OOC/channels) but IC verbs are whitelisted, not blacklisted.
 # ``emit``/``pose`` are further bounded by GhostWindowPrerequisite (death
-# scene / same IC day; funeral + seance containers are later issues' hooks).
+# scene / same IC day; funeral + seance containers (#2393)).
 # ``say`` is deliberately absent — a corpse has no voice.
 DEAD_ALLOWED_ACTION_KEYS: frozenset[str] = frozenset(
     {

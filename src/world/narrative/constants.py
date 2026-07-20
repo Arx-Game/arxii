@@ -23,3 +23,32 @@ class GemitReach(models.TextChoices):
 
     GAME_WIDE = "game_wide", "Game-wide"
     SPECIFIED = "specified", "Specified"
+
+
+class ConditionType(models.TextChoices):
+    """Which fields on an AmbientEmoteCondition are active (#2471 v2).
+
+    Each value compiles to one DSL filter leaf — see
+    world.narrative.ambient_content.compile_line_filter. SPECIES compiles to a plain ``==``
+    on the character's species name (no new DSL op needed); the other three back new
+    Character methods (has_resonance_at_least / has_public_distinction / fame_tier_at_least)
+    via the same method-dispatch pattern has_property/has_capability/shares_covenant_with
+    already use.
+    """
+
+    SPECIES = "species", "Species"
+    RESONANCE_MIN = "resonance_min", "Resonance threshold"
+    DISTINCTION = "distinction", "Distinction"
+    RENOWN_MIN = "renown_min", "Fame tier"
+
+
+class ConditionConnector(models.TextChoices):
+    """How an AmbientEmoteLine's conditions combine (#2471 v2).
+
+    Flat list only — a line's conditions are ALL joined by one connector, no nested
+    AND-of-ORs. Arbitrary nesting is explicitly deferred (needs an authoring form/tool
+    first) — see the #2471 spec's Scope / follow-ups.
+    """
+
+    AND = "and", "All conditions"
+    OR = "or", "Any condition"

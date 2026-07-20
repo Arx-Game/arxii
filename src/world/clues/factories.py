@@ -14,6 +14,7 @@ class ClueFactory(DjangoModelFactory):
     target_kind = ClueTargetKind.CODEX
     target_codex_entry = factory.SubFactory("world.codex.factories.CodexEntryFactory")
     name = factory.Sequence(lambda n: f"Clue {n}")
+    slug = factory.Sequence(lambda n: f"clue-{n}")
     description = "A mysterious clue."
     research_value = 1
 

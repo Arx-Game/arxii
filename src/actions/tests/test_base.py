@@ -174,6 +174,7 @@ class ActionRegistryTests(TestCase):
             "commission_decoration",
             "start_building_extension",
             "start_building_renovation",
+            "start_building_activation",
             "settle_building_arrears",
             "refurbish_building",
             "prepare_building",
@@ -453,6 +454,7 @@ class ActionRegistryTests(TestCase):
             "ceremony_speech",
             "ceremony_finish",
             "ceremony_abandon",
+            "seance_offer_respond",
             # #1985 — estates.
             "will_reading",
             # #1855 — overworld travel / voyages.
@@ -503,6 +505,13 @@ class ActionRegistryTests(TestCase):
             "staff_remove_room",
             "promote_room",
             "promote_area",
+            # #2451 — staff clue placement.
+            "staff_place_clue",
+            "staff_remove_clue",
+            "staff_place_clue_trigger",
+            "staff_remove_clue_trigger",
+            "staff_place_portal_anchor",
+            "staff_remove_portal_anchor",
             # #2450 — GM story builder.
             "create_story_area",
             "edit_story_area",

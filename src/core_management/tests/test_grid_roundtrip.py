@@ -25,6 +25,8 @@ from core_management.tests._grid_fixtures import build_sample_grid
 from evennia_extensions.models import ObjectDisplayData
 from world.areas.models import Area
 from world.character_creation.models import StartingArea
+from world.clues.models import RoomClue
+from world.magic.models import PortalAnchor
 
 _ROOM_TYPECLASS = "typeclasses.rooms.Room"
 
@@ -53,6 +55,8 @@ class GridRoundTripJourneyTests(TestCase):
         ).permanent_description
         original_city_name = self.grid.city.name
         fixture_key = self.grid.taproom.fixture_key
+        clue_fixture_key = self.grid.room_clue.fixture_key
+        anchor_fixture_key = self.grid.portal_anchor.fixture_key
         room_count_before = ObjectDB.objects.filter(db_typeclass_path=_ROOM_TYPECLASS).count()
 
         export_to_content_repo(self.root)
@@ -64,6 +68,8 @@ class GridRoundTripJourneyTests(TestCase):
         display.save()
         self.grid.city.name = "Somewhere Else"
         self.grid.city.save()
+        self.grid.room_clue.detect_difficulty = 1
+        self.grid.room_clue.save()
 
         world_result = load_world_content(self.root)
 
@@ -84,6 +90,68 @@ class GridRoundTripJourneyTests(TestCase):
         self.assertEqual(restored_starting_area.default_starting_room.fixture_key, fixture_key)
         self.assertEqual(restored_starting_area.default_starting_room_id, self.grid.taproom.pk)
 
+        restored_clue = RoomClue.objects.get(fixture_key=clue_fixture_key)
+        self.assertEqual(restored_clue.detect_difficulty, 5)
+        self.assertTrue(
+            PortalAnchor.objects.active().filter(fixture_key=anchor_fixture_key).exists()
+        )
+
         # No duplicate rooms were created by the reload.
         room_count_after = ObjectDB.objects.filter(db_typeclass_path=_ROOM_TYPECLASS).count()
         self.assertEqual(room_count_after, room_count_before)
+
+    def test_ambient_condition_group_derives_and_installs_trigger(self) -> None:
+        from flows.models import Trigger
+        from world.locations.constants import LocationParentType
+        from world.narrative.constants import ConditionType
+        from world.narrative.factories import AmbientEmoteConditionFactory, AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteLine
+        from world.species.factories import SpeciesFactory
+
+        species = SpeciesFactory(name="Infernal")
+        line = AmbientEmoteLineFactory(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.grid.taproom,
+            area=None,
+            bystander_body="A murmur runs through the taproom.",
+        )
+        AmbientEmoteConditionFactory(
+            line=line, condition_type=ConditionType.SPECIES, species=species
+        )
+
+        export_to_content_repo(self.root)
+        export_grid_bundles(self.root)
+
+        # Drift: delete everything, confirm nothing exists before reimport.
+        AmbientEmoteLine.objects.all().delete()
+        self.assertFalse(Trigger.objects.filter(obj=self.grid.taproom_obj).exists())
+
+        load_world_content(self.root)
+
+        restored = AmbientEmoteLine.objects.get(
+            room_profile=self.grid.taproom, bystander_body="A murmur runs through the taproom."
+        )
+        self.assertEqual(restored.conditions.count(), 1)
+        self.assertEqual(restored.conditions.first().species.name, "Infernal")
+        self.assertTrue(
+            Trigger.objects.filter(obj=self.grid.taproom_obj).exists(),
+            "importing ambient content should derive + install its condition-group Trigger",
+        )
+
+    def test_area_scoped_group_installs_on_rooms_without_room_override(self) -> None:
+        from flows.models import Trigger
+        from world.locations.constants import LocationParentType
+        from world.narrative.factories import AmbientEmoteLineFactory
+
+        AmbientEmoteLineFactory(
+            parent_type=LocationParentType.AREA,
+            area=self.grid.city,
+            room_profile=None,
+            arriver_body="The district's general mood.",
+        )
+
+        export_to_content_repo(self.root)
+        export_grid_bundles(self.root)
+        load_world_content(self.root)
+
+        self.assertTrue(Trigger.objects.filter(obj=self.grid.taproom_obj).exists())

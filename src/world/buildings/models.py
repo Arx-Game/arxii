@@ -92,6 +92,69 @@ class BuildingKind(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
+class PropertyGrantProfile(NaturalKeyMixin, SharedMemoryModel):
+    """A reusable catalog row configuring "grant a persona an already-existing Building".
+
+    Not tied to any specific beginning, ward, or game concept — that's
+    content, wired via ``Beginnings.property_grant_profile`` or any future
+    caller of ``grant_property_house``. A profile with ``activation_target_tier``
+    unset grants an already-active building at ``initial_condition_tier``
+    (e.g. a livable dormitory chamber); one with it set grants an
+    upkeep-exempt building that needs a ``BUILDING_ACTIVATION`` project to
+    reach that tier (e.g. a ruin needing a first-time civic rite).
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    building_kind = models.ForeignKey(
+        BuildingKind,
+        on_delete=models.PROTECT,
+        related_name="property_grant_profiles",
+    )
+    ward_area = models.ForeignKey(
+        "areas.Area",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="property_grant_profiles",
+        help_text=(
+            "Parent Area new grants are placed under. NULL falls back to a "
+            "shared placeholder Ward Area, lazily created — real content "
+            "sets this via fixture upsert with no code change."
+        ),
+    )
+    initial_condition_tier = models.PositiveSmallIntegerField(
+        choices=ConditionTier.choices,
+        default=ConditionTier.DECAYED,
+        help_text="Condition tier the Building starts at when granted.",
+    )
+    activation_target_tier = models.PositiveSmallIntegerField(
+        choices=ConditionTier.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "NULL: the grant is already active at initial_condition_tier — "
+            "no activation arc, no upkeep exemption. Set: the granted "
+            "Building starts upkeep-exempt and requires a BUILDING_ACTIVATION "
+            "project to reach this tier."
+        ),
+    )
+    activation_cost_floor_coppers = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Flat coppers-per-target_size floor for the activation project's "
+            "funding threshold. Only consulted when activation_target_tier is set."
+        ),
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class BuildingSizeTier(SharedMemoryModel):
     """Named building size → total space budget (#670; PLACEHOLDER magnitudes).
 
@@ -341,6 +404,35 @@ class Building(SharedMemoryModel):
             "OneToOne so re-running ``complete_building_construction`` on a "
             "completed project hits the unique constraint and the in-Python "
             "idempotency guard catches the duplicate first."
+        ),
+    )
+    granted_via_profile = models.ForeignKey(
+        "buildings.PropertyGrantProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="granted_buildings",
+        help_text=(
+            "Provenance: the PropertyGrantProfile that produced this Building, "
+            "if granted rather than constructed via a permit."
+        ),
+    )
+    property_granted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When this Building was granted via grant_property_house. "
+            "NULL for constructed buildings."
+        ),
+    )
+    property_activated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When this granted Building reached its profile's activation_target_tier "
+            "(stamped immediately at grant if the profile has no activation arc). "
+            "NULL while property_granted_at is set means upkeep-exempt and "
+            "refurbish-refused."
         ),
     )
 
@@ -677,6 +769,43 @@ class BuildingRenovationDetails(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Renovation -> kind {self.target_kind_id} for building {self.building_id}"
+
+
+class BuildingActivationDetails(SharedMemoryModel):
+    """Per-(BUILDING_ACTIVATION Project) details payload.
+
+    Set-once semantics on completion (mirrors BuildingRenovationDetails):
+    the handler sets Building.condition_tier to the snapshotted target_tier
+    exactly once via the applied_at idempotency marker, and stamps
+    Building.property_activated_at.
+    """
+
+    project = models.OneToOneField(
+        _PROJECT_FK,
+        on_delete=models.CASCADE,
+        related_name="building_activation_details",
+        primary_key=True,
+    )
+    building = models.ForeignKey(
+        _BUILDING_MODEL_PATH,
+        on_delete=models.CASCADE,
+        related_name="activation_details",
+    )
+    target_tier = models.PositiveSmallIntegerField(
+        choices=ConditionTier.choices,
+        help_text="Snapshot of the granting profile's activation_target_tier at commission time.",
+    )
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When condition_tier was set; NULL until the handler runs. Idempotency marker.",
+    )
+
+    class Meta:
+        verbose_name_plural = "Building activation details"
+
+    def __str__(self) -> str:
+        return f"Activation -> tier {self.target_tier} for building {self.building_id}"
 
 
 class BuildingPreparationDetails(SharedMemoryModel):
