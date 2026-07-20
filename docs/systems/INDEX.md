@@ -319,9 +319,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `GlimpseTagDistinctionSuggestion` (content model — `magic.glimpsetagdistinctionsuggestion`
     — `tag`/`distinction` FKs, specific→general per ADR-0010, grants nothing, purely a
     suggestion surface). `GlimpseTagAxis`/`GlimpseState`/`GLIMPSE_AXIS_CONFIG`
-    (`constants.py`) — four axes (TONE single-select; CONSEQUENCE, WITNESS, SENSORY
+    (`constants.py`) — five axes (TRIGGER single-select, what caused the
+    awakening [#2611]; TONE single-select; CONSEQUENCE, WITNESS, SENSORY
     multi-select, SENSORY renders as prose prompts) and the NOT_STARTED/TAGS_ONLY/
-    COMPLETE deferral cache. `CharacterAura.glimpse_state` (cache maintained
+    COMPLETE deferral cache. `GlimpseTag.paths` (M2M to `classes.Path`, empty =
+    all paths; #2611) gates tag visibility by path. `CharacterAura.glimpse_state` (cache maintained
     exclusively by `world.magic.services.glimpse`, mirrors the `is_secret`
     FK-presence precedent) + `world.distinctions.models.CharacterDistinction
     .from_glimpse` (nullable FK → `CharacterAura`, SET_NULL — provenance, mirrors
@@ -332,7 +334,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     (`world.character_creation.services.finalize_magic_data`) consumes
     `draft_data["glimpse_tag_ids"/"glimpse_story"/"glimpse_linked_distinction_ids"]`
     through these services. API: CG catalog `GET
-    /api/character-creation/glimpse-tags/` (`CGGlimpseTagViewSet`, embeds
+    /api/character-creation/glimpse-tags/` (`CGGlimpseTagViewSet`, filterable
+    by `?axis=` and `?path_id=<N>` [#2611], embeds
     `suggested_distinctions`) + four `CharacterAuraViewSet` actions
     (`set-glimpse-tags` / `set-glimpse-prose` / `link-glimpse-distinction` /
     `unlink-glimpse-distinction`). Sheet payload: `AuraData.glimpse_story` /
