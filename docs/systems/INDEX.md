@@ -3705,6 +3705,17 @@ holder is never notified a claim exists.
     and the schema-only minister-check seam (`OrganizationOffice.feeds_check`, #2239) are the
     Build-1 wiring that *calls* this; where common value accrues (a per-tier vault bucket) is the
     caller's concern. All magnitudes PLACEHOLDER.
+  - **Common-gem value buckets + bulk requirements** (`world.items.gems.buckets`, Build 0b slice 5)
+    — `CommonGemBucket` (a crafter's common-gem value per tier — a `MaterialCategory` — never
+    instanced; the type-blind bulk source). `credit_common_gems` / `spend_common_gems` /
+    `common_gem_value` (canonical mutate-then-save, not `F()`; `InsufficientCommonGems`).
+    `CraftingMaterialRequirement.required_value` (nullable, category-only, DB-constrained) is a
+    "N value of {tier}" **bulk** requirement: `stage_and_assert_affordable` splits value reqs from
+    instance reqs — instance reqs go through `gather_consumable_pks` (0a, unchanged), value reqs are
+    aggregated per tier and checked against the crafter's buckets (via `StagedCost.bucket_spends`);
+    `consume_cost` spends them. Named Rare-Find stones are never auto-consumed — only this fungible
+    bulk source is. This is the "gem-covered table, don't care which" path; the primary use is still
+    adornment. Common value crediting from mining is the Build-1 cron's job.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)

@@ -1612,6 +1612,7 @@
   - fashion_presentations <- items.FashionPresentation
   - mantle_clearances <- items.MantleLevelClearance
   - recipe_knowledge <- items.CharacterRecipeKnowledge
+  - common_gem_buckets <- items.CommonGemBucket
   - reclamation_claims <- items.ReclamationClaim
   - original_reclamation_claims <- items.ReclamationClaim
   - fatigue <- fatigue.FatiguePool
@@ -3682,6 +3683,7 @@
 ### MaterialCategory
 **Pointed to by:**
   - templates <- items.ItemTemplate
+  - common_gem_buckets <- items.CommonGemBucket
 
 ### InteractionType
 **Pointed to by:**
@@ -3973,6 +3975,11 @@
   - host_instance -> items.ItemInstance [FK]
   - gem_instance -> items.ItemInstance [OneToOne]
   - set_by_account -> accounts.AccountDB [FK] (nullable)
+
+### CommonGemBucket
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - tier -> items.MaterialCategory [FK]
 
 ### MarketSquare
 **Foreign Keys:**
