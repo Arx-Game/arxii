@@ -103,6 +103,71 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `covenant_role_specialty_power_term` (`world.magic.services.power_terms`, see
   `docs/systems/magic.md`). Lore-repo content
   (`covenants.covenantroletechniquespecialty` in `CONTENT_MODELS`).
+- **`VowSituationalPerk`** (#2536, ADR-0150; **Layer 4** of the vow-power model — "the point of
+  vows") — the authoring model for deterministic, situational bonuses: `covenant_role` FK
+  (anchor OR sub-role, ADD semantics like `CovenantRoleTechniqueSpecialty` above — no restriction
+  to primary-only), `name` (the announced label, e.g. "Scout's Instinct"), `beneficiary`
+  (`PerkBeneficiary`: `SELF`/`COVENANT_ALLIES`/`WHOLE_GROUP` — group-granting perks are
+  first-class, not an edge case), `effect_kind` (`PerkEffectKind`: `POWER_BONUS`/`CHECK_BONUS`
+  live this slice; `TIER_FLOOR`/`BOTCH_IMMUNITY` are schema-only, slice 2 wires the outcome-
+  guarantee resolution), `magnitude_tenths` (integer-tenths, `PositiveIntegerField` — no
+  negative magnitudes anywhere in this table; a vow's weakness is the absence of a perk, never a
+  malus), `announce_template` (player-facing line with `{holder}`/`{subject}` placeholders), and
+  an optional `check_type` FK (`CHECK_BONUS` scope; null = any check — `clean()` rejects a
+  `check_type` on a non-`CHECK_BONUS` row). Natural key `(covenant_role, name)`, lore-repo
+  content (`covenants.vowsituationalperk` in `CONTENT_MODELS`).
+- **`VowSituationalPerkSituation`** — `(perk FK, situation choice)` join; every attached
+  situation must hold (AND composition). `situation` is drawn from
+  `world.covenants.perks.constants.Situation`, a code-defined library (see
+  `world.covenants.perks`'s module docs below) — attaching situations to a perk is a content
+  edit; adding a NEW situation to the library is a code change (one evaluator + one enum value).
+  Natural key `(perk, situation)`, content.
+- **`VowSituationalPerkRung`** — `(perk FK, rung_number, extra_situation, magnitude_tenths)` —
+  escalation tiers on top of a perk's base situations (e.g. a "Last Bulwark" perk that
+  intensifies further when allies are hurt, further still against Abyssal attackers). Resolution
+  is strictly cumulative: rung N's required situations = the perk's base situations ∪ the extra
+  situations of rungs 1..N, so a higher rung can never fire without every lower rung's condition
+  also holding; the highest qualifying rung's magnitude REPLACES the base (never sums with it).
+  `clean()` enforces `rung_number >= 1`; contiguity is not enforced (resolution handles gaps).
+  Natural key `(perk, rung_number)`, content.
+
+**`world.covenants.perks`** (the logic modules — models above live in `covenants.models`,
+migration graph, per the "no new app" ruling; import direction still honors ADR-0010, perk
+modules import combat/checks contexts at function level, never the reverse):
+
+- **`constants.py`** — `Situation`/`PerkEffectKind`/`PerkBeneficiary` `TextChoices`.
+- **`context.py`** — `SituationContext` (frozen dataclass: `holder`, `subject`, `target`,
+  `resolution` — see the class docstring for the full field contract and the
+  missing-field-returns-False convention).
+- **`evaluators.py`** — `SITUATION_EVALUATORS` registry (`register(situation)` decorator,
+  mirrors `magic.services.power_terms`'s `_PROVIDERS` registry pattern) + one evaluator per
+  slice-1 `Situation` value. Every evaluator is a pure read (one query or a cached-handler read,
+  never a write, never a query per situation-per-perk).
+- **`services.py`** — `applicable_perks(subject, *, effect_kind, resolution, target) ->
+  list[FiredPerk]`, the beneficiary evaluation point every delivery seam calls (see the module's
+  own extensive docstring for the exact candidate-set rules, the two-different-answers
+  "covenant-mate" split, and the tested query ceiling); `announce_fired_perks(fired, *, subject,
+  location)`, the dual-dispatch presentation-contract seam (see "Presentation contract" below).
+
+**Delivery seams (this slice):** `POWER_BONUS` rides a new conditional power-term provider
+(`vow_situational_power_term`, `world.magic.services.power_terms` — see `docs/systems/magic.md`);
+`CHECK_BONUS` rides `perform_check`'s new optional `situation_ctx` parameter
+(`world.checks.services._situational_perk_check_bonus`, scoped by `perk.check_type`, null = any
+check). Both scale a fired perk's `magnitude_tenths` by
+`total_thread_level_across_all_kinds(sheet)`, the same thread-level axis Layers 1-2 use, and
+truncate the same way (`Decimal` sum, `int()` truncation).
+
+**Presentation contract (ruling 1, HARD):** a firing perk must be a loud, visible moment in BOTH
+clients. `announce_fired_perks` dual-dispatches per firing — a persisted, Narrator-authored
+`OUTCOME` `Interaction` broadcast over the WS interaction payload (the same machinery
+`combat.interaction_services.broadcast_action_outcome` uses) PLUS a `message_location` text
+companion so bare telnet renders the identical line. `broadcast_action_outcome` alone is
+WS-only and was verified insufficient for this path — see ADR-0150 for why it isn't reused
+as-is. Each rendered line is `"{perk.name}: {announce_template rendered with holder/subject}"`.
+Called from inside each delivery provider (never from `applicable_perks` itself) exactly once
+per real resolution — see ADR-0150's "call-site discipline" section for the no-double-announce
+proof.
+
 - **`CovenantRoleGiftGrant`** (#2022) — through model for
   `CovenantRole.granted_gifts` M2M to `magic.Gift`. Carries
   `unlock_thread_level` — the COVENANT_ROLE thread level at which the gift's
@@ -606,11 +671,13 @@ Graduation: when the adjusted party's real primary level re-enters the band,
   the shared `magic.TechniqueFunction` vocabulary — see ADR-0149's 2026-07-20 amendment
   and `docs/systems/magic.md`); #2533 shipped **Layer 3** (`DefenseStyle` vocabulary +
   per-role `CovenantRoleDefenseProfile`, the `gear_additive_fraction` substitution rule
-  at the armor-soak seam, and `VowGearScaling`'s removal — see "Combat Seams" above).
-  Layer 4 (deterministic situational perks — "the point of vows", #2536, which consumes
-  the same `TechniqueFunction` vocabulary Layer 2 introduced) is tracked separately;
-  #2536's first perk set must give every `DefenseStyle` a distinct shine-situation
-  (2026-07-20 niche ruling).
+  at the armor-soak seam, and `VowGearScaling`'s removal — see "Combat Seams" above); and
+  #2536 slice 1 (ADR-0151) shipped the **Layer 4** machinery — the situation library +
+  registry, `VowSituationalPerk` authoring models, `POWER_BONUS`/`CHECK_BONUS` delivery, and
+  the dual-dispatch presentation contract (see "Layer 4: Situational Perks" above), whose
+  first perk set must give every `DefenseStyle` a distinct shine-situation (2026-07-20 niche
+  ruling). Layer 4 slice 2 (`TIER_FLOOR`/`BOTCH_IMMUNITY` outcome guarantees) and slice 3
+  (Court/Battle situation scoping + dormant-vow messaging) remain tracked against #2536.
 
 ## Integrates With
 

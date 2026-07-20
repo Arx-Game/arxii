@@ -93,6 +93,8 @@ from world.covenants.perks.context import SituationContext
 from world.covenants.perks.evaluators import SITUATION_EVALUATORS
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
     from world.covenants.models import CharacterCovenantRole, VowSituationalPerk
 
@@ -413,3 +415,110 @@ class _PerkResolver:
         return FiredPerk(
             perk=perk, holder=holder, magnitude_tenths=magnitude_tenths, rung_number=rung_number
         )
+
+
+def announce_fired_perks(
+    fired: list[FiredPerk],
+    *,
+    subject: CharacterSheet,
+    location: ObjectDB | None,
+) -> None:
+    """Announce every fired perk as a loud, visible moment in BOTH clients
+    (#2536 spec §5, ruling 1 — HARD telnet parity; Task 6).
+
+    **Dual dispatch per firing:** a persisted, Narrator-authored OUTCOME
+    ``Interaction`` broadcast over the interaction WebSocket payload — the
+    same machinery ``combat.interaction_services.broadcast_action_outcome``
+    uses (``create_interaction`` + ``_build_interaction_payload`` +
+    ``_broadcast_to_location``) — PLUS a ``message_location`` text companion
+    so bare telnet clients render the identical line. This is the verified
+    gap the spec calls out: ``broadcast_action_outcome`` alone is WS-only
+    (no text companion), so it must NOT be reused as-is for this path; the
+    pairing precedent instead is ``world.scenes.interaction_views``' pose-
+    create view, which sends ``message_location`` alongside its WS-visible
+    persisted row explicitly "for telnet clients (WS parity)".
+
+    ``announce_template`` is rendered with the firing's ``holder`` name and
+    ``subject``'s name via plain ``str.format`` (the template's documented
+    ``{holder}``/``{subject}`` placeholders — NOT the funcparser actor-
+    stance syntax ``message_location``'s own ``mapping`` machinery
+    understands), then prefixed with ``perk.name`` — the "announced label"
+    per the model's own help_text (e.g. "Scout's Instinct") — mirroring
+    spec §5's presentation example ("Scout's Instinct: you have revealed a
+    trap!") so two different perks firing for one character stay
+    distinguishable in the announce line itself, not only in the ledger. By
+    the time either dispatch sees the text it is fully resolved — mirrors
+    how ``interaction_views.py`` hands an already-authored player pose
+    straight to ``message_location``.
+
+    **Call once per resolution — dedup is a CALL-SITE discipline, not a
+    loop-internal one.** Call this from the provider/seam that computed
+    ``fired`` (``vow_situational_power_term`` for POWER_BONUS,
+    ``_situational_perk_check_bonus`` for CHECK_BONUS), never from
+    ``applicable_perks`` itself: ``applicable_perks`` may legitimately be
+    called more than once for a single player action (e.g. a combat
+    action's offense check and its separate penetration check are two
+    distinct resolutions, each entitled to its own announce). Both wired
+    seams are verified to invoke ``applicable_perks`` exactly once per real
+    resolution: ``_derive_power`` is called exactly once inside
+    ``use_technique``'s orchestration (the single production entry point
+    for a cast — combat, clash, and non-combat casts all converge there
+    before any power derivation happens), and a production
+    ``perform_check`` call computes its breakdown exactly once (the test-
+    rig forced-outcome branch is mutually exclusive with the normal-roll
+    branch — never both run for one call). Calling from inside each
+    provider therefore cannot double-announce a single firing. A perk's
+    ``effect_kind`` is a single value, so the SAME perk row can never fire
+    from both seams for one resolution either — no cross-seam duplicate is
+    possible.
+
+    No-ops (no query, no dispatch) when ``fired`` is empty or ``location``
+    is ``None`` (nowhere to broadcast — mirrors ``message_location``'s and
+    ``push_interaction``'s own "no location, no message" guards).
+    """
+    if not fired or location is None:
+        return
+
+    from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
+    from flows.service_functions.communication import message_location  # noqa: PLC0415
+    from world.scenes.constants import InteractionMode  # noqa: PLC0415
+    from world.scenes.interaction_services import (  # noqa: PLC0415
+        _broadcast_to_location,
+        _build_interaction_payload,
+        create_interaction,
+    )
+    from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
+
+    subject_character = subject.character
+    subject_name = subject_character.key if subject_character is not None else str(subject)
+
+    narrator = get_or_create_narrator_persona()
+    caller_state = SceneDataManager().initialize_state_for_object(
+        narrator.character_sheet.character
+    )
+
+    for firing in fired:
+        holder_character = firing.holder.character
+        holder_name = holder_character.key if holder_character is not None else str(firing.holder)
+        rendered = firing.perk.announce_template.format(holder=holder_name, subject=subject_name)
+        # perk.name is the "announced label" (its help_text's own words, e.g.
+        # "Scout's Instinct") — spec §5's presentation example prefixes it
+        # onto the templated line ("Scout's Instinct: you have revealed a
+        # trap!") so two different perks firing for one character stay
+        # distinguishable in BOTH the WS payload and the telnet line, not
+        # only in the (separately labeled) power/check ledger.
+        text = f"{firing.perk.name}: {rendered}"
+
+        interaction = create_interaction(
+            persona=narrator, content=text, mode=InteractionMode.OUTCOME
+        )
+        payload = _build_interaction_payload(
+            interaction_id=interaction.pk,
+            persona=narrator,
+            content=interaction.content,
+            mode=interaction.mode,
+            timestamp=interaction.timestamp.isoformat(),
+            scene_id=interaction.scene_id,
+        )
+        _broadcast_to_location(location, payload)
+        message_location(caller_state, text)

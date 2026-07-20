@@ -322,11 +322,21 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   `apply_equipped_armor_soak`, once, so a vow whose defense style isn't gear can dial down how
   much armor stacks on top of it. `VowGearScaling` (the never-seeded per-archetype gear
   multiplier short-circuited to 0 by #2529) is removed — subsumed by the single authored
-  fraction. Layer 4 (#2536, deterministic situational perks — "the point of vows", consuming
-  the same `TechniqueFunction` vocabulary Layer 2 introduced; its first perk set must give every
-  `DefenseStyle` a distinct shine-situation per the 2026-07-20 niche ruling) is tracked
-  separately — the only layer left. When the vow dims (#2051), the engaged flag drops and every
-  shipped layer's contribution returns to 0 — which is why soloing legend content is lethal.
+  fraction. **Layer 4 slice 1 of 3** (#2536, ADR-0151, shipped): the
+  deterministic-situational-perk machinery — "the point of vows", consuming the same
+  `TechniqueFunction` vocabulary Layer 2 introduced; its first perk set must give every
+  `DefenseStyle` a distinct shine-situation per the 2026-07-20 niche ruling. A code-defined
+  `Situation` library + evaluator registry (`world.covenants.perks`), the
+  `VowSituationalPerk`/`VowSituationalPerkSituation`/`VowSituationalPerkRung` authoring
+  models (beneficiary SELF/COVENANT_ALLIES/WHOLE_GROUP, no negative magnitudes —
+  structural), `POWER_BONUS` (`vow_situational_power_term`) and `CHECK_BONUS`
+  (`perform_check`'s `situation_ctx`) delivery, and the dual-dispatch presentation
+  contract (a firing perk announces as a loud line in BOTH the web client and bare
+  telnet — WS interaction payload + a direct `location.msg_contents()` text companion).
+  Slice 2 (`TIER_FLOOR`/`BOTCH_IMMUNITY` outcome guarantees — a character can't botch at
+  their specialization) and slice 3 (Court/Battle situation scoping + dormant-vow
+  messaging) remain. When the vow dims (#2051), the engaged flag drops and every shipped
+  layer's contribution returns to 0 — which is why soloing legend content is lethal.
 - Magic is predominant; relationship bonuses matter; **difficulty scales on party size + average level
   only** (ADR-0037); combat merits Legend, never XP (ADR-0036).
 

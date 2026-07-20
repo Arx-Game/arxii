@@ -182,3 +182,43 @@ class SituationalPerkCheckBonusTests(TestCase):
             result = perform_check(self.character, self.check_type, situation_ctx=ctx)
         # 4 * 10 / 10 = 4
         self.assertEqual(result.total_points, 4)
+
+    def test_fired_perk_announced_exactly_once(self) -> None:
+        """Wiring + no-double-announce proof (#2536 Task 6): one
+        ``_compute_check_breakdown`` call fires one CHECK_BONUS perk and
+        calls ``announce_fired_perks`` exactly once with exactly that one
+        scoped firing — ``_situational_perk_check_bonus`` computes its
+        breakdown exactly once per ``perform_check`` call (normal-roll and
+        forced-outcome branches are mutually exclusive), so the announce
+        call site inside it cannot double-announce."""
+        from unittest.mock import patch
+
+        from evennia import create_object
+
+        room = create_object("typeclasses.rooms.Room", key="CheckPerkAnnounceRoom", nohome=True)
+        self.character.location = room
+        self.character.save()
+
+        role = self._engage_role()
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.CHECK_BONUS,
+            magnitude_tenths=10,
+            check_type=self.check_type,
+        )
+        ThreadFactory(owner=self.sheet, level=4)
+
+        ctx = SituationContext(holder=self.sheet, subject=self.sheet, target=None, resolution=None)
+        with (
+            patch("world.checks.services.random.randint", return_value=50),
+            patch("world.covenants.perks.services.announce_fired_perks") as mock_announce,
+        ):
+            perform_check(self.character, self.check_type, situation_ctx=ctx)
+
+        assert mock_announce.call_count == 1
+        (fired_arg,), kwargs = mock_announce.call_args
+        assert len(fired_arg) == 1
+        assert fired_arg[0].perk == perk
+        assert kwargs["subject"] == self.sheet
+        assert kwargs["location"] == room

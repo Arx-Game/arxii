@@ -5589,12 +5589,24 @@ def _resolve_social_check(
     participant: CombatParticipant,
     check_type_name: str,
     target_difficulty: int,
+    target: CharacterSheet | None = None,
 ) -> int:
     """Roll a social-combat check and return the success_level (#2015).
 
     Resolves the CheckType by name (seeded by social_combat_content). Routes
     modifiers through ``collect_check_modifiers`` (the same seam combat uses),
     then ``perform_check``. Returns ``check_result.success_level``.
+
+    ``target`` (#2536 Task 6 fold-in fix): the acting participant's declared
+    opponent, when this social action has one — threaded into
+    ``SituationContext.target`` so target-keyed CHECK_BONUS perks
+    (``TARGET_DISTRACTED``/``TARGET_SWAYED_BY_ALLY``/
+    ``TARGET_FOCUSED_ELSEWHERE``/``TARGET_FAVORABLY_DISPOSED``) can fire on
+    Demoralize/Taunt, whose callers resolve
+    ``_resolve_primary_target_sheet(action)`` and pass it through. Rally
+    (targets an ally, not an opponent) and Parley (deliberately out of this
+    fix's narrow scope — see the #2536 Task 6 report) keep the default
+    ``None``, matching pre-fix behavior for those two verbs.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import collect_check_modifiers, perform_check  # noqa: PLC0415
@@ -5609,16 +5621,13 @@ def _resolve_social_check(
     breakdown = collect_check_modifiers(
         participant.character_sheet, check_type, scene=participant.encounter.scene
     )
-    # #2536 Task 5 review fix: thread the live round context so CHECK_BONUS
-    # situational perks can fire on Rally/Demoralize/Taunt/Parley — this
-    # shared helper only receives `participant` (no per-caller opponent/ally
-    # target is passed through), so `target` is None; the resolution context
-    # (the plumbing every caller has available) is what a future perk scoped
-    # to one of these social CheckTypes needs to not silently never fire.
+    # #2536 Task 5 review fix (Task 6: now target-threaded for callers that
+    # have one — see the docstring above): thread the live round context so
+    # CHECK_BONUS situational perks can fire on Rally/Demoralize/Taunt/Parley.
     situation_ctx = SituationContext(
         holder=participant.character_sheet,
         subject=participant.character_sheet,
-        target=None,
+        target=target,
         resolution=CombatRoundContext(participant),
     )
     result = perform_check(
@@ -5700,7 +5709,9 @@ def _resolve_demoralize(
         return outcome
 
     target_difficulty = _social_combat_difficulty(target)
-    success_level = _resolve_social_check(participant, "Demoralize", target_difficulty)
+    success_level = _resolve_social_check(
+        participant, "Demoralize", target_difficulty, target=_resolve_primary_target_sheet(action)
+    )
 
     if success_level < 1:
         # Failed: mindless targets narrate "the construct is unmoved."
@@ -5728,7 +5739,9 @@ def _resolve_taunt(
     target = action.focused_opponent_target
     if target is not None:
         target_difficulty = _social_combat_difficulty(target)
-        success_level = _resolve_social_check(participant, "Taunt", target_difficulty)
+        success_level = _resolve_social_check(
+            participant, "Taunt", target_difficulty, target=_resolve_primary_target_sheet(action)
+        )
 
         if success_level >= 1:
             accumulate_threat(

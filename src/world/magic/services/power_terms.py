@@ -431,15 +431,20 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     (the TERM loop in ``_derive_power`` calls ``_power_term_label(provider)``
     once per provider function, not per return value — there is no channel
     for a provider to report which of its several internal contributions
-    produced the total). The per-perk NAME the player sees must come from the
-    announce path (Task 6: ``perks.services.announce_fired_perks``), not the
-    power ledger. See this task's report for the precise slice-2 refactor
-    this implies if the ledger ever needs dynamic per-source TERM labels.
+    produced the total). The per-perk NAME the player sees comes from the
+    announce path (#2536 Task 6: ``perks.services.announce_fired_perks``,
+    called below right after ``fired`` is known — not the power ledger).
+    See ADR-0150 (the slice-1 machinery ADR) for the precise slice-2
+    refactor this implies if the ledger ever needs dynamic per-source TERM
+    labels.
     """
     from decimal import Decimal  # noqa: PLC0415
 
     from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
-    from world.covenants.perks.services import applicable_perks  # noqa: PLC0415
+    from world.covenants.perks.services import (  # noqa: PLC0415
+        announce_fired_perks,
+        applicable_perks,
+    )
     from world.magic.services.threads import (  # noqa: PLC0415
         total_thread_level_across_all_kinds,
     )
@@ -460,6 +465,13 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     )
     if not fired:
         return 0
+
+    # #2536 Task 6: announce here, not inside applicable_perks — this
+    # provider is the single production entry point for a cast's power
+    # derivation (use_technique calls _derive_power exactly once), so this
+    # is the ONE place a POWER_BONUS firing can be announced without risking
+    # a double-announce. See announce_fired_perks's docstring.
+    announce_fired_perks(fired, subject=ctx.sheet, location=character.location)
 
     total_threads = total_thread_level_across_all_kinds(ctx.sheet)
     if total_threads == 0:

@@ -232,6 +232,13 @@ def _situational_perk_check_bonus(
     byte-identical default every pre-#2536 ``perform_check`` caller takes.
     A character with no ``CharacterSheet`` (``sheet_data``) also contributes
     0 and never raises — mirrors the guard in ``_calculate_capability_points``.
+
+    Announces (#2536 Task 6) every check-type-scoped firing exactly once
+    here — this function is called exactly once per ``perform_check``
+    breakdown computation (the normal-roll and test-rig forced-outcome
+    branches are mutually exclusive, never both), so this is the ONE place
+    a CHECK_BONUS firing can be announced without risking a double-announce.
+    See ``perks.services.announce_fired_perks``'s docstring.
     """
     if situation_ctx is None:
         return 0
@@ -242,7 +249,10 @@ def _situational_perk_check_bonus(
         return 0
 
     from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
-    from world.covenants.perks.services import applicable_perks  # noqa: PLC0415
+    from world.covenants.perks.services import (  # noqa: PLC0415
+        announce_fired_perks,
+        applicable_perks,
+    )
     from world.magic.services.threads import (  # noqa: PLC0415
         total_thread_level_across_all_kinds,
     )
@@ -260,6 +270,8 @@ def _situational_perk_check_bonus(
     ]
     if not scoped:
         return 0
+
+    announce_fired_perks(scoped, subject=sheet, location=character.location)
 
     total_threads = total_thread_level_across_all_kinds(sheet)
     if total_threads == 0:

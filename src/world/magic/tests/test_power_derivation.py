@@ -1569,3 +1569,64 @@ class VowSituationalPowerTermTests(TestCase):
         technique = TechniqueFactory()
         ctx = self._ctx(technique, target_sheet=None)
         self.assertEqual(vow_situational_power_term(ctx), 0)
+
+    def test_fired_perk_announced_exactly_once(self):
+        """Wiring + no-double-announce proof (#2536 Task 6): calling
+        ``vow_situational_power_term`` ONCE for a resolution where one perk
+        fires calls ``announce_fired_perks`` exactly once, with exactly that
+        one firing — ``_derive_power``'s single call to this provider (per its
+        own docstring) is why the announce call site inside this provider
+        cannot double-announce."""
+        from unittest.mock import patch
+
+        from world.areas.positioning.services import place_in_position
+        from world.combat.factories import (
+            CombatOpponentFactory,
+            CombatParticipantFactory,
+            EngagementLockFactory,
+        )
+        from world.combat.models import CombatEncounter
+        from world.combat.round_context import CombatRoundContext
+        from world.covenants.factories import (
+            VowSituationalPerkFactory,
+            VowSituationalPerkSituationFactory,
+        )
+        from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+        from world.magic.services.power_terms import vow_situational_power_term
+        from world.scenes.factories import SceneFactory
+
+        room, pos_a, pos_b = self._combat_room_with_positions()
+        self.character.location = room
+        self.character.save()
+        place_in_position(self.character, pos_a)
+
+        scene = SceneFactory(location=room)
+        encounter = CombatEncounter.objects.create(scene=scene, room=room)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+
+        opponent = CombatOpponentFactory(encounter=encounter)
+        place_in_position(opponent.objectdb, pos_b)  # not adjacent -> AT_RANGE
+        EngagementLockFactory(encounter=encounter, participant=participant, opponent=opponent)
+
+        role = self._engage_role()
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            magnitude_tenths=13,
+        )
+        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.AT_RANGE)
+
+        self._thread(level=7)
+        technique = TechniqueFactory()
+        ctx = self._ctx(technique, situation_ctx=CombatRoundContext(participant))
+
+        with patch("world.covenants.perks.services.announce_fired_perks") as mock_announce:
+            self.assertEqual(vow_situational_power_term(ctx), 9)
+
+        assert mock_announce.call_count == 1
+        (fired_arg,), kwargs = mock_announce.call_args
+        assert len(fired_arg) == 1
+        assert fired_arg[0].perk == perk
+        assert kwargs["subject"] == self.sheet
+        assert kwargs["location"] == room
