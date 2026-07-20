@@ -31,6 +31,7 @@ import { magicKeys } from '@/magic/queries';
 import type {
   PlayerAction,
   AvailableEnhancement,
+  BoonAskPayload,
   CastableTechnique,
   CastResponse,
   CastPullRequestBody,
@@ -39,6 +40,7 @@ import type { SceneDetail, SceneParticipant } from '../types';
 import { SoulfrayWarning } from './SoulfrayWarning';
 import { StrainSlider } from './StrainSlider';
 import { TargetPicker, type TargetCandidate } from './TargetPicker';
+import { BoonAskForm } from './BoonAskForm';
 
 interface Props {
   sceneId: string;
@@ -71,6 +73,11 @@ export function ActionPanel({ sceneId }: Props) {
   const [expandedAction, setExpandedAction] = useState<string | null>(null);
   const [pendingWarning, setPendingWarning] = useState<PendingWarning | null>(null);
   const [targetingAction, setTargetingAction] = useState<PlayerAction | null>(null);
+  // #2540: a boon dispatch held open while the asker specifies the structured ask.
+  const [boonAskState, setBoonAskState] = useState<{
+    action: PlayerAction;
+    targetId: number;
+  } | null>(null);
   // Per-action strain commitment — keyed by the action's stable display key.
   const [strainByAction, setStrainByAction] = useState<Record<string, number>>({});
   // Initiator effort level for social actions (#1275).
@@ -184,6 +191,8 @@ export function ActionPanel({ sceneId }: Props) {
       technique_id?: number;
       strain_commitment?: number;
       effort_level?: string;
+      /** Structured-ask payload (#2540) — boon dispatches only. */
+      boon?: BoonAskPayload;
     }) => createActionRequest(sceneId, params),
     onSuccess: (data) => {
       invalidateActionOutcomeQueries();
@@ -222,6 +231,8 @@ export function ActionPanel({ sceneId }: Props) {
       /** Multi-target dispatch (#572). */
       target_persona_ids?: number[];
       technique_id?: number;
+      /** Structured-ask payload (#2540) — boon dispatches only. */
+      boon?: BoonAskPayload;
     } = {}
   ) {
     const key = stableId(action);
@@ -235,6 +246,7 @@ export function ActionPanel({ sceneId }: Props) {
       ...(extras.target_persona_ids !== undefined
         ? { target_persona_ids: extras.target_persona_ids }
         : {}),
+      ...(extras.boon !== undefined ? { boon: extras.boon } : {}),
       strain_commitment: strain && strain > 0 ? strain : undefined,
       effort_level: effortLevel !== DEFAULT_EFFORT ? effortLevel : undefined,
     });
@@ -285,6 +297,13 @@ export function ActionPanel({ sceneId }: Props) {
 
   function handleTargetConfirm(ids: number[]) {
     if (!targetingAction || ids.length === 0) return;
+    // #2540: a boon needs its structured ask specified before dispatch — hold the
+    // action and open the ask form instead of committing on target pick.
+    if ((targetingAction.ref.registry_key ?? '') === 'boon' && ids.length === 1) {
+      setBoonAskState({ action: targetingAction, targetId: ids[0] });
+      setTargetingAction(null);
+      return;
+    }
     commitAction(
       targetingAction,
       ids.length === 1 ? { target_persona_id: ids[0] } : { target_persona_ids: ids }
@@ -294,6 +313,15 @@ export function ActionPanel({ sceneId }: Props) {
 
   function handleTargetCancel() {
     setTargetingAction(null);
+  }
+
+  function handleBoonConfirm(payload: BoonAskPayload) {
+    if (!boonAskState) return;
+    commitAction(boonAskState.action, {
+      target_persona_id: boonAskState.targetId,
+      boon: payload,
+    });
+    setBoonAskState(null);
   }
 
   // ------------------------------------------------------------------------
@@ -732,6 +760,15 @@ export function ActionPanel({ sceneId }: Props) {
           candidates={candidates}
           onConfirm={handleTargetConfirm}
           onCancel={handleTargetCancel}
+        />
+      )}
+
+      {boonAskState && (
+        <BoonAskForm
+          targetPersonaId={boonAskState.targetId}
+          targetName={candidates.find((c) => c.id === boonAskState.targetId)?.name}
+          onConfirm={handleBoonConfirm}
+          onCancel={() => setBoonAskState(null)}
         />
       )}
 

@@ -6,6 +6,8 @@ import type {
   PlayerActionsResponse,
   ActionRequest,
   ActionRequestResponse,
+  BoonAskPayload,
+  BoonSumOption,
   IncomingConsentRequest,
   Place,
   CastableTechnique,
@@ -136,6 +138,11 @@ export async function createActionRequest(
      * (e.g. an ephemeral scene).
      */
     entry_interaction_id?: number;
+    /**
+     * Structured-ask payload (#2540) — only for action_key === 'boon'. Money
+     * asks carry a sum_tier (never raw coppers); deed asks carry deed_text.
+     */
+    boon?: BoonAskPayload;
   }
 ): Promise<ActionRequestResponse> {
   // Backend SceneActionRequestCreateSerializer expects:
@@ -159,6 +166,7 @@ export async function createActionRequest(
   copyDefinedField(requestBody, 'target_pending_alteration_id', body.target_pending_alteration_id);
   copyDefinedField(requestBody, 'bond_thread_id', body.bond_thread_id);
   copyDefinedField(requestBody, 'entry_interaction_id', body.entry_interaction_id);
+  copyDefinedField(requestBody, 'boon', body.boon);
   const res = await apiFetch('/api/action-requests/', {
     method: 'POST',
     body: JSON.stringify(requestBody),
@@ -175,6 +183,20 @@ export function toastDispositionMessage(data: ActionRequestResponse) {
   if (data.result?.disposition_message) {
     toast.success(data.result.disposition_message);
   }
+}
+
+/**
+ * The boon ask UI's display seam (#2540): each money sum tier with the concrete
+ * coppers it means against THIS target — renders as 'Minor (50)' / 'Fair (200)' /
+ * 'Great (500)'. An empty list means the target presents no money option at all.
+ */
+export async function fetchBoonOptions(targetPersonaId: number): Promise<BoonSumOption[]> {
+  const res = await apiFetch(
+    `/api/action-requests/boon-options/?target_persona=${targetPersonaId}`
+  );
+  if (!res.ok) await readErrorDetail(res, 'Failed to load boon options');
+  const data = (await res.json()) as { sum_tiers: BoonSumOption[] };
+  return data.sum_tiers;
 }
 
 export async function fetchPendingRequests(sceneId: string): Promise<{ results: ActionRequest[] }> {

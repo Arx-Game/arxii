@@ -107,6 +107,59 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         assert response.data["action_key"] == "intimidate"
         assert response.data["status"] == ActionRequestStatus.PENDING
 
+    def _fund_target(self, coppers: int) -> None:
+        from world.currency.services import get_or_create_purse
+
+        purse = get_or_create_purse(self.target_identity)
+        purse.balance = coppers
+        purse.save(update_fields=["balance"])
+
+    def test_boon_dispatch_attaches_payload_and_read_side_shows_it(self) -> None:
+        """#2540: the web ask carries the sum tier; the defender's read shows the ask."""
+        self._fund_target(1000)
+        url = reverse("sceneactionrequest-list")
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona": self.target_persona.pk,
+            "action_key": "boon",
+            "boon": {"kind": "money", "sum_tier": "fair"},
+        }
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        boon = response.data["boon"]
+        assert boon["kind"] == "money"
+        assert boon["sum_tier"] == "fair"
+        assert boon["amount"] == 200  # 20% of 1000, frozen at ask time
+
+    def test_boon_dispatch_rejects_ineligible_ask(self) -> None:
+        """A penniless target presents no money option — the ask 400s, no orphan row."""
+        url = reverse("sceneactionrequest-list")
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona": self.target_persona.pk,
+            "action_key": "boon",
+            "boon": {"kind": "money", "sum_tier": "fair"},
+        }
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_boon_options_lists_tier_values_for_target(self) -> None:
+        """The ask UI's display seam: tier → concrete coppers against THIS target."""
+        self._fund_target(1000)
+        url = reverse("sceneactionrequest-boon-options")
+        response = self.client.get(url, {"target_persona": self.target_persona.pk})
+        assert response.status_code == status.HTTP_200_OK
+        by_tier = {row["tier"]: row["coppers"] for row in response.data["sum_tiers"]}
+        assert by_tier == {"minor": 50, "fair": 200, "great": 500}
+
+    def test_boon_options_empty_for_penniless_target(self) -> None:
+        url = reverse("sceneactionrequest-boon-options")
+        response = self.client.get(url, {"target_persona": self.target_persona.pk})
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["sum_tiers"] == []  # the option never shows
+
     @patch("world.scenes.action_views.respond_to_action_request")
     def test_respond_accept(self, mock_respond: MagicMock) -> None:
         mock_respond.return_value = _make_enhanced_result("persuade")

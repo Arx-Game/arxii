@@ -220,6 +220,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/action-requests/boon-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Boon money-sum options against a prospective target (#2540 ruling display seam).
+     *
+     *     Returns each ``BoonSumTier`` with the concrete coppers it means against THIS
+     *     target — the ask UI renders 'Minor (50g)' / 'Fair (200g)' / 'Great (500g)'.
+     *     An empty list means the target presents no money-boon option at all (a
+     *     penniless target — the option never shows, so 'no because I can't' never
+     *     happens). The OOC reveal of these values is accepted per the ruling.
+     */
+    get: operations['action_requests_boon_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/action-requests/cast/': {
     parameters: {
       query?: never;
@@ -20751,6 +20776,41 @@ export interface components {
       | 'right_finger'
       | 'left_ear'
       | 'right_ear';
+    /**
+     * @description * `money` - Money
+     *     * `held_item` - A held item
+     *     * `vault_item` - A vault item
+     *     * `deed` - A deed
+     * @enum {string}
+     */
+    BoonAskKindEnum: 'money' | 'held_item' | 'vault_item' | 'deed';
+    /**
+     * @description The structured-ask payload on a `boon` dispatch (#2540).
+     *
+     *     MONEY asks carry a ``sum_tier`` (never a raw amount — the concrete coppers derive
+     *     from the target's purse server-side); item asks name an ``item_instance_id``; DEED
+     *     asks carry the deed text. Eligibility itself is validated by
+     *     ``validate_boon_ask`` inside ``create_action_request`` — this serializer only
+     *     shapes the payload.
+     */
+    BoonAskRequest: {
+      kind: components['schemas']['BoonAskKindEnum'];
+      /** @default  */
+      sum_tier: components['schemas']['SumTierEnum'] | components['schemas']['BlankEnum'];
+      item_instance_id?: number | null;
+      /** @default  */
+      deed_text: string;
+    };
+    /** @description Schema shape for the boon-options read (empty list = no money option shown). */
+    BoonOptions: {
+      sum_tiers: components['schemas']['BoonSumOption'][];
+    };
+    /** @description One money-sum option against a specific target (#2540 — 'Fair (200g)'). */
+    BoonSumOption: {
+      tier: components['schemas']['Tier756Enum'];
+      label: string;
+      coppers: number;
+    };
     /** @description Frontend supplies ``reporter_persona``; ``location`` is server-derived. */
     BugReportCreate: {
       reporter_persona: number;
@@ -33994,6 +34054,16 @@ export interface components {
             [key: string]: unknown;
           }[]
         | null;
+      /**
+       * @description The structured ask riding this request (#2540) — what the defender is asked for.
+       *
+       *     The specified-up-front payload is what lets a piloted target gauge whether it's
+       *     an easy "just no": kind, the sum tier + frozen coppers for money, the item's
+       *     display name, or the deed text.
+       */
+      readonly boon: {
+        [key: string]: unknown;
+      } | null;
       /** Format: date-time */
       readonly created_at: string;
       /**
@@ -34024,6 +34094,7 @@ export interface components {
       target_pending_alteration_id?: number | null;
       bond_thread_id?: number | null;
       pull?: components['schemas']['CastPullRequestRequest'] | null;
+      boon?: components['schemas']['BoonAskRequest'] | null;
     };
     /** @description Flat read payload for a pending additional-target consent row (#1177). */
     SceneActionTarget: {
@@ -35877,6 +35948,13 @@ export interface components {
      * @enum {string}
      */
     SuitEnum: 'swords' | 'cups' | 'wands' | 'coins';
+    /**
+     * @description * `minor` - A minor sum
+     *     * `fair` - A fair sum
+     *     * `great` - A great sum
+     * @enum {string}
+     */
+    SumTierEnum: 'minor' | 'fair' | 'great';
     /** @description POST body for responding to a summons. */
     SummonsRespondRequest: {
       accept: boolean;
@@ -37841,6 +37919,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneActionRequest'];
+        };
+      };
+    };
+  };
+  action_requests_boon_options_retrieve: {
+    parameters: {
+      query: {
+        target_persona: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BoonOptions'];
         };
       };
     };

@@ -175,6 +175,37 @@ export interface StakesSummary {
   stakes: StakeSummaryEntry[];
 }
 
+/** A boon's money sum tier (#2540) — relative to the target, never raw coppers. */
+export type BoonSumTier = 'minor' | 'fair' | 'great';
+
+/** What a Boon asks for (#2540). Item kinds await the visibility ruling in the UI. */
+export type BoonKind = 'money' | 'held_item' | 'vault_item' | 'deed';
+
+/** The structured-ask payload on a boon dispatch (#2540). */
+export interface BoonAskPayload {
+  kind: BoonKind;
+  sum_tier?: BoonSumTier;
+  item_instance_id?: number;
+  deed_text?: string;
+}
+
+/** The ask riding a pending request — what the defender is being asked for (#2540). */
+export interface BoonReadPayload {
+  kind: BoonKind;
+  sum_tier: BoonSumTier | '';
+  /** Concrete coppers frozen at ask time (money asks). */
+  amount: number;
+  item_name: string | null;
+  deed_text: string;
+}
+
+/** One money-sum option against a specific target: 'Fair (200 coppers)' (#2540). */
+export interface BoonSumOption {
+  tier: BoonSumTier;
+  label: string;
+  coppers: number;
+}
+
 /** Mirrors SceneActionRequestSerializer's FLAT payload (#892 — keep in sync). */
 export interface ActionRequest {
   id: number;
@@ -189,6 +220,8 @@ export interface ActionRequest {
   combat_risk_level?: string | null;
   /** Stakes summaries for staked beats behind the gating encounter (#1770). */
   combat_stakes?: StakesSummary[] | null;
+  /** The structured ask on a boon request (#2540) — null for every other action. */
+  boon?: BoonReadPayload | null;
   created_at: string;
 }
 
