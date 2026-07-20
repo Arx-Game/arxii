@@ -9,8 +9,10 @@ from django.utils import timezone
 from world.game_clock.models import ScheduledTaskRecord
 from world.game_clock.task_registry import (
     CronDefinition,
+    CronPhase,
     FrequencyType,
     clear_registry,
+    get_registered_tasks,
     register_task,
     run_due_tasks,
 )
@@ -243,3 +245,86 @@ class AnchoredWeeklyDueTests(TestCase):
         )
         now = datetime(2026, 6, 15, 4, 0, tzinfo=UTC)
         assert _is_task_due(record, self._task(), now=now, ic_now=None) is False
+
+
+class CronPhaseOrderingTests(TestCase):
+    """Execution order within a single pass is declared, not emergent (#2609)."""
+
+    def setUp(self) -> None:
+        clear_registry()
+        self.calls: list[str] = []
+
+    def tearDown(self) -> None:
+        clear_registry()
+
+    def _register(self, key: str, phase: CronPhase | None = None) -> None:
+        """Register a due-immediately task that appends its key to self.calls."""
+        kwargs = {} if phase is None else {"phase": phase}
+        register_task(
+            CronDefinition(
+                task_key=key,
+                callable=lambda key=key: self.calls.append(key),
+                interval=timedelta(minutes=10),
+                **kwargs,
+            )
+        )
+
+    def test_phase_beats_registration_order(self) -> None:
+        # Registered late-band first; phase must override the call order.
+        self._register("cleanup", CronPhase.CLEANUP)
+        self._register("upkeep", CronPhase.UPKEEP)
+        self._register("snapshot", CronPhase.SNAPSHOT)
+        self._register("economy", CronPhase.ECONOMY)
+
+        run_due_tasks()
+
+        assert self.calls == ["snapshot", "economy", "upkeep", "cleanup"]
+
+    def test_income_lands_before_upkeep(self) -> None:
+        """ADR-0150 — the ordering this whole change exists to guarantee."""
+        self._register("buildings.weekly_upkeep", CronPhase.UPKEEP)
+        self._register("weekly_rollover", CronPhase.ECONOMY)
+
+        run_due_tasks()
+
+        assert self.calls.index("weekly_rollover") < self.calls.index("buildings.weekly_upkeep")
+
+    def test_snapshot_runs_before_economy(self) -> None:
+        """SNAPSHOT must see balances before any income moves them."""
+        self._register("economy", CronPhase.ECONOMY)
+        self._register("snapshot", CronPhase.SNAPSHOT)
+
+        run_due_tasks()
+
+        assert self.calls == ["snapshot", "economy"]
+
+    def test_same_phase_keeps_registration_order(self) -> None:
+        """Stable sort — the pre-#2609 behaviour within a band."""
+        self._register("first", CronPhase.ECONOMY)
+        self._register("second", CronPhase.ECONOMY)
+        self._register("third", CronPhase.ECONOMY)
+
+        run_due_tasks()
+
+        assert self.calls == ["first", "second", "third"]
+
+    def test_unphased_tasks_default_and_keep_order(self) -> None:
+        """Tasks that never opt in behave exactly as before."""
+        self._register("alpha")
+        self._register("beta")
+
+        run_due_tasks()
+
+        assert self.calls == ["alpha", "beta"]
+        registered = get_registered_tasks()
+        assert all(task.phase is CronPhase.DEFAULT for task in registered)
+
+    def test_default_sits_between_upkeep_and_cleanup(self) -> None:
+        """An unphased task must not accidentally outrank the money bands."""
+        self._register("unphased")
+        self._register("upkeep", CronPhase.UPKEEP)
+        self._register("cleanup", CronPhase.CLEANUP)
+
+        run_due_tasks()
+
+        assert self.calls == ["upkeep", "unphased", "cleanup"]

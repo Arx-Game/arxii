@@ -43,6 +43,35 @@ Created automatically in `at_server_start()`.
 ### Task Registry
 Tasks registered in `tasks.py` via `register_all_tasks()`, called at server startup.
 
+### Execution Order — `CronPhase` (#2609)
+`CronDefinition.phase` is the **ordering contract** for tasks that come due in the same
+tick. `run_due_tasks()` sorts by it; the sort is stable, so registration order only
+breaks ties *within* a band. Before #2609 ordering was emergent — a side effect of the
+relative line numbers of two `register_task` calls — and nothing marked it load-bearing.
+
+| Band | Value | For |
+|------|-------|-----|
+| `SNAPSHOT` | 100 | Pre-income baselines — read balances before anything moves them |
+| `ECONOMY` | 200 | `weekly_rollover`: income, wages, debt service, contracts |
+| `UPKEEP` | 300 | Building upkeep and personal recurring drains |
+| `DEFAULT` | 500 | Everything with no ordering opinion (the default) |
+| `CLEANUP` | 900 | Sweeps, decay, garbage collection |
+
+Values are spaced so new bands can be inserted without renumbering.
+
+**A phase only orders tasks that are already due together.** It does nothing on its own —
+a task must also share an anchor with its neighbours for its band to ever come into play.
+`buildings.weekly_upkeep` therefore carries *both* `phase=CronPhase.UPKEEP` and the
+rollover's `anchor_weekday=0, anchor_hour_utc=5`.
+
+`ECONOMY` before `UPKEEP` is deliberate and inverts the pre-#2609 accident: **income lands
+before upkeep drains**, so a short player sees a smaller effective paycheck rather than an
+unpreventable arrears hit and condition-tier slide. See
+`docs/adr/0150-income-lands-before-upkeep.md`.
+
+`SNAPSHOT` currently has no members — it is the declared seam for tasks needing a
+start-of-week balance baseline (the "Somehow Always Broke" distinction, #2540).
+
 ### Wired Tasks
 | Task | Frequency | Source App |
 |------|-----------|------------|
@@ -59,6 +88,10 @@ Tasks registered in `tasks.py` via `register_all_tasks()`, called at server star
 | Persona pursuit-heat decay | 24h real | justice (#1765) |
 | Sanctum resonance generation (`sanctum.resonance_generation_tick`) | 24h real | magic |
 | Room ward upkeep (`room_features.ward_upkeep_tick`) | 24h real | room_features (#2177) |
+| Weekly rollover (`weekly_rollover`) | weekly, Sun 00:00 EST anchor, `ECONOMY` | game_clock (#932) |
+| Building upkeep sweep (`buildings.weekly_upkeep`) | weekly, same anchor, `UPKEEP` | buildings (#1930, #2609) |
+
+(Table is partial — `register_all_tasks()` in `tasks.py` is the authoritative list.)
 
 ## API Endpoints
 
