@@ -87,6 +87,11 @@ The magic system for Arx II. Power flows from identity and connection.
 - `Restriction` - Limitations that grant power bonuses (Touch Range, etc.)
 - `IntensityTier` - Configurable thresholds for power intensity (Minor, Moderate, Major)
 - `Technique` - Authored magical abilities with level, style, effect type (created via the budget builder or staff CRUD — see "Technique authoring" below)
+- `TechniqueFunctionTag` - Content-authored `(technique, function)` join recording which
+  fine-grained `TechniqueFunction` labels (`constants.py`, 12-value `TextChoices`) a
+  technique carries; `Technique.cached_function_tags` accessor. The shared vocabulary
+  consumed by covenants' per-vow technique specialty (#2443) and situational perks
+  (#2536) — see `docs/systems/magic.md`'s power-term section.
 - `CharacterGift` - Links characters to known Gifts
 - `CharacterTechnique` - Links characters to known Techniques
 - `AbstractCapabilityGrant` / `AbstractDamageProfile` / `AbstractAppliedCondition` — abstract bases
