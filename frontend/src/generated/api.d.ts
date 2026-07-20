@@ -22836,6 +22836,7 @@ export interface components {
      *     * `until_used` - Until Used (consumed on trigger)
      *     * `end_combat` - Until End of Combat
      *     * `scene` - Until End of Scene
+     *     * `ingame_time` - In-Game Time (expires after IC duration)
      *     * `permanent` - Permanent (until removed)
      * @enum {string}
      */
@@ -22845,6 +22846,7 @@ export interface components {
       | 'until_used'
       | 'end_combat'
       | 'scene'
+      | 'ingame_time'
       | 'permanent';
     /**
      * @description * `attacker` - Attacker
