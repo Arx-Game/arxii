@@ -20153,9 +20153,10 @@ export interface components {
      *     * `CONSEQUENCE` - Consequence
      *     * `WITNESS` - Witness & Secrecy
      *     * `SENSORY` - Sensory & Discovery
+     *     * `TRIGGER` - Trigger
      * @enum {string}
      */
-    AxisEnum: 'TONE' | 'CONSEQUENCE' | 'WITNESS' | 'SENSORY';
+    AxisEnum: 'TONE' | 'CONSEQUENCE' | 'WITNESS' | 'SENSORY' | 'TRIGGER';
     /**
      * @description * `standing` - Standing (unit or banner — can rise again)
      *     * `campaign` - Campaign (one-time event — dissolves when done)
@@ -20944,6 +20945,7 @@ export interface components {
        *     * `CONSEQUENCE` - Consequence
        *     * `WITNESS` - Witness & Secrecy
        *     * `SENSORY` - Sensory & Discovery
+       *     * `TRIGGER` - Trigger
        */
       readonly axis: components['schemas']['AxisEnum'];
       /** @description Player-facing tag name. */
@@ -41047,8 +41049,10 @@ export interface operations {
          *     * `CONSEQUENCE` - Consequence
          *     * `WITNESS` - Witness & Secrecy
          *     * `SENSORY` - Sensory & Discovery
+         *     * `TRIGGER` - Trigger
          */
-        axis?: 'CONSEQUENCE' | 'SENSORY' | 'TONE' | 'WITNESS';
+        axis?: 'CONSEQUENCE' | 'SENSORY' | 'TONE' | 'TRIGGER' | 'WITNESS';
+        path_id?: number;
       };
       header?: never;
       path?: never;
