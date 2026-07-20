@@ -390,8 +390,9 @@ export async function getCGTechniqueOptions(
 // Glimpse Tag Catalog API (guided Glimpse flow, #2427)
 // =============================================================================
 
-export async function getGlimpseTags(): Promise<GlimpseTagOption[]> {
-  const res = await apiFetch(`${BASE_URL}/glimpse-tags/`);
+export async function getGlimpseTags(pathId?: number): Promise<GlimpseTagOption[]> {
+  const params = pathId ? `?path_id=${pathId}` : '';
+  const res = await apiFetch(`${BASE_URL}/glimpse-tags/${params}`);
   if (!res.ok) {
     throw new Error('Failed to load glimpse tags');
   }

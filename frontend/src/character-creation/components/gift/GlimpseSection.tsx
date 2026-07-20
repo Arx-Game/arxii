@@ -42,7 +42,7 @@ interface GlimpseSectionProps {
 
 export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSectionProps) {
   const updateDraft = useUpdateDraft();
-  const { data: tags } = useGlimpseTags();
+  const { data: tags } = useGlimpseTags(draft.selected_path?.id);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
 
   const [isCollapsed, setIsCollapsed] = useState(false);

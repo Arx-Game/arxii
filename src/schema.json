@@ -4091,6 +4091,7 @@ paths:
           - CONSEQUENCE
           - SENSORY
           - TONE
+          - TRIGGER
           - WITNESS
         description: |-
           Which guided step this tag belongs to.
@@ -4099,6 +4100,11 @@ paths:
           * `CONSEQUENCE` - Consequence
           * `WITNESS` - Witness & Secrecy
           * `SENSORY` - Sensory & Discovery
+          * `TRIGGER` - Trigger
+      - in: query
+        name: path_id
+        schema:
+          type: integer
       tags:
       - character-creation
       security:
@@ -33234,12 +33240,14 @@ components:
       - CONSEQUENCE
       - WITNESS
       - SENSORY
+      - TRIGGER
       type: string
       description: |-
         * `TONE` - Tone
         * `CONSEQUENCE` - Consequence
         * `WITNESS` - Witness & Secrecy
         * `SENSORY` - Sensory & Discovery
+        * `TRIGGER` - Trigger
     BattleBindingEnum:
       enum:
       - standing
@@ -34846,6 +34854,7 @@ components:
             * `CONSEQUENCE` - Consequence
             * `WITNESS` - Witness & Secrecy
             * `SENSORY` - Sensory & Discovery
+            * `TRIGGER` - Trigger
         name:
           type: string
           readOnly: true

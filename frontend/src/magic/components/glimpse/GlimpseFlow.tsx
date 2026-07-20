@@ -43,6 +43,7 @@ import type {
 } from './glimpseTypes';
 
 const AXIS_STEPS: { axis: GlimpseTagOption['axis']; label: string; multi: boolean }[] = [
+  { axis: 'TRIGGER', label: 'Trigger', multi: false },
   { axis: 'TONE', label: 'Tone', multi: false },
   { axis: 'CONSEQUENCE', label: 'Consequence', multi: true },
   { axis: 'WITNESS', label: 'Witness & Secrecy', multi: true },

@@ -17,7 +17,7 @@ export interface GlimpseSuggestedDistinction {
  */
 export interface GlimpseTagOption {
   id: number;
-  axis: 'TONE' | 'CONSEQUENCE' | 'WITNESS' | 'SENSORY';
+  axis: 'TONE' | 'CONSEQUENCE' | 'WITNESS' | 'SENSORY' | 'TRIGGER';
   name: string;
   slug: string;
   description: string;

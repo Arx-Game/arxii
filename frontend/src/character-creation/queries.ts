@@ -99,7 +99,8 @@ export const characterCreationKeys = {
   cgTechniqueOptions: (draftId: number, giftId: number) =>
     [...characterCreationKeys.all, 'cg-technique-options', draftId, giftId] as const,
   // Glimpse tag catalog (guided Glimpse flow, #2427)
-  glimpseTags: () => [...characterCreationKeys.all, 'glimpse-tags'] as const,
+  glimpseTags: (pathId?: number) =>
+    [...characterCreationKeys.all, 'glimpse-tags', pathId ?? null] as const,
   // Origin template catalog (guided origin-story flow, #2478)
   originTemplates: (beginningId: number) =>
     [...characterCreationKeys.all, 'origin-templates', beginningId] as const,
@@ -435,10 +436,10 @@ export function useCGTechniqueOptions(draftId: number | undefined, giftId: numbe
  * catalog that rarely changes, so a longer staleTime avoids refetching on
  * every CG stage visit.
  */
-export function useGlimpseTags() {
+export function useGlimpseTags(pathId?: number) {
   return useQuery({
-    queryKey: characterCreationKeys.glimpseTags(),
-    queryFn: getGlimpseTags,
+    queryKey: characterCreationKeys.glimpseTags(pathId),
+    queryFn: () => getGlimpseTags(pathId),
     staleTime: 5 * 60 * 1000,
   });
 }
