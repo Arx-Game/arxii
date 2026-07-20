@@ -1853,10 +1853,15 @@ action consent flow, and a three-mode non-combat round framework.
   `Boon` (#2540, `boon_models.py` — the payload of a structured social ask, 1:1 with its
   `SceneActionRequest`: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`,
   `item_instance`, `deed_text`, `fulfilled_at`. Slice 2 wired the full loop (`boon_services`):
-  `BoonAsk` + `validate_boon_ask` (dial-1 ask-time eligibility — uncoverable money, unheld item,
-  empty deed, and vault-stub asks are rejected before any row exists), the `boon` action key on
+  `BoonAsk` + `validate_boon_ask` (dial-1 ask-time eligibility — an ask the target could not
+  grant never exists: penniless-target money, unheld item, empty deed rejected before any row).
+  **Money asks are relative sum tiers (#2540 ruling): `BoonSumTier` MINOR/FAIR/GREAT *to the
+  target* (PLACEHOLDER pcts of their purse), never raw coppers — nothing to probe a purse with;
+  `boon_sum_values` is the UI display seam (tier → concrete coppers, OOC reveal accepted) and
+  the coppers freeze onto `Boon.amount` at ask time.** The `boon` action key on
   `BoonAction` (`actions/definitions/social.py`) + `ActionTemplate`/`boon`-consent-category seeds,
-  `npc_boon_tier_shift` (the mandatory dial-2 NPC relative-cost band, fed into
+  `npc_boon_tier_shift` (the mandatory dial-2 NPC band — for money, the chosen tier IS the band,
+  fed into
   `resolved_base_difficulty(extra_tier_modifier=…)`; piloted defenders are never band-shifted),
   and the `boon` resolver (`register_resolver`) — fulfillment + the per-Boon stacking affection
   cost (`BOON_AFFECTION_COST`, PLACEHOLDER) fire on BOTH consent paths, never via `execute()`.

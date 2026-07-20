@@ -86,7 +86,7 @@ the unified Persona identity system, and non-combat scene rounds.
   ("ask a head/NPC for a thing, backed by a social roll"), attached 1:1 to a `SceneActionRequest`.
   Fields: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`, `item_instance`, `deed_text`,
   `fulfilled_at`. **Slice 2 wired the full loop:** `create_action_request(boon=BoonAsk(...))`
-  validates eligibility up front (`validate_boon_ask`, dial 1 — uncoverable money / unheld item /
+  validates eligibility up front (`validate_boon_ask`, dial 1 — penniless-target money / unheld item /
   empty deed / vault-stub asks are rejected before any row exists) and persists the `Boon` row
   BEFORE NPC auto-resolve, so the defender sees the ask pre-consent. The `boon` **resolver**
   (`register_resolver`, imported by `ScenesConfig.ready`) fires on both consent paths — NPC
@@ -98,7 +98,11 @@ the unified Persona identity system, and non-combat scene rounds.
   `AffectionShift` — serial asks wear out welcome; the hit never decays). **Fulfillment must NOT
   ride `BoonAction.execute()`** (consent paths never call it — the Blackmail-mint asymmetry) nor a
   seeded `SHIFT_AFFECTION` effect (the consent path's `ResolutionContext` is sceneless).
-  `npc_boon_tier_shift` is the mandatory dial-2 NPC relative-cost band
+  **Money asks are relative sum tiers** (#2540 ruling): `BoonSumTier` MINOR/FAIR/GREAT *to the
+  target*, never raw coppers — `boon_sum_values` (tier → concrete coppers off the target's purse,
+  the UI display seam; OOC reveal accepted) freezes the value onto `Boon.amount` at ask time, and
+  a penniless target simply presents no money option. `npc_boon_tier_shift` is the mandatory
+  dial-2 NPC band (for money the chosen tier IS the band)
   (`resolved_base_difficulty(extra_tier_modifier=…)`); a piloted defender's difficulty choice
   rules — never band-shifted. Seeds: `Boon` template (`world/seeds/social_actions.py`) + `boon`
   consent category under `antagonism` (`world/seeds/consent.py`).

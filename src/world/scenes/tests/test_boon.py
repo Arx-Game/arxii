@@ -15,13 +15,14 @@ from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory
 from world.currency.services import get_or_create_purse
 from world.relationships.models import AffectionShift
-from world.scenes.action_constants import BoonKind
+from world.scenes.action_constants import BoonKind, BoonSumTier
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_services import create_action_request
 from world.scenes.boon_models import Boon
 from world.scenes.boon_services import (
     BOON_AFFECTION_COST,
     BoonAsk,
+    boon_sum_values,
     fulfill_boon,
     npc_boon_tier_shift,
 )
@@ -119,16 +120,28 @@ class BoonAskValidationTests(TestCase):
             boon=BoonAsk(**kwargs),
         )
 
-    def test_uncoverable_money_ask_rejected_with_no_orphan_request(self) -> None:
-        _fund(self.target.character_sheet, 50)
+    def test_penniless_target_presents_no_money_option(self) -> None:
+        # #2540 ruling: impossible asks never exist — and no orphan request either.
         with self.assertRaises(ValidationError):
-            self._ask(kind=BoonKind.MONEY, amount=100)
+            self._ask(kind=BoonKind.MONEY, sum_tier=BoonSumTier.FAIR)
         self.assertFalse(SceneActionRequest.objects.exists())  # no orphan row
+        self.assertEqual(boon_sum_values(self.target.character_sheet), {})  # UI hides it
 
-    def test_coverable_money_ask_attaches_the_payload(self) -> None:
+    def test_money_ask_names_a_tier_never_a_raw_amount(self) -> None:
         _fund(self.target.character_sheet, 500)
-        request = self._ask(kind=BoonKind.MONEY, amount=100)
-        self.assertEqual(request.boon.amount, 100)  # target sees the ask pre-consent
+        with self.assertRaises(ValidationError):
+            self._ask(kind=BoonKind.MONEY, sum_tier="")  # no tier → no ask
+
+    def test_sum_tier_freezes_concrete_coppers_at_ask_time(self) -> None:
+        _fund(self.target.character_sheet, 500)
+        request = self._ask(kind=BoonKind.MONEY, sum_tier=BoonSumTier.FAIR)
+        self.assertEqual(request.boon.sum_tier, BoonSumTier.FAIR)
+        self.assertEqual(request.boon.amount, 100)  # 20% of 500, shown pre-consent
+        # The display seam the ask UI uses: tier → coppers, relative to THIS target.
+        self.assertEqual(
+            boon_sum_values(self.target.character_sheet),
+            {BoonSumTier.MINOR: 25, BoonSumTier.FAIR: 100, BoonSumTier.GREAT: 250},
+        )
 
     def test_held_item_ask_requires_the_target_to_hold_it(self) -> None:
         with self.assertRaises(ValidationError):
@@ -157,26 +170,26 @@ class BoonAskValidationTests(TestCase):
 class NpcBoonBandTests(TestCase):
     """Dial 2 — the mandatory NPC-side relative-cost band; piloted targets unshifted."""
 
-    def _request_with_money_boon(self, *, amount: int, balance: int) -> SceneActionRequest:
+    def _request_with_money_boon(self, *, sum_tier: str) -> SceneActionRequest:
         request = SceneActionRequestFactory(action_key="boon")
-        _fund(request.target_persona.character_sheet, balance)
-        Boon.objects.create(action_request=request, kind=BoonKind.MONEY, amount=amount)
+        _fund(request.target_persona.character_sheet, 1000)
+        Boon.objects.create(action_request=request, kind=BoonKind.MONEY, sum_tier=sum_tier)
         return request
 
-    def test_trivial_ask_adds_no_tiers(self) -> None:
-        request = self._request_with_money_boon(amount=40, balance=1000)  # 4%
+    def test_minor_sum_adds_no_tiers(self) -> None:
+        request = self._request_with_money_boon(sum_tier=BoonSumTier.MINOR)
         self.assertEqual(npc_boon_tier_shift(request), 0)
 
-    def test_painful_ask_adds_tiers(self) -> None:
-        request = self._request_with_money_boon(amount=400, balance=1000)  # 40%
+    def test_fair_sum_adds_a_tier(self) -> None:
+        request = self._request_with_money_boon(sum_tier=BoonSumTier.FAIR)
+        self.assertEqual(npc_boon_tier_shift(request), 1)
+
+    def test_great_sum_adds_the_top_band(self) -> None:
+        request = self._request_with_money_boon(sum_tier=BoonSumTier.GREAT)
         self.assertEqual(npc_boon_tier_shift(request), 2)
 
-    def test_ruinous_ask_adds_the_top_band(self) -> None:
-        request = self._request_with_money_boon(amount=1000, balance=1000)  # 100%
-        self.assertEqual(npc_boon_tier_shift(request), 3)
-
     def test_piloted_target_is_never_band_shifted(self) -> None:
-        request = self._request_with_money_boon(amount=1000, balance=1000)
+        request = self._request_with_money_boon(sum_tier=BoonSumTier.GREAT)
         _pilot(request.target_persona)  # their difficulty choice rules
         self.assertEqual(npc_boon_tier_shift(request), 0)
 
@@ -211,7 +224,7 @@ class BoonResolverE2ETests(TestCase):
         self.accrue_patcher.start()
         self.addCleanup(self.accrue_patcher.stop)
 
-    def _dispatch(self, *, success: bool, amount: int = 100) -> SceneActionRequest:
+    def _dispatch(self, *, success: bool, sum_tier: str = BoonSumTier.FAIR) -> SceneActionRequest:
         with patch(
             "world.scenes.action_services.start_action_resolution",
             return_value=_success_resolution(success=success),
@@ -221,13 +234,13 @@ class BoonResolverE2ETests(TestCase):
                 initiator_persona=self.asker,
                 target_persona=self.npc_target,
                 action_key="boon",
-                boon=BoonAsk(kind=BoonKind.MONEY, amount=amount),
+                boon=BoonAsk(kind=BoonKind.MONEY, sum_tier=sum_tier),
             )
 
     def test_granted_boon_fulfills_and_charges_affection(self) -> None:
-        request = self._dispatch(success=True)
-        self.assertEqual(_balance(self.asker.character_sheet), 100)
-        self.assertEqual(_balance(self.npc_target.character_sheet), 900)
+        request = self._dispatch(success=True)  # fair sum of 1000 = 200 coppers
+        self.assertEqual(_balance(self.asker.character_sheet), 200)
+        self.assertEqual(_balance(self.npc_target.character_sheet), 800)
         request.boon.refresh_from_db()
         self.assertIsNotNone(request.boon.fulfilled_at)
         shift = AffectionShift.objects.get(boon=request.boon)
@@ -244,9 +257,9 @@ class BoonResolverE2ETests(TestCase):
         self.assertFalse(AffectionShift.objects.exists())
 
     def test_serial_boons_in_one_scene_stack_the_affection_cost(self) -> None:
-        self._dispatch(success=True, amount=50)
-        self._dispatch(success=True, amount=50)
-        self.assertEqual(_balance(self.asker.character_sheet), 100)
+        self._dispatch(success=True, sum_tier=BoonSumTier.MINOR)  # 5% of 1000 = 50
+        self._dispatch(success=True, sum_tier=BoonSumTier.MINOR)  # 5% of 950 = 47
+        self.assertEqual(_balance(self.asker.character_sheet), 97)  # tiers re-derive per ask
         self.assertEqual(AffectionShift.objects.count(), 2)  # per-Boon dedup — both landed
 
     def test_granted_vault_boon_withdraws_to_the_asker(self) -> None:

@@ -91,3 +91,17 @@ class BoonKind(models.TextChoices):
     HELD_ITEM = "held_item", "A held item"  # a named item the target currently carries
     VAULT_ITEM = "vault_item", "A vault item"  # from the org vault (needs the bank/vault system)
     DEED = "deed", "A deed"  # do a thing — RP, no mechanical transfer
+
+
+class BoonSumTier(models.TextChoices):
+    """How big a MONEY boon is *to the target* (#2540 ruling 2026-07-20).
+
+    Money asks never name raw coppers — the asker picks a relative sum and the
+    concrete value derives from the target's purse at ask time (displayed to the
+    asker; the OOC reveal is accepted). Kills the purse-probe vector at the root:
+    there is no arbitrary amount to binary-search with.
+    """
+
+    MINOR = "minor", "A minor sum"
+    FAIR = "fair", "A fair sum"
+    GREAT = "great", "A great sum"
