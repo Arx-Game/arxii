@@ -177,15 +177,6 @@ class Trigger(SharedMemoryModel):
             return None
         return limit
 
-    def should_trigger_for_event(self, event: FlowEvent) -> bool:
-        if not self.trigger_definition.matches_event(event, obj=self.obj):
-            return False
-        additional = resolve_self_placeholders(
-            cast(dict[str, object] | None, self.additional_filter_condition),
-            self.obj,
-        )
-        return event.matches_conditions(additional)
-
     def __str__(self) -> str:
         return f"{self.trigger_definition.name} for {self.obj.key}"
 

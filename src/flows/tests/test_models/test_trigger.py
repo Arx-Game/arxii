@@ -1,14 +1,10 @@
-from unittest.mock import MagicMock, patch
-
 from django.test import TestCase
 
 from flows.factories import (
-    FlowEventFactory,
     SceneDataManagerFactory,
     TriggerDefinitionFactory,
     TriggerFactory,
 )
-from flows.flow_event import FlowEvent
 
 
 class TestTrigger(TestCase):
@@ -36,96 +32,6 @@ class TestTrigger(TestCase):
             # Second access uses cache
             data_again = self.trigger.data_map
             assert data_again == data
-
-    def test_should_trigger_for_event_checks_definition_match(self):
-        """Test that the trigger checks its definition's match first."""
-        event = FlowEventFactory(event_type="test_event")
-
-        with patch.object(
-            self.trigger.trigger_definition,
-            "matches_event",
-        ) as mock_matches:
-            mock_matches.return_value = False
-            assert not self.trigger.should_trigger_for_event(event)
-            mock_matches.assert_called_once_with(event, obj=self.trigger.obj)
-
-    def test_should_trigger_for_event_checks_additional_conditions(self):
-        """Test that additional filter conditions are checked."""
-        event = FlowEventFactory(event_type="test_event")
-
-        with patch.object(
-            self.trigger.trigger_definition,
-            "matches_event",
-            return_value=True,
-        ):
-            # Patch the event's matches_conditions method to verify it's called
-            with patch.object(
-                event,
-                "matches_conditions",
-                return_value=True,
-            ) as mock_check:
-                assert self.trigger.should_trigger_for_event(event)
-                mock_check.assert_called_once_with(
-                    self.trigger.additional_filter_condition,
-                )
-
-    def test_should_trigger_for_event_checks_conditions(self):
-        """Test that the trigger checks conditions against event data."""
-        # Create a mock source for the event
-        source = MagicMock()
-        source.context = MagicMock()
-
-        # Test with no conditions
-        event = FlowEvent(
-            "test_event",
-            source=source,
-            data={"foo": "bar", "baz": "qux"},
-        )
-        with patch.object(
-            self.trigger.trigger_definition,
-            "matches_event",
-            return_value=True,
-        ):
-            self.trigger.additional_filter_condition = {}
-            assert self.trigger.should_trigger_for_event(event)
-
-        # Test with passing conditions
-        event = FlowEvent(
-            "test_event",
-            source=source,
-            data={"foo": "bar", "baz": "qux"},
-        )
-        with patch.object(
-            self.trigger.trigger_definition,
-            "matches_event",
-            return_value=True,
-        ):
-            self.trigger.additional_filter_condition = {"baz": "qux"}
-            assert self.trigger.should_trigger_for_event(event)
-
-        # Test with failing conditions
-        event = FlowEvent(
-            "test_event",
-            source=source,
-            data={"foo": "bar", "baz": "wrong"},
-        )
-        with patch.object(
-            self.trigger.trigger_definition,
-            "matches_event",
-            return_value=True,
-        ):
-            self.trigger.additional_filter_condition = {"baz": "qux"}
-            assert not self.trigger.should_trigger_for_event(event)
-
-        # Test with missing data
-        event = FlowEvent("test_event", source=source, data={"foo": "bar"})
-        with patch.object(
-            self.trigger.trigger_definition,
-            "matches_event",
-            return_value=True,
-        ):
-            self.trigger.additional_filter_condition = {"missing": "value"}
-            assert not self.trigger.should_trigger_for_event(event)
 
 
 class TestSystemInstalledTrigger(TestCase):
