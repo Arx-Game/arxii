@@ -665,6 +665,47 @@ class CovenantRoleContentExportTests(TestCase):
         assert scaling.covenant_role_id == primary.pk
         assert scaling.thread_level_multiplier == Decimal("0.125")
 
+    def test_covenant_role_defense_profile_round_trips(self) -> None:
+        """CovenantRoleDefenseProfile (#2533) survives export -> import via its NK.
+
+        NK is ``["covenant_role"]`` (the FK's own natural key, a single-element
+        list holding the role's slug) — unexercised until now.
+        """
+        from world.covenants.constants import DefenseStyle
+        from world.covenants.factories import CovenantRoleDefenseProfileFactory, CovenantRoleFactory
+
+        role = CovenantRoleFactory(name="Defense Profile Role", slug="defense-profile-role")
+        profile = CovenantRoleDefenseProfileFactory(
+            covenant_role=role,
+            style=DefenseStyle.EVASION,
+            gear_additive_tenths=3,
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        profile_path = self.root / "fixtures" / "covenants" / "covenantroledefenseprofile.json"
+        assert profile_path.exists()
+
+        records = json.loads(profile_path.read_text(encoding="utf-8"))
+        assert len(records) == 1
+        record = records[0]
+        assert "pk" not in record
+        assert record["fields"]["covenant_role"] == ["defense-profile-role"]
+        assert record["fields"]["style"] == DefenseStyle.EVASION
+        assert record["fields"]["gear_additive_tenths"] == 3
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        profile.refresh_from_db()
+        assert profile.covenant_role_id == role.pk
+        assert profile.style == DefenseStyle.EVASION
+        assert profile.gear_additive_tenths == 3
+
 
 class TechniqueFunctionTagContentExportTests(TestCase):
     """Round-trip coverage for TechniqueFunctionTag (#2443).
@@ -816,3 +857,194 @@ class CovenantRoleTechniqueSpecialtyContentExportTests(TestCase):
         sub_specialty.refresh_from_db()
         assert sub_specialty.covenant_role_id == sub_role.pk
         assert sub_specialty.multiplier_tenths == 20
+
+
+class VowStatScalingContentExportTests(TestCase):
+    """Round-trip coverage for VowStatScaling (#2533).
+
+    ``covenants.vowstatscaling`` was added to ``CONTENT_MODELS`` with natural key
+    ``["covenant_role", "modifier_target"]`` — verify a row survives export -> import
+    identity-stable, including the FK-in-NK resolution of ``modifier_target`` (itself
+    keyed on ``["category", "name"]`` via ``mechanics.ModifierTarget``).
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_vow_stat_scaling_round_trip(self) -> None:
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.models import VowStatScaling
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+        role = CovenantRoleFactory(
+            name="Round Trip Oathbound",
+            slug="round-trip-oathbound",
+            sword_weight=1,
+            crown_weight=0,
+        )
+        role.full_clean()
+        category = ModifierCategoryFactory(name="Round Trip Vow Stat Category")
+        target = ModifierTargetFactory(name="Round Trip Vow Stat Target", category=category)
+        scaling = VowStatScaling.objects.create(
+            covenant_role=role,
+            modifier_target=target,
+            bonus_per_level=5,
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        scaling_path = self.root / "fixtures" / "covenants" / "vowstatscaling.json"
+        assert scaling_path.exists()
+
+        records = json.loads(scaling_path.read_text(encoding="utf-8"))
+        assert len(records) == 1
+        record = records[0]
+        assert "pk" not in record
+
+        # FK-in-NK: modifier_target serializes as [category_name, target_name],
+        # not a raw pk.
+        target_key = record["fields"]["modifier_target"]
+        assert isinstance(target_key, list)
+        assert target_key == ["Round Trip Vow Stat Category", "Round Trip Vow Stat Target"]
+        assert all(not isinstance(v, int) for v in target_key)
+
+        assert record["fields"]["covenant_role"] == ["round-trip-oathbound"]
+        assert record["fields"]["bonus_per_level"] == 5
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        scaling.refresh_from_db()
+        assert scaling.covenant_role_id == role.pk
+        assert scaling.modifier_target_id == target.pk
+        assert scaling.bonus_per_level == 5
+
+
+class CovenantRoleBonusContentExportTests(TestCase):
+    """Round-trip coverage for CovenantRoleBonus (#2533).
+
+    ``covenants.covenantrolebonus`` was added to ``CONTENT_MODELS`` with natural key
+    ``["covenant_role", "modifier_target"]`` — mirrors ``VowStatScaling``'s FK-in-NK
+    shape but scales by character level rather than thread level (#985, Spec D §5.6).
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_covenant_role_bonus_round_trip(self) -> None:
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.models import CovenantRoleBonus
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+        role = CovenantRoleFactory(
+            name="Round Trip Sworn Blade",
+            slug="round-trip-sworn-blade",
+            sword_weight=1,
+            crown_weight=0,
+        )
+        role.full_clean()
+        category = ModifierCategoryFactory(name="Round Trip Role Bonus Category")
+        target = ModifierTargetFactory(name="Round Trip Role Bonus Target", category=category)
+        bonus = CovenantRoleBonus.objects.create(
+            covenant_role=role,
+            modifier_target=target,
+            bonus_per_level=3,
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        bonus_path = self.root / "fixtures" / "covenants" / "covenantrolebonus.json"
+        assert bonus_path.exists()
+
+        records = json.loads(bonus_path.read_text(encoding="utf-8"))
+        assert len(records) == 1
+        record = records[0]
+        assert "pk" not in record
+
+        # FK-in-NK: modifier_target serializes as [category_name, target_name].
+        target_key = record["fields"]["modifier_target"]
+        assert isinstance(target_key, list)
+        assert target_key == ["Round Trip Role Bonus Category", "Round Trip Role Bonus Target"]
+        assert all(not isinstance(v, int) for v in target_key)
+
+        assert record["fields"]["covenant_role"] == ["round-trip-sworn-blade"]
+        assert record["fields"]["bonus_per_level"] == 3
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        bonus.refresh_from_db()
+        assert bonus.covenant_role_id == role.pk
+        assert bonus.modifier_target_id == target.pk
+        assert bonus.bonus_per_level == 3
+
+
+class GearArchetypeCompatibilityContentExportTests(TestCase):
+    """Round-trip coverage for GearArchetypeCompatibility (#2533).
+
+    ``covenants.geararchetypecompatibility`` was added to ``CONTENT_MODELS`` with
+    natural key ``["covenant_role", "gear_archetype"]`` — an existence-only join
+    (Spec D §4.4), so the only FK-in-NK to exercise is ``covenant_role``.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_gear_archetype_compatibility_round_trip(self) -> None:
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.models import GearArchetypeCompatibility
+        from world.items.constants import GearArchetype
+
+        role = CovenantRoleFactory(
+            name="Round Trip Shieldbearer",
+            slug="round-trip-shieldbearer",
+            shield_weight=1,
+            crown_weight=0,
+        )
+        role.full_clean()
+        compat = GearArchetypeCompatibility.objects.create(
+            covenant_role=role,
+            gear_archetype=GearArchetype.HEAVY_ARMOR,
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        compat_path = self.root / "fixtures" / "covenants" / "geararchetypecompatibility.json"
+        assert compat_path.exists()
+
+        records = json.loads(compat_path.read_text(encoding="utf-8"))
+        assert len(records) == 1
+        record = records[0]
+        assert "pk" not in record
+
+        # FK-in-NK: covenant_role serializes as a natural-key list, not a raw pk.
+        role_key = record["fields"]["covenant_role"]
+        assert isinstance(role_key, list)
+        assert role_key == ["round-trip-shieldbearer"]
+
+        assert record["fields"]["gear_archetype"] == GearArchetype.HEAVY_ARMOR
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        compat.refresh_from_db()
+        assert compat.covenant_role_id == role.pk
+        assert compat.gear_archetype == GearArchetype.HEAVY_ARMOR

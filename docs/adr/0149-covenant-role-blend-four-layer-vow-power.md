@@ -24,14 +24,17 @@ of what else is built on top:
   `_participant_has_archetype`) now read `blend_weight_for(axis) > 0` instead of an
   equality check against a single enum value — a dual-axis role can satisfy either slot
   requirement, which a single-value `archetype` field could never do.
-- **Layer 2 (#2443, tracked separately)** — per-vow technique specialty.
-- **Layer 3 (#2533, tracked separately)** — defense styles + gear substitution. This
-  re-scopes ADR-0108's stat/gear pillars: `vow_stat_scaling_bonus` (`VowStatScaling`,
-  keyed on `ModifierTarget`) is unaffected by this change and stays live; `vow_gear_scaling_bonus`
-  (`VowGearScaling`, keyed on the retired `role_archetype` field) is short-circuited to a
+- **Layer 2 (#2443, shipped via #2546)** — per-vow technique specialty. See the
+  "Amendment (2026-07-20, #2443 implementation)" section below.
+- **Layer 3 (#2533, shipped)** — defense styles + gear substitution. This re-scopes
+  ADR-0108's stat/gear pillars: `vow_stat_scaling_bonus` (`VowStatScaling`, keyed on
+  `ModifierTarget`) is unaffected by this change and stays live; `vow_gear_scaling_bonus`
+  (`VowGearScaling`, keyed on the retired `role_archetype` field) was short-circuited to a
   flat 0 by #2529 — it was already inert (never seeded in a real game) and keyed on the
-  removed enum, so #2529 makes its actual runtime behavior explicit rather than leaving a
-  latent bug. #2533 decides `VowGearScaling`'s real fate under the blend model.
+  removed enum, so #2529 made its actual runtime behavior explicit rather than leaving a
+  latent bug. #2533 removed `VowGearScaling` entirely and substituted the
+  `CovenantRoleDefenseProfile` gear-additive fraction; see the "Amendment (2026-07-20,
+  #2533 implementation)" section below.
 - **Layer 4 (#2536, tracked separately)** — deterministic, situational perks. This is
   "the point of vows": when your situation comes up you really shine, deterministically
   and legibly. Layer 1's baseline is the floor that keeps every engaged vow relevant in
@@ -71,9 +74,10 @@ This ADR supersedes ADR-0108. ADR-0108's stat/gear/technique-specialization fram
 superseded by the four-layer model above; its Capability-grant-wiring and
 role-source-variant-resolution decisions are unaffected by #2529 and remain accurate.
 
-> Status: accepted · Source: issue #2529 · Supersedes: ADR-0108 · Related: ADR-0055
-> (sub-role specialization engine), ADR-0013 (no data migrations pre-production —
-> narrow exception documented above), #2443/#2533/#2536 (Layers 2-4)
+> Status: accepted · amended 2026-07-20 (#2443, #2533) — verified against code · Source:
+> issue #2529 · Supersedes: ADR-0108 · Related: ADR-0055 (sub-role specialization engine),
+> ADR-0013 (no data migrations pre-production — narrow exception documented above),
+> #2536 (Layer 4, remaining)
 
 ## Amendment (2026-07-20, #2443 implementation)
 
@@ -121,3 +125,66 @@ across anchor+sub-role.
 (`frontend/src/covenants/pages/CovenantDetailPage.tsx`) unions the two, summing the
 anchor and resolved sub-role's `multiplier_tenths` on a same-function collision — matching
 the power term's own summed payout, so the displayed chip is never an understatement.
+
+## Amendment (2026-07-20, #2533 implementation)
+
+All claims below were verified against `src/world/covenants/` and `src/world/combat/` on this
+branch before writing.
+
+**Layer 3 shipped: `DefenseStyle` vocabulary + the niche ruling.** `DefenseStyle`
+(`TextChoices` in `world.covenants.constants`) is code-defined, not lore-repo content, per the
+shared-vocabulary ruling: `GEAR_SOAK` (armor is the defense), `EVASION` (not being there is the
+defense), `BARRIER` (force/warding is the defense). **The ratified niche ruling (2026-07-20):**
+each style MUST have distinct shine-situations in Layer 4's (#2536) first perk set — a style
+with no situation where it clearly outshines the other two is an authoring bug at the perk-set
+level, not a code defect. Exact tuning numbers for those perks are secondary to that coverage
+requirement; get the niche right first, balance the numbers after.
+
+**Substitution rule.** `CovenantRoleDefenseProfile` (one row per `CovenantRole`, including
+sub-roles; OneToOne to `CovenantRole`, NK `["covenant_role"]`, lore-repo content) carries
+`style` (`DefenseStyle`) and `gear_additive_tenths` (default 10 = fully additive). Sub-role rows
+are valid with no model-level parent/sub-role constraint — resolution is entirely a read-time
+decision. `gear_additive_fraction(character)` (`world.covenants.services`) resolves, per engaged
+role, the role's own profile when present else its anchor's, then takes the **MAX** fraction
+across all engaged roles (gear is physical and counts once — the most gear-friendly engaged vow
+governs; multi-vow stacking lives on the vow side, never by re-counting armor). No engaged role
+has a profile anywhere → `Decimal(1)`, byte-identical to pre-#2533. `apply_equipped_armor_soak`
+(`world.combat.services`, #1174) applies this fraction to the COMPATIBLE armor bucket **only,
+once**, right after the role-compatibility split and before the compatible-additive/
+incompatible-max blend:
+
+    compat_soak = int(compat_soak * gear_additive_fraction(character))
+    soak = compat_soak + max(incompat_physical, resonant)
+
+The resonant pool and the incompatible-`max` branch are untouched by this change. Durability
+still wears on every compatible piece whose (now-scaled) soak contributes — unchanged from
+#1174. `ArmorSoakRoleGateTests` (the original #1174 suite) passes unmodified, which is the
+enforced proof that the no-profile path stays byte-identical.
+
+**Pillar fates.** `VowStatScaling` (keyed `(covenant_role, modifier_target)`, scales by
+COVENANT_ROLE **thread level**) is Layer 3's stat-power pillar and was already unaffected by
+the #2529 rework; #2533 additionally wires it onto the lore-repo content pipeline
+(`NaturalKeyMixin`, `covenants.vowstatscaling` in `CONTENT_MODELS`), with a wiring-proof test
+showing thread-level scaling aggregate into `equipment_walk_total` end-to-end. It stays the
+**thread-scaled stark-power dial**: unlike `CovenantRoleBonus` (scales on raw character level,
+peer-independent), a deepened vow makes its holder substantially stronger in a way ordinary
+leveling does not — the mechanical heart of "solo darkness." `VowGearScaling` (formerly keyed
+`(gear_archetype, role_archetype)` off the now-removed `CovenantRole.archetype` field, already
+short-circuited to a flat 0 by #2529 because it was never seeded in a real game) is **removed
+entirely** — model, migration (`covenants.0031_delete_vowgearscaling`), `vow_gear_scaling_bonus`,
+and both its call sites in `world.mechanics.services` (`equipment_walk_total` and
+`equipment_walk_total_unblended`). Its intended job — a per-archetype gear multiplier — is
+subsumed by the single authored `gear_additive_tenths` fraction on
+`CovenantRoleDefenseProfile`: one dial per role that substitutes for gear at the armor-soak
+seam, rather than a full `(gear_archetype × role_archetype)` matrix layered on top of the blend
+model. `CovenantRoleBonus` and `GearArchetypeCompatibility` also joined the lore-repo content
+pipeline in this branch (`NaturalKeyMixin`, `CONTENT_MODELS`) — pure plumbing, no behavior
+change.
+
+**Rejected: re-key `VowGearScaling` onto the blend model instead of removing it.** A
+per-`(gear_archetype, covenant_role)` multiplier table would let each role tune gear synergy
+per archetype rather than with one flat fraction — but it never had real seed data even under
+the old single-archetype key, and Layer 3's actual design need (a vow whose defense style isn't
+gear should be able to substitute for gear, not fine-tune which gear archetype it likes) is
+fully served by the coarser per-role fraction. The matrix would have been more authoring
+surface for a need the simpler dial already meets.

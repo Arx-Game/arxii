@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from decimal import Decimal
 import logging
 from typing import TYPE_CHECKING
 
@@ -866,6 +867,48 @@ def is_gear_compatible(role: CovenantRole, archetype: str) -> bool:
     ).exists()
 
 
+def gear_additive_fraction(character: object) -> Decimal:
+    """MAX gear-additive fraction across engaged roles' defense profiles (#2533).
+
+    Profile resolution per engaged (resolved) role: the sub-role's own profile
+    when present, else the anchor's. No engaged role has a profile → Decimal(1)
+    (legacy fully-additive behavior, byte-identical). Gear is physical and
+    counts once — the most gear-friendly engaged vow governs (multi-vow
+    stacking lives on the vow side, never by re-counting armor).
+    """
+    from world.covenants.models import CovenantRoleDefenseProfile  # noqa: PLC0415
+
+    if not hasattr(character, "covenant_roles"):
+        return Decimal(1)
+    engaged_roles = character.covenant_roles.currently_engaged_roles()
+    if not engaged_roles:
+        return Decimal(1)
+
+    role_pks: set[int] = set()
+    for role in engaged_roles:
+        role_pks.add(role.pk)
+        if role.parent_role_id is not None:
+            role_pks.add(role.parent_role_id)
+
+    # One batched query (SharedMemoryModel-cached) — no per-role query loop.
+    profiles_by_role_id = {
+        profile.covenant_role_id: profile
+        for profile in CovenantRoleDefenseProfile.objects.filter(covenant_role_id__in=role_pks)
+    }
+
+    tenths_values: list[int] = []
+    for role in engaged_roles:
+        profile = profiles_by_role_id.get(role.pk)
+        if profile is None and role.parent_role_id is not None:
+            profile = profiles_by_role_id.get(role.parent_role_id)
+        if profile is not None:
+            tenths_values.append(profile.gear_additive_tenths)
+
+    if not tenths_values:
+        return Decimal(1)
+    return Decimal(max(tenths_values)) / 10
+
+
 def covenant_role_action_scaling_bonus(character: object, action_key: str) -> float:
     """Return the per-role scaling bonus for a combat action (#2529, was #2022).
 
@@ -878,8 +921,6 @@ def covenant_role_action_scaling_bonus(character: object, action_key: str) -> fl
     The returned float is a multiplier bonus — callers add it to the action's
     base effect (e.g. interpose partial-block divisor = ``2 + bonus``).
     """
-    from decimal import Decimal  # noqa: PLC0415
-
     from world.covenants.models import CovenantRoleActionScaling  # noqa: PLC0415
 
     if not hasattr(character, "covenant_roles"):

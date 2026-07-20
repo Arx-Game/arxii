@@ -235,11 +235,11 @@ class ModifierTotalQueryBudgetTests(TestCase):
                    modifier-total call; returns no rows (no authored scaling) so it
                    contributes 0.
 
-        Note: the former Query 10 (VowGearScaling.filter(role_archetype__in=...) via
-        vow_gear_scaling_bonus, #2022) was removed by the #2529 short-circuit —
-        vow_gear_scaling_bonus now returns 0 unconditionally (CovenantRole.archetype was
-        removed for the SWORD/SHIELD/CROWN blend rewrite), so it no longer fires a query.
-        Its fate: #2533.
+        Note: the former Query 10 (the "gear scaling" archetype-keyed multiplier lookup,
+        #2022) was removed by the #2529 short-circuit (CovenantRole.archetype was removed
+        for the SWORD/SHIELD/CROWN blend rewrite) and the underlying model + consumer were
+        fully removed by #2533 (replaced by the defense-profile gear-substitution fraction
+        at the armor-soak seam, ``world.covenants.services.gear_additive_fraction``).
 
         Queries that do NOT fire after warming:
           - equipped_items queryset (warmed by iter_item_facets)
@@ -270,8 +270,9 @@ class ModifierTotalQueryBudgetTests(TestCase):
         #               + CovenantRoleBonus.first() (role_base_bonus_for_target, #985)
         #               + CrossingChoice.filter (passive_facet_crossing_bonuses, #1990)
         #               + VowStatScaling.filter (vow_stat_scaling_bonus, #2022)
-        # (VowGearScaling.filter / vow_gear_scaling_bonus, #2022, was removed by the
-        # #2529 short-circuit — see the docstring note above. Fate: #2533.)
+        # (the "gear scaling" query, #2022, was removed by the #2529 short-circuit and
+        # the underlying model + consumer were fully removed by #2533 — see the
+        # docstring note above.)
         baseline_queries = 9
         with self.assertNumQueries(baseline_queries):
             result = get_modifier_total(self.sheet, self.target)

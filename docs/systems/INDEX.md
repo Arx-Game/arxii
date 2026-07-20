@@ -3998,7 +3998,16 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   - `CovenantRoleBonus` — authored config: one row per
     `(CovenantRole, ModifierTarget)` with `bonus_per_level` SmallInt.
     `role_base_bonus_for_target(role, target, char_level)` returns
-    `char_level × bonus_per_level`; no row → 0. Admin-registered.
+    `char_level × bonus_per_level`; no row → 0. Lore-repo content (#2533,
+    `NaturalKeyMixin`, `CONTENT_MODELS`).
+  - `DefenseStyle` (`TextChoices`, #2533, ADR-0149 Layer 3) — `GEAR_SOAK`/
+    `EVASION`/`BARRIER`, how a covenant vow defends. Code-defined vocabulary
+    (Layer 4's situational perks, #2536, key on these labels).
+  - `CovenantRoleDefenseProfile` (#2533) — one row per `CovenantRole` (OneToOne,
+    `related_name="defense_profile"`): `style` (`DefenseStyle`),
+    `gear_additive_tenths` (default 10 = fully additive). Lore-repo content
+    (`NaturalKeyMixin` NK `["covenant_role"]`, `CONTENT_MODELS`). Read via
+    `gear_additive_fraction(character)` — see "Combat seams" below.
   - `CovenantRank` — per-covenant administrative authority tier.
     Fields: `covenant` FK, `name`, `tier` (1 = top authority), `description`,
     `can_invite`, `can_kick`, `can_manage_ranks`, `can_lead_rituals` (may lead
@@ -4126,8 +4135,11 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     - `power_tier_for_level(level: int) -> int` — maps levels 1–5 → tier 1,
       6–10 → tier 2, 11–15 → tier 3, etc. (`ceil(level / TIER_ONE_MAX_LEVEL)`).
       Used by the COURT gulf check in `assert_membership_level_allowed`.
-- **Combat seams (#985, #1174, #1165):** `apply_equipped_armor_soak` splits worn armor into
-  role-compatible vs incompatible buckets; final soak = `compat_physical +
+- **Combat seams (#985, #1174, #1165, #2533):** `apply_equipped_armor_soak` splits worn armor into
+  role-compatible vs incompatible buckets; compatible soak is scaled once by
+  `gear_additive_fraction(character)` (`world.covenants.services`, #2533 — MAX
+  `CovenantRoleDefenseProfile.gear_additive_tenths` fraction across engaged roles,
+  `1` with no profile); final soak = `compat_physical +
   max(incompat_physical, resonant_pool)` where the resonant pool =
   `equipment_walk_total_unblended` (facet + `covenant_role_base_total` +
   covenant-level + mantle + motif-style). `_weapon_augmented_budget` adds

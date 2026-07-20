@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; exit lifecycle — voluntary leave + leader-gated kick + below-2 auto-dissolve, soft-only (#519) — shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate still post-MVP; rank ladder — `CovenantRank` per-covenant authority tier, two-axis `CovenantRole`/`CovenantRank` model, rank management services, `CovenantRankViewSet` API, rank-ladder UI (#1027) — shipped; covenant-role armor-soak gate — compatible→additive, incompatible→`max(physical, resonant pool)`, level-scaled; #1174 — shipped; resonance sub-role runtime resolution (derive-on-read via `resolve_effective_role` + `fire_subrole_discoveries` discovery beat; `discovery_achievement`/`codex_entry` FKs on sub-role `CovenantRole`; `anchor_role` API field; #1277) — shipped; telnet membership lifecycle — `CmdCovenant` (`covenant engage/disengage/leave/kick/rank/transfer/standdown`), seven `action.run()` REGISTRY Actions in `actions/definitions/covenants.py`, `world.covenants.selectors` shared by Actions + viewsets, covenant induction + banner-call rise via `CmdRitual` adapter registry (`commands/ritual_adapters.py` — `CovenantInductionAdapter` + `BannerCallAdapter`) (#1346) — shipped; combat-identity blend — `CovenantRole.archetype` single-enum replaced by `sword_weight`/`shield_weight`/`crown_weight` (sum to 1 on primaries, sub-roles delegate via `blend_weight_for`), `CovenantRoleActionScaling` replacing `ArchetypeActionScaling`, always-on `covenant_role_blend_power_term` baseline cast power term — Layer 1 of ADR-0149's four-layer vow-power model (#2529) — shipped; per-vow finer technique specialty — `CovenantRoleTechniqueSpecialty` (NK `(covenant_role, function)`, valid on primaries AND sub-roles, sub-role rows ADD) + always-on `covenant_role_specialty_power_term`, keyed on the shared code-defined `magic.TechniqueFunction` vocabulary also consumed by Layer 4's situational perks — Layer 2 of ADR-0149 (#2443) — shipped; Layers 3-4 tracked in #2533/#2536)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; exit lifecycle — voluntary leave + leader-gated kick + below-2 auto-dissolve, soft-only (#519) — shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate still post-MVP; rank ladder — `CovenantRank` per-covenant authority tier, two-axis `CovenantRole`/`CovenantRank` model, rank management services, `CovenantRankViewSet` API, rank-ladder UI (#1027) — shipped; covenant-role armor-soak gate — compatible→additive, incompatible→`max(physical, resonant pool)`, level-scaled; #1174 — shipped; resonance sub-role runtime resolution (derive-on-read via `resolve_effective_role` + `fire_subrole_discoveries` discovery beat; `discovery_achievement`/`codex_entry` FKs on sub-role `CovenantRole`; `anchor_role` API field; #1277) — shipped; telnet membership lifecycle — `CmdCovenant` (`covenant engage/disengage/leave/kick/rank/transfer/standdown`), seven `action.run()` REGISTRY Actions in `actions/definitions/covenants.py`, `world.covenants.selectors` shared by Actions + viewsets, covenant induction + banner-call rise via `CmdRitual` adapter registry (`commands/ritual_adapters.py` — `CovenantInductionAdapter` + `BannerCallAdapter`) (#1346) — shipped; combat-identity blend — `CovenantRole.archetype` single-enum replaced by `sword_weight`/`shield_weight`/`crown_weight` (sum to 1 on primaries, sub-roles delegate via `blend_weight_for`), `CovenantRoleActionScaling` replacing `ArchetypeActionScaling`, always-on `covenant_role_blend_power_term` baseline cast power term — Layer 1 of ADR-0149's four-layer vow-power model (#2529) — shipped; per-vow finer technique specialty — `CovenantRoleTechniqueSpecialty` (NK `(covenant_role, function)`, valid on primaries AND sub-roles, sub-role rows ADD) + always-on `covenant_role_specialty_power_term`, keyed on the shared code-defined `magic.TechniqueFunction` vocabulary also consumed by Layer 4's situational perks — Layer 2 of ADR-0149 (#2443) — shipped; defense styles + gear substitution — `DefenseStyle` (GEAR_SOAK/EVASION/BARRIER) + per-role `CovenantRoleDefenseProfile.gear_additive_tenths`, `gear_additive_fraction` scaling the compatible-armor bucket once at the #1174 soak seam, `VowGearScaling` removed (subsumed by the profile fraction) — Layer 3 of ADR-0149 (#2533) — shipped; Layer 4 tracked in #2536)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -135,7 +135,7 @@ Specific role names are authored content (`CovenantRole` rows).
   default to `~rank 15`.
 - See `docs/roadmap/combat.md` for the full combat resolution pipeline.
 
-### Gear × Role Compatibility (Spec D §4.4, #985, #1174)
+### Gear × Role Compatibility (Spec D §4.4, #985, #1174, #2533)
 
 Gear compatibility governs two distinct seams:
 
@@ -148,13 +148,27 @@ Worn armor is split into compatible vs incompatible buckets. The *resonant soak 
 facet + `covenant_role_base_total` + covenant-level (`covenant_level_bonus`) + mantle +
 motif-style (role base × character level, summed once per character, not per slot). Final soak:
 
-    soak = compat_physical + max(incompat_physical, resonant)
+    compat_soak = int(compat_soak * gear_additive_fraction(character))
+    soak = compat_soak + max(incompat_physical, resonant)
 
 Compatible armor's physical soak adds directly to the final total; incompatible armor competes
 with the resonant pool via `max` — at low levels physical armor wins; at higher levels
 the resonant pool overtakes it. Durability wears only on armor whose physical soak
 contributed. Compatibility is staff-authored existence-only data (`GearArchetypeCompatibility`)
 — no boolean column, just row-presence.
+
+**Defense-style gear substitution** (`gear_additive_fraction`, #2533, ADR-0149 Layer 3):
+each engaged role may carry a `CovenantRoleDefenseProfile` authoring a `DefenseStyle`
+(GEAR_SOAK/EVASION/BARRIER) and a `gear_additive_tenths` fraction (default 10 = fully
+additive/legacy). `gear_additive_fraction(character)` takes the MAX fraction across the
+character's engaged roles' resolved profiles (sub-role's own profile when present, else
+its anchor's) and scales `compat_soak` once, before the blend above — no profile anywhere
+→ fraction 1, byte-identical to pre-#2533 behavior. A vow whose style isn't GEAR_SOAK can
+author a lower fraction so its own defense substitutes for gear rather than stacking with
+it; gear counts once even when multiple engaged vows have profiles (the most
+gear-friendly one governs). `VowGearScaling` — the per-(gear_archetype, role_archetype)
+multiplier this layer was originally slated to use — is removed; the single authored
+per-role fraction subsumes it.
 
 ### Magic Integration: COVENANT_ROLE Thread Anchors
 

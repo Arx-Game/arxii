@@ -805,6 +805,7 @@
   - clue -> clues.Clue [FK]
 
 ### Service Functions
+- `charm_into_asset(*, charmer_persona: 'Persona', target_persona: 'Persona', role_context: 'str') -> 'NPCAsset' — Extract a charmed NPC as a CHARM ``NPCAsset`` (#2502).`
 - `coerce_into_asset(*, coercer_persona: 'Persona', target_persona: 'Persona', role_context: 'str') -> 'NPCAsset' — Extract a blackmailed NPC as a COERCION ``NPCAsset`` (#1680).`
 - `introduce_asset(*, introducer_persona: 'Persona', ally_persona: 'Persona', asset: 'NPCAsset') -> 'NPCAsset' — Introduce an owned asset to a co-present ally, creating co-ownership (#2295).`
 - `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction') -> 'None' — Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
@@ -1791,6 +1792,16 @@
   - durance_training_sites <- progression.DuranceTrainingSite
   - path_intents <- progression.PathIntent
   - character_selections <- progression.CharacterPathHistory
+  - traitrequirement_requirements <- progression.TraitRequirement
+  - levelrequirement_requirements <- progression.LevelRequirement
+  - classlevelrequirement_requirements <- progression.ClassLevelRequirement
+  - multiclassrequirement_requirements <- progression.MultiClassRequirement
+  - achievementrequirement_requirements <- progression.AchievementRequirement
+  - relationshiprequirement_requirements <- progression.RelationshipRequirement
+  - legendrequirement_requirements <- progression.LegendRequirement
+  - tierrequirement_requirements <- progression.TierRequirement
+  - itemrequirement_requirements <- progression.ItemRequirement
+  - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - allowed_styles <- magic.TechniqueStyle
   - gift_unlocks <- magic.GiftUnlock
@@ -2293,7 +2304,7 @@
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' — Create a CombatParticipant linking a PC to an encounter.`
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False) -> 'OpponentDamageResult' — Apply damage to an NPC opponent, accounting for soak, probing,`
 - `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'ParticipantDamageResult' — Apply damage to a PC via their CharacterVitals.`
-- `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' — Reduce ``damage`` by role-gated equipped-armor soak (#1174).`
+- `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' — Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533).`
 - `apply_fatigue(character_sheet: 'CharacterSheet', category: 'str', base_cost: 'int', effort_level: 'str') -> 'int' — Add fatigue to the pool.`
 - `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' — Map a graded interpose resolution onto *pre_payload*.`
 - `apply_position_cover(character: 'Character', damage: 'int', damage_type: 'DamageType | None') -> 'int' — Subtract attack-cover from damage.`
@@ -2421,6 +2432,7 @@
 - `materialize_companion_as_combat_opponent(companion: 'Companion', encounter: 'CombatEncounter', *, threat_pool: 'ThreatPool | None' = None) -> 'CombatOpponent' — Bridge a persistent Companion into a duel-scale CombatOpponent (#1873).`
 - `mount_companion(sheet: 'CharacterSheet', companion: 'Companion') -> 'Companion' — Mount *sheet* on *companion* — applies the Mounted condition to the rider.`
 - `order_companion(*, companion: 'Companion', order_kind: 'str', round_number: 'int', encounter: 'CombatEncounter | None' = None, battle: 'Battle | None' = None, target_opponent=None, target_unit=None, ability=None, defending_participant=None, target_ally=None) — Validate and upsert a CompanionOrder directive (#1921).`
+- `promote_summon_to_companion(*, caster_sheet: 'CharacterSheet', combat_opponent: 'CombatOpponent', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' — Promote an ephemeral summon or charmed enemy into a persistent Companion (#2502).`
 - `release_companion(companion: 'Companion') -> 'None' — Release a bonded companion: destroy its live object, keep the row.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' — Resolve a bridged companion's defeat consequence (#1873).`
 - `stables_capacity_bonus_for_sheet(character_sheet: 'CharacterSheet') -> 'int' — Flat Companion Capacity bonus from all Stables the sheet has standing in.`
@@ -2808,6 +2820,7 @@
   - vow_stat_scalings <- covenants.VowStatScaling
   - action_scalings <- covenants.CovenantRoleActionScaling
   - technique_specialties <- covenants.CovenantRoleTechniqueSpecialty
+  - defense_profile <- covenants.CovenantRoleDefenseProfile
   - gift_grants <- covenants.CovenantRoleGiftGrant
   - role_bonuses <- covenants.CovenantRoleBonus
   - combat_participations <- combat.CombatParticipant
@@ -2842,8 +2855,6 @@
   - covenant_role -> covenants.CovenantRole [FK]
   - modifier_target -> mechanics.ModifierTarget [FK]
 
-### VowGearScaling
-
 ### CovenantRoleActionScaling
 **Foreign Keys:**
   - covenant_role -> covenants.CovenantRole [FK]
@@ -2851,6 +2862,10 @@
 ### CovenantRoleTechniqueSpecialty
 **Foreign Keys:**
   - covenant_role -> covenants.CovenantRole [FK]
+
+### CovenantRoleDefenseProfile
+**Foreign Keys:**
+  - covenant_role -> covenants.CovenantRole [OneToOne]
 
 ### CovenantRoleGiftGrant
 **Foreign Keys:**
@@ -2936,6 +2951,7 @@
 - `establish_mentor_bond_via_session(*, session: 'RitualSession') -> 'MentorBond' — Dispatched on Mentor's Vow BILATERAL fire. Wraps establish_mentor_bond.`
 - `evaluate_scene_engagement(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — Auto-engage a Durance covenant if co-presence prerequisites met, then`
 - `fold_arrival_into_active_rites(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — When an engaged member arrives in a room with an active CovenantRiteInstance,`
+- `gear_additive_fraction(character: 'object') -> 'Decimal' — MAX gear-additive fraction across engaged roles' defense profiles (#2533).`
 - `get_court_grant_config() -> 'CourtGrantConfig' — Get-or-create the Court grant negotiation config singleton (pk=1).`
 - `get_mentor_bond_config() -> 'MentorBondConfig' — Return the seeded MentorBondConfig singleton (#1165).`
 - `induct_member_via_session(*, session: 'RitualSession') -> 'CharacterCovenantRole' — Dispatched on INDUCTION fire. Unpacks the session into add_member args.`
@@ -5584,7 +5600,6 @@
 - `stage_property(target: 'ObjectDB', property_: 'Property', value: 'int' = 1) -> 'ObjectProperty' — GM improv: attach or refresh a Property on ``target`` (#2503).`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
 - `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' — Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`
-- `vow_gear_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Vow-driven equipment amplification — inert pending Layer 3 (#2533).`
 - `vow_stat_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven stat scaling across engaged roles (#2022).`
 - `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' — Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`
 
@@ -6254,23 +6269,27 @@
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
   - trait -> traits.Trait [FK]
 
 ### LevelRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
 
 ### ClassLevelRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
   - character_class -> classes.CharacterClass [FK]
 
 ### MultiClassRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
   - required_classes -> classes.CharacterClass [M2M]
 **Pointed to by:**
   - class_levels <- progression.MultiClassLevel
@@ -6284,28 +6303,33 @@
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
   - achievement -> achievements.Achievement [FK]
 
 ### RelationshipRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
   - required_track_kind -> relationships.RelationshipTrack [FK] (nullable)
 
 ### LegendRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
 
 ### TierRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
 
 ### ItemRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
   - item_template -> items.ItemTemplate [FK] (nullable)
   - min_touchstone_tier -> magic.ResonanceTier [FK] (nullable)
   - min_quality_tier -> items.QualityTier [FK] (nullable)
@@ -6314,6 +6338,7 @@
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
 
 ### CharacterUnlock
 **Foreign Keys:**

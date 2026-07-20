@@ -66,3 +66,16 @@ class MentorBondAdjusted(models.TextChoices):
 MENTOR_BOND_BAND_WIDTH = 2
 MENTOR_BOND_ADJACENCY_OFFSET = 1
 MENTOR_BOND_MAX_SIDEKICKS: int | None = None
+
+
+class DefenseStyle(models.TextChoices):
+    """How a covenant vow defends (#2533, Layer 3).
+
+    Code-defined per the shared-vocabulary ruling — #2536's situational perks
+    key on these labels (each style MUST have distinct shine-situations there;
+    a style with none is an authoring bug, per the 2026-07-20 niche ruling).
+    """
+
+    GEAR_SOAK = "gear_soak", "Gear Soak"  # armor is the defense
+    EVASION = "evasion", "Evasion"  # not being there is the defense
+    BARRIER = "barrier", "Barrier"  # force/warding is the defense

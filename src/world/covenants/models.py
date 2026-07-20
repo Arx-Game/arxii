@@ -25,6 +25,7 @@ from world.covenants.constants import (
     BattleBinding,
     CommandTier,
     CovenantType,
+    DefenseStyle,
     MentorBondAdjusted,
     RoleArchetype,
 )
@@ -525,7 +526,11 @@ class CovenantRole(NaturalKeyMixin, AbstractSpecializedVariant, SharedMemoryMode
         return f"{self.name} ({self.get_covenant_type_display()})"
 
 
-class GearArchetypeCompatibility(SharedMemoryModel):
+class GearArchetypeCompatibilityManager(NaturalKeyManager):
+    """Manager for GearArchetypeCompatibility with natural key support."""
+
+
+class GearArchetypeCompatibility(NaturalKeyMixin, SharedMemoryModel):
     """Existence-only join: which roles are compatible with which archetypes.
 
     Spec D §4.4. Row present = role bonuses add to mundane gear stats on
@@ -542,6 +547,8 @@ class GearArchetypeCompatibility(SharedMemoryModel):
         choices=GearArchetype.choices,
     )
 
+    objects = GearArchetypeCompatibilityManager()
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -549,6 +556,10 @@ class GearArchetypeCompatibility(SharedMemoryModel):
                 name="covenants_unique_role_archetype_compat",
             ),
         ]
+
+    class NaturalKeyConfig:
+        fields = ["covenant_role", "gear_archetype"]
+        dependencies = ["covenants.CovenantRole"]
 
     def __str__(self) -> str:
         return f"{self.covenant_role.name} compatible with {self.get_gear_archetype_display()}"
@@ -815,7 +826,11 @@ class CovenantLevelBonus(SharedMemoryModel):
         return f"{self.modifier_target.name}: +{self.bonus_per_level}/level"
 
 
-class VowStatScaling(SharedMemoryModel):
+class VowStatScalingManager(NaturalKeyManager):
+    """Manager for VowStatScaling with natural key support."""
+
+
+class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
     """Authored vow-driven stat scaling keyed by (covenant_role, modifier_target) (#2022).
 
     Unlike ``CovenantRoleBonus`` (which scales by character level), this model
@@ -849,6 +864,8 @@ class VowStatScaling(SharedMemoryModel):
         ),
     )
 
+    objects = VowStatScalingManager()
+
     class Meta:
         ordering = ["covenant_role", "modifier_target"]
         constraints = [
@@ -858,60 +875,14 @@ class VowStatScaling(SharedMemoryModel):
             ),
         ]
 
+    class NaturalKeyConfig:
+        fields = ["covenant_role", "modifier_target"]
+        dependencies = ["covenants.CovenantRole", "mechanics.ModifierTarget"]
+
     def __str__(self) -> str:
         return (
             f"{self.covenant_role.name} / {self.modifier_target.name}: "
             f"+{self.bonus_per_level}/thread-level"
-        )
-
-
-class VowGearScaling(SharedMemoryModel):
-    """Authored vow-driven equipment effectiveness multiplier (#2022).
-
-    Extends ``GearArchetypeCompatibility`` from a gate (which equipment you can
-    use) to a multiplier (how much your equipped gear contributes). Keyed by
-    ``(gear_archetype, role_archetype)`` — the scaling applies to any engaged
-    role whose archetype matches, regardless of the specific role.
-
-    A SHIELD-role character wearing heavy armor gets ``base + thread_level *
-    multiplier`` from the armor; an unroled character gets only ``base``. When
-    the vow dims, the equipment's contribution reverts to base — the character
-    is still wearing the gear, but it's not empowered by the vow.
-    """
-
-    gear_archetype = models.CharField(
-        max_length=20,
-        choices=GearArchetype.choices,
-    )
-    role_archetype = models.CharField(
-        max_length=20,
-        choices=RoleArchetype.choices,
-    )
-    thread_level_multiplier = models.DecimalField(
-        max_digits=5,
-        decimal_places=3,
-        default=0,
-        help_text=(
-            "How much each COVENANT_ROLE thread level adds to the equipment's "
-            "effective contribution. 0 = no scaling (gear works at base). "
-            "The bonus is additive: effective = base * (1 + thread_level * multiplier)."
-        ),
-    )
-
-    class Meta:
-        ordering = ["role_archetype", "gear_archetype"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["gear_archetype", "role_archetype"],
-                name="vow_gear_scaling_unique_archetypes",
-            ),
-        ]
-
-    def __str__(self) -> str:
-        return (
-            f"{self.get_role_archetype_display()} + "
-            f"{self.get_gear_archetype_display()}: "
-            f"×{self.thread_level_multiplier}/level"
         )
 
 
@@ -1023,6 +994,56 @@ class CovenantRoleTechniqueSpecialty(NaturalKeyMixin, SharedMemoryModel):
         )
 
 
+class CovenantRoleDefenseProfileManager(NaturalKeyManager):
+    """Manager for CovenantRoleDefenseProfile with natural key support."""
+
+
+class CovenantRoleDefenseProfile(NaturalKeyMixin, SharedMemoryModel):
+    """Per-role defense style + gear-substitution tuning (#2533, Layer 3).
+
+    One row per ``CovenantRole`` — including sub-roles. This model imposes no
+    parent/sub-role constraint: whether a sub-role's row replaces or extends
+    its parent's defense profile is a resolution-time decision (Task 3's
+    resolution helper), not a model-level restriction.
+
+    ``style`` is the vow's ``DefenseStyle`` (how it defends). Combat resolution
+    reads ``gear_additive_tenths`` when blending the vow's own defense with the
+    character's COMPATIBLE armor soak: 10 (the default) keeps the legacy
+    fully-additive behavior; lower values dial gear soak down for roles whose
+    defense style is meant to substitute for gear rather than stack with it.
+    """
+
+    covenant_role = models.OneToOneField(
+        CovenantRole,
+        on_delete=models.CASCADE,
+        related_name="defense_profile",
+    )
+    style = models.CharField(
+        max_length=20,
+        choices=DefenseStyle.choices,
+        help_text="How this role's vow defends (#2533).",
+    )
+    gear_additive_tenths = models.PositiveIntegerField(
+        default=10,
+        help_text=(
+            "Fraction of COMPATIBLE armor soak that stays additive with the vow's "
+            "own defense; 10 = fully additive (legacy behavior)."
+        ),
+    )
+
+    objects = CovenantRoleDefenseProfileManager()
+
+    class Meta:
+        ordering = ["covenant_role__slug"]
+
+    class NaturalKeyConfig:
+        fields = ["covenant_role"]
+        dependencies = ["covenants.CovenantRole"]
+
+    def __str__(self) -> str:
+        return f"{self.covenant_role.name}: {self.get_style_display()}"
+
+
 class CovenantRoleGiftGrant(SharedMemoryModel):
     """Through model for CovenantRole.granted_gifts (#2022).
 
@@ -1061,7 +1082,11 @@ class CovenantRoleGiftGrant(SharedMemoryModel):
         return f"{self.covenant_role.name} → {self.gift.name} (≥L{self.unlock_thread_level})"
 
 
-class CovenantRoleBonus(SharedMemoryModel):
+class CovenantRoleBonusManager(NaturalKeyManager):
+    """Manager for CovenantRoleBonus with natural key support."""
+
+
+class CovenantRoleBonus(NaturalKeyMixin, SharedMemoryModel):
     """Authored config: per-(role, target) covenant role bonus scaling with the
     holder's character level (#985, Spec D §5.6).
 
@@ -1090,6 +1115,8 @@ class CovenantRoleBonus(SharedMemoryModel):
         ),
     )
 
+    objects = CovenantRoleBonusManager()
+
     class Meta:
         ordering = ["covenant_role", "modifier_target"]
         constraints = [
@@ -1098,6 +1125,10 @@ class CovenantRoleBonus(SharedMemoryModel):
                 name="covenant_role_bonus_unique_role_target",
             ),
         ]
+
+    class NaturalKeyConfig:
+        fields = ["covenant_role", "modifier_target"]
+        dependencies = ["covenants.CovenantRole", "mechanics.ModifierTarget"]
 
     def __str__(self) -> str:
         return (
