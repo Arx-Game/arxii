@@ -27,7 +27,7 @@ from world.progression.types import (
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
-    from world.classes.models import CharacterClass
+    from world.classes.models import CharacterClass, Path
     from world.magic.models import ThreadCrossingThreshold
 
 
@@ -222,6 +222,28 @@ def check_requirements_for_thread_crossing(
         tuple: (all_met: bool, failed_messages: list)
     """
     return _check_requirements(character, threshold, "thread_crossing_threshold")
+
+
+def check_requirements_for_path(
+    character: ObjectDB,
+    path: Path,
+) -> tuple[bool, list[str]]:
+    """Check if a character meets all requirements for a path (#2538).
+
+    Mirrors ``check_requirements_for_unlock`` and
+    ``check_requirements_for_thread_crossing`` but filters on the ``path``
+    FK. Returns ``(True, [])`` when no requirements are authored on the path
+    (fail-open). Used by ``cross_into_path`` (hybrid path entry gate) and
+    ``can_learn_technique`` (cross-path technique learning).
+
+    Args:
+        character: Character to check.
+        path: The ``Path`` to check requirements for.
+
+    Returns:
+        tuple: (all_met: bool, failed_messages: list)
+    """
+    return _check_requirements(character, path, "path")
 
 
 def get_available_unlocks_for_character(
