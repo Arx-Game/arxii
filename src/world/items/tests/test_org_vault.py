@@ -129,13 +129,24 @@ class VaultTransitTests(TestCase):
         self._events = OrgVaultEvent
         self._transits = VaultTransit
 
-    def _pilot_head(self) -> None:
-        character = self.head.character_sheet.character
+    def _pilot(self, persona) -> None:
+        character = persona.character_sheet.character
         character.db_account = self._account_factory()
         character.save(update_fields=["db_account"])
 
-    def _seed_embezzlement(self, mode) -> None:
-        self._category_factory(key="embezzlement", default_mode=mode)
+    def _seed_embezzlement(self, mode):
+        return self._category_factory(key="embezzlement", default_mode=mode)
+
+    def _rule_for(self, persona, category, mode) -> None:
+        """Attach a per-tenure embezzlement rule (overrides the category default)."""
+        from world.consent.factories import (
+            SocialConsentCategoryRuleFactory,
+            SocialConsentPreferenceFactory,
+        )
+
+        tenure = persona.character_sheet.roster_entry.current_tenure
+        preference = SocialConsentPreferenceFactory(tenure=tenure)
+        SocialConsentCategoryRuleFactory(preference=preference, category=category, mode=mode)
 
     def _resolve(self, keep=()):
         from world.items.services.org_vault import resolve_vault_transit
@@ -159,19 +170,61 @@ class VaultTransitTests(TestCase):
         )
         self.assertFalse(self._transits.objects.filter(resolved_at__isnull=True).exists())
 
-    def test_keep_blocked_when_head_is_npc(self) -> None:
+    def test_npc_carrier_never_skims(self) -> None:
         self._seed_embezzlement(self._consent_modes.EVERYONE)
-        with self.assertRaises(ValidationError):  # no piloted head — nobody to consent
+        with self.assertRaises(ValidationError):  # unpiloted carrier has no opt-in path
             self._resolve(keep=[self.stones[0].pk])
 
-    def test_keep_blocked_when_head_consent_blocks(self) -> None:
-        self._pilot_head()
+    def test_keep_blocked_when_deciding_authority_blocks(self) -> None:
+        self._pilot(self.carrier)
+        self._pilot(self.head)
         self._seed_embezzlement(self._consent_modes.ALLOWLIST)  # nobody allowed by default
         with self.assertRaises(ValidationError):
             self._resolve(keep=[self.stones[0].pk])
 
+    def test_npc_head_defers_to_next_piloted_authority(self) -> None:
+        # Unpiloted head; a piloted tier-2 Voice below has opted out — blocked.
+        self._pilot(self.carrier)
+        voice = PersonaFactory()
+        OrganizationMembershipFactory(persona=voice, organization=self.org, rank=2)
+        self._pilot(voice)
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+
+        RosterTenureFactory(roster_entry=RosterEntryFactory(character_sheet=voice.character_sheet))
+        category = self._seed_embezzlement(self._consent_modes.EVERYONE)
+        self._rule_for(voice, category, self._consent_modes.ALLOWLIST)  # the Voice opts out
+        with self.assertRaises(ValidationError):
+            self._resolve(keep=[self.stones[0].pk])
+
+    def test_piloted_head_shields_opted_out_subordinates(self) -> None:
+        # Piloted story-NPC head allows; the opted-out tier-3 carrier peer below is
+        # never consulted — the highest active piloted member answers for the house.
+        self._pilot(self.carrier)
+        self._pilot(self.head)
+        assistant = PersonaFactory()
+        OrganizationMembershipFactory(persona=assistant, organization=self.org, rank=4)
+        self._pilot(assistant)
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=assistant.character_sheet)
+        )
+        category = self._seed_embezzlement(self._consent_modes.EVERYONE)
+        self._rule_for(assistant, category, self._consent_modes.ALLOWLIST)  # opted out, below
+        resolved = self._resolve(keep=[self.stones[0].pk])
+        self.assertEqual(len(resolved), 3)  # allowed — the assistant never had to engage
+
+    def test_carrier_as_topmost_piloted_self_deals(self) -> None:
+        # Unpiloted head, no other piloted members: the carrier IS the highest playable
+        # authority — nobody unwilling is in the loop, the skim is their own story.
+        self._pilot(self.carrier)
+        self._seed_embezzlement(self._consent_modes.ALLOWLIST)  # mode irrelevant — no authority
+        resolved = self._resolve(keep=[self.stones[0].pk])
+        self.assertEqual(len(resolved), 3)
+
     def test_keep_resolves_kept_with_no_vault_event(self) -> None:
-        self._pilot_head()
+        self._pilot(self.carrier)
+        self._pilot(self.head)
         self._seed_embezzlement(self._consent_modes.EVERYONE)
         kept_stone = self.stones[0]
         self._resolve(keep=[kept_stone.pk])

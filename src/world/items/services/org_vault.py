@@ -117,41 +117,58 @@ def _persona_tenure(persona: Persona | None) -> RosterTenure | None:
 
 
 def can_embezzle_from(organization: Organization, carrier_persona: Persona) -> bool:
-    """The head-side half of the embezzlement double-gate (#2540 ruling 2026-07-20).
+    """The authority-side half of the embezzlement double-gate (#2540 rulings 2026-07-20).
 
-    True only when the org has at least one **piloted** leader (an active
-    ``can_manage_ranks`` member with a controlling account) and NO piloted leader's
-    ``embezzlement`` consent blocks the carrier — an NPC-run house can never be
-    embezzled, and one objecting piloted head vetoes. (Strict-all across multiple
-    piloted heads is a PLACEHOLDER semantic — Apostate may relax to any-one-allows.)
-    The carrier-side half of the gate is simply opting in via ``keep_item_ids``.
+    "Who has to deal with this" (Apostate): the **highest-ranked active piloted
+    member** is the consent authority — walk the ladder from the top, skip everything
+    non-piloted, and the first piloted tier's ``embezzlement`` consent decides. A
+    piloted story-NPC head therefore answers for the house even when an opted-out PC
+    Voice serves below (the Voice is never consulted, never has to engage); an
+    unpiloted NPC head defers to the next piloted member down, whose opt-out blocks.
+
+    Boundaries: the carrier must themselves be piloted (NPC collectors never skim —
+    ruled); the carrier is excluded from the authority set (the register protects you
+    from OTHERS), so when the carrier IS the topmost piloted member there is no
+    unwilling player in the loop and the skim is allowed — self-dealing under
+    non-piloted oversight is exactly the story. Ties at the deciding tier resolve
+    strict-all (any objecting co-equal blocks). The carrier-side half of the gate is
+    the explicit opt-in via ``keep_item_ids``.
     """
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.consent.services import consent_blocks_targeting  # noqa: PLC0415
     from world.societies.models import OrganizationMembership  # noqa: PLC0415
 
+    def _piloted(persona: Persona) -> bool:
+        return persona.character_sheet.character.db_account is not None
+
+    if not _piloted(carrier_persona):
+        return False  # NPC collectors never skim
     category = SocialConsentCategory.objects.filter(key="embezzlement").first()
     if category is None:
         return False  # unseeded resolves strict, mirroring theft's fallback
-    carrier_tenure = _persona_tenure(carrier_persona)
-    leaders = OrganizationMembership.objects.filter(
+    memberships = OrganizationMembership.objects.filter(
         organization=organization,
         left_at__isnull=True,
         exiled_at__isnull=True,
-        rank__can_manage_ranks=True,
-    ).select_related("persona__character_sheet__character__db_account")
-    piloted_head_seen = False
-    for membership in leaders:
-        head = membership.persona
-        if head.character_sheet.character.db_account is None:
-            continue  # non-piloted head — no one to consent
-        piloted_head_seen = True
-        head_tenure = _persona_tenure(head)
-        if head_tenure is None or consent_blocks_targeting(
-            owner_tenure=head_tenure, category=category, actor_tenure=carrier_tenure
+    ).select_related("rank", "persona__character_sheet__character__db_account")
+    authorities = [
+        membership
+        for membership in memberships
+        if _piloted(membership.persona) and membership.persona_id != carrier_persona.pk
+    ]
+    if not authorities:
+        return True  # the carrier is the topmost piloted stakeholder — nobody unwilling
+    deciding_tier = min(membership.rank.tier for membership in authorities)
+    carrier_tenure = _persona_tenure(carrier_persona)
+    for membership in authorities:
+        if membership.rank.tier != deciding_tier:
+            continue  # below the deciding tier — never consulted, never has to engage
+        authority_tenure = _persona_tenure(membership.persona)
+        if authority_tenure is None or consent_blocks_targeting(
+            owner_tenure=authority_tenure, category=category, actor_tenure=carrier_tenure
         ):
             return False
-    return piloted_head_seen
+    return True
 
 
 @transaction.atomic
