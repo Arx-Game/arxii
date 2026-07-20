@@ -95,8 +95,7 @@ def validate_boon_ask(*, ask: BoonAsk, target_persona: Persona | None) -> None:
     elif ask.kind == BoonKind.HELD_ITEM:
         _validate_held_item_ask(ask, target_persona.character_sheet)
     elif ask.kind == BoonKind.VAULT_ITEM:
-        msg = "Vault boons await the org vault system."
-        raise ValidationError(msg)
+        _validate_vault_item_ask(ask, target_persona)
     elif not ask.deed_text.strip():
         msg = "A deed boon needs the deed spelled out."
         raise ValidationError(msg)
@@ -124,6 +123,29 @@ def _validate_held_item_ask(ask: BoonAsk, target_sheet: CharacterSheet) -> None:
     ).exists()
     if not held:
         msg = "They do not hold that item."
+        raise ValidationError(msg)
+
+
+def _validate_vault_item_ask(ask: BoonAsk, target_persona: Persona) -> None:
+    """Dial-1 eligibility for a vault ask: the target must hold withdraw authority.
+
+    A granted vault boon is the target *exercising* their org-vault authority on the
+    asker's behalf (#2540 Layer 4) — so the ask is only eligible when the named item
+    sits in a vault the target can withdraw from.
+    """
+    from world.items.org_vault_models import VaultHolding  # noqa: PLC0415
+    from world.items.services.org_vault import can_access_vault  # noqa: PLC0415
+
+    if ask.item_instance_id is None:
+        msg = "A vault boon names the item asked for."
+        raise ValidationError(msg)
+    holding = (
+        VaultHolding.objects.filter(item_instance_id=ask.item_instance_id)
+        .select_related("vault")
+        .first()
+    )
+    if holding is None or not can_access_vault(holding.vault, target_persona):
+        msg = "They cannot draw that from any vault."
         raise ValidationError(msg)
 
 
@@ -199,11 +221,41 @@ def fulfill_boon(boon: Boon) -> bool:
             from_purse=get_or_create_purse(target_sheet),
             to_purse=get_or_create_purse(asker_sheet),
         )
-    # HELD_ITEM / VAULT_ITEM fulfillment: follow-up slices (see #2540).
+    elif boon.kind == BoonKind.VAULT_ITEM and boon.item_instance_id is not None:
+        _fulfill_vault_item(boon, request)
+    # HELD_ITEM fulfillment: follow-up slice (needs the ownership-transfer seam, #2540).
 
     boon.fulfilled_at = timezone.now()
     boon.save(update_fields=["fulfilled_at"])
     return True
+
+
+def _fulfill_vault_item(boon: Boon, request: SceneActionRequest) -> None:
+    """The granted vault boon: the target withdraws the item to the asker's hands.
+
+    Routes through the vault's own audited withdraw service — the target is the
+    authority, the asker the recipient. Raises ``ValidationError`` (surfaced by the
+    resolver's unfulfillable branch) if the item left the vault or the target lost
+    authority between ask and accept.
+    """
+    from world.items.org_vault_models import VaultHolding  # noqa: PLC0415
+    from world.items.services.org_vault import withdraw_item_from_vault  # noqa: PLC0415
+
+    holding = (
+        VaultHolding.objects.filter(item_instance_id=boon.item_instance_id)
+        .select_related("vault__organization")
+        .first()
+    )
+    if holding is None:
+        msg = "The asked item is no longer in a vault."
+        raise ValidationError(msg)
+    withdraw_item_from_vault(
+        organization=holding.vault.organization,
+        persona=request.target_persona,
+        item_instance=boon.item_instance,
+        to_persona=request.initiator_persona,
+        reason="boon",
+    )
 
 
 def _resolve_boon(request: SceneActionRequest, result: EnhancedSceneActionResult) -> None:

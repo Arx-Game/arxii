@@ -3749,6 +3749,19 @@ holder is never notified a claim exists.
     `stones_delivered` / `stones_lost`. Currency reaches this via a lazy import (FK direction
     preserved — currency stays free of an items dependency at load). Remaining sub-slices: the
     crafting draw off `OrgGemStock`, the `game_clock` scheduling, and the minister seam (#2239).
+- **Org vault (#2540 Layer 4, `org_vault_models.py` + `services/org_vault.py`):** logical org
+  custody of items — the ratified "model B with model D's access surface". `OrganizationVault`
+  (OneToOne org, get-or-create; `withdraw_rank_max`, the `spend_rank_max` twin),
+  `VaultHolding` (vault + OneToOne `ItemInstance` + `deposited_by`/`deposited_at`; created on
+  deposit, deleted on withdrawal), `OrgVaultEvent` (append-only audit — the `CurrencyTransfer`
+  analogue for items; how embezzlement gets discovered). Services (sole mutators):
+  `get_or_create_org_vault`, `can_access_vault` (active membership at tier <=
+  `withdraw_rank_max`), `deposit_item_to_vault` (any active member, must hold the item; holder
+  goes null + `game_object` dematerialized — custody is the row, not the prop),
+  `withdraw_item_from_vault` (rank-gated; `to_persona` directs the item elsewhere — the
+  VAULT_ITEM boon shape, its first live caller). WHERE deposit/withdraw may be performed (bank
+  room / bank-access room feature) is a follow-up action-layer prerequisite gate; distinct from
+  the physical room-feature VAULT (#2179), which secures loose items in a room.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)

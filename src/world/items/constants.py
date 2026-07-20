@@ -206,3 +206,10 @@ class ClaimStatus(models.TextChoices):
     RECOVERED_LAWFUL = "recovered_lawful", "Recovered (Lawful)"
     RECOVERED_TAKEN = "recovered_taken", "Recovered (Taken Back)"
     RELEASED = "released", "Released"
+
+
+class OrgVaultEventKind(models.TextChoices):
+    """Org-vault audit event kinds (#2540 Layer 4)."""
+
+    DEPOSIT = "deposit", "Deposit"
+    WITHDRAW = "withdraw", "Withdraw"

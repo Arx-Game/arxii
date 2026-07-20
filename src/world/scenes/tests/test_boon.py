@@ -134,9 +134,10 @@ class BoonAskValidationTests(TestCase):
         with self.assertRaises(ValidationError):
             self._ask(kind=BoonKind.HELD_ITEM, item_instance_id=999999)
 
-    def test_vault_ask_is_stubbed_until_the_org_vault(self) -> None:
+    def test_vault_ask_requires_target_withdraw_authority(self) -> None:
+        # No vaulted item / no authority — ineligible.
         with self.assertRaises(ValidationError):
-            self._ask(kind=BoonKind.VAULT_ITEM)
+            self._ask(kind=BoonKind.VAULT_ITEM, item_instance_id=999999)
 
     def test_deed_ask_requires_text(self) -> None:
         with self.assertRaises(ValidationError):
@@ -247,6 +248,34 @@ class BoonResolverE2ETests(TestCase):
         self._dispatch(success=True, amount=50)
         self.assertEqual(_balance(self.asker.character_sheet), 100)
         self.assertEqual(AffectionShift.objects.count(), 2)  # per-Boon dedup — both landed
+
+    def test_granted_vault_boon_withdraws_to_the_asker(self) -> None:
+        from world.items.factories import ItemInstanceFactory
+        from world.items.org_vault_models import VaultHolding
+        from world.items.services.org_vault import deposit_item_to_vault
+        from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+
+        org = OrganizationFactory()
+        OrganizationMembershipFactory(persona=self.npc_target, organization=org, rank=1)
+        item = ItemInstanceFactory(holder_character_sheet=self.npc_target.character_sheet)
+        deposit_item_to_vault(organization=org, persona=self.npc_target, item_instance=item)
+
+        with patch(
+            "world.scenes.action_services.start_action_resolution",
+            return_value=_success_resolution(success=True),
+        ):
+            request = create_action_request(
+                scene=self.scene,
+                initiator_persona=self.asker,
+                target_persona=self.npc_target,
+                action_key="boon",
+                boon=BoonAsk(kind=BoonKind.VAULT_ITEM, item_instance_id=item.pk),
+            )
+        item.refresh_from_db()
+        self.assertEqual(item.holder_character_sheet, self.asker.character_sheet)
+        self.assertFalse(VaultHolding.objects.exists())  # left the vault, audited
+        request.boon.refresh_from_db()
+        self.assertIsNotNone(request.boon.fulfilled_at)
 
 
 class BoonSeedTests(TestCase):

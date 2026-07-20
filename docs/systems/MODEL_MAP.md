@@ -3768,6 +3768,8 @@
   - pending_rare_find <- items.PendingRareFind
   - ware_listing <- items.WareListing
   - market_sales <- items.MarketSale
+  - vault_holding <- items.VaultHolding
+  - org_vault_events <- items.OrgVaultEvent
   - reclamation_claims <- items.ReclamationClaim
   - bequests <- estates.Bequest
   - estate_claims <- estates.EstateClaim
@@ -4045,6 +4047,25 @@
   - buyer_persona -> scenes.Persona [FK]
   - seller_persona -> scenes.Persona [FK] (nullable)
   - item_instance -> items.ItemInstance [FK] (nullable)
+
+### OrganizationVault
+**Foreign Keys:**
+  - organization -> societies.Organization [OneToOne]
+**Pointed to by:**
+  - holdings <- items.VaultHolding
+  - events <- items.OrgVaultEvent
+
+### VaultHolding
+**Foreign Keys:**
+  - vault -> items.OrganizationVault [FK]
+  - item_instance -> items.ItemInstance [OneToOne]
+  - deposited_by -> scenes.Persona [FK] (nullable)
+
+### OrgVaultEvent
+**Foreign Keys:**
+  - vault -> items.OrganizationVault [FK]
+  - item_instance -> items.ItemInstance [FK] (nullable)
+  - actor_persona -> scenes.Persona [FK] (nullable)
 
 ### ReclamationClaim
 **Foreign Keys:**
@@ -7030,6 +7051,8 @@
   - crafting_service_offers <- items.CraftingServiceOffer
   - market_purchases <- items.MarketSale
   - market_sales <- items.MarketSale
+  - vault_deposits <- items.VaultHolding
+  - org_vault_events <- items.OrgVaultEvent
   - hosted_events <- events.EventHost
   - event_invitations <- events.EventInvitation
   - invitations_sent <- events.EventInvitation
@@ -7602,6 +7625,7 @@
   - captives <- captivity.Captivity
   - gem_stocks <- items.OrgGemStock
   - hosted_stalls <- items.MarketStall
+  - item_vault <- items.OrganizationVault
   - event_invitations <- events.EventInvitation
   - covenant <- covenants.Covenant
   - bequests_received <- estates.Bequest
