@@ -6,6 +6,7 @@ the minimal level-write + cache invalidation on a character's primary class leve
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING
 
 from evennia.objects.models import ObjectDB
@@ -85,9 +86,21 @@ def cross_into_path(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
     Majora crossing (``cross_threshold``, levels 5/10/15/20) and the Ritual of the
     Durance POTENTIAL-stage semi-crossing (level 3, no Audere Majora). Returns the
     ``PathMagicGrantResult``.
+
+    Raises ``PathRequirementsNotMet`` (#2538) when the path has authored
+    TraitRequirements the character does not meet. The semi-crossing resolver
+    catches this for a non-breaking level-only advance; Audere Majora lets it
+    propagate, rolling back the crossing.
     """
     from world.magic.services.path_magic import grant_path_magic
     from world.progression.models import CharacterPathHistory
+    from world.progression.services.spends import check_requirements_for_path
+
+    met, failed_messages = check_requirements_for_path(sheet.character, path)
+    if not met:
+        from world.progression.exceptions import PathRequirementsNotMet
+
+        raise PathRequirementsNotMet(path_name=path.name, failed_messages=failed_messages)
 
     CharacterPathHistory.objects.create(character=sheet.character, path=path)
     return grant_path_magic(sheet, path)
@@ -294,15 +307,27 @@ def _maybe_semi_cross_into_potential_path(
     gift+techniques through the shared ``cross_into_path`` seam — the same machinery
     a crossing uses. No-op when the advance stays within a stage or no path was
     declared.
+
+    If the declared path has authored TraitRequirements the inductee does not meet
+    (#2538), ``cross_into_path`` raises ``PathRequirementsNotMet`` — caught here for
+    a non-breaking level-only advance (the level still increases, just without the
+    path switch). This mirrors the existing non-breaking behavior when no path is
+    declared.
     """
     from world.classes.services import stage_for_level
+    from world.progression.exceptions import PathRequirementsNotMet
 
     new_stage = stage_for_level(target_level)
     if new_stage == stage_for_level(level_before):
         return
     new_path = _resolve_declared_advanced_path(inductee, participant, new_stage)
     if new_path is not None:
-        cross_into_path(inductee, new_path)
+        # Non-breaking: if the path has unmet TraitRequirements (#2538), the level
+        # advance still commits, just without the path switch. The eligible-paths
+        # selector should have filtered this path out already, but the gate in
+        # cross_into_path is the backstop.
+        with contextlib.suppress(PathRequirementsNotMet):
+            cross_into_path(inductee, new_path)
 
 
 def _assert_unlock_purchased(character: ObjectDB, unlock: ClassLevelUnlock) -> None:  # noqa: OBJECTDB_PARAM
