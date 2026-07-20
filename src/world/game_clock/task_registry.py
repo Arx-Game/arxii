@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import Enum, IntEnum
 import logging
 
 from django.utils import timezone
@@ -20,6 +20,29 @@ class FrequencyType(Enum):
     IC = "ic"
 
 
+class CronPhase(IntEnum):
+    """Execution-order bands for tasks that share a tick (#2609).
+
+    Ordering used to be an emergent property of ``register_task`` call order —
+    two lines hundreds apart in ``tasks.py``, with nothing saying the
+    relationship was load-bearing. A phase states the intent at the call site.
+
+    Bands are spaced so new ones can be inserted without renumbering. Tasks
+    that do not care stay in ``DEFAULT``; sorting is stable, so within a band
+    registration order still decides.
+
+    The money bands encode the income-before-upkeep ruling (see
+    ``docs/adr/0150-income-lands-before-upkeep.md``): a player experiences a
+    smaller effective paycheck, never an unpreventable condition slide.
+    """
+
+    SNAPSHOT = 100  # pre-income baselines — read balances before anything moves
+    ECONOMY = 200  # weekly_rollover: income, wages, debt service, contracts
+    UPKEEP = 300  # building upkeep and personal recurring drains
+    DEFAULT = 500  # everything with no ordering opinion
+    CLEANUP = 900  # sweeps, decay, garbage collection
+
+
 @dataclass(frozen=True)
 class CronDefinition:
     task_key: str
@@ -32,6 +55,11 @@ class CronDefinition:
     # last run — instead of the rolling interval. 0=Monday … 6=Sunday.
     anchor_weekday: int | None = None
     anchor_hour_utc: int = 0
+    # Execution-order band within a single run_due_tasks pass (#2609). This is
+    # the ordering contract; registration order is only a tiebreak within a
+    # band. Phases order tasks that are due *together* — a task must also share
+    # an anchor with its neighbours for the ordering to ever come into play.
+    phase: CronPhase = CronPhase.DEFAULT
 
 
 # Module-level registry populated once at server startup via register_all_tasks().
@@ -59,12 +87,16 @@ def clear_registry() -> None:
 def run_due_tasks(*, ic_now: datetime | None = None) -> list[str]:
     """Check all registered tasks and run any that are due.
 
+    Tasks execute in ``CronPhase`` order (#2609). The sort is stable, so tasks
+    sharing a phase keep registration order — the pre-#2609 behaviour for every
+    task that has not opted into a band.
+
     Returns list of task_keys that were executed.
     """
     now = timezone.now()
     executed: list[str] = []
 
-    for task_def in _registry:
+    for task_def in sorted(_registry, key=lambda task: task.phase):
         record, _ = ScheduledTaskRecord.objects.get_or_create(
             task_key=task_def.task_key,
         )
