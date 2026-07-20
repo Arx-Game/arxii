@@ -139,3 +139,124 @@ class ApplyIngameTimeConditionTests(EvenniaTestCase):
 
         self.assertTrue(result.success)
         self.assertIsNone(result.instance.expires_at)
+
+
+class LazyExpiryTests(EvenniaTestCase):
+    """Tests for the lazy IC-time expiry check in get_active_conditions."""
+
+    def test_expired_condition_removed_on_read(self):
+        """An INGAME_TIME condition past its expires_at is removed when
+        get_active_conditions is called."""
+        from world.conditions.constants import DurationType
+        from world.conditions.factories import (
+            ConditionInstanceFactory,
+            ConditionTemplateFactory,
+        )
+        from world.conditions.models import ConditionInstance
+        from world.conditions.services import get_active_conditions
+        from world.scenes.factories import PersonaFactory
+
+        persona = PersonaFactory()
+        target = persona.character_sheet.character
+        tmpl = ConditionTemplateFactory(
+            name="Expired Poison",
+            default_duration_type=DurationType.INGAME_TIME,
+            default_duration_value=24,
+        )
+        # Set expires_at in the past
+        inst = ConditionInstanceFactory(
+            target=target,
+            condition=tmpl,
+            rounds_remaining=None,
+            expires_at=timezone.now() - timedelta(hours=1),
+        )
+
+        result = get_active_conditions(target)
+
+        self.assertFalse(ConditionInstance.objects.filter(pk=inst.pk).exists())
+        self.assertNotIn(inst, result)
+
+    def test_non_expired_condition_survives_read(self):
+        """An INGAME_TIME condition with a future expires_at survives."""
+        from world.conditions.constants import DurationType
+        from world.conditions.factories import (
+            ConditionInstanceFactory,
+            ConditionTemplateFactory,
+        )
+        from world.conditions.services import get_active_conditions
+        from world.scenes.factories import PersonaFactory
+
+        persona = PersonaFactory()
+        target = persona.character_sheet.character
+        tmpl = ConditionTemplateFactory(
+            name="Active Curse",
+            default_duration_type=DurationType.INGAME_TIME,
+            default_duration_value=24,
+        )
+        inst = ConditionInstanceFactory(
+            target=target,
+            condition=tmpl,
+            rounds_remaining=None,
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+
+        result = get_active_conditions(target)
+
+        self.assertIn(inst, result)
+
+    def test_no_expires_at_conditions_not_touched(self):
+        """Conditions with expires_at=None (ROUNDS, SCENE, etc.) are not
+        affected by the lazy sweep."""
+        from world.conditions.constants import DurationType
+        from world.conditions.factories import (
+            ConditionInstanceFactory,
+            ConditionTemplateFactory,
+        )
+        from world.conditions.services import get_active_conditions
+        from world.scenes.factories import PersonaFactory
+
+        persona = PersonaFactory()
+        target = persona.character_sheet.character
+        rounds_tmpl = ConditionTemplateFactory(
+            name="Bleeding",
+            default_duration_type=DurationType.ROUNDS,
+            default_duration_value=3,
+        )
+        inst = ConditionInstanceFactory(
+            target=target,
+            condition=rounds_tmpl,
+            rounds_remaining=3,
+            expires_at=None,
+        )
+
+        result = get_active_conditions(target)
+
+        self.assertIn(inst, result)
+
+    def test_afk_safety_condition_lingers_until_read(self):
+        """An expired INGAME_TIME condition lingers in DB until
+        get_active_conditions is called (not swept by time alone)."""
+        from world.conditions.constants import DurationType
+        from world.conditions.factories import (
+            ConditionInstanceFactory,
+            ConditionTemplateFactory,
+        )
+        from world.conditions.models import ConditionInstance
+        from world.scenes.factories import PersonaFactory
+
+        persona = PersonaFactory()
+        target = persona.character_sheet.character
+        tmpl = ConditionTemplateFactory(
+            name="Lingering Poison",
+            default_duration_type=DurationType.INGAME_TIME,
+            default_duration_value=24,
+        )
+        inst = ConditionInstanceFactory(
+            target=target,
+            condition=tmpl,
+            rounds_remaining=None,
+            expires_at=timezone.now() - timedelta(hours=1),
+        )
+
+        # Without calling get_active_conditions, the instance still exists
+        self.assertTrue(ConditionInstance.objects.filter(pk=inst.pk).exists())

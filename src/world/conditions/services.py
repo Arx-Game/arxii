@@ -196,6 +196,32 @@ def get_active_conditions(
     if condition:
         qs = qs.filter(condition=condition)
 
+    # #2537: lazy IC-time expiry. Remove any instances whose expires_at has
+    # passed before returning them as "active." Removal is always safe
+    # (CONDITION_REMOVED event + deferred-death resolution fire via the
+    # teardown helper). Uses _teardown_removed_condition_instance directly
+    # (not remove_condition) to avoid re-entrancy: remove_condition calls
+    # get_condition_instance → get_active_conditions, which would re-enter
+    # this function. The instance is already in hand, so the direct teardown
+    # (the same path remove_conditions_by_category and clear_all_conditions
+    # use) is correct and avoids the loop.
+    instances = list(qs)
+    if instances:
+        now = timezone.now()
+        expired = [
+            inst for inst in instances if inst.expires_at is not None and now >= inst.expires_at
+        ]
+        if expired:
+            for inst in expired:
+                _teardown_removed_condition_instance(inst.target, inst)
+            # Re-query to exclude removed instances. pk__in is already filtered
+            # (derived from the post-filter instances list above), so the
+            # category/condition/suppressed filters don't need re-applying.
+            surviving_pks = [inst.pk for inst in instances if inst not in expired]
+            qs = ConditionInstance.objects.filter(pk__in=surviving_pks).select_related(
+                "condition", "condition__category", "current_stage"
+            )
+
     return qs
 
 
