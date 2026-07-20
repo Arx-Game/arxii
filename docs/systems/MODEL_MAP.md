@@ -3934,6 +3934,11 @@
   - income_stream -> currency.OrgIncomeStream [FK]
   - gem_instance -> items.ItemInstance [OneToOne]
 
+### OrgGemStock
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - tier -> items.MaterialCategory [FK]
+
 ### MarketSquare
 **Foreign Keys:**
   - area -> areas.Area [FK]
@@ -7508,6 +7513,7 @@
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - captives <- captivity.Captivity
+  - gem_stocks <- items.OrgGemStock
   - hosted_stalls <- items.MarketStall
   - event_invitations <- events.EventInvitation
   - covenant <- covenants.Covenant
