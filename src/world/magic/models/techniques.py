@@ -553,6 +553,14 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         """
         return list(self.target_prerequisites.all())
 
+    @cached_property
+    def cached_function_tags(self) -> list:
+        """Fine-grained TechniqueFunction labels for this technique (#2443).
+
+        Supports Prefetch(to_attr=). To invalidate: ``del instance.cached_function_tags``.
+        """
+        return list(self.function_tags.all())
+
     def has_property(self, name: str) -> bool:
         """Return True if this technique carries the named Property tag."""
         return self.properties.filter(name=name).exists()
