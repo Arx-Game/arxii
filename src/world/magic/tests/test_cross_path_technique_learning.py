@@ -88,14 +88,14 @@ class CanLearnTechniqueCrossPathTests(TestCase):
         sheet = self._setup_character_on_path(path_a, trait=trait_c, trait_value=40)
         self.assertTrue(can_learn_technique(sheet, technique))
 
-    def test_cross_path_allowed_when_allowed_path_has_no_requirements(self):
-        """If an allowed path has no authored requirements, cross-learning is open (fail-open)."""
+    def test_cross_path_blocked_when_allowed_path_has_no_requirements(self):
+        """A path with no authored requirements does NOT open cross-learning."""
         path_a = PathFactory()
         path_b = PathFactory()
-        # No TraitRequirements on path_b — fail-open means anyone qualifies
+        # No TraitRequirements on path_b — allowed_paths restriction stands
         technique = self._make_technique_with_style([path_b])
         sheet = self._setup_character_on_path(path_a)
-        self.assertTrue(can_learn_technique(sheet, technique))
+        self.assertFalse(can_learn_technique(sheet, technique))
 
     def test_current_path_still_works(self):
         """A character on a path in allowed_paths can learn without cross-path check."""

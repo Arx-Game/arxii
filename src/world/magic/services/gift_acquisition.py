@@ -83,11 +83,17 @@ def can_learn_technique(learner: CharacterSheet, technique: Technique) -> bool:
         return True
     # Cross-path learning: check if the character meets any allowed path's
     # TraitRequirements (#2538). Reuses the same requirement rows authored
-    # for hybrid path entry gating.
+    # for hybrid path entry gating. Only applies when the allowed path has
+    # authored requirements — a path with no requirements is NOT open to
+    # cross-learning (its allowed_paths restriction stands as-is).
+    from world.progression.models import TraitRequirement  # noqa: PLC0415
     from world.progression.services.spends import check_requirements_for_path  # noqa: PLC0415
 
     for allowed_path in allowed:
         if allowed_path.pk == path.pk:
+            continue
+        # Only cross-learn via paths that have authored requirements
+        if not TraitRequirement.objects.filter(path=allowed_path, is_active=True).exists():
             continue
         met, _ = check_requirements_for_path(learner.character, allowed_path)
         if met:
