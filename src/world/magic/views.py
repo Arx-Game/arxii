@@ -39,6 +39,7 @@ from world.magic.constants import (
     RitualExecutionKind,
     SuggestionStatus,
     TargetKind,
+    is_ghost_tutor_ritual,
     is_imbuing_ritual,
 )
 from world.magic.exceptions import (
@@ -1097,6 +1098,30 @@ class RitualPerformView(APIView):
             )
         return None
 
+    @staticmethod
+    def _resolve_ghost_tutor_kwargs(sheet: CharacterSheet, kwargs: dict) -> Response | None:  # noqa: ARG004
+        """Resolve the ghost-tutor ``tradition_id`` kwarg in place.
+
+        Returns a 400 ``Response`` on invalid input, else ``None`` (with
+        ``kwargs["tradition"]`` resolved to an active ``Tradition`` instance).
+        """
+        from world.magic.models import Tradition  # noqa: PLC0415
+
+        tradition_id = kwargs.pop("tradition_id", None)
+        if not isinstance(tradition_id, int):
+            return Response(
+                {"detail": "Summoning a ghost tutor requires a tradition."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        tradition = Tradition.objects.filter(pk=tradition_id, is_active=True).first()
+        if tradition is None:
+            return Response(
+                {"detail": "No active tradition with that id."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        kwargs["tradition"] = tradition
+        return None
+
     def post(self, request: Request) -> Response:
         """Validate, resolve, and dispatch the ritual; return a result payload."""
         serializer = RitualPerformRequestSerializer(
@@ -1119,6 +1144,15 @@ class RitualPerformView(APIView):
         )
         if imbuing:
             error = self._resolve_imbuing_kwargs(sheet, kwargs)
+            if error is not None:
+                return error
+
+        # Ghost-tutor summoning takes a Tradition. The primitive-only kwargs
+        # surface carries ``tradition_id``; resolve here (#2460).
+        if is_ghost_tutor_ritual(
+            name=ritual.name, service_function_path=ritual.service_function_path
+        ):
+            error = self._resolve_ghost_tutor_kwargs(sheet, kwargs)
             if error is not None:
                 return error
 
