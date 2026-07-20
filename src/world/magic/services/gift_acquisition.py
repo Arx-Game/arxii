@@ -60,6 +60,12 @@ def can_learn_technique(learner: CharacterSheet, technique: Technique) -> bool:
     against the learner's current path. A character with no path
     history (pre-awakening / NPCs) is unrestricted.
 
+    Cross-path learning (#2538): if the learner's current path is NOT in
+    ``allowed_paths``, checks whether the learner meets the TraitRequirements
+    of any path that IS in ``allowed_paths``. If so, the technique is
+    learnable — the character has qualified via stat/skill investment even
+    without taking that path. Derive-on-read (ADR-0014).
+
     Args:
         learner: The character sheet wanting to learn the technique.
         technique: The technique being learned.
@@ -73,7 +79,20 @@ def can_learn_technique(learner: CharacterSheet, technique: Technique) -> bool:
     allowed = technique.style.cached_allowed_paths
     if not allowed:
         return True
-    return path in allowed
+    if path in allowed:
+        return True
+    # Cross-path learning: check if the character meets any allowed path's
+    # TraitRequirements (#2538). Reuses the same requirement rows authored
+    # for hybrid path entry gating.
+    from world.progression.services.spends import check_requirements_for_path  # noqa: PLC0415
+
+    for allowed_path in allowed:
+        if allowed_path.pk == path.pk:
+            continue
+        met, _ = check_requirements_for_path(learner.character, allowed_path)
+        if met:
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
