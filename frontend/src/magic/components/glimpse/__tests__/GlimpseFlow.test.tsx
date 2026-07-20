@@ -79,6 +79,28 @@ const SENSORY_TASTE: GlimpseTagOption = {
   suggested_distinctions: [],
 };
 
+const TRIGGER_TRAUMA: GlimpseTagOption = {
+  id: 10,
+  axis: 'TRIGGER',
+  name: 'Trauma',
+  slug: 'trauma',
+  description: 'A shattering event cracked you open.',
+  example: 'The wound never fully closed.',
+  sort_order: 1,
+  suggested_distinctions: [],
+};
+
+const TRIGGER_PATRON: GlimpseTagOption = {
+  id: 11,
+  axis: 'TRIGGER',
+  name: 'Patron Chose You',
+  slug: 'patron-chose-you',
+  description: 'A god, demon, or force selected you.',
+  example: 'Something ancient turned its gaze upon you.',
+  sort_order: 2,
+  suggested_distinctions: [],
+};
+
 const ALL_TAGS: GlimpseTagOption[] = [
   TONE_WONDER,
   TONE_DREAD,
@@ -265,5 +287,36 @@ describe('GlimpseFlow', () => {
     await user.keyboard('[Space]');
 
     expect(onChangeAxis).toHaveBeenCalledWith('TONE', [1]);
+  });
+
+  it('renders the Trigger step as a single-select accordion item', () => {
+    render(<GlimpseFlow {...makeProps({ tags: [...ALL_TAGS, TRIGGER_TRAUMA, TRIGGER_PATRON] })} />);
+
+    expect(screen.getByText('Trigger')).toBeInTheDocument();
+    expect(screen.getByText('Trauma')).toBeInTheDocument();
+  });
+
+  it('replaces the selection when a second Trigger card is clicked (single-select)', async () => {
+    const user = userEvent.setup();
+    const onChangeAxis = vi.fn();
+    render(
+      <GlimpseFlow
+        {...makeProps({
+          tags: [...ALL_TAGS, TRIGGER_TRAUMA, TRIGGER_PATRON],
+          selectedTagIds: [10],
+          onChangeAxis,
+        })}
+      />
+    );
+
+    await user.click(screen.getByText('Patron Chose You'));
+
+    expect(onChangeAxis).toHaveBeenCalledWith('TRIGGER', [11]);
+  });
+
+  it('hides the Trigger step when no TRIGGER tags exist in the catalog', () => {
+    render(<GlimpseFlow {...makeProps()} />);
+
+    expect(screen.queryByText('Trigger')).not.toBeInTheDocument();
   });
 });
