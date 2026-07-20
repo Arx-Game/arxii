@@ -40,6 +40,7 @@ class ConditionType(models.TextChoices):
     RESONANCE_MIN = "resonance_min", "Resonance threshold"
     DISTINCTION = "distinction", "Distinction"
     RENOWN_MIN = "renown_min", "Fame tier"
+    LEGEND_DEED = "legend_deed", "Has common-knowledge deeds"
 
 
 class ConditionConnector(models.TextChoices):

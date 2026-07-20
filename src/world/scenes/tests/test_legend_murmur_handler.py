@@ -102,3 +102,20 @@ class CacheInvalidationTests(TestCase):
         self.assertIn("legend_murmur", persona.__dict__)
         persona.save()
         self.assertNotIn("legend_murmur", persona.__dict__)
+
+
+class MutationInvalidationTests(TestCase):
+    def test_spread_deed_clears_persona_cache(self) -> None:
+        from world.societies.services import spread_deed
+
+        persona = PersonaFactory()
+        deed = LegendEntryFactory(persona=persona, base_value=10, is_active=True)
+        # Prime the cache
+        _ = persona.legend_murmur.murmurable_deeds
+        self.assertIn("legend_murmur", persona.__dict__)
+        # Spread the deed — should clear the cache
+        spread_deed(deed=deed, spreader_persona=PersonaFactory(), value_added=40)
+        # The cache should be cleared on the persona instance
+        self.assertNotIn("legend_murmur", persona.__dict__)
+        # And the fresh query should see the now-common-knowledge deed
+        self.assertTrue(persona.legend_murmur.has_murmurable_deeds)

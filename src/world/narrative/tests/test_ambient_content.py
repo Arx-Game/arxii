@@ -102,6 +102,19 @@ class CompileLineFilterTests(TestCase):
         compiled = compile_line_filter(line)
         self.assertEqual(compiled["value"]["perceiving_society"], "The Silver Court")
 
+    def test_legend_deed_condition_compiles_to_has_legend_deeds_op(self) -> None:
+        line = AmbientEmoteLineFactory(bystander_body="A murmur.")
+        AmbientEmoteConditionFactory(
+            line=line,
+            condition_type=ConditionType.LEGEND_DEED,
+            species=None,
+        )
+        compiled = compile_line_filter(line)
+        self.assertEqual(
+            compiled,
+            {"path": "character", "op": "has_legend_deeds", "value": None},
+        )
+
     def test_two_conditions_and_connector_compiles_to_and_tree(self) -> None:
         species = SpeciesFactory(name="Infernal")
         resonance = ResonanceFactory(name="Abyssal")
@@ -229,3 +242,150 @@ class DeliverAmbientGroupTests(TestCase):
             ).values_list("message__body", flat=True)
         )
         self.assertEqual(msgs, ["In the group."])
+
+
+class FormatDeedListTests(TestCase):
+    def test_empty_returns_empty_string(self) -> None:
+        from world.narrative.ambient_content import _format_deed_list
+
+        self.assertEqual(_format_deed_list([]), "")
+
+    def test_single_title(self) -> None:
+        from world.narrative.ambient_content import _format_deed_list
+
+        self.assertEqual(_format_deed_list(["Slew the Emperor"]), "Slew the Emperor")
+
+    def test_two_titles_joined_with_and(self) -> None:
+        from world.narrative.ambient_content import _format_deed_list
+
+        self.assertEqual(
+            _format_deed_list(["Slew the Emperor", "Broke the Seal"]),
+            "Slew the Emperor and Broke the Seal",
+        )
+
+    def test_three_titles_oxford_comma(self) -> None:
+        from world.narrative.ambient_content import _format_deed_list
+
+        self.assertEqual(
+            _format_deed_list(["A", "B", "C"]),
+            "A, B, and C",
+        )
+
+
+class RenderBodyTests(TestCase):
+    def test_static_body_passes_through_unchanged(self) -> None:
+        from world.narrative.ambient_content import _render_body
+
+        room, _profile = _room()
+        character = _character(room)
+        body = "A chill wind blows through the room."
+        self.assertEqual(_render_body(body, character), body)
+
+    def test_substitutes_name_placeholder(self) -> None:
+        from world.narrative.ambient_content import _render_body
+
+        room, _profile = _room()
+        character = _character(room)
+        persona = character.character_sheet.primary_persona
+        body = "The crowd turns to look at {name}."
+        self.assertEqual(
+            _render_body(body, character), f"The crowd turns to look at {persona.name}."
+        )
+
+    def test_substitutes_deeds_placeholder(self) -> None:
+        from world.narrative.ambient_content import _render_body
+        from world.societies.factories import (
+            LegendEntryFactory,
+            LegendSpreadFactory,
+        )
+
+        room, _profile = _room()
+        character = _character(room)
+        persona = character.character_sheet.primary_persona
+        deed = LegendEntryFactory(
+            persona=persona, base_value=10, is_active=True, title="Slew the Emperor"
+        )
+        LegendSpreadFactory(legend_entry=deed, value_added=40)
+        body = "Word has it: {name}, {deeds}."
+        result = _render_body(body, character)
+        self.assertIn(persona.name, result)
+        self.assertIn("Slew the Emperor", result)
+
+    def test_no_sheet_returns_body_unchanged(self) -> None:
+        from world.narrative.ambient_content import _render_body
+
+        character = CharacterFactory()
+        body = "Something happens. {name} is here."
+        self.assertEqual(_render_body(body, character), body)
+
+
+class LegendMurmurJourneyTests(TestCase):
+    """End-to-end: a legend-murmur AmbientEmoteLine fires for a notable persona."""
+
+    def test_murmur_fires_and_renders_deeds_for_notable_persona(self) -> None:
+        from world.societies.factories import (
+            LegendEntryFactory,
+            LegendSpreadFactory,
+        )
+
+        room, profile = _room()
+        arriver = _character(room)
+        bystander = _character(room)
+        persona = arriver.character_sheet.primary_persona
+        persona.fame_tier = FameTier.CELEBRITY
+        persona.save(update_fields=["fame_tier"])
+
+        deed = LegendEntryFactory(
+            persona=persona, base_value=10, is_active=True, title="Slew the Emperor"
+        )
+        LegendSpreadFactory(legend_entry=deed, value_added=40)
+
+        line = AmbientEmoteLineFactory(
+            room_profile=profile,
+            bystander_body="A murmur ripples through the crowd as {name} enters — {deeds}.",
+            arriver_body="",
+            fire_chance=100,
+            cooldown_minutes=0,
+        )
+        AmbientEmoteConditionFactory(
+            line=line,
+            condition_type=ConditionType.LEGEND_DEED,
+            species=None,
+        )
+
+        fired = deliver_ambient_group(
+            payload=_FakeMovedPayload(character=arriver, destination=room),
+            line_ids=[line.pk],
+        )
+
+        self.assertTrue(fired)
+        delivery = NarrativeMessageDelivery.objects.get(
+            recipient_character_sheet=bystander.character_sheet
+        )
+        self.assertIn(persona.name, delivery.message.body)
+        self.assertIn("Slew the Emperor", delivery.message.body)
+        self.assertEqual(delivery.message.category, NarrativeCategory.RENOWN)
+
+    def test_murmur_does_not_fire_for_persona_without_deeds(self) -> None:
+        """The has_legend_deeds filter blocks personas with no common-knowledge deeds."""
+        from flows.filters.evaluator import evaluate_filter
+        from world.narrative.ambient_content import compile_line_filter
+
+        room, profile = _room()
+        arriver = _character(room)
+
+        line = AmbientEmoteLineFactory(
+            room_profile=profile,
+            bystander_body="A murmur ripples through the crowd as {name} enters — {deeds}.",
+            arriver_body="",
+        )
+        AmbientEmoteConditionFactory(
+            line=line,
+            condition_type=ConditionType.LEGEND_DEED,
+            species=None,
+        )
+
+        compiled = compile_line_filter(line)
+        payload = _FakeMovedPayload(character=arriver, destination=room)
+        result = evaluate_filter(compiled, payload, self_ref=arriver)
+        self.assertFalse(result)
