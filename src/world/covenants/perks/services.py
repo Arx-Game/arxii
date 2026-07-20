@@ -45,7 +45,10 @@ moment, never on the perk-holder's own timer. The candidate set is:
 - ``SELF``/``WHOLE_GROUP`` perks on the subject's own engaged roles (anchor
   AND resolved sub-role both apply — sub-role perks ADD, never replace).
 - ``COVENANT_ALLIES``/``WHOLE_GROUP`` perks on an engaged covenant-mate's
-  (see above) engaged (anchor) role.
+  (see above) engaged role — anchor AND the mate's own resolved sub-role
+  both apply, same ADD semantics as the subject's own roles (a mate's
+  level-3+ sub-role vow perk must be able to fire for the group, not just
+  their base vow — see ``_ally_sub_role_candidates``).
 
 ``COVENANT_ALLIES`` never fires for the holder's own action because the
 subject is structurally excluded from being counted as their own covenant-
@@ -55,16 +58,29 @@ first bullet, a mate's action via the second) — "includes the holder."
 ## Query discipline
 
 Every step below is a small, FIXED number of queries independent of how many
-perks/situations/rungs are authored: one query for the subject's own active
-memberships (cached per-character by the covenant-roles handler), a bounded
-number of resolve calls for the subject's own engaged roles (scales with the
-subject's OWN role count, not perk count), one query for the co-presence
-roster, one query for the batched ally ``CharacterCovenantRole`` fetch, and
-ONE query (plus 2 prefetch queries — ``situations``, ``rungs``) for the
-candidate-perk fetch regardless of how many perks match. That last group (3
-queries: base + 2 prefetches) is the part this module's contract calls out
-explicitly as never scaling with perk count — see
-``test_perk_resolution.PerkResolutionQueryBudgetTests``.
+perks/situations/rungs/mates are authored: one query for the subject's own
+active memberships (cached per-character by the covenant-roles handler), a
+bounded number of resolve calls for the subject's own engaged roles (scales
+with the subject's OWN role count, not perk count), one query for the
+co-presence roster, one query for the batched ally ``CharacterCovenantRole``
+fetch (with ``select_related("covenant_role")`` so the anchor role rides the
+same query — no per-mate follow-up), one query for the batched ally
+COVENANT_ROLE ``Thread`` fetch across every mate at once (see
+``_ally_sub_role_candidates``), a bounded number of ``CovenantRole
+.matching_variant`` resolve calls — one per DISTINCT anchor role held among
+the group's mates (SharedMemoryModel's identity map de-dupes mates sharing
+the same role to one Python instance, so this scales with role DIVERSITY in
+the group, never with mate COUNT), and ONE query (plus 2 prefetch queries —
+``situations``, ``rungs``, only issued when at least one candidate perk
+matches) for the candidate-perk fetch regardless of how many perks match.
+The candidate-perk fetch group is fixed at UP TO 3 queries (base + 2
+prefetches) in every shape; the documented CEILING for the full
+``applicable_perks`` pipeline in the worst common shape (allies present, a
+matching perk, one shared anchor role among the mates) is **6** — see
+``test_perk_resolution.PerkResolutionQueryBudgetTests`` (perk-count
+invariance, self-only shape, ceiling 3) and
+``test_perk_resolution.AllyMateCountQueryBudgetTests`` (mate-count
+invariance, 2 vs 5 mates on one shared role, ceiling 6).
 """
 
 from __future__ import annotations
@@ -78,7 +94,7 @@ from world.covenants.perks.evaluators import SITUATION_EVALUATORS
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.covenants.models import VowSituationalPerk
+    from world.covenants.models import CharacterCovenantRole, VowSituationalPerk
 
 #: Beneficiaries that fire on the perk-owning holder's OWN action.
 _SELF_BENEFICIARIES = frozenset({PerkBeneficiary.SELF, PerkBeneficiary.WHOLE_GROUP})
@@ -175,9 +191,9 @@ def _ally_candidates(subject: CharacterSheet, resolution: object | None) -> list
 
     See the module docstring's "What counts as a covenant-mate" — engaged
     role in a shared covenant AND co-present per ``_group_sheet_ids``. Ally
-    roles use the STORED (anchor) ``covenant_role`` only — no per-mate
-    sub-role resolution, which would cost one query per mate; see the module
-    docstring's query-discipline section.
+    roles use BOTH the mate's STORED (anchor) ``covenant_role`` AND their
+    resolved sub-role (ADD semantics, mirroring ``_self_candidates``) — see
+    ``_ally_sub_role_candidates`` for the batched (not per-mate) resolution.
     """
     character = subject.character
     if character is None:
@@ -195,14 +211,80 @@ def _ally_candidates(subject: CharacterSheet, resolution: object | None) -> list
 
     from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
 
-    mate_rows = CharacterCovenantRole.objects.filter(
-        character_sheet_id__in=group_ids,
-        covenant_id__in=engaged_covenant_ids,
-        engaged=True,
-        left_at__isnull=True,
-    ).select_related("character_sheet")
+    mate_rows = list(
+        CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=group_ids,
+            covenant_id__in=engaged_covenant_ids,
+            engaged=True,
+            left_at__isnull=True,
+        ).select_related("character_sheet", "covenant_role")
+    )
+    if not mate_rows:
+        return []
 
-    return [(row.covenant_role_id, row.character_sheet, _ALLY_BENEFICIARIES) for row in mate_rows]
+    candidates = [
+        (row.covenant_role_id, row.character_sheet, _ALLY_BENEFICIARIES) for row in mate_rows
+    ]
+    candidates.extend(_ally_sub_role_candidates(mate_rows))
+    return candidates
+
+
+def _ally_sub_role_candidates(mate_rows: list[CharacterCovenantRole]) -> list[_Candidate]:
+    """Resolved sub-role candidates for ``mate_rows`` — the ally-side mirror
+    of ``_self_candidates``' anchor+sub-role ADD semantics (#2536 review: a
+    perk authored on a mate's sub-role — e.g. a level-3 resonance vow — must
+    be able to fire for the group, not just the mate's base/anchor perks).
+
+    Batched, not per-mate: ONE query fetches every relevant mate's active
+    COVENANT_ROLE ``Thread`` row in a single shot (keyed by
+    ``(owner, target_covenant_role)`` — the same pair the DB's
+    ``one active thread per (owner, role)`` constraint enforces, so at most
+    one thread per mate per role). ``CovenantRole.matching_variant`` is then
+    called in Python per row; because ``CovenantRole`` is a SharedMemoryModel,
+    mates who share the same anchor role resolve against the SAME identity-
+    mapped Python instance, so ``matching_variant``'s underlying
+    ``cached_sub_roles`` query fires once per DISTINCT role held among the
+    mates, never once per mate (see the module docstring's query-discipline
+    section).
+    """
+    from world.covenants.models import CovenantRole  # noqa: PLC0415
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.models import Thread  # noqa: PLC0415
+
+    # Threads anchor COVENANT_ROLE resonance investment on the PRIMARY role
+    # only (mirrors `_resolve_covenant_role_variant`'s single-depth guard) --
+    # a mate whose stored membership already points at a sub-role has no
+    # further sub-role to resolve.
+    anchor_rows = [row for row in mate_rows if row.covenant_role.parent_role_id is None]
+    if not anchor_rows:
+        return []
+
+    sheet_ids = {row.character_sheet_id for row in anchor_rows}
+    role_ids = {row.covenant_role_id for row in anchor_rows}
+
+    threads_by_owner_role = {
+        (thread.owner_id, thread.target_covenant_role_id): thread
+        for thread in Thread.objects.filter(
+            owner_id__in=sheet_ids,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role_id__in=role_ids,
+            retired_at__isnull=True,
+        ).select_related("resonance")
+    }
+    if not threads_by_owner_role:
+        return []
+
+    candidates: list[_Candidate] = []
+    for row in anchor_rows:
+        thread = threads_by_owner_role.get((row.character_sheet_id, row.covenant_role_id))
+        if thread is None:
+            continue
+        variant = CovenantRole.matching_variant(
+            row.covenant_role, resonance=thread.resonance, thread_level=thread.level
+        )
+        if variant is not None:
+            candidates.append((variant.pk, row.character_sheet, _ALLY_BENEFICIARIES))
+    return candidates
 
 
 def _group_sheet_ids(subject: CharacterSheet, resolution: object | None) -> list[int]:
