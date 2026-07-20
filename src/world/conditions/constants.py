@@ -16,6 +16,7 @@ class DurationType(models.TextChoices):
     UNTIL_USED = "until_used", "Until Used (consumed on trigger)"
     UNTIL_END_OF_COMBAT = "end_combat", "Until End of Combat"
     SCENE = "scene", "Until End of Scene"
+    INGAME_TIME = "ingame_time", "In-Game Time (expires after IC duration)"
     PERMANENT = "permanent", "Permanent (until removed)"
 
 
