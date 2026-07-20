@@ -1233,3 +1233,4 @@ class GhostTutelageAdmin(admin.ModelAdmin):
     list_filter = ("tradition",)
     search_fields = ("character_sheet__roster_entry__character__db_key",)
     readonly_fields = ("created_at",)
+    autocomplete_fields = ("character_sheet",)
