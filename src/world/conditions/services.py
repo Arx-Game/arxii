@@ -795,6 +795,8 @@ def _handle_refresh(
     rounds = params.duration_rounds or template.default_duration_value
     if template.default_duration_type == DurationType.ROUNDS:
         existing.rounds_remaining = rounds
+    elif template.default_duration_type == DurationType.INGAME_TIME:
+        existing.expires_at = _compute_ingame_time_expires(template)
     existing.save()
 
     return ApplyConditionResult(

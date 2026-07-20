@@ -260,3 +260,50 @@ class LazyExpiryTests(EvenniaTestCase):
 
         # Without calling get_active_conditions, the instance still exists
         self.assertTrue(ConditionInstance.objects.filter(pk=inst.pk).exists())
+
+
+class RefreshIngameTimeConditionTests(EvenniaTestCase):
+    """Tests that re-applying an INGAME_TIME condition recomputes expires_at."""
+
+    def test_refresh_recomputes_expires_at(self):
+        """Re-applying an INGAME_TIME condition resets expires_at from now."""
+        from world.conditions.constants import DurationType
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.conditions.services import apply_condition
+        from world.game_clock.models import GameClock
+        from world.scenes.factories import PersonaFactory
+
+        clock = GameClock.get_active()
+        if clock is None:
+            clock = GameClock.objects.create(
+                anchor_real_time=timezone.now(),
+                anchor_ic_time=timezone.now(),
+                time_ratio=3.0,
+            )
+        else:
+            clock.time_ratio = 3.0
+            clock.save()
+
+        persona = PersonaFactory()
+        target = persona.character_sheet.character
+        tmpl = ConditionTemplateFactory(
+            name="Refreshing Curse",
+            default_duration_type=DurationType.INGAME_TIME,
+            default_duration_value=24,  # 24 IC hours = 8 real hours
+        )
+
+        # First application
+        result1 = apply_condition(target, tmpl, severity=1)
+        original_expires = result1.instance.expires_at
+        self.assertIsNotNone(original_expires)
+
+        # Wait a moment, then re-apply (refresh)
+        import time
+
+        time.sleep(0.01)
+        result2 = apply_condition(target, tmpl, severity=1)
+
+        self.assertTrue(result2.success)
+        self.assertIsNotNone(result2.instance.expires_at)
+        # The refreshed expires_at should be later than the original
+        self.assertGreater(result2.instance.expires_at, original_expires)
