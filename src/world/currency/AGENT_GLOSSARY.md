@@ -35,3 +35,11 @@ _Avoid_: pending income, savings, stockpile (item sense)
 **Collection dispatch**:
 The active org-level act (`collect_org_income`, the COLLECTION offer on a steward summon) that gathers every pooled stream and runs the Tax Collection check whose band decides how much arrives — the sole path from pools to treasury.
 _Avoid_: payout, harvest, passive income
+
+**Purse Drain**:
+A weekly emptying of one holder's `CharacterPurse` driven by a distinction (`DistinctionPurseDrain` config), first shipped for "Somehow Always Broke" (#2613). Runs as two `CronPhase`-ordered cron tasks: the `SNAPSHOT` band records the opening balance before income lands, the `DRAIN` band (after upkeep) removes `opening_balance − outflows` so the holder keeps only that week's fresh income. Every drain is an audited `transfer` sink; physical coin, org treasuries, and coin held by others are never touched.
+_Avoid_: wipe, reset, tax
+
+**Opening balance**:
+A `PurseDrainWeek` holder's purse balance captured in the `SNAPSHOT` band at week start, *before* weekly income lands — the baseline the `DRAIN` band drains down to (minus the week's outflows). Persists between the two cron bands and doubles as the drain's audit row.
+_Avoid_: starting money, snapshot balance (field-adjacent only)

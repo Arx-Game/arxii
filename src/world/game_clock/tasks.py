@@ -580,30 +580,7 @@ def register_all_tasks() -> None:
 
     register_fashion_tasks()
 
-    # #1930: Weekly building-upkeep sweep — deducts upkeep from owner
-    # wallets; misses accrue bounded arrears then slide the condition
-    # tier (never mutates polish/features).
-    from world.buildings.upkeep_services import apply_weekly_upkeep_all_buildings
-
-    register_task(
-        CronDefinition(
-            task_key="buildings.weekly_upkeep",
-            callable=apply_weekly_upkeep_all_buildings,
-            interval=timedelta(days=7),
-            # #2609: shares the rollover's anchor so upkeep and the economy
-            # pass fall due in the same tick, and sits in UPKEEP so it drains
-            # AFTER income lands (see ADR-0150). Both halves are required —
-            # a phase only orders tasks that are already due together.
-            anchor_weekday=0,
-            anchor_hour_utc=5,
-            phase=CronPhase.UPKEEP,
-            description=(
-                "Weekly upkeep sweep: all-or-nothing deduction from the "
-                "owner wallet; misses accrue capped arrears then slide the "
-                "building's condition tier; above-normal tiers dwell-decay."
-            ),
-        )
-    )
+    _register_weekly_money_tasks()
 
     # #1930: Weekly mothball sweep — long owner inactivity hides a
     # building from the grid and freezes its upkeep/condition accrual;
@@ -759,6 +736,71 @@ def register_all_tasks() -> None:
     from world.weather.tasks import roll_and_echo_weather
 
     _register_late_tasks(roll_and_echo_weather)
+
+
+def _register_weekly_money_tasks() -> None:
+    """Register the anchored weekly-money tasks that must run in band order.
+
+    All three share the Sunday-rollover anchor and are ordered by ``CronPhase``
+    (ADR-0150): building upkeep (UPKEEP) drains after income lands, and the
+    Somehow Always Broke drain (#2613) runs in two bands around it — SNAPSHOT
+    records each holder's opening balance BEFORE income, then DRAIN empties the
+    purse down to just this week's income AFTER upkeep has paid. Extracted from
+    ``register_all_tasks`` to keep it under the ruff PLR0915 statement limit.
+    """
+    # #1930: Weekly building-upkeep sweep — deducts upkeep from owner wallets;
+    # misses accrue bounded arrears then slide the condition tier.
+    from world.buildings.upkeep_services import apply_weekly_upkeep_all_buildings
+    from world.currency.services import run_purse_drains, snapshot_purse_drains
+
+    register_task(
+        CronDefinition(
+            task_key="buildings.weekly_upkeep",
+            callable=apply_weekly_upkeep_all_buildings,
+            interval=timedelta(days=7),
+            # #2609: shares the rollover's anchor so upkeep and the economy
+            # pass fall due in the same tick, and sits in UPKEEP so it drains
+            # AFTER income lands (see ADR-0150). Both halves are required —
+            # a phase only orders tasks that are already due together.
+            anchor_weekday=0,
+            anchor_hour_utc=5,
+            phase=CronPhase.UPKEEP,
+            description=(
+                "Weekly upkeep sweep: all-or-nothing deduction from the "
+                "owner wallet; misses accrue capped arrears then slide the "
+                "building's condition tier; above-normal tiers dwell-decay."
+            ),
+        )
+    )
+
+    register_task(
+        CronDefinition(
+            task_key="currency.purse_drain_snapshot",
+            callable=snapshot_purse_drains,
+            interval=timedelta(days=7),
+            anchor_weekday=0,
+            anchor_hour_utc=5,
+            phase=CronPhase.SNAPSHOT,
+            description=(
+                "Records each Somehow Always Broke holder's opening purse "
+                "balance before weekly income lands."
+            ),
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="currency.purse_drains",
+            callable=run_purse_drains,
+            interval=timedelta(days=7),
+            anchor_weekday=0,
+            anchor_hour_utc=5,
+            phase=CronPhase.DRAIN,
+            description=(
+                "Drains each Somehow Always Broke holder's purse down to this "
+                "week's income, after obligations have paid."
+            ),
+        )
+    )
 
 
 def _register_late_tasks(roll_and_echo_weather: object) -> None:

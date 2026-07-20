@@ -4,8 +4,10 @@ from world.currency.models import (
     CharacterPurse,
     CurrencyInstrumentDetails,
     CurrencyTransfer,
+    DistinctionPurseDrain,
     FavorTokenDetails,
     OrganizationTreasury,
+    PurseDrainWeek,
 )
 
 
@@ -60,3 +62,26 @@ class FavorTokenDetailsAdmin(admin.ModelAdmin):
     search_fields = ("provenance_note", "issuing_organization__name")
     raw_id_fields = ("item_instance", "issuing_organization")
     date_hierarchy = "minted_at"
+
+
+@admin.register(DistinctionPurseDrain)
+class DistinctionPurseDrainAdmin(admin.ModelAdmin):
+    list_display = ("distinction", "drain_percent", "floor_coppers")
+    search_fields = ("distinction__name",)
+    raw_id_fields = ("distinction",)
+
+
+@admin.register(PurseDrainWeek)
+class PurseDrainWeekAdmin(admin.ModelAdmin):
+    list_display = (
+        "character_sheet",
+        "game_week",
+        "opening_balance",
+        "outflows",
+        "amount_drained",
+        "drained_at",
+    )
+    list_filter = ("game_week",)
+    search_fields = ("character_sheet__character__db_key",)
+    raw_id_fields = ("character_sheet", "game_week")
+    date_hierarchy = "snapshot_at"

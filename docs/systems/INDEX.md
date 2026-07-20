@@ -2658,12 +2658,19 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   `OrgIncomeStream` (`uncollected_pool`, optional `area` FK — authored anchor for a future
   local order/crime difficulty modifier), `IncomeDeclaration` (actual-vs-declared),
   `OrgEconomicsProfile` (`graft_pct`), `OrgObligation`, `DebtInstrument`, `Contract`,
-  `Business`, `CharacterEmployment`
+  `Business`, `CharacterEmployment`, `DistinctionPurseDrain` (#2613 — per-distinction weekly
+  purse-drain config: `drain_percent`/`floor_coppers`; the "Somehow Always Broke" sidecar,
+  in `currency` not `distinctions` per ADR-0010), `PurseDrainWeek` (#2613 — per-holder
+  per-week baseline persisted between the `SNAPSHOT` and `DRAIN` cron bands + drain audit row)
 - **Key functions (`world/currency/services.py`):** `transfer`, `accrue_income_stream`
   (weekly pool growth), `collect_org_income` (the dispatch: check → band pct → graft →
   per-stream proportional landing), `improve_org_domain` (Domain Investment check → gross
   bump + graft crackdown), `process_income_stream(stream, amount)` (landing path),
   `settle_obligations`, `run_weekly_economy` (Sunday rollover phases),
+  `snapshot_purse_drains` / `run_purse_drains` (#2613 — the two-band Somehow Always Broke
+  weekly drain: `SNAPSHOT` records each holder's opening balance before income, `DRAIN` empties
+  the purse down to `opening − outflows` after upkeep, so only that week's income survives;
+  ordered via `CronPhase`, ADR-0150),
   `withdraw_from_treasury(*, organization, persona, amount)` (#2540 — the discretionary-spend
   primitive: a `can_spend_treasury`-authorized member draws treasury→purse; the treasury→member
   outflow #930 never built. Action-driven, so inherently piloted-only; never automate it),

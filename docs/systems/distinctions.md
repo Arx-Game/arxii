@@ -233,6 +233,33 @@ distinction wrote a modifier nothing read) was removed from both grant paths as 
 
 ---
 
+## Economic axis — `DistinctionPurseDrain` (#2613)
+
+A distinction can empty its holder's purse every week. **"Somehow Always Broke"** is the
+first: a large negative (`cost_per_rank=-50`) that a player takes so their perpetually-broke
+concept cannot be undone by another player's generosity — a consent mechanic (like the
+antagonism register #2170), not an economic balance knob.
+
+`DistinctionPurseDrain` (`world/currency/models.py` — lives in `world.currency`, not
+`world.distinctions`, per ADR-0010: the sidecar points at the primitive) is a per-distinction
+config: `drain_percent` (1–100) and `floor_coppers`. Somehow Always Broke is one row at
+`100% / floor 0`; siblings (a 50% Spendthrift, a 10% tithe) are data rows, no new code.
+
+The drain runs as **two anchored weekly cron tasks** ordered by `CronPhase` (ADR-0150):
+`currency.purse_drain_snapshot` (`SNAPSHOT` band) records each holder's opening purse balance
+*before* income lands; `currency.purse_drains` (`DRAIN` band, after building upkeep) empties
+the purse down to `opening_balance − outflows`, where outflows is any coin that left since the
+snapshot. Net effect: the holder keeps exactly that week's fresh income and nothing carried
+over. `PurseDrainWeek` persists the per-holder baseline between the two bands and is the audit
+trail. Every drain is an audited `currency.services.transfer` sink, never a silent write.
+Services: `snapshot_purse_drains` / `run_purse_drains` (`world/currency/services.py`).
+
+Deliberately untouched: physical minted coin (`CurrencyInstrumentDetails`, an `ItemInstance`
+possession), org treasuries, and coin held by anyone else — the laundering routes are the
+concept being played, not defects. See the #2613 issue spec.
+
+---
+
 ## Profile Visibility — relocated into Secrets (#1109 → #1334)
 
 A sensitive distinction is no longer flagged public/private; it is **relocated into a Secret**
