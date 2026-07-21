@@ -394,3 +394,89 @@ class SeedOrFeedEncounterOpenedFromParleyTests(EvenniaTestCase):
 
         self.assertEqual(encounter.pk, existing.pk)
         self.assertFalse(encounter.opened_from_parley)
+
+
+class SeedOrFeedEncounterInitiatedByPcSideTests(EvenniaTestCase):
+    """``initiated_by_pc_side`` stamping (#2623 Task 2): a CREATE at the cast-seed
+    site always stamps True — a PC's hostile cast is what opened the fight. No
+    NPC-initiated creation path exists yet, so this site never stamps False;
+    feeding a pre-existing encounter never touches whatever value it already has."""
+
+    @staticmethod
+    def _make_caster_and_target():
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.vitals.models import CharacterVitals
+
+        caster = CharacterSheetFactory()
+        target = CharacterSheetFactory()
+        for sheet in (caster, target):
+            CharacterVitals.objects.create(
+                character_sheet=sheet,
+                health=50,
+                max_health=50,
+                base_max_health=50,
+            )
+        return caster, target
+
+    @staticmethod
+    def _make_damage_technique():
+        from world.magic.factories import TechniqueFactory
+
+        return TechniqueFactory()
+
+    @staticmethod
+    def _make_scene_with_room():
+        from evennia import create_object
+
+        from world.scenes.factories import SceneFactory
+
+        room = create_object("typeclasses.rooms.Room", key="Initiator Cast Room", nohome=True)
+        scene = SceneFactory(location=room)
+        return scene, room
+
+    def test_seeded_encounter_stamps_pc_side_initiator(self):
+        from world.combat.cast_seed import seed_or_feed_encounter_from_cast
+
+        caster, target = self._make_caster_and_target()
+        technique = self._make_damage_technique()
+        scene, room = self._make_scene_with_room()
+
+        encounter = seed_or_feed_encounter_from_cast(
+            caster_sheet=caster,
+            target_sheet=target,
+            technique=technique,
+            scene=scene,
+            room=room,
+        )
+
+        self.assertIs(encounter.initiated_by_pc_side, True)
+
+    def test_feeding_existing_encounter_never_flips_initiator_stamp(self):
+        from world.combat.cast_seed import seed_or_feed_encounter_from_cast
+        from world.combat.constants import EncounterType, RiskLevel
+        from world.combat.models import CombatEncounter
+        from world.scenes.constants import RoundStatus
+
+        caster, target = self._make_caster_and_target()
+        technique = self._make_damage_technique()
+        scene, room = self._make_scene_with_room()
+
+        existing = CombatEncounter.objects.create(
+            room=room,
+            scene=scene,
+            status=RoundStatus.BETWEEN_ROUNDS,
+            risk_level=RiskLevel.MODERATE,
+            encounter_type=EncounterType.PARTY_COMBAT,
+            initiated_by_pc_side=None,
+        )
+
+        encounter = seed_or_feed_encounter_from_cast(
+            caster_sheet=caster,
+            target_sheet=target,
+            technique=technique,
+            scene=scene,
+            room=room,
+        )
+
+        self.assertEqual(encounter.pk, existing.pk)
+        self.assertIsNone(encounter.initiated_by_pc_side)
