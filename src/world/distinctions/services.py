@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.distinctions.exceptions import DistinctionExclusionError
+from world.distinctions.types import DISTINCTION_CHANGE_XP_PER_CG_POINT
 from world.secrets.constants import SecretProvenance
 from world.secrets.models import Secret
 
@@ -189,3 +190,36 @@ def grant_distinction(
     )
 
     return char_distinction
+
+
+def change_supported(distinction: Distinction) -> bool:
+    """True iff this distinction may be added/removed via a GM table request (#2607).
+
+    Two guards (both must pass): (1) the hard technical guard — it carries none
+    of the irreversible grant types (resonance/asset/codex), which have no clean
+    unwind (resonance ``lifetime_earned`` is monotonic); (2) the soft denylist —
+    it is not flagged ``post_cg_immutable``. The first is derived from grant
+    config (no authoring); the second is a reactively-curated opt-out.
+    """
+    if distinction.post_cg_immutable:
+        return False
+    return not (
+        distinction.resonance_grants.exists()
+        or distinction.asset_grants.exists()
+        or distinction.codex_grants.exists()
+    )
+
+
+def distinction_change_xp_cost(distinction: Distinction, *, rank: int, removing: bool) -> int:
+    """XP charged for a table distinction change (#2607).
+
+    Charged only on the benefit direction — gaining a positive distinction or
+    removing a negative one — and free otherwise. ``3 × |cost_per_rank × rank|``.
+    This asymmetry kills the points-pump: a distinction taken at CG for a point
+    refund costs real XP to shed later.
+    """
+    cost_per_rank = distinction.cost_per_rank
+    benefits = (cost_per_rank < 0 and removing) or (cost_per_rank > 0 and not removing)
+    if not benefits:
+        return 0
+    return DISTINCTION_CHANGE_XP_PER_CG_POINT * abs(cost_per_rank * rank)

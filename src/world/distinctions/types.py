@@ -80,3 +80,9 @@ class OtherStatus(models.TextChoices):
     PENDING_REVIEW = "pending_review", "Pending Review"
     APPROVED = "approved", "Approved"
     MAPPED = "mapped", "Mapped to Distinction"
+
+
+#: Flat XP charged per CG point when adding/removing a distinction via a GM
+#: table request (#2607). Applied only on the benefit direction (gain positive
+#: or shed negative); free otherwise. No per-distinction override in v1.
+DISTINCTION_CHANGE_XP_PER_CG_POINT = 3
