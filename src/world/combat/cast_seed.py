@@ -269,7 +269,9 @@ def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance
         ``CombatEncounter.opened_from_parley`` (#2536 slice 3, Task 4) is stamped True
         iff ``scene`` is itself an active, non-Battle-backed Scene at that moment (see
         ``_scene_is_active_non_battle``) — "this fight started as a conversation that
-        turned hostile." Feeding an existing encounter never touches the flag.
+        turned hostile." Feeding an existing encounter never touches the flag. A
+        CREATE also always stamps ``CombatEncounter.initiated_by_pc_side = True``
+        (#2623) — this call site is always a PC's hostile cast opening the fight.
 
     Returns:
         The seeded or fed CombatEncounter, in DECLARING status with the caster's
@@ -284,6 +286,7 @@ def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance
             risk_level=RiskLevel.MODERATE,
             encounter_type=EncounterType.PARTY_COMBAT,
             opened_from_parley=_scene_is_active_non_battle(scene),
+            initiated_by_pc_side=True,
         )
         from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
 

@@ -1,7 +1,11 @@
-"""Tests for the situation evaluator registry (#2536, Task 2).
+"""Tests for the situation evaluator registry (#2536, Task 2; parameterized
+#2623 Task 3).
 
 Per evaluator: a fixture-built TRUE case, a FALSE case, and a missing-context
 False case (spec convention: a missing required field always reads False).
+Every call site passes ``NO_PARAMS`` unless the evaluator's own params matter
+to the case under test (the affinity matrix, origin-side, and per-row
+threshold classes below).
 
 Built in ``setUp`` rather than ``setUpTestData`` throughout — factories here
 create Evennia ``ObjectDB`` instances (``DbHolder``, not deepcopyable), which
@@ -38,8 +42,8 @@ from world.covenants.factories import (
     CovenantRoleFactory,
 )
 from world.covenants.perks import evaluators
-from world.covenants.perks.constants import Situation
-from world.covenants.perks.context import SituationContext
+from world.covenants.perks.constants import Situation, SituationOriginSide
+from world.covenants.perks.context import NO_PARAMS, SituationContext, SituationParams
 from world.covenants.perks.evaluators import SITUATION_EVALUATORS
 from world.magic.constants import TechniqueFunction
 from world.magic.factories import (
@@ -57,7 +61,7 @@ class SituationEvaluatorRegistryTests(TestCase):
     """The registry carries exactly every live ``Situation`` value (9 from slice 1,
     ``CHAMPION_DUEL`` from slice 3 Task 3, ``COMBAT_OPENED_FROM_PARLEY`` and
     ``AMBUSH_UNDERWAY`` from slice 3 Task 4, ``ALLY_INTERCEPTED_FOR_ME`` from
-    slice 3 Task 5, plus ``ATTACKER_ABYSSAL`` from slice 3 Task 6, #2536)."""
+    slice 3 Task 5, plus ``ATTACKER_AFFINITY`` from slice 3 Task 6, #2536)."""
 
     def test_registry_covers_every_surviving_situation(self) -> None:
         self.assertEqual(set(SITUATION_EVALUATORS), set(Situation.values))
@@ -104,19 +108,19 @@ class AtRangeInMeleeEvaluatorTests(TestCase):
     def test_in_melee_true_when_engaged_enemy_shares_position(self) -> None:
         self._engage_opponent_at(self.pos_a)
         ctx = self._ctx(self.resolution)
-        self.assertTrue(evaluators.in_melee(ctx))
-        self.assertFalse(evaluators.at_range(ctx))
+        self.assertTrue(evaluators.in_melee(ctx, NO_PARAMS))
+        self.assertFalse(evaluators.at_range(ctx, NO_PARAMS))
 
     def test_at_range_true_when_engaged_enemy_elsewhere(self) -> None:
         self._engage_opponent_at(self.pos_b)
         ctx = self._ctx(self.resolution)
-        self.assertFalse(evaluators.in_melee(ctx))
-        self.assertTrue(evaluators.at_range(ctx))
+        self.assertFalse(evaluators.in_melee(ctx, NO_PARAMS))
+        self.assertTrue(evaluators.at_range(ctx, NO_PARAMS))
 
     def test_missing_context_returns_false(self) -> None:
         ctx = self._ctx(None)
-        self.assertFalse(evaluators.in_melee(ctx))
-        self.assertFalse(evaluators.at_range(ctx))
+        self.assertFalse(evaluators.in_melee(ctx, NO_PARAMS))
+        self.assertFalse(evaluators.at_range(ctx, NO_PARAMS))
 
 
 class SurroundedEvaluatorTests(TestCase):
@@ -135,14 +139,23 @@ class SurroundedEvaluatorTests(TestCase):
     def test_true_at_threshold(self) -> None:
         EngagementLockFactory(participant=self.participant, encounter=self.participant.encounter)
         EngagementLockFactory(participant=self.participant, encounter=self.participant.encounter)
-        self.assertTrue(evaluators.surrounded(self._ctx(self.resolution)))
+        self.assertTrue(evaluators.surrounded(self._ctx(self.resolution), NO_PARAMS))
 
     def test_false_below_threshold(self) -> None:
         EngagementLockFactory(participant=self.participant, encounter=self.participant.encounter)
-        self.assertFalse(evaluators.surrounded(self._ctx(self.resolution)))
+        self.assertFalse(evaluators.surrounded(self._ctx(self.resolution), NO_PARAMS))
 
     def test_missing_context_returns_false(self) -> None:
-        self.assertFalse(evaluators.surrounded(self._ctx(None)))
+        self.assertFalse(evaluators.surrounded(self._ctx(None), NO_PARAMS))
+
+    def test_surrounded_row_threshold(self) -> None:
+        """An authored count_threshold overrides SURROUNDED_LOCK_THRESHOLD per row."""
+        EngagementLockFactory(participant=self.participant, encounter=self.participant.encounter)
+        EngagementLockFactory(participant=self.participant, encounter=self.participant.encounter)
+        self.assertFalse(
+            evaluators.surrounded(self._ctx(self.resolution), SituationParams(count_threshold=3))
+        )
+        self.assertTrue(evaluators.surrounded(self._ctx(self.resolution), NO_PARAMS))
 
 
 class TargetDistractedEvaluatorTests(TestCase):
@@ -165,13 +178,13 @@ class TargetDistractedEvaluatorTests(TestCase):
         ConditionInstanceFactory(
             target=self.target_sheet.character, source_technique=self.technique
         )
-        self.assertTrue(evaluators.target_distracted(self._ctx(self.target_sheet)))
+        self.assertTrue(evaluators.target_distracted(self._ctx(self.target_sheet), NO_PARAMS))
 
     def test_false_when_no_matching_condition(self) -> None:
-        self.assertFalse(evaluators.target_distracted(self._ctx(self.target_sheet)))
+        self.assertFalse(evaluators.target_distracted(self._ctx(self.target_sheet), NO_PARAMS))
 
     def test_missing_context_returns_false(self) -> None:
-        self.assertFalse(evaluators.target_distracted(self._ctx(None)))
+        self.assertFalse(evaluators.target_distracted(self._ctx(None), NO_PARAMS))
 
 
 class TargetSwayedByAllyEvaluatorTests(TestCase):
@@ -195,7 +208,7 @@ class TargetSwayedByAllyEvaluatorTests(TestCase):
             source_technique=self.technique,
             source_character=self.holder_sheet.character,
         )
-        self.assertTrue(evaluators.target_swayed_by_ally(self._ctx(self.target_sheet)))
+        self.assertTrue(evaluators.target_swayed_by_ally(self._ctx(self.target_sheet), NO_PARAMS))
 
     def test_true_when_applied_by_covenant_mate(self) -> None:
         mate_sheet = CharacterSheetFactory()
@@ -212,7 +225,7 @@ class TargetSwayedByAllyEvaluatorTests(TestCase):
             source_technique=self.technique,
             source_character=mate_sheet.character,
         )
-        self.assertTrue(evaluators.target_swayed_by_ally(self._ctx(self.target_sheet)))
+        self.assertTrue(evaluators.target_swayed_by_ally(self._ctx(self.target_sheet), NO_PARAMS))
 
     def test_false_when_applied_by_stranger(self) -> None:
         ConditionInstanceFactory(
@@ -220,10 +233,10 @@ class TargetSwayedByAllyEvaluatorTests(TestCase):
             source_technique=self.technique,
             source_character=self.stranger_sheet.character,
         )
-        self.assertFalse(evaluators.target_swayed_by_ally(self._ctx(self.target_sheet)))
+        self.assertFalse(evaluators.target_swayed_by_ally(self._ctx(self.target_sheet), NO_PARAMS))
 
     def test_missing_context_returns_false(self) -> None:
-        self.assertFalse(evaluators.target_swayed_by_ally(self._ctx(None)))
+        self.assertFalse(evaluators.target_swayed_by_ally(self._ctx(None), NO_PARAMS))
 
 
 class TargetFocusedElsewhereEvaluatorTests(TestCase):
@@ -256,7 +269,7 @@ class TargetFocusedElsewhereEvaluatorTests(TestCase):
         CombatRoundActionFactory(
             participant=self.target_participant, round_number=1, focused_opponent_target=opponent
         )
-        self.assertTrue(evaluators.target_focused_elsewhere(self._ctx(self.resolution)))
+        self.assertTrue(evaluators.target_focused_elsewhere(self._ctx(self.resolution), NO_PARAMS))
 
     def test_false_when_target_declared_action_targets_subject(self) -> None:
         CombatRoundActionFactory(
@@ -264,10 +277,10 @@ class TargetFocusedElsewhereEvaluatorTests(TestCase):
             round_number=1,
             focused_ally_target=self.subject_participant,
         )
-        self.assertFalse(evaluators.target_focused_elsewhere(self._ctx(self.resolution)))
+        self.assertFalse(evaluators.target_focused_elsewhere(self._ctx(self.resolution), NO_PARAMS))
 
     def test_missing_context_returns_false(self) -> None:
-        self.assertFalse(evaluators.target_focused_elsewhere(self._ctx(None)))
+        self.assertFalse(evaluators.target_focused_elsewhere(self._ctx(None), NO_PARAMS))
 
 
 class AllyLowHealthEvaluatorTests(TestCase):
@@ -311,24 +324,39 @@ class AllyLowHealthEvaluatorTests(TestCase):
     def test_true_when_engaged_mate_below_fraction(self) -> None:
         self._mate_membership(engaged=True)
         CharacterVitals.objects.create(character_sheet=self.mate_sheet, health=10, max_health=100)
-        self.assertTrue(evaluators.ally_low_health(self._ctx(self.resolution)))
+        self.assertTrue(evaluators.ally_low_health(self._ctx(self.resolution), NO_PARAMS))
 
     def test_false_when_mate_healthy(self) -> None:
         self._mate_membership(engaged=True)
         CharacterVitals.objects.create(character_sheet=self.mate_sheet, health=90, max_health=100)
-        self.assertFalse(evaluators.ally_low_health(self._ctx(self.resolution)))
+        self.assertFalse(evaluators.ally_low_health(self._ctx(self.resolution), NO_PARAMS))
 
     def test_true_when_mate_unengaged(self) -> None:
         """Reversal (Tehom 2026-07-20): an unengaged low-health covenant-mate still
         counts — Last Bulwark fires hardest exactly when mates are down."""
         self._mate_membership(engaged=False)
         CharacterVitals.objects.create(character_sheet=self.mate_sheet, health=10, max_health=100)
-        self.assertTrue(evaluators.ally_low_health(self._ctx(self.resolution)))
+        self.assertTrue(evaluators.ally_low_health(self._ctx(self.resolution), NO_PARAMS))
 
     def test_missing_context_returns_false(self) -> None:
         self._mate_membership(engaged=True)
         CharacterVitals.objects.create(character_sheet=self.mate_sheet, health=10, max_health=100)
-        self.assertFalse(evaluators.ally_low_health(self._ctx(None)))
+        self.assertFalse(evaluators.ally_low_health(self._ctx(None), NO_PARAMS))
+
+    def test_ally_low_health_row_threshold(self) -> None:
+        """An authored threshold_percent overrides ALLY_LOW_HEALTH_FRACTION per row."""
+        self._mate_membership(engaged=True)
+        CharacterVitals.objects.create(character_sheet=self.mate_sheet, health=40, max_health=100)
+        self.assertFalse(
+            evaluators.ally_low_health(
+                self._ctx(self.resolution), SituationParams(threshold_percent=25)
+            )
+        )
+        self.assertTrue(
+            evaluators.ally_low_health(
+                self._ctx(self.resolution), SituationParams(threshold_percent=50)
+            )
+        )
 
 
 class AllyLowHealthQueryBudgetTests(TestCase):
@@ -374,14 +402,14 @@ class AllyLowHealthQueryBudgetTests(TestCase):
 
     def _count_queries(self) -> int:
         with CaptureQueriesContext(connection) as ctx:
-            evaluators.ally_low_health(self._ctx())
+            evaluators.ally_low_health(self._ctx(), NO_PARAMS)
         return len(ctx)
 
     def test_query_count_fixed_regardless_of_mate_count(self) -> None:
         # Warm the holder's covenant-roles handler cache first, so both
         # measurements below start from the same (warm) state and compare
         # only the queries that genuinely run per evaluation.
-        evaluators.ally_low_health(self._ctx())
+        evaluators.ally_low_health(self._ctx(), NO_PARAMS)
 
         self._add_engaged_mates(2)
         count_with_two = self._count_queries()
@@ -411,19 +439,19 @@ class DuringNegotiationEvaluatorTests(TestCase):
 
     def test_true_when_active_scene_and_not_in_combat(self) -> None:
         SceneFactory(location=self.room)
-        self.assertTrue(evaluators.during_negotiation(self._ctx(None)))
+        self.assertTrue(evaluators.during_negotiation(self._ctx(None), NO_PARAMS))
 
     def test_false_when_no_active_scene(self) -> None:
-        self.assertFalse(evaluators.during_negotiation(self._ctx(None)))
+        self.assertFalse(evaluators.during_negotiation(self._ctx(None), NO_PARAMS))
 
     def test_false_when_resolving_in_combat(self) -> None:
         SceneFactory(location=self.room)
         participant = CombatParticipantFactory(character_sheet=self.subject_sheet)
         resolution = CombatRoundContext(participant)
-        self.assertFalse(evaluators.during_negotiation(self._ctx(resolution)))
+        self.assertFalse(evaluators.during_negotiation(self._ctx(resolution), NO_PARAMS))
 
     def test_missing_context_returns_false(self) -> None:
-        self.assertFalse(evaluators.during_negotiation(self._ctx(None, subject=False)))
+        self.assertFalse(evaluators.during_negotiation(self._ctx(None, subject=False), NO_PARAMS))
 
 
 class TargetFavorablyDisposedEvaluatorTests(TestCase):
@@ -444,13 +472,29 @@ class TargetFavorablyDisposedEvaluatorTests(TestCase):
             npc_persona=self.target_sheet.primary_persona,
             affection=5,
         )
-        self.assertTrue(evaluators.target_favorably_disposed(self._ctx(self.target_sheet)))
+        ctx = self._ctx(self.target_sheet)
+        self.assertTrue(evaluators.target_favorably_disposed(ctx, NO_PARAMS))
 
     def test_false_when_no_standing_row(self) -> None:
-        self.assertFalse(evaluators.target_favorably_disposed(self._ctx(self.target_sheet)))
+        ctx = self._ctx(self.target_sheet)
+        self.assertFalse(evaluators.target_favorably_disposed(ctx, NO_PARAMS))
 
     def test_missing_context_returns_false(self) -> None:
-        self.assertFalse(evaluators.target_favorably_disposed(self._ctx(None)))
+        self.assertFalse(evaluators.target_favorably_disposed(self._ctx(None), NO_PARAMS))
+
+    def test_favorably_disposed_row_threshold(self) -> None:
+        """An authored count_threshold overrides FAVORABLY_DISPOSED_MIN_AFFECTION
+        per row."""
+        NPCStandingFactory(
+            persona=self.holder_sheet.primary_persona,
+            npc_persona=self.target_sheet.primary_persona,
+            affection=1,
+        )
+        ctx = self._ctx(self.target_sheet)
+        self.assertFalse(
+            evaluators.target_favorably_disposed(ctx, SituationParams(count_threshold=2))
+        )
+        self.assertTrue(evaluators.target_favorably_disposed(ctx, NO_PARAMS))
 
 
 class ChampionDuelEvaluatorTests(TestCase):
@@ -471,16 +515,16 @@ class ChampionDuelEvaluatorTests(TestCase):
         encounter = CombatEncounterFactory(scene=self.scene, room=self.room, is_champion_duel=True)
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
         resolution = CombatRoundContext(participant)
-        self.assertTrue(evaluators.champion_duel(self._ctx(resolution)))
+        self.assertTrue(evaluators.champion_duel(self._ctx(resolution), NO_PARAMS))
 
     def test_false_in_ordinary_encounter(self) -> None:
         encounter = CombatEncounterFactory(scene=self.scene, room=self.room)
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
         resolution = CombatRoundContext(participant)
-        self.assertFalse(evaluators.champion_duel(self._ctx(resolution)))
+        self.assertFalse(evaluators.champion_duel(self._ctx(resolution), NO_PARAMS))
 
     def test_false_outside_combat(self) -> None:
-        self.assertFalse(evaluators.champion_duel(self._ctx(None)))
+        self.assertFalse(evaluators.champion_duel(self._ctx(None), NO_PARAMS))
 
 
 class CombatOpenedFromParleyEvaluatorTests(TestCase):
@@ -503,16 +547,16 @@ class CombatOpenedFromParleyEvaluatorTests(TestCase):
         )
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
         resolution = CombatRoundContext(participant)
-        self.assertTrue(evaluators.combat_opened_from_parley(self._ctx(resolution)))
+        self.assertTrue(evaluators.combat_opened_from_parley(self._ctx(resolution), NO_PARAMS))
 
     def test_false_in_ordinary_encounter(self) -> None:
         encounter = CombatEncounterFactory(scene=self.scene, room=self.room)
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
         resolution = CombatRoundContext(participant)
-        self.assertFalse(evaluators.combat_opened_from_parley(self._ctx(resolution)))
+        self.assertFalse(evaluators.combat_opened_from_parley(self._ctx(resolution), NO_PARAMS))
 
     def test_false_outside_combat(self) -> None:
-        self.assertFalse(evaluators.combat_opened_from_parley(self._ctx(None)))
+        self.assertFalse(evaluators.combat_opened_from_parley(self._ctx(None), NO_PARAMS))
 
 
 class AmbushUnderwayEvaluatorTests(TestCase):
@@ -535,7 +579,7 @@ class AmbushUnderwayEvaluatorTests(TestCase):
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
         CombatRoundActionFactory(participant=participant, round_number=1, from_entrance=True)
         resolution = CombatRoundContext(participant)
-        self.assertTrue(evaluators.ambush_underway(self._ctx(resolution)))
+        self.assertTrue(evaluators.ambush_underway(self._ctx(resolution), NO_PARAMS))
 
     def test_true_round_one_opened_from_parley(self) -> None:
         encounter = CombatEncounterFactory(
@@ -543,24 +587,58 @@ class AmbushUnderwayEvaluatorTests(TestCase):
         )
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
         resolution = CombatRoundContext(participant)
-        self.assertTrue(evaluators.ambush_underway(self._ctx(resolution)))
+        self.assertTrue(evaluators.ambush_underway(self._ctx(resolution), NO_PARAMS))
 
     def test_false_round_two_even_with_from_entrance_action(self) -> None:
         encounter = CombatEncounterFactory(scene=self.scene, room=self.room, round_number=2)
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
         CombatRoundActionFactory(participant=participant, round_number=1, from_entrance=True)
         resolution = CombatRoundContext(participant)
-        self.assertFalse(evaluators.ambush_underway(self._ctx(resolution)))
+        self.assertFalse(evaluators.ambush_underway(self._ctx(resolution), NO_PARAMS))
 
     def test_false_round_one_without_surprise_origin(self) -> None:
         encounter = CombatEncounterFactory(scene=self.scene, room=self.room, round_number=1)
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
         CombatRoundActionFactory(participant=participant, round_number=1, from_entrance=False)
         resolution = CombatRoundContext(participant)
-        self.assertFalse(evaluators.ambush_underway(self._ctx(resolution)))
+        self.assertFalse(evaluators.ambush_underway(self._ctx(resolution), NO_PARAMS))
 
     def test_false_outside_combat(self) -> None:
-        self.assertFalse(evaluators.ambush_underway(self._ctx(None)))
+        self.assertFalse(evaluators.ambush_underway(self._ctx(None), NO_PARAMS))
+
+    def _round_one_surprise_encounter(self, *, initiated_by_pc_side: bool | None):
+        encounter = CombatEncounterFactory(
+            scene=self.scene,
+            room=self.room,
+            round_number=1,
+            initiated_by_pc_side=initiated_by_pc_side,
+        )
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        CombatRoundActionFactory(participant=participant, round_number=1, from_entrance=True)
+        return CombatRoundContext(participant)
+
+    def test_ambush_ours_requires_pc_side_true(self) -> None:
+        resolution = self._round_one_surprise_encounter(initiated_by_pc_side=True)
+        params = SituationParams(origin_side=SituationOriginSide.OURS)
+        self.assertTrue(evaluators.ambush_underway(self._ctx(resolution), params))
+
+    def test_ambush_theirs_false_when_pc_side_true(self) -> None:
+        resolution = self._round_one_surprise_encounter(initiated_by_pc_side=True)
+        params = SituationParams(origin_side=SituationOriginSide.THEIRS)
+        self.assertFalse(evaluators.ambush_underway(self._ctx(resolution), params))
+
+    def test_ambush_directed_false_when_initiator_null(self) -> None:
+        """A non-blank origin_side never holds when the initiator is unprovable
+        (NULL initiated_by_pc_side) — regression for #2623 spec §3."""
+        resolution = self._round_one_surprise_encounter(initiated_by_pc_side=None)
+        params = SituationParams(origin_side=SituationOriginSide.OURS)
+        self.assertFalse(evaluators.ambush_underway(self._ctx(resolution), params))
+
+    def test_ambush_blank_side_blind_unchanged(self) -> None:
+        """NO_PARAMS (blank origin_side) is side-blind — today's behavior,
+        unaffected by a NULL initiated_by_pc_side."""
+        resolution = self._round_one_surprise_encounter(initiated_by_pc_side=None)
+        self.assertTrue(evaluators.ambush_underway(self._ctx(resolution), NO_PARAMS))
 
 
 class AllyInterceptedForMeEvaluatorTests(TestCase):
@@ -616,7 +694,7 @@ class AllyInterceptedForMeEvaluatorTests(TestCase):
             is_ready=True,
             focused_ally_target=self.holder_participant,
         )
-        self.assertTrue(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+        self.assertTrue(evaluators.ally_intercepted_for_me(self._ctx(self.resolution), NO_PARAMS))
 
     def test_false_when_guarding_a_different_ally(self) -> None:
         self._declare_interpose(
@@ -624,13 +702,13 @@ class AllyInterceptedForMeEvaluatorTests(TestCase):
             is_ready=True,
             focused_ally_target=self.other_ally_participant,
         )
-        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(self.resolution), NO_PARAMS))
 
     def test_true_when_guard_anyone(self) -> None:
         self._declare_interpose(
             participant=self.mate_participant, is_ready=True, focused_ally_target=None
         )
-        self.assertTrue(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+        self.assertTrue(evaluators.ally_intercepted_for_me(self._ctx(self.resolution), NO_PARAMS))
 
     def test_false_when_interposer_not_covenant_mate(self) -> None:
         stranger_sheet = CharacterSheetFactory()
@@ -642,7 +720,7 @@ class AllyInterceptedForMeEvaluatorTests(TestCase):
             is_ready=True,
             focused_ally_target=self.holder_participant,
         )
-        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(self.resolution), NO_PARAMS))
 
     def test_false_when_declaration_unready(self) -> None:
         self._declare_interpose(
@@ -650,7 +728,7 @@ class AllyInterceptedForMeEvaluatorTests(TestCase):
             is_ready=False,
             focused_ally_target=self.holder_participant,
         )
-        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(self.resolution), NO_PARAMS))
 
     def test_false_outside_combat(self) -> None:
         self._declare_interpose(
@@ -658,7 +736,7 @@ class AllyInterceptedForMeEvaluatorTests(TestCase):
             is_ready=True,
             focused_ally_target=self.holder_participant,
         )
-        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(None)))
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(None), NO_PARAMS))
 
 
 class AllyInterceptedForMeSubjectExclusionTests(TestCase):
@@ -712,13 +790,13 @@ class AllyInterceptedForMeSubjectExclusionTests(TestCase):
         """Alice's own armed guard-anyone INTERPOSE must not self-satisfy the
         situation on Bob's perk — no other mate is guarding her."""
         self._declare_interpose(participant=self.subject_participant, focused_ally_target=None)
-        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx()))
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(), NO_PARAMS))
 
     def test_true_when_holder_guards_the_subject(self) -> None:
         """A companion positive case: Bob (the holder) declares guard-anyone —
         a genuine covenant-mate other than the subject — must satisfy it."""
         self._declare_interpose(participant=self.holder_participant, focused_ally_target=None)
-        self.assertTrue(evaluators.ally_intercepted_for_me(self._ctx()))
+        self.assertTrue(evaluators.ally_intercepted_for_me(self._ctx(), NO_PARAMS))
 
 
 class AllyInterceptedForMeQueryBudgetTests(TestCase):
@@ -768,14 +846,14 @@ class AllyInterceptedForMeQueryBudgetTests(TestCase):
 
     def _count_queries(self) -> int:
         with CaptureQueriesContext(connection) as ctx:
-            evaluators.ally_intercepted_for_me(self._ctx())
+            evaluators.ally_intercepted_for_me(self._ctx(), NO_PARAMS)
         return len(ctx)
 
     def test_query_count_fixed_regardless_of_interposer_count(self) -> None:
         # Warm the holder's covenant-roles handler cache first, so both
         # measurements below start from the same (warm) state and compare
         # only the queries that genuinely run per evaluation.
-        evaluators.ally_intercepted_for_me(self._ctx())
+        evaluators.ally_intercepted_for_me(self._ctx(), NO_PARAMS)
 
         self._add_guarding_mates(1)
         count_with_one = self._count_queries()
@@ -787,11 +865,16 @@ class AllyInterceptedForMeQueryBudgetTests(TestCase):
         self.assertEqual(count_with_one, 2)
 
 
-class AttackerAbyssalEvaluatorTests(TestCase):
-    """ATTACKER_ABYSSAL (#2536 slice 3, Task 6): resolution order —
-    (1) a ``CombatOpponent`` with a non-empty authored ``affinity`` compares
-    directly, (2) a reachable ``ObjectDB``'s ``CharacterAura.dominant_affinity``
-    is the fallback, (3) otherwise False. Never raises on missing relations;
+class AttackerAffinityEvaluatorTests(TestCase):
+    """ATTACKER_AFFINITY (#2536 slice 3, Task 6; parameterized #2623 spec §2):
+    resolution order — (1) a ``CombatOpponent`` with a non-empty authored
+    ``affinity`` compares directly against ``params.affinity`` (threshold
+    ignored), (2) a reachable ``ObjectDB``'s ``CharacterAura`` is the
+    fallback — with ``params.threshold_percent`` set, that axis's percentage
+    must be >= the threshold; unset, the aura's ``dominant_affinity`` must
+    equal the axis, (3) otherwise False. ``affinity`` is a REQUIRED param
+    (``SITUATION_PARAM_SPECS``) — ``NO_PARAMS`` (blank ``affinity``) never
+    holds, regardless of attacker data. Never raises on missing relations;
     False when ``ctx.attacker`` is ``None``.
     """
 
@@ -808,41 +891,66 @@ class AttackerAbyssalEvaluatorTests(TestCase):
             attacker=attacker,
         )
 
-    def test_true_for_authored_abyssal_opponent(self) -> None:
+    def test_authored_affinity_axis_match(self) -> None:
+        opponent = CombatOpponentFactory(affinity=AffinityType.PRIMAL)
+        params = SituationParams(affinity=AffinityType.PRIMAL)
+        self.assertTrue(evaluators.attacker_affinity(self._ctx(opponent), params))
+
+    def test_authored_affinity_axis_mismatch(self) -> None:
         opponent = CombatOpponentFactory(affinity=AffinityType.ABYSSAL)
-        self.assertTrue(evaluators.attacker_abyssal(self._ctx(opponent)))
+        params = SituationParams(affinity=AffinityType.PRIMAL)
+        self.assertFalse(evaluators.attacker_affinity(self._ctx(opponent), params))
 
-    def test_false_for_authored_non_abyssal_opponent(self) -> None:
-        opponent = CombatOpponentFactory(affinity=AffinityType.CELESTIAL)
-        self.assertFalse(evaluators.attacker_abyssal(self._ctx(opponent)))
-
-    def test_true_for_persona_backed_opponent_with_abyssal_dominant_aura(self) -> None:
-        """No authored affinity — falls back to the persona's ObjectDB CharacterAura."""
+    def test_aura_dominant_match_without_threshold(self) -> None:
+        """No authored affinity — falls back to the persona's ObjectDB
+        CharacterAura's dominant axis; no threshold_percent authored."""
         persona = PersonaFactory()
         CharacterAuraFactory(
             character=persona.character_sheet.character,
-            celestial=Decimal("10.00"),
+            celestial=Decimal("80.00"),
             primal=Decimal("10.00"),
-            abyssal=Decimal("80.00"),
-        )
-        opponent = CombatOpponentFactory(persona=persona)
-        self.assertTrue(evaluators.attacker_abyssal(self._ctx(opponent)))
-
-    def test_false_for_persona_backed_opponent_with_non_abyssal_aura(self) -> None:
-        persona = PersonaFactory()
-        CharacterAuraFactory(
-            character=persona.character_sheet.character,
-            celestial=Decimal("10.00"),
-            primal=Decimal("80.00"),
             abyssal=Decimal("10.00"),
         )
         opponent = CombatOpponentFactory(persona=persona)
-        self.assertFalse(evaluators.attacker_abyssal(self._ctx(opponent)))
+        params = SituationParams(affinity=AffinityType.CELESTIAL)
+        self.assertTrue(evaluators.attacker_affinity(self._ctx(opponent), params))
+
+    def test_aura_axis_threshold_met(self) -> None:
+        persona = PersonaFactory()
+        CharacterAuraFactory(
+            character=persona.character_sheet.character,
+            celestial=Decimal("30.00"),
+            primal=Decimal("40.00"),
+            abyssal=Decimal("30.00"),
+        )
+        opponent = CombatOpponentFactory(persona=persona)
+        params = SituationParams(affinity=AffinityType.PRIMAL, threshold_percent=30)
+        self.assertTrue(evaluators.attacker_affinity(self._ctx(opponent), params))
+
+    def test_aura_axis_threshold_not_met(self) -> None:
+        persona = PersonaFactory()
+        CharacterAuraFactory(
+            character=persona.character_sheet.character,
+            celestial=Decimal("40.00"),
+            primal=Decimal("20.00"),
+            abyssal=Decimal("40.00"),
+        )
+        opponent = CombatOpponentFactory(persona=persona)
+        params = SituationParams(affinity=AffinityType.PRIMAL, threshold_percent=30)
+        self.assertFalse(evaluators.attacker_affinity(self._ctx(opponent), params))
+
+    def test_no_affinity_param_false(self) -> None:
+        """affinity is a REQUIRED param — NO_PARAMS never holds, even against
+        an attacker unambiguously typed to an axis."""
+        opponent = CombatOpponentFactory(affinity=AffinityType.ABYSSAL)
+        self.assertFalse(evaluators.attacker_affinity(self._ctx(opponent), NO_PARAMS))
 
     def test_false_with_no_affinity_and_no_aura_data(self) -> None:
         """A generic ephemeral opponent: no authored affinity, no CharacterAura row."""
         opponent = CombatOpponentFactory()
-        self.assertFalse(evaluators.attacker_abyssal(self._ctx(opponent)))
+        params = SituationParams(affinity=AffinityType.ABYSSAL)
+        self.assertFalse(evaluators.attacker_affinity(self._ctx(opponent), params))
 
     def test_false_when_no_attacker(self) -> None:
-        self.assertFalse(evaluators.attacker_abyssal(self._ctx(None)))
+        params = SituationParams(affinity=AffinityType.ABYSSAL)
+        self.assertFalse(evaluators.attacker_affinity(self._ctx(None), params))

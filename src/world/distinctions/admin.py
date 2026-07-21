@@ -13,6 +13,7 @@ from world.distinctions.models import (
     CharacterDistinctionOther,
     Distinction,
     DistinctionCategory,
+    DistinctionChangeAuthorization,
     DistinctionEffect,
     DistinctionPrerequisite,
     DistinctionTag,
@@ -179,3 +180,16 @@ class CharacterDistinctionOtherAdmin(admin.ModelAdmin):
     def mark_approved(self, request, queryset):
         updated = queryset.update(status=OtherStatus.APPROVED)
         self.message_user(request, f"{updated} entries marked as approved.")
+
+
+@admin.register(DistinctionChangeAuthorization)
+class DistinctionChangeAuthorizationAdmin(admin.ModelAdmin):
+    list_display = ("character_sheet", "action", "xp_cost", "is_consumed", "created_at")
+    list_filter = ("action", "is_consumed")
+    readonly_fields = ("created_at", "consumed_at")
+    raw_id_fields = (
+        "character_sheet",
+        "target_distinction",
+        "target_character_distinction",
+        "authorized_by",
+    )

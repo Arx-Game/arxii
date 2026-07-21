@@ -41,6 +41,17 @@ class RoomFeaturesConfig(AppConfig):
             as_default=True,
         )
 
+        # Bank access (#2540 Layer 4) is likewise generic — home app is here.
+        from world.room_features.services import (  # noqa: PLC0415
+            handle_bank_progression,
+        )
+
+        register_room_feature_strategy(
+            RoomFeatureServiceStrategy.BANK,
+            handle_bank_progression,
+            as_default=True,
+        )
+
         # Civic-hub readers (#1450) are likewise generic — home app is here.
         from world.room_features.services import (  # noqa: PLC0415
             handle_notice_board_progression,

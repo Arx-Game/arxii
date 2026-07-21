@@ -28,7 +28,15 @@ from world.covenants.models import (
     VowSituationalPerkRung,
     VowSituationalPerkSituation,
 )
-from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+from world.covenants.perks.constants import (
+    SITUATION_PARAM_SPECS,
+    PerkBeneficiary,
+    PerkEffectKind,
+    Situation,
+    SituationOriginSide,
+)
+from world.covenants.perks.context import SituationParams
+from world.magic.types.aura import AffinityType
 from world.missions.factories import MissionCategoryFactory, MissionTemplateFactory
 
 
@@ -332,3 +340,126 @@ class VowSituationalPerkRungModelTests(TestCase):
         perk.delete()
 
         self.assertEqual(VowSituationalPerkRung.objects.count(), 0)
+
+
+class SituationParamValidationTests(TestCase):
+    """clean() enforces the per-situation parameter contract (#2623 spec §2)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.perk = VowSituationalPerkFactory()
+
+    def test_param_on_paramless_situation_rejected(self):
+        row = VowSituationalPerkSituationFactory.build(
+            perk=self.perk, situation=Situation.IN_MELEE, count_threshold=3
+        )
+        with self.assertRaises(ValidationError):
+            row.full_clean()
+
+    def test_attacker_affinity_requires_affinity(self):
+        row = VowSituationalPerkSituationFactory.build(
+            perk=self.perk, situation=Situation.ATTACKER_AFFINITY
+        )
+        with self.assertRaises(ValidationError):
+            row.full_clean()
+
+    def test_attacker_affinity_with_axis_and_threshold_valid(self):
+        row = VowSituationalPerkSituationFactory.build(
+            perk=self.perk,
+            situation=Situation.ATTACKER_AFFINITY,
+            affinity=AffinityType.PRIMAL,
+            threshold_percent=30,
+        )
+        row.full_clean()  # no raise
+
+    def test_origin_side_on_ambush_valid_and_rung_mirrors(self):
+        row = VowSituationalPerkSituationFactory.build(
+            perk=self.perk,
+            situation=Situation.AMBUSH_UNDERWAY,
+            origin_side=SituationOriginSide.THEIRS,
+        )
+        row.full_clean()
+        rung = VowSituationalPerkRungFactory.build(
+            perk=self.perk,
+            rung_number=1,
+            extra_situation=Situation.ALLY_LOW_HEALTH,
+            threshold_percent=25,
+        )
+        rung.full_clean()
+
+    def test_rung_rejects_wrong_param(self):
+        rung = VowSituationalPerkRungFactory.build(
+            perk=self.perk,
+            rung_number=1,
+            extra_situation=Situation.SURROUNDED,
+            affinity=AffinityType.ABYSSAL,
+        )
+        with self.assertRaises(ValidationError):
+            rung.full_clean()
+
+    def test_params_property_round_trip(self):
+        row = VowSituationalPerkSituationFactory.build(
+            perk=self.perk,
+            situation=Situation.ATTACKER_AFFINITY,
+            affinity=AffinityType.CELESTIAL,
+            threshold_percent=40,
+        )
+        self.assertEqual(
+            row.params,
+            SituationParams(threshold_percent=40, affinity=AffinityType.CELESTIAL),
+        )
+
+    def test_threshold_percent_zero_rejected(self):
+        """0 is an authoring footgun (e.g. ALLY_LOW_HEALTH percent 0 = never holds) —
+        MinValueValidator(1) on ``threshold_percent`` (review fix, #2623)."""
+        row = VowSituationalPerkSituationFactory.build(
+            perk=self.perk,
+            situation=Situation.ALLY_LOW_HEALTH,
+            threshold_percent=0,
+        )
+        with self.assertRaises(ValidationError):
+            row.full_clean()
+
+    def test_count_threshold_zero_rejected(self):
+        """0 is an authoring footgun (e.g. SURROUNDED count 0 = always holds) —
+        MinValueValidator(1) on ``count_threshold`` (review fix, #2623)."""
+        row = VowSituationalPerkSituationFactory.build(
+            perk=self.perk,
+            situation=Situation.SURROUNDED,
+            count_threshold=0,
+        )
+        with self.assertRaises(ValidationError):
+            row.full_clean()
+
+
+class SituationParamSpecCompletenessTests(TestCase):
+    """Pins the ``SITUATION_PARAM_SPECS`` param contract shape (#2623 review fix).
+
+    Mirrors the repo's registry-completeness test pattern: every entry's
+    ``allowed``/``required`` fields must draw only from the four columns
+    ``SituationRequirementMixin`` actually defines, every dict key must be a
+    real ``Situation`` value, and ``required`` must never claim a field the
+    situation doesn't also ``allow`` — guards against a typo silently
+    widening/narrowing the per-situation contract.
+    """
+
+    _KNOWN_PARAM_FIELDS = frozenset(
+        {"threshold_percent", "count_threshold", "affinity", "origin_side"}
+    )
+
+    def test_spec_keys_are_valid_situations(self):
+        for situation in SITUATION_PARAM_SPECS:
+            self.assertIn(situation, Situation.values)
+
+    def test_spec_fields_are_known_param_columns(self):
+        for situation, spec in SITUATION_PARAM_SPECS.items():
+            unknown = (spec.allowed | spec.required) - self._KNOWN_PARAM_FIELDS
+            self.assertFalse(unknown, f"{situation}: unknown param field(s) {unknown!r}")
+
+    def test_spec_required_is_subset_of_allowed(self):
+        for situation, spec in SITUATION_PARAM_SPECS.items():
+            self.assertLessEqual(
+                spec.required,
+                spec.allowed,
+                f"{situation}: required {spec.required!r} not <= allowed {spec.allowed!r}",
+            )

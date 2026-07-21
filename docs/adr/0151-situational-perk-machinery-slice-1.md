@@ -6,6 +6,9 @@ This slice (1 of 3) ships the machinery: the situation library + evaluator regis
 authoring models, `POWER_BONUS`/`CHECK_BONUS` delivery, and the presentation contract. It
 records the decisions worth keeping, not a restatement of the spec (`gh issue view 2536`).
 
+> Editor's note (2026-07-21): `attacker_abyssal` below was renamed to `ATTACKER_AFFINITY` and
+> parameterized in #2623 — see ADR-0154.
+
 ## Situation-library registry pattern
 
 `Situation` (`world.covenants.perks.constants`) is a code-defined `TextChoices` — ruling 5 from

@@ -164,6 +164,17 @@ class CombatEncounter(AbstractRound):
             "per-vow situational perk scoping."
         ),
     )
+    initiated_by_pc_side = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Who sprang this fight (#2623): True = a PC participant's action "
+            "opened it, False = the opposing side did, NULL = unknown/undirected "
+            "(duels, battles, staff-opened). Read by origin_side-parameterized "
+            "situations. No NPC-initiated creation path exists yet — False is "
+            "staff/admin-stampable until one lands."
+        ),
+    )
     story_beat = models.ForeignKey(
         "stories.Beat",
         on_delete=models.SET_NULL,
@@ -634,7 +645,7 @@ class CombatOpponent(SharedMemoryModel):
         help_text=(
             "Authored magical affinity for non-persona NPCs (generic/ephemeral "
             "opponents carry no CharacterAura row to infer from). Blank = "
-            "untyped/unauthored — the ATTACKER_ABYSSAL situational-perk evaluator "
+            "untyped/unauthored — the ATTACKER_AFFINITY situational-perk evaluator "
             "(world.covenants.perks.evaluators) falls back to a reachable "
             "ObjectDB's CharacterAura.dominant_affinity when this is blank."
         ),

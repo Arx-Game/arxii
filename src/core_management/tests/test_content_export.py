@@ -819,6 +819,64 @@ class VowSituationalPerkContentExportTests(TestCase):
         assert rung.rung_number == 1
         assert rung.magnitude_tenths == 25
 
+    def test_situation_param_columns_round_trip(self) -> None:
+        """Typed situation parameter columns (#2623) survive export -> import.
+
+        ``threshold_percent``/``count_threshold``/``affinity``/``origin_side`` are
+        plain scalar columns (no natural-key resolution) shared by
+        ``SituationRequirementMixin`` — verify all four ride the exported fixture
+        dict and reload identity-stable on an ``ATTACKER_AFFINITY`` row.
+        """
+        from world.covenants.factories import (
+            CovenantRoleFactory,
+            VowSituationalPerkFactory,
+            VowSituationalPerkSituationFactory,
+        )
+        from world.covenants.perks.constants import PerkEffectKind, Situation
+        from world.magic.types.aura import AffinityType
+
+        role = CovenantRoleFactory(
+            name="Round Trip Params", slug="round-trip-params", sword_weight=1
+        )
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            name="Primal Warder",
+            effect_kind=PerkEffectKind.POWER_BONUS,
+        )
+        situation = VowSituationalPerkSituationFactory(
+            perk=perk,
+            situation=Situation.ATTACKER_AFFINITY,
+            affinity=AffinityType.PRIMAL,
+            threshold_percent=30,
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        situation_path = self.root / "fixtures" / "covenants" / "vowsituationalperksituation.json"
+        records = json.loads(situation_path.read_text(encoding="utf-8"))
+        record = next(
+            r for r in records if r["fields"]["perk"] == ["round-trip-params", "Primal Warder"]
+        )
+        assert record["fields"]["situation"] == Situation.ATTACKER_AFFINITY
+        assert record["fields"]["affinity"] == AffinityType.PRIMAL
+        assert record["fields"]["threshold_percent"] == 30
+        assert record["fields"]["count_threshold"] is None
+        assert not record["fields"]["origin_side"]
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        load_result = build_all(self.root)
+        created, _updated = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        situation.refresh_from_db()
+        assert situation.situation == Situation.ATTACKER_AFFINITY
+        assert situation.affinity == AffinityType.PRIMAL
+        assert situation.threshold_percent == 30
+        assert situation.count_threshold is None
+        assert not situation.origin_side
+
     def test_perk_with_null_check_type_round_trips(self) -> None:
         """A POWER_BONUS perk (no check_type) also round-trips cleanly."""
         from world.covenants.factories import CovenantRoleFactory, VowSituationalPerkFactory

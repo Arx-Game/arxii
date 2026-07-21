@@ -17,3 +17,25 @@ class DistinctionExclusionError(Exception):
         if user_message is not None:
             self.user_message = user_message
         super().__init__(self.user_message)
+
+
+class DistinctionPrerequisiteError(Exception):
+    """Raised when removing a distinction that another held distinction depends on."""
+
+    user_message: str = "Cannot remove this distinction — another distinction depends on it."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        if user_message is not None:
+            self.user_message = user_message
+        super().__init__(self.user_message)
+
+
+class DistinctionAuthorizationError(Exception):
+    """Raised when a DistinctionChangeAuthorization is invalid or already consumed."""
+
+    user_message: str = "This distinction change authorization is not valid."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        if user_message is not None:
+            self.user_message = user_message
+        super().__init__(self.user_message)

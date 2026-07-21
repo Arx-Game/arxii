@@ -102,7 +102,11 @@ from actions.definitions.crafting import (
 from actions.definitions.crossing import resolve_crossing_offer
 from actions.definitions.currency import DepositCoinsAction, GiveCoinsAction, WithdrawCoinsAction
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
-from actions.definitions.distinctions import GMAwardDistinctionAction
+from actions.definitions.distinctions import (
+    AcceptDistinctionChangeAction,
+    AuthorizeDistinctionChangeAction,
+    GMAwardDistinctionAction,
+)
 from actions.definitions.domains import (
     AddDomainHoldingAction,
     AppointDomainOfficeAction,
@@ -264,6 +268,7 @@ from actions.definitions.npc_services import (
     resolve_npc_offer,
     start_npc_interaction,
 )
+from actions.definitions.org_vault import vault_deposit, vault_withdraw
 from actions.definitions.organizations import (
     org_apply_action,
     org_demote_action,
@@ -521,6 +526,8 @@ _ALL_ACTIONS: list[Action] = [
     UseItemAction(),
     GrantItemAction(),
     GMAwardDistinctionAction(),
+    AuthorizeDistinctionChangeAction(),
+    AcceptDistinctionChangeAction(),
     # #2183 — dramatic-moment suggestion confirm/dismiss (account-authorized GM inbox).
     ConfirmDramaticMomentSuggestionAction(),
     DismissDramaticMomentSuggestionAction(),
@@ -670,6 +677,8 @@ _ALL_ACTIONS: list[Action] = [
     seduce,
     blackmail,
     boon,
+    vault_deposit,
+    vault_withdraw,
     coerce,
     reveal_secret,
     CharmAssetAction(),

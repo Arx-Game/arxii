@@ -12,6 +12,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -30,10 +31,18 @@ from world.covenants.constants import (
     MentorBondAdjusted,
     RoleArchetype,
 )
-from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+from world.covenants.perks.constants import (
+    SITUATION_PARAM_SPECS,
+    PerkBeneficiary,
+    PerkEffectKind,
+    Situation,
+    SituationOriginSide,
+)
+from world.covenants.perks.context import SituationParams
 from world.items.constants import GearArchetype
 from world.magic.constants import TechniqueFunction
 from world.magic.specialization.models import AbstractSpecializedVariant
+from world.magic.types.aura import AffinityType
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -1782,11 +1791,82 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.covenant_role.name}: {self.name}"
 
 
+class SituationRequirementMixin(models.Model):
+    """Typed parameter columns shared by perk situation + rung rows (#2623).
+
+    Which columns a given situation reads — and which it requires — is the
+    ``SITUATION_PARAM_SPECS`` contract (``perks/constants.py``); ``clean()``
+    enforces it both directions, mirroring the per-effect-kind gating on
+    ``VowSituationalPerk.clean()``. Null/blank everywhere = the pre-#2623
+    parameterless behavior (evaluator module defaults).
+    """
+
+    SITUATION_FIELD = "situation"
+
+    threshold_percent = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="Percent-shaped floor (1-100): aura-axis floor, ally-health fraction.",
+    )
+    count_threshold = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+        help_text="Count-shaped floor: surrounded lock count, minimum affection.",
+    )
+    affinity = models.CharField(
+        max_length=20,
+        choices=AffinityType.choices,
+        blank=True,
+        default="",
+        help_text="Affinity axis for attacker typing (ATTACKER_AFFINITY).",
+    )
+    origin_side = models.CharField(
+        max_length=10,
+        choices=SituationOriginSide.choices,
+        blank=True,
+        default="",
+        help_text="Directed combat-origin side; blank = side-blind.",
+    )
+
+    class Meta:
+        abstract = True
+
+    @property
+    def params(self) -> SituationParams:
+        return SituationParams(
+            threshold_percent=self.threshold_percent,
+            count_threshold=self.count_threshold,
+            affinity=self.affinity,
+            origin_side=self.origin_side,
+        )
+
+    def clean(self) -> None:
+        super().clean()
+        situation = getattr(self, self.SITUATION_FIELD)
+        spec = SITUATION_PARAM_SPECS.get(situation)
+        allowed = spec.allowed if spec is not None else frozenset()
+        required = spec.required if spec is not None else frozenset()
+        values: dict[str, object | None] = {
+            "threshold_percent": self.threshold_percent,
+            "count_threshold": self.count_threshold,
+            "affinity": self.affinity or None,
+            "origin_side": self.origin_side or None,
+        }
+        for field, value in values.items():
+            if value is not None and field not in allowed:
+                raise ValidationError({field: f"{field} is not read by situation '{situation}'."})
+        for field in required:
+            if values[field] is None:
+                raise ValidationError({field: f"situation '{situation}' requires {field}."})
+
+
 class VowSituationalPerkSituationManager(NaturalKeyManager):
     """Manager for VowSituationalPerkSituation with natural key support."""
 
 
-class VowSituationalPerkSituation(NaturalKeyMixin, SharedMemoryModel):
+class VowSituationalPerkSituation(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryModel):
     """One AND-composed situation attached to a ``VowSituationalPerk`` (#2536).
 
     ALL situations attached to a perk must hold simultaneously for the perk's
@@ -1824,7 +1904,7 @@ class VowSituationalPerkRungManager(NaturalKeyManager):
     """Manager for VowSituationalPerkRung with natural key support."""
 
 
-class VowSituationalPerkRung(NaturalKeyMixin, SharedMemoryModel):
+class VowSituationalPerkRung(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryModel):
     """An escalation rung on a ``VowSituationalPerk`` (#2536, worked-example
     implication #2 — "perks can escalate in tiers").
 
@@ -1838,7 +1918,13 @@ class VowSituationalPerkRung(NaturalKeyMixin, SharedMemoryModel):
     ``rung_number`` must be >= 1 (enforced in ``clean()`` — ``PositiveIntegerField``
     alone permits 0). Contiguity is NOT enforced: rung numbers may have gaps —
     the resolution service walks whatever rungs exist in ``rung_number`` order.
+    Parameter columns (``threshold_percent``/``count_threshold``/``affinity``/
+    ``origin_side``, #2623) are shared with ``VowSituationalPerkSituation`` via
+    ``SituationRequirementMixin`` — a rung can re-require its ``extra_situation``
+    at a tighter parameter than the base row (e.g. a lower ally-health floor).
     """
+
+    SITUATION_FIELD = "extra_situation"
 
     perk = models.ForeignKey(
         "covenants.VowSituationalPerk",

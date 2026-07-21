@@ -72,6 +72,7 @@ class DistinctionOrigin(models.TextChoices):
     CONSEQUENCE_POOL = "consequence_pool", "Consequence"
     ENDORSEMENT_THRESHOLD = "endorsement_threshold", "Endorsement Threshold"
     SPECIES = "species", "Species"
+    UNLOCK_PURCHASE = "unlock_purchase", "Unlock Purchase"
 
 
 class OtherStatus(models.TextChoices):
@@ -80,3 +81,10 @@ class OtherStatus(models.TextChoices):
     PENDING_REVIEW = "pending_review", "Pending Review"
     APPROVED = "approved", "Approved"
     MAPPED = "mapped", "Mapped to Distinction"
+
+
+class DistinctionChangeAction(models.TextChoices):
+    """Which direction a distinction change authorization goes."""
+
+    ADD = "add", "Add"
+    REMOVE = "remove", "Remove"

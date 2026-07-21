@@ -338,10 +338,16 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   columns (mission/battle-action-kind) narrowing WHEN a fired perk applies; `situation_ctx`
   threaded into every mission check and Battle warfare roll; five new `Situation` values
   (`CHAMPION_DUEL`, `COMBAT_OPENED_FROM_PARLEY`, `AMBUSH_UNDERWAY`, `ALLY_INTERCEPTED_FOR_ME`,
-  `ATTACKER_ABYSSAL`); the defense-side seam (`resolve_npc_attack` threads `SituationContext
+  `ATTACKER_AFFINITY`); the defense-side seam (`resolve_npc_attack` threads `SituationContext
   .attacker`, making perks live on defense rolls for the first time); and dormant-vow messaging
   (ruling 2's "loud OFF state" — a disengaged vow that would have answered announces so,
-  holder-only, never the room). When the vow dims (#2051), the engaged flag drops and every
+  holder-only, never the room). #2623 (ADR-0154) follow-up parameterizes the situation library:
+  `SituationRequirementMixin`'s four typed columns (`threshold_percent`/`count_threshold`/
+  `affinity`/`origin_side`) on both `VowSituationalPerkSituation` and `VowSituationalPerkRung`,
+  a per-situation `SITUATION_PARAM_SPECS` allowed/required contract, `ATTACKER_AFFINITY`
+  authorable against any `AffinityType` axis (was Abyssal-only), and
+  `CombatEncounter.initiated_by_pc_side` recording who sprang a fight for `origin_side`-gated
+  ambush/parley perks. When the vow dims (#2051), the engaged flag drops and every
   layer's contribution returns to 0 — which is why soloing legend content is lethal.
 - Magic is predominant; relationship bonuses matter; **difficulty scales on party size + average level
   only** (ADR-0037); combat merits Legend, never XP (ADR-0036).
