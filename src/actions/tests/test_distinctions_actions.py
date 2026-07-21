@@ -41,7 +41,7 @@ class GMAwardDistinctionActionTests(TestCase):
 
     def setUp(self) -> None:
         self.target = CharacterFactory(db_key="AwardDistinctionTarget")
-        self.target_sheet = CharacterSheetFactory(character=self.target.sheet_data)
+        self.target_sheet = CharacterSheetFactory(character=self.target)
         self.distinction = DistinctionFactory(
             name="Silver Tongue", slug="silver-tongue", max_rank=3
         )

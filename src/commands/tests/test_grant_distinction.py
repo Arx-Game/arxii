@@ -46,7 +46,7 @@ class CmdGrantDistinctionTests(TestCase):
         self.staff_character.db_account = AccountFactory(is_staff=True)
         self.staff_character.save()
         self.target_character = CharacterFactory()
-        self.target_sheet = CharacterSheetFactory(character=self.target_character.sheet_data)
+        self.target_sheet = CharacterSheetFactory(character=self.target_character)
         self.distinction = DistinctionFactory(
             name="Silver Tongue", slug="silver-tongue", max_rank=3
         )
@@ -128,7 +128,7 @@ class CmdGrantDistinctionGMTrustTests(TestCase):
 
     def setUp(self) -> None:
         self.target_character = CharacterFactory()
-        self.target_sheet = CharacterSheetFactory(character=self.target_character.sheet_data)
+        self.target_sheet = CharacterSheetFactory(character=self.target_character)
         self.distinction = DistinctionFactory(
             name="Silver Tongue", slug="silver-tongue", max_rank=3
         )
