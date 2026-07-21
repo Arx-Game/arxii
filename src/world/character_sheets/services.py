@@ -9,7 +9,13 @@ from django.db import transaction
 from evennia.objects.models import ObjectDB
 from evennia.utils.create import create_object
 
-from world.character_sheets.models import _PROFILE_FIELDS, CharacterSheet, Profile
+from world.character_sheets.models import (
+    _PROFILE_FIELDS,
+    CharacterSheet,
+    Profile,
+    ProfileTextVersion,
+)
+from world.character_sheets.types import ProfileTextField
 from world.roster.models import RosterEntry
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
@@ -148,4 +154,68 @@ def enforce_oc_cap(account: AbstractBaseUser, *, cap: int = DEFAULT_OC_CAP) -> N
                 f"You already have {current} active OCs (cap {cap})."
                 " Freeze or retire one before creating another."
             ),
+        )
+
+
+def update_profile_text(
+    profile: Profile,
+    field: str,
+    text: str,
+    *,
+    edited_by: Any | None = None,
+    previous_text: str | None = None,
+) -> ProfileTextVersion:
+    """Write a versioned Profile prose field — the ONLY sanctioned write path (#2631).
+
+    Snapshots on every write so history is never lost. If this is the first
+    versioned write and the field already holds CG text, that original is
+    captured first, so the earliest version row is always the CG-approved text.
+    Each row is stamped with the IC datetime and active Era (season) when
+    available.
+
+    Args:
+        profile: The Profile to update (a sheet's true_profile, or a guise's).
+        field: A ``ProfileTextField`` value (matches the Profile attribute name).
+        text: The full replacement text.
+        edited_by: The staff account for admin-path edits; None for
+            request-driven writes.
+        previous_text: Override for the pre-write field value when the caller
+            has already mutated the instance (the admin path — the identity
+            map means ``getattr`` sees the new value there). None reads the
+            instance.
+
+    Returns:
+        The created ProfileTextVersion for the new text.
+    """
+    from world.game_clock.models import GameClock  # noqa: PLC0415
+    from world.stories.models import Era  # noqa: PLC0415
+
+    if field not in ProfileTextField.values:
+        msg = f"{field!r} is not a versioned profile text field."
+        raise ValueError(msg)
+
+    clock = GameClock.get_active()
+    ic_date = clock.get_ic_now() if clock else None
+    era = Era.objects.get_active()
+
+    with transaction.atomic():
+        current = previous_text if previous_text is not None else getattr(profile, field)
+        has_versions = ProfileTextVersion.objects.filter(profile=profile, field=field).exists()
+        if not has_versions and current:
+            ProfileTextVersion.objects.create(
+                profile=profile,
+                field=field,
+                text=current,
+                ic_date=ic_date,
+                era=era,
+            )
+        setattr(profile, field, text)
+        profile.save(update_fields=[field])
+        return ProfileTextVersion.objects.create(
+            profile=profile,
+            field=field,
+            text=text,
+            ic_date=ic_date,
+            era=era,
+            edited_by=edited_by,
         )
