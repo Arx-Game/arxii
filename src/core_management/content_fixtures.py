@@ -815,8 +815,8 @@ def _upsert_fixture_object(  # noqa: C901 — one branch per distinct skip reaso
 
 def load_entries(
     result: BuildResult, *, defer_unresolved: bool = False
-) -> tuple[int, int] | tuple[int, int, list[tuple[dict, Path | None]]]:
-    """Upsert built objects into the database; returns (created, updated).
+) -> tuple[int, int, list[tuple[dict, Path | None]]]:
+    """Upsert built objects into the database; returns (created, updated, deferred).
 
     Deliberately NOT ``loaddata``: SharedMemoryModel's identity map
     intercepts construction-by-pk and returns the cached old instance,
@@ -857,6 +857,9 @@ def load_entries(
     depend on another deferred object (e.g. a ``Technique`` naming a ``Gift``
     that was ALSO deferred).
 
+    When ``defer_unresolved`` is false the ``deferred`` element is an empty
+    list — the tuple shape is always ``(created, updated, deferred)``.
+
     Requires Django to be configured; imports are deferred so the module
     stays import-safe for pure validation.
     """
@@ -885,9 +888,7 @@ def load_entries(
                 updated_count += 1
             elif outcome == OUTCOME_DEFERRED:
                 deferred.append((obj, source_path))
-    if defer_unresolved:
-        return created_count, updated_count, deferred
-    return created_count, updated_count
+    return created_count, updated_count, deferred
 
 
 @dataclass

@@ -19,8 +19,11 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
-# App-qualified model path repeated across FK references; centralized for dedup.
+# App-qualified model paths repeated across FK references; centralized for dedup.
 _DISTINCTION_MODEL = "distinctions.Distinction"
+_PATH_MODEL = "classes.Path"
+_GIFT_MODEL = "magic.Gift"
+_TRADITION_MODEL = "magic.Tradition"
 
 
 class BeginningsRitualGrant(SharedMemoryModel):
@@ -57,7 +60,7 @@ class PathRitualGrant(models.Model):  # noqa: SHARED_MEMORY
     """Rituals granted by a Path choice."""
 
     path = models.ForeignKey(
-        "classes.Path",
+        _PATH_MODEL,
         on_delete=models.CASCADE,
         related_name="ritual_grants",
     )
@@ -96,12 +99,12 @@ class PathGiftGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
     """
 
     path = models.ForeignKey(
-        "classes.Path",
+        _PATH_MODEL,
         on_delete=models.CASCADE,
         related_name="gift_grants",
     )
     gift = models.ForeignKey(
-        "magic.Gift",
+        _GIFT_MODEL,
         on_delete=models.PROTECT,
         related_name="path_grants",
     )
@@ -116,7 +119,7 @@ class PathGiftGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
 
     class NaturalKeyConfig:
         fields = ["path", "gift"]
-        dependencies = ["classes.Path", "magic.Gift"]
+        dependencies = [_PATH_MODEL, _GIFT_MODEL]
 
     class Meta:
         constraints = [
@@ -156,12 +159,12 @@ class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
     """
 
     tradition = models.ForeignKey(
-        "magic.Tradition",
+        _TRADITION_MODEL,
         on_delete=models.CASCADE,
         related_name="gift_grants",
     )
     gift = models.ForeignKey(
-        "magic.Gift",
+        _GIFT_MODEL,
         on_delete=models.PROTECT,
         related_name="tradition_grants",
     )
@@ -179,7 +182,7 @@ class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["tradition", "gift"]
-        dependencies = ["magic.Tradition", "magic.Gift"]
+        dependencies = [_TRADITION_MODEL, _GIFT_MODEL]
 
     class Meta:
         constraints = [
@@ -346,7 +349,7 @@ class TraditionRitualGrant(SharedMemoryModel):
     """Rituals granted by a Tradition."""
 
     tradition = models.ForeignKey(
-        "magic.Tradition",
+        _TRADITION_MODEL,
         on_delete=models.CASCADE,
         related_name="ritual_grants",
     )

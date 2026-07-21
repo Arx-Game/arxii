@@ -13,6 +13,9 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+# App-qualified model path repeated across FK references; centralized for dedup.
+_DOMAIN_MODEL = "societies.Domain"
+
 
 class CropType(SharedMemoryModel):
     """Staff-authored catalog of crop varieties.
@@ -93,7 +96,7 @@ class FoodStockpile(SharedMemoryModel):
     """
 
     domain = models.OneToOneField(
-        "societies.Domain",
+        _DOMAIN_MODEL,
         on_delete=models.CASCADE,
         related_name="food_stockpile",
         primary_key=True,
@@ -208,12 +211,12 @@ class FoodTransfer(SharedMemoryModel):
     """
 
     source_domain = models.ForeignKey(
-        "societies.Domain",
+        _DOMAIN_MODEL,
         on_delete=models.CASCADE,
         related_name="food_transfers_out",
     )
     target_domain = models.ForeignKey(
-        "societies.Domain",
+        _DOMAIN_MODEL,
         on_delete=models.CASCADE,
         related_name="food_transfers_in",
     )

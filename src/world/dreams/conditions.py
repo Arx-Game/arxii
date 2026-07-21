@@ -18,6 +18,9 @@ from world.dreams.constants import (
     NIGHTMARES_CONDITION_NAME,
 )
 
+# Shared description for mental-focus check condition templates.
+_FOCUS_CHECK_DESCRIPTION = "Mental focus and concentration checks."
+
 
 def _ensure_nightmares_category() -> ConditionCategory:
     """Return the Dream Affliction condition category (non-behavior-altering)."""
@@ -90,12 +93,12 @@ def ensure_nightmares_condition() -> ConditionTemplate:
 
     mental_category, _ = CheckCategory.objects.get_or_create(
         name="Mental",
-        defaults={"description": "Mental focus and concentration checks.", "display_order": 30},
+        defaults={"description": _FOCUS_CHECK_DESCRIPTION, "display_order": 30},
     )
     mental_check, _ = CheckType.objects.get_or_create(
         name="Mental",
         category=mental_category,
-        defaults={"description": "Mental focus and concentration checks."},
+        defaults={"description": _FOCUS_CHECK_DESCRIPTION},
     )
     ConditionCheckModifier.objects.get_or_create(
         condition=template,
@@ -154,12 +157,12 @@ def ensure_madness_condition() -> ConditionTemplate:
 
     mental_category, _ = CheckCategory.objects.get_or_create(
         name="Mental",
-        defaults={"description": "Mental focus and concentration checks.", "display_order": 30},
+        defaults={"description": _FOCUS_CHECK_DESCRIPTION, "display_order": 30},
     )
     mental_check, _ = CheckType.objects.get_or_create(
         name="Mental",
         category=mental_category,
-        defaults={"description": "Mental focus and concentration checks."},
+        defaults={"description": _FOCUS_CHECK_DESCRIPTION},
     )
     ConditionCheckModifier.objects.get_or_create(
         condition=template,
@@ -195,7 +198,7 @@ def _ensure_dream_peril_config() -> None:
     # Create a stability-based check type for Dream Peril resistance
     category, _ = CheckCategory.objects.get_or_create(
         name="Mental",
-        defaults={"description": "Mental focus and concentration checks.", "display_order": 30},
+        defaults={"description": _FOCUS_CHECK_DESCRIPTION, "display_order": 30},
     )
     check_type, created = CheckType.objects.get_or_create(
         name="Dream Peril Resolve",

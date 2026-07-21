@@ -54,6 +54,9 @@ logger = logging.getLogger(__name__)
 _AMBIENT_SCOPE_ROOM = "room"
 _AMBIENT_SCOPE_AREA = "area"
 
+# Evennia typeclass path for exits, used when filtering and creating exit objects.
+EXIT_TYPECLASS = "typeclasses.exits.Exit"
+
 
 @dataclass
 class GridImportResult:
@@ -99,6 +102,115 @@ def _resolve_named_fk(model: Any, name: str | None, bundle_name: str, label: str
     return obj
 
 
+def _resolve_area_parent(
+    parent_slug: str | None, area_by_slug: dict[str, Area]
+) -> tuple[Area | None, bool]:
+    """Resolve an area's parent for upsert, returning ``(parent, ready)``.
+
+    When ``ready`` is False the parent slug is not yet imported and not in the
+    DB, so the caller should defer this area to a later topological pass.
+
+    Args:
+        parent_slug: The slug of the parent area, or None for a root area.
+        area_by_slug: Areas already imported in earlier passes of this run.
+
+    Returns:
+        ``(parent, ready)`` — the resolved parent Area (or None for a root)
+        and whether the parent is ready for this area to be imported now.
+    """
+    from world.areas.models import Area  # noqa: PLC0415
+
+    if parent_slug is None:
+        return None, True
+    parent = area_by_slug.get(parent_slug)
+    if parent is not None:
+        return parent, True
+    parent = Area.objects.filter(slug=parent_slug).first()
+    if parent is None:
+        return None, False
+    return parent, True
+
+
+def _resolve_building_kinds(kind_names: list[str], bundle_name: str) -> list:
+    """Resolve a list of building-kind names to ``BuildingKind`` objects.
+
+    Args:
+        kind_names: Display names of building kinds referenced by the bundle.
+        bundle_name: Filename of the bundle, for error messages.
+
+    Returns:
+        The resolved ``BuildingKind`` objects.
+
+    Raises:
+        ContentError: When a referenced building kind does not exist.
+    """
+    from core_management.content_fixtures import ContentError  # noqa: PLC0415
+    from world.buildings.models import BuildingKind  # noqa: PLC0415
+
+    kinds = []
+    for kind_name in kind_names:
+        kind = BuildingKind.objects.filter(name=kind_name).first()
+        if kind is None:
+            msg = f"{bundle_name}: unknown building kind {kind_name!r}"
+            raise ContentError(msg)
+        kinds.append(kind)
+    return kinds
+
+
+def _upsert_single_area(area_data: dict, parent: Area | None, bundle_name: str) -> tuple:
+    """Upsert one area and its allowed building kinds.
+
+    Resolves the area's realm/climate/society FK references, then
+    ``update_or_create``s the Area row and replaces its
+    ``allowed_building_kinds`` set, all inside a single transaction.
+
+    Args:
+        area_data: The ``area`` dict from a bundle.
+        parent: The resolved parent Area (or None for a root area).
+        bundle_name: Filename of the bundle, for error messages.
+
+    Returns:
+        ``(area, created)`` from the underlying ``update_or_create``.
+    """
+    from django.db import transaction  # noqa: PLC0415
+
+    from world.areas.constants import GridOrigin  # noqa: PLC0415
+    from world.areas.models import Area  # noqa: PLC0415
+    from world.realms.models import Realm  # noqa: PLC0415
+    from world.societies.models import Society  # noqa: PLC0415
+    from world.weather.models import Climate  # noqa: PLC0415
+
+    realm = _resolve_named_fk(Realm, area_data["realm"], bundle_name, "realm")
+    climate = _resolve_named_fk(Climate, area_data["climate"], bundle_name, "climate")
+    society = _resolve_named_fk(
+        Society, area_data["dominant_society"], bundle_name, "dominant society"
+    )
+
+    with transaction.atomic():
+        area, created = Area.objects.update_or_create(
+            slug=area_data["slug"],
+            defaults={
+                "name": area_data["name"],
+                "level": area_data["level"],
+                "parent": parent,
+                "realm": realm,
+                "climate": climate,
+                "dominant_society": society,
+                "description": area_data["description"],
+                "color": area_data["color"],
+                "grid_x": area_data["grid_x"],
+                "grid_y": area_data["grid_y"],
+                "permit_eligibility": area_data["permit_eligibility"],
+                "permit_cost_multiplier": area_data["permit_cost_multiplier"],
+                "origin": GridOrigin.AUTHORED,
+            },
+        )
+        area.allowed_building_kinds.set(
+            _resolve_building_kinds(area_data["allowed_building_kinds"], bundle_name)
+        )
+    return area, created
+
+
 def _import_areas(
     bundles: list[tuple[Path, dict]], result: GridImportResult
 ) -> tuple[dict[str, Area], dict[Path, Area]]:
@@ -106,15 +218,7 @@ def _import_areas(
 
     Returns ``(area_by_slug, area_by_bundle_path)``.
     """
-    from django.db import transaction  # noqa: PLC0415
-
     from core_management.content_fixtures import ContentError  # noqa: PLC0415
-    from world.areas.constants import GridOrigin  # noqa: PLC0415
-    from world.areas.models import Area  # noqa: PLC0415
-    from world.buildings.models import BuildingKind  # noqa: PLC0415
-    from world.realms.models import Realm  # noqa: PLC0415
-    from world.societies.models import Society  # noqa: PLC0415
-    from world.weather.models import Climate  # noqa: PLC0415
 
     area_by_slug: dict[str, Area] = {}
     area_by_path: dict[Path, Area] = {}
@@ -124,50 +228,13 @@ def _import_areas(
         still_pending: list[tuple[Path, dict]] = []
         progressed = False
         for path, area_data in pending:
-            parent_slug = area_data["parent"]
-            if parent_slug is not None and parent_slug not in area_by_slug:
-                if not Area.objects.filter(slug=parent_slug).exists():
-                    still_pending.append((path, area_data))
-                    continue
-            parent = area_by_slug.get(parent_slug) if parent_slug else None
-            if parent is None and parent_slug is not None:
-                parent = Area.objects.get(slug=parent_slug)
+            parent, ready = _resolve_area_parent(area_data["parent"], area_by_slug)
+            if not ready:
+                still_pending.append((path, area_data))
+                continue
 
             bundle_name = path.name
-            realm = _resolve_named_fk(Realm, area_data["realm"], bundle_name, "realm")
-            climate = _resolve_named_fk(Climate, area_data["climate"], bundle_name, "climate")
-            society = _resolve_named_fk(
-                Society, area_data["dominant_society"], bundle_name, "dominant society"
-            )
-
-            with transaction.atomic():
-                area, created = Area.objects.update_or_create(
-                    slug=area_data["slug"],
-                    defaults={
-                        "name": area_data["name"],
-                        "level": area_data["level"],
-                        "parent": parent,
-                        "realm": realm,
-                        "climate": climate,
-                        "dominant_society": society,
-                        "description": area_data["description"],
-                        "color": area_data["color"],
-                        "grid_x": area_data["grid_x"],
-                        "grid_y": area_data["grid_y"],
-                        "permit_eligibility": area_data["permit_eligibility"],
-                        "permit_cost_multiplier": area_data["permit_cost_multiplier"],
-                        "origin": GridOrigin.AUTHORED,
-                    },
-                )
-                kinds = []
-                for kind_name in area_data["allowed_building_kinds"]:
-                    kind = BuildingKind.objects.filter(name=kind_name).first()
-                    if kind is None:
-                        msg = f"{bundle_name}: unknown building kind {kind_name!r}"
-                        raise ContentError(msg)
-                    kinds.append(kind)
-                area.allowed_building_kinds.set(kinds)
-
+            area, created = _upsert_single_area(area_data, parent, bundle_name)
             area_by_slug[area_data["slug"]] = area
             area_by_path[path] = area
             if created:
@@ -185,6 +252,116 @@ def _import_areas(
     return area_by_slug, area_by_path
 
 
+def _resolve_room_size(size_name: str | None, fixture_key: str, bundle_name: str) -> object | None:
+    """Resolve a room's size tier name to a ``RoomSizeTier`` object.
+
+    Args:
+        size_name: The size tier name from the bundle, or None.
+        fixture_key: The room's fixture key, for error messages.
+        bundle_name: Filename of the bundle, for error messages.
+
+    Returns:
+        The resolved ``RoomSizeTier`` or None when ``size_name`` is None.
+
+    Raises:
+        ContentError: When a non-null size name does not resolve.
+    """
+    from core_management.content_fixtures import ContentError  # noqa: PLC0415
+    from evennia_extensions.models import RoomSizeTier  # noqa: PLC0415
+
+    if size_name is None:
+        return None
+    size = RoomSizeTier.objects.filter(name=size_name).first()
+    if size is None:
+        msg = f"{bundle_name}: unknown room size {size_name!r} for {fixture_key!r}"
+        raise ContentError(msg)
+    return size
+
+
+def _build_room_fields(room_data: dict, area: Area, size: object | None) -> dict:
+    """Build the RoomProfile field dict for a room from bundle data.
+
+    Args:
+        room_data: The room dict from a bundle.
+        area: The Area the room belongs to.
+        size: The resolved size tier, or None.
+
+    Returns:
+        A dict of field name to value suitable for ``update_or_create`` defaults.
+    """
+    from world.areas.constants import GridOrigin  # noqa: PLC0415
+
+    return {
+        "area": area,
+        "origin": GridOrigin.AUTHORED,
+        "is_public": room_data["is_public"],
+        "is_social_hub": room_data["is_social_hub"],
+        "is_outdoor": room_data["is_outdoor"],
+        "enclosure": room_data["enclosure"],
+        "size": size,
+        "grid_x": room_data["grid_x"],
+        "grid_y": room_data["grid_y"],
+        "floor": room_data["floor"],
+    }
+
+
+def _upsert_single_room(
+    room_data: dict,
+    fixture_key: str,
+    room_fields: dict,
+    result: GridImportResult,
+) -> tuple:
+    """Upsert one room and its display data, updating result counters.
+
+    When a ``RoomProfile`` for the fixture key already exists, updates its
+    ObjectDB key and field values; otherwise creates a new Evennia object and
+    RoomProfile. In both cases the ``ObjectDisplayData`` row is upserted.
+
+    Args:
+        room_data: The room dict from a bundle.
+        fixture_key: The room's stable fixture key.
+        room_fields: The resolved field dict from ``_build_room_fields``.
+        result: The import result to increment counters on.
+
+    Returns:
+        ``(profile, room_obj)`` — the RoomProfile and the Evennia object.
+    """
+    from evennia.utils import create as evennia_create  # noqa: PLC0415
+
+    from evennia_extensions.models import ObjectDisplayData, RoomProfile  # noqa: PLC0415
+
+    existing = RoomProfile.objects.filter(fixture_key=fixture_key).first()
+    if existing is not None:
+        room_obj = existing.objectdb
+        room_obj.db_key = room_data["key"]
+        room_obj.save()
+        for attr, value in room_fields.items():
+            setattr(existing, attr, value)
+        existing.save()
+        profile = existing
+        result.updated_rooms += 1
+    else:
+        room_obj = evennia_create.create_object(
+            typeclass="typeclasses.rooms.Room",
+            key=room_data["key"],
+            nohome=True,
+        )
+        profile, _ = RoomProfile.objects.update_or_create(
+            objectdb=room_obj,
+            defaults={**room_fields, "fixture_key": fixture_key},
+        )
+        result.created_rooms += 1
+
+    ObjectDisplayData.objects.update_or_create(
+        object=room_obj,
+        defaults={
+            "longname": room_data["longname"],
+            "permanent_description": room_data["description"],
+        },
+    )
+    return profile, room_obj
+
+
 def _import_rooms(
     bundles: list[tuple[Path, dict]],
     area_by_path: dict[Path, Area],
@@ -192,15 +369,6 @@ def _import_rooms(
 ) -> dict[str, RoomProfile]:
     """Pass 2: upsert every bundle's rooms by ``fixture_key``."""
     from django.db import transaction  # noqa: PLC0415
-    from evennia.utils import create as evennia_create  # noqa: PLC0415
-
-    from core_management.content_fixtures import ContentError  # noqa: PLC0415
-    from evennia_extensions.models import (  # noqa: PLC0415
-        ObjectDisplayData,
-        RoomProfile,
-        RoomSizeTier,
-    )
-    from world.areas.constants import GridOrigin  # noqa: PLC0415
 
     room_by_fixture_key: dict[str, RoomProfile] = {}
 
@@ -210,59 +378,108 @@ def _import_rooms(
         with transaction.atomic():
             for room_data in bundle["rooms"]:
                 fixture_key = room_data["fixture_key"]
-                size = None
-                size_name = room_data["size"]
-                if size_name is not None:
-                    size = RoomSizeTier.objects.filter(name=size_name).first()
-                    if size is None:
-                        msg = f"{bundle_name}: unknown room size {size_name!r} for {fixture_key!r}"
-                        raise ContentError(msg)
-
-                room_fields = {
-                    "area": area,
-                    "origin": GridOrigin.AUTHORED,
-                    "is_public": room_data["is_public"],
-                    "is_social_hub": room_data["is_social_hub"],
-                    "is_outdoor": room_data["is_outdoor"],
-                    "enclosure": room_data["enclosure"],
-                    "size": size,
-                    "grid_x": room_data["grid_x"],
-                    "grid_y": room_data["grid_y"],
-                    "floor": room_data["floor"],
-                }
-
-                existing = RoomProfile.objects.filter(fixture_key=fixture_key).first()
-                if existing is not None:
-                    room_obj = existing.objectdb
-                    room_obj.db_key = room_data["key"]
-                    room_obj.save()
-                    for attr, value in room_fields.items():
-                        setattr(existing, attr, value)
-                    existing.save()
-                    profile = existing
-                    result.updated_rooms += 1
-                else:
-                    room_obj = evennia_create.create_object(
-                        typeclass="typeclasses.rooms.Room",
-                        key=room_data["key"],
-                        nohome=True,
-                    )
-                    profile, _ = RoomProfile.objects.update_or_create(
-                        objectdb=room_obj,
-                        defaults={**room_fields, "fixture_key": fixture_key},
-                    )
-                    result.created_rooms += 1
-
-                ObjectDisplayData.objects.update_or_create(
-                    object=room_obj,
-                    defaults={
-                        "longname": room_data["longname"],
-                        "permanent_description": room_data["description"],
-                    },
-                )
+                size = _resolve_room_size(room_data["size"], fixture_key, bundle_name)
+                room_fields = _build_room_fields(room_data, area, size)
+                profile, _ = _upsert_single_room(room_data, fixture_key, room_fields, result)
                 room_by_fixture_key[fixture_key] = profile
 
     return room_by_fixture_key
+
+
+def _resolve_exit_endpoints(
+    exit_data: dict,
+    room_by_fixture_key: dict[str, RoomProfile],
+    bundle_name: str,
+) -> tuple[object, object]:
+    """Resolve an exit's source and destination rooms.
+
+    Args:
+        exit_data: The exit dict from a bundle.
+        room_by_fixture_key: Rooms imported in pass 2, keyed by fixture key.
+        bundle_name: Filename of the bundle, for error messages.
+
+    Returns:
+        ``(source_obj, dest_obj)`` — the Evennia ObjectDB objects for the
+        exit's source and destination rooms.
+
+    Raises:
+        ContentError: When the source or destination fixture key is not a
+            room imported from any bundle.
+    """
+    from core_management.content_fixtures import ContentError  # noqa: PLC0415
+
+    source_key = exit_data["source"]
+    dest_key = exit_data["destination"]
+    exit_key = exit_data["key"]
+
+    source_profile = room_by_fixture_key.get(source_key)
+    if source_profile is None:
+        msg = (
+            f"{bundle_name}: exit {exit_key!r} source {source_key!r} "
+            "is not a room imported from any bundle"
+        )
+        raise ContentError(msg)
+    dest_profile = room_by_fixture_key.get(dest_key)
+    if dest_profile is None:
+        msg = (
+            f"{bundle_name}: exit {exit_key!r} from {source_key!r} has a "
+            f"dangling destination {dest_key!r} — corrupt bundle"
+        )
+        raise ContentError(msg)
+
+    return source_profile.objectdb, dest_profile.objectdb
+
+
+def _upsert_single_exit_object(
+    exit_data: dict,
+    source_obj: object,
+    dest_obj: object,
+    result: GridImportResult,
+) -> object:
+    """Upsert one exit's Evennia object, returning it and updating counters.
+
+    When an exit object with the same key/typeclass/location already exists,
+    updates its destination; otherwise creates a new Evennia object. Aliases
+    not already present are added afterwards.
+
+    Args:
+        exit_data: The exit dict from a bundle.
+        source_obj: The source room's Evennia object.
+        dest_obj: The destination room's Evennia object.
+        result: The import result to increment counters on.
+
+    Returns:
+        The exit Evennia object (existing or newly created).
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+    from evennia.utils import create as evennia_create  # noqa: PLC0415
+
+    exit_key = exit_data["key"]
+    existing_exit = ObjectDB.objects.filter(
+        db_location=source_obj,
+        db_key=exit_key,
+        db_typeclass_path=EXIT_TYPECLASS,
+    ).first()
+    if existing_exit is not None:
+        existing_exit.db_destination = dest_obj
+        existing_exit.save()
+        exit_obj = existing_exit
+        result.updated_exits += 1
+    else:
+        exit_obj = evennia_create.create_object(
+            typeclass=EXIT_TYPECLASS,
+            key=exit_key,
+            location=source_obj,
+            destination=dest_obj,
+            nohome=True,
+        )
+        result.created_exits += 1
+
+    current_aliases = set(exit_obj.aliases.all())
+    for alias in exit_data["aliases"]:
+        if alias not in current_aliases:
+            exit_obj.aliases.add(alias)
+    return exit_obj
 
 
 def _import_exits(
@@ -272,62 +489,17 @@ def _import_exits(
 ) -> None:
     """Pass 3: upsert every bundle's exits by ``(source fixture_key, key)``."""
     from django.db import transaction  # noqa: PLC0415
-    from evennia.objects.models import ObjectDB  # noqa: PLC0415
-    from evennia.utils import create as evennia_create  # noqa: PLC0415
 
-    from core_management.content_fixtures import ContentError  # noqa: PLC0415
     from evennia_extensions.models import ExitProfile  # noqa: PLC0415
 
     for path, bundle in bundles:
         bundle_name = path.name
         with transaction.atomic():
             for exit_data in bundle["exits"]:
-                source_key = exit_data["source"]
-                dest_key = exit_data["destination"]
-                exit_key = exit_data["key"]
-
-                source_profile = room_by_fixture_key.get(source_key)
-                if source_profile is None:
-                    msg = (
-                        f"{bundle_name}: exit {exit_key!r} source {source_key!r} "
-                        "is not a room imported from any bundle"
-                    )
-                    raise ContentError(msg)
-                dest_profile = room_by_fixture_key.get(dest_key)
-                if dest_profile is None:
-                    msg = (
-                        f"{bundle_name}: exit {exit_key!r} from {source_key!r} has a "
-                        f"dangling destination {dest_key!r} — corrupt bundle"
-                    )
-                    raise ContentError(msg)
-
-                source_obj = source_profile.objectdb
-                dest_obj = dest_profile.objectdb
-
-                existing_exit = ObjectDB.objects.filter(
-                    db_location=source_obj,
-                    db_key=exit_key,
-                    db_typeclass_path="typeclasses.exits.Exit",
-                ).first()
-                if existing_exit is not None:
-                    existing_exit.db_destination = dest_obj
-                    existing_exit.save()
-                    exit_obj = existing_exit
-                    result.updated_exits += 1
-                else:
-                    exit_obj = evennia_create.create_object(
-                        typeclass="typeclasses.exits.Exit",
-                        key=exit_key,
-                        location=source_obj,
-                        destination=dest_obj,
-                        nohome=True,
-                    )
-                    result.created_exits += 1
-
-                current_aliases = set(exit_obj.aliases.all())
-                for alias in exit_data["aliases"]:
-                    if alias not in current_aliases:
-                        exit_obj.aliases.add(alias)
+                source_obj, dest_obj = _resolve_exit_endpoints(
+                    exit_data, room_by_fixture_key, bundle_name
+                )
+                exit_obj = _upsert_single_exit_object(exit_data, source_obj, dest_obj, result)
 
                 profile = ExitProfile.get_or_create_for_exit(exit_obj)
                 profile.exit_kind = exit_data["exit_kind"]
@@ -356,7 +528,7 @@ def _report_orphaned_exits(bundles: list[tuple[Path, dict]], result: GridImportR
         return
 
     exits = ObjectDB.objects.filter(
-        db_location_id__in=fixture_by_objectdb_id, db_typeclass_path="typeclasses.exits.Exit"
+        db_location_id__in=fixture_by_objectdb_id, db_typeclass_path=EXIT_TYPECLASS
     )
     for exit_obj in exits:
         source_key = fixture_by_objectdb_id[exit_obj.db_location_id]
@@ -463,6 +635,131 @@ def _import_sidecars(
                 )
 
 
+def _resolve_clue(clue_slug: str, bundle_name: str) -> object:
+    """Resolve a clue slug to a ``Clue`` object.
+
+    Args:
+        clue_slug: The clue slug from the bundle.
+        bundle_name: Filename of the bundle, for error messages.
+
+    Returns:
+        The resolved ``Clue`` object.
+
+    Raises:
+        ContentError: When the clue slug does not resolve.
+    """
+    from core_management.content_fixtures import ContentError  # noqa: PLC0415
+    from world.clues.models import Clue  # noqa: PLC0415
+
+    clue = Clue.objects.filter(slug=clue_slug).first()
+    if clue is None:
+        msg = f"{bundle_name}: unknown clue slug {clue_slug!r}"
+        raise ContentError(msg)
+    return clue
+
+
+def _import_room_clue_rows(
+    rows: list[dict],
+    room_by_fixture_key: dict[str, RoomProfile],
+    result: GridImportResult,
+    bundle_name: str,
+) -> None:
+    """Upsert ``RoomClue`` rows for one bundle.
+
+    Args:
+        rows: The bundle's ``clues`` list.
+        room_by_fixture_key: Rooms imported in pass 2, keyed by fixture key.
+        result: The import result to increment counters on.
+        bundle_name: Filename of the bundle, for error messages.
+    """
+    from world.clues.models import RoomClue  # noqa: PLC0415
+
+    for row_data in rows:
+        room_profile = room_by_fixture_key[row_data["room"]]
+        clue = _resolve_clue(row_data["clue"], bundle_name)
+        _, created = RoomClue.objects.update_or_create(
+            fixture_key=row_data["fixture_key"],
+            defaults={
+                "room_profile": room_profile,
+                "clue": clue,
+                "detect_difficulty": row_data["detect_difficulty"],
+                "eligibility_rule": row_data["eligibility_rule"],
+                "is_active": row_data["is_active"],
+            },
+        )
+        result.created_clue_sidecars += created
+        result.updated_clue_sidecars += not created
+
+
+def _import_clue_trigger_rows(
+    rows: list[dict],
+    room_by_fixture_key: dict[str, RoomProfile],
+    result: GridImportResult,
+    bundle_name: str,
+) -> None:
+    """Upsert ``ClueTrigger`` rows for one bundle.
+
+    Args:
+        rows: The bundle's ``clue_triggers`` list.
+        room_by_fixture_key: Rooms imported in pass 2, keyed by fixture key.
+        result: The import result to increment counters on.
+        bundle_name: Filename of the bundle, for error messages.
+    """
+    from world.clues.models import ClueTrigger  # noqa: PLC0415
+
+    for row_data in rows:
+        room_profile = room_by_fixture_key[row_data["room"]]
+        clue = _resolve_clue(row_data["clue"], bundle_name)
+        _, created = ClueTrigger.objects.update_or_create(
+            fixture_key=row_data["fixture_key"],
+            defaults={
+                "room_profile": room_profile,
+                "clue": clue,
+                "eligibility_rule": row_data["eligibility_rule"],
+                "is_active": row_data["is_active"],
+            },
+        )
+        result.created_clue_sidecars += created
+        result.updated_clue_sidecars += not created
+
+
+def _import_portal_anchor_rows(
+    rows: list[dict],
+    room_by_fixture_key: dict[str, RoomProfile],
+    result: GridImportResult,
+    bundle_name: str,
+) -> None:
+    """Upsert ``PortalAnchor`` rows for one bundle.
+
+    Args:
+        rows: The bundle's ``portal_anchors`` list.
+        room_by_fixture_key: Rooms imported in pass 2, keyed by fixture key.
+        result: The import result to increment counters on.
+        bundle_name: Filename of the bundle, for error messages.
+    """
+    from core_management.content_fixtures import ContentError  # noqa: PLC0415
+    from world.magic.models import PortalAnchor, PortalAnchorKind  # noqa: PLC0415
+
+    for row_data in rows:
+        room_profile = room_by_fixture_key[row_data["room"]]
+        kind = PortalAnchorKind.objects.filter(name=row_data["kind"]).first()
+        if kind is None:
+            msg = f"{bundle_name}: unknown portal anchor kind {row_data['kind']!r}"
+            raise ContentError(msg)
+        _, created = PortalAnchor.objects.update_or_create(
+            fixture_key=row_data["fixture_key"],
+            defaults={
+                "room_profile": room_profile,
+                "kind": kind,
+                "name": row_data["name"],
+                "is_network_open": row_data["is_network_open"],
+                "dissolved_at": None,
+            },
+        )
+        result.created_clue_sidecars += created
+        result.updated_clue_sidecars += not created
+
+
 def _import_clue_and_anchor_sidecars(
     bundles: list[tuple[Path, dict]],
     room_by_fixture_key: dict[str, RoomProfile],
@@ -471,68 +768,16 @@ def _import_clue_and_anchor_sidecars(
     """Pass 5: upsert fixture-keyed RoomClue/ClueTrigger/PortalAnchor rows by fixture_key."""
     from django.db import transaction  # noqa: PLC0415
 
-    from core_management.content_fixtures import ContentError  # noqa: PLC0415
-    from world.clues.models import Clue, ClueTrigger, RoomClue  # noqa: PLC0415
-    from world.magic.models import PortalAnchor, PortalAnchorKind  # noqa: PLC0415
-
     for path, bundle in bundles:
         bundle_name = path.name
         with transaction.atomic():
-            for row_data in bundle["clues"]:
-                room_profile = room_by_fixture_key[row_data["room"]]
-                clue = Clue.objects.filter(slug=row_data["clue"]).first()
-                if clue is None:
-                    msg = f"{bundle_name}: unknown clue slug {row_data['clue']!r}"
-                    raise ContentError(msg)
-                _, created = RoomClue.objects.update_or_create(
-                    fixture_key=row_data["fixture_key"],
-                    defaults={
-                        "room_profile": room_profile,
-                        "clue": clue,
-                        "detect_difficulty": row_data["detect_difficulty"],
-                        "eligibility_rule": row_data["eligibility_rule"],
-                        "is_active": row_data["is_active"],
-                    },
-                )
-                result.created_clue_sidecars += created
-                result.updated_clue_sidecars += not created
-
-            for row_data in bundle["clue_triggers"]:
-                room_profile = room_by_fixture_key[row_data["room"]]
-                clue = Clue.objects.filter(slug=row_data["clue"]).first()
-                if clue is None:
-                    msg = f"{bundle_name}: unknown clue slug {row_data['clue']!r}"
-                    raise ContentError(msg)
-                _, created = ClueTrigger.objects.update_or_create(
-                    fixture_key=row_data["fixture_key"],
-                    defaults={
-                        "room_profile": room_profile,
-                        "clue": clue,
-                        "eligibility_rule": row_data["eligibility_rule"],
-                        "is_active": row_data["is_active"],
-                    },
-                )
-                result.created_clue_sidecars += created
-                result.updated_clue_sidecars += not created
-
-            for row_data in bundle["portal_anchors"]:
-                room_profile = room_by_fixture_key[row_data["room"]]
-                kind = PortalAnchorKind.objects.filter(name=row_data["kind"]).first()
-                if kind is None:
-                    msg = f"{bundle_name}: unknown portal anchor kind {row_data['kind']!r}"
-                    raise ContentError(msg)
-                _, created = PortalAnchor.objects.update_or_create(
-                    fixture_key=row_data["fixture_key"],
-                    defaults={
-                        "room_profile": room_profile,
-                        "kind": kind,
-                        "name": row_data["name"],
-                        "is_network_open": row_data["is_network_open"],
-                        "dissolved_at": None,
-                    },
-                )
-                result.created_clue_sidecars += created
-                result.updated_clue_sidecars += not created
+            _import_room_clue_rows(bundle["clues"], room_by_fixture_key, result, bundle_name)
+            _import_clue_trigger_rows(
+                bundle["clue_triggers"], room_by_fixture_key, result, bundle_name
+            )
+            _import_portal_anchor_rows(
+                bundle["portal_anchors"], room_by_fixture_key, result, bundle_name
+            )
 
 
 def _resolve_ambient_condition_fks(row_data: dict, bundle_name: str) -> dict[str, object]:
@@ -737,6 +982,125 @@ def _ensure_ambient_group_trigger(
     return trigger_def
 
 
+def _group_ambient_lines(
+    lines: list, area: Area, room_fixture_by_id: dict[int, str]
+) -> dict[tuple[str, str, str], list]:
+    """Group ambient lines by ``(scope, scope_key, compiled_filter_json)``.
+
+    Each line is compiled to a filter dict, JSON-serialized as a stable key,
+    and bucketed by scope (room vs area) and scope key.
+
+    Args:
+        lines: The freshly-imported ``AmbientEmoteLine`` objects.
+        area: The area the lines belong to, used as the area scope key.
+        room_fixture_by_id: Map of room_profile_id to fixture key.
+
+    Returns:
+        A dict from ``(scope, scope_key, compiled_json)`` to the lines in that group.
+    """
+    from collections import defaultdict  # noqa: PLC0415
+    import json  # noqa: PLC0415
+
+    from world.locations.constants import LocationParentType  # noqa: PLC0415
+    from world.narrative.ambient_content import compile_line_filter  # noqa: PLC0415
+
+    groups: dict[tuple[str, str, str], list] = defaultdict(list)
+    for line in lines:
+        compiled = compile_line_filter(line)
+        compiled_json = json.dumps(compiled, sort_keys=True)
+        if line.parent_type == LocationParentType.ROOM:
+            scope, scope_key = _AMBIENT_SCOPE_ROOM, room_fixture_by_id[line.room_profile_id]
+        else:
+            scope, scope_key = _AMBIENT_SCOPE_AREA, area.slug
+        groups[(scope, scope_key, compiled_json)].append(line)
+    return groups
+
+
+def _collect_room_override_filters(groups: dict[tuple[str, str, str], list]) -> dict[str, set[str]]:
+    """Build the set of compiled-filter overrides each room has.
+
+    A room appears here only if it has its own room-scoped group; area-scoped
+    groups with an identical filter are skipped for that room (most-specific-
+    wins).
+
+    Args:
+        groups: The grouped lines from ``_group_ambient_lines``.
+
+    Returns:
+        A dict from room fixture key to the set of compiled-filter JSON strings
+        that room overrides.
+    """
+    from collections import defaultdict  # noqa: PLC0415
+
+    room_override_filters: dict[str, set[str]] = defaultdict(set)
+    for scope, scope_key, compiled_json in groups:
+        if scope == _AMBIENT_SCOPE_ROOM:
+            room_override_filters[scope_key].add(compiled_json)
+    return room_override_filters
+
+
+def _install_area_scoped_trigger(
+    trigger_def: object,
+    compiled_json: str,
+    bundle_room_fixture_keys: list[str],
+    room_by_fixture_key: dict[str, RoomProfile],
+    room_override_filters: dict[str, set[str]],
+) -> None:
+    """Install an area-scoped trigger on every bundle room without an override.
+
+    A room whose own room-scoped group has an identical compiled filter is
+    skipped (most-specific-wins).
+
+    Args:
+        trigger_def: The derived ``TriggerDefinition`` to install.
+        compiled_json: The compiled-filter JSON string for this group.
+        bundle_room_fixture_keys: Fixture keys for every room in this bundle.
+        room_by_fixture_key: Rooms imported in pass 2, keyed by fixture key.
+        room_override_filters: Per-room override sets from
+            ``_collect_room_override_filters``.
+    """
+    for fixture_key in bundle_room_fixture_keys:
+        if compiled_json in room_override_filters[fixture_key]:
+            continue
+        _ensure_ambient_trigger(room_by_fixture_key[fixture_key].objectdb, trigger_def)
+
+
+def _install_group_triggers(
+    groups: dict[tuple[str, str, str], list],
+    bundle_room_fixture_keys: list[str],
+    room_by_fixture_key: dict[str, RoomProfile],
+) -> None:
+    """Derive and install Triggers for each ambient condition group.
+
+    Room-scoped groups install only on their own room. Area-scoped groups
+    install on every bundle room except one that has its own room-scoped group
+    with an identical compiled filter (most-specific-wins).
+
+    Args:
+        groups: The grouped lines from ``_group_ambient_lines``.
+        bundle_room_fixture_keys: Fixture keys for every room in this bundle.
+        room_by_fixture_key: Rooms imported in pass 2, keyed by fixture key.
+    """
+    import json  # noqa: PLC0415
+
+    room_override_filters = _collect_room_override_filters(groups)
+
+    for (scope, scope_key, compiled_json), group_lines in groups.items():
+        compiled = json.loads(compiled_json)
+        line_ids = [line.pk for line in group_lines]
+        trigger_def = _ensure_ambient_group_trigger(scope, scope_key, compiled, line_ids)
+        if scope == _AMBIENT_SCOPE_ROOM:
+            _ensure_ambient_trigger(room_by_fixture_key[scope_key].objectdb, trigger_def)
+        else:
+            _install_area_scoped_trigger(
+                trigger_def,
+                compiled_json,
+                bundle_room_fixture_keys,
+                room_by_fixture_key,
+                room_override_filters,
+            )
+
+
 def _install_ambient_triggers(
     area: Area,
     bundle_room_fixture_keys: list[str],
@@ -751,42 +1115,11 @@ def _install_ambient_triggers(
     replacement: a room's own SPECIES override doesn't suppress the area's unrelated
     RESONANCE_MIN group.
     """
-    from collections import defaultdict  # noqa: PLC0415
-    import json  # noqa: PLC0415
-
-    from world.locations.constants import LocationParentType  # noqa: PLC0415
-    from world.narrative.ambient_content import compile_line_filter  # noqa: PLC0415
-
     room_fixture_by_id = {
         profile.objectdb_id: fixture_key for fixture_key, profile in room_by_fixture_key.items()
     }
-
-    groups: dict[tuple[str, str, str], list] = defaultdict(list)
-    for line in lines:
-        compiled = compile_line_filter(line)
-        compiled_json = json.dumps(compiled, sort_keys=True)
-        if line.parent_type == LocationParentType.ROOM:
-            scope, scope_key = _AMBIENT_SCOPE_ROOM, room_fixture_by_id[line.room_profile_id]
-        else:
-            scope, scope_key = _AMBIENT_SCOPE_AREA, area.slug
-        groups[(scope, scope_key, compiled_json)].append(line)
-
-    room_override_filters: dict[str, set[str]] = defaultdict(set)
-    for scope, scope_key, compiled_json in groups:
-        if scope == _AMBIENT_SCOPE_ROOM:
-            room_override_filters[scope_key].add(compiled_json)
-
-    for (scope, scope_key, compiled_json), group_lines in groups.items():
-        compiled = json.loads(compiled_json)
-        line_ids = [line.pk for line in group_lines]
-        trigger_def = _ensure_ambient_group_trigger(scope, scope_key, compiled, line_ids)
-        if scope == _AMBIENT_SCOPE_ROOM:
-            _ensure_ambient_trigger(room_by_fixture_key[scope_key].objectdb, trigger_def)
-        else:
-            for fixture_key in bundle_room_fixture_keys:
-                if compiled_json in room_override_filters[fixture_key]:
-                    continue
-                _ensure_ambient_trigger(room_by_fixture_key[fixture_key].objectdb, trigger_def)
+    groups = _group_ambient_lines(lines, area, room_fixture_by_id)
+    _install_group_triggers(groups, bundle_room_fixture_keys, room_by_fixture_key)
 
 
 def _report_missing_clue_and_anchor_sidecars(

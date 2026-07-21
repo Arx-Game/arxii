@@ -6,6 +6,8 @@ from typing import Any
 from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
 
+_NO_SHEET_MSG = "You have no character sheet."
+
 
 @dataclass
 class SleepAction(Action):
@@ -37,9 +39,9 @@ class SleepAction(Action):
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
-            return ActionResult(success=False, message="You have no character sheet.")
+            return ActionResult(success=False, message=_NO_SHEET_MSG)
         if sheet is None:
-            return ActionResult(success=False, message="You have no character sheet.")
+            return ActionResult(success=False, message=_NO_SHEET_MSG)
 
         template = ConditionTemplate.objects.filter(name=SLEEPING_CONDITION_NAME).first()
         if template is None:
@@ -80,9 +82,9 @@ class DescendAction(Action):
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
-            return ActionResult(success=False, message="You have no character sheet.")
+            return ActionResult(success=False, message=_NO_SHEET_MSG)
         if sheet is None:
-            return ActionResult(success=False, message="You have no character sheet.")
+            return ActionResult(success=False, message=_NO_SHEET_MSG)
         if not perceives_dreamside(sheet):
             return ActionResult(success=False, message="You must be dreaming to descend.")
 
@@ -177,9 +179,9 @@ class DreamwalkAction(Action):
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
-            return ActionResult(success=False, message="You have no character sheet.")
+            return ActionResult(success=False, message=_NO_SHEET_MSG)
         if sheet is None:
-            return ActionResult(success=False, message="You have no character sheet.")
+            return ActionResult(success=False, message=_NO_SHEET_MSG)
 
         # Must be dreamside to dreamwalk
         if not perceives_dreamside(sheet):

@@ -105,7 +105,7 @@ def _create_exit(
     # broadcast no-ops without live in-memory scene state, so this is benign —
     # traced in the #2449 Task 1 review.
     exit_obj = evennia_create.create_object(
-        typeclass="typeclasses.exits.Exit",
+        typeclass=_EXIT_TYPECLASS,
         key=name,
         location=source,
         destination=destination,
@@ -148,7 +148,7 @@ def exits_for_rooms(room_ids: set[int]) -> QuerySet:
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
     return ObjectDB.objects.filter(
-        db_typeclass_path="typeclasses.exits.Exit",
+        db_typeclass_path=_EXIT_TYPECLASS,
         db_location_id__in=room_ids,
         db_destination_id__in=room_ids,
     )
@@ -163,7 +163,7 @@ def exits_from_rooms(room_ids: set[int]) -> QuerySet:
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
     return ObjectDB.objects.filter(
-        db_typeclass_path="typeclasses.exits.Exit",
+        db_typeclass_path=_EXIT_TYPECLASS,
         db_location_id__in=room_ids,
     )
 

@@ -23,7 +23,13 @@ import {
   useSkills,
   useUpdateDraft,
 } from '../queries';
-import type { CharacterDraft, Skill, SkillPointBudget, Specialization } from '../types';
+import type {
+  CharacterDraft,
+  PathSkillSuggestion,
+  Skill,
+  SkillPointBudget,
+  Specialization,
+} from '../types';
 
 /** Skill points header showing total, spent, and remaining */
 function SkillPointsHeader({ budget, spent }: { budget: SkillPointBudget; spent: number }) {
@@ -160,6 +166,82 @@ function SpecializationRow({
   );
 }
 
+/**
+ * Build a skill-value map from a path's suggested starting values.
+ */
+function skillsFromSuggestions(suggestions: PathSkillSuggestion[]): Record<number, number> {
+  const initialSkills: Record<number, number> = {};
+  for (const suggestion of suggestions) {
+    initialSkills[suggestion.skill_id] = suggestion.suggested_value;
+  }
+  return initialSkills;
+}
+
+/**
+ * Convert a DRF-style `Record<string, number>` (string keys from JSON) to the
+ * numeric-keyed map the UI uses internally. Returns `null` for an empty input.
+ */
+function toNumericMap(values: Record<string, number> | undefined): Record<number, number> | null {
+  if (!values) return null;
+  const numeric: Record<number, number> = {};
+  for (const [key, value] of Object.entries(values)) {
+    numeric[parseInt(key, 10)] = value as number;
+  }
+  return Object.keys(numeric).length > 0 ? numeric : null;
+}
+
+/**
+ * Accordion panel listing a skill's specializations, gated by the
+ * specialization-unlock threshold. Extracted as its own component so the
+ * `onChange` callback passed to each SpecializationRow lives at the top
+ * nesting level rather than 5 functions deep (SonarCloud S2004).
+ */
+function SkillSpecializations({
+  skill,
+  skillValue,
+  specValues,
+  threshold,
+  maxValue,
+  canIncrease,
+  onSpecChange,
+}: {
+  skill: Skill;
+  skillValue: number;
+  specValues: Record<number, number>;
+  threshold: number;
+  maxValue: number;
+  canIncrease: boolean;
+  onSpecChange: (specId: number, newValue: number) => void;
+}) {
+  return (
+    <AccordionItem value={`skill-${skill.id}`} className="border-b-0">
+      <AccordionTrigger className="ml-6 py-2 text-xs text-muted-foreground hover:no-underline">
+        Specializations ({skill.specializations.length})
+      </AccordionTrigger>
+      <AccordionContent className="ml-6">
+        {skillValue >= threshold ? (
+          <div className="space-y-2">
+            {skill.specializations.map((spec) => (
+              <SpecializationRow
+                key={spec.id}
+                spec={spec}
+                value={specValues[spec.id] || 0}
+                onChange={(newValue) => onSpecChange(spec.id, newValue)}
+                maxValue={maxValue}
+                canIncrease={canIncrease}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Requires {threshold}+ points in {skill.name}
+          </p>
+        )}
+      </AccordionContent>
+    </AccordionItem>
+  );
+}
+
 /** Skills section with interactive skill point allocation */
 export function SkillsSection({ draft }: { draft: CharacterDraft }) {
   const { data: skills, isLoading: skillsLoading, error: skillsError } = useSkills();
@@ -186,10 +268,7 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
 
     // If path changed, always reset to new path's suggestions
     if (pathChanged) {
-      const initialSkills: Record<number, number> = {};
-      for (const suggestion of suggestions) {
-        initialSkills[suggestion.skill_id] = suggestion.suggested_value;
-      }
+      const initialSkills = skillsFromSuggestions(suggestions);
       setSkillValues(initialSkills);
       setSpecValues({});
       // Persist the reset (2026-07 audit): the UI showed the new path's
@@ -202,38 +281,24 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
     }
 
     // First time initialization - use draft data if available, otherwise suggestions
-    if (!isInitialized) {
-      const draftSkills = draft.draft_data?.skills;
-      const draftSpecs = draft.draft_data?.specializations;
+    if (isInitialized) return;
 
-      if (draftSkills && Object.keys(draftSkills).length > 0) {
-        // Convert string keys to numbers
-        const numericSkills: Record<number, number> = {};
-        for (const [key, value] of Object.entries(draftSkills)) {
-          numericSkills[parseInt(key, 10)] = value as number;
-        }
-        setSkillValues(numericSkills);
-
-        if (draftSpecs) {
-          const numericSpecs: Record<number, number> = {};
-          for (const [key, value] of Object.entries(draftSpecs)) {
-            numericSpecs[parseInt(key, 10)] = value as number;
-          }
-          setSpecValues(numericSpecs);
-        }
-      } else if (suggestions.length > 0) {
-        // Initialize from path suggestions
-        const initialSkills: Record<number, number> = {};
-        for (const suggestion of suggestions) {
-          initialSkills[suggestion.skill_id] = suggestion.suggested_value;
-        }
-        setSkillValues(initialSkills);
-        setSpecValues({});
+    const numericSkills = toNumericMap(draft.draft_data?.skills);
+    if (numericSkills) {
+      setSkillValues(numericSkills);
+      // Preserve original behavior: set specs whenever they exist on the
+      // draft (even an empty {}), converting string keys to numbers.
+      if (draft.draft_data?.specializations) {
+        setSpecValues(toNumericMap(draft.draft_data.specializations) ?? {});
       }
-
-      initializedPathRef.current = currentPathId;
-      setIsInitialized(true);
+    } else if (suggestions.length > 0) {
+      // Initialize from path suggestions
+      setSkillValues(skillsFromSuggestions(suggestions));
+      setSpecValues({});
     }
+
+    initializedPathRef.current = currentPathId;
+    setIsInitialized(true);
   }, [
     skills,
     suggestions,
@@ -408,7 +473,6 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
                       {categorySkills.map((skill) => {
                         const skillValue = skillValues[skill.id] || 0;
                         const hasSpecs = skill.specializations.length > 0;
-                        const meetsThreshold = skillValue >= budget.specialization_unlock_threshold;
 
                         return (
                           <div key={skill.id}>
@@ -420,34 +484,15 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
                               canIncrease={canIncrease}
                             />
                             {hasSpecs && (
-                              <AccordionItem value={`skill-${skill.id}`} className="border-b-0">
-                                <AccordionTrigger className="ml-6 py-2 text-xs text-muted-foreground hover:no-underline">
-                                  Specializations ({skill.specializations.length})
-                                </AccordionTrigger>
-                                <AccordionContent className="ml-6">
-                                  {meetsThreshold ? (
-                                    <div className="space-y-2">
-                                      {skill.specializations.map((spec) => (
-                                        <SpecializationRow
-                                          key={spec.id}
-                                          spec={spec}
-                                          value={specValues[spec.id] || 0}
-                                          onChange={(newValue) =>
-                                            handleSpecChange(spec.id, newValue)
-                                          }
-                                          maxValue={budget.max_specialization_value}
-                                          canIncrease={canIncrease}
-                                        />
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <p className="text-xs text-muted-foreground">
-                                      Requires {budget.specialization_unlock_threshold}+ points in{' '}
-                                      {skill.name}
-                                    </p>
-                                  )}
-                                </AccordionContent>
-                              </AccordionItem>
+                              <SkillSpecializations
+                                skill={skill}
+                                skillValue={skillValue}
+                                specValues={specValues}
+                                threshold={budget.specialization_unlock_threshold}
+                                maxValue={budget.max_specialization_value}
+                                canIncrease={canIncrease}
+                                onSpecChange={handleSpecChange}
+                              />
                             )}
                           </div>
                         );

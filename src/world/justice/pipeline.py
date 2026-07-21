@@ -123,6 +123,50 @@ def maybe_guard_encounter(
     return GuardEncounter.objects.create(persona=persona, area=area, trigger=trigger)
 
 
+def _resolve_evasion_level(encounter: GuardEncounter, check_level: int | None) -> int:
+    """Determine the evasion check success level for an encounter.
+
+    ``check_level`` injects a band for tests; otherwise the evasion check type
+    rolls (degrading to a plain escape when unseeded — pressure never lands
+    without the content in place).
+    """
+    if check_level is not None:
+        return check_level
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.checks.services import perform_check  # noqa: PLC0415
+
+    sheet = encounter.persona.character_sheet
+    character = sheet.character if sheet is not None else None
+    check_type = CheckType.objects.filter(name=EVASION_CHECK_TYPE_NAME).first()
+    if character is None or check_type is None:
+        return 1  # unseeded world / bodiless persona: escape clean
+    result = perform_check(character, check_type)
+    return result.outcome.success_level if result.outcome else 0
+
+
+def _apply_encounter_outcome(encounter: GuardEncounter, level: int) -> None:
+    """Set the encounter outcome based on the evasion level and bump heat if seen."""
+    if level > 0:
+        encounter.outcome = EncounterOutcome.ESCAPED
+    elif level > EVASION_BOTCH_LEVEL:
+        encounter.outcome = EncounterOutcome.ESCAPED_SEEN
+        _bump_heat_for_seen_escape(encounter)
+    else:
+        encounter.outcome = EncounterOutcome.CAPTURED
+
+
+def _bump_heat_for_seen_escape(encounter: GuardEncounter) -> None:
+    """Increase heat on the persona's top heat row for the encounter area."""
+    row = (
+        PersonaHeat.objects.filter(persona=encounter.persona, area=encounter.area)
+        .order_by("-value")
+        .first()
+    )
+    if row is not None:
+        row.value += EVASION_ESCAPE_HEAT_BUMP
+        row.save(update_fields=["value"])
+
+
 def resolve_guard_encounter(
     encounter: GuardEncounter, *, check_level: int | None = None
 ) -> GuardEncounter:
@@ -134,34 +178,9 @@ def resolve_guard_encounter(
     """
     if encounter.resolved_at is not None:
         return encounter
-    level = check_level
-    if level is None:
-        from world.checks.models import CheckType  # noqa: PLC0415
-        from world.checks.services import perform_check  # noqa: PLC0415
 
-        sheet = encounter.persona.character_sheet
-        character = sheet.character if sheet is not None else None
-        check_type = CheckType.objects.filter(name=EVASION_CHECK_TYPE_NAME).first()
-        if character is None or check_type is None:
-            level = 1  # unseeded world / bodiless persona: escape clean
-        else:
-            result = perform_check(character, check_type)
-            level = result.outcome.success_level if result.outcome else 0
-
-    if level > 0:
-        encounter.outcome = EncounterOutcome.ESCAPED
-    elif level > EVASION_BOTCH_LEVEL:
-        encounter.outcome = EncounterOutcome.ESCAPED_SEEN
-        row = (
-            PersonaHeat.objects.filter(persona=encounter.persona, area=encounter.area)
-            .order_by("-value")
-            .first()
-        )
-        if row is not None:
-            row.value += EVASION_ESCAPE_HEAT_BUMP
-            row.save(update_fields=["value"])
-    else:
-        encounter.outcome = EncounterOutcome.CAPTURED
+    level = _resolve_evasion_level(encounter, check_level)
+    _apply_encounter_outcome(encounter, level)
     encounter.resolved_at = timezone.now()
     encounter.save(update_fields=["outcome", "resolved_at"])
 

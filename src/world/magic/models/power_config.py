@@ -10,6 +10,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.managers import ArxSharedMemoryManager
 from world.magic.constants import StandingCapMode
 
+_COVENANT_ROLE_BLEND_CONFIG_LABEL = "Covenant Role Blend Config"
+
 
 class LevelPowerConfig(SharedMemoryModel):
     """Staff-tunable singleton controlling how character and technique level feed into power.
@@ -136,8 +138,8 @@ class CovenantRoleBlendConfig(SharedMemoryModel):
     )
 
     class Meta:
-        verbose_name = "Covenant Role Blend Config"
-        verbose_name_plural = "Covenant Role Blend Config"
+        verbose_name = _COVENANT_ROLE_BLEND_CONFIG_LABEL
+        verbose_name_plural = _COVENANT_ROLE_BLEND_CONFIG_LABEL
 
     def __str__(self) -> str:
-        return "Covenant Role Blend Config"
+        return _COVENANT_ROLE_BLEND_CONFIG_LABEL

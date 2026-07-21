@@ -5,6 +5,9 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import CachedAllMixin
 
+# App-qualified model path repeated across FK references; centralized for dedup.
+_OBJECT_DB_MODEL = "objects.ObjectDB"
+
 
 class DreamReflectionManager(CachedAllMixin, models.Manager):
     """Manager with cached_all() and a for_waking_room convenience lookup."""
@@ -39,17 +42,17 @@ class DreamReflection(SharedMemoryModel):
     """
 
     waking_room = models.OneToOneField(
-        "objects.ObjectDB",
+        _OBJECT_DB_MODEL,
         on_delete=models.CASCADE,
         related_name="dream_reflection",
     )
     dream_room = models.OneToOneField(
-        "objects.ObjectDB",
+        _OBJECT_DB_MODEL,
         on_delete=models.PROTECT,
         related_name="reflection_of",
     )
     descent_target = models.ForeignKey(
-        "objects.ObjectDB",
+        _OBJECT_DB_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

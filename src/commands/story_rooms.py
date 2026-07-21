@@ -24,6 +24,9 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from world.gm.models import StoryRoomGrant
 
+# Shared lock string for story-room commands (authorization lives in the actions).
+_ALL_LOCK = "cmd:all()"
+
 _CLOSE_SUBVERB = "close"
 _SCENEROOM_USAGE = "Usage: sceneroom <name> = <description> | sceneroom close <#room-id>"
 
@@ -42,7 +45,7 @@ class CmdSceneRoom(ArxCommand):
     """
 
     key = "sceneroom"
-    locks = "cmd:all()"
+    locks = _ALL_LOCK
     help_category = "Building"
 
     def func(self) -> None:
@@ -98,7 +101,7 @@ class CmdJoinRoom(ArxCommand):
     """
 
     key = "joinroom"
-    locks = "cmd:all()"
+    locks = _ALL_LOCK
     help_category = "Building"
     action = JoinStoryRoomAction()
 
@@ -150,6 +153,6 @@ class CmdLeaveRoom(ArxCommand):
     """
 
     key = "leaveroom"
-    locks = "cmd:all()"
+    locks = _ALL_LOCK
     help_category = "Building"
     action = LeaveStoryRoomAction()

@@ -26,6 +26,11 @@ from world.covenants.constants import RoleArchetype
 from world.magic.constants import TechniqueCategory, TechniqueFunction, TechniqueReach
 from world.magic.models.gifts import Gift
 
+# App-qualified model paths repeated across FK references; centralized for dedup.
+_TECHNIQUE_MODEL = "magic.Technique"
+_CONDITION_TEMPLATE_MODEL = "conditions.ConditionTemplate"
+_CAPABILITY_TYPE_MODEL = "conditions.CapabilityType"
+
 
 class ConditionTargetKind(models.TextChoices):
     """Who a condition applied by a technique targets."""
@@ -427,7 +432,7 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         help_text="Resolution spec for using this technique outside challenge contexts.",
     )
     applied_conditions = models.ManyToManyField(
-        "conditions.ConditionTemplate",
+        _CONDITION_TEMPLATE_MODEL,
         through="magic.TechniqueAppliedCondition",
         related_name="techniques_applying",
         blank=True,
@@ -647,7 +652,7 @@ class AbstractCapabilityGrant(SharedMemoryModel):
     """
 
     capability = models.ForeignKey(
-        "conditions.CapabilityType",
+        _CAPABILITY_TYPE_MODEL,
         on_delete=models.CASCADE,
         related_name="%(class)s_grants",
     )
@@ -673,7 +678,7 @@ class AbstractAppliedCondition(SharedMemoryModel):
     """
 
     condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        _CONDITION_TEMPLATE_MODEL,
         on_delete=models.PROTECT,
         related_name="%(class)s_applied",
     )
@@ -852,7 +857,7 @@ class TechniqueCapabilityGrant(NaturalKeyMixin, AbstractCapabilityGrant):
 
     class NaturalKeyConfig:
         fields = ["technique", "capability"]
-        dependencies = ["magic.Technique", "conditions.CapabilityType"]
+        dependencies = [_TECHNIQUE_MODEL, _CAPABILITY_TYPE_MODEL]
 
     class Meta:
         constraints = [
@@ -888,12 +893,12 @@ class TechniqueCapabilityRequirement(NaturalKeyMixin, SharedMemoryModel):
     """
 
     technique = models.ForeignKey(
-        "magic.Technique",
+        _TECHNIQUE_MODEL,
         on_delete=models.CASCADE,
         related_name="capability_requirements",
     )
     capability = models.ForeignKey(
-        "conditions.CapabilityType",
+        _CAPABILITY_TYPE_MODEL,
         on_delete=models.CASCADE,
         related_name="technique_requirements",
     )
@@ -906,7 +911,7 @@ class TechniqueCapabilityRequirement(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["technique", "capability"]
-        dependencies = ["magic.Technique", "conditions.CapabilityType"]
+        dependencies = [_TECHNIQUE_MODEL, _CAPABILITY_TYPE_MODEL]
 
     class Meta:
         constraints = [
@@ -1048,7 +1053,7 @@ class TechniqueAppliedCondition(NaturalKeyMixin, AbstractAppliedCondition):
 
     class NaturalKeyConfig:
         fields = ["technique", "condition", "target_kind"]
-        dependencies = ["magic.Technique", "conditions.ConditionTemplate"]
+        dependencies = [_TECHNIQUE_MODEL, _CONDITION_TEMPLATE_MODEL]
 
     class Meta:
         constraints = [
@@ -1096,7 +1101,7 @@ class TechniqueRemovedCondition(NaturalKeyMixin, AbstractAppliedCondition):
 
     class NaturalKeyConfig:
         fields = ["technique", "condition", "target_kind"]
-        dependencies = ["magic.Technique", "conditions.ConditionTemplate"]
+        dependencies = [_TECHNIQUE_MODEL, _CONDITION_TEMPLATE_MODEL]
 
     class Meta:
         constraints = [
@@ -1156,7 +1161,7 @@ class TechniqueDamageProfile(NaturalKeyMixin, AbstractDamageProfile):
 
     class NaturalKeyConfig:
         fields = ["technique", "damage_type"]
-        dependencies = ["magic.Technique", "conditions.DamageType"]
+        dependencies = [_TECHNIQUE_MODEL, "conditions.DamageType"]
 
     class Meta:
         constraints = [

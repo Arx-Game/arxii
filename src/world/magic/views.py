@@ -1048,6 +1048,24 @@ class RitualViewSet(viewsets.ModelViewSet):
         return RitualSerializer
 
 
+def _validate_imbuing_amount(kwargs: dict) -> Response | None:
+    """Validate the imbuing ``amount`` kwarg is a positive integer.
+
+    Args:
+        kwargs: The kwargs dict carrying ``amount``.
+
+    Returns:
+        A 400 ``Response`` if ``amount`` is missing or invalid, else ``None``.
+    """
+    amount = kwargs.get("amount")
+    if not isinstance(amount, int) or amount < 1:
+        return Response(
+            {"detail": _ERR_IMBUING_REQUIRES_AMOUNT},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return None
+
+
 class RitualPerformView(APIView):
     """Dispatch a Ritual via ``PerformRitualAction.run()`` (Spec A §4.5, #1331).
 
@@ -1090,13 +1108,7 @@ class RitualPerformView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         kwargs["thread"] = thread
-        amount = kwargs.get("amount")
-        if not isinstance(amount, int) or amount < 1:
-            return Response(
-                {"detail": _ERR_IMBUING_REQUIRES_AMOUNT},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return None
+        return _validate_imbuing_amount(kwargs)
 
     @staticmethod
     def _resolve_ghost_tutor_kwargs(sheet: CharacterSheet, kwargs: dict) -> Response | None:  # noqa: ARG004

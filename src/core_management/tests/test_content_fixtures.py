@@ -186,7 +186,7 @@ class ContentLoadTests(TestCase):
         _write(self.root, "skills/performance.md", GOOD_SKILL)
 
     def test_load_creates_then_updates_by_natural_key(self) -> None:
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert (created, updated) == (1, 0)
         trait = Trait.objects.get(name="Performance")
         assert trait.trait_type == TraitType.SKILL
@@ -198,7 +198,7 @@ class ContentLoadTests(TestCase):
             "skills/performance.md",
             "---\nname: Performance\ncategory: social\n---\nThe rewritten voice.\n",
         )
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert (created, updated) == (0, 1)
         assert Trait.objects.filter(name="Performance").count() == 1
         trait.refresh_from_db()
@@ -253,7 +253,7 @@ class NewDomainContentLoadTests(TestCase):
 
     def test_npc_role_load_creates_then_updates(self) -> None:
         _write(self.root, "npc_roles/clerk.md", GOOD_NPC_ROLE)
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert (created, updated) == (1, 0)
         role = NPCRole.objects.get(name="Builders Guild Clerk")
         assert role.faction_affiliation.name == "Builders Guild"
@@ -267,7 +267,7 @@ class NewDomainContentLoadTests(TestCase):
                 "Rewritten flavor text.",
             ),
         )
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert (created, updated) == (0, 1)
         assert NPCRole.objects.filter(name="Builders Guild Clerk").count() == 1
         role.refresh_from_db()
@@ -320,19 +320,19 @@ class NewDomainContentLoadTests(TestCase):
 
     def test_item_template_load_creates_then_updates(self) -> None:
         _write(self.root, "items/longsword.md", GOOD_ITEM)
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert (created, updated) == (1, 0)
         item = ItemTemplate.objects.get(name="Iron Longsword")
         assert item.value == 40
 
         _write(self.root, "items/longsword.md", GOOD_ITEM.replace("well-balanced", "battered"))
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert (created, updated) == (0, 1)
         assert ItemTemplate.objects.filter(name="Iron Longsword").count() == 1
 
     def test_building_kind_load_creates_then_updates(self) -> None:
         _write(self.root, "building_kinds/watchtower.md", GOOD_BUILDING_KIND)
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert (created, updated) == (1, 0)
         assert BuildingKind.objects.filter(name="Watchtower").count() == 1
 
@@ -341,7 +341,7 @@ class NewDomainContentLoadTests(TestCase):
             "building_kinds/watchtower.md",
             GOOD_BUILDING_KIND.replace("fortified lookout post", "watchpost"),
         )
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert (created, updated) == (0, 1)
         assert BuildingKind.objects.filter(name="Watchtower").count() == 1
 
@@ -356,7 +356,7 @@ class NewDomainContentLoadTests(TestCase):
         assert DecorationKind.objects.filter(name="Great Hearth").count() == 1
 
         _write(self.root, "decoration_kinds/hearth.md", GOOD_DECORATION_KIND)
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert (created, updated) == (0, 1)
 
         assert DecorationKind.objects.filter(name="Great Hearth").count() == 1
@@ -483,7 +483,7 @@ class FixtureJsonLoadTests(TestCase):
             ]
         )
         _write(self.root, "fixtures/magic/effects.json", fixture_data)
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert (created, updated) == (1, 0)
 
         from world.magic.models import EffectType
@@ -504,7 +504,7 @@ class FixtureJsonLoadTests(TestCase):
             ]
         )
         _write(self.root, "fixtures/magic/effects.json", updated_data)
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert (created, updated) == (0, 1)
         et.refresh_from_db()
         assert et.description == "Rewritten description."
@@ -527,7 +527,7 @@ class FixtureJsonLoadTests(TestCase):
                 ]
             ),
         )
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert (created, updated) == (1, 0)
 
     def test_stale_fixture_field_skips_row_without_crashing_the_load(self) -> None:
@@ -565,7 +565,7 @@ class FixtureJsonLoadTests(TestCase):
             ),
         )
         result = build_all(self.root)
-        created, updated = load_entries(result)
+        created, updated, _ = load_entries(result)
         assert (created, updated) == (1, 0)
         assert any("no_longer_on_model" in s or "Bad Field Effect" in s for s in result.skipped)
 
@@ -586,7 +586,7 @@ class FixtureJsonLoadTests(TestCase):
             ),
         )
         result = build_all(self.root)
-        created, updated = load_entries(result)
+        created, updated, _ = load_entries(result)
         assert (created, updated) == (0, 0)
         assert len(result.skipped) == 1
         assert "magic.threadtype" in result.skipped[0]
@@ -630,7 +630,7 @@ class FixtureJsonLoadTests(TestCase):
         from world.mechanics.models import ModifierCategory
 
         ModifierCategory.objects.get_or_create(name="power")
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert created + updated == 1
 
     def test_defer_unresolved_returns_deferred_entries(self) -> None:
@@ -666,7 +666,7 @@ class FixtureJsonLoadTests(TestCase):
 
         # Without the flag, the exact same fixture skips (today's terminal
         # behavior, unchanged).
-        created, updated = load_entries(build_all(self.root))
+        created, updated, _ = load_entries(build_all(self.root))
         assert (created, updated) == (0, 0)
 
     def test_combined_frontmatter_and_fixture_json(self) -> None:
@@ -695,7 +695,7 @@ class FixtureJsonLoadTests(TestCase):
         # Frontmatter output
         assert "world/traits/fixtures/content_skills.json" in result.fixtures
         # Both load
-        created, _updated = load_entries(result)
+        created, _updated, _ = load_entries(result)
         assert created >= 2  # 1 trait + 1 effect type
 
 
@@ -736,7 +736,7 @@ class LoadEntriesM2MTest(TestCase):
         self.effect = EffectTypeFactory()
         restriction = RestrictionFactory(name="Touch Range")
         result = self._result_with([self._technique_obj(restrictions=[[restriction.name]])])
-        created, _updated = load_entries(result)
+        created, _updated, _ = load_entries(result)
         assert created == 1, result.skipped
         from world.magic.models import Technique
 
@@ -760,13 +760,13 @@ class LoadEntriesM2MTest(TestCase):
         restriction_b = RestrictionFactory(name="Restriction B")
 
         result = self._result_with([self._technique_obj(restrictions=[[restriction_a.name]])])
-        created, _updated = load_entries(result)
+        created, _updated, _ = load_entries(result)
         assert created == 1, result.skipped
         technique = Technique.objects.get(name="M2M Trip")
         assert list(technique.restrictions.all()) == [restriction_a]
 
         result = self._result_with([self._technique_obj(restrictions=[[restriction_b.name]])])
-        created, updated = load_entries(result)
+        created, updated, _ = load_entries(result)
         assert (created, updated) == (0, 1)
         technique.refresh_from_db()
         assert list(technique.restrictions.all()) == [restriction_b]
@@ -794,7 +794,7 @@ class LoadEntriesM2MTest(TestCase):
         self.style = TechniqueStyleFactory()
         self.effect = EffectTypeFactory()
         result = self._result_with([self._technique_obj(restrictions=[["No Such Restriction"]])])
-        created, updated = load_entries(result)
+        created, updated, _ = load_entries(result)
         assert (created, updated) == (0, 0)
         assert len(result.skipped) == 1
         assert not Technique.objects.filter(name="M2M Trip").exists()
