@@ -19,7 +19,11 @@ from world.secrets.models import Secret
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.distinctions.models import CharacterDistinction, Distinction
+    from world.distinctions.models import (
+        CharacterDistinction,
+        Distinction,
+        DistinctionChangeAuthorization,
+    )
     from world.scenes.models import Persona
 
 
@@ -189,3 +193,201 @@ def grant_distinction(
     )
 
     return char_distinction
+
+
+DISTINCTION_REMOVAL_FRICTION_MULTIPLIER = 1.5
+
+
+def compute_distinction_change_xp_cost(
+    distinction: Distinction,
+    rank: int,
+    action: str,
+) -> int:
+    """Compute the XP cost for a distinction change.
+
+    Args:
+        distinction: The distinction being added or removed.
+        rank: For ADD, the target rank (usually 1). For REMOVE, the
+            CharacterDistinction's current rank.
+        action: ``DistinctionChangeAction.ADD`` or ``DistinctionChangeAction.REMOVE``.
+
+    Returns:
+        The XP cost (always positive).
+    """
+    from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
+
+    base = 2 * abs(distinction.cost_per_rank) * rank
+    if action == DistinctionChangeAction.REMOVE and distinction.cost_per_rank < 0:
+        return int(base * DISTINCTION_REMOVAL_FRICTION_MULTIPLIER)
+    return base
+
+
+def _check_removal_prerequisites(character_distinction: CharacterDistinction) -> None:
+    """Check that no other held distinction depends on the one being removed.
+
+    Stub — DistinctionPrerequisite uses rule_json, no production rows reference
+    distinctions as prerequisites yet. TODO: proper rule evaluation.
+    """
+
+
+def remove_distinction(
+    character_distinction: CharacterDistinction,
+    *,
+    authorization: DistinctionChangeAuthorization,
+) -> None:
+    """Remove a CharacterDistinction, reconciling all dependent systems.
+
+    The inverse of ``grant_distinction``. Requires a valid (non-consumed)
+    ``DistinctionChangeAuthorization`` with ``action=REMOVE`` targeting this row.
+
+    Teardown order:
+    1. ``delete_distinction_modifiers`` — removes CharacterModifier + ModifierSource rows.
+    2. ``clear_distinction_secret`` — deletes the Secret if present (idempotent).
+    3. ``CharacterDistinction.delete()`` — CASCADE handles remaining FKs.
+
+    The authorization's ``is_consumed`` / ``consumed_at`` are marked by the
+    CALLER (``spend_xp_on_distinction_unlock``), NOT by this function.
+
+    NOT torn down (by design):
+    - ``CharacterResonance`` currency (monotonic, no clawback — #2037).
+    - ``NPCAsset`` (world entity, nullable FK orphans).
+    - CodexEntry grants (knowledge can't be unlearned).
+    - ``ActionEnhancement`` (auto-disabled when CharacterDistinction row is gone).
+
+    Args:
+        character_distinction: The CharacterDistinction to remove.
+        authorization: The DistinctionChangeAuthorization authorizing this removal.
+
+    Raises:
+        DistinctionAuthorizationError: If the authorization is already consumed
+            or doesn't target this CharacterDistinction.
+    """
+    from world.distinctions.exceptions import (  # noqa: PLC0415
+        DistinctionAuthorizationError,
+    )
+    from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
+    from world.mechanics.services import delete_distinction_modifiers  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    if authorization.is_consumed:
+        msg = "This distinction change authorization has already been used."
+        raise DistinctionAuthorizationError(msg)
+    if (
+        authorization.action != DistinctionChangeAction.REMOVE
+        or authorization.target_character_distinction_id != character_distinction.pk
+    ):
+        msg = "This authorization does not target this distinction."
+        raise DistinctionAuthorizationError(msg)
+
+    _check_removal_prerequisites(character_distinction)
+
+    with transaction.atomic():
+        delete_distinction_modifiers(character_distinction)
+        clear_distinction_secret(character_distinction)
+
+        distinction_name = character_distinction.distinction.name
+        character_sheet = authorization.character_sheet
+        character_distinction.delete()
+
+    send_narrative_message(
+        recipients=[character_sheet],
+        body=f"You have shed the distinction: {distinction_name}.",
+        category=NarrativeCategory.ABILITY,
+        sender_account=None,
+    )
+
+
+def spend_xp_on_distinction_unlock(
+    character_sheet: CharacterSheet,
+    authorization: DistinctionChangeAuthorization,
+) -> None:
+    """Spend XP to complete a distinction change (add or remove).
+
+    Validates: authorization not consumed, authorization targets this character.
+    Locks the authorization row with ``select_for_update`` to prevent
+    double-accept. Debits XPTracker, writes XPTransaction, fires
+    ``grant_distinction`` (ADD) or ``remove_distinction`` (REMOVE), then marks
+    the authorization consumed.
+
+    This service is the SOLE writer of ``is_consumed`` / ``consumed_at``.
+
+    Args:
+        character_sheet: The character spending XP.
+        authorization: The DistinctionChangeAuthorization to complete.
+
+    Raises:
+        DistinctionAuthorizationError: If the authorization is already
+            consumed, doesn't target this character, or the character has
+            insufficient XP.
+    """
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.distinctions.exceptions import DistinctionAuthorizationError  # noqa: PLC0415
+    from world.distinctions.models import DistinctionChangeAuthorization  # noqa: PLC0415
+    from world.distinctions.types import (  # noqa: PLC0415
+        DistinctionChangeAction,
+        DistinctionOrigin,
+    )
+    from world.magic.services.alterations import enforce_advancement_gate  # noqa: PLC0415
+    from world.progression.models.rewards import XPTransaction  # noqa: PLC0415
+    from world.progression.services.awards import get_or_create_xp_tracker  # noqa: PLC0415
+    from world.progression.types import ProgressionReason  # noqa: PLC0415
+
+    if authorization.character_sheet_id != character_sheet.pk:
+        msg = "This authorization does not target this character."
+        raise DistinctionAuthorizationError(msg)
+
+    enforce_advancement_gate(character_sheet)
+
+    account = character_sheet.character.account
+    if account is None:
+        msg = "This character has no linked account."
+        raise DistinctionAuthorizationError(msg)
+
+    xp_tracker = get_or_create_xp_tracker(account)
+
+    with transaction.atomic():
+        locked_auth = (
+            DistinctionChangeAuthorization.objects.select_for_update()
+            .filter(pk=authorization.pk)
+            .first()
+        )
+        if locked_auth is None or locked_auth.is_consumed:
+            msg = "This distinction change authorization has already been used."
+            raise DistinctionAuthorizationError(msg)
+
+        if not xp_tracker.can_spend(locked_auth.xp_cost):
+            msg = f"Need {locked_auth.xp_cost} XP, have {xp_tracker.current_available}."
+            raise DistinctionAuthorizationError(msg)
+
+        xp_tracker.spend_xp(locked_auth.xp_cost)
+
+        XPTransaction.objects.create(
+            account=account,
+            amount=-locked_auth.xp_cost,
+            reason=ProgressionReason.XP_PURCHASE,
+            description=f"Distinction change: {locked_auth.action}",
+            character=character_sheet.character,
+            gm=locked_auth.authorized_by,
+        )
+
+        if locked_auth.action == DistinctionChangeAction.ADD:
+            grant_distinction(
+                character_sheet,
+                locked_auth.target_distinction,
+                origin=DistinctionOrigin.UNLOCK_PURCHASE,
+                source_description=locked_auth.reason,
+            )
+        else:
+            remove_distinction(
+                locked_auth.target_character_distinction,
+                authorization=locked_auth,
+            )
+            # Refresh from DB — remove_distinction deleted the
+            # target_character_distinction, and SET_NULL nulled the FK.
+            locked_auth.refresh_from_db()
+
+        locked_auth.is_consumed = True
+        locked_auth.consumed_at = timezone.now()
+        locked_auth.save(update_fields=["is_consumed", "consumed_at"])
