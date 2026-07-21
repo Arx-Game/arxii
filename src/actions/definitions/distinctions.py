@@ -133,3 +133,247 @@ class GMAwardDistinctionAction(Action):
                 f"Awarded '{distinction.name}' (rank {char_distinction.rank}) to {target.key}."
             ),
         )
+
+
+@dataclass
+class AuthorizeDistinctionChangeAction(Action):
+    """GM action: authorize a distinction add or removal for a character.
+
+    Creates a ``DistinctionChangeAuthorization`` row. The player then spends
+    XP via ``AcceptDistinctionChangeAction`` to complete the change.
+
+    Gated on ``MinimumGMLevelPrerequisite(GMLevel.JUNIOR)``.
+
+    Dispatch convention
+    -------------------
+    REGISTRY ActionRef: ``registry_key="authorize_distinction_change"``,
+    ``target_name=<str>``, ``action=<"add"|"remove">``,
+    ``distinction_slug=<str>`` (for add) or
+    ``character_distinction_id=<int>`` (for remove),
+    optional ``xp_cost=<int>`` (defaults to computed cost),
+    ``reason=<str>``.
+    """
+
+    key: str = "authorize_distinction_change"
+    name: str = "Authorize Distinction Change"
+    icon: str = "scroll"
+    category: str = "gm"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
+
+    def execute(  # noqa: PLR0911, PLR0912, C901
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.distinctions.models import (  # noqa: PLC0415
+            CharacterDistinction,
+            Distinction,
+            DistinctionChangeAuthorization,
+        )
+        from world.distinctions.services import (  # noqa: PLC0415
+            compute_distinction_change_xp_cost,
+        )
+        from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
+
+        target_name = (kwargs.get("target_name") or "").strip()
+        action_str = (kwargs.get("action") or "").strip().lower()
+        reason = (kwargs.get("reason") or "").strip()
+
+        if not target_name or not action_str or not reason:
+            usage = (
+                "Usage: authorize_distinction_change <character>,action=<add|remove>,reason=<text>"
+            )
+            return ActionResult(success=False, message=usage)
+
+        if action_str not in (DistinctionChangeAction.ADD, DistinctionChangeAction.REMOVE):
+            return ActionResult(success=False, message="action must be 'add' or 'remove'.")
+
+        target = actor.search(target_name, global_search=True)
+        if target is None:
+            return ActionResult(success=False)
+
+        sheet = target.character_sheet
+        if sheet is None:
+            return ActionResult(success=False, message="That is not a character.")
+
+        if action_str == DistinctionChangeAction.ADD:
+            distinction_slug = (kwargs.get("distinction_slug") or "").strip()
+            if not distinction_slug:
+                return ActionResult(
+                    success=False, message="distinction_slug required for add action."
+                )
+
+            distinction = Distinction.objects.filter(
+                slug__iexact=distinction_slug, is_active=True
+            ).first()
+            if distinction is None:
+                return ActionResult(
+                    success=False,
+                    message=f"No active distinction found with slug '{distinction_slug}'.",
+                )
+
+            if CharacterDistinction.objects.filter(
+                character=sheet, distinction=distinction
+            ).exists():
+                return ActionResult(
+                    success=False,
+                    message=f"{target.key} already has {distinction.name}.",
+                )
+
+            rank = kwargs.get("rank")
+            rank_int = _coerce_positive_int(rank) if rank else 1
+            if rank is not None and rank_int is None:
+                return ActionResult(success=False, message="rank must be a positive whole number.")
+
+            xp_cost = kwargs.get("xp_cost")
+            if xp_cost is not None:
+                xp_cost_int = _coerce_positive_int(xp_cost)
+                if xp_cost_int is None:
+                    return ActionResult(
+                        success=False, message="xp_cost must be a positive whole number."
+                    )
+            else:
+                xp_cost_int = compute_distinction_change_xp_cost(
+                    distinction, rank_int, DistinctionChangeAction.ADD
+                )
+
+            auth = DistinctionChangeAuthorization.objects.create(
+                character_sheet=sheet,
+                action=DistinctionChangeAction.ADD,
+                target_distinction=distinction,
+                authorized_by=actor.account,
+                reason=reason,
+                xp_cost=xp_cost_int,
+            )
+            return ActionResult(
+                success=True,
+                message=(
+                    f"Authorized adding {distinction.name} to {target.key}"
+                    f" for {xp_cost_int} XP (auth #{auth.pk})."
+                ),
+            )
+
+        # REMOVE
+        cd_id = kwargs.get("character_distinction_id")
+        if cd_id is None:
+            return ActionResult(
+                success=False, message="character_distinction_id required for remove action."
+            )
+
+        try:
+            cd_id_int = int(cd_id)
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="character_distinction_id must be a number.")
+
+        char_distinction = CharacterDistinction.objects.filter(
+            pk=cd_id_int, character=sheet
+        ).first()
+        if char_distinction is None:
+            return ActionResult(
+                success=False,
+                message=f"CharacterDistinction #{cd_id_int} not found for {target.key}.",
+            )
+
+        xp_cost = kwargs.get("xp_cost")
+        if xp_cost is not None:
+            xp_cost_int = _coerce_positive_int(xp_cost)
+            if xp_cost_int is None:
+                return ActionResult(
+                    success=False, message="xp_cost must be a positive whole number."
+                )
+        else:
+            xp_cost_int = compute_distinction_change_xp_cost(
+                char_distinction.distinction, char_distinction.rank, DistinctionChangeAction.REMOVE
+            )
+
+        auth = DistinctionChangeAuthorization.objects.create(
+            character_sheet=sheet,
+            action=DistinctionChangeAction.REMOVE,
+            target_character_distinction=char_distinction,
+            authorized_by=actor.account,
+            reason=reason,
+            xp_cost=xp_cost_int,
+        )
+        return ActionResult(
+            success=True,
+            message=(
+                f"Authorized removing {char_distinction.distinction.name}"
+                f" from {target.key} for {xp_cost_int} XP (auth #{auth.pk})."
+            ),
+        )
+
+
+@dataclass
+class AcceptDistinctionChangeAction(Action):
+    """Player action: accept a distinction change by spending XP.
+
+    Calls ``spend_xp_on_distinction_unlock`` to debit XP and fire the change.
+
+    Dispatch convention
+    -------------------
+    REGISTRY ActionRef: ``registry_key="accept_distinction_change"``,
+    ``authorization_id=<int>``.
+    """
+
+    key: str = "accept_distinction_change"
+    name: str = "Accept Distinction Change"
+    icon: str = "check"
+    category: str = "distinctions"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(  # noqa: PLR0911
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.distinctions.exceptions import (  # noqa: PLC0415
+            DistinctionAuthorizationError,
+            DistinctionExclusionError,
+        )
+        from world.distinctions.models import DistinctionChangeAuthorization  # noqa: PLC0415
+        from world.distinctions.services import spend_xp_on_distinction_unlock  # noqa: PLC0415
+        from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
+
+        sheet = actor.character_sheet
+        if sheet is None:
+            return ActionResult(success=False, message="You have no character sheet.")
+
+        auth_id = kwargs.get("authorization_id")
+        if auth_id is None:
+            return ActionResult(
+                success=False, message="Usage: accept_distinction_change <authorization_id>"
+            )
+
+        try:
+            auth_id_int = int(auth_id)
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="authorization_id must be a number.")
+
+        auth = DistinctionChangeAuthorization.objects.filter(
+            pk=auth_id_int, character_sheet=sheet
+        ).first()
+        if auth is None:
+            return ActionResult(
+                success=False,
+                message=f"Authorization #{auth_id_int} not found for your character.",
+            )
+
+        try:
+            spend_xp_on_distinction_unlock(sheet, auth)
+        except DistinctionAuthorizationError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        except DistinctionExclusionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        action_word = "added" if auth.action == DistinctionChangeAction.ADD else "removed"
+        return ActionResult(
+            success=True,
+            message=f"Distinction change complete: {action_word} for {auth.xp_cost} XP.",
+        )
