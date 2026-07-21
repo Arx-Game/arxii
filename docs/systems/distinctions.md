@@ -100,10 +100,17 @@ CG finalization and Django admin — no in-play caller re-implements the create/
   (`update_distinction_rank`) → narrate via `send_narrative_message` (ABILITY category) → return
   the row. The modifier/resonance-seed cascade (see "Distinctions grant/shape Resonance" below)
   fires automatically either way, since both branches reuse the same CG-time modifier services.
-- **No XP path.** Unlike progression unlocks, granting or ranking up a distinction through this
-  seam never spends or checks XP — it is a narrative/mechanical award (GM narration, an
-  achievement, a consequence-pool outcome, or sustained in-character endorsement), not a
-  purchase. CG-time distinctions remain point-costed (`Distinction.calculate_total_cost`); that
+- **XP path via SheetUpdateRequest (#2628).** Player-initiated requests to add or
+  remove distinctions go through a `SheetUpdateRequest` model — the player
+  submits with justification, the GM at their table approves or denies, and XP
+  is auto-debited on approval. The sign-based cost model: adding a beneficial
+  distinction (positive `cost_per_rank`) costs XP; adding a detrimental one
+  (negative `cost_per_rank`) is free; removing is the inverse. The GM-direct
+  path (`gm_award_distinction`) creates an auto-approved request — same XP model,
+  no free bypass, ensuring consistency. Automated sources (achievement,
+  consequence pool, endorsement threshold) continue to call `grant_distinction`
+  directly with no XP charge — those are system-driven rewards, not purchases.
+  CG-time distinctions remain point-costed (`Distinction.calculate_total_cost`); that
   budget economy does not extend past character creation.
 
 ### Exclusion checks
@@ -125,16 +132,17 @@ consequence-pool resolution, an endorsement's resonance grant). This mirrors
 The one exception is the GM action/telnet path, which surfaces the conflict as a failed action
 (`exc.user_message`) since a GM issuing the award is present to see and correct it.
 
-### The four ratified sources
+### The five ratified sources
 
 | `DistinctionOrigin` | Caller | Where |
 |---|---|---|
-| `GM_AWARD` | `GMAwardDistinctionAction` (`registry_key="gm_award_distinction"`, JUNIOR-tier `MinimumGMLevelPrerequisite`, staff bypass) — global target search, catalog-only slug lookup (never creates), optional `rank` validated at the action boundary (rejects `<1` or `>max_rank`, never clamps) | `src/actions/definitions/distinctions.py`; telnet face `CmdGrantDistinction` (`grant_distinction <character>=<distinction slug>[,rank]`, mirrors `CmdGrantItem`) in `src/commands/grant_distinction.py`; web surface is the existing generic `DispatchActionView` (registry registration only, zero new endpoint) |
+| `GM_AWARD` | `GMAwardDistinctionAction` (`registry_key="gm_award_distinction"`, JUNIOR-tier `MinimumGMLevelPrerequisite`, staff bypass) — now goes through the `SheetUpdateRequest` framework (#2628): creates an auto-approved request and processes it (XP debited on the sign-based model). Supports add (default) and remove (`/remove` switch). Telnet face `CmdGrantDistinction` (`grant_distinction <character>=<distinction slug>[,rank]` / `grant_distinction/remove <character>=<slug>`) in `src/commands/grant_distinction.py` | `src/actions/definitions/distinctions.py` |
+| `UNLOCK_PURCHASE` | `SubmitSheetUpdateRequestAction` (player-initiated, `registry_key="submit_sheet_update"`) → GM approves via `ReviewSheetUpdateRequestAction` (`registry_key="review_sheet_update"`, JUNIOR-tier). `SheetUpdateRequest` model tracks PENDING → APPROVED/DENIED. XP auto-debited on approval (#2628). Telnet face `CmdSheetRequest` (`sheetrequest <add|remove|cancel|approve|deny> ...`) in `src/commands/sheet_request.py` | `src/world/distinctions/services.py` (`create_sheet_update_request` / `approve_sheet_update_request`); `src/actions/definitions/distinctions.py` |
 | `ACHIEVEMENT_AUTO_GRANT` | `RewardType.DISTINCTION` on `achievements.RewardDefinition` (`distinction` FK, nullable, mirrors `modifier_target`) dispatched by `apply_achievement_rewards` → `_grant_distinction` | `src/world/achievements/services.py`. `AchievementReward.reward_value` parses as an explicit rank when a valid int, else `rank=None` (advance one step — **not** a no-op, unlike `_grant_bonus`'s parse-or-skip for BONUS rewards) |
 | `CONSEQUENCE_POOL` | `EffectType.GRANT_DISTINCTION` on `checks.ConsequenceEffect` (`distinction` FK, CASCADE, mirrors `property`; `distinction_rank` nullable, mirrors `property_value`, null = advance one step) dispatched by the `_grant_distinction` handler | `src/world/mechanics/effect_handlers.py`, registered in the `EffectType` → handler dispatch table |
 | `ENDORSEMENT_THRESHOLD` | `check_distinction_rank_thresholds(character_sheet, resonance)`, called from `grant_resonance` only for `ACCELERATED_GAIN_SOURCES` (sustained in-character endorsement play) | `src/world/magic/services/distinction_resonance.py` — see "Reverse direction — resonance thresholds rank up a held distinction (#2037)" below for the full mechanic (ranks up held distinctions only, never mints a new grant, multi-level catch-up) |
 
-All four sources are lazy-imported callers of the single seam — none reimplements exclusion
+All five sources are lazy-imported callers of the single seam — none reimplements exclusion
 checking, the create/rank-up branch, or the narrative message.
 
 ---
