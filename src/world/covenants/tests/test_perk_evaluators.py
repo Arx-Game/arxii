@@ -652,3 +652,129 @@ class AllyInterceptedForMeEvaluatorTests(TestCase):
             focused_ally_target=self.holder_participant,
         )
         self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(None)))
+
+
+class AllyInterceptedForMeSubjectExclusionTests(TestCase):
+    """Regression for Task 5 review Critical #1: the evaluator must exclude the
+    SUBJECT's own declaration, not the HOLDER's. A character can never be their
+    own intercepting ally — a subject's own guard-anyone INTERPOSE must not
+    self-satisfy a covenant-mate's ``COVENANT_ALLIES`` perk when holder != subject
+    (#2536 slice 3, Task 5 review). Bob is the perk-owning holder; Alice is the
+    acting subject; both are covenant-mates in the same encounter.
+    """
+
+    def setUp(self) -> None:
+        self.covenant = CovenantFactory()
+        self.role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
+        self.holder_sheet = CharacterSheetFactory()  # Bob
+        self.subject_sheet = CharacterSheetFactory()  # Alice
+        CharacterCovenantRoleFactory(
+            character_sheet=self.holder_sheet, covenant=self.covenant, covenant_role=self.role
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=self.subject_sheet, covenant=self.covenant, covenant_role=self.role
+        )
+        self.encounter = CombatEncounterFactory(round_number=1)
+        self.holder_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.holder_sheet
+        )
+        self.subject_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.subject_sheet
+        )
+        # SituationContext.resolution is always the SUBJECT's resolution.
+        self.resolution = CombatRoundContext(self.subject_participant)
+
+    def _ctx(self) -> SituationContext:
+        return SituationContext(
+            holder=self.holder_sheet,
+            subject=self.subject_sheet,
+            target=None,
+            resolution=self.resolution,
+        )
+
+    def _declare_interpose(self, *, participant, focused_ally_target) -> None:
+        CombatRoundActionFactory(
+            participant=participant,
+            round_number=self.encounter.round_number,
+            maneuver=CombatManeuver.INTERPOSE,
+            is_ready=True,
+            focused_ally_target=focused_ally_target,
+        )
+
+    def test_false_when_only_the_subject_guards_herself(self) -> None:
+        """Alice's own armed guard-anyone INTERPOSE must not self-satisfy the
+        situation on Bob's perk — no other mate is guarding her."""
+        self._declare_interpose(participant=self.subject_participant, focused_ally_target=None)
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx()))
+
+    def test_true_when_holder_guards_the_subject(self) -> None:
+        """A companion positive case: Bob (the holder) declares guard-anyone —
+        a genuine covenant-mate other than the subject — must satisfy it."""
+        self._declare_interpose(participant=self.holder_participant, focused_ally_target=None)
+        self.assertTrue(evaluators.ally_intercepted_for_me(self._ctx()))
+
+
+class AllyInterceptedForMeQueryBudgetTests(TestCase):
+    """ALLY_INTERCEPTED_FOR_ME resolves with a FIXED query count (Task 5 review
+    Minor #3 fold-in), mirroring ``AllyLowHealthQueryBudgetTests``: one
+    declarations query + one batched ``CharacterCovenantRole`` membership query,
+    regardless of interposer count.
+    """
+
+    def setUp(self) -> None:
+        self.covenant = CovenantFactory()
+        self.role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
+        self.holder_sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=self.holder_sheet, covenant=self.covenant, covenant_role=self.role
+        )
+        self.encounter = CombatEncounterFactory(round_number=1)
+        self.holder_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.holder_sheet
+        )
+        self.resolution = CombatRoundContext(self.holder_participant)
+
+    def _ctx(self) -> SituationContext:
+        return SituationContext(
+            holder=self.holder_sheet,
+            subject=self.holder_sheet,
+            target=None,
+            resolution=self.resolution,
+        )
+
+    def _add_guarding_mates(self, count: int) -> None:
+        for _ in range(count):
+            mate_sheet = CharacterSheetFactory()
+            CharacterCovenantRoleFactory(
+                character_sheet=mate_sheet, covenant=self.covenant, covenant_role=self.role
+            )
+            mate_participant = CombatParticipantFactory(
+                encounter=self.encounter, character_sheet=mate_sheet
+            )
+            CombatRoundActionFactory(
+                participant=mate_participant,
+                round_number=self.encounter.round_number,
+                maneuver=CombatManeuver.INTERPOSE,
+                is_ready=True,
+                focused_ally_target=None,
+            )
+
+    def _count_queries(self) -> int:
+        with CaptureQueriesContext(connection) as ctx:
+            evaluators.ally_intercepted_for_me(self._ctx())
+        return len(ctx)
+
+    def test_query_count_fixed_regardless_of_interposer_count(self) -> None:
+        # Warm the holder's covenant-roles handler cache first, so both
+        # measurements below start from the same (warm) state and compare
+        # only the queries that genuinely run per evaluation.
+        evaluators.ally_intercepted_for_me(self._ctx())
+
+        self._add_guarding_mates(1)
+        count_with_one = self._count_queries()
+
+        self._add_guarding_mates(2)  # 3 total guarding mates now
+        count_with_three = self._count_queries()
+
+        self.assertEqual(count_with_one, count_with_three)
+        self.assertEqual(count_with_one, 2)

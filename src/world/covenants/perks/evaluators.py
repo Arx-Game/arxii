@@ -546,9 +546,10 @@ def ally_intercepted_for_me(ctx: SituationContext) -> bool:
     non-departed (``CharacterCovenantRole.left_at__isnull=True``) role in a
     covenant the HOLDER is also actively engaged in — the mate's own
     ``engaged``/participant status beyond being co-present is irrelevant,
-    same reversal (Tehom 2026-07-20). The holder themself is excluded from
-    the mate pool (interposing for yourself is not "a covenant-mate" guarding
-    you).
+    same reversal (Tehom 2026-07-20). The SUBJECT themself is excluded from
+    the interpose-declaration pool (a character can never be their own
+    intercepting ally — a subject's own guard-anyone INTERPOSE must not
+    self-satisfy this situation).
 
     Data source, verified: ``CombatRoundAction`` (``world/combat/models.py``
     ~1094-1140) filtered to the SUBJECT's encounter (``ctx.resolution`` is
@@ -590,7 +591,7 @@ def ally_intercepted_for_me(ctx: SituationContext) -> bool:
             maneuver=CombatManeuver.INTERPOSE,
             is_ready=True,
         )
-        .exclude(participant__character_sheet=ctx.holder)
+        .exclude(participant_id=participant.pk)
         .select_related("participant__character_sheet")
     )
     if not declarations:
