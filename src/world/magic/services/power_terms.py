@@ -373,7 +373,7 @@ def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
 def vow_situational_power_term(ctx: PowerTermContext) -> int:
     """Per-vow situational-perk power boost (#2536 slice 1, Layer 4).
 
-    Σ over every fired ``POWER_BONUS`` perk (self + engaged covenant-mate
+    Σ over every fired ``POWER_BONUS`` perk (self + co-present covenant-mate
     beneficiaries — see ``perks.services.applicable_perks``) of
     ``total_thread_level_across_all_kinds(ctx.sheet) × magnitude_tenths /
     10``, int-truncated — mirrors ``covenant_role_specialty_power_term``'s
