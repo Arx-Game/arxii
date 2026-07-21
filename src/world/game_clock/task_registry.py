@@ -39,6 +39,7 @@ class CronPhase(IntEnum):
     SNAPSHOT = 100  # pre-income baselines — read balances before anything moves
     ECONOMY = 200  # weekly_rollover: income, wages, debt service, contracts
     UPKEEP = 300  # building upkeep and personal recurring drains
+    DRAIN = 400  # post-obligation purse drains (Somehow Always Broke, #2613)
     DEFAULT = 500  # everything with no ordering opinion
     CLEANUP = 900  # sweeps, decay, garbage collection
 

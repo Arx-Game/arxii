@@ -1576,6 +1576,7 @@
   - org_obligations <- societies.OrganizationObligation
   - purse <- currency.CharacterPurse
   - employments <- currency.CharacterEmployment
+  - purse_drain_weeks <- currency.PurseDrainWeek
   - treasured_by <- boundaries.TreasuredSubject
   - companions <- companions.Companion
   - ridden_companion <- companions.Companion
@@ -3100,6 +3101,15 @@
 **Pointed to by:**
   - bequests <- estates.Bequest
 
+### DistinctionPurseDrain
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [OneToOne]
+
+### PurseDrainWeek
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - game_week -> game_clock.GameWeek [FK]
+
 ### Service Functions
 - `accrue_income_stream(stream: 'OrgIncomeStream') -> 'int' — One weekly cycle: the gross amasses in the uncollected pool (#930).`
 - `accrue_monthly_interest(organization: 'Organization') -> 'int' — One month's interest lands in arrears (#927). Returns total accrued.`
@@ -3126,12 +3136,14 @@
 - `redeem_instrument(*, instance: 'ItemInstance', to_purse: 'CharacterPurse | None' = None, to_treasury: 'OrganizationTreasury | None' = None) -> 'CurrencyTransfer' — Convert a physical coin back into ledger money (fee-free).`
 - `repay_principal(debt: 'DebtInstrument', amount: 'int') -> 'CurrencyTransfer' — Pay down (or off) a debt's principal, treasury→treasury (#927).`
 - `run_business_week(business: 'Business', *, fortune: 'int') -> 'int' — One week's business result (#929). ``fortune`` is -100..100.`
+- `run_purse_drains() -> 'int' — DRAIN band: empty each holder's purse down to this week's income (#2613).`
 - `run_weekly_economy() -> 'dict[str, int]' — The Sunday-rollover economy pass (#932, reshaped by #930). Per-phase counts.`
 - `run_weekly_employment(employment: 'CharacterEmployment', *, was_active: 'bool') -> 'int' — One week's automated wages for a held job (#929).`
 - `service_debt_principal(*, organization: 'Organization', basis: 'int') -> 'int' — Pay a flat share of ``basis`` (the collection's gross) toward debt principal.`
 - `settle_contract_cycle(contract: 'Contract') -> 'list[CurrencyTransfer]' — Run one settlement cycle for an ACTIVE notarized contract (#928).`
 - `settle_obligations(organization: 'Organization') -> 'list[CurrencyTransfer]' — Settle all active obligations against unsettled declared income (#926).`
 - `sign_contract(contract: 'Contract') -> 'Contract' — The consent moment (#928): counterparty accepts the fixed terms.`
+- `snapshot_purse_drains() -> 'int' — SNAPSHOT band: record each drain-holder's opening balance (#2613).`
 - `transfer(*, amount: 'int', reason: 'str', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None, to_purse: 'CharacterPurse | None' = None, to_treasury: 'OrganizationTreasury | None' = None) -> 'CurrencyTransfer' — Move ``amount`` coppers; null source = mint (faucet), null dest = sink.`
 - `treat_servants(organization: 'Organization', *, payment: 'int', graft_reduction: 'int') -> 'OrgEconomicsProfile' — Spend treasury money treating servants to buy graft down (#926).`
 - `withdraw_from_treasury(*, organization: 'Organization', persona: 'Persona', amount: 'int', reason: 'str' = '') -> 'CurrencyTransfer' — A spend-authorized member draws ``amount`` coppers from the org treasury to their purse.`
@@ -3168,6 +3180,7 @@
   - character_grants <- distinctions.CharacterDistinction
   - other_entries <- distinctions.CharacterDistinctionOther
   - mapped_from_other <- distinctions.CharacterDistinctionOther
+  - purse_drain <- currency.DistinctionPurseDrain
   - codex_grants <- codex.DistinctionCodexGrant
   - asset_grants <- assets.DistinctionAssetGrant
   - consequence_effects <- checks.ConsequenceEffect
@@ -3510,6 +3523,7 @@
   - skill_usages <- progression.WeeklySkillUsage
   - vote_budgets <- progression.WeeklyVoteBudget
   - votes <- progression.WeeklyVote
+  - purse_drain_weeks <- currency.PurseDrainWeek
   - relationships <- relationships.CharacterRelationship
   - journal_xp_trackers <- journals.WeeklyJournalXP
   - gm_reward_trackers <- gm.GMWeeklyRewardTracker

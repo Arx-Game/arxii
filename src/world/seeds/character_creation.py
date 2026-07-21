@@ -850,6 +850,56 @@ def seed_character_creation_dev() -> None:
     seed_beginning_traditions()
     ensure_shroudwatch_academy()
     seed_metallic_order_tradition()
+    ensure_somehow_always_broke_distinction()
+
+
+def ensure_somehow_always_broke_distinction():
+    """Seed the 'Somehow Always Broke' economic distinction + its drain (#2613).
+
+    A large negative (``cost_per_rank=-50``) that a player takes so their
+    perpetually-broke concept cannot be undone by another player's generosity —
+    a consent mechanic (like the antagonism register #2170), not a balance knob.
+    ``max_rank=1``. Personality category per Apostate's ruling (the flaw reads as
+    a trait — compulsion, recklessness, the addictions the description names).
+
+    The mechanic lives in the ``DistinctionPurseDrain`` sidecar
+    (``100% / floor 0``): the two weekly cron tasks empty every holder's purse
+    down to just that week's income. Both rows are idempotent ``get_or_create``;
+    the drain row's ``distinction`` O2O keys off the seeded distinction. Never
+    overwrites a staff-adjusted row.
+    """
+    from world.currency.models import DistinctionPurseDrain  # noqa: PLC0415
+    from world.distinctions.models import Distinction, DistinctionCategory  # noqa: PLC0415
+
+    category, _ = DistinctionCategory.objects.get_or_create(
+        slug="personality",
+        defaults={
+            "name": "Personality",
+            "description": (
+                "Distinctions rooted in a character's temperament, habits, and compulsions."
+            ),
+        },
+    )
+    distinction, _ = Distinction.objects.get_or_create(
+        slug="somehow-always-broke",
+        defaults={
+            "name": "Somehow Always Broke",
+            "category": category,
+            "description": (
+                "To the exasperation of all that know them, they somehow find a way to "
+                "spend, waste or lose all money that finds a way into their possession, "
+                "without fail. It could be for any number of reasons, from unfettered "
+                "addictions to preposterous luck, but they will go broke again."
+            ),
+            "cost_per_rank": -50,
+            "max_rank": 1,
+        },
+    )
+    DistinctionPurseDrain.objects.get_or_create(
+        distinction=distinction,
+        defaults={"drain_percent": 100, "floor_coppers": 0},
+    )
+    return distinction
 
 
 def _seed_cg_explanations() -> None:

@@ -36,6 +36,7 @@ from world.character_creation.factories import (
 from world.seeds.character_creation import (
     ensure_orphaned_tradition_distinction,
     ensure_shroudwatch_academy,
+    ensure_somehow_always_broke_distinction,
     ensure_tradition_training_distinction,
     ensure_unbound_drawback_distinction,
     seed_beginning_traditions,
@@ -535,3 +536,56 @@ class SeedMetallicOrderTraditionTests(TestCase):
         # #2442: Unbound's own row now gates on the "Unbound" drawback (not None).
         self.assertIsNotNone(unbound_bt.required_distinction_id)
         self.assertEqual(unbound_bt.required_distinction.slug, "unbound")
+
+
+class EnsureSomehowAlwaysBrokeDistinctionTests(TestCase):
+    """Shape, the drain sidecar, idempotency, and staff-edit survival (#2613)."""
+
+    def test_creates_distinction_and_drain_with_expected_shape(self) -> None:
+        from world.currency.models import DistinctionPurseDrain
+        from world.distinctions.models import Distinction
+
+        ensure_somehow_always_broke_distinction()
+
+        distinction = Distinction.objects.get(slug="somehow-always-broke")
+        self.assertEqual(distinction.name, "Somehow Always Broke")
+        self.assertEqual(distinction.cost_per_rank, -50)
+        self.assertEqual(distinction.max_rank, 1)
+        self.assertEqual(distinction.category.slug, "personality")
+
+        drain = DistinctionPurseDrain.objects.get(distinction=distinction)
+        self.assertEqual(drain.drain_percent, 100)
+        self.assertEqual(drain.floor_coppers, 0)
+
+    def test_idempotent_second_call_creates_no_duplicates(self) -> None:
+        from world.currency.models import DistinctionPurseDrain
+        from world.distinctions.models import Distinction
+
+        ensure_somehow_always_broke_distinction()
+        ensure_somehow_always_broke_distinction()
+
+        self.assertEqual(Distinction.objects.filter(slug="somehow-always-broke").count(), 1)
+        self.assertEqual(
+            DistinctionPurseDrain.objects.filter(distinction__slug="somehow-always-broke").count(),
+            1,
+        )
+
+    def test_staff_edit_to_drain_percent_survives_rerun(self) -> None:
+        from world.currency.models import DistinctionPurseDrain
+
+        ensure_somehow_always_broke_distinction()
+        DistinctionPurseDrain.objects.filter(distinction__slug="somehow-always-broke").update(
+            drain_percent=50
+        )
+
+        ensure_somehow_always_broke_distinction()
+
+        # Read via .values() to hit the DB, not the SharedMemoryModel identity
+        # map (which still holds the pre-.update() instance) — mirrors
+        # test_staff_edit_to_distinction_survives_rerun above.
+        db_value = (
+            DistinctionPurseDrain.objects.filter(distinction__slug="somehow-always-broke")
+            .values("drain_percent")
+            .get()
+        )
+        self.assertEqual(db_value["drain_percent"], 50)

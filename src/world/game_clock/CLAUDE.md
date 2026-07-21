@@ -54,6 +54,7 @@ relative line numbers of two `register_task` calls — and nothing marked it loa
 | `SNAPSHOT` | 100 | Pre-income baselines — read balances before anything moves them |
 | `ECONOMY` | 200 | `weekly_rollover`: income, wages, debt service, contracts |
 | `UPKEEP` | 300 | Building upkeep and personal recurring drains |
+| `DRAIN` | 400 | Post-obligation purse drains (Somehow Always Broke, #2613) |
 | `DEFAULT` | 500 | Everything with no ordering opinion (the default) |
 | `CLEANUP` | 900 | Sweeps, decay, garbage collection |
 
@@ -69,8 +70,10 @@ before upkeep drains**, so a short player sees a smaller effective paycheck rath
 unpreventable arrears hit and condition-tier slide. See
 `docs/adr/0150-income-lands-before-upkeep.md`.
 
-`SNAPSHOT` currently has no members — it is the declared seam for tasks needing a
-start-of-week balance baseline (the "Somehow Always Broke" distinction, #2540).
+`SNAPSHOT`'s first member is `currency.purse_drain_snapshot` (#2613) — it records each
+Somehow Always Broke holder's opening purse balance before income lands, which the `DRAIN`
+band then drains down to. That two-band split is why `SNAPSHOT` and `DRAIN` bracket the
+money bands rather than being one task.
 
 ### Wired Tasks
 | Task | Frequency | Source App |
@@ -90,6 +93,8 @@ start-of-week balance baseline (the "Somehow Always Broke" distinction, #2540).
 | Room ward upkeep (`room_features.ward_upkeep_tick`) | 24h real | room_features (#2177) |
 | Weekly rollover (`weekly_rollover`) | weekly, Sun 00:00 EST anchor, `ECONOMY` | game_clock (#932) |
 | Building upkeep sweep (`buildings.weekly_upkeep`) | weekly, same anchor, `UPKEEP` | buildings (#1930, #2609) |
+| Purse drain snapshot (`currency.purse_drain_snapshot`) | weekly, same anchor, `SNAPSHOT` | currency (#2613) |
+| Purse drain (`currency.purse_drains`) | weekly, same anchor, `DRAIN` | currency (#2613) |
 
 (Table is partial — `register_all_tasks()` in `tasks.py` is the authoritative list.)
 
