@@ -204,6 +204,12 @@ def create_covenant(  # noqa: PLR0913, C901, PLR0912
     if covenant_type == CovenantType.COURT:
         if leader is None:
             raise CourtLeaderRequiredError
+        # Worshipped forces are remote; Court is for proximate NPCs (#2550).
+        from world.worship.models import WorshippedBeing  # noqa: PLC0415
+
+        if WorshippedBeing.objects.filter(avatar_sheet=leader).exists():
+            msg = "A worshipped being cannot be a Court master."
+            raise CourtLeaderNotAllowedError(msg)
     elif leader is not None:
         raise CourtLeaderNotAllowedError
 

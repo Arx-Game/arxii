@@ -20,6 +20,17 @@ from world.magic.models.techniques import (
 from world.worship.constants import MiracleTrigger
 
 
+class PatronageValence(models.TextChoices):
+    """The nature of a Chosen's bond with their patron (#2550).
+
+    Null on ``DevotionStanding.valence`` means ordinary worship (not a patronage).
+    """
+
+    DEVOTIONAL = "devotional", "Devotional"
+    ANTAGONISTIC = "antagonistic", "Antagonistic"
+    PACT = "pact", "Pact"
+
+
 class WorshipTradition(SharedMemoryModel):
     """A style of worship (PLACEHOLDER names: Liturgy/Spiritcalling/Druidry/Occultism).
 
@@ -120,6 +131,25 @@ class DevotionStanding(SharedMemoryModel):
     )
     favor = models.IntegerField(default=0)
     lifetime_favor = models.IntegerField(default=0)
+    valence = models.CharField(
+        max_length=20,
+        choices=PatronageValence.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "Set when this being chose the character as their champion. Null = ordinary worship."
+        ),
+    )
+    established_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the patronage was established. Null for ordinary worship.",
+    )
+    released_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when the patron released the Chosen. Null = active patronage.",
+    )
 
     class Meta:
         ordering = ["-favor"]
@@ -352,3 +382,36 @@ class MiraclePerformance(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.miracle} → {self.target_character} ({self.trigger_event})"
+
+
+class ChosenFavorConfig(SharedMemoryModel):
+    """Staff-tunable favor thresholds for Chosen benefits (#2550).
+
+    Singleton (pk=1), lazy-created via ``get_chosen_favor_config()``.
+    Only ``anima_recovery_*`` fields are wired; ``ceremony_edge_*`` fields are
+    defined for shape stability but inert until a future issue wires them.
+    """
+
+    anima_recovery_threshold = models.PositiveIntegerField(
+        default=10,
+        help_text="Minimum favor for the Chosen's anima ritual bonus.",
+    )
+    anima_recovery_bonus = models.PositiveIntegerField(
+        default=5,
+        help_text="Extra anima recovered when favor meets the threshold.",
+    )
+    ceremony_edge_threshold = models.PositiveIntegerField(
+        default=25,
+        help_text="DEFERRED — minimum favor for ceremony check bonus. Inert until wired.",
+    )
+    ceremony_edge_bonus = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="DEFERRED — bonus weight added to the Devotion aspect. Inert until wired.",
+    )
+
+    class Meta:
+        verbose_name = "Chosen Favor Config"
+        verbose_name_plural = "Chosen Favor Config"
+
+    def __str__(self) -> str:
+        return "Chosen Favor Config"

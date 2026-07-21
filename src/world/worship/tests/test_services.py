@@ -12,8 +12,16 @@ from world.worship.constants import (
     GODS_FAVORITE_PRINCESS,
 )
 from world.worship.factories import WorshippedBeingFactory
-from world.worship.models import WorshipGrant
-from world.worship.services import bump_devotion, grant_worship
+from world.worship.models import PatronageValence, WorshipGrant
+from world.worship.services import (
+    active_patronage_for,
+    best_patronage_favor,
+    bump_devotion,
+    establish_patronage,
+    get_chosen_favor_config,
+    grant_worship,
+    release_patronage,
+)
 
 
 def _seed_favorite_achievements() -> None:
@@ -97,3 +105,112 @@ class GodsFavoriteTests(TestCase):
         standing = bump_devotion(sheet, self.being, 10)
         self.assertEqual(standing.favor, 10)
         self.assertEqual(self._earned(sheet), set())
+
+
+class EstablishPatronageTests(TestCase):
+    """Patronage establishment, active filtering, and release (#2550)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.being = WorshippedBeingFactory()
+        cls.sheet = CharacterSheetFactory()
+
+    def test_establish_patronage_sets_valence_and_established_at(self) -> None:
+        standing = establish_patronage(self.sheet, self.being, valence=PatronageValence.DEVOTIONAL)
+        self.assertEqual(standing.valence, PatronageValence.DEVOTIONAL)
+        self.assertIsNotNone(standing.established_at)
+        self.assertIsNone(standing.released_at)
+
+    def test_establish_patronage_idempotent_does_not_reset_established_at(self) -> None:
+        first = establish_patronage(self.sheet, self.being, valence=PatronageValence.DEVOTIONAL)
+        original_at = first.established_at
+        second = establish_patronage(self.sheet, self.being, valence=PatronageValence.DEVOTIONAL)
+        self.assertEqual(second.pk, first.pk)
+        self.assertEqual(second.established_at, original_at)
+
+    def test_establish_patronage_on_existing_worship_preserves_favor(self) -> None:
+        bump_devotion(self.sheet, self.being, 15)
+        standing = establish_patronage(self.sheet, self.being, valence=PatronageValence.PACT)
+        self.assertEqual(standing.favor, 15)
+        self.assertEqual(standing.valence, PatronageValence.PACT)
+
+
+class ActivePatronageTests(TestCase):
+    """active_patronage_for and best_patronage_favor (#2550)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.being_a = WorshippedBeingFactory()
+        cls.being_b = WorshippedBeingFactory()
+        cls.sheet = CharacterSheetFactory()
+
+    def test_active_patronage_excludes_ordinary_worship(self) -> None:
+        bump_devotion(self.sheet, self.being_a, 10)  # ordinary worship, no valence
+        patronages = active_patronage_for(self.sheet)
+        self.assertEqual(patronages, [])
+
+    def test_active_patronage_includes_patronage_rows(self) -> None:
+        establish_patronage(self.sheet, self.being_a, valence=PatronageValence.DEVOTIONAL)
+        patronages = active_patronage_for(self.sheet)
+        self.assertEqual(len(patronages), 1)
+        self.assertEqual(patronages[0].being, self.being_a)
+
+    def test_active_patronage_ordered_by_favor_desc(self) -> None:
+        establish_patronage(self.sheet, self.being_a, valence=PatronageValence.DEVOTIONAL)
+        establish_patronage(self.sheet, self.being_b, valence=PatronageValence.DEVOTIONAL)
+        bump_devotion(self.sheet, self.being_b, 20)
+        bump_devotion(self.sheet, self.being_a, 5)
+        patronages = active_patronage_for(self.sheet)
+        self.assertEqual(patronages[0].being, self.being_b)
+        self.assertEqual(patronages[1].being, self.being_a)
+
+    def test_best_patronage_favor_returns_highest(self) -> None:
+        establish_patronage(self.sheet, self.being_a, valence=PatronageValence.DEVOTIONAL)
+        bump_devotion(self.sheet, self.being_a, 20)
+        self.assertEqual(best_patronage_favor(self.sheet), 20)
+
+    def test_best_patronage_favor_zero_when_no_patronage(self) -> None:
+        self.assertEqual(best_patronage_favor(self.sheet), 0)
+
+    def test_best_patronage_favor_excludes_released(self) -> None:
+        standing = establish_patronage(
+            self.sheet, self.being_a, valence=PatronageValence.DEVOTIONAL
+        )
+        bump_devotion(self.sheet, self.being_a, 20)
+        release_patronage(standing)
+        self.assertEqual(best_patronage_favor(self.sheet), 0)
+
+
+class ReleasePatronageTests(TestCase):
+    """release_patronage marks bonds dormant (#2550)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.being = WorshippedBeingFactory()
+        cls.sheet = CharacterSheetFactory()
+
+    def test_release_sets_released_at(self) -> None:
+        standing = establish_patronage(self.sheet, self.being, valence=PatronageValence.DEVOTIONAL)
+        release_patronage(standing)
+        standing.refresh_from_db()
+        self.assertIsNotNone(standing.released_at)
+
+    def test_released_bond_excluded_from_active(self) -> None:
+        standing = establish_patronage(self.sheet, self.being, valence=PatronageValence.DEVOTIONAL)
+        release_patronage(standing)
+        self.assertEqual(active_patronage_for(self.sheet), [])
+
+
+class ChosenFavorConfigTests(TestCase):
+    """Lazy singleton creation (#2550)."""
+
+    def test_get_chosen_favor_config_creates_singleton(self) -> None:
+        config = get_chosen_favor_config()
+        self.assertEqual(config.pk, 1)
+        self.assertEqual(config.anima_recovery_threshold, 10)
+        self.assertEqual(config.anima_recovery_bonus, 5)
+
+    def test_get_chosen_favor_config_idempotent(self) -> None:
+        first = get_chosen_favor_config()
+        second = get_chosen_favor_config()
+        self.assertEqual(first.pk, second.pk)

@@ -196,6 +196,19 @@ def apply_anima_ritual_outcome(
                 soulfray_resolved = True
                 break
 
+    # Chosen patronage favor bonus (#2550): additive to the leftover budget
+    # after soulfray reduction, before the anima refill. Both call paths
+    # (perform_anima_ritual direct + _resolve_anima_ritual web) converge here.
+    from world.worship.services import (  # noqa: PLC0415
+        best_patronage_favor,
+        get_chosen_favor_config,
+    )
+
+    favor = best_patronage_favor(character_sheet)
+    chosen_config = get_chosen_favor_config()
+    if favor >= chosen_config.anima_recovery_threshold:
+        budget += chosen_config.anima_recovery_bonus
+
     anima_before = anima.current
     anima.current = min(anima.current + max(0, budget), anima.maximum)
 

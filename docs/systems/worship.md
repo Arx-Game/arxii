@@ -18,11 +18,24 @@ issue bodies; the model decision is ADR-0132.
   `avatar_sheet` → CharacterSheet (rare played gods), `is_active`.
 - `WorshipGrant` — audit ledger (being, amount, granted_by sheet, reason).
 - `DevotionStanding` — one-way PC→god favor, unique (character_sheet, being).
+  Chosen patronage fields (#2550): `valence` (nullable PatronageValence:
+  DEVOTIONAL/ANTAGONISTIC/PACT — null = ordinary worship), `established_at`
+  (when the patronage was established), `released_at` (set when the patron
+  released the Chosen — null = active). Favor is the single favor number for
+  both ordinary worship and patronage; `bump_devotion` accrues it regardless.
 - `WorshipDeclaration` — OneToOne sheet: `public_being` + `secret_being`
   (both optional) + the minted `secret` FK. Secret worship mints a `Secret`
   (`worship/secrets.py: mint_worship_secret`, mirrors the secret-distinction
   pattern). Set at CG (`CharacterDraft.public_worship`/`secret_worship`,
   created in `_create_worship_declaration` at finalization).
+- `ChosenFavorConfig` — singleton (pk=1, lazy-created via
+  `get_chosen_favor_config()`). Staff-tunable favor thresholds for Chosen
+  benefits (#2550): `anima_recovery_threshold`/`anima_recovery_bonus` (wired —
+  the Chosen's anima ritual adds the bonus to recovery budget when favor meets
+  the threshold), `ceremony_edge_threshold`/`ceremony_edge_bonus` (deferred —
+  defined for shape stability but inert until a future issue wires them).
+- `PatronageValence` — TextChoice (DEVOTIONAL/ANTAGONISTIC/PACT). Null on
+  DevotionStanding.valence means ordinary worship.
 
 **Services** (`worship/services.py`)
 
@@ -33,6 +46,17 @@ issue bodies; the model decision is ADR-0132.
   achievement (God's Favorite Princess / Prince / Chosen; leapfroggers earn it
   too, prior holders keep theirs; text never names the being).
 - `gods_favorite_achievement_for(sheet)` — gender-variant row resolution.
+- `get_chosen_favor_config()` — lazy-create the singleton (pk=1).
+- `active_patronage_for(sheet)` → active patronages (valence set, released_at
+  null), ordered by favor descending. Empty list for non-Chosen or a Chosen
+  who lost all patrons.
+- `best_patronage_favor(sheet)` → the highest-favor active patronage's favor,
+  or 0. Read by `apply_anima_ritual_outcome` to gate the anima recovery bonus.
+- `establish_patronage(sheet, being, *, valence)` → get-or-create a
+  DevotionStanding and mark it as patronage (sets valence/established_at;
+  idempotent; preserves existing favor). Called at CG when Path of the Chosen.
+- `release_patronage(standing)` → sets `released_at` (graceful degradation —
+  the Chosen keeps the Path but this patron's favor no longer gates benefits).
 
 ### Miracles & Divine Intervention (#2360)
 

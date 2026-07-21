@@ -18,7 +18,12 @@ from django.utils import timezone
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.models import PlayerData
-from world.character_creation.constants import ApplicationStatus, CommentType, OriginStoryState
+from world.character_creation.constants import (
+    PATH_OF_THE_CHOSEN_NAME,
+    ApplicationStatus,
+    CommentType,
+    OriginStoryState,
+)
 from world.character_creation.models import (
     CharacterDraft,
     CharacterOriginSlot,
@@ -558,6 +563,21 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
             character=character,
             path=draft.selected_path,
         )
+
+    # Establish patronage for Path of the Chosen (#2550)
+    if draft.selected_path and draft.selected_path.name == PATH_OF_THE_CHOSEN_NAME:
+        from world.worship.models import PatronageValence, WorshipDeclaration  # noqa: PLC0415
+        from world.worship.services import establish_patronage  # noqa: PLC0415
+
+        declaration = WorshipDeclaration.objects.filter(
+            character_sheet=character.sheet_data
+        ).first()
+        if declaration:
+            being = declaration.secret_being or declaration.public_being
+            if being:
+                establish_patronage(
+                    character.sheet_data, being, valence=PatronageValence.DEVOTIONAL
+                )
 
     # Apply post-CG bonuses if any (from other stages exceeding 5)
     # NOTE: This is reserved for future functionality where other CG stages might

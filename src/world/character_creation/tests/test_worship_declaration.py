@@ -6,7 +6,8 @@ from world.character_creation.services import _create_worship_declaration
 from world.character_sheets.factories import CharacterSheetFactory
 from world.secrets.models import Secret
 from world.worship.factories import WorshippedBeingFactory
-from world.worship.models import WorshipDeclaration
+from world.worship.models import PatronageValence, WorshipDeclaration
+from world.worship.services import establish_patronage
 
 
 class _DraftStub:
@@ -68,3 +69,33 @@ class WorshipDeclarationFinalizationTests(TestCase):
         identity = _build_identity(sheet)
         self.assertEqual(identity["worship"]["name"], self.public.name)
         self.assertNotIn(self.dark.name, str(identity))
+
+
+class PatronageEstablishmentTests(TestCase):
+    """Patronage establishment from a worship declaration (#2550).
+
+    The CG finalization hook calls ``establish_patronage`` when the character's
+    path is Path of the Chosen. These tests verify the service-level behavior
+    that the hook relies on.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.being = WorshippedBeingFactory()
+        cls.sheet = CharacterSheetFactory()
+
+    def test_establish_patronage_creates_devotion_standing_with_valence(self) -> None:
+        standing = establish_patronage(self.sheet, self.being, valence=PatronageValence.DEVOTIONAL)
+        self.assertEqual(standing.valence, PatronageValence.DEVOTIONAL)
+        self.assertIsNotNone(standing.established_at)
+        self.assertIsNone(standing.released_at)
+        self.assertEqual(standing.favor, 0)  # favor starts at 0 at CG
+
+    def test_non_chosen_devotion_standing_has_null_valence(self) -> None:
+        """Ordinary worship (bump_devotion) does not set valence."""
+        from world.worship.services import bump_devotion
+
+        standing = bump_devotion(self.sheet, self.being, 10)
+        self.assertIsNone(standing.valence)
+        self.assertIsNone(standing.established_at)
+        self.assertEqual(standing.favor, 10)

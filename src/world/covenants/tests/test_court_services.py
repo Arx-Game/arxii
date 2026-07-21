@@ -63,3 +63,23 @@ class CreateCourtCovenantTests(TestCase):
                 ],
                 leader=self.master,
             )
+
+    def test_worshipped_being_cannot_be_court_master(self):
+        """A WorshippedBeing's avatar cannot lead a Court covenant (#2550)."""
+        from world.worship.factories import WorshipTraditionFactory
+        from world.worship.models import WorshippedBeing
+
+        tradition = WorshipTraditionFactory()
+        WorshippedBeing.objects.create(
+            name="The Dread Patron",
+            tradition=tradition,
+            avatar_sheet=self.master,
+        )
+        with self.assertRaises(CourtLeaderNotAllowedError):
+            create_covenant(
+                name="Court of the Dread Patron",
+                covenant_type=CovenantType.COURT,
+                sworn_objective="Serve the patron.",
+                founders=self._founders(),
+                leader=self.master,
+            )

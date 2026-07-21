@@ -8,13 +8,20 @@ standing + the God's Favorite achievement check). Explicit calls, no signals.
 from typing import TYPE_CHECKING
 
 from django.db.models import Max
+from django.utils import timezone
 
 from world.worship.constants import (
     GODS_FAVORITE_CHOSEN,
     GODS_FAVORITE_PRINCE,
     GODS_FAVORITE_PRINCESS,
 )
-from world.worship.models import DevotionStanding, WorshipGrant, WorshippedBeing
+from world.worship.models import (
+    ChosenFavorConfig,
+    DevotionStanding,
+    PatronageValence,
+    WorshipGrant,
+    WorshippedBeing,
+)
 
 if TYPE_CHECKING:
     from world.achievements.models import Achievement
@@ -347,3 +354,70 @@ def remove_divine_intervention_trigger(
         obj=character,
         trigger_definition=trigger_def,
     ).delete()
+
+
+def get_chosen_favor_config() -> ChosenFavorConfig:
+    """Lazy-create the ChosenFavorConfig singleton (pk=1)."""
+
+    config, _ = ChosenFavorConfig.objects.get_or_create(pk=1)
+    return config
+
+
+def active_patronage_for(sheet: "CharacterSheet") -> list[DevotionStanding]:
+    """Return all active patronages for a character, ordered by favor descending.
+
+    An active patronage is a DevotionStanding with ``valence`` set (non-null)
+    and ``released_at`` null. Ordinary worship rows (valence=null) and released
+    patronages are excluded.
+    """
+    return list(
+        DevotionStanding.objects.filter(
+            character_sheet=sheet,
+            valence__isnull=False,
+            released_at__isnull=True,
+        ).order_by("-favor")
+    )
+
+
+def best_patronage_favor(sheet: "CharacterSheet") -> int:
+    """Return the favor of the highest-favor active patronage, or 0.
+
+    Returns 0 when the character has no active patronage — a non-Chosen or a
+    Chosen who has lost all their patrons.
+    """
+    patronages = active_patronage_for(sheet)
+    return patronages[0].favor if patronages else 0
+
+
+def establish_patronage(
+    sheet: "CharacterSheet",
+    being: WorshippedBeing,
+    *,
+    valence: PatronageValence,
+) -> DevotionStanding:
+    """Get-or-create a DevotionStanding and mark it as a patronage.
+
+    If the standing already exists (ordinary worship), the valence and
+    established_at are set on it — favor is preserved. Idempotent: re-calling
+    with the same being does not reset established_at.
+    """
+    standing, _ = DevotionStanding.objects.get_or_create(
+        character_sheet=sheet,
+        being=being,
+    )
+    if standing.valence is None:
+        standing.valence = valence
+        standing.established_at = timezone.now()
+        standing.save(update_fields=["valence", "established_at"])
+    return standing
+
+
+def release_patronage(standing: DevotionStanding) -> None:
+    """Mark a patronage as released (dormant).
+
+    Sets ``released_at`` — the Chosen keeps the Path but this patron's favor
+    no longer counts toward benefit thresholds. The standing row is preserved
+    for audit.
+    """
+    standing.released_at = timezone.now()
+    standing.save(update_fields=["released_at"])
