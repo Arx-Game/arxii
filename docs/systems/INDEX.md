@@ -4041,29 +4041,36 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `covenant_role_specialty_power_term` (`world.magic.services.power_terms`).
     Lore-repo content.
   - `VowSituationalPerk` / `VowSituationalPerkSituation` / `VowSituationalPerkRung`
-    (#2536 slice 1, ADR-0151; **Layer 4** of the vow-power model — "the point of vows")
-    — deterministic, situational bonuses. `VowSituationalPerk` (NK `(covenant_role,
-    name)`): `beneficiary` (SELF/COVENANT_ALLIES/WHOLE_GROUP), `effect_kind`
-    (POWER_BONUS/CHECK_BONUS live this slice; TIER_FLOOR/BOTCH_IMMUNITY schema-only),
-    `magnitude_tenths` (no negatives — structural, `PositiveIntegerField`),
-    `announce_template`, optional `check_type` scope. `VowSituationalPerkSituation`
-    (AND-composed situation attachments) + `VowSituationalPerkRung` (cumulative
-    escalation tiers — rung N requires rungs 1..N-1 too, highest qualifying rung's
+    (#2536 slices 1-2, ADR-0151/ADR-0152; **Layer 4** of the vow-power model — "the point of
+    vows") — deterministic, situational bonuses. `VowSituationalPerk` (NK `(covenant_role,
+    name)`): `beneficiary` (SELF/COVENANT_ALLIES/WHOLE_GROUP), `effect_kind` (all four values
+    live: POWER_BONUS/CHECK_BONUS slice 1; TIER_FLOOR/BOTCH_IMMUNITY slice 2),
+    `magnitude_tenths` (no negatives — structural, `PositiveIntegerField`), `announce_template`,
+    optional `check_type` scope, optional `floor_success_level` (SmallInt, canonical −10..+10
+    scale — TIER_FLOOR-only, `clean()`-enforced both directions, ADR-0152).
+    `VowSituationalPerkSituation` (AND-composed situation attachments) + `VowSituationalPerkRung`
+    (cumulative escalation tiers — rung N requires rungs 1..N-1 too, highest qualifying rung's
     magnitude replaces the base). All lore-repo content. Situations are drawn from
     `world.covenants.perks.constants.Situation`, a code-defined library with a
     registered evaluator per value (`world.covenants.perks.evaluators
     .SITUATION_EVALUATORS`) — attaching a situation to a perk is content; adding a new
     situation to the library is code. `world.covenants.perks.services
     .applicable_perks(subject, *, effect_kind, resolution, target)` is the beneficiary
-    evaluation point every delivery seam calls; `announce_fired_perks` is the
+    evaluation point every delivery seam calls (`effect_kind` accepts a single kind or a
+    `tuple[str, ...]`, slice 2 — same fixed query ceiling); `announce_fired_perks` is the
     dual-dispatch (WS + a direct telnet `location.msg_contents()` call, NOT
     `message_location`) presentation-contract seam — see
-    `docs/systems/covenants.md`'s "Layer 4: Situational Perks" and ADR-0151 for the
+    `docs/systems/covenants.md`'s "Layer 4: Situational Perks" and ADR-0151/ADR-0152 for the
     full design (registry pattern, query ceiling, why `broadcast_action_outcome`
     alone was insufficient for telnet parity). Delivery: `POWER_BONUS` via
     `vow_situational_power_term` (`world.magic.services.power_terms`, see the Magic
     section above); `CHECK_BONUS` via `perform_check`'s optional `situation_ctx`
-    parameter (`world.checks.services`).
+    parameter (`world.checks.services`) — both thread-scaled. `TIER_FLOOR`/`BOTCH_IMMUNITY`
+    also ride `perform_check`, via `_apply_outcome_guarantees` AFTER the outcome is determined
+    (rolled or test-rig forced) — ABSOLUTE, never thread-scaled, ungated; `TIER_FLOOR` guarantees
+    `success_level >= floor_success_level`, `BOTCH_IMMUNITY` downgrades a botch
+    (`success_level <= world.checks.constants.BOTCH_SUCCESS_LEVEL_MAX`) to the least-bad
+    non-botch outcome; announces only when a guarantee actually altered the outcome.
   - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
     compatible with which `GearArchetype` values (read-only authored content)
   - `CovenantRoleBonus` — authored config: one row per

@@ -40,6 +40,10 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 4. Extra modifiers from caller (goals, magic, combat, conditions, `resolve_challenge`'s
    `capability_source.value`)
 5. Total points -> CheckRank -> ResultChart -> roll 1-100 -> outcome
+6. Outcome guarantees (#2536 slice 2, ADR-0152): if a `situation_ctx` was passed, `TIER_FLOOR`/
+   `BOTCH_IMMUNITY` covenant perks (`_apply_outcome_guarantees`) may raise the outcome to an
+   authored floor — absolute, never thread-scaled; announces only when it actually altered the
+   outcome. Applies identically to the test-rig forced-outcome path.
 
 ## The modifier seam — `collect_check_modifiers(sheet, check_type, *, scene=None, ...)`
 

@@ -1808,6 +1808,7 @@
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - allowed_styles <- magic.TechniqueStyle
   - gift_unlocks <- magic.GiftUnlock
+  - glimpse_trigger_tags <- magic.GlimpseTag
   - ritual_grants <- magic.PathRitualGrant
   - gift_grants <- magic.PathGiftGrant
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
@@ -4838,6 +4839,8 @@
 ### GiftAcquisitionConfig
 
 ### GlimpseTag
+**Foreign Keys:**
+  - paths -> classes.Path [M2M]
 **Pointed to by:**
   - character_rows <- magic.CharacterGlimpseTag
   - distinction_suggestions <- magic.GlimpseTagDistinctionSuggestion
