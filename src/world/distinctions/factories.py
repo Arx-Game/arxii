@@ -8,6 +8,7 @@ from world.distinctions.models import (
     CharacterDistinctionOther,
     Distinction,
     DistinctionCategory,
+    DistinctionChangeDetails,
     DistinctionEffect,
     DistinctionPrerequisite,
     DistinctionTag,
@@ -98,3 +99,14 @@ class CharacterDistinctionOtherFactory(DjangoModelFactory):
     character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     parent_distinction = factory.SubFactory(DistinctionFactory, allow_other=True)
     freeform_text = factory.Faker("word")
+
+
+class DistinctionChangeRequestFactory(DjangoModelFactory):
+    """DistinctionChangeDetails attached to a gm.TableUpdateRequest (#2607)."""
+
+    class Meta:
+        model = DistinctionChangeDetails
+
+    request = factory.SubFactory("world.gm.factories.TableUpdateRequestFactory")
+    distinction = factory.SubFactory(DistinctionFactory)
+    rank = 1

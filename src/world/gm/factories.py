@@ -10,7 +10,12 @@ from factory import django as factory_django
 from actions.factories import ConsequencePoolFactory
 from evennia_extensions.factories import AccountFactory
 from world.areas.constants import AreaLevel, GridOrigin
-from world.gm.constants import CatalogSuggestionProposalKind, GMApplicationStatus, GMLevel
+from world.gm.constants import (
+    CatalogSuggestionProposalKind,
+    GMApplicationStatus,
+    GMLevel,
+    TableRequestKind,
+)
 from world.gm.models import (
     CatalogSuggestion,
     CheckTypeSituationFit,
@@ -26,6 +31,7 @@ from world.gm.models import (
     SituationKind,
     StoryArea,
     StoryRoomGrant,
+    TableUpdateRequest,
 )
 from world.player_submissions.constants import SubmissionStatus
 from world.roster.factories import RosterEntryFactory
@@ -67,6 +73,15 @@ class GMTableMembershipFactory(factory_django.DjangoModelFactory):
 
     table = factory.SubFactory(GMTableFactory)
     persona = factory.SubFactory(PersonaFactory)  # defaults to ESTABLISHED
+
+
+class TableUpdateRequestFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = TableUpdateRequest
+
+    membership = factory.SubFactory(GMTableMembershipFactory)
+    kind = TableRequestKind.DISTINCTION_ADD
+    player_reasoning = "Learned it from a mentor offscreen."
 
 
 class GMRosterInviteFactory(factory_django.DjangoModelFactory):

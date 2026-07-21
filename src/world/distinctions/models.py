@@ -598,3 +598,40 @@ class CharacterDistinctionOther(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"'{self.freeform_text}' for {self.parent_distinction.name}"
+
+
+class DistinctionChangeDetails(SharedMemoryModel):
+    """Distinction-kind payload for a ``gm.TableUpdateRequest`` (#2607).
+
+    Consumer-side details row (ADR-0010): the FK points at the general
+    ``gm.TableUpdateRequest`` framework primitive; ``gm`` never imports
+    ``distinctions``. Its completion handler (registered from
+    ``DistinctionsConfig.ready``) grants or revokes the distinction and charges
+    XP on the benefit direction.
+    """
+
+    request = models.OneToOneField(
+        "gm.TableUpdateRequest",
+        on_delete=models.CASCADE,
+        related_name="distinction_change_details",
+    )
+    distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    rank = models.PositiveIntegerField(
+        default=1,
+        help_text="Target rank for an add; the held rank for a remove.",
+    )
+    xp_cost = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Denormalized at submit for display; re-derived and charged at completion.",
+    )
+
+    class Meta:
+        verbose_name = "Distinction Change Details"
+        verbose_name_plural = "Distinction Change Details"
+
+    def __str__(self) -> str:
+        return f"DistinctionChangeDetails(req={self.request_id}, distinction={self.distinction_id})"

@@ -17,6 +17,8 @@ from world.gm.constants import (
     GMApplicationStatus,
     GMLevel,
     GMTableStatus,
+    TableRequestKind,
+    TableRequestStatus,
 )
 from world.player_submissions.constants import SubmissionStatus
 from world.scenes.action_constants import DifficultyChoice
@@ -785,3 +787,46 @@ class GMWeeklyRewardTracker(SharedMemoryModel):
     def __str__(self) -> str:
         username = self.gm_profile.account.username
         return f"GMWeeklyRewardTracker({username}: {self.xp_awarded_this_week})"
+
+
+class TableUpdateRequest(SharedMemoryModel):
+    """A member's end-of-session request for their table GM to change their sheet (#2607).
+
+    The general framework: a table member leaves a request, the GM signs off
+    yes/no, and on approval the member completes it. Kind-specific payload lives
+    on a 1:1 details model (no JSON, ADR-0007); a registered handler
+    (``world.gm.request_handlers``) runs at completion. Distinction add/remove is
+    the first and, in this PR, only kind. The GM's sign-off is the veto gate.
+    """
+
+    membership = models.ForeignKey(
+        "gm.GMTableMembership",
+        on_delete=models.CASCADE,
+        related_name="update_requests",
+    )
+    kind = models.CharField(max_length=30, choices=TableRequestKind.choices, db_index=True)
+    player_reasoning = models.TextField(
+        blank=True,
+        default="",
+        help_text="The IC/OOC case the GM weighs when signing off.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=TableRequestStatus.choices,
+        default=TableRequestStatus.PENDING,
+        db_index=True,
+    )
+    gm_notes = models.TextField(blank=True, default="", help_text="GM sign-off note.")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    resolved_at = models.DateTimeField(null=True, blank=True, help_text="When the GM signed off.")
+    completed_at = models.DateTimeField(
+        null=True, blank=True, help_text="When the member completed it."
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Table Update Request"
+        verbose_name_plural = "Table Update Requests"
+
+    def __str__(self) -> str:
+        return f"TableUpdateRequest({self.kind}, {self.status})"
