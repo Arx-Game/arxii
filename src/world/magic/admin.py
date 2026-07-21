@@ -3,6 +3,11 @@ from django.db.models import Prefetch
 
 from world.codex.models import TraditionCodexGrant
 from world.magic.audere import AudereThreshold
+from world.magic.audere_majora import (
+    AudereMajoraFaithVariant,
+    AudereMajoraFaithVariantAppliedCondition,
+    AudereMajoraFaithVariantCapabilityGrant,
+)
 from world.magic.models import (
     Affinity,
     AffinityInteraction,
@@ -1235,3 +1240,23 @@ class GhostTutelageAdmin(admin.ModelAdmin):
     search_fields = ("character_sheet__roster_entry__character__db_key",)
     readonly_fields = ("created_at",)
     autocomplete_fields = ("character_sheet",)
+
+
+# --- Audere Majora Faith Variant (#2360) ---
+
+
+class FaithVariantCapabilityGrantInline(admin.TabularInline):
+    model = AudereMajoraFaithVariantCapabilityGrant
+    extra = 0
+
+
+class FaithVariantAppliedConditionInline(admin.TabularInline):
+    model = AudereMajoraFaithVariantAppliedCondition
+    extra = 0
+
+
+@admin.register(AudereMajoraFaithVariant)
+class AudereMajoraFaithVariantAdmin(admin.ModelAdmin):
+    list_display = ("threshold", "being", "resonance_pool_cost", "favor_threshold", "is_active")
+    list_filter = ("is_active",)
+    inlines = [FaithVariantCapabilityGrantInline, FaithVariantAppliedConditionInline]

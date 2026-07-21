@@ -19765,6 +19765,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/worship/miracles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-facing miracle catalog browser (#2360). */
+    get: operations['worship_miracles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/miracles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-facing miracle catalog browser (#2360). */
+    get: operations['worship_miracles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -20121,6 +20155,10 @@ export interface components {
       chosen_path_name: string;
       advisory_text: string;
       declaration_interaction_id: number | null;
+      /** @default false */
+      faith_coupling_applied: boolean;
+      /** @default  */
+      faith_being_name: string;
     };
     /** @description Write serializer for the player's Crossing decision. accept=false declines. */
     AudereMajoraRespondRequest: {
@@ -25640,6 +25678,12 @@ export interface components {
       /** @description Description of what this interaction does. */
       readonly description: string;
     };
+    /**
+     * @description * `incapacitated` - Character Incapacitated
+     *     * `near_death` - Character Near Death
+     * @enum {string}
+     */
+    InterventionTriggerEnum: 'incapacitated' | 'near_death';
     /** @description Read serializer for ItemFacet (GET list/detail). */
     ItemFacetRead: {
       readonly id: number;
@@ -26078,6 +26122,28 @@ export interface components {
      * @enum {string}
      */
     MinRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
+    /** @description Staff-facing miracle catalog serializer (#2360). */
+    Miracle: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      readonly being_name: string;
+      /** @description Amount deducted from being.resonance_pool when performed. */
+      readonly resonance_pool_cost: number;
+      /**
+       * @description Danger context this miracle responds to.
+       *
+       *     * `incapacitated` - Character Incapacitated
+       *     * `near_death` - Character Near Death
+       */
+      readonly intervention_trigger: components['schemas']['InterventionTriggerEnum'];
+      /** @description Minimum DevotionStanding.favor required for this miracle to fire. */
+      readonly favor_threshold: number;
+      /** @description Narrative broadcast (EMIT) when this miracle fires. */
+      readonly narrative_text: string;
+      readonly is_active: boolean;
+      readonly sort_order: number;
+    };
     /** @description Result of the #1023 abandon endpoint — the run's id and new status. */
     MissionAbandonResult: {
       readonly id: number;
@@ -28869,6 +28935,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Media'][];
+    };
+    PaginatedMiracleList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Miracle'][];
     };
     PaginatedMissionCategoryList: {
       /** @example 123 */
@@ -32124,7 +32205,10 @@ export interface components {
       readonly boundary_level: number;
       /** @description Human-readable label for the target PathStage. */
       readonly target_stage_display: string;
+      /** @description Return faith variant vision text if set, else the threshold's. */
       readonly vision_text: string;
+      /** @description Faith variant selected at offer creation; null = no faith coupling. */
+      readonly faith_variant_id: number | null;
       /** @description Live corruption advisory; empty string when no stage-3+ corruption. */
       readonly advisory_text: string;
       /** @description Fixed risk copy (approved verbatim). */
@@ -65183,6 +65267,52 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WorshippedBeingRef'];
+        };
+      };
+    };
+  };
+  worship_miracles_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMiracleList'];
+        };
+      };
+    };
+  };
+  worship_miracles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this miracle. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Miracle'];
         };
       };
     };
