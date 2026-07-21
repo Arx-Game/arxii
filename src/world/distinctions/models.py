@@ -19,7 +19,11 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.distinctions.types import DistinctionOrigin, OtherStatus
+from world.distinctions.types import (
+    DistinctionChangeAction,
+    DistinctionOrigin,
+    OtherStatus,
+)
 from world.secrets.constants import SecretLevel
 
 
@@ -209,6 +213,11 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
     is_active = models.BooleanField(
         default=True,
         help_text="Whether this distinction is available for selection.",
+    )
+    is_teachable = models.BooleanField(
+        default=False,
+        help_text="If True, a PC who holds this distinction can teach it to others "
+        "or remove it for them, without a GM. (PC teaching flow is deferred.)",
     )
 
     # Privacy (#1334): instead of a public/private flag, a sensitive kind *relocates* into a
@@ -588,3 +597,92 @@ class CharacterDistinctionOther(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"'{self.freeform_text}' for {self.parent_distinction.name}"
+
+
+class DistinctionChangeAuthorization(models.Model):  # noqa: SHARED_MEMORY
+    """A GM-authorized permission for a character to add or remove a distinction.
+
+    Created by a GM (or automated beat) based on narrative justification.
+    The player then spends XP via ``spend_xp_on_distinction_unlock`` to
+    complete the change. One authorization = one change. ``is_consumed``
+    prevents double-use.
+
+    For ADD: ``target_distinction`` is set, ``target_character_distinction`` is null.
+    For REMOVE: ``target_character_distinction`` is set (until consumed, then
+    SET_NULL when the CharacterDistinction row is deleted).
+    """
+
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="distinction_change_authorizations",
+        help_text="The character who may use this authorization.",
+    )
+    action = models.CharField(
+        max_length=10,
+        choices=DistinctionChangeAction.choices,
+        help_text="Whether this authorizes adding or removing a distinction.",
+    )
+    target_distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="add_authorizations",
+        help_text="The distinction to add (set for ADD action only).",
+    )
+    target_character_distinction = models.ForeignKey(
+        "distinctions.CharacterDistinction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="remove_authorizations",
+        help_text="The CharacterDistinction to remove (set for REMOVE action only). "
+        "Null after the distinction is deleted — the auth row survives as a receipt.",
+    )
+    authorized_by = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="authorized_distinction_changes",
+        help_text="The GM or staff member who authorized this change.",
+    )
+    reason = models.TextField(
+        help_text="Narrative justification for this change (staff-only field).",
+    )
+    xp_cost = models.PositiveIntegerField(
+        help_text="XP cost the player must spend to complete this change.",
+    )
+    is_consumed = models.BooleanField(
+        default=False,
+        help_text="True once the player has spent XP and the change has fired.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Distinction Change Authorization"
+        verbose_name_plural = "Distinction Change Authorizations"
+
+    def __str__(self) -> str:
+        return f"{self.action.capitalize()} auth for {self.character_sheet} ({self.xp_cost} XP)"
+
+    def clean(self) -> None:
+        """Validate exactly one target is set based on action."""
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        if self.action == DistinctionChangeAction.ADD:
+            if not self.target_distinction_id:
+                msg = "ADD action requires target_distinction."
+                raise ValidationError(msg)
+            if self.target_character_distinction_id:
+                msg = "ADD action must not set target_character_distinction."
+                raise ValidationError(msg)
+        elif self.action == DistinctionChangeAction.REMOVE:
+            if not self.target_character_distinction_id:
+                msg = "REMOVE action requires target_character_distinction."
+                raise ValidationError(msg)
+            if self.target_distinction_id:
+                msg = "REMOVE action must not set target_distinction."
+                raise ValidationError(msg)
