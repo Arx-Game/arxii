@@ -19,7 +19,7 @@ from evennia import create_object
 
 from world.areas.positioning.services import connect_positions, create_position, place_in_position
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import ParticipantStatus
+from world.combat.constants import CombatManeuver, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -48,8 +48,9 @@ from world.vitals.models import CharacterVitals
 
 class SituationEvaluatorRegistryTests(TestCase):
     """The registry carries exactly every live ``Situation`` value (9 from slice 1,
-    ``CHAMPION_DUEL`` from slice 3 Task 3, plus ``COMBAT_OPENED_FROM_PARLEY`` and
-    ``AMBUSH_UNDERWAY`` from slice 3 Task 4, #2536)."""
+    ``CHAMPION_DUEL`` from slice 3 Task 3, ``COMBAT_OPENED_FROM_PARLEY`` and
+    ``AMBUSH_UNDERWAY`` from slice 3 Task 4, plus ``ALLY_INTERCEPTED_FOR_ME`` from
+    slice 3 Task 5, #2536)."""
 
     def test_registry_covers_every_surviving_situation(self) -> None:
         self.assertEqual(set(SITUATION_EVALUATORS), set(Situation.values))
@@ -553,3 +554,101 @@ class AmbushUnderwayEvaluatorTests(TestCase):
 
     def test_false_outside_combat(self) -> None:
         self.assertFalse(evaluators.ambush_underway(self._ctx(None)))
+
+
+class AllyInterceptedForMeEvaluatorTests(TestCase):
+    """ALLY_INTERCEPTED_FOR_ME: a covenant-mate's armed INTERPOSE this round,
+    guarding the subject specifically or guard-anyone (#2536 slice 3, Task 5).
+
+    Declared cover counts — the guarded moment is the situation, it does not
+    wait for damage to land (ratified judgment call, see the ``Situation``
+    enum docstring).
+    """
+
+    def setUp(self) -> None:
+        self.covenant = CovenantFactory()
+        self.role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
+        self.holder_sheet = CharacterSheetFactory()
+        self.mate_sheet = CharacterSheetFactory()
+        self.other_ally_sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=self.holder_sheet, covenant=self.covenant, covenant_role=self.role
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=self.mate_sheet, covenant=self.covenant, covenant_role=self.role
+        )
+        self.encounter = CombatEncounterFactory(round_number=1)
+        self.holder_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.holder_sheet
+        )
+        self.mate_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.mate_sheet
+        )
+        self.other_ally_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.other_ally_sheet
+        )
+        self.resolution = CombatRoundContext(self.holder_participant)
+
+    def _ctx(self, resolution: object | None) -> SituationContext:
+        return SituationContext(
+            holder=self.holder_sheet, subject=self.holder_sheet, target=None, resolution=resolution
+        )
+
+    def _declare_interpose(self, *, participant, is_ready: bool, focused_ally_target) -> None:
+        CombatRoundActionFactory(
+            participant=participant,
+            round_number=self.encounter.round_number,
+            maneuver=CombatManeuver.INTERPOSE,
+            is_ready=is_ready,
+            focused_ally_target=focused_ally_target,
+        )
+
+    def test_true_when_mate_guards_subject(self) -> None:
+        self._declare_interpose(
+            participant=self.mate_participant,
+            is_ready=True,
+            focused_ally_target=self.holder_participant,
+        )
+        self.assertTrue(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+
+    def test_false_when_guarding_a_different_ally(self) -> None:
+        self._declare_interpose(
+            participant=self.mate_participant,
+            is_ready=True,
+            focused_ally_target=self.other_ally_participant,
+        )
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+
+    def test_true_when_guard_anyone(self) -> None:
+        self._declare_interpose(
+            participant=self.mate_participant, is_ready=True, focused_ally_target=None
+        )
+        self.assertTrue(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+
+    def test_false_when_interposer_not_covenant_mate(self) -> None:
+        stranger_sheet = CharacterSheetFactory()
+        stranger_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=stranger_sheet
+        )
+        self._declare_interpose(
+            participant=stranger_participant,
+            is_ready=True,
+            focused_ally_target=self.holder_participant,
+        )
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+
+    def test_false_when_declaration_unready(self) -> None:
+        self._declare_interpose(
+            participant=self.mate_participant,
+            is_ready=False,
+            focused_ally_target=self.holder_participant,
+        )
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+
+    def test_false_outside_combat(self) -> None:
+        self._declare_interpose(
+            participant=self.mate_participant,
+            is_ready=True,
+            focused_ally_target=self.holder_participant,
+        )
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(None)))

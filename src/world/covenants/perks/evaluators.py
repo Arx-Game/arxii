@@ -528,3 +528,88 @@ def ambush_underway(ctx: SituationContext) -> bool:
         round_number=1,
         from_entrance=True,
     ).exists()
+
+
+@register(Situation.ALLY_INTERCEPTED_FOR_ME)
+def ally_intercepted_for_me(ctx: SituationContext) -> bool:
+    """A covenant-mate of the holder has an armed INTERPOSE guarding the subject.
+
+    Ratified v1 judgment call (#2536 slice 3, Task 5): DECLARED-guard
+    semantics — holds as soon as a covenant-mate's INTERPOSE declaration is
+    armed (``is_ready=True``) this round, whether or not the interpose ever
+    actually intercepts damage. "The guarded moment is the situation" — a
+    perk keying off this fires the instant cover is committed, not later when
+    it resolves.
+
+    "Mate" scoping mirrors ``ally_low_health`` exactly (see that function's
+    docstring, "Ally scoping rule"): a candidate counts if they hold a
+    non-departed (``CharacterCovenantRole.left_at__isnull=True``) role in a
+    covenant the HOLDER is also actively engaged in — the mate's own
+    ``engaged``/participant status beyond being co-present is irrelevant,
+    same reversal (Tehom 2026-07-20). The holder themself is excluded from
+    the mate pool (interposing for yourself is not "a covenant-mate" guarding
+    you).
+
+    Data source, verified: ``CombatRoundAction`` (``world/combat/models.py``
+    ~1094-1140) filtered to the SUBJECT's encounter (``ctx.resolution`` is
+    always the SUBJECT's resolution — see ``SituationContext`` docstring) +
+    the encounter's current ``round_number`` (the same ``AbstractRound``
+    scalar ``ambush_underway`` reads) + ``maneuver=CombatManeuver.INTERPOSE``
+    + ``is_ready=True``, restricted to ACTIVE participants. A declaration
+    "guards" the subject when its ``focused_ally_target_id`` is either the
+    subject's own participant id (a specific-ally guard) or ``None``
+    (guard-anyone, ``declare_interpose`` — ``world/combat/services.py:1846``
+    — allows either). Query budget: one declarations query (as above,
+    ``select_related`` the interposer's character sheet) + one BATCHED
+    ``CharacterCovenantRole`` membership query across every guarding
+    interposer's sheet id (never one query per candidate — "no queries in
+    loops"). Two queries total, fixed regardless of interposer count. False
+    outside combat.
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None or ctx.holder is None:
+        return False
+    holder_character = ctx.holder.character
+    if holder_character is None:
+        return False
+
+    holder_covenant_ids = holder_character.active_covenant_ids()
+    if not holder_covenant_ids:
+        return False
+
+    from world.combat.constants import CombatManeuver, ParticipantStatus  # noqa: PLC0415
+    from world.combat.models import CombatRoundAction  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    encounter = participant.encounter
+    declarations = list(
+        CombatRoundAction.objects.filter(
+            participant__encounter_id=encounter.pk,
+            participant__status=ParticipantStatus.ACTIVE,
+            round_number=encounter.round_number,
+            maneuver=CombatManeuver.INTERPOSE,
+            is_ready=True,
+        )
+        .exclude(participant__character_sheet=ctx.holder)
+        .select_related("participant__character_sheet")
+    )
+    if not declarations:
+        return False
+
+    guarding = [
+        declaration
+        for declaration in declarations
+        if declaration.focused_ally_target_id is None
+        or declaration.focused_ally_target_id == participant.pk
+    ]
+    if not guarding:
+        return False
+
+    mate_sheet_ids = set(
+        CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=[d.participant.character_sheet_id for d in guarding],
+            covenant_id__in=holder_covenant_ids,
+            left_at__isnull=True,
+        ).values_list("character_sheet_id", flat=True)
+    )
+    return any(d.participant.character_sheet_id in mate_sheet_ids for d in guarding)

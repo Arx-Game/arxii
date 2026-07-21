@@ -16,9 +16,10 @@ class Situation(models.TextChoices):
 
     Slice 1 shipped 9 values; ``CHAMPION_DUEL`` is slice 3's Battle-wiring
     addition (#2536 Task 3); ``COMBAT_OPENED_FROM_PARLEY`` and
-    ``AMBUSH_UNDERWAY`` are slice 3's origin-marker addition (#2536 Task 4) —
-    the enum ships no other inert entries; every value here has a registered
-    evaluator with signature ``(ctx: SituationContext) -> bool``.
+    ``AMBUSH_UNDERWAY`` are slice 3's origin-marker addition (#2536 Task 4);
+    ``ALLY_INTERCEPTED_FOR_ME`` is slice 3's declared-guard addition (#2536
+    Task 5) — the enum ships no other inert entries; every value here has a
+    registered evaluator with signature ``(ctx: SituationContext) -> bool``.
     ``SituationContext`` (``perks.context``) carries four required fields plus
     slice-3 scoping/defense fields: ``holder`` (the perk-owning vow-holder),
     ``subject`` (the acting character whose cast/check is resolving — equals
@@ -28,9 +29,8 @@ class Situation(models.TextChoices):
     context otherwise, ``None`` when absent). An evaluator whose required
     field is missing/``None`` returns False (a combat-positioning situation
     simply never holds outside combat; a DB-state situation like
-    ``TARGET_DISTRACTED`` evaluates anywhere). DEFERRED (each arrives with
-    its own machinery, not listed here): ``ally_intercepted_for_me``,
-    ``attacker_abyssal``.
+    ``TARGET_DISTRACTED`` evaluates anywhere). DEFERRED (arrives with its own
+    machinery, not listed here): ``attacker_abyssal``.
 
     - ``AT_RANGE`` — the SUBJECT's engagement distance profile this round is
       ranged (has at least one actively-engaged enemy, none of them sharing
@@ -100,6 +100,14 @@ class Situation(models.TextChoices):
       ``CombatRoundAction`` exists (a dramatic technique-entrance opener,
       #2183) — and is False from round 2 on. Reads ``resolution``; False
       outside combat.
+    - ``ALLY_INTERCEPTED_FOR_ME`` — a covenant-mate of the HOLDER, co-present
+      in the SUBJECT's encounter, has an armed (``is_ready=True``) INTERPOSE
+      declaration THIS round whose ``focused_ally_target`` is the SUBJECT's
+      participant or ``None`` (guard-anyone) (#2536 slice 3, Task 5).
+      Ratified v1 judgment call: DECLARED-guard semantics — declared cover
+      counts as soon as it is armed; the situation does not wait for the
+      interpose to actually intercept damage. Reads ``holder`` + ``resolution``;
+      False outside combat.
     """
 
     AT_RANGE = "at_range", "At Range"
@@ -114,6 +122,7 @@ class Situation(models.TextChoices):
     CHAMPION_DUEL = "champion_duel", "Champion Duel"
     COMBAT_OPENED_FROM_PARLEY = "combat_opened_from_parley", "Combat Opened From Parley"
     AMBUSH_UNDERWAY = "ambush_underway", "Ambush Underway"
+    ALLY_INTERCEPTED_FOR_ME = "ally_intercepted_for_me", "Ally Intercepted for Me"
 
 
 class PerkEffectKind(models.TextChoices):
