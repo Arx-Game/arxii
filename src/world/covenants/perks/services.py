@@ -175,19 +175,43 @@ def applicable_perks(
     return fired
 
 
-def perk_scope_matches(perk: VowSituationalPerk, ctx: SituationContext) -> bool:
+def mission_category_ids_for(ctx: SituationContext) -> frozenset[int]:
+    """``ctx.mission.template``'s authored category ids, as a hoistable set (#2536
+    slice 3 review fix).
+
+    Callers checking more than one mission-category-scoped perk against the SAME
+    ``ctx`` in one resolution (``checks.services._situational_perk_check_bonus``,
+    ``magic.services.power_terms.vow_situational_power_term``) MUST call this ONCE
+    before their per-perk filter loop and pass the result through
+    ``perk_scope_matches``'s ``mission_category_ids`` kwarg — that keeps the
+    categories query at exactly one per resolution regardless of how many perks
+    fire. Empty (no query) when ``ctx.mission`` is ``None``.
+    """
+    if ctx.mission is None:
+        return frozenset()
+    return frozenset(ctx.mission.template.categories.values_list("pk", flat=True))
+
+
+def perk_scope_matches(
+    perk: VowSituationalPerk,
+    ctx: SituationContext,
+    *,
+    mission_category_ids: frozenset[int] | None = None,
+) -> bool:
     """Every authored scope column on ``perk`` must match ``ctx`` (AND); empty scopes
-    always match. Mission-category membership is checked against the template's
-    prefetched/cached ``categories`` (SharedMemoryModel + M2M — one query per template
-    per call at most, cached on the instance's prefetch cache when present).
+    always match.
+
+    ``mission_category_ids`` is the caller-hoisted result of
+    ``mission_category_ids_for(ctx)``. Pass it through when checking more than one
+    perk against the same ``ctx`` in a single resolution — see that function's
+    docstring for the hoist contract. ``None`` (the default) means the caller didn't
+    hoist: this function falls back to computing it itself via
+    ``mission_category_ids_for``, one query, which keeps single-perk call sites
+    simple at the cost of a fresh query per call.
 
     Shared by both fired-perk seams (#2536 slice 3): ``checks.services
     ._situational_perk_check_bonus`` (CHECK_BONUS) and ``magic.services.power_terms
-    .vow_situational_power_term`` (POWER_BONUS) — one rule, one place. Callers with
-    more than one scoped perk in a single resolution should hoist the
-    ``ctx.mission.template.categories`` set OUTSIDE their per-perk loop rather than
-    calling this per-perk when ``ctx.mission`` is set; this function itself queries
-    fresh per call for a single perk.
+    .vow_situational_power_term`` (POWER_BONUS) — one rule, one place.
     """
     if perk.battle_action_kind and perk.battle_action_kind != (ctx.battle_action_kind or ""):
         return False
@@ -197,8 +221,9 @@ def perk_scope_matches(perk: VowSituationalPerk, ctx: SituationContext) -> bool:
     if perk.mission_category_id is not None:
         if ctx.mission is None:
             return False
-        category_ids = {c.pk for c in ctx.mission.template.categories.all()}
-        if perk.mission_category_id not in category_ids:
+        if mission_category_ids is None:
+            mission_category_ids = mission_category_ids_for(ctx)
+        if perk.mission_category_id not in mission_category_ids:
             return False
     return True
 

@@ -445,6 +445,7 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     from world.covenants.perks.services import (  # noqa: PLC0415
         announce_fired_perks,
         applicable_perks,
+        mission_category_ids_for,
         perk_scope_matches,
     )
     from world.magic.services.threads import (  # noqa: PLC0415
@@ -490,7 +491,19 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
             resolution=ctx.situation_ctx,
             battle_action_kind=battle_action_kind,
         )
-        fired = [firing for firing in fired if perk_scope_matches(firing.perk, scope_ctx)]
+        # #2536 slice 3 review fix: hoist the mission-category set ONCE for
+        # this resolution (mirrors ``_situational_perk_check_bonus`` in
+        # ``checks.services``) rather than re-querying it per scoped perk
+        # below. ``scope_ctx.mission`` is always ``None`` here today (POWER_BONUS
+        # rows can only author ``battle_action_kind`` scope — see the comment
+        # above), so this call issues no query; hoisting anyway keeps both
+        # seams sharing the identical contract if that ever changes.
+        mission_category_ids = mission_category_ids_for(scope_ctx)
+        fired = [
+            firing
+            for firing in fired
+            if perk_scope_matches(firing.perk, scope_ctx, mission_category_ids=mission_category_ids)
+        ]
     if not fired:
         return 0
 

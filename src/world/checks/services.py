@@ -267,6 +267,7 @@ def _situational_perk_check_bonus(
     from world.covenants.perks.services import (  # noqa: PLC0415
         announce_fired_perks,
         applicable_perks,
+        mission_category_ids_for,
         perk_scope_matches,
     )
     from world.magic.services.threads import (  # noqa: PLC0415
@@ -284,7 +285,14 @@ def _situational_perk_check_bonus(
         for firing in fired
         if firing.perk.check_type_id is None or firing.perk.check_type_id == check_type.pk
     ]
-    scoped = [f for f in scoped if perk_scope_matches(f.perk, situation_ctx)]
+    # #2536 slice 3 review fix: hoist the mission-category set ONCE for this
+    # resolution rather than re-querying it per scoped perk below.
+    mission_category_ids = mission_category_ids_for(situation_ctx)
+    scoped = [
+        f
+        for f in scoped
+        if perk_scope_matches(f.perk, situation_ctx, mission_category_ids=mission_category_ids)
+    ]
     if not scoped:
         return 0
 
