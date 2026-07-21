@@ -37,7 +37,7 @@ class PurseDrainTests(TestCase):
         DistinctionPurseDrain.objects.create(
             distinction=distinction, drain_percent=percent, floor_coppers=floor
         )
-        CharacterDistinctionFactory(character=sheet.character, distinction=distinction)
+        CharacterDistinctionFactory(character=sheet, distinction=distinction)
         purse = get_or_create_purse(sheet)
         purse.balance = balance
         purse.save(update_fields=["balance"])
