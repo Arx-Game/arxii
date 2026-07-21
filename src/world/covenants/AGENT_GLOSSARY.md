@@ -164,15 +164,22 @@ slice 3, Task 5.)
 _Avoid_: guarded, protected (too generic — this is specifically an ARMED DECLARATION, not a
 resolved block).
 
-**Attacker Abyssal**:
-`Situation.ATTACKER_ABYSSAL` — holds when the DEFENSE-side `SituationContext.attacker` is
-Abyssal-affiliated: a `CombatOpponent` with a non-empty authored `affinity` matching
-`AffinityType.ABYSSAL` (checked first), falling back to a reachable `ObjectDB`'s
-`CharacterAura.dominant_affinity`. `None` — and this Situation False — on every offense-side
-resolution, where `attacker` is never populated. The first Situation to read the Defense-Side
-Seam (below). (#2536 slice 3, Task 6.)
-_Avoid_: target abyssal (Situation's `target` field is the acting character's OWN action
-target — an unrelated concept on offense; `attacker` is the incoming threat on defense).
+**Attacker Affinity**:
+`Situation.ATTACKER_AFFINITY` (renamed from its original Abyssal-only situation, parameterized
+#2623) — holds
+when the DEFENSE-side `SituationContext.attacker` is typed to the row's authored `affinity` axis
+(required Situation Parameter, one of `AffinityType.CELESTIAL/PRIMAL/ABYSSAL` — no longer
+hardcoded to Abyssal). A `CombatOpponent` with a non-empty authored `affinity` matching the row's
+axis is definitional (checked first, `threshold_percent` ignored); otherwise falls back to a
+reachable `ObjectDB`'s `CharacterAura` — with `threshold_percent` set, that axis's Decimal
+percentage must be ≥ the threshold; unset, the aura's `dominant_affinity` must equal the axis
+(the pre-#2623 behavior, now the parameterless default). `None` — and this Situation False — on
+every offense-side resolution, where `attacker` is never populated. The first Situation to read
+the Defense-Side Seam (below). (#2536 slice 3 Task 6; renamed + parameterized #2623, ADR-0154.)
+_Avoid_: attacker abyssal (superseded name — the family now covers all three axes, not only
+Abyssal); target abyssal/target affinity (Situation's `target` field is the acting character's
+OWN action target — an unrelated concept on offense; `attacker` is the incoming threat on
+defense).
 
 **Defense-Side Seam**:
 The evaluation point making situational perks reachable on a defender's OWN roll, not only the
@@ -181,9 +188,52 @@ resolution) threaded by `world.combat.services.resolve_npc_attack` into the defe
 `perform_check` call — the ONLY defense-check site doing so in v1. Reuses the existing
 `applicable_perks`/`_PerkResolver`/delivery-seam machinery rather than a parallel defense
 pipeline (see ADR-0153's rejected alternative). Makes CHECK_BONUS/TIER_FLOOR/BOTCH_IMMUNITY
-perks — including `ATTACKER_ABYSSAL`-gated ones — fire on defense for the first time. (#2536
+perks — including `ATTACKER_AFFINITY`-gated ones — fire on defense for the first time. (#2536
 slice 3, Task 6, ADR-0153.)
 _Avoid_: defense pipeline (there is no separate one — that was the rejected design).
+
+**Situation Parameters / `SituationParams`**:
+The typed knobs authored on ONE situation-requirement row (`VowSituationalPerkSituation` or
+`VowSituationalPerkRung`), carried via `SituationRequirementMixin` (`world.covenants.models`,
+#2623): `threshold_percent` (0-100, percent-shaped floors — aura-axis floor, ally-health
+fraction), `count_threshold` (count-shaped floors — surrounded lock count, minimum affection),
+`affinity` (`AffinityType` axis selector for attacker typing), `origin_side`
+(`SituationOriginSide` — see below). Which situation reads which params — and which it
+REQUIRES — is `SITUATION_PARAM_SPECS` (`world.covenants.perks.constants`); the mixin's `clean()`
+enforces both directions, mirroring the per-effect-kind gating already on
+`VowSituationalPerk.clean()`. Null/blank on every field = the pre-#2623 parameterless behavior
+(the evaluator's module-constant default) — parameterless rows are byte-identical to before
+#2623, not a breaking change. `.params` (a property on the mixin) builds the frozen, hashable
+`SituationParams` dataclass (`perks/context.py`) an evaluator actually reads; `_PerkResolver`
+keys its evaluation cache on `(situation, params, holder_pk)` so a rung can re-require the same
+situation at a tighter parameter than its base row. See ADR-0154.
+_Avoid_: situation config, situation options (this codebase's term is Situation Parameters,
+plural columns on the requirement row itself — not a separate config object).
+
+**`SituationOriginSide`**:
+The `TextChoices` (`world.covenants.perks.constants`, #2623) an `origin_side` Situation
+Parameter takes: `OURS` ("our side sprang it") or `THEIRS` ("their side sprang it"), blank =
+side-blind (today's pre-#2623 behavior). Read by `AMBUSH_UNDERWAY`/`COMBAT_OPENED_FROM_PARLEY`
+against `CombatEncounter.initiated_by_pc_side` (below) — `OURS` requires
+`initiated_by_pc_side is True`, `THEIRS` requires `is False`, and a `NULL` initiator with a
+non-blank `origin_side` means the situation does not hold (direction unprovable, never guessed).
+v1 side model: the subject is always a PC, so PC-side = "ours" — a PvP refinement is out of
+scope until PvP encounters thread perks at all. See ADR-0154.
+_Avoid_: attacker side, defender side (this axis is about who OPENED the encounter, not who is
+attacking/defending within it — a different question from `SituationContext.attacker`).
+
+**`initiated_by_pc_side`**:
+`CombatEncounter.initiated_by_pc_side` (`world.combat.models`, #2623) — `BooleanField(null=True)`
+recording who sprang a fight: `True` = a PC participant's action opened it, `False` = the
+opposing side did, `NULL` = unknown/undirected (duels, battles, staff-opened). Stamped `True`
+unconditionally by `world.combat.cast_seed.seed_or_feed_encounter_from_cast` at CREATE — every
+verified encounter-creation path today is PC-cast, so no code path can stamp `False` yet; that
+gap is recorded honestly in ADR-0154 rather than papered over with an invented NPC-aggression
+system. `False` is admin/GM-stampable in v1 (exposed in combat admin); the first
+NPC-initiated-encounter service to land stamps it at creation. Read by `origin_side`-parameterized
+situations (above).
+_Avoid_: aggressor, first_mover (this codebase's field name is `initiated_by_pc_side` — a
+PC/NPC-side fact, not a per-participant aggressor flag).
 
 **Dormant Vow**:
 An active `CharacterCovenantRole` membership that is currently DISENGAGED — the vow still

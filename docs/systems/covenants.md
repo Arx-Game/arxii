@@ -127,31 +127,56 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `POWER_BONUS` — `clean()` rejects it on `TIER_FLOOR`/`BOTCH_IMMUNITY`). Every non-empty scope
   column on a row must match (AND); an empty scope always matches — see `perk_scope_matches`
   below.
-- **`VowSituationalPerkSituation`** — `(perk FK, situation choice)` join; every attached
-  situation must hold (AND composition). `situation` is drawn from
+- **`SituationRequirementMixin`** (#2623, ADR-0154) — abstract mixin shared by
+  `VowSituationalPerkSituation`/`VowSituationalPerkRung`; carries four typed, nullable/blank
+  parameter columns (Situation Parameters): `threshold_percent` (0-100, percent-shaped floors —
+  aura-axis floor, ally-health fraction), `count_threshold` (count-shaped floors — surrounded
+  lock count, minimum affection), `affinity` (`AffinityType` axis for attacker typing),
+  `origin_side` (`SituationOriginSide.OURS`/`THEIRS`, blank = side-blind). No JSON (ADR-0007) —
+  every knob is a real column. Which situation reads which params — and requires which — is
+  `SITUATION_PARAM_SPECS` (`perks/constants.py`); the mixin's `clean()` enforces both directions
+  (an authored param the situation doesn't read is rejected; a required param missing is
+  rejected), mirroring the per-effect-kind gating on `VowSituationalPerk.clean()`. All-null/blank
+  rows behave byte-identically to pre-#2623 (the old module-constant defaults) — parameterless
+  rows are the parameterless default of a parameterized family, not a breaking change. `.params`
+  builds the frozen, hashable `SituationParams` dataclass (`perks/context.py`) an evaluator reads.
+- **`VowSituationalPerkSituation`** — `(perk FK, situation choice)` join plus the mixin's four
+  param columns; every attached situation must hold (AND composition). `situation` is drawn from
   `world.covenants.perks.constants.Situation`, a code-defined library (see
-  `world.covenants.perks`'s module docs below) — attaching situations to a perk is a content
-  edit; adding a NEW situation to the library is a code change (one evaluator + one enum value).
-  Natural key `(perk, situation)`, content.
-- **`VowSituationalPerkRung`** — `(perk FK, rung_number, extra_situation, magnitude_tenths)` —
-  escalation tiers on top of a perk's base situations (e.g. a "Last Bulwark" perk that
-  intensifies further when allies are hurt, further still against Abyssal attackers). Resolution
-  is strictly cumulative: rung N's required situations = the perk's base situations ∪ the extra
-  situations of rungs 1..N, so a higher rung can never fire without every lower rung's condition
-  also holding; the highest qualifying rung's magnitude REPLACES the base (never sums with it).
-  `clean()` enforces `rung_number >= 1`; contiguity is not enforced (resolution handles gaps).
-  Natural key `(perk, rung_number)`, content.
+  `world.covenants.perks`'s module docs below) — attaching situations to a perk (and tuning their
+  params) is a content edit; adding a NEW situation to the library is a code change (one
+  evaluator + one enum value + a `SITUATION_PARAM_SPECS` entry). Natural key `(perk, situation)`
+  (unchanged by #2623 — one row per situation per perk; multi-row same-situation composition is
+  out of scope), content.
+- **`VowSituationalPerkRung`** — `(perk FK, rung_number, extra_situation, magnitude_tenths)` plus
+  the mixin's four param columns — escalation tiers on top of a perk's base situations (e.g. a
+  "Last Bulwark" perk that intensifies further when allies are hurt, further still against
+  Primal attackers). A rung can re-require its `extra_situation` at a TIGHTER parameter than the
+  base row (#2623) — e.g. base `ALLY_LOW_HEALTH` at the module default (50%), rung 1 at
+  `threshold_percent=25`. Resolution is strictly cumulative: rung N's required
+  `(situation, params)` pairs = the perk's base pairs ∪ the extra pairs of rungs 1..N, so a
+  higher rung can never fire without every lower rung's condition also holding; the highest
+  qualifying rung's magnitude REPLACES the base (never sums with it). `clean()` enforces
+  `rung_number >= 1`; contiguity is not enforced (resolution handles gaps). Natural key
+  `(perk, rung_number)`, content.
 
 **`world.covenants.perks`** (the logic modules — models above live in `covenants.models`,
 migration graph, per the "no new app" ruling; import direction still honors ADR-0010, perk
 modules import combat/checks contexts at function level, never the reverse):
 
-- **`constants.py`** — `Situation`/`PerkEffectKind`/`PerkBeneficiary` `TextChoices`. `Situation`
-  ships 14 values as of slice 3 (#2536, ADR-0153): slice 1's 9 plus `CHAMPION_DUEL` (Battle
-  wiring, Task 3), `COMBAT_OPENED_FROM_PARLEY`/`AMBUSH_UNDERWAY` (origin-marker addition, Task
-  4), `ALLY_INTERCEPTED_FOR_ME` (declared-guard, Task 5), and `ATTACKER_ABYSSAL` (defense-side
-  seam, Task 6) — see each value's own docstring entry for its evaluator's data source and any
-  v1 approximation.
+- **`constants.py`** — `Situation`/`PerkEffectKind`/`PerkBeneficiary`/`SituationOriginSide`
+  `TextChoices`, plus the `SituationParamSpec`/`SITUATION_PARAM_SPECS` contract (#2623,
+  ADR-0154). `Situation` still ships 14 values as of slice 3 (#2536, ADR-0153): slice 1's 9 plus
+  `CHAMPION_DUEL` (Battle wiring, Task 3), `COMBAT_OPENED_FROM_PARLEY`/`AMBUSH_UNDERWAY`
+  (origin-marker addition, Task 4), `ALLY_INTERCEPTED_FOR_ME` (declared-guard, Task 5), and
+  `ATTACKER_AFFINITY` (defense-side seam, Task 6; originally Abyssal-only, renamed and
+  parameterized to all three `AffinityType` axes by #2623, ADR-0154) — see each value's own docstring entry for its
+  evaluator's data source, its Situation Parameters, and any v1 approximation.
+  `SITUATION_PARAM_SPECS` (#2623) names, per situation, which of the four `SituationRequirementMixin`
+  columns are ALLOWED and which are REQUIRED — `ATTACKER_AFFINITY` requires `affinity`;
+  `ALLY_LOW_HEALTH`/`SURROUNDED`/`TARGET_FAVORABLY_DISPOSED` allow (but don't require) their
+  threshold; `AMBUSH_UNDERWAY`/`COMBAT_OPENED_FROM_PARLEY` allow `origin_side`; every other
+  situation allows none (an authored param on one of those rejects at `clean()`).
 - **`context.py`** — `SituationContext` (frozen dataclass: four required fields — `holder`,
   `subject`, `target`, `resolution` — plus three optional slice-3 fields (ADR-0153), all
   defaulting to `None`/byte-identical to pre-slice-3 behavior when unset: `mission` (the live
@@ -205,7 +230,7 @@ and Battle warfare rolls — `BattleTechniqueResolver.__call__`/`resolve_battle_
 defense side, `world.combat.services.resolve_npc_attack` threads a `SituationContext(attacker=
 opponent_action.opponent, resolution=CombatRoundContext(participant), ...)` into the defender's
 real `perform_check` — the only defense-check site doing so in v1, making CHECK_BONUS/
-TIER_FLOOR/BOTCH_IMMUNITY perks (including `ATTACKER_ABYSSAL`-gated ones) live on defense rolls
+TIER_FLOOR/BOTCH_IMMUNITY perks (including `ATTACKER_AFFINITY`-gated ones) live on defense rolls
 for the first time. See ADR-0153 for why each of these is a `SituationContext` field/threading
 addition rather than a parallel pipeline.
 
@@ -218,7 +243,7 @@ when the raw outcome is a botch (`success_level <= world.checks.constants
 .BOTCH_SUCCESS_LEVEL_MAX`, the centralized botch-boundary constant) and floors it at the
 least-bad non-botch level. Both fetch through `applicable_perks(effect_kind=(TIER_FLOOR,
 BOTCH_IMMUNITY), ...)` — one call, the tuple form above; slice 3 threads `attacker=situation_ctx
-.attacker` through this call too, so a defense-side guarantee can key on `ATTACKER_ABYSSAL`. The
+.attacker` through this call too, so a defense-side guarantee can key on `ATTACKER_AFFINITY`. The
 replacement outcome is the current `ResultChart`'s lowest outcome at/above the effective floor,
 falling back to the global `CheckOutcome` table when the chart has no row there, or a no-op when
 no such outcome is authored anywhere (never invents rows). `announce_fired_perks` fires only for
@@ -785,10 +810,20 @@ Graduation: when the adjusted party's real primary level re-enters the band,
   (`mission_category`/`mission_template`/`battle_action_kind`) + `perk_scope_matches`, Court
   (all six mission check sites) and Battle (warfare-roll) `situation_ctx` threading, five new
   `Situation` values (`CHAMPION_DUEL`, `COMBAT_OPENED_FROM_PARLEY`, `AMBUSH_UNDERWAY`,
-  `ALLY_INTERCEPTED_FOR_ME`, `ATTACKER_ABYSSAL`), the defense-side seam
+  `ALLY_INTERCEPTED_FOR_ME`, `ATTACKER_AFFINITY`), the defense-side seam
   (`SituationContext.attacker` + `resolve_npc_attack` threading), and dormant-vow messaging
   (the "loud OFF state", ruling 2) — see "Court/Battle scoping + defense-side seam" and
-  "Dormant-vow messaging" above. **Layer 4 is now complete; #2536 is closed pending merge.**
+  "Dormant-vow messaging" above. **Layer 4 is complete; #2536 is closed.** #2623 (ADR-0154)
+  followed up with parameterized situation requirements: `SituationRequirementMixin`'s four
+  typed columns (`threshold_percent`/`count_threshold`/`affinity`/`origin_side`) on both
+  `VowSituationalPerkSituation` and `VowSituationalPerkRung`, the `SITUATION_PARAM_SPECS`
+  per-situation allowed/required contract, the Abyssal-only attacker-typing situation's rename
+  to `ATTACKER_AFFINITY` (now authorable against all three `AffinityType` axes), and
+  `CombatEncounter.initiated_by_pc_side` — the new initiator-side capture `origin_side`-
+  parameterized situations read (stamped `True` at CREATE by every PC-cast encounter path;
+  `False` is admin/GM-stampable in v1, honestly `NULL`-heavy until an NPC-initiated-encounter
+  service exists). All 14 pre-#2623 situation rows behave byte-identically (parameterless =
+  the parameterless default of each parameterized family).
 
 ## Integrates With
 
