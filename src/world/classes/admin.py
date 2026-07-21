@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from world.classes.models import Aspect, Path, PathAspect
 from world.codex.models import PathCodexGrant
-from world.progression.models import TraitRequirement
+from world.progression.models import CodexKnowledgeRequirement, TraitRequirement
 from world.skills.models import PathSkillSuggestion
 
 
@@ -39,6 +39,18 @@ class PathTraitRequirementInline(admin.TabularInline):
     autocomplete_fields = ["trait"]
 
 
+class PathCodexKnowledgeRequirementInline(admin.TabularInline):
+    """Inline for CodexKnowledgeRequirements attached to a Path (#2603).
+
+    Lets staff author codex-knowledge prerequisites directly on a Path row.
+    """
+
+    model = CodexKnowledgeRequirement
+    extra = 0
+    fields = ["codex_entry", "is_active", "description"]
+    autocomplete_fields = ["codex_entry"]
+
+
 @admin.register(Path)
 class PathAdmin(admin.ModelAdmin):
     """Admin for character paths."""
@@ -59,6 +71,7 @@ class PathAdmin(admin.ModelAdmin):
         PathCodexGrantInline,
         PathSkillSuggestionInline,
         PathTraitRequirementInline,
+        PathCodexKnowledgeRequirementInline,
     ]
     fieldsets = (
         (None, {"fields": ("name", "description", "stage", "minimum_level")}),
