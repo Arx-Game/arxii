@@ -18,6 +18,8 @@ from world.secrets.constants import SecretProvenance
 from world.secrets.models import Secret
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+
     from world.character_sheets.models import CharacterSheet
     from world.distinctions.models import (
         CharacterDistinction,
@@ -202,24 +204,125 @@ def compute_distinction_change_xp_cost(
     distinction: Distinction,
     rank: int,
     action: str,
+    *,
+    current_rank: int = 0,
 ) -> int:
-    """Compute the XP cost for a distinction change.
+    """Compute the XP cost for a distinction change — benefit direction only (#2631).
+
+    Only the two benefit-direction quadrants charge: gaining a positive-cost
+    distinction, and shedding a negative-cost one (removing a flaw, with a
+    friction multiplier). Taking on a detriment or losing a benefit for story
+    reasons is free — the GM sign-off is the only gate.
 
     Args:
         distinction: The distinction being added or removed.
-        rank: For ADD, the target rank (usually 1). For REMOVE, the
+        rank: For ADD, the target rank (absolute). For REMOVE, the
             CharacterDistinction's current rank.
         action: ``DistinctionChangeAction.ADD`` or ``DistinctionChangeAction.REMOVE``.
+        current_rank: For ADD on an existing holder (rank-up), the held rank —
+            only the delta above it is charged.
 
     Returns:
-        The XP cost (always positive).
+        The XP cost (0 for the free quadrants).
     """
     from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
 
-    base = 2 * abs(distinction.cost_per_rank) * rank
+    if action == DistinctionChangeAction.ADD and distinction.cost_per_rank > 0:
+        return 2 * distinction.cost_per_rank * max(rank - current_rank, 0)
     if action == DistinctionChangeAction.REMOVE and distinction.cost_per_rank < 0:
+        base = 2 * abs(distinction.cost_per_rank) * rank
         return int(base * DISTINCTION_REMOVAL_FRICTION_MULTIPLIER)
-    return base
+    return 0
+
+
+def create_distinction_change_authorization(  # noqa: PLR0913
+    character_sheet: CharacterSheet,
+    *,
+    action: str,
+    authorized_by: AccountDB | None,
+    reason: str,
+    distinction: Distinction | None = None,
+    character_distinction: CharacterDistinction | None = None,
+    rank: int = 1,
+    xp_cost: int | None = None,
+) -> DistinctionChangeAuthorization:
+    """Create a change authorization and notify the player (#2631).
+
+    The single creation seam for ``DistinctionChangeAuthorization`` — the GM
+    action and the table-request sign-off flow both call this. Computes the
+    benefit-direction XP cost when ``xp_cost`` is None (0 is a legitimate
+    explicit override: story-reason changes are free), then tells the player a
+    change is waiting for them, which the bare action-layer create never did.
+
+    Args:
+        character_sheet: The character the change targets.
+        action: ``DistinctionChangeAction.ADD`` or ``REMOVE``.
+        authorized_by: The authorizing GM/staff account (None for automation).
+        reason: Narrative justification (staff-facing).
+        distinction: Required for ADD.
+        character_distinction: Required for REMOVE.
+        rank: Target rank for ADD (absolute; above current rank for a rank-up).
+        xp_cost: Explicit cost override; None computes the standard cost.
+
+    Returns:
+        The created authorization.
+    """
+    from world.distinctions.models import (  # noqa: PLC0415
+        CharacterDistinction,
+        DistinctionChangeAuthorization,
+    )
+    from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    if action == DistinctionChangeAction.ADD:
+        current = (
+            CharacterDistinction.objects.filter(
+                character=character_sheet, distinction=distinction
+            ).first()
+            if distinction
+            else None
+        )
+        current_rank = current.rank if current else 0
+        cost_target = distinction
+        cost_rank = rank
+    else:
+        current_rank = 0
+        cost_target = character_distinction.distinction if character_distinction else None
+        cost_rank = character_distinction.rank if character_distinction else 1
+
+    if xp_cost is None:
+        if cost_target is None:
+            msg = "Cannot compute a cost without a target distinction."
+            raise ValueError(msg)
+        xp_cost = compute_distinction_change_xp_cost(
+            cost_target, cost_rank, action, current_rank=current_rank
+        )
+
+    auth = DistinctionChangeAuthorization.objects.create(
+        character_sheet=character_sheet,
+        action=action,
+        rank=rank,
+        target_distinction=distinction,
+        target_character_distinction=character_distinction,
+        authorized_by=authorized_by,
+        reason=reason,
+        xp_cost=xp_cost,
+    )
+
+    name = cost_target.name if cost_target else "a distinction"
+    verb = "gain" if action == DistinctionChangeAction.ADD else "shed"
+    cost_note = f" for {xp_cost} XP" if xp_cost else " at no cost"
+    send_narrative_message(
+        recipients=[character_sheet],
+        body=(
+            f"A change to your sheet has been authorized: you may {verb} "
+            f"{name}{cost_note}. Accept it when you are ready."
+        ),
+        category=NarrativeCategory.ABILITY,
+        sender_account=authorized_by,
+    )
+    return auth
 
 
 def _check_removal_prerequisites(character_distinction: CharacterDistinction) -> None:
@@ -357,26 +460,28 @@ def spend_xp_on_distinction_unlock(
             msg = "This distinction change authorization has already been used."
             raise DistinctionAuthorizationError(msg)
 
-        if not xp_tracker.can_spend(locked_auth.xp_cost):
-            msg = f"Need {locked_auth.xp_cost} XP, have {xp_tracker.current_available}."
-            raise DistinctionAuthorizationError(msg)
+        if locked_auth.xp_cost:
+            if not xp_tracker.can_spend(locked_auth.xp_cost):
+                msg = f"Need {locked_auth.xp_cost} XP, have {xp_tracker.current_available}."
+                raise DistinctionAuthorizationError(msg)
 
-        xp_tracker.spend_xp(locked_auth.xp_cost)
+            xp_tracker.spend_xp(locked_auth.xp_cost)
 
-        XPTransaction.objects.create(
-            account=account,
-            amount=-locked_auth.xp_cost,
-            reason=ProgressionReason.XP_PURCHASE,
-            description=f"Distinction change: {locked_auth.action}",
-            character=character_sheet.character,
-            gm=locked_auth.authorized_by,
-        )
+            XPTransaction.objects.create(
+                account=account,
+                amount=-locked_auth.xp_cost,
+                reason=ProgressionReason.XP_PURCHASE,
+                description=f"Distinction change: {locked_auth.action}",
+                character=character_sheet.character,
+                gm=locked_auth.authorized_by,
+            )
 
         if locked_auth.action == DistinctionChangeAction.ADD:
             grant_distinction(
                 character_sheet,
                 locked_auth.target_distinction,
                 origin=DistinctionOrigin.UNLOCK_PURCHASE,
+                rank=locked_auth.rank,
                 source_description=locked_auth.reason,
             )
         else:

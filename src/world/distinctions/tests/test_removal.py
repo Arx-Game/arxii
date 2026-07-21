@@ -31,14 +31,32 @@ class ComputeXPCostTests(TestCase):
         )
         assert cost == 30  # 2 × 5 × 3
 
-    def test_remove_positive_distinction(self):
+    def test_remove_positive_distinction_is_free(self):
         from world.distinctions.services import compute_distinction_change_xp_cost
 
         distinction = DistinctionFactory(cost_per_rank=10, max_rank=1)
         cost = compute_distinction_change_xp_cost(
             distinction, rank=1, action=DistinctionChangeAction.REMOVE
         )
-        assert cost == 20  # 2 × 10 × 1
+        assert cost == 0  # losing a benefit for story reasons is free (#2631)
+
+    def test_add_negative_distinction_is_free(self):
+        from world.distinctions.services import compute_distinction_change_xp_cost
+
+        distinction = DistinctionFactory(cost_per_rank=-50, max_rank=1)
+        cost = compute_distinction_change_xp_cost(
+            distinction, rank=1, action=DistinctionChangeAction.ADD
+        )
+        assert cost == 0  # taking on a detriment is free (#2631)
+
+    def test_add_rank_up_charges_delta_only(self):
+        from world.distinctions.services import compute_distinction_change_xp_cost
+
+        distinction = DistinctionFactory(cost_per_rank=5, max_rank=3)
+        cost = compute_distinction_change_xp_cost(
+            distinction, rank=3, action=DistinctionChangeAction.ADD, current_rank=2
+        )
+        assert cost == 10  # 2 × 5 × (3 − 2)
 
     def test_remove_negative_distinction_has_friction(self):
         from world.distinctions.services import compute_distinction_change_xp_cost

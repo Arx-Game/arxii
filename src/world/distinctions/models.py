@@ -623,6 +623,11 @@ class DistinctionChangeAuthorization(models.Model):  # noqa: SHARED_MEMORY
         choices=DistinctionChangeAction.choices,
         help_text="Whether this authorizes adding or removing a distinction.",
     )
+    rank = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Target rank for ADD (absolute, not a delta — a rank-up authorization "
+        "for an existing holder sets this above the current rank). Ignored for REMOVE.",
+    )
     target_distinction = models.ForeignKey(
         "distinctions.Distinction",
         on_delete=models.PROTECT,

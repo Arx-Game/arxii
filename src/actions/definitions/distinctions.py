@@ -27,6 +27,19 @@ def _coerce_positive_int(value: Any) -> int | None:
     return coerced if coerced > 0 else None
 
 
+def _coerce_nonneg_int(value: Any) -> int | None:
+    """Return ``value`` as a non-negative int, or ``None`` if it isn't one.
+
+    Zero is legitimate for ``xp_cost`` — story-reason changes are free (#2631) —
+    so the xp_cost override uses this instead of ``_coerce_positive_int``.
+    """
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        return None
+    return coerced if coerced >= 0 else None
+
+
 @dataclass
 class GMAwardDistinctionAction(Action):
     """JUNIOR-tier GM action: award or rank up a catalog Distinction (#2037 Decision 4).
@@ -173,10 +186,9 @@ class AuthorizeDistinctionChangeAction(Action):
         from world.distinctions.models import (  # noqa: PLC0415
             CharacterDistinction,
             Distinction,
-            DistinctionChangeAuthorization,
         )
         from world.distinctions.services import (  # noqa: PLC0415
-            compute_distinction_change_xp_cost,
+            create_distinction_change_authorization,
         )
         from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
 
@@ -217,44 +229,54 @@ class AuthorizeDistinctionChangeAction(Action):
                     message=f"No active distinction found with slug '{distinction_slug}'.",
                 )
 
-            if CharacterDistinction.objects.filter(
+            existing = CharacterDistinction.objects.filter(
                 character=sheet, distinction=distinction
-            ).exists():
-                return ActionResult(
-                    success=False,
-                    message=f"{target.key} already has {distinction.name}.",
-                )
+            ).first()
+            current_rank = existing.rank if existing else 0
 
             rank = kwargs.get("rank")
-            rank_int = _coerce_positive_int(rank) if rank else 1
-            if rank is not None and rank_int is None:
+            rank_int = _coerce_positive_int(rank) if rank else current_rank + 1
+            if rank_int is None:
                 return ActionResult(success=False, message="rank must be a positive whole number.")
 
-            xp_cost = kwargs.get("xp_cost")
-            if xp_cost is not None:
-                xp_cost_int = _coerce_positive_int(xp_cost)
-                if xp_cost_int is None:
-                    return ActionResult(
-                        success=False, message="xp_cost must be a positive whole number."
-                    )
-            else:
-                xp_cost_int = compute_distinction_change_xp_cost(
-                    distinction, rank_int, DistinctionChangeAction.ADD
+            if rank_int > distinction.max_rank:
+                return ActionResult(
+                    success=False,
+                    message=f"{distinction.name} has a maximum rank of {distinction.max_rank}.",
+                )
+            if existing and rank_int <= current_rank:
+                return ActionResult(
+                    success=False,
+                    message=(
+                        f"{target.key} already has {distinction.name} at rank "
+                        f"{current_rank}; a rank-up needs a higher target rank."
+                    ),
                 )
 
-            auth = DistinctionChangeAuthorization.objects.create(
-                character_sheet=sheet,
+            xp_cost = kwargs.get("xp_cost")
+            xp_cost_int: int | None = None
+            if xp_cost is not None:
+                xp_cost_int = _coerce_nonneg_int(xp_cost)
+                if xp_cost_int is None:
+                    return ActionResult(
+                        success=False, message="xp_cost must be a non-negative whole number."
+                    )
+
+            auth = create_distinction_change_authorization(
+                sheet,
                 action=DistinctionChangeAction.ADD,
-                target_distinction=distinction,
+                distinction=distinction,
                 authorized_by=actor.account,
                 reason=reason,
+                rank=rank_int,
                 xp_cost=xp_cost_int,
             )
+            verb = "ranking up" if existing else "adding"
             return ActionResult(
                 success=True,
                 message=(
-                    f"Authorized adding {distinction.name} to {target.key}"
-                    f" for {xp_cost_int} XP (auth #{auth.pk})."
+                    f"Authorized {verb} {distinction.name} (rank {rank_int}) for "
+                    f"{target.key} at {auth.xp_cost} XP (auth #{auth.pk})."
                 ),
             )
 
@@ -280,21 +302,18 @@ class AuthorizeDistinctionChangeAction(Action):
             )
 
         xp_cost = kwargs.get("xp_cost")
+        xp_cost_int: int | None = None
         if xp_cost is not None:
-            xp_cost_int = _coerce_positive_int(xp_cost)
+            xp_cost_int = _coerce_nonneg_int(xp_cost)
             if xp_cost_int is None:
                 return ActionResult(
-                    success=False, message="xp_cost must be a positive whole number."
+                    success=False, message="xp_cost must be a non-negative whole number."
                 )
-        else:
-            xp_cost_int = compute_distinction_change_xp_cost(
-                char_distinction.distinction, char_distinction.rank, DistinctionChangeAction.REMOVE
-            )
 
-        auth = DistinctionChangeAuthorization.objects.create(
-            character_sheet=sheet,
+        auth = create_distinction_change_authorization(
+            sheet,
             action=DistinctionChangeAction.REMOVE,
-            target_character_distinction=char_distinction,
+            character_distinction=char_distinction,
             authorized_by=actor.account,
             reason=reason,
             xp_cost=xp_cost_int,
@@ -303,7 +322,7 @@ class AuthorizeDistinctionChangeAction(Action):
             success=True,
             message=(
                 f"Authorized removing {char_distinction.distinction.name}"
-                f" from {target.key} for {xp_cost_int} XP (auth #{auth.pk})."
+                f" from {target.key} for {auth.xp_cost} XP (auth #{auth.pk})."
             ),
         )
 
