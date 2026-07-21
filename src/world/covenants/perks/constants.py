@@ -15,21 +15,22 @@ class Situation(models.TextChoices):
     """Code-defined situation library for per-vow situational perks (#2536).
 
     Slice 1 shipped 9 values; ``CHAMPION_DUEL`` is slice 3's Battle-wiring
-    addition (#2536 Task 3) — the enum ships no other inert entries; every
-    value here has a registered evaluator with signature ``(ctx:
-    SituationContext) -> bool``. ``SituationContext`` (``perks.context``)
-    carries four required fields plus slice-3 scoping/defense fields:
-    ``holder`` (the perk-owning vow-holder), ``subject`` (the acting
-    character whose cast/check is resolving — equals ``holder`` for SELF
-    perks), ``target`` (the action's target sheet, ``None`` when the action
-    has none), and ``resolution`` (the live resolution context —
-    ``CombatRoundContext`` in combat, the check's context otherwise,
-    ``None`` when absent). An evaluator whose required field is
-    missing/``None`` returns False (a combat-positioning situation simply
-    never holds outside combat; a DB-state situation like
+    addition (#2536 Task 3); ``COMBAT_OPENED_FROM_PARLEY`` and
+    ``AMBUSH_UNDERWAY`` are slice 3's origin-marker addition (#2536 Task 4) —
+    the enum ships no other inert entries; every value here has a registered
+    evaluator with signature ``(ctx: SituationContext) -> bool``.
+    ``SituationContext`` (``perks.context``) carries four required fields plus
+    slice-3 scoping/defense fields: ``holder`` (the perk-owning vow-holder),
+    ``subject`` (the acting character whose cast/check is resolving — equals
+    ``holder`` for SELF perks), ``target`` (the action's target sheet,
+    ``None`` when the action has none), and ``resolution`` (the live
+    resolution context — ``CombatRoundContext`` in combat, the check's
+    context otherwise, ``None`` when absent). An evaluator whose required
+    field is missing/``None`` returns False (a combat-positioning situation
+    simply never holds outside combat; a DB-state situation like
     ``TARGET_DISTRACTED`` evaluates anywhere). DEFERRED (each arrives with
-    its own machinery, not listed here): ``combat_opened_from_parley``,
-    ``ambush_underway``, ``ally_intercepted_for_me``, ``attacker_abyssal``.
+    its own machinery, not listed here): ``ally_intercepted_for_me``,
+    ``attacker_abyssal``.
 
     - ``AT_RANGE`` — the SUBJECT's engagement distance profile this round is
       ranged (has at least one actively-engaged enemy, none of them sharing
@@ -85,6 +86,20 @@ class Situation(models.TextChoices):
       ``CombatRoundContext``) into every ``SituationContext``, so no new
       threading was needed for this situation. Reads ``resolution``; False
       outside combat.
+    - ``COMBAT_OPENED_FROM_PARLEY`` — the SUBJECT's combat encounter was
+      CREATED (never fed) by ``world.combat.cast_seed.
+      seed_or_feed_encounter_from_cast`` while its seeding Scene was an
+      active, non-Battle-backed Scene — "this fight started as a
+      conversation that turned hostile" (#2536 slice 3, Task 4). v1
+      approximation (PR-body judgment call): holds for the encounter's
+      ENTIRE lifetime once stamped, not just its opening moment. Reads
+      ``resolution``; False outside combat.
+    - ``AMBUSH_UNDERWAY`` — v1 semantics (documented approximation): holds
+      only during ROUND 1 of an encounter that opened as a surprise —
+      either ``opened_from_parley=True`` OR a round-1 ``from_entrance=True``
+      ``CombatRoundAction`` exists (a dramatic technique-entrance opener,
+      #2183) — and is False from round 2 on. Reads ``resolution``; False
+      outside combat.
     """
 
     AT_RANGE = "at_range", "At Range"
@@ -97,6 +112,8 @@ class Situation(models.TextChoices):
     DURING_NEGOTIATION = "during_negotiation", "During Negotiation"
     TARGET_FAVORABLY_DISPOSED = "target_favorably_disposed", "Target Favorably Disposed"
     CHAMPION_DUEL = "champion_duel", "Champion Duel"
+    COMBAT_OPENED_FROM_PARLEY = "combat_opened_from_parley", "Combat Opened From Parley"
+    AMBUSH_UNDERWAY = "ambush_underway", "Ambush Underway"
 
 
 class PerkEffectKind(models.TextChoices):

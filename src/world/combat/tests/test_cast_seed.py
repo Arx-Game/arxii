@@ -266,3 +266,131 @@ class SeedOrFeedEncounterFromCastTests(EvenniaTestCase):
 
         with self.assertRaises(ValueError):
             self._seed(caster, target, technique, scene, room)
+
+
+class SeedOrFeedEncounterOpenedFromParleyTests(EvenniaTestCase):
+    """``opened_from_parley`` stamping (#2536 slice 3, Task 4): a CREATE from an
+    active non-Battle-backed Scene stamps True; feeding an existing encounter
+    never flips it, regardless of the feeding scene's classification."""
+
+    @staticmethod
+    def _make_caster_and_target():
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.vitals.models import CharacterVitals
+
+        caster = CharacterSheetFactory()
+        target = CharacterSheetFactory()
+        for sheet in (caster, target):
+            CharacterVitals.objects.create(
+                character_sheet=sheet,
+                health=50,
+                max_health=50,
+                base_max_health=50,
+            )
+        return caster, target
+
+    @staticmethod
+    def _make_damage_technique():
+        from world.magic.factories import TechniqueFactory
+
+        return TechniqueFactory()
+
+    @staticmethod
+    def _make_scene_with_room(*, is_active=True):
+        from evennia import create_object
+
+        from world.scenes.factories import SceneFactory
+
+        room = create_object("typeclasses.rooms.Room", key="Parley Cast Room", nohome=True)
+        scene = SceneFactory(location=room, is_active=is_active)
+        return scene, room
+
+    def test_create_from_active_scene_stamps_opened_from_parley(self):
+        from world.combat.cast_seed import seed_or_feed_encounter_from_cast
+
+        caster, target = self._make_caster_and_target()
+        technique = self._make_damage_technique()
+        scene, room = self._make_scene_with_room(is_active=True)
+
+        encounter = seed_or_feed_encounter_from_cast(
+            caster_sheet=caster,
+            target_sheet=target,
+            technique=technique,
+            scene=scene,
+            room=room,
+        )
+
+        self.assertTrue(encounter.opened_from_parley)
+
+    def test_create_from_inactive_scene_leaves_flag_false(self):
+        from world.combat.cast_seed import seed_or_feed_encounter_from_cast
+
+        caster, target = self._make_caster_and_target()
+        technique = self._make_damage_technique()
+        scene, room = self._make_scene_with_room(is_active=False)
+
+        encounter = seed_or_feed_encounter_from_cast(
+            caster_sheet=caster,
+            target_sheet=target,
+            technique=technique,
+            scene=scene,
+            room=room,
+        )
+
+        self.assertFalse(encounter.opened_from_parley)
+
+    def test_create_from_battle_backed_scene_leaves_flag_false(self):
+        from evennia import create_object
+
+        from world.battles.factories import BattleFactory
+        from world.combat.cast_seed import seed_or_feed_encounter_from_cast
+
+        caster, target = self._make_caster_and_target()
+        technique = self._make_damage_technique()
+
+        # Battle scenes are location-less (ADR-0081, Battle.save()) — the `room`
+        # kwarg below is only the CombatEncounter.room, unrelated to the battle
+        # backing scene's (always-None) location.
+        room = create_object("typeclasses.rooms.Room", key="Battle Cast Room", nohome=True)
+        battle = BattleFactory()
+        scene = battle.scene
+
+        encounter = seed_or_feed_encounter_from_cast(
+            caster_sheet=caster,
+            target_sheet=target,
+            technique=technique,
+            scene=scene,
+            room=room,
+        )
+
+        self.assertFalse(encounter.opened_from_parley)
+
+    def test_feeding_existing_encounter_never_flips_flag(self):
+        from world.combat.cast_seed import seed_or_feed_encounter_from_cast
+        from world.combat.constants import EncounterType, RiskLevel
+        from world.combat.models import CombatEncounter
+        from world.scenes.constants import RoundStatus
+
+        caster, target = self._make_caster_and_target()
+        technique = self._make_damage_technique()
+        scene, room = self._make_scene_with_room(is_active=True)
+
+        existing = CombatEncounter.objects.create(
+            room=room,
+            scene=scene,
+            status=RoundStatus.BETWEEN_ROUNDS,
+            risk_level=RiskLevel.MODERATE,
+            encounter_type=EncounterType.PARTY_COMBAT,
+            opened_from_parley=False,
+        )
+
+        encounter = seed_or_feed_encounter_from_cast(
+            caster_sheet=caster,
+            target_sheet=target,
+            technique=technique,
+            scene=scene,
+            room=room,
+        )
+
+        self.assertEqual(encounter.pk, existing.pk)
+        self.assertFalse(encounter.opened_from_parley)

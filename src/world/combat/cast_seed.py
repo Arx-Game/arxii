@@ -43,13 +43,13 @@ from world.combat.services import (
 )
 from world.fatigue.constants import EffortLevel
 from world.scenes.constants import RoundStatus
+from world.scenes.models import Scene
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import Technique
-    from world.scenes.models import Scene
 
 
 # A PC opponent is a real, competent foe rather than a mook/swarm; ELITE mirrors
@@ -94,6 +94,19 @@ def _opponent_kwargs_from_sheet(sheet: CharacterSheet) -> _OpponentKwargs:
         threat_pool=None,
         existing_objectdb=sheet.character,
     )
+
+
+def _scene_is_active_non_battle(scene: Scene) -> bool:
+    """True when *scene* is itself an active, non-Battle-backed Scene.
+
+    Mirrors the classification ``world.covenants.perks.evaluators.during_negotiation``
+    documents (``Scene.objects.active_for_room``'s ``is_active`` + ``battle__isnull``
+    filter, #2010) — scoped directly to this scene by pk rather than re-derived from a
+    room, since the caller already holds the ``Scene`` in hand (no location lookup
+    needed). Feeds ``CombatEncounter.opened_from_parley`` (#2536 slice 3, Task 4). One
+    query.
+    """
+    return Scene.objects.filter(pk=scene.pk, is_active=True, battle__isnull=True).exists()
 
 
 def _feedable_encounter(scene: Scene) -> CombatEncounter | None:
@@ -251,6 +264,13 @@ def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance
             technique entrance (#2183) — stamped onto the caster's declared
             round action so a later task can fire recognition on resolution.
 
+    Note:
+        When this call CREATES a new encounter (no feedable encounter existed),
+        ``CombatEncounter.opened_from_parley`` (#2536 slice 3, Task 4) is stamped True
+        iff ``scene`` is itself an active, non-Battle-backed Scene at that moment (see
+        ``_scene_is_active_non_battle``) — "this fight started as a conversation that
+        turned hostile." Feeding an existing encounter never touches the flag.
+
     Returns:
         The seeded or fed CombatEncounter, in DECLARING status with the caster's
         opening action declared.
@@ -263,6 +283,7 @@ def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance
             status=RoundStatus.BETWEEN_ROUNDS,
             risk_level=RiskLevel.MODERATE,
             encounter_type=EncounterType.PARTY_COMBAT,
+            opened_from_parley=_scene_is_active_non_battle(scene),
         )
         from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
 

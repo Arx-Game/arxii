@@ -1,1 +1,1 @@
-0049_combatencounter_is_champion_duel
+0050_combatencounter_opened_from_parley

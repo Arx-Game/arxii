@@ -149,6 +149,20 @@ class CombatEncounter(AbstractRound):
             "(world.covenants.perks.evaluators) for per-vow situational perk scoping."
         ),
     )
+    opened_from_parley = models.BooleanField(
+        default=False,
+        help_text=(
+            "True iff world.combat.cast_seed.seed_or_feed_encounter_from_cast CREATED "
+            "this encounter from a hostile cast landing inside an active, non-Battle-"
+            "backed Scene (#2536 slice 3, Task 4) — the same active-Scene classification "
+            "the Situation.DURING_NEGOTIATION evaluator documents. Stamped only at "
+            "CREATE time; feeding an existing encounter never flips it. v1 approximation "
+            "(PR-body judgment call): stays True for the encounter's entire lifetime, not "
+            "just its opening moment. Read by the Situation.COMBAT_OPENED_FROM_PARLEY and "
+            "Situation.AMBUSH_UNDERWAY evaluators (world.covenants.perks.evaluators) for "
+            "per-vow situational perk scoping."
+        ),
+    )
     story_beat = models.ForeignKey(
         "stories.Beat",
         on_delete=models.SET_NULL,

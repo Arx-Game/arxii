@@ -470,3 +470,61 @@ def champion_duel(ctx: SituationContext) -> bool:
     if participant is None:
         return False
     return participant.encounter.is_champion_duel is True
+
+
+@register(Situation.COMBAT_OPENED_FROM_PARLEY)
+def combat_opened_from_parley(ctx: SituationContext) -> bool:
+    """True for every combat resolution in an encounter that opened as a parley.
+
+    ``opened_from_parley`` (#2536 slice 3, Task 4) is stamped exclusively by
+    ``world.combat.cast_seed.seed_or_feed_encounter_from_cast`` when it CREATES a
+    new encounter from a hostile cast landing inside an active, non-Battle-backed
+    Scene (the same classification ``during_negotiation`` above documents) —
+    feeding an existing encounter never flips the flag. v1 approximation (PR-body
+    judgment call): the flag holds for the encounter's ENTIRE lifetime, not just
+    its opening moment — "this fight started as a conversation that turned
+    hostile" stays true throughout. One cached FK read (``participant.encounter``,
+    idmapper-cached) and False outside combat.
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+    return participant.encounter.opened_from_parley is True
+
+
+@register(Situation.AMBUSH_UNDERWAY)
+def ambush_underway(ctx: SituationContext) -> bool:
+    """True only during ROUND 1 of an encounter that opened as a surprise.
+
+    v1 semantics (documented approximation, #2536 slice 3 Task 4): holds when
+    the encounter's CURRENT round (``CombatEncounter.round_number``, the
+    ``AbstractRound`` scalar shared with ``SceneRound``) is 1 AND either
+    ``opened_from_parley`` is True (a parley that turned hostile IS a surprise
+    — nobody was braced for combat) OR at least one ``CombatRoundAction`` in
+    round 1 has ``from_entrance=True`` (a dramatic technique-entrance opener,
+    #2183). False from round 2 on — the ambush window closes once a full round
+    has passed, regardless of how the fight opened. Data source, verified:
+    ``CombatRoundAction.from_entrance`` (``world/combat/models.py:1095``),
+    filtered to the SUBJECT's encounter (not just their own actions — an
+    ambush is a property of the encounter, any entrance-cast participant
+    counts) + ``round_number=1``. Two queries at most: the cached
+    ``participant.encounter`` FK read, plus (only when ``opened_from_parley``
+    is False) a single ``CombatRoundAction.objects.filter(...).exists()``
+    lookup — never a query inside a loop. False outside combat.
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+    encounter = participant.encounter
+    if encounter.round_number != 1:
+        return False
+    if encounter.opened_from_parley:
+        return True
+
+    from world.combat.models import CombatRoundAction  # noqa: PLC0415
+
+    return CombatRoundAction.objects.filter(
+        participant__encounter_id=encounter.pk,
+        round_number=1,
+        from_entrance=True,
+    ).exists()

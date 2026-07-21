@@ -47,8 +47,9 @@ from world.vitals.models import CharacterVitals
 
 
 class SituationEvaluatorRegistryTests(TestCase):
-    """The registry carries exactly every live ``Situation`` value (9 from slice 1
-    plus ``CHAMPION_DUEL`` from slice 3, #2536 Task 3)."""
+    """The registry carries exactly every live ``Situation`` value (9 from slice 1,
+    ``CHAMPION_DUEL`` from slice 3 Task 3, plus ``COMBAT_OPENED_FROM_PARLEY`` and
+    ``AMBUSH_UNDERWAY`` from slice 3 Task 4, #2536)."""
 
     def test_registry_covers_every_surviving_situation(self) -> None:
         self.assertEqual(set(SITUATION_EVALUATORS), set(Situation.values))
@@ -472,3 +473,83 @@ class ChampionDuelEvaluatorTests(TestCase):
 
     def test_false_outside_combat(self) -> None:
         self.assertFalse(evaluators.champion_duel(self._ctx(None)))
+
+
+class CombatOpenedFromParleyEvaluatorTests(TestCase):
+    """COMBAT_OPENED_FROM_PARLEY reads the subject's resolution participant's
+    encounter flag (#2536 slice 3, Task 4)."""
+
+    def setUp(self) -> None:
+        self.room = create_object("typeclasses.rooms.Room", key="ParleyOriginRoom", nohome=True)
+        self.scene = SceneFactory(location=self.room)
+        self.sheet = CharacterSheetFactory()
+
+    def _ctx(self, resolution) -> SituationContext:
+        return SituationContext(
+            holder=self.sheet, subject=self.sheet, target=None, resolution=resolution
+        )
+
+    def test_true_when_encounter_opened_from_parley(self) -> None:
+        encounter = CombatEncounterFactory(
+            scene=self.scene, room=self.room, opened_from_parley=True
+        )
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        resolution = CombatRoundContext(participant)
+        self.assertTrue(evaluators.combat_opened_from_parley(self._ctx(resolution)))
+
+    def test_false_in_ordinary_encounter(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        resolution = CombatRoundContext(participant)
+        self.assertFalse(evaluators.combat_opened_from_parley(self._ctx(resolution)))
+
+    def test_false_outside_combat(self) -> None:
+        self.assertFalse(evaluators.combat_opened_from_parley(self._ctx(None)))
+
+
+class AmbushUnderwayEvaluatorTests(TestCase):
+    """AMBUSH_UNDERWAY holds only during round 1 of a surprise-opened encounter
+    (#2536 slice 3, Task 4): ``opened_from_parley=True`` OR a round-1
+    ``from_entrance=True`` ``CombatRoundAction`` — False from round 2 on."""
+
+    def setUp(self) -> None:
+        self.room = create_object("typeclasses.rooms.Room", key="AmbushRoom", nohome=True)
+        self.scene = SceneFactory(location=self.room)
+        self.sheet = CharacterSheetFactory()
+
+    def _ctx(self, resolution) -> SituationContext:
+        return SituationContext(
+            holder=self.sheet, subject=self.sheet, target=None, resolution=resolution
+        )
+
+    def test_true_round_one_from_entrance_action(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room, round_number=1)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        CombatRoundActionFactory(participant=participant, round_number=1, from_entrance=True)
+        resolution = CombatRoundContext(participant)
+        self.assertTrue(evaluators.ambush_underway(self._ctx(resolution)))
+
+    def test_true_round_one_opened_from_parley(self) -> None:
+        encounter = CombatEncounterFactory(
+            scene=self.scene, room=self.room, round_number=1, opened_from_parley=True
+        )
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        resolution = CombatRoundContext(participant)
+        self.assertTrue(evaluators.ambush_underway(self._ctx(resolution)))
+
+    def test_false_round_two_even_with_from_entrance_action(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room, round_number=2)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        CombatRoundActionFactory(participant=participant, round_number=1, from_entrance=True)
+        resolution = CombatRoundContext(participant)
+        self.assertFalse(evaluators.ambush_underway(self._ctx(resolution)))
+
+    def test_false_round_one_without_surprise_origin(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room, round_number=1)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        CombatRoundActionFactory(participant=participant, round_number=1, from_entrance=False)
+        resolution = CombatRoundContext(participant)
+        self.assertFalse(evaluators.ambush_underway(self._ctx(resolution)))
+
+    def test_false_outside_combat(self) -> None:
+        self.assertFalse(evaluators.ambush_underway(self._ctx(None)))
