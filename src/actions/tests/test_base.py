@@ -207,8 +207,8 @@ class ActionRegistryTests(TestCase):
             "use_item",
             "grant_item",
             "gm_award_distinction",
-            "authorize_distinction_change",
-            "accept_distinction_change",
+            "submit_sheet_update",
+            "review_sheet_update",
             # #2183 — dramatic-moment suggestion confirm/dismiss (account-authorized GM inbox).
             "confirm_dramatic_moment_suggestion",
             "dismiss_dramatic_moment_suggestion",

@@ -103,9 +103,9 @@ from actions.definitions.crossing import resolve_crossing_offer
 from actions.definitions.currency import DepositCoinsAction, GiveCoinsAction, WithdrawCoinsAction
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.distinctions import (
-    AcceptDistinctionChangeAction,
-    AuthorizeDistinctionChangeAction,
     GMAwardDistinctionAction,
+    ReviewSheetUpdateRequestAction,
+    SubmitSheetUpdateRequestAction,
 )
 from actions.definitions.domains import (
     AddDomainHoldingAction,
@@ -526,8 +526,8 @@ _ALL_ACTIONS: list[Action] = [
     UseItemAction(),
     GrantItemAction(),
     GMAwardDistinctionAction(),
-    AuthorizeDistinctionChangeAction(),
-    AcceptDistinctionChangeAction(),
+    SubmitSheetUpdateRequestAction(),
+    ReviewSheetUpdateRequestAction(),
     # #2183 — dramatic-moment suggestion confirm/dismiss (account-authorized GM inbox).
     ConfirmDramaticMomentSuggestionAction(),
     DismissDramaticMomentSuggestionAction(),
