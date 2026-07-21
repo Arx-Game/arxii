@@ -16,9 +16,12 @@ entirely, mirroring how ``test_services.py`` tests ``_calculate_capability_point
 
 from __future__ import annotations
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from evennia_extensions.factories import CharacterFactory
+from world.battles.constants import BattleActionKind
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.services import _compute_check_breakdown, perform_check
@@ -31,6 +34,11 @@ from world.covenants.factories import (
 from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind
 from world.covenants.perks.context import SituationContext
 from world.magic.factories import ThreadFactory
+from world.missions.factories import (
+    MissionCategoryFactory,
+    MissionInstanceFactory,
+    MissionTemplateFactory,
+)
 
 
 class SituationalPerkCheckBonusTests(TestCase):
@@ -116,6 +124,156 @@ class SituationalPerkCheckBonusTests(TestCase):
         other_check_type = CheckTypeFactory(name="Stealth")
         self.assertEqual(self._breakdown_total(self.check_type, situation_ctx=ctx), 12)
         self.assertEqual(self._breakdown_total(other_check_type, situation_ctx=ctx), 0)
+
+    def test_mission_category_scope_requires_matching_mission(self) -> None:
+        """#2536 slice 3 Court scoping: a mission_category-scoped perk never
+        fires when situation_ctx.mission is None, and fires when the ctx
+        carries a MissionInstance whose template carries that category.
+        10 * 10 / 10 = 10."""
+        role = self._engage_role()
+        category = MissionCategoryFactory()
+        VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.CHECK_BONUS,
+            magnitude_tenths=10,
+            check_type=None,
+            mission_category=category,
+        )
+        ThreadFactory(owner=self.sheet, level=10)
+
+        ctx_no_mission = SituationContext(
+            holder=self.sheet, subject=self.sheet, target=None, resolution=None
+        )
+        self.assertEqual(self._breakdown_total(self.check_type, situation_ctx=ctx_no_mission), 0)
+
+        template = MissionTemplateFactory()
+        template.categories.add(category)
+        instance = MissionInstanceFactory(template=template)
+        ctx_with_mission = SituationContext(
+            holder=self.sheet, subject=self.sheet, target=None, resolution=None, mission=instance
+        )
+        self.assertEqual(self._breakdown_total(self.check_type, situation_ctx=ctx_with_mission), 10)
+
+    def test_mission_category_scope_does_not_fire_for_non_matching_category(self) -> None:
+        """A mission with a DIFFERENT category than the perk's scope stays silent."""
+        role = self._engage_role()
+        category = MissionCategoryFactory()
+        other_category = MissionCategoryFactory()
+        VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.CHECK_BONUS,
+            magnitude_tenths=10,
+            check_type=None,
+            mission_category=category,
+        )
+        ThreadFactory(owner=self.sheet, level=10)
+
+        template = MissionTemplateFactory()
+        template.categories.add(other_category)
+        instance = MissionInstanceFactory(template=template)
+        ctx = SituationContext(
+            holder=self.sheet, subject=self.sheet, target=None, resolution=None, mission=instance
+        )
+        self.assertEqual(self._breakdown_total(self.check_type, situation_ctx=ctx), 0)
+
+    def test_mission_category_scope_hoists_categories_query_across_perks(self) -> None:
+        """#2536 slice 3 review fix: ``perk_scope_matches``'s mission-category
+        lookup is hoisted OUTSIDE the per-perk filter loop via
+        ``mission_category_ids_for`` — two mission-category-scoped CHECK_BONUS
+        perks firing in ONE resolution issue exactly as many categories
+        queries as one perk does (previously: one categories query PER fired
+        perk, so this would have grown with perk count). Isolates the
+        categories-table queries specifically (rather than the total query
+        count) because ``announce_fired_perks`` legitimately issues one
+        additional (unrelated) query per fired perk for its Interaction
+        broadcast — that scaling is expected and orthogonal to this fix.
+        """
+        role = self._engage_role()
+        category = MissionCategoryFactory()
+        template = MissionTemplateFactory()
+        template.categories.add(category)
+        instance = MissionInstanceFactory(template=template)
+        ThreadFactory(owner=self.sheet, level=10)
+
+        def _add_scoped_perk() -> None:
+            VowSituationalPerkFactory(
+                covenant_role=role,
+                beneficiary=PerkBeneficiary.SELF,
+                effect_kind=PerkEffectKind.CHECK_BONUS,
+                magnitude_tenths=10,
+                check_type=None,
+                mission_category=category,
+            )
+
+        def _categories_query_count(ctx_queries: CaptureQueriesContext) -> int:
+            return sum(
+                1 for query in ctx_queries.captured_queries if "categories" in query["sql"].lower()
+            )
+
+        _add_scoped_perk()
+        ctx = SituationContext(
+            holder=self.sheet, subject=self.sheet, target=None, resolution=None, mission=instance
+        )
+        # Warm caches (covenant-roles handler, etc.) before either measurement
+        # so both captures start from the same warm state — same rationale as
+        # ``PerkResolutionQueryBudgetTests`` in ``test_perk_resolution.py``.
+        self._breakdown_total(self.check_type, situation_ctx=ctx)
+
+        with CaptureQueriesContext(connection) as one_perk_queries:
+            total_one = self._breakdown_total(self.check_type, situation_ctx=ctx)
+        self.assertEqual(total_one, 10)
+        self.assertEqual(_categories_query_count(one_perk_queries), 1)
+
+        _add_scoped_perk()
+        with CaptureQueriesContext(connection) as two_perk_queries:
+            total_two = self._breakdown_total(self.check_type, situation_ctx=ctx)
+        self.assertEqual(total_two, 20)
+        self.assertEqual(_categories_query_count(two_perk_queries), 1)
+
+        self.assertEqual(
+            _categories_query_count(one_perk_queries), _categories_query_count(two_perk_queries)
+        )
+
+    def test_battle_action_kind_scope_matches_exact_kind(self) -> None:
+        """#2536 slice 3 Battle scoping: a battle_action_kind=ROUT perk fires
+        only when situation_ctx.battle_action_kind == 'rout'. 10 * 10 / 10 = 10."""
+        role = self._engage_role()
+        VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.CHECK_BONUS,
+            magnitude_tenths=10,
+            check_type=None,
+            battle_action_kind=BattleActionKind.ROUT,
+        )
+        ThreadFactory(owner=self.sheet, level=10)
+
+        ctx_no_kind = SituationContext(
+            holder=self.sheet, subject=self.sheet, target=None, resolution=None
+        )
+        self.assertEqual(self._breakdown_total(self.check_type, situation_ctx=ctx_no_kind), 0)
+
+        ctx_wrong_kind = SituationContext(
+            holder=self.sheet,
+            subject=self.sheet,
+            target=None,
+            resolution=None,
+            battle_action_kind=BattleActionKind.RALLY,
+        )
+        self.assertEqual(self._breakdown_total(self.check_type, situation_ctx=ctx_wrong_kind), 0)
+
+        ctx_matching_kind = SituationContext(
+            holder=self.sheet,
+            subject=self.sheet,
+            target=None,
+            resolution=None,
+            battle_action_kind=BattleActionKind.ROUT,
+        )
+        self.assertEqual(
+            self._breakdown_total(self.check_type, situation_ctx=ctx_matching_kind), 10
+        )
 
     def test_ally_beneficiary_check_bonus_fires_for_covenant_mate(self) -> None:
         """A COVENANT_ALLIES CHECK_BONUS perk held by a co-present covenant-mate,

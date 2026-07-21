@@ -43,7 +43,16 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 6. Outcome guarantees (#2536 slice 2, ADR-0152): if a `situation_ctx` was passed, `TIER_FLOOR`/
    `BOTCH_IMMUNITY` covenant perks (`_apply_outcome_guarantees`) may raise the outcome to an
    authored floor — absolute, never thread-scaled; announces only when it actually altered the
-   outcome. Applies identically to the test-rig forced-outcome path.
+   outcome. Applies identically to the test-rig forced-outcome path. `situation_ctx.attacker`
+   (#2536 slice 3, ADR-0153) is threaded through too — populated only on a defense-side check
+   (currently only `world.combat.services.resolve_npc_attack`), `None` on every offense-side
+   call — so an `ATTACKER_ABYSSAL`-gated guarantee can fire on a defender's roll.
+   Both `_situational_perk_check_bonus` (step 5's CHECK_BONUS) and this step also make a
+   DORMANT pass right after their live `applicable_perks` call (#2536 slice 3, Task 7, ruling
+   2): a covenant role the checking character holds but has left DISENGAGED, that would have
+   fired here if engaged, announces `"your vow lies dormant — {perk.name} would have answered
+   here"` to the checker alone (never the room) — see `world.covenants.perks.services
+   .dormant_perk_firings`/`announce_dormant_perks`.
 
 ## The modifier seam — `collect_check_modifiers(sheet, check_type, *, scene=None, ...)`
 

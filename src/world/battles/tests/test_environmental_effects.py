@@ -575,7 +575,7 @@ class RoundBoundaryExpiryTests(TestCase):
 
         captured_modifiers: list[int] = []
 
-        def _capture(character, check_type, extra_modifiers=0):
+        def _capture(character, check_type, extra_modifiers=0, situation_ctx=None):
             captured_modifiers.append(extra_modifiers)
             return _success_result(2)
 

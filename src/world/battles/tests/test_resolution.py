@@ -203,6 +203,101 @@ class BattleTechniqueResolverTests(TestCase):
         self.assertNotEqual(config.check_type, self.technique.action_template.check_type)
 
 
+class BattleActionKindCheckBonusScopingTests(TestCase):
+    """A CHECK_BONUS perk scoped to ``battle_action_kind=ROUT`` fires on a ROUT
+    declaration's check and not on a RALLY declaration's (#2536 slice 3 Battle
+    wiring — ``BattleTechniqueResolver.__call__`` threads
+    ``situation_ctx=SituationContext(battle_action_kind=declaration.action_kind)``
+    into ``perform_check``).
+    """
+
+    def setUp(self) -> None:
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            VowSituationalPerkFactory,
+        )
+        from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind
+        from world.magic.factories import ThreadFactory
+
+        self.sheet = CharacterSheetFactory()
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+
+        role = CovenantRoleFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=self.sheet,
+            covenant=CovenantFactory(),
+            covenant_role=role,
+            engaged=True,
+        )
+        VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.CHECK_BONUS,
+            magnitude_tenths=10,
+            check_type=None,
+            battle_action_kind=BattleActionKind.ROUT,
+        )
+        ThreadFactory(owner=self.sheet, level=10)
+
+    def test_check_bonus_fires_on_matching_action_kind_only(self) -> None:
+        from world.battles.resolution import resolve_battle_technique
+        from world.battles.services import (
+            add_side,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+        )
+        from world.checks.services import perform_check as real_perform_check
+        from world.checks.test_helpers import force_check_outcome
+        from world.traits.factories import CheckOutcomeFactory
+
+        success = CheckOutcomeFactory(name="BattleScopeSuccess", success_level=3)
+
+        battle = create_battle(name="Battle Scope Battle")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        participant = enlist_participant(battle=battle, character_sheet=self.sheet, side=side)
+        begin_battle_round(battle=battle)
+
+        captured: dict[str, int] = {}
+
+        def _capture(action_kind: str, label: str) -> None:
+            declaration = declare_battle_action(
+                participant=participant,
+                action_kind=action_kind,
+                technique=self.technique,
+            )
+            totals: list[int] = []
+
+            def _spy(*args, **kwargs):
+                result = real_perform_check(*args, **kwargs)
+                totals.append(result.total_points)
+                return result
+
+            with (
+                force_check_outcome(success),
+                patch("world.battles.resolution.perform_check", side_effect=_spy),
+            ):
+                resolve_battle_technique(declaration=declaration)
+            captured[label] = totals[0]
+
+        # Same participant/place across both declarations — redeclare updates
+        # action_kind in place (declare_battle_action's update_or_create), so
+        # every other modifier-stack input (unit=None, place, commander, posture)
+        # stays byte-identical between the two calls; only battle_action_kind
+        # (and therefore the CHECK_BONUS scope match) differs.
+        _capture(BattleActionKind.ROUT, "rout")
+        _capture(BattleActionKind.RALLY, "rally")
+
+        # magnitude_tenths=10 * thread level=10 / 10 == 10 (mirrors #2536 slice 3
+        # Court wiring's world.missions.tests.test_mission_perk_scoping calibration).
+        self.assertEqual(captured["rout"], captured["rally"] + 10)
+
+
 class DeclareBattleActionTests(TestCase):
     def setUp(self) -> None:
         from actions.factories import ActionTemplateFactory

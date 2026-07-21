@@ -114,6 +114,102 @@ _Avoid_: crit immunity, botch protection (both suggest prevention rather than th
 The `PerkBeneficiary` axis on a `VowSituationalPerk` (SELF / COVENANT_ALLIES / WHOLE_GROUP) deciding who benefits when the perk fires at ANOTHER character's resolution moment: SELF fires only for the perk-owning holder's own actions; COVENANT_ALLIES fires for a co-present covenant-mate's action but structurally excludes the holder's own; WHOLE_GROUP fires for both. "Covenant-mate" here means a non-departed role (`left_at__isnull=True`) in a covenant the ACTING character is actively engaged in, AND physical co-presence for this resolution (same combat encounter / same active Scene) — the CANDIDATE mate's own `engaged` flag is irrelevant (#2536 reversal, Tehom 2026-07-20, ADR-0152: a KO'd or disengaged mate still in the fight keeps contributing group perks, so losing allies mid-encounter never weakens the survivors — no death-spiral); the ACTING character's own engagement is still required (stark-power rule, untouched). A member sharing a covenant but not co-present, or who left the encounter (FLED/REMOVED), does not extend or receive group-beneficiary perks (#2536, ADR-0151/ADR-0152 — see `world.covenants.perks.services`'s module docstring for the deliberately different provenance-situation rule).
 _Avoid_: recipient, target (Situation's own `target` field is the acting character's action target, an unrelated concept — do not conflate).
 
+**Perk Scope**:
+A `VowSituationalPerk` column narrowing WHEN a fired perk applies, distinct from a Situation
+(which asks whether the game state itself holds): `mission_category`/`mission_template` (FKs,
+CHECK_BONUS-only) and `battle_action_kind` (`BattleActionKind` CharField, CHECK_BONUS or
+POWER_BONUS only) — `clean()` rejects each column authored outside its valid `effect_kind`
+set. Every non-empty scope column on a row must match (AND); an empty scope always matches.
+Checked by `perk_scope_matches` (`world.covenants.perks.services`), the single seam both fired-
+perk delivery providers filter through. (#2536 slice 3, ADR-0153.)
+_Avoid_: filter, condition (both are used elsewhere for different mechanisms — Scope is
+specifically these three typed columns, not a general predicate).
+
+**Champion Duel (situation)**:
+`Situation.CHAMPION_DUEL` — holds when the SUBJECT is a participant in a `CombatEncounter` whose
+`is_champion_duel` flag is True, stamped exclusively by `world.battles.services
+.open_champion_duel` (never by the siege-engine skirmish path, which shares the same duel
+helper but carries no Champion-role requirement). A Situation, not a Perk Scope — see ADR-0153
+for why. (#2536 slice 3, Battle wiring.)
+_Avoid_: duel scope, battle scope (this is evaluated as game state, not authored as a scope
+column).
+
+**Combat Opened From Parley**:
+`Situation.COMBAT_OPENED_FROM_PARLEY` — holds for the entire lifetime of a `CombatEncounter`
+whose `opened_from_parley` flag is True, stamped by `world.combat.cast_seed
+.seed_or_feed_encounter_from_cast` only when it CREATES (never feeds) an encounter from a
+hostile cast landing inside an active, non-Battle-backed Scene — "this fight started as a
+conversation that turned hostile." v1 approximation: the flag never clears once set, even long
+after the fight's opening moment has passed. (#2536 slice 3, Task 4.)
+_Avoid_: ambush (a related but narrower/stricter situation — see Ambush Underway below; the two
+are not synonyms, `opened_from_parley` alone is one of two OR'd triggers for it).
+
+**Ambush Underway**:
+`Situation.AMBUSH_UNDERWAY` — holds only during ROUND 1 of a `CombatEncounter` that opened as a
+surprise: either `opened_from_parley` is True, or a round-1 `CombatRoundAction` with
+`from_entrance=True` exists (a dramatic technique-entrance opener, #2183). False from round 2
+on regardless of how the fight opened — a documented v1 approximation trading precision for
+zero new polling machinery. (#2536 slice 3, Task 4.)
+_Avoid_: surprise round, first strike (neither is this codebase's vocabulary for the mechanic).
+
+**Ally Intercepted for Me**:
+`Situation.ALLY_INTERCEPTED_FOR_ME` — holds when a covenant-mate of the HOLDER, co-present in
+the SUBJECT's encounter, has an armed (`is_ready=True`) INTERPOSE declaration THIS round
+targeting the subject specifically or guard-anyone (`focused_ally_target=None`). Ratified v1
+judgment call: DECLARED-guard semantics — "the guarded moment is the situation," it does not
+wait for the interpose to actually intercept damage (see ADR-0153 for the rejected
+fired-marker-persistence alternative). Uses the same covenant-mate batching Ally Low Health
+uses (one declarations query + one batched membership query, no queries in loops). (#2536
+slice 3, Task 5.)
+_Avoid_: guarded, protected (too generic — this is specifically an ARMED DECLARATION, not a
+resolved block).
+
+**Attacker Abyssal**:
+`Situation.ATTACKER_ABYSSAL` — holds when the DEFENSE-side `SituationContext.attacker` is
+Abyssal-affiliated: a `CombatOpponent` with a non-empty authored `affinity` matching
+`AffinityType.ABYSSAL` (checked first), falling back to a reachable `ObjectDB`'s
+`CharacterAura.dominant_affinity`. `None` — and this Situation False — on every offense-side
+resolution, where `attacker` is never populated. The first Situation to read the Defense-Side
+Seam (below). (#2536 slice 3, Task 6.)
+_Avoid_: target abyssal (Situation's `target` field is the acting character's OWN action
+target — an unrelated concept on offense; `attacker` is the incoming threat on defense).
+
+**Defense-Side Seam**:
+The evaluation point making situational perks reachable on a defender's OWN roll, not only the
+attacker's: `SituationContext.attacker` (populated only here, `None` on every offense-side
+resolution) threaded by `world.combat.services.resolve_npc_attack` into the defender's real
+`perform_check` call — the ONLY defense-check site doing so in v1. Reuses the existing
+`applicable_perks`/`_PerkResolver`/delivery-seam machinery rather than a parallel defense
+pipeline (see ADR-0153's rejected alternative). Makes CHECK_BONUS/TIER_FLOOR/BOTCH_IMMUNITY
+perks — including `ATTACKER_ABYSSAL`-gated ones — fire on defense for the first time. (#2536
+slice 3, Task 6, ADR-0153.)
+_Avoid_: defense pipeline (there is no separate one — that was the rejected design).
+
+**Dormant Vow**:
+An active `CharacterCovenantRole` membership that is currently DISENGAGED — the vow still
+exists, but its Situational Perks do not fire while it sits unengaged. Ruling 2's "loud OFF
+state" (#2536 slice 3, Task 7, ADR-0153): rather than silently doing nothing, a dormant vow
+that WOULD have answered a resolution announces so — see Dormant Perk Firing below. A mate's
+own dormancy is invisible to this mechanism entirely (only the SUBJECT'S OWN disengaged
+memberships are ever dormant-checked — never a co-present ally's).
+_Avoid_: inactive covenant, un-sworn (a dormant VOW is still sworn and still active — only its
+`engaged` flag is False; do not conflate with "setting active=true" language the War Covenant
+entry above already warns against for a different mechanic).
+
+**Dormant Perk Firing**:
+The result of `dormant_perk_firings` (`world.covenants.perks.services`) — every
+`VowSituationalPerk` on the subject's own Dormant Vow(s) that WOULD have fired (same
+`_PerkResolver` situation evaluation plus the Task-1 Perk Scope filter) had the role been
+engaged. `announce_dormant_perks` delivers the exact line `"your vow lies dormant —
+{perk.name} would have answered here"` to the HOLDER ALONE (a WHISPER-mode `Interaction` +
+direct telnet `.msg()`) — NEVER the room, deliberately unlike `announce_fired_perks`'s room
+broadcast for a LIVE firing (see ADR-0153 for why: a live firing is a spectacle for the scene, a
+dormant notice is a private diagnostic for the one player it concerns). Wired into all three
+fired-perk delivery seams, right after each one's own live `applicable_perks` call. Zero extra
+queries when nothing is disengaged. (#2536 slice 3, Task 7, ADR-0153.)
+_Avoid_: fired perk, live firing (the opposite concept — a Dormant Perk Firing is exactly the
+firing that did NOT happen).
+
 **Covenant Rank**:
 The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals / request-gm. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).
 _Avoid_: role, level.

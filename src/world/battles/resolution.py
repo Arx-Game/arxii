@@ -78,6 +78,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionInstance
+    from world.covenants.perks.context import SituationContext
     from world.magic.models import Technique
     from world.magic.types.power_ledger import PowerLedger
     from world.mechanics.types import HasCapabilities, HasProperties
@@ -335,6 +336,36 @@ def resolve_surrounded_terminal(
     return died
 
 
+def _battle_situation_ctx(character: ObjectDB, action_kind: str) -> SituationContext | None:
+    """``SituationContext`` for a warfare-roll check/cast (#2536 slice 3 Battle wiring).
+
+    ``None`` when ``character`` has no ``CharacterSheet`` — mirrors the guard
+    ``world.missions.services._situation.mission_situation_ctx`` and
+    ``checks.services._situational_perk_check_bonus`` apply to themselves, so a
+    caster without a sheet stays byte-identical to the pre-#2536 default (no
+    bonus, no penalty). ``holder``/``subject`` are both the caster's own sheet —
+    a warfare roll has no distinct target sheet (``target=None``) and no
+    combat/mission ``resolution`` object of its own (``resolution=None``); only
+    ``battle_action_kind`` is populated, for ``battle_action_kind`` scope
+    matching (``perks.services.perk_scope_matches``).
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+
+    try:
+        sheet = character.sheet_data
+    except (ObjectDoesNotExist, AttributeError):
+        return None
+    return SituationContext(
+        holder=sheet,
+        subject=sheet,
+        target=None,
+        resolution=None,
+        battle_action_kind=action_kind,
+    )
+
+
 @dataclass
 class BattleTechniqueResolution:
     """Adapts ``use_technique``'s resolve_fn contract — exposes ``.check_result``
@@ -368,7 +399,13 @@ class BattleTechniqueResolver:
 
         check_type = resolve_cast_check_type(self.character, self.technique.action_template)
         total_modifiers = extra_modifiers + self._battle_modifier_stack()
-        check_result = perform_check(self.character, check_type, extra_modifiers=total_modifiers)
+        situation_ctx = _battle_situation_ctx(self.character, self.declaration.action_kind)
+        check_result = perform_check(
+            self.character,
+            check_type,
+            extra_modifiers=total_modifiers,
+            situation_ctx=situation_ctx,
+        )
         return BattleTechniqueResolution(check_result=check_result)
 
     def _battle_modifier_stack(self) -> int:
@@ -443,6 +480,7 @@ def resolve_battle_technique(*, declaration: BattleActionDeclaration) -> CheckRe
         # lethal defaults True (unlike combat's lethal=encounter.is_lethal) — battles
         # have no non-lethal encounter concept; this only bounds the CASTER's own
         # anima-overburn/Soulfray severity, not PvP damage (ADR-0023 is unaffected).
+        situation_ctx=_battle_situation_ctx(character, declaration.action_kind),
     )
     if not result.confirmed or result.resolution_result is None:
         # PRE_CAST cancellation (rare, e.g. a reactive scar) — no anima was spent,

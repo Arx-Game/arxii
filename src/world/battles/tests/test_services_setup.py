@@ -324,6 +324,9 @@ class OpenChampionDuelTests(TestCase):
         self.assertEqual(self.place.combat_encounter_id, enc.pk)
         self.assertEqual(enc.encounter_type, EncounterType.DUEL)
         self.assertEqual(enc.risk_level, RiskLevel.LETHAL)
+        # #2536 slice 3: Champion duels are the ONLY DUEL creation path that
+        # stamps is_champion_duel=True (Situation.CHAMPION_DUEL scoping).
+        self.assertIs(enc.is_champion_duel, True)
 
     def test_open_champion_duel_rejects_non_champion(self) -> None:
         other_sheet = CharacterSheetFactory()
@@ -418,6 +421,9 @@ class OpenSiegeEngineEncounterTests(TestCase):
         self.assertEqual(self.place.combat_encounter_id, enc.pk)
         self.assertEqual(enc.encounter_type, EncounterType.DUEL)
         self.assertEqual(enc.risk_level, RiskLevel.LETHAL)
+        # #2536 slice 3: siege-engine DUEL encounters share create_lethal_duel with
+        # Champion duels but are NOT Champion duels — is_champion_duel stays False.
+        self.assertIs(enc.is_champion_duel, False)
 
     def test_raises_if_place_already_dueling(self) -> None:
         open_siege_engine_encounter(

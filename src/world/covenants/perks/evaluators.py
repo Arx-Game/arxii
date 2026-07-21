@@ -450,3 +450,234 @@ def target_favorably_disposed(ctx: SituationContext) -> bool:
         npc_persona=target_persona,
         affection__gte=FAVORABLY_DISPOSED_MIN_AFFECTION,
     ).exists()
+
+
+@register(Situation.CHAMPION_DUEL)
+def champion_duel(ctx: SituationContext) -> bool:
+    """True when the SUBJECT is a participant in a Champion-duel combat encounter.
+
+    ``is_champion_duel`` (#2536 slice 3) is stamped exclusively by
+    ``world.battles.services.open_champion_duel`` on the ``CombatEncounter`` it
+    creates — every other DUEL creation path, including the siege-engine
+    skirmish opened by ``open_siege_engine_encounter`` (shares the same
+    ``create_lethal_duel`` helper, no Champion-role requirement), leaves the
+    flag False. Combat checks/casts already thread ``resolution`` (a
+    ``CombatRoundContext``) into every ``SituationContext``, so no new
+    threading is needed for this situation — one cached FK read
+    (``participant.encounter``, idmapper-cached) and False outside combat.
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+    return participant.encounter.is_champion_duel is True
+
+
+@register(Situation.COMBAT_OPENED_FROM_PARLEY)
+def combat_opened_from_parley(ctx: SituationContext) -> bool:
+    """True for every combat resolution in an encounter that opened as a parley.
+
+    ``opened_from_parley`` (#2536 slice 3, Task 4) is stamped exclusively by
+    ``world.combat.cast_seed.seed_or_feed_encounter_from_cast`` when it CREATES a
+    new encounter from a hostile cast landing inside an active, non-Battle-backed
+    Scene (the same classification ``during_negotiation`` above documents) —
+    feeding an existing encounter never flips the flag. v1 approximation (PR-body
+    judgment call): the flag holds for the encounter's ENTIRE lifetime, not just
+    its opening moment — "this fight started as a conversation that turned
+    hostile" stays true throughout. One cached FK read (``participant.encounter``,
+    idmapper-cached) and False outside combat.
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+    return participant.encounter.opened_from_parley is True
+
+
+@register(Situation.AMBUSH_UNDERWAY)
+def ambush_underway(ctx: SituationContext) -> bool:
+    """True only during ROUND 1 of an encounter that opened as a surprise.
+
+    v1 semantics (documented approximation, #2536 slice 3 Task 4): holds when
+    the encounter's CURRENT round (``CombatEncounter.round_number``, the
+    ``AbstractRound`` scalar shared with ``SceneRound``) is 1 AND either
+    ``opened_from_parley`` is True (a parley that turned hostile IS a surprise
+    — nobody was braced for combat) OR at least one ``CombatRoundAction`` in
+    round 1 has ``from_entrance=True`` (a dramatic technique-entrance opener,
+    #2183). False from round 2 on — the ambush window closes once a full round
+    has passed, regardless of how the fight opened. Data source, verified:
+    ``CombatRoundAction.from_entrance`` (``world/combat/models.py:1095``),
+    filtered to the SUBJECT's encounter (not just their own actions — an
+    ambush is a property of the encounter, any entrance-cast participant
+    counts) + ``round_number=1``. Two queries at most: the cached
+    ``participant.encounter`` FK read, plus (only when ``opened_from_parley``
+    is False) a single ``CombatRoundAction.objects.filter(...).exists()``
+    lookup — never a query inside a loop. False outside combat.
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+    encounter = participant.encounter
+    if encounter.round_number != 1:
+        return False
+    if encounter.opened_from_parley:
+        return True
+
+    from world.combat.models import CombatRoundAction  # noqa: PLC0415
+
+    return CombatRoundAction.objects.filter(
+        participant__encounter_id=encounter.pk,
+        round_number=1,
+        from_entrance=True,
+    ).exists()
+
+
+@register(Situation.ALLY_INTERCEPTED_FOR_ME)
+def ally_intercepted_for_me(ctx: SituationContext) -> bool:
+    """A covenant-mate of the holder has an armed INTERPOSE guarding the subject.
+
+    Ratified v1 judgment call (#2536 slice 3, Task 5): DECLARED-guard
+    semantics — holds as soon as a covenant-mate's INTERPOSE declaration is
+    armed (``is_ready=True``) this round, whether or not the interpose ever
+    actually intercepts damage. "The guarded moment is the situation" — a
+    perk keying off this fires the instant cover is committed, not later when
+    it resolves.
+
+    "Mate" scoping mirrors ``ally_low_health`` exactly (see that function's
+    docstring, "Ally scoping rule"): a candidate counts if they hold a
+    non-departed (``CharacterCovenantRole.left_at__isnull=True``) role in a
+    covenant the HOLDER is also actively engaged in — the mate's own
+    ``engaged``/participant status beyond being co-present is irrelevant,
+    same reversal (Tehom 2026-07-20). The SUBJECT themself is excluded from
+    the interpose-declaration pool (a character can never be their own
+    intercepting ally — a subject's own guard-anyone INTERPOSE must not
+    self-satisfy this situation).
+
+    Data source, verified: ``CombatRoundAction`` (``world/combat/models.py``
+    ~1094-1140) filtered to the SUBJECT's encounter (``ctx.resolution`` is
+    always the SUBJECT's resolution — see ``SituationContext`` docstring) +
+    the encounter's current ``round_number`` (the same ``AbstractRound``
+    scalar ``ambush_underway`` reads) + ``maneuver=CombatManeuver.INTERPOSE``
+    + ``is_ready=True``, restricted to ACTIVE participants. A declaration
+    "guards" the subject when its ``focused_ally_target_id`` is either the
+    subject's own participant id (a specific-ally guard) or ``None``
+    (guard-anyone, ``declare_interpose`` — ``world/combat/services.py:1846``
+    — allows either). Query budget: one declarations query (as above,
+    ``select_related`` the interposer's character sheet) + one BATCHED
+    ``CharacterCovenantRole`` membership query across every guarding
+    interposer's sheet id (never one query per candidate — "no queries in
+    loops"). Two queries total, fixed regardless of interposer count. False
+    outside combat.
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None or ctx.holder is None:
+        return False
+    holder_character = ctx.holder.character
+    if holder_character is None:
+        return False
+
+    holder_covenant_ids = holder_character.active_covenant_ids()
+    if not holder_covenant_ids:
+        return False
+
+    from world.combat.constants import CombatManeuver, ParticipantStatus  # noqa: PLC0415
+    from world.combat.models import CombatRoundAction  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    encounter = participant.encounter
+    declarations = list(
+        CombatRoundAction.objects.filter(
+            participant__encounter_id=encounter.pk,
+            participant__status=ParticipantStatus.ACTIVE,
+            round_number=encounter.round_number,
+            maneuver=CombatManeuver.INTERPOSE,
+            is_ready=True,
+        )
+        .exclude(participant_id=participant.pk)
+        .select_related("participant__character_sheet")
+    )
+    if not declarations:
+        return False
+
+    guarding = [
+        declaration
+        for declaration in declarations
+        if declaration.focused_ally_target_id is None
+        or declaration.focused_ally_target_id == participant.pk
+    ]
+    if not guarding:
+        return False
+
+    mate_sheet_ids = set(
+        CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=[d.participant.character_sheet_id for d in guarding],
+            covenant_id__in=holder_covenant_ids,
+            left_at__isnull=True,
+        ).values_list("character_sheet_id", flat=True)
+    )
+    return any(d.participant.character_sheet_id in mate_sheet_ids for d in guarding)
+
+
+@register(Situation.ATTACKER_ABYSSAL)
+def attacker_abyssal(ctx: SituationContext) -> bool:
+    """True when ``ctx.attacker`` is Abyssal-affiliated (#2536 slice 3, Task 6).
+
+    ``ctx.attacker`` is populated ONLY on a defense-side resolution (see
+    ``SituationContext``'s docstring, "attacker") — a ``CombatOpponent`` or an
+    ObjectDB-backed attacker; ``None`` on every offense-side resolution, which
+    this evaluator reads as False. Resolution order, never raising on missing
+    relations:
+
+    1. A ``CombatOpponent`` with a non-empty AUTHORED ``affinity``
+       (``world/combat/models.py`` — #2536 slice 3 field, for non-persona/
+       generic NPCs that carry no ``CharacterAura`` row to infer from) —
+       compared directly against ``AffinityType.ABYSSAL``. Authored typing
+       wins outright when present; the aura fallback below is never
+       consulted.
+    2. A reachable ``ObjectDB`` carrying a ``CharacterAura``
+       (``world/magic/models/aura.py`` — a ``OneToOneField`` with
+       ``related_name="aura"``) — read via ``attacker.objectdb.aura`` for a
+       ``CombatOpponent`` (``objectdb`` is nullable — covers persona-backed
+       story NPCs AND PvP attackers, see the PvP note below) or
+       ``attacker.aura`` for a bare ``ObjectDB`` attacker. Holds when
+       ``dominant_affinity == AffinityType.ABYSSAL``.
+    3. Otherwise False — no attacker, no authored affinity, and no aura data
+       reachable (an ephemeral/generic NPC with neither).
+
+    PvP note (v1 scope): a PvP attacker is a ``CombatOpponent`` row with
+    ``objectdb`` set to the attacking PC (never an authored ``affinity`` —
+    that field is generic-NPC-only), so path (2) is what covers PvP.
+    ``world.combat.services.resolve_npc_attack`` is the ONLY defense-check
+    site threaded with ``ctx.attacker`` in v1 — the penetration-vs-ward PvP
+    path has no defender roll to thread this into.
+
+    At most one query (the ``CharacterAura`` OneToOne fetch, reached only
+    when no authored affinity short-circuits path 1 first).
+    """
+    attacker = ctx.attacker
+    if attacker is None:
+        return False
+
+    from world.magic.types.aura import AffinityType  # noqa: PLC0415
+
+    try:
+        affinity = attacker.affinity
+    except AttributeError:
+        affinity = ""
+    if affinity:
+        return affinity == AffinityType.ABYSSAL
+
+    try:
+        objectdb = attacker.objectdb
+    except AttributeError:
+        # Not a CombatOpponent (no `.objectdb` indirection) — treat the
+        # attacker itself as the ObjectDB to read `.aura` off directly.
+        objectdb = attacker
+    if objectdb is None:
+        return False
+
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        aura = objectdb.aura
+    except (ObjectDoesNotExist, AttributeError):
+        return False
+    return aura.dominant_affinity == AffinityType.ABYSSAL

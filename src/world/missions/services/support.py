@@ -22,6 +22,7 @@ from world.checks.consequence_resolution import apply_resolution
 from world.checks.services import perform_check
 from world.checks.types import ResolutionContext
 from world.conditions.services import get_effective_capability_value
+from world.missions.services._situation import mission_situation_ctx
 from world.missions.types import SupportMove
 from world.predicates.predicates import CharacterPredicateContext, evaluate
 
@@ -247,6 +248,7 @@ def _roll_and_bank(  # noqa: PLR0913
             character,
             move.support_check_type,
             target_difficulty=move.difficulty,
+            situation_ctx=mission_situation_ctx(character, instance),
         )
         is_success = result.success_level >= 1
         easing_banked = move.easing if is_success else 0

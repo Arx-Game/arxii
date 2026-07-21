@@ -5281,6 +5281,12 @@ def resolve_npc_attack(
     level determines a damage multiplier applied to the threat entry's
     ``base_damage``.
 
+    #2536 slice 3 Task 6: this is the ONLY defense-check site in v1 that
+    threads a ``SituationContext`` with ``attacker`` populated
+    (``opponent_action.opponent``) into ``perform_check`` — making
+    CHECK_BONUS/TIER_FLOOR/BOTCH_IMMUNITY situational perks, including
+    ``Situation.ATTACKER_ABYSSAL``-gated ones, live on the defender's roll.
+
     Args:
         opponent_action: The NPC's chosen action for the round.
         participant: The targeted PC.
@@ -5367,10 +5373,31 @@ def resolve_npc_attack(
         scene=participant.encounter.scene,
         extra_contributions=bond_contributions,
     )
+
+    # #2536 slice 3 Task 6: thread the defense-side situation context so
+    # CHECK_BONUS/TIER_FLOOR/BOTCH_IMMUNITY situational perks can fire on the
+    # PC's defensive roll — the one context where the SUBJECT is not the
+    # aggressor, so `target` stays None and `attacker` carries the NPC's
+    # opponent row instead (the ATTACKER_ABYSSAL evaluator's data source).
+    # Mirrors the offense sites' sheet + CombatRoundContext construction
+    # (services.py:435-448) with `holder`/`subject` both the defender's own
+    # sheet, matching `_resolve_social_check`'s pattern above.
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+
+    defender_sheet = participant.character_sheet
+    situation_ctx = SituationContext(
+        holder=defender_sheet,
+        subject=defender_sheet,
+        target=None,
+        resolution=CombatRoundContext(participant),
+        attacker=opponent_action.opponent,
+    )
     result: CheckResult = perform_check_fn(
         character,
         check_type,
         extra_modifiers=breakdown.total,
+        situation_ctx=situation_ctx,
     )
 
     multiplier = _damage_multiplier_for_success(result.success_level)

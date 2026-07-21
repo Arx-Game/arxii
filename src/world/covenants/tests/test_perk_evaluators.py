@@ -12,6 +12,8 @@ would break ``setUpTestData``'s deepcopy (same rationale as
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -19,7 +21,7 @@ from evennia import create_object
 
 from world.areas.positioning.services import connect_positions, create_position, place_in_position
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import ParticipantStatus
+from world.combat.constants import CombatManeuver, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -40,14 +42,22 @@ from world.covenants.perks.constants import Situation
 from world.covenants.perks.context import SituationContext
 from world.covenants.perks.evaluators import SITUATION_EVALUATORS
 from world.magic.constants import TechniqueFunction
-from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
+from world.magic.factories import (
+    CharacterAuraFactory,
+    TechniqueFactory,
+    TechniqueFunctionTagFactory,
+)
+from world.magic.types.aura import AffinityType
 from world.npc_services.factories import NPCStandingFactory
-from world.scenes.factories import SceneFactory
+from world.scenes.factories import PersonaFactory, SceneFactory
 from world.vitals.models import CharacterVitals
 
 
 class SituationEvaluatorRegistryTests(TestCase):
-    """The registry carries exactly the 9 surviving Situation values."""
+    """The registry carries exactly every live ``Situation`` value (9 from slice 1,
+    ``CHAMPION_DUEL`` from slice 3 Task 3, ``COMBAT_OPENED_FROM_PARLEY`` and
+    ``AMBUSH_UNDERWAY`` from slice 3 Task 4, ``ALLY_INTERCEPTED_FOR_ME`` from
+    slice 3 Task 5, plus ``ATTACKER_ABYSSAL`` from slice 3 Task 6, #2536)."""
 
     def test_registry_covers_every_surviving_situation(self) -> None:
         self.assertEqual(set(SITUATION_EVALUATORS), set(Situation.values))
@@ -441,3 +451,398 @@ class TargetFavorablyDisposedEvaluatorTests(TestCase):
 
     def test_missing_context_returns_false(self) -> None:
         self.assertFalse(evaluators.target_favorably_disposed(self._ctx(None)))
+
+
+class ChampionDuelEvaluatorTests(TestCase):
+    """CHAMPION_DUEL reads the subject's resolution participant's encounter flag
+    (#2536 slice 3 Battle wiring)."""
+
+    def setUp(self) -> None:
+        self.room = create_object("typeclasses.rooms.Room", key="ChampionDuelRoom", nohome=True)
+        self.scene = SceneFactory(location=self.room)
+        self.sheet = CharacterSheetFactory()
+
+    def _ctx(self, resolution) -> SituationContext:
+        return SituationContext(
+            holder=self.sheet, subject=self.sheet, target=None, resolution=resolution
+        )
+
+    def test_true_in_champion_duel_encounter(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room, is_champion_duel=True)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        resolution = CombatRoundContext(participant)
+        self.assertTrue(evaluators.champion_duel(self._ctx(resolution)))
+
+    def test_false_in_ordinary_encounter(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        resolution = CombatRoundContext(participant)
+        self.assertFalse(evaluators.champion_duel(self._ctx(resolution)))
+
+    def test_false_outside_combat(self) -> None:
+        self.assertFalse(evaluators.champion_duel(self._ctx(None)))
+
+
+class CombatOpenedFromParleyEvaluatorTests(TestCase):
+    """COMBAT_OPENED_FROM_PARLEY reads the subject's resolution participant's
+    encounter flag (#2536 slice 3, Task 4)."""
+
+    def setUp(self) -> None:
+        self.room = create_object("typeclasses.rooms.Room", key="ParleyOriginRoom", nohome=True)
+        self.scene = SceneFactory(location=self.room)
+        self.sheet = CharacterSheetFactory()
+
+    def _ctx(self, resolution) -> SituationContext:
+        return SituationContext(
+            holder=self.sheet, subject=self.sheet, target=None, resolution=resolution
+        )
+
+    def test_true_when_encounter_opened_from_parley(self) -> None:
+        encounter = CombatEncounterFactory(
+            scene=self.scene, room=self.room, opened_from_parley=True
+        )
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        resolution = CombatRoundContext(participant)
+        self.assertTrue(evaluators.combat_opened_from_parley(self._ctx(resolution)))
+
+    def test_false_in_ordinary_encounter(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        resolution = CombatRoundContext(participant)
+        self.assertFalse(evaluators.combat_opened_from_parley(self._ctx(resolution)))
+
+    def test_false_outside_combat(self) -> None:
+        self.assertFalse(evaluators.combat_opened_from_parley(self._ctx(None)))
+
+
+class AmbushUnderwayEvaluatorTests(TestCase):
+    """AMBUSH_UNDERWAY holds only during round 1 of a surprise-opened encounter
+    (#2536 slice 3, Task 4): ``opened_from_parley=True`` OR a round-1
+    ``from_entrance=True`` ``CombatRoundAction`` — False from round 2 on."""
+
+    def setUp(self) -> None:
+        self.room = create_object("typeclasses.rooms.Room", key="AmbushRoom", nohome=True)
+        self.scene = SceneFactory(location=self.room)
+        self.sheet = CharacterSheetFactory()
+
+    def _ctx(self, resolution) -> SituationContext:
+        return SituationContext(
+            holder=self.sheet, subject=self.sheet, target=None, resolution=resolution
+        )
+
+    def test_true_round_one_from_entrance_action(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room, round_number=1)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        CombatRoundActionFactory(participant=participant, round_number=1, from_entrance=True)
+        resolution = CombatRoundContext(participant)
+        self.assertTrue(evaluators.ambush_underway(self._ctx(resolution)))
+
+    def test_true_round_one_opened_from_parley(self) -> None:
+        encounter = CombatEncounterFactory(
+            scene=self.scene, room=self.room, round_number=1, opened_from_parley=True
+        )
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        resolution = CombatRoundContext(participant)
+        self.assertTrue(evaluators.ambush_underway(self._ctx(resolution)))
+
+    def test_false_round_two_even_with_from_entrance_action(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room, round_number=2)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        CombatRoundActionFactory(participant=participant, round_number=1, from_entrance=True)
+        resolution = CombatRoundContext(participant)
+        self.assertFalse(evaluators.ambush_underway(self._ctx(resolution)))
+
+    def test_false_round_one_without_surprise_origin(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room, round_number=1)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        CombatRoundActionFactory(participant=participant, round_number=1, from_entrance=False)
+        resolution = CombatRoundContext(participant)
+        self.assertFalse(evaluators.ambush_underway(self._ctx(resolution)))
+
+    def test_false_outside_combat(self) -> None:
+        self.assertFalse(evaluators.ambush_underway(self._ctx(None)))
+
+
+class AllyInterceptedForMeEvaluatorTests(TestCase):
+    """ALLY_INTERCEPTED_FOR_ME: a covenant-mate's armed INTERPOSE this round,
+    guarding the subject specifically or guard-anyone (#2536 slice 3, Task 5).
+
+    Declared cover counts — the guarded moment is the situation, it does not
+    wait for damage to land (ratified judgment call, see the ``Situation``
+    enum docstring).
+    """
+
+    def setUp(self) -> None:
+        self.covenant = CovenantFactory()
+        self.role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
+        self.holder_sheet = CharacterSheetFactory()
+        self.mate_sheet = CharacterSheetFactory()
+        self.other_ally_sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=self.holder_sheet, covenant=self.covenant, covenant_role=self.role
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=self.mate_sheet, covenant=self.covenant, covenant_role=self.role
+        )
+        self.encounter = CombatEncounterFactory(round_number=1)
+        self.holder_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.holder_sheet
+        )
+        self.mate_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.mate_sheet
+        )
+        self.other_ally_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.other_ally_sheet
+        )
+        self.resolution = CombatRoundContext(self.holder_participant)
+
+    def _ctx(self, resolution: object | None) -> SituationContext:
+        return SituationContext(
+            holder=self.holder_sheet, subject=self.holder_sheet, target=None, resolution=resolution
+        )
+
+    def _declare_interpose(self, *, participant, is_ready: bool, focused_ally_target) -> None:
+        CombatRoundActionFactory(
+            participant=participant,
+            round_number=self.encounter.round_number,
+            maneuver=CombatManeuver.INTERPOSE,
+            is_ready=is_ready,
+            focused_ally_target=focused_ally_target,
+        )
+
+    def test_true_when_mate_guards_subject(self) -> None:
+        self._declare_interpose(
+            participant=self.mate_participant,
+            is_ready=True,
+            focused_ally_target=self.holder_participant,
+        )
+        self.assertTrue(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+
+    def test_false_when_guarding_a_different_ally(self) -> None:
+        self._declare_interpose(
+            participant=self.mate_participant,
+            is_ready=True,
+            focused_ally_target=self.other_ally_participant,
+        )
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+
+    def test_true_when_guard_anyone(self) -> None:
+        self._declare_interpose(
+            participant=self.mate_participant, is_ready=True, focused_ally_target=None
+        )
+        self.assertTrue(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+
+    def test_false_when_interposer_not_covenant_mate(self) -> None:
+        stranger_sheet = CharacterSheetFactory()
+        stranger_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=stranger_sheet
+        )
+        self._declare_interpose(
+            participant=stranger_participant,
+            is_ready=True,
+            focused_ally_target=self.holder_participant,
+        )
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+
+    def test_false_when_declaration_unready(self) -> None:
+        self._declare_interpose(
+            participant=self.mate_participant,
+            is_ready=False,
+            focused_ally_target=self.holder_participant,
+        )
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(self.resolution)))
+
+    def test_false_outside_combat(self) -> None:
+        self._declare_interpose(
+            participant=self.mate_participant,
+            is_ready=True,
+            focused_ally_target=self.holder_participant,
+        )
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx(None)))
+
+
+class AllyInterceptedForMeSubjectExclusionTests(TestCase):
+    """Regression for Task 5 review Critical #1: the evaluator must exclude the
+    SUBJECT's own declaration, not the HOLDER's. A character can never be their
+    own intercepting ally — a subject's own guard-anyone INTERPOSE must not
+    self-satisfy a covenant-mate's ``COVENANT_ALLIES`` perk when holder != subject
+    (#2536 slice 3, Task 5 review). Bob is the perk-owning holder; Alice is the
+    acting subject; both are covenant-mates in the same encounter.
+    """
+
+    def setUp(self) -> None:
+        self.covenant = CovenantFactory()
+        self.role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
+        self.holder_sheet = CharacterSheetFactory()  # Bob
+        self.subject_sheet = CharacterSheetFactory()  # Alice
+        CharacterCovenantRoleFactory(
+            character_sheet=self.holder_sheet, covenant=self.covenant, covenant_role=self.role
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=self.subject_sheet, covenant=self.covenant, covenant_role=self.role
+        )
+        self.encounter = CombatEncounterFactory(round_number=1)
+        self.holder_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.holder_sheet
+        )
+        self.subject_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.subject_sheet
+        )
+        # SituationContext.resolution is always the SUBJECT's resolution.
+        self.resolution = CombatRoundContext(self.subject_participant)
+
+    def _ctx(self) -> SituationContext:
+        return SituationContext(
+            holder=self.holder_sheet,
+            subject=self.subject_sheet,
+            target=None,
+            resolution=self.resolution,
+        )
+
+    def _declare_interpose(self, *, participant, focused_ally_target) -> None:
+        CombatRoundActionFactory(
+            participant=participant,
+            round_number=self.encounter.round_number,
+            maneuver=CombatManeuver.INTERPOSE,
+            is_ready=True,
+            focused_ally_target=focused_ally_target,
+        )
+
+    def test_false_when_only_the_subject_guards_herself(self) -> None:
+        """Alice's own armed guard-anyone INTERPOSE must not self-satisfy the
+        situation on Bob's perk — no other mate is guarding her."""
+        self._declare_interpose(participant=self.subject_participant, focused_ally_target=None)
+        self.assertFalse(evaluators.ally_intercepted_for_me(self._ctx()))
+
+    def test_true_when_holder_guards_the_subject(self) -> None:
+        """A companion positive case: Bob (the holder) declares guard-anyone —
+        a genuine covenant-mate other than the subject — must satisfy it."""
+        self._declare_interpose(participant=self.holder_participant, focused_ally_target=None)
+        self.assertTrue(evaluators.ally_intercepted_for_me(self._ctx()))
+
+
+class AllyInterceptedForMeQueryBudgetTests(TestCase):
+    """ALLY_INTERCEPTED_FOR_ME resolves with a FIXED query count (Task 5 review
+    Minor #3 fold-in), mirroring ``AllyLowHealthQueryBudgetTests``: one
+    declarations query + one batched ``CharacterCovenantRole`` membership query,
+    regardless of interposer count.
+    """
+
+    def setUp(self) -> None:
+        self.covenant = CovenantFactory()
+        self.role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
+        self.holder_sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=self.holder_sheet, covenant=self.covenant, covenant_role=self.role
+        )
+        self.encounter = CombatEncounterFactory(round_number=1)
+        self.holder_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.holder_sheet
+        )
+        self.resolution = CombatRoundContext(self.holder_participant)
+
+    def _ctx(self) -> SituationContext:
+        return SituationContext(
+            holder=self.holder_sheet,
+            subject=self.holder_sheet,
+            target=None,
+            resolution=self.resolution,
+        )
+
+    def _add_guarding_mates(self, count: int) -> None:
+        for _ in range(count):
+            mate_sheet = CharacterSheetFactory()
+            CharacterCovenantRoleFactory(
+                character_sheet=mate_sheet, covenant=self.covenant, covenant_role=self.role
+            )
+            mate_participant = CombatParticipantFactory(
+                encounter=self.encounter, character_sheet=mate_sheet
+            )
+            CombatRoundActionFactory(
+                participant=mate_participant,
+                round_number=self.encounter.round_number,
+                maneuver=CombatManeuver.INTERPOSE,
+                is_ready=True,
+                focused_ally_target=None,
+            )
+
+    def _count_queries(self) -> int:
+        with CaptureQueriesContext(connection) as ctx:
+            evaluators.ally_intercepted_for_me(self._ctx())
+        return len(ctx)
+
+    def test_query_count_fixed_regardless_of_interposer_count(self) -> None:
+        # Warm the holder's covenant-roles handler cache first, so both
+        # measurements below start from the same (warm) state and compare
+        # only the queries that genuinely run per evaluation.
+        evaluators.ally_intercepted_for_me(self._ctx())
+
+        self._add_guarding_mates(1)
+        count_with_one = self._count_queries()
+
+        self._add_guarding_mates(2)  # 3 total guarding mates now
+        count_with_three = self._count_queries()
+
+        self.assertEqual(count_with_one, count_with_three)
+        self.assertEqual(count_with_one, 2)
+
+
+class AttackerAbyssalEvaluatorTests(TestCase):
+    """ATTACKER_ABYSSAL (#2536 slice 3, Task 6): resolution order —
+    (1) a ``CombatOpponent`` with a non-empty authored ``affinity`` compares
+    directly, (2) a reachable ``ObjectDB``'s ``CharacterAura.dominant_affinity``
+    is the fallback, (3) otherwise False. Never raises on missing relations;
+    False when ``ctx.attacker`` is ``None``.
+    """
+
+    def setUp(self) -> None:
+        self.holder_sheet = CharacterSheetFactory()
+        self.subject_sheet = CharacterSheetFactory()
+
+    def _ctx(self, attacker: object | None) -> SituationContext:
+        return SituationContext(
+            holder=self.holder_sheet,
+            subject=self.subject_sheet,
+            target=None,
+            resolution=None,
+            attacker=attacker,
+        )
+
+    def test_true_for_authored_abyssal_opponent(self) -> None:
+        opponent = CombatOpponentFactory(affinity=AffinityType.ABYSSAL)
+        self.assertTrue(evaluators.attacker_abyssal(self._ctx(opponent)))
+
+    def test_false_for_authored_non_abyssal_opponent(self) -> None:
+        opponent = CombatOpponentFactory(affinity=AffinityType.CELESTIAL)
+        self.assertFalse(evaluators.attacker_abyssal(self._ctx(opponent)))
+
+    def test_true_for_persona_backed_opponent_with_abyssal_dominant_aura(self) -> None:
+        """No authored affinity — falls back to the persona's ObjectDB CharacterAura."""
+        persona = PersonaFactory()
+        CharacterAuraFactory(
+            character=persona.character_sheet.character,
+            celestial=Decimal("10.00"),
+            primal=Decimal("10.00"),
+            abyssal=Decimal("80.00"),
+        )
+        opponent = CombatOpponentFactory(persona=persona)
+        self.assertTrue(evaluators.attacker_abyssal(self._ctx(opponent)))
+
+    def test_false_for_persona_backed_opponent_with_non_abyssal_aura(self) -> None:
+        persona = PersonaFactory()
+        CharacterAuraFactory(
+            character=persona.character_sheet.character,
+            celestial=Decimal("10.00"),
+            primal=Decimal("80.00"),
+            abyssal=Decimal("10.00"),
+        )
+        opponent = CombatOpponentFactory(persona=persona)
+        self.assertFalse(evaluators.attacker_abyssal(self._ctx(opponent)))
+
+    def test_false_with_no_affinity_and_no_aura_data(self) -> None:
+        """A generic ephemeral opponent: no authored affinity, no CharacterAura row."""
+        opponent = CombatOpponentFactory()
+        self.assertFalse(evaluators.attacker_abyssal(self._ctx(opponent)))
+
+    def test_false_when_no_attacker(self) -> None:
+        self.assertFalse(evaluators.attacker_abyssal(self._ctx(None)))

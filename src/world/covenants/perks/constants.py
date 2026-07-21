@@ -14,21 +14,26 @@ from django.db import models
 class Situation(models.TextChoices):
     """Code-defined situation library for per-vow situational perks (#2536).
 
-    Slice 1 ships these 9 values ONLY — the enum ships no inert entries;
-    every value here has (or, per Task 2, will get) a registered evaluator
-    with signature ``(ctx: SituationContext) -> bool``. ``SituationContext``
-    (``perks.context``, Task 2) carries four fields: ``holder`` (the
-    perk-owning vow-holder), ``subject`` (the acting character whose
-    cast/check is resolving — equals ``holder`` for SELF perks), ``target``
-    (the action's target sheet, ``None`` when the action has none), and
-    ``resolution`` (the live resolution context — ``CombatRoundContext`` in
-    combat, the check's context otherwise, ``None`` when absent). An
-    evaluator whose required field is missing/``None`` returns False (a
-    combat-positioning situation simply never holds outside combat; a
-    DB-state situation like ``TARGET_DISTRACTED`` evaluates anywhere).
-    DEFERRED to slices 2/3 (each arrives with its own machinery, not listed
-    here): ``combat_opened_from_parley``, ``ambush_underway``,
-    ``ally_intercepted_for_me``, ``attacker_abyssal``.
+    Slice 1 shipped 9 values; ``CHAMPION_DUEL`` is slice 3's Battle-wiring
+    addition (#2536 Task 3); ``COMBAT_OPENED_FROM_PARLEY`` and
+    ``AMBUSH_UNDERWAY`` are slice 3's origin-marker addition (#2536 Task 4);
+    ``ALLY_INTERCEPTED_FOR_ME`` is slice 3's declared-guard addition (#2536
+    Task 5); ``ATTACKER_ABYSSAL`` is slice 3's defense-side seam addition
+    (#2536 Task 6) — the enum ships no other inert entries; every value here
+    has a registered evaluator with signature ``(ctx: SituationContext) ->
+    bool``.
+    ``SituationContext`` (``perks.context``) carries four required fields plus
+    slice-3 scoping/defense fields: ``holder`` (the perk-owning vow-holder),
+    ``subject`` (the acting character whose cast/check is resolving — equals
+    ``holder`` for SELF perks), ``target`` (the action's target sheet,
+    ``None`` when the action has none), ``resolution`` (the live
+    resolution context — ``CombatRoundContext`` in combat, the check's
+    context otherwise, ``None`` when absent), and ``attacker`` (the attacking
+    entity on a defense-side resolution, ``None`` on every offense-side one —
+    see ``ATTACKER_ABYSSAL`` below). An evaluator whose required field is
+    missing/``None`` returns False (a combat-positioning situation simply
+    never holds outside combat; a DB-state situation like
+    ``TARGET_DISTRACTED`` evaluates anywhere).
 
     - ``AT_RANGE`` — the SUBJECT's engagement distance profile this round is
       ranged (has at least one actively-engaged enemy, none of them sharing
@@ -73,6 +78,47 @@ class Situation(models.TextChoices):
       (distinct from ``TARGET_SWAYED_BY_ALLY``, which reads applied
       conditions rather than disposition state). Reads ``holder`` +
       ``target``; DB-state, evaluates anywhere.
+    - ``CHAMPION_DUEL`` — the SUBJECT is a participant in a Champion-duel
+      combat encounter (#2536 slice 3 Battle wiring). The flag is stamped
+      exclusively by ``world.battles.services.open_champion_duel`` on the
+      ``CombatEncounter`` it creates — every other DUEL creation path,
+      including the siege-engine skirmish opened by
+      ``open_siege_engine_encounter`` (same ``create_lethal_duel`` helper,
+      no Champion-role requirement), leaves ``is_champion_duel`` False.
+      Combat checks/casts already thread ``resolution`` (a
+      ``CombatRoundContext``) into every ``SituationContext``, so no new
+      threading was needed for this situation. Reads ``resolution``; False
+      outside combat.
+    - ``COMBAT_OPENED_FROM_PARLEY`` — the SUBJECT's combat encounter was
+      CREATED (never fed) by ``world.combat.cast_seed.
+      seed_or_feed_encounter_from_cast`` while its seeding Scene was an
+      active, non-Battle-backed Scene — "this fight started as a
+      conversation that turned hostile" (#2536 slice 3, Task 4). v1
+      approximation (PR-body judgment call): holds for the encounter's
+      ENTIRE lifetime once stamped, not just its opening moment. Reads
+      ``resolution``; False outside combat.
+    - ``AMBUSH_UNDERWAY`` — v1 semantics (documented approximation): holds
+      only during ROUND 1 of an encounter that opened as a surprise —
+      either ``opened_from_parley=True`` OR a round-1 ``from_entrance=True``
+      ``CombatRoundAction`` exists (a dramatic technique-entrance opener,
+      #2183) — and is False from round 2 on. Reads ``resolution``; False
+      outside combat.
+    - ``ALLY_INTERCEPTED_FOR_ME`` — a covenant-mate of the HOLDER, co-present
+      in the SUBJECT's encounter, has an armed (``is_ready=True``) INTERPOSE
+      declaration THIS round whose ``focused_ally_target`` is the SUBJECT's
+      participant or ``None`` (guard-anyone) (#2536 slice 3, Task 5).
+      Ratified v1 judgment call: DECLARED-guard semantics — declared cover
+      counts as soon as it is armed; the situation does not wait for the
+      interpose to actually intercept damage. Reads ``holder`` + ``resolution``;
+      False outside combat.
+    - ``ATTACKER_ABYSSAL`` — the attacking entity on a DEFENSE resolution is
+      Abyssal-affiliated (#2536 slice 3, Task 6): a ``CombatOpponent`` with a
+      non-empty authored ``affinity`` matching ``AffinityType.ABYSSAL``, or
+      (falling back) a reachable ObjectDB whose ``CharacterAura.
+      dominant_affinity`` is Abyssal. Reads ``attacker``; False when
+      ``attacker`` is ``None`` (every offense-side resolution) or carries no
+      affinity/aura data. ``world.combat.services.resolve_npc_attack`` is the
+      only defense-check site that threads ``attacker`` in v1.
     """
 
     AT_RANGE = "at_range", "At Range"
@@ -84,6 +130,11 @@ class Situation(models.TextChoices):
     ALLY_LOW_HEALTH = "ally_low_health", "Ally Low Health"
     DURING_NEGOTIATION = "during_negotiation", "During Negotiation"
     TARGET_FAVORABLY_DISPOSED = "target_favorably_disposed", "Target Favorably Disposed"
+    CHAMPION_DUEL = "champion_duel", "Champion Duel"
+    COMBAT_OPENED_FROM_PARLEY = "combat_opened_from_parley", "Combat Opened From Parley"
+    AMBUSH_UNDERWAY = "ambush_underway", "Ambush Underway"
+    ALLY_INTERCEPTED_FOR_ME = "ally_intercepted_for_me", "Ally Intercepted for Me"
+    ATTACKER_ABYSSAL = "attacker_abyssal", "Attacker Abyssal"
 
 
 class PerkEffectKind(models.TextChoices):

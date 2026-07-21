@@ -76,6 +76,7 @@ from world.missions.models import (
     MissionOptionRoute,
     MissionOptionRouteCandidate,
 )
+from world.missions.services._situation import mission_situation_ctx
 from world.missions.services.beat import on_mission_complete_for_beat
 from world.missions.services.challenge_options import challenge_options_for_character
 from world.missions.services.renown_emission import emit_terminal_renown_awards
@@ -344,6 +345,7 @@ def _resolve_challenge_check(
     option: MissionOption,
     character: ObjectDB,
     chosen_approach: ChallengeApproach | None,
+    instance: MissionInstance,
     *,
     extra_modifiers: int = 0,
 ) -> CheckResult:
@@ -374,6 +376,7 @@ def _resolve_challenge_check(
         chosen_approach.check_type,
         target_difficulty=challenge.severity,
         extra_modifiers=extra_modifiers,
+        situation_ctx=mission_situation_ctx(character, instance),
     )
 
 
@@ -595,7 +598,7 @@ def resolve_option(  # noqa: PLR0913
         # severity is the difficulty. Routing below is unchanged — it keys
         # on the resulting CheckOutcome exactly like an AUTHORED CHECK.
         result = _resolve_challenge_check(
-            option, character, chosen_approach, extra_modifiers=extra_modifiers
+            option, character, chosen_approach, instance, extra_modifiers=extra_modifiers
         )
     else:
         check_type = _resolve_check_type(option)
@@ -604,6 +607,7 @@ def resolve_option(  # noqa: PLR0913
             check_type,
             target_difficulty=instance.template.risk_tier,
             extra_modifiers=extra_modifiers,
+            situation_ctx=mission_situation_ctx(character, instance),
         )
 
     route = MissionOptionRoute.objects.filter(

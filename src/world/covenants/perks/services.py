@@ -92,6 +92,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from world.covenants.perks.constants import PerkBeneficiary
 from world.covenants.perks.context import SituationContext
 from world.covenants.perks.evaluators import SITUATION_EVALUATORS
@@ -101,6 +103,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.covenants.models import CharacterCovenantRole, VowSituationalPerk
+    from world.missions.models import MissionInstance
 
 #: Beneficiaries that fire on the perk-owning holder's OWN action.
 _SELF_BENEFICIARIES = frozenset({PerkBeneficiary.SELF, PerkBeneficiary.WHOLE_GROUP})
@@ -137,6 +140,7 @@ def applicable_perks(
     effect_kind: str | tuple[str, ...],
     resolution: object | None,
     target: CharacterSheet | None,
+    attacker: object | None = None,
 ) -> list[FiredPerk]:
     """Return every ``VowSituationalPerk`` of ``effect_kind`` that fires for
     ``subject``'s resolution right now (#2536 spec §2, Task 3).
@@ -151,7 +155,11 @@ def applicable_perks(
     ``CombatRoundContext`` in combat, a check-pipeline context otherwise, or
     ``None``) — see ``SituationContext``'s docstring; it is reused unchanged
     across every candidate holder evaluated here. ``target`` is the subject's
-    action target, or ``None``.
+    action target, or ``None``. ``attacker`` (#2536 slice 3, Task 6) is the
+    SUBJECT's defense-side attacking entity, or ``None`` (the default, and
+    every offense-side caller) — threaded through to every candidate
+    holder's ``SituationContext`` so the ``ATTACKER_ABYSSAL`` evaluator can
+    read it.
     """
     candidates = _self_candidates(subject) + _ally_candidates(subject, resolution)
     if not candidates:
@@ -163,7 +171,9 @@ def applicable_perks(
     if not perks_by_role:
         return []
 
-    resolver = _PerkResolver(subject=subject, target=target, resolution=resolution)
+    resolver = _PerkResolver(
+        subject=subject, target=target, resolution=resolution, attacker=attacker
+    )
     fired: list[FiredPerk] = []
     for role_id, holder, allowed_beneficiaries in candidates:
         for perk in perks_by_role.get(role_id, ()):
@@ -173,6 +183,221 @@ def applicable_perks(
             if result is not None:
                 fired.append(result)
     return fired
+
+
+def mission_category_ids_for(ctx: SituationContext) -> frozenset[int]:
+    """``ctx.mission.template``'s authored category ids, as a hoistable set (#2536
+    slice 3 review fix).
+
+    Callers checking more than one mission-category-scoped perk against the SAME
+    ``ctx`` in one resolution (``checks.services._situational_perk_check_bonus``,
+    ``magic.services.power_terms.vow_situational_power_term``) MUST call this ONCE
+    before their per-perk filter loop and pass the result through
+    ``perk_scope_matches``'s ``mission_category_ids`` kwarg — that keeps the
+    categories query at exactly one per resolution regardless of how many perks
+    fire. Empty (no query) when ``ctx.mission`` is ``None``.
+    """
+    if ctx.mission is None:
+        return frozenset()
+    return frozenset(ctx.mission.template.categories.values_list("pk", flat=True))
+
+
+def perk_scope_matches(
+    perk: VowSituationalPerk,
+    ctx: SituationContext,
+    *,
+    mission_category_ids: frozenset[int] | None = None,
+) -> bool:
+    """Every authored scope column on ``perk`` must match ``ctx`` (AND); empty scopes
+    always match.
+
+    ``mission_category_ids`` is the caller-hoisted result of
+    ``mission_category_ids_for(ctx)``. Pass it through when checking more than one
+    perk against the same ``ctx`` in a single resolution — see that function's
+    docstring for the hoist contract. ``None`` (the default) means the caller didn't
+    hoist: this function falls back to computing it itself via
+    ``mission_category_ids_for``, one query, which keeps single-perk call sites
+    simple at the cost of a fresh query per call.
+
+    Shared by both fired-perk seams (#2536 slice 3): ``checks.services
+    ._situational_perk_check_bonus`` (CHECK_BONUS) and ``magic.services.power_terms
+    .vow_situational_power_term`` (POWER_BONUS) — one rule, one place.
+    """
+    if perk.battle_action_kind and perk.battle_action_kind != (ctx.battle_action_kind or ""):
+        return False
+    if perk.mission_template_id is not None:
+        if ctx.mission is None or ctx.mission.template_id != perk.mission_template_id:
+            return False
+    if perk.mission_category_id is not None:
+        if ctx.mission is None:
+            return False
+        if mission_category_ids is None:
+            mission_category_ids = mission_category_ids_for(ctx)
+        if perk.mission_category_id not in mission_category_ids:
+            return False
+    return True
+
+
+def dormant_perk_firings(  # noqa: PLR0913 - applicable_perks' resolution/target/attacker
+    # triple plus the Task-1 scope columns (mission/battle_action_kind) baked in here, unlike
+    # applicable_perks, which leaves scope filtering to the caller.
+    subject: CharacterSheet,
+    *,
+    effect_kind: str | tuple[str, ...],
+    resolution: object | None,
+    target: CharacterSheet | None,
+    mission: MissionInstance | None = None,
+    battle_action_kind: str | None = None,
+    attacker: object | None = None,
+) -> list[FiredPerk]:
+    """Every ``VowSituationalPerk`` of ``effect_kind`` that would have fired for
+    ``subject``'s resolution if their vow were still engaged (#2536 slice 3,
+    Task 7 — ruling 2's "loud OFF state").
+
+    Candidates are the SUBJECT'S OWN active-but-DISENGAGED memberships ONLY
+    (``_dormant_self_candidates`` — the inverted mirror of ``_self_candidates``'s
+    engaged-only filter); a co-present ally's perk is never dormant — ally
+    beneficiaries key on the MATE's role, not the subject's, so a mate's own
+    disengagement is simply invisible here (the slice-2 reversal already made
+    a mate's engagement irrelevant to whether their perk reaches the subject
+    at all). Runs the SAME ``_PerkResolver`` situation evaluation
+    ``applicable_perks`` runs, **plus** the Task-1 scope filter
+    (``perk_scope_matches``, hoisted mission-category ids) inline — unlike
+    ``applicable_perks``, which leaves scope filtering to each call site, this
+    function returns an already-scope-filtered set so every wiring seam can
+    hand its result straight to ``announce_dormant_perks`` (a CHECK_BONUS
+    caller still applies its OWN ``check_type`` filter on top, same as it does
+    for the live set).
+
+    **Zero queries when the subject has no disengaged active membership** —
+    ``_dormant_self_candidates`` reads the SAME cached
+    ``character.covenant_roles.active_memberships`` list the live
+    ``applicable_perks`` call (made immediately before this one at every
+    wiring seam) has already warmed; this is the every-check fast path.
+    """
+    candidates = _dormant_self_candidates(subject)
+    if not candidates:
+        return []
+
+    kinds = (effect_kind,) if isinstance(effect_kind, str) else tuple(effect_kind)
+    role_ids = {role_id for role_id, _holder, _beneficiaries in candidates}
+    perks_by_role = _fetch_candidate_perks(role_ids, kinds)
+    if not perks_by_role:
+        return []
+
+    resolver = _PerkResolver(
+        subject=subject, target=target, resolution=resolution, attacker=attacker
+    )
+    fired: list[FiredPerk] = []
+    for role_id, holder, allowed_beneficiaries in candidates:
+        for perk in perks_by_role.get(role_id, ()):
+            if perk.beneficiary not in allowed_beneficiaries:
+                continue
+            result = resolver.resolve(perk, holder=holder)
+            if result is not None:
+                fired.append(result)
+    if not fired:
+        return []
+
+    scope_ctx = SituationContext(
+        holder=subject,
+        subject=subject,
+        target=target,
+        resolution=resolution,
+        mission=mission,
+        battle_action_kind=battle_action_kind,
+        attacker=attacker,
+    )
+    mission_category_ids = mission_category_ids_for(scope_ctx)
+    return [
+        firing
+        for firing in fired
+        if perk_scope_matches(firing.perk, scope_ctx, mission_category_ids=mission_category_ids)
+    ]
+
+
+def announce_dormant_perks(dormant: list[FiredPerk], *, subject: CharacterSheet) -> None:
+    """Announce every dormant firing as the "loud OFF state" (#2536 slice 3,
+    Task 7, ruling 2): a disengaged vow says so out loud, at the exact moment
+    it would have answered, instead of silently doing nothing.
+
+    Exact line: ``"your vow lies dormant — {perk.name} would have answered
+    here"`` — delivered to the HOLDER (= ``subject``) ONLY, never the room
+    (unlike ``announce_fired_perks``, which broadcasts). Dual dispatch, single
+    recipient:
+
+    - A narrator-authored WHISPER-mode ``Interaction``, receiver-scoped to the
+      subject's PRIMARY persona — mirrors ``record_whisper_interaction``'s
+      receiver/target-persona shape (``receivers=[subject_persona],
+      target_personas=[subject_persona]``), but is NOT built by calling
+      ``record_whisper_interaction`` directly: that function derives its
+      AUTHOR persona from a ``character`` argument (the whisperer), which
+      would wrongly attribute the line to the subject narrating to
+      themselves rather than to the system Narrator. This function instead
+      calls ``create_interaction`` directly with ``persona=narrator``.
+    - The WS payload is sent ONLY to ``subject.character`` via
+      ``_send_to_objects`` — deliberately NOT via ``push_interaction``, which
+      would resolve the broadcast location from the WRITER persona's
+      (narrator's) own — usually unset — character location, the exact
+      "resolve delivery off the wrong object" bug class ``announce_fired_perks``'s
+      docstring documents for ``message_location``. Sending directly to
+      ``[subject.character]`` sidesteps location resolution entirely — there
+      is nowhere to broadcast to; this is a single addressed message.
+    - A direct ``subject.character.msg(text)`` telnet companion, mirroring
+      ``announce_fired_perks``'s own dual-dispatch discipline.
+
+    No-op (no query, no dispatch) when ``dormant`` is empty, ``subject`` has
+    no character, or the character has no primary persona.
+    """
+    if not dormant:
+        return
+
+    subject_character = subject.character
+    if subject_character is None:
+        return
+
+    try:
+        subject_persona = subject.primary_persona
+    except ObjectDoesNotExist:
+        return
+
+    from world.scenes.constants import InteractionMode  # noqa: PLC0415
+    from world.scenes.interaction_services import (  # noqa: PLC0415
+        _build_interaction_payload,
+        _send_to_objects,
+        create_interaction,
+        get_active_scene,
+    )
+    from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
+
+    narrator = get_or_create_narrator_persona()
+    scene = get_active_scene(subject_character.location)
+
+    for firing in dormant:
+        text = f"your vow lies dormant — {firing.perk.name} would have answered here"
+
+        interaction = create_interaction(
+            persona=narrator,
+            content=text,
+            mode=InteractionMode.WHISPER,
+            scene=scene,
+            receivers=[subject_persona],
+            target_personas=[subject_persona],
+        )
+        payload = _build_interaction_payload(
+            interaction_id=interaction.pk,
+            persona=narrator,
+            content=interaction.content,
+            mode=interaction.mode,
+            timestamp=interaction.timestamp.isoformat(),
+            scene_id=interaction.scene_id,
+            receiver_persona_ids=[subject_persona.pk],
+            target_persona_ids=[subject_persona.pk],
+        )
+        _send_to_objects([subject_character], payload)
+        # Telnet companion (mirrors announce_fired_perks's dual-dispatch
+        # discipline) — addressed directly, HOLDER-only, never the room.
+        subject_character.msg(text)
 
 
 def _self_candidates(subject: CharacterSheet) -> list[_Candidate]:
@@ -191,6 +416,39 @@ def _self_candidates(subject: CharacterSheet) -> list[_Candidate]:
     role_ids: set[int] = set()
     for membership in character.covenant_roles.active_memberships:
         if not membership.engaged:
+            continue
+        role_ids.add(membership.covenant_role_id)
+        resolved_role = resolve_effective_role(character=character, role=membership.covenant_role)
+        role_ids.add(resolved_role.pk)
+
+    return [(role_id, subject, _SELF_BENEFICIARIES) for role_id in role_ids]
+
+
+def _dormant_self_candidates(subject: CharacterSheet) -> list[_Candidate]:
+    """Subject's own DISENGAGED (but still active) roles — the dormant-vow
+    mirror of ``_self_candidates`` (#2536 slice 3, Task 7, ruling 2's "loud
+    OFF state"). Same anchor + resolved sub-role ADD semantics, same
+    ``_SELF_BENEFICIARIES`` set — a disengaged vow never buffs allies (dormant
+    perks are never ``COVENANT_ALLIES``/``WHOLE_GROUP``-for-a-mate; the
+    slice-2 reversal documented at the top of this module only concerns a
+    co-present MATE's own engagement, never the SUBJECT's).
+
+    Zero queries beyond the cached handler list: ``character.covenant_roles
+    .active_memberships`` is the SAME cached ``_rows`` list ``_self_candidates``
+    already reads — every wiring seam calls this function right after its own
+    live ``applicable_perks`` call, which has already warmed the cache, so
+    this never issues a query of its own (the every-check fast path the
+    module docstring's query-discipline section documents for the live path).
+    """
+    character = subject.character
+    if character is None:
+        return []
+
+    from world.covenants.services import resolve_effective_role  # noqa: PLC0415
+
+    role_ids: set[int] = set()
+    for membership in character.covenant_roles.active_memberships:
+        if membership.engaged:
             continue
         role_ids.add(membership.covenant_role_id)
         resolved_role = resolve_effective_role(character=character, role=membership.covenant_role)
@@ -379,11 +637,11 @@ def _fetch_candidate_perks(
 
 
 class _PerkResolver:
-    """Evaluates candidate perks against the ONE (subject, target, resolution)
-    triple shared by every candidate holder in a single ``applicable_perks``
-    call. Holds a per-call situation-evaluation cache (keyed on
-    ``(situation, holder_pk)``) so a situation shared by multiple candidate
-    perks/holders is evaluated at most once.
+    """Evaluates candidate perks against the ONE (subject, target, resolution,
+    attacker) tuple shared by every candidate holder in a single
+    ``applicable_perks`` call. Holds a per-call situation-evaluation cache
+    (keyed on ``(situation, holder_pk)``) so a situation shared by multiple
+    candidate perks/holders is evaluated at most once.
     """
 
     def __init__(
@@ -392,17 +650,23 @@ class _PerkResolver:
         subject: CharacterSheet,
         target: CharacterSheet | None,
         resolution: object | None,
+        attacker: object | None = None,
     ) -> None:
         self.subject = subject
         self.target = target
         self.resolution = resolution
+        self.attacker = attacker
         self._eval_cache: dict[tuple[str, int], bool] = {}
 
     def _holds(self, situation: str, holder: CharacterSheet) -> bool:
         key = (situation, holder.pk)
         if key not in self._eval_cache:
             ctx = SituationContext(
-                holder=holder, subject=self.subject, target=self.target, resolution=self.resolution
+                holder=holder,
+                subject=self.subject,
+                target=self.target,
+                resolution=self.resolution,
+                attacker=self.attacker,
             )
             self._eval_cache[key] = SITUATION_EVALUATORS[situation](ctx)
         return self._eval_cache[key]

@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType, CheckTypeCapabilityModifier, Consequence
+    from world.covenants.models import VowSituationalPerk
     from world.covenants.perks.context import SituationContext
     from world.mechanics.models import CharacterChallengeRecord
     from world.scenes.models import Interaction, Scene
@@ -64,10 +65,12 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
         extra_modifiers: Additional modifiers from caller (goals, magic, etc.).
         effort_level: Optional EffortLevel value. Applies effort check modifier.
         fatigue_penalty: Penalty from fatigue zone (caller-computed, typically negative).
-        situation_ctx: (#2536, Task 5) the checking character's own
-            ``SituationContext`` — only ``.resolution`` (a ``CombatRoundContext``
-            or ``None``) and ``.target`` are read; ``.holder``/``.subject`` are
-            unused here (the checking character's ``CharacterSheet`` is
+        situation_ctx: (#2536, Task 5; ``.attacker`` added slice 3 Task 6) the
+            checking character's own ``SituationContext`` — only
+            ``.resolution`` (a ``CombatRoundContext`` or ``None``),
+            ``.target``, and ``.attacker`` (the defense-side attacking
+            entity, or ``None`` on offense) are read; ``.holder``/``.subject``
+            are unused here (the checking character's ``CharacterSheet`` is
             resolved from ``character`` directly). ``None`` (the default) is
             byte-identical to pre-#2536 behavior — no query, no perk lookup.
             When provided, fires ``CHECK_BONUS`` situational perks
@@ -237,7 +240,10 @@ def _situational_perk_check_bonus(
     thread-level scaling, same integer truncation after summing in
     ``Decimal``) but scopes fired perks to ``check_type``: a perk with
     ``check_type=None`` fires on any check; a perk scoped to a specific
-    ``CheckType`` fires only when it matches THIS check.
+    ``CheckType`` fires only when it matches THIS check. Also applies
+    ``perks.services.perk_scope_matches`` (#2536 slice 3) — the shared
+    mission/battle scope filter both this function and
+    ``vow_situational_power_term`` run every fired perk through.
 
     Returns 0 with no query beyond resolving the character's
     ``CharacterSheet`` when ``situation_ctx`` is ``None`` — the
@@ -251,6 +257,15 @@ def _situational_perk_check_bonus(
     branches are mutually exclusive, never both), so this is the ONE place
     a CHECK_BONUS firing can be announced without risking a double-announce.
     See ``perks.services.announce_fired_perks``'s docstring.
+
+    Makes ONE dormant pass right after computing the live firings (#2536
+    slice 3, Task 7 — ruling 2's "loud OFF state"): a DISENGAGED role that
+    would have answered this check announces the dormant line to the
+    subject alone, respecting the SAME ``check_type`` + scope filters the
+    live set goes through — see ``perks.services.dormant_perk_firings``/
+    ``announce_dormant_perks``. Fires even when ``fired`` (the live,
+    engaged set) is empty — a wholly-disengaged vow has no live firings at
+    all, but that is exactly the case ruling 2 wants to be loud about.
     """
     if situation_ctx is None:
         return 0
@@ -262,8 +277,12 @@ def _situational_perk_check_bonus(
 
     from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
     from world.covenants.perks.services import (  # noqa: PLC0415
+        announce_dormant_perks,
         announce_fired_perks,
         applicable_perks,
+        dormant_perk_firings,
+        mission_category_ids_for,
+        perk_scope_matches,
     )
     from world.magic.services.threads import (  # noqa: PLC0415
         total_thread_level_across_all_kinds,
@@ -274,11 +293,38 @@ def _situational_perk_check_bonus(
         effect_kind=PerkEffectKind.CHECK_BONUS,
         resolution=situation_ctx.resolution,
         target=situation_ctx.target,
+        attacker=situation_ctx.attacker,
     )
+
+    dormant = dormant_perk_firings(
+        sheet,
+        effect_kind=PerkEffectKind.CHECK_BONUS,
+        resolution=situation_ctx.resolution,
+        target=situation_ctx.target,
+        mission=situation_ctx.mission,
+        battle_action_kind=situation_ctx.battle_action_kind,
+        attacker=situation_ctx.attacker,
+    )
+    if dormant:
+        dormant_scoped = [
+            firing
+            for firing in dormant
+            if firing.perk.check_type_id is None or firing.perk.check_type_id == check_type.pk
+        ]
+        announce_dormant_perks(dormant_scoped, subject=sheet)
+
     scoped = [
         firing
         for firing in fired
         if firing.perk.check_type_id is None or firing.perk.check_type_id == check_type.pk
+    ]
+    # #2536 slice 3 review fix: hoist the mission-category set ONCE for this
+    # resolution rather than re-querying it per scoped perk below.
+    mission_category_ids = mission_category_ids_for(situation_ctx)
+    scoped = [
+        f
+        for f in scoped
+        if perk_scope_matches(f.perk, situation_ctx, mission_category_ids=mission_category_ids)
     ]
     if not scoped:
         return 0
@@ -293,6 +339,61 @@ def _situational_perk_check_bonus(
     for firing in scoped:
         total += Decimal(total_threads) * firing.magnitude_tenths / 10
     return int(total)
+
+
+def _guarantee_floor(
+    perk: "VowSituationalPerk", *, raw_level: int, non_botch_floor: int
+) -> int | None:
+    """The floor a TIER_FLOOR/BOTCH_IMMUNITY perk demands against ``raw_level``,
+    or ``None`` when it never applies here (#2536 slice 2/3). Shared by the
+    live-binding computation and the dormant "would it have bound" check in
+    ``_apply_outcome_guarantees`` — one rule, one place.
+    """
+    from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
+
+    if perk.effect_kind == PerkEffectKind.TIER_FLOOR:
+        return perk.floor_success_level
+    # BOTCH_IMMUNITY -- binds only against an actual botch.
+    return non_botch_floor if raw_level <= BOTCH_SUCCESS_LEVEL_MAX else None
+
+
+def _announce_dormant_outcome_guarantees(
+    sheet: "CharacterSheet",
+    situation_ctx: "SituationContext",
+    kinds: tuple[str, ...],
+    raw_level: int,
+) -> None:
+    """The dormant half of ``_apply_outcome_guarantees`` (#2536 slice 3, Task 7 —
+    ruling 2's "loud OFF state"), split out to keep the main function's
+    branching within the complexity budget. Announces a DISENGAGED guarantee
+    perk only when it WOULD have bound against the RAW outcome — never merely
+    because a disengaged perk exists.
+    """
+    from world.covenants.perks.services import (  # noqa: PLC0415
+        announce_dormant_perks,
+        dormant_perk_firings,
+    )
+
+    dormant = dormant_perk_firings(
+        sheet,
+        effect_kind=kinds,
+        resolution=situation_ctx.resolution,
+        target=situation_ctx.target,
+        mission=situation_ctx.mission,
+        battle_action_kind=situation_ctx.battle_action_kind,
+        attacker=situation_ctx.attacker,
+    )
+    if not dormant:
+        return
+
+    non_botch_floor = BOTCH_SUCCESS_LEVEL_MAX + 1
+    would_have_bound = []
+    for firing in dormant:
+        floor = _guarantee_floor(firing.perk, raw_level=raw_level, non_botch_floor=non_botch_floor)
+        if floor is not None and floor > raw_level:
+            would_have_bound.append(firing)
+    if would_have_bound:
+        announce_dormant_perks(would_have_bound, subject=sheet)
 
 
 def _apply_outcome_guarantees(
@@ -317,6 +418,15 @@ def _apply_outcome_guarantees(
     the outcome actually changed — a guarantee that didn't bind is silence, not
     spam. ``situation_ctx=None`` (every pre-slice-2 caller) or ``outcome=None``
     returns unchanged with zero queries.
+
+    Makes ONE dormant pass right after computing the live firings (#2536
+    slice 3, Task 7 — ruling 2's "loud OFF state"): a DISENGAGED guarantee
+    perk announces only when it WOULD have bound — its floor (or, for
+    BOTCH_IMMUNITY, the non-botch floor against an actual raw botch) exceeds
+    the RAW outcome's ``success_level`` — never merely because a disengaged
+    perk exists. Runs whether or not the live set has any binding perk: a
+    wholly-disengaged vow has no live firings at all, which is exactly the
+    case ruling 2 wants to be loud about.
     """
     if situation_ctx is None or outcome is None:
         return outcome
@@ -332,23 +442,26 @@ def _apply_outcome_guarantees(
         applicable_perks,
     )
 
+    kinds = (PerkEffectKind.TIER_FLOOR, PerkEffectKind.BOTCH_IMMUNITY)
+    raw_level = int(outcome.success_level)
+    non_botch_floor = BOTCH_SUCCESS_LEVEL_MAX + 1
+
     fired = applicable_perks(
         sheet,
-        effect_kind=(PerkEffectKind.TIER_FLOOR, PerkEffectKind.BOTCH_IMMUNITY),
+        effect_kind=kinds,
         resolution=situation_ctx.resolution,
         target=situation_ctx.target,
+        attacker=situation_ctx.attacker,
     )
+
+    _announce_dormant_outcome_guarantees(sheet, situation_ctx, kinds, raw_level)
+
     if not fired:
         return outcome
 
-    raw_level = int(outcome.success_level)
-    non_botch_floor = BOTCH_SUCCESS_LEVEL_MAX + 1
     binding = []
     for firing in fired:
-        if firing.perk.effect_kind == PerkEffectKind.TIER_FLOOR:
-            floor = firing.perk.floor_success_level
-        else:  # BOTCH_IMMUNITY — binds only against an actual botch
-            floor = non_botch_floor if raw_level <= BOTCH_SUCCESS_LEVEL_MAX else None
+        floor = _guarantee_floor(firing.perk, raw_level=raw_level, non_botch_floor=non_botch_floor)
         if floor is not None and floor > raw_level:
             binding.append((floor, firing))
     if not binding:

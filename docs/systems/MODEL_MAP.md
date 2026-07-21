@@ -2940,6 +2940,8 @@
 **Foreign Keys:**
   - covenant_role -> covenants.CovenantRole [FK]
   - check_type -> checks.CheckType [FK] (nullable)
+  - mission_category -> missions.MissionCategory [FK] (nullable)
+  - mission_template -> missions.MissionTemplate [FK] (nullable)
 **Pointed to by:**
   - situations <- covenants.VowSituationalPerkSituation
   - rungs <- covenants.VowSituationalPerkRung
@@ -5705,6 +5707,7 @@
 
 ### MissionCategory
 **Pointed to by:**
+  - situational_perks <- covenants.VowSituationalPerk
   - templates <- missions.MissionTemplate
 
 ### MissionTemplate
@@ -5715,6 +5718,7 @@
 **Pointed to by:**
   - crisis_options <- societies.DomainCrisisTypeOption
   - clues <- clues.Clue
+  - situational_perks <- covenants.VowSituationalPerk
   - nodes <- missions.MissionNode
   - instances <- missions.MissionInstance
   - givers <- missions.MissionGiver

@@ -40,6 +40,7 @@ from world.missions.constants import (
     MissionStatus,
     ReportStyle,
 )
+from world.missions.services._situation import mission_situation_ctx
 from world.missions.services.play import BeatActionError, participant_for
 from world.missions.services.rewards import apply_deed_rewards
 
@@ -146,7 +147,9 @@ def _embellish_difficulty(functionary: Functionary) -> int:  # noqa: ARG001
     return DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
 
 
-def _run_embellish_check(reporter: ObjectDB, functionary: Functionary) -> bool:
+def _run_embellish_check(
+    reporter: ObjectDB, functionary: Functionary, instance: MissionInstance
+) -> bool:
     """Roll the manipulation check against the giver. Raises if the reporter can't embellish."""
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check  # noqa: PLC0415
@@ -163,11 +166,14 @@ def _run_embellish_check(reporter: ObjectDB, functionary: Functionary) -> bool:
         check_type,
         target_difficulty=_embellish_difficulty(functionary),
         specialization=_manipulation_specialization(reporter),
+        situation_ctx=mission_situation_ctx(reporter, instance),
     )
     return result.outcome is not None and result.outcome.success_level >= 0
 
 
-def _run_consequence_dodge_check(reporter: ObjectDB, functionary: Functionary) -> bool:
+def _run_consequence_dodge_check(
+    reporter: ObjectDB, functionary: Functionary, instance: MissionInstance
+) -> bool:
     """The mostly-accurate check: report around the truth to dodge the criminal fallout (#1765).
 
     Ratified (Apostate 2026-07-03): rides **Con** (charm + Persuasion +
@@ -189,6 +195,7 @@ def _run_consequence_dodge_check(reporter: ObjectDB, functionary: Functionary) -
         reporter,
         check_type,
         target_difficulty=_embellish_difficulty(functionary),
+        situation_ctx=mission_situation_ctx(reporter, instance),
     )
     return result.outcome is not None and result.outcome.success_level >= 0
 
@@ -228,6 +235,7 @@ def _apply_masked_deed_association(
             reporter,
             check_type,
             target_difficulty=_embellish_difficulty(functionary),
+            situation_ctx=mission_situation_ctx(reporter, instance),
         )
         if result.outcome is not None and result.outcome.success_level >= 0:
             return  # slipped away clean — nobody connected the faces.
@@ -296,10 +304,10 @@ def _apply_style_payout(
 
     embellish_success: bool | None = None
     if style == ReportStyle.EMBELLISHED:
-        embellish_success = _run_embellish_check(reporter, functionary)
+        embellish_success = _run_embellish_check(reporter, functionary, instance)
     dodge_success: bool | None = None
     if style == ReportStyle.MOSTLY_ACCURATE:
-        dodge_success = _run_consequence_dodge_check(reporter, functionary)
+        dodge_success = _run_consequence_dodge_check(reporter, functionary, instance)
 
     # Baseline money (all styles) — the authored lines. CRIME_WATCH is live
     # (#1765): it mints at the report room unless the dodge succeeded; RUMOR

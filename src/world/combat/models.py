@@ -58,6 +58,7 @@ from world.fatigue.constants import EffortLevel
 from world.gm.constants import GMLevel
 from world.magic.constants import EffectKind, VitalBonusTarget
 from world.magic.models.commitments import CommittingDeclaration
+from world.magic.types.aura import AffinityType
 from world.scenes.round_models import AbstractRound
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
@@ -136,6 +137,32 @@ class CombatEncounter(AbstractRound):
         blank=True,
         related_name="duels_won",
         help_text="Recorded duel victor; null while ongoing or for an abandoned/mutual stop.",
+    )
+    is_champion_duel = models.BooleanField(
+        default=False,
+        help_text=(
+            "True iff this DUEL encounter was opened by "
+            "world.battles.services.open_champion_duel (#2536 slice 3 Battle wiring) — a "
+            "PC Champion's duel against an enemy boss. Stamped exclusively there; every "
+            "other DUEL creation path (world.combat.duels.create_lethal_duel's other "
+            "callers, world.battles.services.open_siege_engine_encounter) leaves this "
+            "False. Read by the Situation.CHAMPION_DUEL evaluator "
+            "(world.covenants.perks.evaluators) for per-vow situational perk scoping."
+        ),
+    )
+    opened_from_parley = models.BooleanField(
+        default=False,
+        help_text=(
+            "True iff world.combat.cast_seed.seed_or_feed_encounter_from_cast CREATED "
+            "this encounter from a hostile cast landing inside an active, non-Battle-"
+            "backed Scene (#2536 slice 3, Task 4) — the same active-Scene classification "
+            "the Situation.DURING_NEGOTIATION evaluator documents. Stamped only at "
+            "CREATE time; feeding an existing encounter never flips it. v1 approximation "
+            "(PR-body judgment call): stays True for the encounter's entire lifetime, not "
+            "just its opening moment. Read by the Situation.COMBAT_OPENED_FROM_PARLEY and "
+            "Situation.AMBUSH_UNDERWAY evaluators (world.covenants.perks.evaluators) for "
+            "per-vow situational perk scoping."
+        ),
     )
     story_beat = models.ForeignKey(
         "stories.Beat",
@@ -596,6 +623,21 @@ class CombatOpponent(SharedMemoryModel):
     vulnerability_intensity_bonus = models.PositiveIntegerField(
         default=0,
         help_text="Intensity bonus during vulnerability window; from BreakBarConfig.",
+    )
+
+    # === Affinity field (#2536 slice 3 Task 6) ===
+    affinity = models.CharField(
+        max_length=20,
+        choices=AffinityType.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Authored magical affinity for non-persona NPCs (generic/ephemeral "
+            "opponents carry no CharacterAura row to infer from). Blank = "
+            "untyped/unauthored — the ATTACKER_ABYSSAL situational-perk evaluator "
+            "(world.covenants.perks.evaluators) falls back to a reachable "
+            "ObjectDB's CharacterAura.dominant_affinity when this is blank."
+        ),
     )
 
     class Meta:

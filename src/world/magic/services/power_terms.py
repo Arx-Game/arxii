@@ -437,13 +437,25 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     See ADR-0151 (the slice-1 machinery ADR) for the precise slice-2
     refactor this implies if the ledger ever needs dynamic per-source TERM
     labels.
+
+    **Dormant pass (#2536 slice 3, Task 7 — ruling 2's "loud OFF state"):**
+    right after resolving ``battle_action_kind``, makes ONE
+    ``dormant_perk_firings`` call and announces the result via
+    ``announce_dormant_perks`` — BEFORE the "subject has an engaged role"
+    early-exit below, since a subject whose entire vow is disengaged has no
+    engaged role at all and is exactly the case this pass exists to catch.
     """
     from decimal import Decimal  # noqa: PLC0415
 
     from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
+    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
     from world.covenants.perks.services import (  # noqa: PLC0415
+        announce_dormant_perks,
         announce_fired_perks,
         applicable_perks,
+        dormant_perk_firings,
+        mission_category_ids_for,
+        perk_scope_matches,
     )
     from world.magic.services.threads import (  # noqa: PLC0415
         total_thread_level_across_all_kinds,
@@ -454,6 +466,38 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     character = ctx.sheet.character
     if not hasattr(character, "covenant_roles"):
         return 0
+
+    # #2536 slice 3: battle_action_kind is the only scope column clean()
+    # permits on a POWER_BONUS row (mission scopes are CHECK_BONUS-only),
+    # but this runs through the SAME shared perk_scope_matches helper the
+    # CHECK_BONUS seam uses — one rule, one place. ``ctx.situation_ctx``
+    # carries ``battle_action_kind`` when a caller threads a real
+    # ``SituationContext`` through as the resolution (Battle warfare
+    # casts, slice 3 Task 3, via typed attribute access — not a duck
+    # read); an ordinary combat ``CombatRoundContext`` or ``None`` is
+    # not a ``SituationContext``, so the isinstance guard leaves
+    # ``battle_action_kind`` at ``None`` and every battle_action_kind
+    # scope column simply no-ops there.
+    battle_action_kind = None
+    if isinstance(ctx.situation_ctx, SituationContext):
+        battle_action_kind = ctx.situation_ctx.battle_action_kind
+
+    # #2536 slice 3, Task 7 (ruling 2's "loud OFF state"): the dormant pass
+    # runs BEFORE the "subject has an engaged role" guard below — a subject
+    # whose ENTIRE vow is disengaged has no engaged role at all, which is
+    # exactly the case this pass must still catch. ``dormant_perk_firings``
+    # reads the same cached ``covenant_roles`` handler list this guard does,
+    # so running it first costs no extra query either way.
+    dormant = dormant_perk_firings(
+        ctx.sheet,
+        effect_kind=PerkEffectKind.POWER_BONUS,
+        resolution=ctx.situation_ctx,
+        target=ctx.target_sheet,
+        battle_action_kind=battle_action_kind,
+    )
+    if dormant:
+        announce_dormant_perks(dormant, subject=ctx.sheet)
+
     if not character.covenant_roles.currently_engaged_roles():
         return 0
 
@@ -463,6 +507,30 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
         resolution=ctx.situation_ctx,
         target=ctx.target_sheet,
     )
+    if fired:
+        scope_ctx = SituationContext(
+            holder=ctx.sheet,
+            subject=ctx.sheet,
+            target=ctx.target_sheet,
+            resolution=ctx.situation_ctx,
+            battle_action_kind=battle_action_kind,
+        )
+        # #2536 slice 3 review fix: hoist the mission-category set ONCE for
+        # this resolution (mirrors ``_situational_perk_check_bonus`` in
+        # ``checks.services``) rather than re-querying it per scoped perk
+        # below. ``scope_ctx.mission`` is always ``None`` here today (POWER_BONUS
+        # rows can only author ``battle_action_kind`` scope — see the comment
+        # above), so this call issues no query; hoisting anyway keeps both
+        # seams sharing the identical contract if that ever changes. Folded
+        # into the SAME truthiness check as the fetch above (rather than a
+        # second early return) to keep this provider's return count within
+        # the lint budget — see the empty-``fired`` guard below.
+        mission_category_ids = mission_category_ids_for(scope_ctx)
+        fired = [
+            firing
+            for firing in fired
+            if perk_scope_matches(firing.perk, scope_ctx, mission_category_ids=mission_category_ids)
+        ]
     if not fired:
         return 0
 
