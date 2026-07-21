@@ -19,6 +19,10 @@ from world.magic.audere import (
     AbstractPendingOffer,
     _check_intensity_gate,
 )
+from world.magic.models.techniques import (
+    AbstractAppliedCondition,
+    AbstractCapabilityGrant,
+)
 from world.progression.models.advancement import AbstractClassLevelAdvancement
 from world.progression.selectors import current_path_for_character
 from world.societies.renown_config import RenownAwardConfig
@@ -98,6 +102,14 @@ class PendingAudereMajoraOffer(AbstractPendingOffer):
         AudereMajoraThreshold,
         on_delete=models.PROTECT,
         related_name="pending_offers",
+    )
+    faith_variant = models.ForeignKey(
+        "AudereMajoraFaithVariant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pending_offers",
+        help_text="Faith variant selected at offer creation; null = no faith coupling.",
     )
 
     class Meta:
@@ -428,9 +440,54 @@ def maybe_create_audere_majora_offer(
     )
 
     if created:
-        _broadcast_manifestation(character, threshold.manifestation_text)
+        variant = maybe_apply_audere_faith_coupling(sheet, threshold, offer)
+        if variant is not None:
+            _broadcast_manifestation(character, variant.manifestation_text)
+        else:
+            _broadcast_manifestation(character, threshold.manifestation_text)
 
     return offer
+
+
+def maybe_apply_audere_faith_coupling(
+    sheet: CharacterSheet,
+    threshold: AudereMajoraThreshold,
+    offer: PendingAudereMajoraOffer,
+) -> AudereMajoraFaithVariant | None:
+    """Select and persist a faith variant on the offer if the character qualifies.
+
+    Does NOT spend the pool — pool spend is deferred to ``cross_threshold``.
+    Returns the selected variant, or None. If a variant is selected, its
+    ``manifestation_text`` replaces the generic threshold broadcast.
+    """
+    from world.worship.models import DevotionStanding  # noqa: PLC0415
+
+    variants = AudereMajoraFaithVariant.objects.filter(
+        threshold=threshold,
+        is_active=True,
+    ).select_related("being")
+
+    best_variant = None
+    best_favor = 0
+    for variant in variants:
+        standing = DevotionStanding.objects.filter(
+            character_sheet=sheet,
+            being=variant.being,
+        ).first()
+        if standing is None or standing.favor < variant.favor_threshold:
+            continue
+        if variant.being.resonance_pool < variant.resonance_pool_cost:
+            continue
+        if standing.favor > best_favor:
+            best_variant = variant
+            best_favor = standing.favor
+
+    if best_variant is None:
+        return None
+
+    offer.faith_variant = best_variant
+    offer.save(update_fields=["faith_variant"])
+    return best_variant
 
 
 # =============================================================================
@@ -517,6 +574,8 @@ class AudereMajoraCrossingResult:
     chosen_path_name: str = ""
     advisory_text: str = ""
     declaration_interaction_id: int | None = None
+    faith_coupling_applied: bool = False
+    faith_being_name: str = ""
 
 
 def _primary_class_level(character: ObjectDB):
@@ -571,6 +630,7 @@ def cross_threshold(
     chosen_path,
     *,
     declaration_text: str,
+    offer: PendingAudereMajoraOffer | None = None,
 ) -> AudereMajoraCrossingResult:
     """Execute the crossing inside the caller's transaction.
 
@@ -638,6 +698,27 @@ def cross_threshold(
     else:
         declaration_id = None
 
+    # Faith coupling bonus (#2360): apply variant conditions + spend pool at crossing.
+    faith_coupling_applied = False
+    faith_being_name = ""
+    if offer is not None and offer.faith_variant_id is not None:
+        variant = offer.faith_variant
+        being = variant.being
+        # Re-check pool (staleness guard — offer was created at cast time).
+        if being.resonance_pool >= variant.resonance_pool_cost:
+            from world.worship.services import spend_worship_pool  # noqa: PLC0415
+
+            for row in variant.condition_applications.select_related("condition"):
+                apply_condition(
+                    target=character,
+                    condition=row.condition,
+                    severity=row.base_severity,
+                    duration_rounds=row.base_duration_rounds,
+                )
+            spend_worship_pool(being, variant.resonance_pool_cost, reason="audere_faith_coupling")
+            faith_coupling_applied = True
+            faith_being_name = being.name
+
     return AudereMajoraCrossingResult(
         accepted=True,
         level_before=level_before,
@@ -645,6 +726,8 @@ def cross_threshold(
         chosen_path_name=chosen_path.name,
         advisory_text=advisory,
         declaration_interaction_id=declaration_id,
+        faith_coupling_applied=faith_coupling_applied,
+        faith_being_name=faith_being_name,
     )
 
 
@@ -706,6 +789,7 @@ def resolve_audere_majora_offer(
             threshold,
             chosen_path,
             declaration_text=declaration_text,
+            offer=locked,
         )
         locked.delete()
 
@@ -728,3 +812,96 @@ def end_audere_majora(character: ObjectDB) -> None:
     if template is None:
         return
     remove_condition(character, template)
+
+
+# =============================================================================
+# Faith Variant (#2360)
+# =============================================================================
+
+
+class AudereMajoraFaithVariant(SharedMemoryModel):
+    """Faith-specific ceremony override for a crossing threshold (#2360).
+
+    When a crossing character has high devotion to a being whose pool is
+    sufficient, this variant overrides the threshold's vision_text and
+    manifestation_text and grants a mechanical bonus (condition payload).
+    Pool is spent at crossing time (not offer creation), so a declined
+    offer costs nothing.
+    """
+
+    threshold = models.ForeignKey(
+        AudereMajoraThreshold,
+        on_delete=models.CASCADE,
+        related_name="faith_variants",
+    )
+    being = models.ForeignKey(
+        "worship.WorshippedBeing",
+        on_delete=models.PROTECT,
+        related_name="audere_majora_faith_variants",
+    )
+    vision_text = models.TextField(
+        help_text="Shown ONLY to the crossing player. Spoiler-private.",
+    )
+    manifestation_text = models.TextField(
+        help_text="Broadcast to the room when the offer fires.",
+    )
+    resonance_pool_cost = models.PositiveIntegerField(
+        help_text="Spent from being.resonance_pool when this variant fires (at crossing time).",
+    )
+    favor_threshold = models.PositiveIntegerField(default=50)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["threshold", "being"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["threshold", "being"],
+                name="unique_faith_variant_per_threshold_being",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"FaithVariant({self.threshold} / {self.being})"
+
+
+class AudereMajoraFaithVariantCapabilityGrant(AbstractCapabilityGrant):
+    """Capability grant payload for an AudereMajoraFaithVariant (#2360).
+
+    INERT until a capability-read-path issue is built — mirrors
+    SignatureMotifBonusCapabilityGrant inertness.
+    """
+
+    faith_variant = models.ForeignKey(
+        AudereMajoraFaithVariant,
+        on_delete=models.CASCADE,
+        related_name="capability_grants",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["faith_variant", "capability"],
+                name="faith_variant_cap_grant_unique",
+            ),
+        ]
+
+
+class AudereMajoraFaithVariantAppliedCondition(AbstractAppliedCondition):
+    """Applied condition payload for an AudereMajoraFaithVariant (#2360).
+
+    The MVP mechanical bonus surface for faith-colored crossings.
+    """
+
+    faith_variant = models.ForeignKey(
+        AudereMajoraFaithVariant,
+        on_delete=models.CASCADE,
+        related_name="condition_applications",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["faith_variant", "condition", "target_kind"],
+                name="faith_variant_applied_condition_unique",
+            ),
+        ]

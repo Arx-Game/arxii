@@ -32392,6 +32392,56 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorshippedBeingRef'
           description: ''
+  /api/worship/miracles/:
+    get:
+      operationId: worship_miracles_list
+      description: Staff-facing miracle catalog browser (#2360).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMiracleList'
+          description: ''
+  /api/worship/miracles/{id}/:
+    get:
+      operationId: worship_miracles_retrieve
+      description: Staff-facing miracle catalog browser (#2360).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this miracle.
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Miracle'
+          description: ''
 components:
   schemas:
     AcceptSoulTetherRequest:
@@ -33156,6 +33206,12 @@ components:
         declaration_interaction_id:
           type: integer
           nullable: true
+        faith_coupling_applied:
+          type: boolean
+          default: false
+        faith_being_name:
+          type: string
+          default: ''
       required:
       - accepted
       - advisory_text
@@ -44974,6 +45030,14 @@ components:
       - id
       - label
       - name
+    InterventionTriggerEnum:
+      enum:
+      - incapacitated
+      - near_death
+      type: string
+      description: |-
+        * `incapacitated` - Character Incapacitated
+        * `near_death` - Character Near Death
     ItemFacetRead:
       type: object
       description: Read serializer for ItemFacet (GET list/detail).
@@ -45980,6 +46044,61 @@ components:
         * `moderate` - Moderate
         * `high` - High
         * `extreme` - Extreme
+    Miracle:
+      type: object
+      description: Staff-facing miracle catalog serializer (#2360).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        being_name:
+          type: string
+          readOnly: true
+        resonance_pool_cost:
+          type: integer
+          readOnly: true
+          description: Amount deducted from being.resonance_pool when performed.
+        intervention_trigger:
+          allOf:
+          - $ref: '#/components/schemas/InterventionTriggerEnum'
+          readOnly: true
+          description: |-
+            Danger context this miracle responds to.
+
+            * `incapacitated` - Character Incapacitated
+            * `near_death` - Character Near Death
+        favor_threshold:
+          type: integer
+          readOnly: true
+          description: Minimum DevotionStanding.favor required for this miracle to
+            fire.
+        narrative_text:
+          type: string
+          readOnly: true
+          description: Narrative broadcast (EMIT) when this miracle fires.
+        is_active:
+          type: boolean
+          readOnly: true
+        sort_order:
+          type: integer
+          readOnly: true
+      required:
+      - being_name
+      - description
+      - favor_threshold
+      - id
+      - intervention_trigger
+      - is_active
+      - name
+      - narrative_text
+      - resonance_pool_cost
+      - sort_order
     MissionAbandonResult:
       type: object
       description: 'Result of the #1023 abandon endpoint — the run''s id and new status.'
@@ -50960,6 +51079,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Media'
+    PaginatedMiracleList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Miracle'
     PaginatedMissionCategoryList:
       type: object
       required:
@@ -56204,6 +56346,12 @@ components:
           readOnly: true
         vision_text:
           type: string
+          description: Return faith variant vision text if set, else the threshold's.
+          readOnly: true
+        faith_variant_id:
+          type: integer
+          nullable: true
+          description: Faith variant selected at offer creation; null = no faith coupling.
           readOnly: true
         advisory_text:
           type: string
@@ -56235,6 +56383,7 @@ components:
       - character_sheet_id
       - created_at
       - eligible_paths
+      - faith_variant_id
       - fired_intensity
       - id
       - intended_path_id

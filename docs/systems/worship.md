@@ -34,6 +34,99 @@ issue bodies; the model decision is ADR-0132.
   too, prior holders keep theirs; text never names the being).
 - `gods_favorite_achievement_for(sheet)` — gender-variant row resolution.
 
+### Miracles & Divine Intervention (#2360)
+
+Gods spend their accumulated `resonance_pool` on miracles — authored effects that
+fire automatically when a high-devotion PC is in danger, and faith-colored Audere
+Majora crossings.
+
+**Models** (`worship/models.py`)
+
+- `Miracle` — authored catalog entry: `name`, `being` FK (PROTECT),
+  `resonance_pool_cost`, `intervention_trigger` (MiracleTrigger: INCAPACITATED,
+  NEAR_DEATH), `favor_threshold`, `narrative_text`, `is_active`, `sort_order`.
+  Unique per `(being, name)`.
+- `MiracleCapabilityGrant` / `MiracleAppliedCondition` / `MiracleDamageProfile` —
+  payload child rows inheriting `Abstract*` bases from `magic/models/techniques.py`.
+  Capability-grant rows are **inert** until a future read-path issue is built (mirrors
+  `SignatureMotifBonusCapabilityGrant` inertness). `MiracleAppliedCondition` rows are
+  the MVP mechanical effect surface.
+- `MiraclePerformance` — immutable audit row (miracle, being, target_character,
+  scene, resonance_spent, trigger_event, created_at).
+- `DivineInterventionConfig` — singleton (pk=1): `favor_threshold` (default 50),
+  `cooldown_hours` (default 24), `min_pool_for_intervention` (default 100).
+- `MiracleTrigger` (TextChoices in `constants.py`): INCAPACITATED, NEAR_DEATH.
+
+**Services** (`worship/services.py`)
+
+- `spend_worship_pool(being, amount, *, reason)` → bool — the spend counterpart to
+  `grant_worship`. Deducts from `resonance_pool` (floor at 0); returns False if
+  insufficient. Does NOT create an audit row — the caller creates `MiraclePerformance`.
+- `perform_divine_intervention(sheet, being, miracle, *, scene)` → MiraclePerformance —
+  the commit seam: spends pool, applies `MiracleAppliedCondition` rows via
+  `apply_condition`, creates audit row, broadcasts narrative EMIT.
+- `maybe_fire_divine_intervention(character, payload)` — trigger handler: called by
+  the `divine_intervention_on_incapacitated` TriggerDefinition's flow step when
+  `CHARACTER_INCAPACITATED` fires. Checks favor + pool + cooldown, picks highest-
+  priority miracle, calls `perform_divine_intervention`, applies cooldown condition.
+- `install_divine_intervention_trigger(sheet, being)` / `remove_divine_intervention_trigger(sheet, being)` —
+  installs/removes the `Trigger` row on the character's ObjectDB. Called from
+  `bump_devotion` when favor crosses the config threshold. Mirrors Soul Tether's
+  trigger installation pattern.
+
+**Trigger lifecycle**: `bump_devotion` calls `install_divine_intervention_trigger`
+when `standing.favor >= DivineInterventionConfig.favor_threshold`. The trigger
+subscribes to `CHARACTER_INCAPACITATED` (priority 60, above combat escalation's 50).
+When the event fires, the flow's `CALL_SERVICE_FUNCTION` step calls
+`maybe_fire_divine_intervention`. Per-character cooldown via a timed
+`ConditionInstance` ("Divine Intervention Cooldown").
+
+**Seed content** (`worship/factories.py: wire_miracle_content()`): TriggerDefinition +
+FlowDefinition, DivineInterventionConfig singleton, "Divine Intervention Cooldown"
+ConditionTemplate, example Miracle rows per seeded being. Called from
+`seed_worship_content()`.
+
+**Admin**: `MiracleAdmin` (with payload inlines), `MiraclePerformanceAdmin` (read-only
+audit), `DivineInterventionConfigAdmin` (singleton).
+
+**API**: `GET /api/worship/miracles/` — staff-facing catalog browser
+(`IsAdminUser`). No player-facing API — intervention is automatic.
+
+### Audere Majora Faith Coupling (#2360)
+
+When a faithful character crosses Audere Majora, the ceremony gets faith-specific
+vision/manifestation text override + a mechanical bonus. Pool is spent at crossing
+time (not offer creation), so a declined offer costs nothing.
+
+**Models** (`magic/audere_majora.py`)
+
+- `AudereMajoraFaithVariant` — per-being ceremony override: `threshold` FK (CASCADE),
+  `being` FK → `worship.WorshippedBeing` (PROTECT), `vision_text` (spoiler-private),
+  `manifestation_text`, `resonance_pool_cost`, `favor_threshold`, `is_active`.
+  Unique per `(threshold, being)`.
+- `AudereMajoraFaithVariantCapabilityGrant` / `AudereMajoraFaithVariantAppliedCondition` —
+  payload child rows. Capability-grant rows are inert (same as MiracleCapabilityGrant).
+  `AudereMajoraFaithVariantAppliedCondition` rows are the MVP bonus surface.
+- `PendingAudereMajoraOffer.faith_variant` — nullable FK (SET_NULL), persisted at
+  offer creation when a variant qualifies.
+
+**Services** (`magic/audere_majora.py`)
+
+- `maybe_apply_audere_faith_coupling(sheet, threshold, offer)` → variant | None —
+  called from `maybe_create_audere_majora_offer` after offer creation. Checks
+  DevotionStanding + pool sufficiency; if a variant qualifies, persists it on the
+  offer FK and broadcasts the variant's `manifestation_text` (replacing the generic
+  threshold text). Does NOT spend the pool — deferred to crossing time.
+- `cross_threshold` extended with `offer=` kwarg: after the existing crossing logic,
+  if `offer.faith_variant` is set, applies the variant's `AppliedCondition` rows via
+  `apply_condition` and spends the pool via `spend_worship_pool` inside the same
+  `transaction.atomic()`. Re-checks pool sufficiency (staleness guard); skips bonus
+  but completes the crossing if pool is now insufficient.
+
+**Serializer**: `PendingAudereMajoraOfferSerializer.vision_text` — SerializerMethodField;
+returns `faith_variant.vision_text` when set, else `threshold.vision_text`.
+`AudereMajoraCrossingResultSerializer` adds `faith_coupling_applied` + `faith_being_name`.
+
 **Skill & seeds** (`seeds/worship_content.py`, cluster `worship`)
 
 - Rites skill (Trait-backed, open to all paths) + the four tradition

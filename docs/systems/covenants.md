@@ -103,18 +103,21 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `covenant_role_specialty_power_term` (`world.magic.services.power_terms`, see
   `docs/systems/magic.md`). Lore-repo content
   (`covenants.covenantroletechniquespecialty` in `CONTENT_MODELS`).
-- **`VowSituationalPerk`** (#2536, ADR-0151; **Layer 4** of the vow-power model — "the point of
-  vows") — the authoring model for deterministic, situational bonuses: `covenant_role` FK
-  (anchor OR sub-role, ADD semantics like `CovenantRoleTechniqueSpecialty` above — no restriction
-  to primary-only), `name` (the announced label, e.g. "Scout's Instinct"), `beneficiary`
-  (`PerkBeneficiary`: `SELF`/`COVENANT_ALLIES`/`WHOLE_GROUP` — group-granting perks are
-  first-class, not an edge case), `effect_kind` (`PerkEffectKind`: `POWER_BONUS`/`CHECK_BONUS`
-  live this slice; `TIER_FLOOR`/`BOTCH_IMMUNITY` are schema-only, slice 2 wires the outcome-
-  guarantee resolution), `magnitude_tenths` (integer-tenths, `PositiveIntegerField` — no
-  negative magnitudes anywhere in this table; a vow's weakness is the absence of a perk, never a
-  malus), `announce_template` (player-facing line with `{holder}`/`{subject}` placeholders), and
-  an optional `check_type` FK (`CHECK_BONUS` scope; null = any check — `clean()` rejects a
-  `check_type` on a non-`CHECK_BONUS` row). Natural key `(covenant_role, name)`, lore-repo
+- **`VowSituationalPerk`** (#2536, ADR-0151/ADR-0152; **Layer 4** of the vow-power model — "the
+  point of vows") — the authoring model for deterministic, situational bonuses: `covenant_role`
+  FK (anchor OR sub-role, ADD semantics like `CovenantRoleTechniqueSpecialty` above — no
+  restriction to primary-only), `name` (the announced label, e.g. "Scout's Instinct"),
+  `beneficiary` (`PerkBeneficiary`: `SELF`/`COVENANT_ALLIES`/`WHOLE_GROUP` — group-granting perks
+  are first-class, not an edge case), `effect_kind` (`PerkEffectKind`: all four values are live —
+  `POWER_BONUS`/`CHECK_BONUS` shipped slice 1; `TIER_FLOOR`/`BOTCH_IMMUNITY` fire in
+  `perform_check`'s outcome resolution as of slice 2, see "Outcome guarantees" below),
+  `magnitude_tenths` (integer-tenths, `PositiveIntegerField` — no negative magnitudes anywhere in
+  this table; a vow's weakness is the absence of a perk, never a malus), `announce_template`
+  (player-facing line with `{holder}`/`{subject}` placeholders), an optional `check_type` FK
+  (`CHECK_BONUS` scope; null = any check — `clean()` rejects a `check_type` on a non-`CHECK_BONUS`
+  row), and an optional `floor_success_level` (`SmallIntegerField`, canonical −10..+10
+  `success_level` scale — `TIER_FLOOR`-only, `clean()`-required on `TIER_FLOOR` rows and rejected
+  on every other `effect_kind`, ADR-0152). Natural key `(covenant_role, name)`, lore-repo
   content (`covenants.vowsituationalperk` in `CONTENT_MODELS`).
 - **`VowSituationalPerkSituation`** — `(perk FK, situation choice)` join; every attached
   situation must hold (AND composition). `situation` is drawn from
@@ -146,16 +149,34 @@ modules import combat/checks contexts at function level, never the reverse):
 - **`services.py`** — `applicable_perks(subject, *, effect_kind, resolution, target) ->
   list[FiredPerk]`, the beneficiary evaluation point every delivery seam calls (see the module's
   own extensive docstring for the exact candidate-set rules, the two-different-answers
-  "covenant-mate" split, and the tested query ceiling); `announce_fired_perks(fired, *, subject,
-  location)`, the dual-dispatch presentation-contract seam (see "Presentation contract" below).
+  "covenant-mate" split, and the tested query ceiling). `effect_kind` accepts a single kind or a
+  `tuple[str, ...]` (slice 2) — a tuple fetches every listed kind in one call, same fixed query
+  ceiling either way; the outcome-guarantee seam below uses this to fetch `TIER_FLOOR` +
+  `BOTCH_IMMUNITY` together. `announce_fired_perks(fired, *, subject, location)`, the
+  dual-dispatch presentation-contract seam (see "Presentation contract" below).
 
-**Delivery seams (this slice):** `POWER_BONUS` rides a new conditional power-term provider
+**Delivery seams:** `POWER_BONUS` (slice 1) rides a conditional power-term provider
 (`vow_situational_power_term`, `world.magic.services.power_terms` — see `docs/systems/magic.md`);
-`CHECK_BONUS` rides `perform_check`'s new optional `situation_ctx` parameter
+`CHECK_BONUS` (slice 1) rides `perform_check`'s optional `situation_ctx` parameter
 (`world.checks.services._situational_perk_check_bonus`, scoped by `perk.check_type`, null = any
 check). Both scale a fired perk's `magnitude_tenths` by
 `total_thread_level_across_all_kinds(sheet)`, the same thread-level axis Layers 1-2 use, and
 truncate the same way (`Decimal` sum, `int()` truncation).
+
+**Outcome guarantees (slice 2, ADR-0152):** `TIER_FLOOR`/`BOTCH_IMMUNITY` also ride
+`perform_check`, but AFTER the outcome is determined (rolled or test-rig forced), via
+`world.checks.services._apply_outcome_guarantees`. Both are ABSOLUTE — no thread-level scaling,
+no thread-level gate (ungated ruling, 2026-07-20) — unlike `POWER_BONUS`/`CHECK_BONUS` above.
+`TIER_FLOOR` guarantees `success_level >= perk.floor_success_level`; `BOTCH_IMMUNITY` binds only
+when the raw outcome is a botch (`success_level <= world.checks.constants
+.BOTCH_SUCCESS_LEVEL_MAX`, the centralized botch-boundary constant) and floors it at the
+least-bad non-botch level. Both fetch through `applicable_perks(effect_kind=(TIER_FLOOR,
+BOTCH_IMMUNITY), ...)` — one call, the tuple form above. The replacement outcome is the current
+`ResultChart`'s lowest outcome at/above the effective floor, falling back to the global
+`CheckOutcome` table when the chart has no row there, or a no-op when no such outcome is
+authored anywhere (never invents rows). `announce_fired_perks` fires only for the binding
+perk(s), only when the outcome actually changed — a guarantee that was eligible but never bound
+stays silent (no announce-on-fire spam).
 
 **Presentation contract (ruling 1, HARD):** a firing perk must be a loud, visible moment in BOTH
 clients. `announce_fired_perks` dual-dispatches per firing — a persisted, Narrator-authored
@@ -685,8 +706,12 @@ Graduation: when the adjusted party's real primary level re-enters the band,
   registry, `VowSituationalPerk` authoring models, `POWER_BONUS`/`CHECK_BONUS` delivery, and
   the dual-dispatch presentation contract (see "Layer 4: Situational Perks" above), whose
   first perk set must give every `DefenseStyle` a distinct shine-situation (2026-07-20 niche
-  ruling). Layer 4 slice 2 (`TIER_FLOOR`/`BOTCH_IMMUNITY` outcome guarantees) and slice 3
-  (Court/Battle situation scoping + dormant-vow messaging) remain tracked against #2536.
+  ruling); #2536 slice 2 (ADR-0152) shipped the **outcome-guarantee** resolution —
+  `floor_success_level` on `VowSituationalPerk`, the centralized `BOTCH_SUCCESS_LEVEL_MAX`
+  constant, multi-kind `applicable_perks`, and `TIER_FLOOR`/`BOTCH_IMMUNITY` wired into
+  `perform_check` (see "Outcome guarantees" above) — plus the covenant-mate reversal (ally
+  group-perks now scope on membership + co-presence, not the mate's own `engaged` flag). Layer 4
+  slice 3 (Court/Battle situation scoping + dormant-vow messaging) remains tracked against #2536.
 
 ## Integrates With
 

@@ -61,6 +61,7 @@ const PENDING_FIXTURE: PaginatedPendingAudereMajoraOfferList = {
       boundary_level: 5,
       target_stage_display: 'Ascendant',
       vision_text: '[TEST VISION]',
+      faith_variant_id: null,
       advisory_text: '',
       risk_text: '',
       eligible_paths: [ELIGIBLE_PATH],
@@ -77,6 +78,8 @@ const CROSSING_RESULT_FIXTURE: AudereMajoraCrossingResult = {
   chosen_path_name: 'Path of Fire',
   advisory_text: '',
   declaration_interaction_id: 42,
+  faith_coupling_applied: false,
+  faith_being_name: '',
 };
 
 const PATH_INTENT_FIXTURE: PathIntentResponse = {

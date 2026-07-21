@@ -125,7 +125,14 @@ class VowSituationalPerkRungInline(admin.TabularInline):
 
 @admin.register(VowSituationalPerk)
 class VowSituationalPerkAdmin(admin.ModelAdmin):
-    list_display = ("name", "covenant_role", "effect_kind", "beneficiary", "magnitude_tenths")
+    list_display = (
+        "name",
+        "covenant_role",
+        "effect_kind",
+        "beneficiary",
+        "magnitude_tenths",
+        "floor_success_level",
+    )
     list_filter = ("effect_kind", "beneficiary")
     search_fields = ("name", "covenant_role__name")
     autocomplete_fields = ("covenant_role", "check_type")

@@ -13,17 +13,20 @@ questions, deliberately differently:
 
 - **Group membership for perk beneficiaries** (this module's
   ``applicable_perks``, and ``evaluators.ally_low_health``, which this module
-  matches on purpose): a covenant-mate is a character who BOTH (a) holds an
-  ENGAGED role (``CharacterCovenantRole.engaged``) in a covenant the acting
-  character is also actively engaged in, AND (b) is physically grouped with
-  the acting character for this resolution — the same combat encounter's
+  matches on purpose): a covenant-mate is a character who BOTH (a) holds a
+  non-departed role (``CharacterCovenantRole.left_at__isnull=True``) in a
+  covenant the ACTING character is actively engaged in, AND (b) is co-present
+  with the acting character for this resolution — the same combat encounter's
   active roster in combat, the same active Scene otherwise (see
-  ``_group_sheet_ids``). Perks are a benefit of ACTIVE, PRESENT vows: an
-  unengaged member is "in civilian garb" (does not extend or receive
-  group-beneficiary perks even though ``Character.shares_covenant_with``
-  would still say they share a covenant), and an engaged member who isn't
-  here right now cannot lend their vow to a fight or a negotiation they are
-  not part of.
+  ``_group_sheet_ids``). The MATE's own ``engaged`` flag is irrelevant
+  (Tehom's 2026-07-20 reversal of the slice-1 rule): a KO'd or disengaged
+  covenant-mate who is still in the encounter keeps contributing their group
+  perks, so losing allies mid-fight never weakens the survivors — no
+  death-spiral. The SUBJECT's own engagement is still required (stark-power
+  ruling, untouched): receiving group perks is a benefit of the ACTING
+  character's own active vow, not of the mate's. Leaving the encounter
+  (FLED/REMOVED, or absent from the scene) still drops a mate from the group
+  — co-presence is unaffected by this reversal.
 - **Provenance situations** (``evaluators.target_swayed_by_ally``)
   legitimately read HISTORY instead of live group membership: who applied a
   condition is a past fact about the moment it landed, not a claim about
@@ -44,11 +47,12 @@ moment, never on the perk-holder's own timer. The candidate set is:
 
 - ``SELF``/``WHOLE_GROUP`` perks on the subject's own engaged roles (anchor
   AND resolved sub-role both apply — sub-role perks ADD, never replace).
-- ``COVENANT_ALLIES``/``WHOLE_GROUP`` perks on an engaged covenant-mate's
-  (see above) engaged role — anchor AND the mate's own resolved sub-role
-  both apply, same ADD semantics as the subject's own roles (a mate's
-  level-3+ sub-role vow perk must be able to fire for the group, not just
-  their base vow — see ``_ally_sub_role_candidates``).
+- ``COVENANT_ALLIES``/``WHOLE_GROUP`` perks on a co-present covenant-mate's
+  (see above — the mate's own engagement is irrelevant) role — anchor AND
+  the mate's own resolved sub-role both apply, same ADD semantics as the
+  subject's own roles (a mate's level-3+ sub-role vow perk must be able to
+  fire for the group, not just their base vow — see
+  ``_ally_sub_role_candidates``).
 
 ``COVENANT_ALLIES`` never fires for the holder's own action because the
 subject is structurally excluded from being counted as their own covenant-
@@ -101,7 +105,7 @@ if TYPE_CHECKING:
 #: Beneficiaries that fire on the perk-owning holder's OWN action.
 _SELF_BENEFICIARIES = frozenset({PerkBeneficiary.SELF, PerkBeneficiary.WHOLE_GROUP})
 
-#: Beneficiaries that fire on an engaged covenant-mate's action (never the
+#: Beneficiaries that fire on a co-present covenant-mate's action (never the
 #: holder's own — the mate query structurally excludes the subject).
 _ALLY_BENEFICIARIES = frozenset({PerkBeneficiary.COVENANT_ALLIES, PerkBeneficiary.WHOLE_GROUP})
 
@@ -130,12 +134,18 @@ class FiredPerk:
 def applicable_perks(
     subject: CharacterSheet,
     *,
-    effect_kind: str,
+    effect_kind: str | tuple[str, ...],
     resolution: object | None,
     target: CharacterSheet | None,
 ) -> list[FiredPerk]:
     """Return every ``VowSituationalPerk`` of ``effect_kind`` that fires for
     ``subject``'s resolution right now (#2536 spec §2, Task 3).
+
+    ``effect_kind`` accepts a single kind (unchanged behavior) or a tuple of
+    kinds — a tuple fetches every listed kind in ONE call (added for the
+    outcome-guarantee seam, #2536 slice 2, which needs ``TIER_FLOOR`` +
+    ``BOTCH_IMMUNITY`` together without doubling queries; same 3-query
+    candidate-perk ceiling either way).
 
     ``resolution`` is the SUBJECT's live resolution context (a
     ``CombatRoundContext`` in combat, a check-pipeline context otherwise, or
@@ -147,8 +157,9 @@ def applicable_perks(
     if not candidates:
         return []
 
+    kinds = (effect_kind,) if isinstance(effect_kind, str) else tuple(effect_kind)
     role_ids = {role_id for role_id, _holder, _beneficiaries in candidates}
-    perks_by_role = _fetch_candidate_perks(role_ids, effect_kind)
+    perks_by_role = _fetch_candidate_perks(role_ids, kinds)
     if not perks_by_role:
         return []
 
@@ -189,13 +200,16 @@ def _self_candidates(subject: CharacterSheet) -> list[_Candidate]:
 
 
 def _ally_candidates(subject: CharacterSheet, resolution: object | None) -> list[_Candidate]:
-    """Engaged covenant-mates grouped with ``subject`` for this resolution.
+    """Covenant-mates grouped with ``subject`` for this resolution.
 
-    See the module docstring's "What counts as a covenant-mate" — engaged
-    role in a shared covenant AND co-present per ``_group_sheet_ids``. Ally
-    roles use BOTH the mate's STORED (anchor) ``covenant_role`` AND their
-    resolved sub-role (ADD semantics, mirroring ``_self_candidates``) — see
-    ``_ally_sub_role_candidates`` for the batched (not per-mate) resolution.
+    See the module docstring's "What counts as a covenant-mate" — a
+    non-departed role in a covenant the SUBJECT is actively engaged in AND
+    co-present per ``_group_sheet_ids``. The mate's OWN ``engaged`` flag is
+    irrelevant (Tehom's 2026-07-20 reversal — a KO'd mate still in the fight
+    keeps buffing; no death-spiral). Ally roles use BOTH the mate's STORED
+    (anchor) ``covenant_role`` AND their resolved sub-role (ADD semantics,
+    mirroring ``_self_candidates``) — see ``_ally_sub_role_candidates`` for
+    the batched (not per-mate) resolution.
     """
     character = subject.character
     if character is None:
@@ -217,7 +231,6 @@ def _ally_candidates(subject: CharacterSheet, resolution: object | None) -> list
         CharacterCovenantRole.objects.filter(
             character_sheet_id__in=group_ids,
             covenant_id__in=engaged_covenant_ids,
-            engaged=True,
             left_at__isnull=True,
         ).select_related("character_sheet", "covenant_role")
     )
@@ -343,18 +356,20 @@ def _group_sheet_ids(subject: CharacterSheet, resolution: object | None) -> list
 
 
 def _fetch_candidate_perks(
-    role_ids: set[int], effect_kind: str
+    role_ids: set[int], effect_kinds: tuple[str, ...]
 ) -> dict[int, list[VowSituationalPerk]]:
-    """Every candidate perk of ``effect_kind`` on ``role_ids``, keyed by role.
+    """Every candidate perk of the requested kinds on ``role_ids``, keyed by role.
 
     ONE query + 2 prefetch queries (``situations``, ``rungs``) — 3 total,
-    independent of how many perks/situations/rungs match (the module
-    docstring's query-discipline contract).
+    independent of how many perks/situations/rungs match, and independent of
+    how many kinds are requested (the module docstring's query-discipline
+    contract; ``effect_kind__in`` costs the same one query as a single
+    ``effect_kind=`` would).
     """
     from world.covenants.models import VowSituationalPerk  # noqa: PLC0415
 
     perks = VowSituationalPerk.objects.filter(
-        covenant_role_id__in=role_ids, effect_kind=effect_kind
+        covenant_role_id__in=role_ids, effect_kind__in=effect_kinds
     ).prefetch_related("situations", "rungs")  # noqa: PREFETCH_STRING
 
     by_role: dict[int, list[VowSituationalPerk]] = {}
