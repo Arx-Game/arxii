@@ -103,22 +103,30 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `covenant_role_specialty_power_term` (`world.magic.services.power_terms`, see
   `docs/systems/magic.md`). Lore-repo content
   (`covenants.covenantroletechniquespecialty` in `CONTENT_MODELS`).
-- **`VowSituationalPerk`** (#2536, ADR-0151/ADR-0152; **Layer 4** of the vow-power model — "the
-  point of vows") — the authoring model for deterministic, situational bonuses: `covenant_role`
-  FK (anchor OR sub-role, ADD semantics like `CovenantRoleTechniqueSpecialty` above — no
-  restriction to primary-only), `name` (the announced label, e.g. "Scout's Instinct"),
-  `beneficiary` (`PerkBeneficiary`: `SELF`/`COVENANT_ALLIES`/`WHOLE_GROUP` — group-granting perks
-  are first-class, not an edge case), `effect_kind` (`PerkEffectKind`: all four values are live —
-  `POWER_BONUS`/`CHECK_BONUS` shipped slice 1; `TIER_FLOOR`/`BOTCH_IMMUNITY` fire in
-  `perform_check`'s outcome resolution as of slice 2, see "Outcome guarantees" below),
-  `magnitude_tenths` (integer-tenths, `PositiveIntegerField` — no negative magnitudes anywhere in
-  this table; a vow's weakness is the absence of a perk, never a malus), `announce_template`
-  (player-facing line with `{holder}`/`{subject}` placeholders), an optional `check_type` FK
-  (`CHECK_BONUS` scope; null = any check — `clean()` rejects a `check_type` on a non-`CHECK_BONUS`
-  row), and an optional `floor_success_level` (`SmallIntegerField`, canonical −10..+10
-  `success_level` scale — `TIER_FLOOR`-only, `clean()`-required on `TIER_FLOOR` rows and rejected
-  on every other `effect_kind`, ADR-0152). Natural key `(covenant_role, name)`, lore-repo
-  content (`covenants.vowsituationalperk` in `CONTENT_MODELS`).
+- **`VowSituationalPerk`** (#2536, ADR-0151/ADR-0152/ADR-0153; **Layer 4** of the vow-power model
+  — "the point of vows") — the authoring model for deterministic, situational bonuses:
+  `covenant_role` FK (anchor OR sub-role, ADD semantics like `CovenantRoleTechniqueSpecialty`
+  above — no restriction to primary-only), `name` (the announced label, e.g. "Scout's
+  Instinct"), `beneficiary` (`PerkBeneficiary`: `SELF`/`COVENANT_ALLIES`/`WHOLE_GROUP` —
+  group-granting perks are first-class, not an edge case), `effect_kind` (`PerkEffectKind`: all
+  four values are live — `POWER_BONUS`/`CHECK_BONUS` shipped slice 1; `TIER_FLOOR`/
+  `BOTCH_IMMUNITY` fire in `perform_check`'s outcome resolution as of slice 2, see "Outcome
+  guarantees" below), `magnitude_tenths` (integer-tenths, `PositiveIntegerField` — no negative
+  magnitudes anywhere in this table; a vow's weakness is the absence of a perk, never a malus),
+  `announce_template` (player-facing line with `{holder}`/`{subject}` placeholders), an optional
+  `check_type` FK (`CHECK_BONUS` scope; null = any check — `clean()` rejects a `check_type` on a
+  non-`CHECK_BONUS` row), and an optional `floor_success_level` (`SmallIntegerField`, canonical
+  −10..+10 `success_level` scale — `TIER_FLOOR`-only, `clean()`-required on `TIER_FLOOR` rows and
+  rejected on every other `effect_kind`, ADR-0152). Natural key `(covenant_role, name)`,
+  lore-repo content (`covenants.vowsituationalperk` in `CONTENT_MODELS`).
+  Three scope columns narrow WHEN a fired perk applies (#2536 slice 3, ADR-0153 — Court/Battle
+  scoping, distinct from a `Situation`, which asks whether the game state itself holds):
+  `mission_category`/`mission_template` (FKs to `missions.MissionCategory`/`MissionTemplate`,
+  `SET_NULL`, `CHECK_BONUS`-only — `clean()` rejects either on any other `effect_kind`) and
+  `battle_action_kind` (`BattleActionKind` CharField, blank-default, valid on `CHECK_BONUS` **or**
+  `POWER_BONUS` — `clean()` rejects it on `TIER_FLOOR`/`BOTCH_IMMUNITY`). Every non-empty scope
+  column on a row must match (AND); an empty scope always matches — see `perk_scope_matches`
+  below.
 - **`VowSituationalPerkSituation`** — `(perk FK, situation choice)` join; every attached
   situation must hold (AND composition). `situation` is drawn from
   `world.covenants.perks.constants.Situation`, a code-defined library (see
@@ -138,22 +146,43 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 migration graph, per the "no new app" ruling; import direction still honors ADR-0010, perk
 modules import combat/checks contexts at function level, never the reverse):
 
-- **`constants.py`** — `Situation`/`PerkEffectKind`/`PerkBeneficiary` `TextChoices`.
-- **`context.py`** — `SituationContext` (frozen dataclass: `holder`, `subject`, `target`,
-  `resolution` — see the class docstring for the full field contract and the
-  missing-field-returns-False convention).
+- **`constants.py`** — `Situation`/`PerkEffectKind`/`PerkBeneficiary` `TextChoices`. `Situation`
+  ships 14 values as of slice 3 (#2536, ADR-0153): slice 1's 9 plus `CHAMPION_DUEL` (Battle
+  wiring, Task 3), `COMBAT_OPENED_FROM_PARLEY`/`AMBUSH_UNDERWAY` (origin-marker addition, Task
+  4), `ALLY_INTERCEPTED_FOR_ME` (declared-guard, Task 5), and `ATTACKER_ABYSSAL` (defense-side
+  seam, Task 6) — see each value's own docstring entry for its evaluator's data source and any
+  v1 approximation.
+- **`context.py`** — `SituationContext` (frozen dataclass: four required fields — `holder`,
+  `subject`, `target`, `resolution` — plus three optional slice-3 fields (ADR-0153), all
+  defaulting to `None`/byte-identical to pre-slice-3 behavior when unset: `mission` (the live
+  `MissionInstance` for a mission-driven check, Court scoping), `battle_action_kind` (the
+  declared `BattleActionKind` for a warfare roll, Battle scoping), and `attacker` (the attacking
+  entity — a `CombatOpponent` or ObjectDB-backed attacker — populated ONLY on a defense-side
+  resolution; `None` on every offense-side one, the defense-side seam). See the class docstring
+  for the full field contract and the missing-field-returns-False convention.
 - **`evaluators.py`** — `SITUATION_EVALUATORS` registry (`register(situation)` decorator,
   mirrors `magic.services.power_terms`'s `_PROVIDERS` registry pattern) + one evaluator per
-  slice-1 `Situation` value. Every evaluator is a pure read (one query or a cached-handler read,
-  never a write, never a query per situation-per-perk).
-- **`services.py`** — `applicable_perks(subject, *, effect_kind, resolution, target) ->
-  list[FiredPerk]`, the beneficiary evaluation point every delivery seam calls (see the module's
-  own extensive docstring for the exact candidate-set rules, the two-different-answers
+  `Situation` value (14 as of slice 3). Every evaluator is a pure read (one query or a
+  cached-handler read, never a write, never a query per situation-per-perk).
+- **`services.py`** — `applicable_perks(subject, *, effect_kind, resolution, target, attacker=None)
+  -> list[FiredPerk]`, the beneficiary evaluation point every delivery seam calls (see the
+  module's own extensive docstring for the exact candidate-set rules, the two-different-answers
   "covenant-mate" split, and the tested query ceiling). `effect_kind` accepts a single kind or a
   `tuple[str, ...]` (slice 2) — a tuple fetches every listed kind in one call, same fixed query
   ceiling either way; the outcome-guarantee seam below uses this to fetch `TIER_FLOOR` +
-  `BOTCH_IMMUNITY` together. `announce_fired_perks(fired, *, subject, location)`, the
+  `BOTCH_IMMUNITY` together. `attacker` (slice 3, ADR-0153) threads the defense-side attacking
+  entity into every candidate holder's `SituationContext`, defaulting to `None` for every
+  offense-side caller. `perk_scope_matches(perk, ctx, *, mission_category_ids=None) -> bool`
+  (slice 3) — every non-empty scope column on `perk` must match `ctx` (AND); shared by both
+  fired-perk providers below. `mission_category_ids_for(ctx)` hoists the mission's authored
+  category-id set ONCE per resolution (a review fix — the naive per-perk-call form issued one
+  categories query per fired perk); callers checking more than one mission-scoped perk against
+  the same `ctx` MUST call this first and pass the result through `perk_scope_matches`'s
+  `mission_category_ids` kwarg. `announce_fired_perks(fired, *, subject, location)`, the
   dual-dispatch presentation-contract seam (see "Presentation contract" below).
+  `dormant_perk_firings(subject, *, effect_kind, resolution, target, mission=None,
+  battle_action_kind=None, attacker=None) -> list[FiredPerk]` / `announce_dormant_perks(dormant,
+  *, subject)` (slice 3, Task 7, ruling 2) — see "Dormant-vow messaging" below.
 
 **Delivery seams:** `POWER_BONUS` (slice 1) rides a conditional power-term provider
 (`vow_situational_power_term`, `world.magic.services.power_terms` — see `docs/systems/magic.md`);
@@ -161,7 +190,24 @@ modules import combat/checks contexts at function level, never the reverse):
 (`world.checks.services._situational_perk_check_bonus`, scoped by `perk.check_type`, null = any
 check). Both scale a fired perk's `magnitude_tenths` by
 `total_thread_level_across_all_kinds(sheet)`, the same thread-level axis Layers 1-2 use, and
-truncate the same way (`Decimal` sum, `int()` truncation).
+truncate the same way (`Decimal` sum, `int()` truncation). As of slice 3 (ADR-0153), both also
+filter their fired set through `perk_scope_matches` before scaling — a `mission_category`/
+`mission_template`/`battle_action_kind` scope column that doesn't match `situation_ctx` drops the
+firing even though its `Situation`s all held.
+
+**Court/Battle scoping + defense-side seam (slice 3, ADR-0153):** `situation_ctx` now reaches
+mission checks — all six mission `perform_check` call sites thread
+`world.missions.services._situation.mission_situation_ctx(character, instance)`
+(`SituationContext(mission=instance, ...)`, `None` when the character has no `CharacterSheet`) —
+and Battle warfare rolls — `BattleTechniqueResolver.__call__`/`resolve_battle_technique`
+(`world.battles.resolution`) thread `_battle_situation_ctx(character, declaration.action_kind)`
+(`SituationContext(battle_action_kind=..., ...)`) into `perform_check`/`use_technique`. On the
+defense side, `world.combat.services.resolve_npc_attack` threads a `SituationContext(attacker=
+opponent_action.opponent, resolution=CombatRoundContext(participant), ...)` into the defender's
+real `perform_check` — the only defense-check site doing so in v1, making CHECK_BONUS/
+TIER_FLOOR/BOTCH_IMMUNITY perks (including `ATTACKER_ABYSSAL`-gated ones) live on defense rolls
+for the first time. See ADR-0153 for why each of these is a `SituationContext` field/threading
+addition rather than a parallel pipeline.
 
 **Outcome guarantees (slice 2, ADR-0152):** `TIER_FLOOR`/`BOTCH_IMMUNITY` also ride
 `perform_check`, but AFTER the outcome is determined (rolled or test-rig forced), via
@@ -171,12 +217,36 @@ no thread-level gate (ungated ruling, 2026-07-20) — unlike `POWER_BONUS`/`CHEC
 when the raw outcome is a botch (`success_level <= world.checks.constants
 .BOTCH_SUCCESS_LEVEL_MAX`, the centralized botch-boundary constant) and floors it at the
 least-bad non-botch level. Both fetch through `applicable_perks(effect_kind=(TIER_FLOOR,
-BOTCH_IMMUNITY), ...)` — one call, the tuple form above. The replacement outcome is the current
-`ResultChart`'s lowest outcome at/above the effective floor, falling back to the global
-`CheckOutcome` table when the chart has no row there, or a no-op when no such outcome is
-authored anywhere (never invents rows). `announce_fired_perks` fires only for the binding
-perk(s), only when the outcome actually changed — a guarantee that was eligible but never bound
-stays silent (no announce-on-fire spam).
+BOTCH_IMMUNITY), ...)` — one call, the tuple form above; slice 3 threads `attacker=situation_ctx
+.attacker` through this call too, so a defense-side guarantee can key on `ATTACKER_ABYSSAL`. The
+replacement outcome is the current `ResultChart`'s lowest outcome at/above the effective floor,
+falling back to the global `CheckOutcome` table when the chart has no row there, or a no-op when
+no such outcome is authored anywhere (never invents rows). `announce_fired_perks` fires only for
+the binding perk(s), only when the outcome actually changed — a guarantee that was eligible but
+never bound stays silent (no announce-on-fire spam).
+
+**Dormant-vow messaging (slice 3, Task 7, ruling 2, ADR-0153) — the "loud OFF state":** a
+disengaged vow says so out loud, at the exact moment it would have answered, instead of silently
+doing nothing. `dormant_perk_firings` enumerates the subject's own active-but-DISENGAGED
+memberships (`_dormant_self_candidates`, the inverted mirror of `_self_candidates` — never a
+co-present mate's disengagement, only the subject's own), runs the same `_PerkResolver`
+situation evaluation as the live path plus the slice-3 scope filter, and returns the set that
+WOULD have fired if the vow were engaged. `announce_dormant_perks` delivers the exact line
+`"your vow lies dormant — {perk.name} would have answered here"` to the HOLDER ALONE — a
+narrator-authored WHISPER-mode `Interaction` (receiver-scoped to the subject's primary persona,
+sent directly to `subject.character` rather than resolved via `push_interaction`'s
+writer-location lookup — the narrator persona's own location is unrelated) plus a direct
+`subject.character.msg(text)` telnet companion — NEVER the room, deliberately unlike
+`announce_fired_perks`'s room broadcast for live firings (see ADR-0153 for why). Wired into all
+three fired-perk seams (`_situational_perk_check_bonus`, `_apply_outcome_guarantees`,
+`vow_situational_power_term`), each making one dormant pass right after its own live
+`applicable_perks` call — including the wholly-disengaged case where the existing "no engaged
+role" cheap-exit guard would otherwise skip announcing entirely. For outcome guarantees, a
+dormant `TIER_FLOOR`/`BOTCH_IMMUNITY` perk announces ONLY when it WOULD have bound against the
+RAW outcome (its floor exceeds the raw `success_level`) — never merely because a disengaged
+guarantee perk exists. Zero extra queries when the subject has no disengaged active membership
+(reads the same cached `character.covenant_roles.active_memberships` list the live path's call,
+made immediately before, has already warmed).
 
 **Presentation contract (ruling 1, HARD):** a firing perk must be a loud, visible moment in BOTH
 clients. `announce_fired_perks` dual-dispatches per firing — a persisted, Narrator-authored
@@ -710,8 +780,15 @@ Graduation: when the adjusted party's real primary level re-enters the band,
   `floor_success_level` on `VowSituationalPerk`, the centralized `BOTCH_SUCCESS_LEVEL_MAX`
   constant, multi-kind `applicable_perks`, and `TIER_FLOOR`/`BOTCH_IMMUNITY` wired into
   `perform_check` (see "Outcome guarantees" above) — plus the covenant-mate reversal (ally
-  group-perks now scope on membership + co-presence, not the mate's own `engaged` flag). Layer 4
-  slice 3 (Court/Battle situation scoping + dormant-vow messaging) remains tracked against #2536.
+  group-perks now scope on membership + co-presence, not the mate's own `engaged` flag);
+  #2536 slice 3 (ADR-0153) shipped the final **Layer 4** wave — three scope columns
+  (`mission_category`/`mission_template`/`battle_action_kind`) + `perk_scope_matches`, Court
+  (all six mission check sites) and Battle (warfare-roll) `situation_ctx` threading, five new
+  `Situation` values (`CHAMPION_DUEL`, `COMBAT_OPENED_FROM_PARLEY`, `AMBUSH_UNDERWAY`,
+  `ALLY_INTERCEPTED_FOR_ME`, `ATTACKER_ABYSSAL`), the defense-side seam
+  (`SituationContext.attacker` + `resolve_npc_attack` threading), and dormant-vow messaging
+  (the "loud OFF state", ruling 2) — see "Court/Battle scoping + defense-side seam" and
+  "Dormant-vow messaging" above. **Layer 4 is now complete; #2536 is closed pending merge.**
 
 ## Integrates With
 

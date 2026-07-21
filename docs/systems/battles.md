@@ -302,6 +302,19 @@ if the cast is interrupted before resolution (e.g. a reactive PRE_CAST cancellat
 `perform_check` — battle applies no damage-profile/condition logic of its own, that stays in
 `resolve_battle_round`'s STRIKE/SUPPORT/failure routing below.
 
+**Battle situational-perk scoping (#2536 slice 3, ADR-0153):** both `BattleTechniqueResolver
+.__call__` (the check) and `resolve_battle_technique` (the surrounding `use_technique` cast)
+thread a `SituationContext(battle_action_kind=declaration.action_kind, ...)` — built by the
+shared `_battle_situation_ctx(character, action_kind)` helper (`world/battles/resolution.py`,
+`None` when the caster has no `CharacterSheet`, mirroring the same guard
+`world.missions.services._situation.mission_situation_ctx` and
+`checks.services._situational_perk_check_bonus` apply to themselves) — into `perform_check`/
+`use_technique`. This is what makes a `CHECK_BONUS`/`POWER_BONUS` `VowSituationalPerk` scoped to
+a `battle_action_kind` (e.g. a perk that only fires on a declared ROUT) actually fire on a
+warfare-roll check/cast; `holder`/`subject` are both the caster's own sheet, `target=None`,
+`resolution=None` — a warfare roll has no distinct target sheet or combat/mission resolution
+object of its own.
+
 ### `resolve_battle_round` (`src/world/battles/resolution.py`)
 
 Iterates all unresolved `BattleActionDeclaration` rows for the round and for each:
@@ -1006,6 +1019,14 @@ The Champion duel reuses `world.combat.duels.create_lethal_duel` unmodified —
 to the winner) is wired via `world.battles.duel_wiring`, mirroring
 `world.combat.beat_wiring`'s `ENCOUNTER_COMPLETED` `TriggerDefinition` pattern exactly
 — no new event type.
+
+`open_champion_duel` also stamps `CombatEncounter.is_champion_duel = True` (#2536 slice 3,
+ADR-0153) — exclusively here; `open_siege_engine_encounter` shares the same
+`create_lethal_duel` call but never sets it, so a siege-engine skirmish DUEL stays False. Read
+by the `Situation.CHAMPION_DUEL` situational-perk evaluator
+(`world.covenants.perks.evaluators.champion_duel`, reading `participant.encounter
+.is_champion_duel` off the subject's `CombatRoundContext` resolution) — see
+`docs/systems/covenants.md`'s "Layer 4: Situational Perks" for the perk side.
 
 ## Sieges (#1713)
 

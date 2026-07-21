@@ -446,7 +446,7 @@ normalized away** — the opposite of the anchor-only rule
 `covenant_role_action_scaling_bonus` uses; a promoted (specialized) member reads as
 strictly more specialized than an unpromoted one.
 
-### Vow Situational Power Term (#2536 slice 1, ADR-0151) [BUILT & WIRED]
+### Vow Situational Power Term (#2536 slices 1 & 3, ADR-0151/ADR-0153) [BUILT & WIRED]
 
 `vow_situational_power_term` is a conditional `_PROVIDERS` entry — **Layer 4** of
 `covenants`' four-layer vow-power model ("the point of vows", see
@@ -490,6 +490,20 @@ ruling 1's "loud, visible moment" actually needs to land. See ADR-0151 for the r
 an optional keyword-only `situation_ctx` parameter, `None` by default (byte-identical to
 every pre-#2536 call site; existing checks tests pass unmodified as the proof), scoped by
 each fired perk's `check_type` (null = any check).
+
+**Slice 3 additions (ADR-0153):** the fired set is filtered through `perk_scope_matches`
+before scaling — `battle_action_kind` is `POWER_BONUS`'s only valid scope column
+(`mission_category`/`mission_template` are `CHECK_BONUS`-only, `clean()`-enforced), read off
+`ctx.situation_ctx.battle_action_kind` via an `isinstance(ctx.situation_ctx, SituationContext)`
+type check — an ordinary combat `CombatRoundContext` (or `None`) is not a `SituationContext`, so
+every battle_action_kind scope column simply no-ops outside a Battle warfare cast (the only
+caller that threads a real `SituationContext` through as `PowerTermContext.situation_ctx`, via
+`BattleTechniqueResolver`/`resolve_battle_technique`, `world/battles/resolution.py`). This
+provider also runs one **dormant pass** (`dormant_perk_firings`/`announce_dormant_perks`, ruling
+2's "loud OFF state") BEFORE the "subject has an engaged role" early-exit above — a subject
+whose entire vow is disengaged has no engaged role at all, which is exactly the case the dormant
+pass exists to catch; it reads the same cached `covenant_roles` handler list that guard does, so
+running it first costs no extra query either way.
 
 ### Targeting Model (#1321) [BUILT & WIRED]
 
