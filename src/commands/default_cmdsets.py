@@ -52,6 +52,7 @@ from commands.crafting_station import CmdLabStation
 from commands.currency import CmdDeposit, CmdSecure, CmdSteal
 from commands.deeds import CmdDeed
 from commands.defenses import CmdDefense
+from commands.distinction_change import CmdDistinctionChange
 from commands.domains import CmdDomain
 from commands.door import CmdBreak, CmdLock, CmdPick, CmdUnlock
 from commands.dramatic_moments import CmdMoment
@@ -389,6 +390,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdProgressionUnlock,
             # #2116 — gift/technique/thread-weaving acquisition namespace.
             CmdLearn,
+            # #2607 follow-up — telnet surface for the distinction-change flow.
+            CmdDistinctionChange,
             # #1350 — journal authoring namespace: write/respond/edit subverbs + list hub.
             CmdJournal,
             # #1350 — goal authoring namespace.
