@@ -83,3 +83,23 @@ PROPOSAL_KIND_MIN_LEVEL: dict[str, str] = {
     CatalogSuggestionProposalKind.DIFFICULTY_GUIDE: GMLevel.GM,
     CatalogSuggestionProposalKind.POOL_GUIDE: GMLevel.EXPERIENCED,
 }
+
+
+class TableRequestKind(models.TextChoices):
+    """Kinds of end-of-session sheet-update request a member can leave (#2607).
+
+    Extensible: other sheet-update kinds register their own handler later.
+    """
+
+    DISTINCTION_ADD = "distinction_add", "Add Distinction"
+    DISTINCTION_REMOVE = "distinction_remove", "Remove Distinction"
+
+
+class TableRequestStatus(models.TextChoices):
+    """Lifecycle of a TableUpdateRequest (#2607)."""
+
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+    COMPLETED = "completed", "Completed"
+    WITHDRAWN = "withdrawn", "Withdrawn"
