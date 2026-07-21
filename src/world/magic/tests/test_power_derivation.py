@@ -1466,7 +1466,7 @@ class VowSituationalPowerTermTests(TestCase):
         self.assertEqual(vow_situational_power_term(ctx), 10)
 
     def test_ally_beneficiary_perk_boosts_subject_cast(self):
-        """A COVENANT_ALLIES perk held by an engaged covenant-mate, co-present in
+        """A COVENANT_ALLIES perk held by a co-present covenant-mate in
         the same encounter, fires on the SUBJECT's cast (scaled by the SUBJECT's
         own thread level, not the mate's)."""
         from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory

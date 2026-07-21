@@ -54,6 +54,7 @@ const OFFER: PendingAudereMajoraOffer = {
   boundary_level: 5,
   target_stage_display: 'Ascendant',
   vision_text: '[TEST VISION]',
+  faith_variant_id: null,
   advisory_text: '',
   risk_text: '',
   eligible_paths: [PATH_A, PATH_B],
@@ -188,6 +189,8 @@ describe('AudereMajoraOfferDialog (via AudereMajoraOfferGate)', () => {
       chosen_path_name: 'Path of Fire',
       advisory_text: '',
       declaration_interaction_id: 42,
+      faith_coupling_applied: false,
+      faith_being_name: '',
     });
 
     renderGate([OFFER]);
@@ -221,6 +224,8 @@ describe('AudereMajoraOfferDialog (via AudereMajoraOfferGate)', () => {
       chosen_path_name: '',
       advisory_text: '',
       declaration_interaction_id: null,
+      faith_coupling_applied: false,
+      faith_being_name: '',
     });
 
     renderGate([OFFER]);

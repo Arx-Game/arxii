@@ -118,7 +118,7 @@ class SituationalPerkCheckBonusTests(TestCase):
         self.assertEqual(self._breakdown_total(other_check_type, situation_ctx=ctx), 0)
 
     def test_ally_beneficiary_check_bonus_fires_for_covenant_mate(self) -> None:
-        """A COVENANT_ALLIES CHECK_BONUS perk held by an engaged covenant-mate,
+        """A COVENANT_ALLIES CHECK_BONUS perk held by a co-present covenant-mate,
         co-present via an active Scene, fires on the SUBJECT's check (scaled by
         the SUBJECT's own thread level, not the mate's)."""
         from evennia import create_object

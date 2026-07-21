@@ -149,6 +149,35 @@ class VowSituationalPerkModelTests(TestCase):
         with self.assertRaises(ValidationError):
             perk.full_clean()
 
+    def test_tier_floor_requires_floor_success_level(self) -> None:
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
+        perk = VowSituationalPerkFactory.build(
+            covenant_role=role,
+            effect_kind=PerkEffectKind.TIER_FLOOR,
+            floor_success_level=None,
+        )
+        with self.assertRaises(ValidationError):
+            perk.full_clean()
+
+    def test_floor_success_level_rejected_off_tier_floor(self) -> None:
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
+        perk = VowSituationalPerkFactory.build(
+            covenant_role=role,
+            effect_kind=PerkEffectKind.BOTCH_IMMUNITY,
+            floor_success_level=1,
+        )
+        with self.assertRaises(ValidationError):
+            perk.full_clean()
+
+    def test_tier_floor_with_floor_is_valid(self) -> None:
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
+        perk = VowSituationalPerkFactory.build(
+            covenant_role=role,
+            effect_kind=PerkEffectKind.TIER_FLOOR,
+            floor_success_level=1,
+        )
+        perk.full_clean()  # must not raise
+
 
 class VowSituationalPerkSituationModelTests(TestCase):
     def test_str_uses_perk_name_and_situation_display(self) -> None:

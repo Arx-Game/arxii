@@ -762,3 +762,104 @@ class Business(SharedMemoryModel):
         from world.currency.constants import BUSINESS_INVESTMENT_PER_LEVEL  # noqa: PLC0415
 
         return 1 + self.invested // BUSINESS_INVESTMENT_PER_LEVEL
+
+
+class DistinctionPurseDrain(SharedMemoryModel):
+    """Config: a distinction that empties its holder's purse every week (#2613).
+
+    The sidecar pattern for a non-modifier ongoing distinction effect, matching
+    ``DistinctionAssetGrant`` (assets), ``DistinctionCodexGrant`` (codex), and
+    ``DistinctionResonanceGrant`` (magic). Lives here, not in ``distinctions``,
+    per ADR-0010: the consumer holds the FK pointing at the primitive, so
+    ``distinctions`` stays dependency-free.
+
+    Parameterized rather than a hardcoded slug lookup because siblings are
+    certain — a Spendthrift at 50%, a tithe-bound character at 10%. Each is a
+    data row, not new code.
+    """
+
+    distinction = models.OneToOneField(
+        "distinctions.Distinction",
+        on_delete=models.CASCADE,
+        related_name="purse_drain",
+        help_text="The distinction whose holders drain weekly.",
+    )
+    drain_percent = models.PositiveSmallIntegerField(
+        default=100,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="Percent of the drainable amount actually taken (100 = all of it).",
+    )
+    floor_coppers = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Never drain the purse below this many coppers.",
+    )
+
+    class Meta:
+        verbose_name = "Distinction Purse Drain"
+        verbose_name_plural = "Distinction Purse Drains"
+
+    def __str__(self) -> str:
+        return f"PurseDrain({self.distinction_id}: {self.drain_percent}%)"
+
+
+class PurseDrainWeek(SharedMemoryModel):
+    """One holder's drain week: the opening baseline, and what came of it (#2613).
+
+    The baseline is recorded in the ``SNAPSHOT`` cron band — *before* income
+    lands — and consumed in the ``DRAIN`` band after obligations have paid.
+    Those are separate tasks, so the value has to persist between them; it
+    cannot be a local variable.
+
+    Doubles as the audit trail. Without it the player-facing message can say
+    that money vanished but not why that particular number did.
+    """
+
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="purse_drain_weeks",
+    )
+    game_week = models.ForeignKey(
+        "game_clock.GameWeek",
+        on_delete=models.CASCADE,
+        related_name="purse_drain_weeks",
+    )
+    opening_balance = models.PositiveBigIntegerField(
+        help_text="Purse balance at week start, before any income landed.",
+    )
+    snapshot_at = models.DateTimeField(
+        help_text="When the baseline was taken — opens the outflow window.",
+    )
+    outflows = models.PositiveBigIntegerField(
+        default=0,
+        help_text=(
+            "Total coppers that left the purse since snapshot_at — upkeep, dues, "
+            "and ordinary spending alike. Any outgoing cost counts."
+        ),
+    )
+    amount_drained = models.PositiveBigIntegerField(
+        default=0,
+        help_text="What the drain actually took.",
+    )
+    drained_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Null means the baseline exists but the drain has not run yet.",
+    )
+
+    class Meta:
+        ordering = ["-game_week"]
+        verbose_name = "Purse Drain Week"
+        verbose_name_plural = "Purse Drain Weeks"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_sheet", "game_week"],
+                name="purse_drain_week_unique_per_sheet",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"PurseDrainWeek({self.character_sheet_id}@{self.game_week_id}: "
+            f"{self.opening_balance}c)"
+        )

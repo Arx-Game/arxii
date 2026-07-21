@@ -13,7 +13,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
 from world.currency.constants import (
@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.currency.models import DistinctionPurseDrain
     from world.items.models import ItemInstance
     from world.scenes.models import Persona
     from world.societies.models import Organization
@@ -1597,3 +1598,155 @@ def fund_fame_display(persona: Persona, *, amount: int) -> int:
     )
     set_persona_fame(persona, persona.fame_points + points)
     return points
+
+
+# --- Somehow Always Broke: weekly purse drain (#2613) ---
+
+PURSE_DRAIN_REASON = "Somehow Always Broke weekly drain"
+
+
+def snapshot_purse_drains() -> int:
+    """SNAPSHOT band: record each drain-holder's opening balance (#2613).
+
+    Runs *before* income lands, so the row captures the carried-over hoard
+    the drain will target. Consumed later the same tick by ``run_purse_drains``
+    in the DRAIN band. Idempotent per (holder, week): a re-run adds no rows.
+
+    Returns the number of new snapshot rows written.
+    """
+    from world.currency.models import PurseDrainWeek  # noqa: PLC0415
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+
+    # CharacterDistinction.character_id is the ObjectDB pk, which equals the
+    # CharacterSheet pk (CharacterSheet.character is a primary_key O2O). Once
+    # #2608 re-points that FK to CharacterSheet this becomes a direct field.
+    holder_sheet_ids = list(
+        CharacterDistinction.objects.filter(distinction__purse_drain__isnull=False).values_list(
+            "character_id", flat=True
+        )
+    )
+    if not holder_sheet_ids:
+        return 0
+
+    week = get_current_game_week()
+    now = timezone.now()
+    already = set(
+        PurseDrainWeek.objects.filter(
+            game_week=week, character_sheet_id__in=holder_sheet_ids
+        ).values_list("character_sheet_id", flat=True)
+    )
+    purses = CharacterPurse.objects.filter(character_sheet_id__in=holder_sheet_ids)
+    new_rows = [
+        PurseDrainWeek(
+            character_sheet_id=purse.character_sheet_id,
+            game_week=week,
+            opening_balance=purse.balance,
+            snapshot_at=now,
+        )
+        for purse in purses
+        if purse.character_sheet_id not in already
+    ]
+    PurseDrainWeek.objects.bulk_create(new_rows)
+    return len(new_rows)
+
+
+def _holder_drain_configs() -> dict[int, DistinctionPurseDrain]:
+    """Map each drain-holder's sheet id to its strongest drain config (#2613).
+
+    A holder with two drain distinctions (not a live scenario yet) resolves to
+    the higher ``drain_percent`` so ordering is never arbitrary.
+    """
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+
+    configs: dict[int, DistinctionPurseDrain] = {}
+    cds = CharacterDistinction.objects.filter(
+        distinction__purse_drain__isnull=False
+    ).select_related("distinction__purse_drain")
+    for cd in cds:
+        drain = cd.distinction.purse_drain
+        current = configs.get(cd.character_id)
+        if current is None or drain.drain_percent > current.drain_percent:
+            configs[cd.character_id] = drain
+    return configs
+
+
+def run_purse_drains() -> int:
+    """DRAIN band: empty each holder's purse down to this week's income (#2613).
+
+    For opening balance ``S`` and outflows ``O`` since the snapshot (upkeep,
+    dues, and ordinary spending alike — any outgoing cost), the drain removes
+    ``clamp(S - O, 0, balance)`` scaled by ``drain_percent`` and never dips
+    below ``floor_coppers``. Because the snapshot ran before income and this
+    runs after obligations, the holder is left with exactly the week's fresh
+    income (see ADR-0150 for the band ordering that makes that true).
+
+    Every drain is an audited ``transfer`` sink, never a silent balance write.
+    Per-row failure isolation: one broken holder never wedges the rest.
+
+    Returns the number of holders actually drained (amount > 0).
+    """
+    from world.currency.models import PurseDrainWeek  # noqa: PLC0415
+    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    week = get_current_game_week()
+    pending = list(
+        PurseDrainWeek.objects.filter(game_week=week, drained_at__isnull=True).select_related(
+            "character_sheet"
+        )
+    )
+    if not pending:
+        return 0
+
+    configs = _holder_drain_configs()
+    sheet_ids = [row.character_sheet_id for row in pending]
+    purses = {
+        purse.character_sheet_id: purse
+        for purse in CharacterPurse.objects.filter(character_sheet_id__in=sheet_ids)
+    }
+    now = timezone.now()
+    drained = 0
+
+    for row in pending:
+        try:
+            config = configs.get(row.character_sheet_id)
+            purse = purses.get(row.character_sheet_id)
+            # Distinction removed between snapshot and drain, or no purse: close
+            # the row without draining. Never drain against a stale snapshot.
+            if config is None or purse is None or purse.balance == 0:
+                row.drained_at = now
+                row.save(update_fields=["drained_at"])
+                continue
+
+            outflows = (
+                CurrencyTransfer.objects.filter(
+                    from_purse=purse, created_at__gte=row.snapshot_at
+                ).aggregate(total=models.Sum("amount"))["total"]
+                or 0
+            )
+            drainable = min(max(0, row.opening_balance - outflows), purse.balance)
+            amount = drainable * config.drain_percent // 100
+            floor_room = max(0, purse.balance - config.floor_coppers)
+            amount = min(amount, floor_room)
+
+            row.outflows = outflows
+            if amount > 0:
+                transfer(amount=amount, reason=PURSE_DRAIN_REASON, from_purse=purse)
+                row.amount_drained = amount
+                send_narrative_message(
+                    recipients=[row.character_sheet],
+                    body=(
+                        f"{format_coppers(amount)} was frittered away, or lost in "
+                        "mishaps. Such is life."
+                    ),
+                    category=NarrativeCategory.SYSTEM,
+                )
+                drained += 1
+            row.drained_at = now
+            row.save(update_fields=["outflows", "amount_drained", "drained_at"])
+        except Exception:
+            logger.exception("Purse drain failed for sheet %s", row.character_sheet_id)
+
+    return drained
