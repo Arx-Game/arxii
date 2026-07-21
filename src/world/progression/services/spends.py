@@ -147,6 +147,7 @@ def _check_requirements(
     from world.progression.models import (
         AchievementRequirement,
         ClassLevelRequirement,
+        CodexKnowledgeRequirement,
         ItemRequirement,
         LegendRequirement,
         LevelRequirement,
@@ -161,6 +162,7 @@ def _check_requirements(
         TraitRequirement,
         LevelRequirement,
         ClassLevelRequirement,
+        CodexKnowledgeRequirement,
         TierRequirement,
         AchievementRequirement,
         RelationshipRequirement,
