@@ -563,7 +563,7 @@ def _build_path_detail(sheet: CharacterSheet) -> PathDetailSection | None:
 _DISTINCTIONS_SELECT_RELATED: tuple[str, ...] = ()
 _DISTINCTIONS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
-        "character__distinctions",
+        "distinctions",
         queryset=CharacterDistinction.objects.select_related("distinction"),
         to_attr="cached_distinctions",
     ),
@@ -576,10 +576,9 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
     Sensitive distinctions are *relocated* into Secrets (criminal / scandalous kinds, or a
     player-gated one): they drop off this public list and surface on the secret tab once learned.
     A non-privileged viewer sees only the non-secret entries; the owner / staff see all, with
-    ``is_secret`` flagging which are gated. Expects ``character.distinctions`` prefetched with
+    ``is_secret`` flagging which are gated. Expects ``sheet.distinctions`` prefetched with
     ``select_related("distinction")`` so the secret state resolves query-free.
     """
-    character = sheet.character
     return [
         DistinctionEntry(
             id=cd.pk,
@@ -589,7 +588,7 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
             is_secret=cd.is_secret,
             is_from_glimpse=cd.from_glimpse_id is not None,
         )
-        for cd in character.cached_distinctions
+        for cd in sheet.cached_distinctions
         if privileged or not cd.is_secret
     ]
 

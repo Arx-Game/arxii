@@ -67,7 +67,7 @@ class DistinctionResonancePotencyTests(TestCase):
         self.character = CharacterFactory()
         self.sheet = CharacterSheetFactory(character=self.character)
         char_distinction = CharacterDistinctionFactory(
-            character=self.character,
+            character=self.sheet,
             distinction=self.distinction,
             rank=1,
         )
@@ -178,7 +178,7 @@ class DistinctionResonancePotencyUnscopedTests(TestCase):
         self.character = CharacterFactory()
         self.sheet = CharacterSheetFactory(character=self.character)
         char_distinction = CharacterDistinctionFactory(
-            character=self.character,
+            character=self.sheet,
             distinction=self.distinction,
             rank=1,
         )

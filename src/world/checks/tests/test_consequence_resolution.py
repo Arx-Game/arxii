@@ -337,7 +337,7 @@ class GrantDistinctionResolutionTests(TestCase):
 
         assert len(results) == 1
         assert results[0].applied is True
-        cd = CharacterDistinction.objects.get(character=self.character, distinction=distinction)
+        cd = CharacterDistinction.objects.get(character=self.sheet, distinction=distinction)
         assert cd.rank == 1
         assert cd.origin == DistinctionOrigin.CONSEQUENCE_POOL
 
@@ -357,7 +357,7 @@ class GrantDistinctionResolutionTests(TestCase):
 
         assert len(applied) == 1
         assert applied[0].applied is True
-        cd = CharacterDistinction.objects.get(character=self.character, distinction=distinction)
+        cd = CharacterDistinction.objects.get(character=self.sheet, distinction=distinction)
         assert cd.rank == 1
 
 

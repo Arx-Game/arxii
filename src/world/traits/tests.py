@@ -697,7 +697,7 @@ class TraitHandlerStatModifierTests(TestCase):
     def _grant_giants_blood(self):
         """Helper to grant Giant's Blood distinction and create modifiers."""
         char_distinction = CharacterDistinction.objects.create(
-            character=self.character,
+            character=self.sheet,
             distinction=self.giants_blood,
             rank=1,
         )
@@ -866,7 +866,7 @@ class GiantsBloodModifierCreationTests(TestCase):
         from world.mechanics.models import CharacterModifier
 
         char_distinction = CharacterDistinction.objects.create(
-            character=self.character,
+            character=self.sheet,
             distinction=self.giants_blood,
             rank=1,
         )
@@ -886,7 +886,7 @@ class GiantsBloodModifierCreationTests(TestCase):
         from world.mechanics.models import CharacterModifier
 
         char_distinction = CharacterDistinction.objects.create(
-            character=self.character,
+            character=self.sheet,
             distinction=self.giants_blood,
             rank=1,
         )

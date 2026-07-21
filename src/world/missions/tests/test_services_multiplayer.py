@@ -116,8 +116,8 @@ class BuildGroupOptionListTests(TestCase):
         # A owns dist_a, B owns dist_b (disjoint).
         cls.dist_a = DistinctionFactory(slug="grp-dist-a")
         cls.dist_b = DistinctionFactory(slug="grp-dist-b")
-        CharacterDistinctionFactory(character=cls.char_a, distinction=cls.dist_a)
-        CharacterDistinctionFactory(character=cls.char_b, distinction=cls.dist_b)
+        CharacterDistinctionFactory(character=cls.char_a.sheet_data, distinction=cls.dist_a)
+        CharacterDistinctionFactory(character=cls.char_b.sheet_data, distinction=cls.dist_b)
 
         # AUTHORED option visible only to A (requires dist_a).
         cls.a_only = MissionOptionFactory(

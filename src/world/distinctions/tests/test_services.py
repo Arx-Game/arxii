@@ -41,7 +41,7 @@ class GrantDistinctionNewGrantTests(TestCase):
         self.assertEqual(cd.character_id, self.sheet.character_id)
         self.assertTrue(
             CharacterDistinction.objects.filter(
-                character=self.sheet.character, distinction=self.distinction
+                character=self.sheet, distinction=self.distinction
             ).exists()
         )
 
@@ -81,7 +81,7 @@ class GrantDistinctionRepeatGrantTests(TestCase):
             distinction=cls.distinction, resonance=cls.resonance, flat_amount_per_rank=10
         )
         cls.existing = CharacterDistinctionFactory(
-            character=cls.sheet.character,
+            character=cls.sheet,
             distinction=cls.distinction,
             rank=1,
             origin=DistinctionOrigin.CHARACTER_CREATION,
@@ -163,7 +163,7 @@ class GrantDistinctionExclusionTests(TestCase):
         alpha = DistinctionFactory(name="Alpha")
         beta = DistinctionFactory(name="Beta")
         alpha.mutually_exclusive_with.add(beta)
-        CharacterDistinctionFactory(character=sheet.character, distinction=alpha, rank=1)
+        CharacterDistinctionFactory(character=sheet, distinction=alpha, rank=1)
 
         with self.assertRaises(DistinctionExclusionError) as ctx:
             grant_distinction(sheet, beta, origin=DistinctionOrigin.GM_AWARD)
@@ -176,7 +176,7 @@ class GrantDistinctionExclusionTests(TestCase):
         alpha = DistinctionFactory(name="Alpha")
         beta = DistinctionFactory(name="Beta")
         alpha.mutually_exclusive_with.add(beta)
-        CharacterDistinctionFactory(character=sheet.character, distinction=beta, rank=1)
+        CharacterDistinctionFactory(character=sheet, distinction=beta, rank=1)
 
         with self.assertRaises(DistinctionExclusionError):
             grant_distinction(sheet, alpha, origin=DistinctionOrigin.GM_AWARD)
@@ -186,7 +186,7 @@ class GrantDistinctionExclusionTests(TestCase):
         parent = DistinctionFactory(name="Noble Blood", variants_are_mutually_exclusive=True)
         variant_a = DistinctionFactory(name="Noble Blood (Valardin)", parent_distinction=parent)
         variant_b = DistinctionFactory(name="Noble Blood (Grayson)", parent_distinction=parent)
-        CharacterDistinctionFactory(character=sheet.character, distinction=variant_a, rank=1)
+        CharacterDistinctionFactory(character=sheet, distinction=variant_a, rank=1)
 
         with self.assertRaises(DistinctionExclusionError) as ctx:
             grant_distinction(sheet, variant_b, origin=DistinctionOrigin.GM_AWARD)
@@ -200,7 +200,7 @@ class GrantDistinctionExclusionTests(TestCase):
         variant_a = DistinctionFactory(
             name="Noble Blood (Valardin)", parent_distinction=parent, max_rank=3
         )
-        CharacterDistinctionFactory(character=sheet.character, distinction=variant_a, rank=1)
+        CharacterDistinctionFactory(character=sheet, distinction=variant_a, rank=1)
 
         cd = grant_distinction(sheet, variant_a, origin=DistinctionOrigin.GM_AWARD)
 
@@ -211,7 +211,7 @@ class GrantDistinctionExclusionTests(TestCase):
         parent = DistinctionFactory(name="Hair Color", variants_are_mutually_exclusive=False)
         variant_a = DistinctionFactory(name="Hair (Red)", parent_distinction=parent)
         variant_b = DistinctionFactory(name="Hair (Black)", parent_distinction=parent)
-        CharacterDistinctionFactory(character=sheet.character, distinction=variant_a, rank=1)
+        CharacterDistinctionFactory(character=sheet, distinction=variant_a, rank=1)
 
         cd = grant_distinction(sheet, variant_b, origin=DistinctionOrigin.GM_AWARD)
 

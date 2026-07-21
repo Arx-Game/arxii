@@ -189,7 +189,7 @@ class ReconcileRitualKnowledgeTests(TestCase):
 
         # Assign distinction to character
         CharacterDistinctionFactory(
-            character=roster_entry.character_sheet.character,
+            character=roster_entry.character_sheet,
             distinction=distinction,
         )
 

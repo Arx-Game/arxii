@@ -41,7 +41,7 @@ class DistinctionAssetGrantReconcileTests(EvenniaTestCase):
         from world.distinctions.models import CharacterDistinction
 
         return CharacterDistinction.objects.create(
-            character=self.character,
+            character=self.sheet,
             distinction=self.distinction,
             rank=1,
         )
@@ -91,7 +91,7 @@ class DistinctionAssetGrantReconcileTests(EvenniaTestCase):
         from world.distinctions.models import CharacterDistinction
 
         char_dist = CharacterDistinction.objects.create(
-            character=self.character,
+            character=self.sheet,
             distinction=bare_distinction,
             rank=1,
         )

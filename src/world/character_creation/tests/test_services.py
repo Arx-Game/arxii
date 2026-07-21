@@ -889,7 +889,7 @@ class FinalizeCharacterDistinctionsTests(FinalizationTestMixin, TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        char_distinctions = CharacterDistinction.objects.filter(character=character)
+        char_distinctions = CharacterDistinction.objects.filter(character=character.sheet_data)
         assert char_distinctions.count() == 2
 
         simple = char_distinctions.get(distinction=self.simple_distinction)
@@ -928,7 +928,7 @@ class FinalizeCharacterDistinctionsTests(FinalizationTestMixin, TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        cd = CharacterDistinction.objects.get(character=character, distinction=criminal)
+        cd = CharacterDistinction.objects.get(character=character.sheet_data, distinction=criminal)
         assert cd.is_secret is True
         assert cd.secret.level == SecretLevel.DANGEROUS
         assert cd.secret.subject_sheet_id == character.sheet_data.pk
@@ -971,7 +971,7 @@ class FinalizeCharacterDistinctionsTests(FinalizationTestMixin, TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        assert not CharacterDistinction.objects.filter(character=character).exists()
+        assert not CharacterDistinction.objects.filter(character=character.sheet_data).exists()
 
     def test_skips_invalid_distinction_ids(self):
         """Invalid distinction IDs are silently skipped."""
@@ -1002,7 +1002,7 @@ class FinalizeCharacterDistinctionsTests(FinalizationTestMixin, TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        char_distinctions = CharacterDistinction.objects.filter(character=character)
+        char_distinctions = CharacterDistinction.objects.filter(character=character.sheet_data)
         assert char_distinctions.count() == 1
         assert char_distinctions.first().distinction == self.simple_distinction
 
@@ -1118,7 +1118,7 @@ class FinalizeCharacterDistinctionResonanceTests(FinalizationTestMixin, TestCase
         sheet = character.sheet_data
 
         char_dist = CharacterDistinction.objects.get(
-            character=character, distinction=self.predatory_distinction
+            character=sheet, distinction=self.predatory_distinction
         )
 
         # The CharacterResonance is claimed.
@@ -1705,7 +1705,9 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
 
         aura = CharacterAura.objects.get(character=character)
-        cd = CharacterDistinction.objects.get(character=character, distinction=distinction)
+        cd = CharacterDistinction.objects.get(
+            character=character.sheet_data, distinction=distinction
+        )
         assert cd.from_glimpse_id == aura.pk
 
     def test_finalize_ignores_unknown_linked_distinction_ids(self):

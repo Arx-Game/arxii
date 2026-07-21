@@ -554,14 +554,16 @@ class GrantDistinctionHandlerTests(TestCase):
         result = apply_effect(effect, context)
 
         assert result.applied is True
-        cd = CharacterDistinction.objects.get(character=character, distinction=distinction)
+        cd = CharacterDistinction.objects.get(
+            character=character.sheet_data, distinction=distinction
+        )
         assert cd.rank == 1
         assert cd.origin == DistinctionOrigin.CONSEQUENCE_POOL
 
     def test_null_distinction_rank_steps_the_rank(self) -> None:
         character, _sheet = self._character_with_sheet("grant_dist_step")
         distinction = DistinctionFactory(name="Silver Tongue_step", max_rank=3)
-        CharacterDistinctionFactory(character=character, distinction=distinction, rank=1)
+        CharacterDistinctionFactory(character=character.sheet_data, distinction=distinction, rank=1)
         effect = ConsequenceEffectFactory(
             consequence=ConsequenceFactory(),
             effect_type=EffectType.GRANT_DISTINCTION,
@@ -573,7 +575,9 @@ class GrantDistinctionHandlerTests(TestCase):
         result = apply_effect(effect, context)
 
         assert result.applied is True
-        cd = CharacterDistinction.objects.get(character=character, distinction=distinction)
+        cd = CharacterDistinction.objects.get(
+            character=character.sheet_data, distinction=distinction
+        )
         assert cd.rank == 2
 
     def test_explicit_distinction_rank_sets_that_rank(self) -> None:
@@ -590,7 +594,9 @@ class GrantDistinctionHandlerTests(TestCase):
         result = apply_effect(effect, context)
 
         assert result.applied is True
-        cd = CharacterDistinction.objects.get(character=character, distinction=distinction)
+        cd = CharacterDistinction.objects.get(
+            character=character.sheet_data, distinction=distinction
+        )
         assert cd.rank == 3
 
     def test_grant_distinction_skips_without_sheet(self) -> None:
@@ -614,7 +620,7 @@ class GrantDistinctionHandlerTests(TestCase):
         alpha = DistinctionFactory(name="Alpha_eff")
         beta = DistinctionFactory(name="Beta_eff")
         alpha.mutually_exclusive_with.add(beta)
-        CharacterDistinctionFactory(character=character, distinction=alpha, rank=1)
+        CharacterDistinctionFactory(character=character.sheet_data, distinction=alpha, rank=1)
         effect = ConsequenceEffectFactory(
             consequence=ConsequenceFactory(),
             effect_type=EffectType.GRANT_DISTINCTION,
@@ -627,7 +633,7 @@ class GrantDistinctionHandlerTests(TestCase):
         assert result.applied is False
         assert result.skip_reason
         assert not CharacterDistinction.objects.filter(
-            character=character, distinction=beta
+            character=character.sheet_data, distinction=beta
         ).exists()
 
 

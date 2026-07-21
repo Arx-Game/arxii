@@ -53,7 +53,7 @@ class DistinctionEarnRateForTests(TestCase):
             resonance=resonance,
             earn_rate_bonus_per_rank=Decimal("2.5"),
         )
-        CharacterDistinctionFactory(character=sheet.character, distinction=distinction, rank=2)
+        CharacterDistinctionFactory(character=sheet, distinction=distinction, rank=2)
 
         self.assertEqual(distinction_earn_rate_for(sheet, resonance), Decimal("5.0"))
 
@@ -67,7 +67,7 @@ class DistinctionEarnRateForTests(TestCase):
             resonance=other_resonance,
             earn_rate_bonus_per_rank=Decimal("2.5"),
         )
-        CharacterDistinctionFactory(character=sheet.character, distinction=distinction, rank=2)
+        CharacterDistinctionFactory(character=sheet, distinction=distinction, rank=2)
 
         self.assertEqual(distinction_earn_rate_for(sheet, resonance), Decimal(0))
 
@@ -82,7 +82,7 @@ class GrantResonanceAcceleratorTests(TestCase):
             resonance=resonance,
             earn_rate_bonus_per_rank=Decimal("5.0"),
         )
-        CharacterDistinctionFactory(character=sheet.character, distinction=distinction, rank=1)
+        CharacterDistinctionFactory(character=sheet, distinction=distinction, rank=1)
         cr = CharacterResonanceFactory(
             character_sheet=sheet, resonance=resonance, balance=0, lifetime_earned=0
         )
@@ -110,9 +110,9 @@ class GrantResonanceAcceleratorTests(TestCase):
             resonance=resonance,
             earn_rate_bonus_per_rank=Decimal("5.0"),
         )
-        CharacterDistinctionFactory(character=sheet.character, distinction=distinction, rank=1)
+        CharacterDistinctionFactory(character=sheet, distinction=distinction, rank=1)
         character_distinction = CharacterDistinctionFactory(
-            character=sheet.character, distinction=DistinctionFactory()
+            character=sheet, distinction=DistinctionFactory()
         )
         cr = CharacterResonanceFactory(
             character_sheet=sheet, resonance=resonance, balance=0, lifetime_earned=0

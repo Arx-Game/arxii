@@ -56,12 +56,12 @@ class JoinTraditionTests(TestCase):
         unbound_drawback = DistinctionFactory(slug="unbound", cost_per_rank=-2)
         orphaned_drawback = DistinctionFactory(slug="orphaned-tradition", cost_per_rank=-2)
         CharacterDistinctionFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             distinction=unbound_drawback,
             origin=DistinctionOrigin.CHARACTER_CREATION,
         )
         CharacterDistinctionFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             distinction=orphaned_drawback,
             origin=DistinctionOrigin.CHARACTER_CREATION,
         )
@@ -69,10 +69,10 @@ class JoinTraditionTests(TestCase):
         join_tradition(self.sheet, self.caretakers)
 
         assert not CharacterDistinction.objects.filter(
-            character=self.sheet.character, distinction=unbound_drawback
+            character=self.sheet, distinction=unbound_drawback
         ).exists()
         assert not CharacterDistinction.objects.filter(
-            character=self.sheet.character, distinction=orphaned_drawback
+            character=self.sheet, distinction=orphaned_drawback
         ).exists()
 
     def test_join_tolerates_absent_drawback_rows(self) -> None:
@@ -95,7 +95,7 @@ class JoinTraditionTests(TestCase):
         )
         CharacterTraditionFactory(character=self.sheet, tradition=self.unbound)
         CharacterDistinctionFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             distinction=orphaned_drawback,
             origin=DistinctionOrigin.CHARACTER_CREATION,
         )
@@ -103,7 +103,7 @@ class JoinTraditionTests(TestCase):
         join_tradition(self.sheet, metallic_order)
 
         assert CharacterDistinction.objects.filter(
-            character=self.sheet.character, distinction=orphaned_drawback
+            character=self.sheet, distinction=orphaned_drawback
         ).exists()
 
     def test_learned_techniques_untouched_on_join(self) -> None:
@@ -140,7 +140,7 @@ class LeaveTraditionTests(TestCase):
         leave_tradition(self.sheet)
 
         grant = CharacterDistinction.objects.filter(
-            character=self.sheet.character, distinction__slug="unbound"
+            character=self.sheet, distinction__slug="unbound"
         ).first()
         assert grant is not None
         assert grant.origin == DistinctionOrigin.GAMEPLAY
@@ -152,7 +152,7 @@ class LeaveTraditionTests(TestCase):
         leave_tradition(self.sheet)
 
         assert not CharacterDistinction.objects.filter(
-            character=self.sheet.character, distinction__slug="unbound"
+            character=self.sheet, distinction__slug="unbound"
         ).exists()
 
 

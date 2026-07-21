@@ -62,8 +62,13 @@ branches on `target.category.name`:
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterDistinction` | Character's acquired distinctions | `character`, `distinction`, `rank`, `origin`, `is_temporary`, `notes`, `secret` (→ `secrets.Secret`) |
-| `CharacterDistinctionOther` | Freeform "Other" entries | `character`, `parent_distinction`, `freeform_text`, `status`, `staff_mapped_distinction` |
+| `CharacterDistinction` | Character's acquired distinctions | `character` (FK → `character_sheets.CharacterSheet`), `distinction`, `rank`, `origin`, `is_temporary`, `notes`, `secret` (→ `secrets.Secret`) |
+| `CharacterDistinctionOther` | Freeform "Other" entries | `character` (FK → `character_sheets.CharacterSheet`), `parent_distinction`, `freeform_text`, `status`, `staff_mapped_distinction` |
+
+Both `character` FKs point at **`CharacterSheet`**, not `ObjectDB` (#2608 — the first
+re-point in the ObjectDB FK audit). `CharacterSheet.pk ==
+ObjectDB.pk` (primary-key O2O), so the change was a pure `AlterField`. Read
+`character_distinction.character` and get the sheet directly — no `.sheet_data` hop.
 
 ---
 

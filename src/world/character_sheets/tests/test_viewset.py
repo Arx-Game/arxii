@@ -884,13 +884,13 @@ class TestDistinctionsSection(TestCase):
         cls.distinction_b = DistinctionFactory(name="Strong Arm", max_rank=3)
 
         cls.cd_a = CharacterDistinctionFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             distinction=cls.distinction_a,
             rank=1,
             notes="Born outside the compact.",
         )
         cls.cd_b = CharacterDistinctionFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             distinction=cls.distinction_b,
             rank=2,
             notes="",
@@ -1009,12 +1009,12 @@ class TestDistinctionsPrivacy(TestCase):
         cls.secret_distinction = DistinctionFactory(name="HiddenShame")
 
         cls.public_cd = CharacterDistinctionFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             distinction=cls.public_distinction,
             rank=1,
         )
         cls.secret_cd = CharacterDistinctionFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             distinction=cls.secret_distinction,
             rank=1,
             secret=SecretFactory(subject_sheet=cls.roster_entry.character_sheet),
@@ -1994,7 +1994,7 @@ class TestCharacterSheetQueryCount(TestCase):
 
         # --- Distinctions ---
         dist = DistinctionFactory(name="QCBrave")
-        CharacterDistinctionFactory(character=cls.character, distinction=dist, rank=1)
+        CharacterDistinctionFactory(character=cls.character.sheet_data, distinction=dist, rank=1)
 
         # --- Magic ---
         resonance = ResonanceFactory(name="QCResolve")
@@ -2211,7 +2211,7 @@ class TestPrefetchCompleteness(TestCase):
 
         # Distinctions
         dist = DistinctionFactory(name="PFBrave")
-        CharacterDistinctionFactory(character=cls.character, distinction=dist, rank=1)
+        CharacterDistinctionFactory(character=cls.character.sheet_data, distinction=dist, rank=1)
 
         # Magic: gifts, techniques, motif, anima ritual, aura
         resonance = ResonanceFactory(name="PFResolve")

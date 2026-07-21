@@ -19,7 +19,7 @@ class ReconcileDistinctionResonanceGrantsTests(TestCase):
             distinction=distinction, resonance=resonance, flat_amount_per_rank=0
         )
         character_distinction = CharacterDistinctionFactory(
-            character=sheet.character, distinction=distinction, rank=1
+            character=sheet, distinction=distinction, rank=1
         )
 
         reconcile_distinction_resonance_grants(character_distinction)
@@ -36,7 +36,7 @@ class ReconcileDistinctionResonanceGrantsTests(TestCase):
             distinction=distinction, resonance=resonance, flat_amount_per_rank=10
         )
         character_distinction = CharacterDistinctionFactory(
-            character=sheet.character, distinction=distinction, rank=2
+            character=sheet, distinction=distinction, rank=2
         )
 
         reconcile_distinction_resonance_grants(character_distinction)
@@ -59,7 +59,7 @@ class ReconcileDistinctionResonanceGrantsTests(TestCase):
             distinction=distinction, resonance=resonance, flat_amount_per_rank=10
         )
         character_distinction = CharacterDistinctionFactory(
-            character=sheet.character, distinction=distinction, rank=2
+            character=sheet, distinction=distinction, rank=2
         )
 
         reconcile_distinction_resonance_grants(character_distinction)
@@ -82,7 +82,7 @@ class ReconcileDistinctionResonanceGrantsTests(TestCase):
             distinction=distinction, resonance=resonance, flat_amount_per_rank=10
         )
         character_distinction = CharacterDistinctionFactory(
-            character=sheet.character, distinction=distinction, rank=2
+            character=sheet, distinction=distinction, rank=2
         )
         reconcile_distinction_resonance_grants(character_distinction)
 
@@ -112,7 +112,7 @@ class ReconcileDistinctionResonanceGrantsTests(TestCase):
             distinction=distinction, resonance=predatory, flat_amount_per_rank=7
         )
         character_distinction = CharacterDistinctionFactory(
-            character=sheet.character, distinction=distinction, rank=3
+            character=sheet, distinction=distinction, rank=3
         )
 
         reconcile_distinction_resonance_grants(character_distinction)
@@ -173,7 +173,7 @@ class ReconcileDistinctionResonanceGrantsTests(TestCase):
             distinction=distinction, resonance=resonance, flat_amount_per_rank=10
         )
         character_distinction = CharacterDistinctionFactory(
-            character=sheet.character, distinction=distinction, rank=1
+            character=sheet, distinction=distinction, rank=1
         )
         reconcile_distinction_resonance_grants(character_distinction)
         grant = ResonanceGrant.objects.get(
@@ -202,7 +202,7 @@ class ReconcileDistinctionResonanceGrantsTests(TestCase):
             distinction=distinction, resonance=resonance, flat_amount_per_rank=10
         )
         character_distinction = CharacterDistinctionFactory(
-            character=sheet.character, distinction=distinction, rank=2
+            character=sheet, distinction=distinction, rank=2
         )
         reconcile_distinction_resonance_grants(character_distinction)
         character_distinction.rank = 3

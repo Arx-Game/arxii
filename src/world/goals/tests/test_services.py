@@ -165,7 +165,7 @@ class GetGoalBonusTest(TestCase):
 
         # Grant Rapacious distinction
         char_distinction = CharacterDistinction.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             distinction=self.rapacious,
             rank=1,
         )
@@ -194,7 +194,7 @@ class GetGoalBonusTest(TestCase):
 
         # Grant Voracious at rank 1 (+100%)
         char_distinction = CharacterDistinction.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             distinction=self.voracious,
             rank=1,
         )
@@ -218,7 +218,7 @@ class GetGoalBonusTest(TestCase):
 
         # Grant Voracious at rank 3 (+300%)
         char_distinction = CharacterDistinction.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             distinction=self.voracious,
             rank=3,
         )
@@ -238,14 +238,14 @@ class GetGoalBonusTest(TestCase):
 
         # Grant both distinctions
         rapacious_cd = CharacterDistinction.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             distinction=self.rapacious,
             rank=1,
         )
         create_distinction_modifiers(rapacious_cd)
 
         voracious_cd = CharacterDistinction.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             distinction=self.voracious,
             rank=1,
         )
@@ -308,7 +308,7 @@ class GetTotalGoalPointsTest(TestCase):
     def test_ambitious_adds_points(self):
         """Ambitious adds 30 goal points."""
         char_distinction = CharacterDistinction.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             distinction=self.ambitious,
             rank=1,
         )
@@ -388,7 +388,7 @@ class GetGoalBonusesBreakdownTest(TestCase):
         )
 
         char_distinction = CharacterDistinction.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             distinction=self.rapacious,
             rank=1,
         )
@@ -461,7 +461,7 @@ class ApplyGoalTests(TestCase):
             distinction=distinction, target=target, value_per_rank=1
         )
         char_dist = CharacterDistinction.objects.create(
-            character=self.character, distinction=distinction
+            character=self.character.sheet_data, distinction=distinction
         )
         source = ModifierSource.objects.create(
             distinction_effect=effect, character_distinction=char_dist

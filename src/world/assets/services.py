@@ -47,7 +47,7 @@ def reconcile_distinction_asset_grants(character_distinction: CharacterDistincti
     from world.character_sheets.services import create_character_with_sheet  # noqa: PLC0415
     from world.npc_services.models import NPCStanding  # noqa: PLC0415
 
-    promoter_persona = character_distinction.character.sheet_data.primary_persona
+    promoter_persona = character_distinction.character.primary_persona
 
     grants = DistinctionAssetGrant.objects.filter(distinction=character_distinction.distinction)
     for grant in grants:

@@ -60,7 +60,9 @@ class GMAwardDistinctionActionTests(TestCase):
         result = self._run(actor)
 
         assert result.success is True
-        cd = CharacterDistinction.objects.get(character=self.target, distinction=self.distinction)
+        cd = CharacterDistinction.objects.get(
+            character=self.target.sheet_data, distinction=self.distinction
+        )
         assert cd.rank == 1
         assert cd.origin == DistinctionOrigin.GM_AWARD
         # Narration fired: the grant seam creates a NarrativeMessage for the target.
@@ -74,7 +76,7 @@ class GMAwardDistinctionActionTests(TestCase):
 
         assert result.success is False
         assert "Junior GM" in result.message
-        assert not CharacterDistinction.objects.filter(character=self.target).exists()
+        assert not CharacterDistinction.objects.filter(character=self.target.sheet_data).exists()
 
     def test_missing_gm_profile_is_blocked(self) -> None:
         actor = CharacterFactory(db_key="AwardDistinctionNoProfile")
@@ -84,7 +86,7 @@ class GMAwardDistinctionActionTests(TestCase):
 
         assert result.success is False
         assert result.message == "GM trust required."
-        assert not CharacterDistinction.objects.filter(character=self.target).exists()
+        assert not CharacterDistinction.objects.filter(character=self.target.sheet_data).exists()
 
     def test_staff_bypass_without_gm_profile_awards(self) -> None:
         actor = self._staff_actor()
@@ -92,7 +94,7 @@ class GMAwardDistinctionActionTests(TestCase):
 
         assert result.success is True
         assert CharacterDistinction.objects.filter(
-            character=self.target, distinction=self.distinction
+            character=self.target.sheet_data, distinction=self.distinction
         ).exists()
 
     def test_slug_lookup_is_case_insensitive(self) -> None:
@@ -107,7 +109,7 @@ class GMAwardDistinctionActionTests(TestCase):
 
         assert result.success is False
         assert "No active distinction found" in result.message
-        assert not CharacterDistinction.objects.filter(character=self.target).exists()
+        assert not CharacterDistinction.objects.filter(character=self.target.sheet_data).exists()
 
     def test_inactive_distinction_is_not_awardable(self) -> None:
         DistinctionFactory(name="Retired", slug="retired", is_active=False)
@@ -137,7 +139,7 @@ class GMAwardDistinctionActionTests(TestCase):
 
     def test_re_award_ranks_up(self) -> None:
         CharacterDistinctionFactory(
-            character=self.target,
+            character=self.target.sheet_data,
             distinction=self.distinction,
             rank=1,
             origin=DistinctionOrigin.CHARACTER_CREATION,
@@ -146,7 +148,9 @@ class GMAwardDistinctionActionTests(TestCase):
         result = self._run(actor)
 
         assert result.success is True
-        cd = CharacterDistinction.objects.get(character=self.target, distinction=self.distinction)
+        cd = CharacterDistinction.objects.get(
+            character=self.target.sheet_data, distinction=self.distinction
+        )
         assert cd.rank == 2
         # Rank-up never rewrites the original acquisition origin (seam behavior,
         # ratified in the Task 1 tests).
@@ -157,7 +161,9 @@ class GMAwardDistinctionActionTests(TestCase):
         result = self._run(actor, rank=3)
 
         assert result.success is True
-        cd = CharacterDistinction.objects.get(character=self.target, distinction=self.distinction)
+        cd = CharacterDistinction.objects.get(
+            character=self.target.sheet_data, distinction=self.distinction
+        )
         assert cd.rank == 3
 
     def test_rank_below_one_is_rejected(self) -> None:
@@ -166,7 +172,7 @@ class GMAwardDistinctionActionTests(TestCase):
 
         assert result.success is False
         assert "positive whole number" in result.message
-        assert not CharacterDistinction.objects.filter(character=self.target).exists()
+        assert not CharacterDistinction.objects.filter(character=self.target.sheet_data).exists()
 
     def test_garbage_rank_is_rejected(self) -> None:
         actor = self._staff_actor(db_key="AwardDistinctionStaffRankGarbage")
@@ -181,12 +187,12 @@ class GMAwardDistinctionActionTests(TestCase):
 
         assert result.success is False
         assert "maximum rank of 3" in result.message
-        assert not CharacterDistinction.objects.filter(character=self.target).exists()
+        assert not CharacterDistinction.objects.filter(character=self.target.sheet_data).exists()
 
     def test_exclusion_violation_surfaces_user_message(self) -> None:
         rival = DistinctionFactory(name="Rival Trait", slug="rival-trait")
         self.distinction.mutually_exclusive_with.add(rival)
-        CharacterDistinctionFactory(character=self.target, distinction=rival, rank=1)
+        CharacterDistinctionFactory(character=self.target.sheet_data, distinction=rival, rank=1)
 
         actor = self._staff_actor(db_key="AwardDistinctionStaffExcl")
         result = self._run(actor)
@@ -194,7 +200,7 @@ class GMAwardDistinctionActionTests(TestCase):
         assert result.success is False
         assert "Mutually exclusive" in result.message
         assert not CharacterDistinction.objects.filter(
-            character=self.target, distinction=self.distinction
+            character=self.target.sheet_data, distinction=self.distinction
         ).exists()
 
     def test_missing_kwargs_fails_with_usage(self) -> None:

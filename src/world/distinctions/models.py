@@ -16,7 +16,6 @@ defining characteristics (merits/flaws equivalent):
 
 from django.db import models
 from django.utils.functional import cached_property
-from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
@@ -444,10 +443,10 @@ class CharacterDistinction(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        ObjectDB,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="distinctions",
-        help_text="The character who has this distinction.",
+        help_text="The character sheet this distinction belongs to.",
     )
     distinction = models.ForeignKey(
         Distinction,
@@ -549,10 +548,10 @@ class CharacterDistinctionOther(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        ObjectDB,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="distinction_other_entries",
-        help_text="The character who entered this 'Other' distinction.",
+        help_text="The character sheet that entered this 'Other' distinction.",
     )
     parent_distinction = models.ForeignKey(
         Distinction,

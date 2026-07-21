@@ -149,7 +149,7 @@ class ProvisionSpeciesGiftsTests(TestCase):
         grant.gift.resonances.add(self.resonance)
         sheet = CharacterSheetFactory(species=grant.species)
         provision_species_gifts(sheet, resonance=self.resonance)
-        cd = CharacterDistinction.objects.get(character=sheet.character, distinction=distinction)
+        cd = CharacterDistinction.objects.get(character=sheet, distinction=distinction)
         self.assertEqual(cd.origin, DistinctionOrigin.SPECIES)
 
     def test_drawback_distinction_is_idempotent(self):
@@ -164,9 +164,7 @@ class ProvisionSpeciesGiftsTests(TestCase):
         sheet = CharacterSheetFactory(species=grant.species)
         provision_species_gifts(sheet, resonance=self.resonance)
         provision_species_gifts(sheet, resonance=self.resonance)
-        rows = CharacterDistinction.objects.filter(
-            character=sheet.character, distinction=distinction
-        )
+        rows = CharacterDistinction.objects.filter(character=sheet, distinction=distinction)
         self.assertEqual(rows.count(), 1)
         self.assertEqual(rows.first().rank, 1)
 

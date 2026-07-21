@@ -184,7 +184,7 @@ class CharacterModifierViewSetTests(TestCase):
 
         # Create character distinctions and sources
         cls.char_dist1 = CharacterDistinctionFactory(
-            character=cls.sheet1.character, distinction=cls.distinction1
+            character=cls.sheet1, distinction=cls.distinction1
         )
         cls.source1 = ModifierSource.objects.create(
             distinction_effect=cls.effect1, character_distinction=cls.char_dist1
@@ -194,7 +194,7 @@ class CharacterModifierViewSetTests(TestCase):
         )
 
         cls.char_dist2 = CharacterDistinctionFactory(
-            character=cls.sheet2.character, distinction=cls.distinction1
+            character=cls.sheet2, distinction=cls.distinction1
         )
         cls.source3 = ModifierSource.objects.create(
             distinction_effect=cls.effect1, character_distinction=cls.char_dist2

@@ -61,7 +61,7 @@ def reconcile_ritual_knowledge(roster_entry: "RosterEntry") -> None:
         )
 
     # 3. Walk DistinctionRitualGrant — collect rituals for all distinctions
-    distinction_ids = character.distinctions.values_list("distinction_id", flat=True)
+    distinction_ids = char_sheet.distinctions.values_list("distinction_id", flat=True)
     if distinction_ids:
         ritual_ids.update(
             DistinctionRitualGrant.objects.filter(distinction_id__in=distinction_ids).values_list(

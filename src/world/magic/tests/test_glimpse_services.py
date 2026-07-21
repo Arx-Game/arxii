@@ -95,10 +95,12 @@ class GlimpseStateTransitionTests(TestCase):
 
 class GlimpseDistinctionLinkTests(TestCase):
     def test_link_and_unlink(self):
+        from world.character_sheets.factories import CharacterSheetFactory
         from world.distinctions.factories import CharacterDistinctionFactory
 
         aura = CharacterAuraFactory()
-        cd = CharacterDistinctionFactory(character=aura.character)
+        sheet = CharacterSheetFactory(character=aura.character)
+        cd = CharacterDistinctionFactory(character=sheet)
         link_distinction_to_glimpse(cd, aura)
         assert cd.from_glimpse_id == aura.pk
         unlink_distinction_from_glimpse(cd)

@@ -101,7 +101,7 @@ class DistinctionRewardApplicationTests(TestCase):
 
         assert (
             CharacterDistinction.objects.filter(
-                character=self.sheet.character, distinction=self.distinction
+                character=self.sheet, distinction=self.distinction
             ).count()
             == 1
         )
@@ -111,9 +111,7 @@ class DistinctionRewardApplicationTests(TestCase):
 
         grant_achievement(self.achievement, [self.sheet])
 
-        cd = CharacterDistinction.objects.get(
-            character=self.sheet.character, distinction=self.distinction
-        )
+        cd = CharacterDistinction.objects.get(character=self.sheet, distinction=self.distinction)
         assert cd.origin == DistinctionOrigin.ACHIEVEMENT_AUTO_GRANT
 
     def test_explicit_reward_value_grants_that_rank(self) -> None:
@@ -121,9 +119,7 @@ class DistinctionRewardApplicationTests(TestCase):
 
         grant_achievement(self.achievement, [self.sheet])
 
-        cd = CharacterDistinction.objects.get(
-            character=self.sheet.character, distinction=self.distinction
-        )
+        cd = CharacterDistinction.objects.get(character=self.sheet, distinction=self.distinction)
         assert cd.rank == 3
 
     def test_blank_reward_value_steps_rank(self) -> None:
@@ -131,9 +127,7 @@ class DistinctionRewardApplicationTests(TestCase):
 
         grant_achievement(self.achievement, [self.sheet])
 
-        cd = CharacterDistinction.objects.get(
-            character=self.sheet.character, distinction=self.distinction
-        )
+        cd = CharacterDistinction.objects.get(character=self.sheet, distinction=self.distinction)
         assert cd.rank == 1
 
     def test_garbage_reward_value_steps_rank(self) -> None:
@@ -141,9 +135,7 @@ class DistinctionRewardApplicationTests(TestCase):
 
         grant_achievement(self.achievement, [self.sheet])
 
-        cd = CharacterDistinction.objects.get(
-            character=self.sheet.character, distinction=self.distinction
-        )
+        cd = CharacterDistinction.objects.get(character=self.sheet, distinction=self.distinction)
         assert cd.rank == 1
 
     def test_negative_reward_value_steps_rank_and_sibling_rewards_still_apply(self) -> None:
@@ -158,9 +150,7 @@ class DistinctionRewardApplicationTests(TestCase):
 
         grant_achievement(self.achievement, [self.sheet])
 
-        cd = CharacterDistinction.objects.get(
-            character=self.sheet.character, distinction=self.distinction
-        )
+        cd = CharacterDistinction.objects.get(character=self.sheet, distinction=self.distinction)
         assert cd.rank == 1
         assert CharacterTitle.objects.filter(character_sheet=self.sheet).exists()
 
@@ -169,16 +159,14 @@ class DistinctionRewardApplicationTests(TestCase):
         grant_achievement(self.achievement, [self.sheet])
         grant_achievement(self.achievement, [self.sheet])
 
-        cd = CharacterDistinction.objects.get(
-            character=self.sheet.character, distinction=self.distinction
-        )
+        cd = CharacterDistinction.objects.get(character=self.sheet, distinction=self.distinction)
         assert cd.rank == 1
 
     def test_exclusion_conflict_skips_the_distinction_leg_and_continues(self) -> None:
         # Sheet already holds a distinction mutually exclusive with the reward's.
         conflicting = DistinctionFactory(name="Iron Will")
         self.distinction.mutually_exclusive_with.add(conflicting)
-        CharacterDistinctionFactory(character=self.sheet.character, distinction=conflicting, rank=1)
+        CharacterDistinctionFactory(character=self.sheet, distinction=conflicting, rank=1)
         self._add_reward()
         # A second, unrelated reward on the same achievement — proves the exclusion
         # conflict on the distinction leg doesn't crash the rest of the award.
@@ -188,6 +176,6 @@ class DistinctionRewardApplicationTests(TestCase):
         grant_achievement(self.achievement, [self.sheet])
 
         assert not CharacterDistinction.objects.filter(
-            character=self.sheet.character, distinction=self.distinction
+            character=self.sheet, distinction=self.distinction
         ).exists()
         assert CharacterTitle.objects.filter(character_sheet=self.sheet).exists()

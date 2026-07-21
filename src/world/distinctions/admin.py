@@ -155,7 +155,7 @@ class CharacterDistinctionAdmin(admin.ModelAdmin):
     ]
     list_filter = ["origin", "is_temporary", "distinction__category"]
     list_select_related = ["character", "distinction", "distinction__category"]
-    search_fields = ["character__db_key", "distinction__name"]
+    search_fields = ["character__character__db_key", "distinction__name"]
     autocomplete_fields = ["character", "distinction"]
     readonly_fields = ["created_at", "updated_at"]
 
@@ -170,7 +170,7 @@ class CharacterDistinctionOtherAdmin(admin.ModelAdmin):
         "created_at",
     ]
     list_filter = ["status", "parent_distinction"]
-    search_fields = ["character__db_key", "freeform_text"]
+    search_fields = ["character__character__db_key", "freeform_text"]
     autocomplete_fields = ["character", "parent_distinction", "staff_mapped_distinction"]
     readonly_fields = ["created_at"]
     actions = ["mark_approved"]

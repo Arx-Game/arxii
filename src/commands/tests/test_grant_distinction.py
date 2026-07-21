@@ -60,7 +60,7 @@ class CmdGrantDistinctionTests(TestCase):
         cmd.func()
 
         cd = CharacterDistinction.objects.get(
-            character=self.target_character, distinction=self.distinction
+            character=self.target_character.sheet_data, distinction=self.distinction
         )
         assert cd.rank == 1
         assert cd.origin == DistinctionOrigin.GM_AWARD
@@ -76,7 +76,7 @@ class CmdGrantDistinctionTests(TestCase):
         cmd.func()
 
         cd = CharacterDistinction.objects.get(
-            character=self.target_character, distinction=self.distinction
+            character=self.target_character.sheet_data, distinction=self.distinction
         )
         assert cd.rank == 3
         self.staff_character.msg.assert_called_with(
@@ -91,7 +91,9 @@ class CmdGrantDistinctionTests(TestCase):
         cmd.func()
 
         self.staff_character.msg.assert_any_call("rank must be a whole number.")
-        assert not CharacterDistinction.objects.filter(character=self.target_character).exists()
+        assert not CharacterDistinction.objects.filter(
+            character=self.target_character.sheet_data
+        ).exists()
 
     def test_unknown_slug_reports_error(self) -> None:
         cmd = _build_cmd(
@@ -101,7 +103,9 @@ class CmdGrantDistinctionTests(TestCase):
         cmd.func()
 
         self.staff_character.msg.assert_called()
-        assert not CharacterDistinction.objects.filter(character=self.target_character).exists()
+        assert not CharacterDistinction.objects.filter(
+            character=self.target_character.sheet_data
+        ).exists()
 
     def test_missing_equals_reports_usage(self) -> None:
         cmd = _build_cmd(self.staff_character, "justaname")
@@ -142,7 +146,7 @@ class CmdGrantDistinctionGMTrustTests(TestCase):
         cmd.func()
 
         assert CharacterDistinction.objects.filter(
-            character=self.target_character, distinction=self.distinction
+            character=self.target_character.sheet_data, distinction=self.distinction
         ).exists()
 
     def test_starting_gm_below_junior_tier_is_blocked(self) -> None:
@@ -152,7 +156,9 @@ class CmdGrantDistinctionGMTrustTests(TestCase):
         cmd.func()
 
         caller.msg.assert_called_with("Requires Junior GM or higher.")
-        assert not CharacterDistinction.objects.filter(character=self.target_character).exists()
+        assert not CharacterDistinction.objects.filter(
+            character=self.target_character.sheet_data
+        ).exists()
 
     def test_missing_gm_profile_is_blocked(self) -> None:
         caller = self._caller()
@@ -162,4 +168,6 @@ class CmdGrantDistinctionGMTrustTests(TestCase):
         cmd.func()
 
         caller.msg.assert_called_with("GM trust required.")
-        assert not CharacterDistinction.objects.filter(character=self.target_character).exists()
+        assert not CharacterDistinction.objects.filter(
+            character=self.target_character.sheet_data
+        ).exists()

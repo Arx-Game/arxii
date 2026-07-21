@@ -48,7 +48,7 @@ class HasPublicDistinctionTests(TestCase):
     def test_true_for_public_distinction(self) -> None:
         character = _character_with_sheet()
         distinction = DistinctionFactory(slug="blooded-duelist")
-        CharacterDistinction.objects.create(character=character, distinction=distinction)
+        CharacterDistinction.objects.create(character=character.sheet_data, distinction=distinction)
         self.assertTrue(character.has_public_distinction("blooded-duelist"))
 
     def test_false_for_secret_relocated_distinction(self) -> None:
@@ -56,7 +56,7 @@ class HasPublicDistinctionTests(TestCase):
         distinction = DistinctionFactory(slug="blooded-duelist")
         secret = SecretFactory()
         CharacterDistinction.objects.create(
-            character=character, distinction=distinction, secret=secret
+            character=character.sheet_data, distinction=distinction, secret=secret
         )
         self.assertFalse(character.has_public_distinction("blooded-duelist"))
 

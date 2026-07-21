@@ -314,7 +314,10 @@ class Character(ObjectParent, DefaultCharacter):
         A distinction relocated into a Secret (#1334) must never leak through a reactive
         filter. Used by the reactive-filter ``has_public_distinction`` op (#2471 v2).
         """
-        return self.distinctions.filter(distinction__slug=slug, secret__isnull=True).exists()
+        sheet = self.character_sheet
+        if sheet is None:
+            return False
+        return sheet.distinctions.filter(distinction__slug=slug, secret__isnull=True).exists()
 
     def fame_tier_at_least(self, spec: dict) -> bool:
         """True if this character's active persona's perceived fame tier meets a minimum.

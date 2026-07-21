@@ -1031,7 +1031,7 @@ def create_distinction_modifiers(
 
     distinction = character_distinction.distinction
     rank = character_distinction.rank
-    character = character_distinction.character.sheet_data
+    character = character_distinction.character
 
     created_modifiers = []
 

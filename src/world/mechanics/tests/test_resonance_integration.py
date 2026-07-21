@@ -78,7 +78,7 @@ class DistinctionResonanceModifierSkippedTest(TestCase):
         )
 
         char_dist = CharacterDistinctionFactory(
-            character=self.character,
+            character=self.character_sheet,
             distinction=patient,
             rank=1,
         )
@@ -102,7 +102,7 @@ class DistinctionResonanceModifierSkippedTest(TestCase):
         )
 
         char_dist = CharacterDistinctionFactory(
-            character=self.character,
+            character=self.character_sheet,
             distinction=charming,
             rank=1,
         )
@@ -138,7 +138,7 @@ class DistinctionResonanceModifierSkippedTest(TestCase):
         )
 
         char_dist = CharacterDistinctionFactory(
-            character=self.character,
+            character=self.character_sheet,
             distinction=zen,
             rank=2,
         )
@@ -163,7 +163,7 @@ class DistinctionResonanceModifierSkippedTest(TestCase):
             value_per_rank=5,
         )
         char_dist = CharacterDistinctionFactory(
-            character=self.character,
+            character=self.character_sheet,
             distinction=charming,
             rank=1,
         )
@@ -192,7 +192,7 @@ class DistinctionGrantReconcilesResonanceTest(TestCase):
         )
 
         char_dist = CharacterDistinctionFactory(
-            character=self.character,
+            character=self.character_sheet,
             distinction=devoted,
             rank=2,
         )
@@ -219,7 +219,7 @@ class DistinctionGrantReconcilesResonanceTest(TestCase):
         )
 
         char_dist = CharacterDistinctionFactory(
-            character=self.character,
+            character=self.character_sheet,
             distinction=devoted,
             rank=1,
         )
@@ -246,7 +246,7 @@ class DistinctionGrantReconcilesResonanceTest(TestCase):
         """A distinction with no DistinctionResonanceGrant row reconciles to nothing."""
         plain = DistinctionFactory(name="Plain")
         char_dist = CharacterDistinctionFactory(
-            character=self.character,
+            character=self.character_sheet,
             distinction=plain,
             rank=1,
         )

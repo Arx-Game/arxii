@@ -1573,6 +1573,8 @@
   - story_progress <- stories.StoryProgress
   - alternate_selves <- forms.AlternateSelf
   - active_alternate_self <- forms.ActiveAlternateSelf
+  - distinctions <- distinctions.CharacterDistinction
+  - distinction_other_entries <- distinctions.CharacterDistinctionOther
   - org_obligations <- societies.OrganizationObligation
   - purse <- currency.CharacterPurse
   - employments <- currency.CharacterEmployment
@@ -3200,7 +3202,7 @@
 
 ### CharacterDistinction
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - distinction -> distinctions.Distinction [FK]
   - secret -> secrets.Secret [OneToOne] (nullable)
   - from_glimpse -> magic.CharacterAura [FK] (nullable)
@@ -3210,7 +3212,7 @@
 
 ### CharacterDistinctionOther
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - parent_distinction -> distinctions.Distinction [FK]
   - staff_mapped_distinction -> distinctions.Distinction [FK] (nullable)
 

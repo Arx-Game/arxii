@@ -3,7 +3,7 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.distinctions.models import (
     CharacterDistinction,
     CharacterDistinctionOther,
@@ -392,7 +392,7 @@ class CharacterDistinctionTests(TestCase):
             cost_per_rank=2,
             max_rank=5,
         )
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory()
 
     def test_character_distinction_creation(self):
         """Test creating a character distinction with rank."""
@@ -477,7 +477,7 @@ class CharacterDistinctionOtherTests(TestCase):
             cost_per_rank=-2,
             allow_other=True,
         )
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory()
 
     def test_other_creation(self):
         """Test creating an 'Other' entry with freeform text."""
