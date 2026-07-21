@@ -614,6 +614,13 @@ Character advantages and disadvantages (CG Stage 6: Traits).
   the four ratified sources (`GMAwardDistinctionAction`/telnet `grant_distinction`, achievement
   `RewardType.DISTINCTION`, consequence-pool `EffectType.GRANT_DISTINCTION`, magic's
   `ENDORSEMENT_THRESHOLD`) and the skip-on-conflict pattern each one uses.
+- **Post-CG removal + change requests (#2607):** `revoke_distinction(cd)` — the unwind
+  counterpart (clear secret → delete modifiers → delete row; refuses resonance/asset/codex
+  distinctions via `DistinctionRevokeError`). `change_supported(distinction)` (derived
+  resonance/asset/codex block + the `Distinction.post_cg_immutable` denylist) and
+  `distinction_change_xp_cost(*, rank, removing)` (`3 × |cost_per_rank × rank|`, benefit-direction
+  only) gate the GM-table request flow. The flow lives in `world.gm` (`TableUpdateRequest`); see
+  the GM section and [distinctions.md](distinctions.md) "Post-CG removal".
 - **Integrates with:** character_creation (draft storage; CG-only writer besides this seam and
   admin), traits (stat modifiers), gm/actions (`GMAwardDistinctionAction`, JUNIOR-tier),
   commands (telnet `CmdGrantDistinction`), achievements (`RewardType.DISTINCTION` reward
@@ -1644,7 +1651,19 @@ GM at a given level may author (#2000, ADR-0097).
   (`submitted_by: accounts.AccountDB`, `situation_kind` nullable, `proposal_kind`,
   `proposal_text`, `status: player_submissions.SubmissionStatus` — reused directly,
   Decision 8 — `reviewer`, `review_notes`, `resolved_at`)
+- **Table sheet-update requests (#2607):** `TableUpdateRequest` (`membership` FK, `kind:
+  TableRequestKind`, `player_reasoning`, `status: TableRequestStatus`, `gm_notes`,
+  created/resolved/completed timestamps) — a general end-of-session request a member leaves for
+  their table GM to sign off (PENDING→APPROVED/REJECTED; APPROVED→COMPLETED by the member).
+  Kind-specific payload on a 1:1 details model in the consumer app (first kind:
+  `distinctions.DistinctionChangeDetails`, distinction add/remove). Kind→handler registry in
+  `request_handlers.py` (`register_request_handler`, called from the consumer's `AppConfig.ready`);
+  generic transitions in `table_request_services.py`; the four REGISTRY actions in
+  `actions/definitions/table_requests.py`; telnet `tablerequest`/`treq`. See `src/world/gm/CLAUDE.md`
+  for the extension pattern.
 - **Enums (`constants.py`):** `GMLevel` (STARTING/JUNIOR/GM/EXPERIENCED/SENIOR),
+  `TableRequestKind` (`distinction_add`/`distinction_remove`, #2607),
+  `TableRequestStatus` (pending/approved/rejected/completed/withdrawn, #2607),
   `GM_LEVEL_ORDER` + `gm_level_index(level)` (position on the ladder, 0–4),
   `GMApplicationStatus`, `GMTableStatus`, `CatalogSuggestionProposalKind`
   (NEW_SITUATION/CHECK_FIT/DIFFICULTY_GUIDE/POOL_GUIDE/OTHER) + `PROPOSAL_KIND_MIN_LEVEL`

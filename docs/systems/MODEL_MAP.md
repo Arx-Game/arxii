@@ -117,6 +117,7 @@
 **Pointed to by:**
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
+  - auderemajorafaithvariantcapabilitygrant_grants <- magic.AudereMajoraFaithVariantCapabilityGrant
   - techniquevariantcapabilitygrant_grants <- magic.TechniqueVariantCapabilityGrant
   - signaturemotifbonuscapabilitygrant_grants <- magic.SignatureMotifBonusCapabilityGrant
   - techniquedraftcapabilitygrant_grants <- magic.TechniqueDraftCapabilityGrant
@@ -128,6 +129,7 @@
   - blocking_challenges <- mechanics.ChallengeTemplate
   - check_type_modifiers <- checks.CheckTypeCapabilityModifier
   - granted_by_roles <- covenants.CovenantRole
+  - miraclecapabilitygrant_grants <- worship.MiracleCapabilityGrant
   - combat_pull_grants <- combat.CombatPullResolvedEffect
   - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge
   - battle_unit_template_values <- battles.BattleUnitTemplateCapability
@@ -162,6 +164,7 @@
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
   - weapon_templates <- items.ItemTemplate
+  - miracledamageprofile_damage_profiles <- worship.MiracleDamageProfile
   - threat_pool_entries <- combat.ThreatPoolEntry
   - combat_pull_resistances <- combat.CombatPullResolvedEffect
 
@@ -182,6 +185,7 @@
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - techniqueremovedcondition_applied <- magic.TechniqueRemovedCondition
+  - auderemajorafaithvariantappliedcondition_applied <- magic.AudereMajoraFaithVariantAppliedCondition
   - magical_alteration <- magic.MagicalAlterationTemplate
   - crossing_options <- magic.CrossingOption
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
@@ -210,6 +214,7 @@
   - consequence_effects <- checks.ConsequenceEffect
   - stat_rules_for <- achievements.ConditionStatRule
   - rampart_signature_profiles <- areas.RampartElementProfile
+  - miracleappliedcondition_applied <- worship.MiracleAppliedCondition
   - threat_pool_entries <- combat.ThreatPoolEntry
   - ward_reactions <- room_features.RoomWardDetails
   - defense_progression_projects <- room_features.DefenseProgressionDetails
@@ -1516,14 +1521,14 @@
   - development_transactions <- progression.DevelopmentTransaction
   - weekly_skill_usage <- progression.WeeklySkillUsage
   - audere_offers <- magic.PendingAudereOffer
-  - audere_majora_offers <- magic.PendingAudereMajoraOffer
-  - audere_majora_crossings <- magic.AudereMajoraCrossing
-  - entry_flourish_offers <- magic.PendingEntryFlourishOffer
   - created_gifts <- magic.Gift
   - character_gifts <- magic.CharacterGift
   - character_traditions <- magic.CharacterTradition
   - authored_techniques <- magic.Technique
   - character_techniques <- magic.CharacterTechnique
+  - audere_majora_offers <- magic.PendingAudereMajoraOffer
+  - audere_majora_crossings <- magic.AudereMajoraCrossing
+  - entry_flourish_offers <- magic.PendingEntryFlourishOffer
   - pending_alterations <- magic.PendingAlteration
   - alteration_events <- magic.MagicalAlterationEvent
   - anima_ritual_participations <- magic.AnimaRitualPerformance
@@ -1633,6 +1638,7 @@
   - worship_grants <- worship.WorshipGrant
   - devotion_standings <- worship.DevotionStanding
   - worship_declaration <- worship.WorshipDeclaration
+  - miracle_performances <- worship.MiraclePerformance
   - ceremony_honors <- ceremonies.CeremonyHonoree
   - will <- estates.Will
   - estate_settlement <- estates.EstateSettlement
@@ -1808,8 +1814,8 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
-  - audere_majora_crossings <- magic.AudereMajoraCrossing
   - allowed_styles <- magic.TechniqueStyle
+  - audere_majora_crossings <- magic.AudereMajoraCrossing
   - gift_unlocks <- magic.GiftUnlock
   - glimpse_trigger_tags <- magic.GlimpseTag
   - ritual_grants <- magic.PathRitualGrant
@@ -2458,6 +2464,7 @@
 **Pointed to by:**
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
+  - auderemajorafaithvariantcapabilitygrant_grants <- magic.AudereMajoraFaithVariantCapabilityGrant
   - techniquevariantcapabilitygrant_grants <- magic.TechniqueVariantCapabilityGrant
   - signaturemotifbonuscapabilitygrant_grants <- magic.SignatureMotifBonusCapabilityGrant
   - techniquedraftcapabilitygrant_grants <- magic.TechniqueDraftCapabilityGrant
@@ -2469,6 +2476,7 @@
   - blocking_challenges <- mechanics.ChallengeTemplate
   - check_type_modifiers <- checks.CheckTypeCapabilityModifier
   - granted_by_roles <- covenants.CovenantRole
+  - miraclecapabilitygrant_grants <- worship.MiracleCapabilityGrant
   - combat_pull_grants <- combat.CombatPullResolvedEffect
   - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge
   - battle_unit_template_values <- battles.BattleUnitTemplateCapability
@@ -2503,6 +2511,7 @@
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
   - weapon_templates <- items.ItemTemplate
+  - miracledamageprofile_damage_profiles <- worship.MiracleDamageProfile
   - threat_pool_entries <- combat.ThreatPoolEntry
   - combat_pull_resistances <- combat.CombatPullResolvedEffect
 
@@ -2523,6 +2532,7 @@
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - techniqueremovedcondition_applied <- magic.TechniqueRemovedCondition
+  - auderemajorafaithvariantappliedcondition_applied <- magic.AudereMajoraFaithVariantAppliedCondition
   - magical_alteration <- magic.MagicalAlterationTemplate
   - crossing_options <- magic.CrossingOption
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
@@ -2551,6 +2561,7 @@
   - consequence_effects <- checks.ConsequenceEffect
   - stat_rules_for <- achievements.ConditionStatRule
   - rampart_signature_profiles <- areas.RampartElementProfile
+  - miracleappliedcondition_applied <- worship.MiracleAppliedCondition
   - threat_pool_entries <- combat.ThreatPoolEntry
   - ward_reactions <- room_features.RoomWardDetails
   - defense_progression_projects <- room_features.DefenseProgressionDetails
@@ -3218,10 +3229,18 @@
   - parent_distinction -> distinctions.Distinction [FK]
   - staff_mapped_distinction -> distinctions.Distinction [FK] (nullable)
 
+### DistinctionChangeDetails
+**Foreign Keys:**
+  - request -> gm.TableUpdateRequest [OneToOne]
+  - distinction -> distinctions.Distinction [FK]
+
 ### Service Functions
+- `change_supported(distinction: 'Distinction') -> 'bool' — True iff this distinction may be added/removed via a GM table request (#2607).`
 - `clear_distinction_secret(character_distinction: 'CharacterDistinction') -> 'None' — Make a relocated distinction public again by deleting its Secret (#1334).`
+- `distinction_change_xp_cost(distinction: 'Distinction', *, rank: 'int', removing: 'bool') -> 'int' — XP charged for a table distinction change (#2607).`
 - `grant_distinction(character: 'CharacterSheet', distinction: 'Distinction', *, origin: 'str', rank: 'int | None' = None, source_description: 'str' = '') -> 'CharacterDistinction' — Grant a Distinction, or rank one up, through the single acquisition seam (#2037).`
 - `mint_distinction_secret(character_distinction: 'CharacterDistinction', *, level: 'int | None' = None, provenance: 'str' = SecretProvenance.GM_AUTHORED, author_persona: 'Persona | None' = None, content: 'str' = '') -> 'Secret' — Relocate a distinction into a Secret, returning it (#1334).`
+- `revoke_distinction(character_distinction: 'CharacterDistinction') -> 'None' — Remove a held distinction and reverse everything the grant built (#2607).`
 
 
 ## world.dreams
@@ -3599,6 +3618,8 @@
 **Foreign Keys:**
   - table -> gm.GMTable [FK]
   - persona -> scenes.Persona [FK]
+**Pointed to by:**
+  - update_requests <- gm.TableUpdateRequest
 
 ### GMRosterInvite
 **Foreign Keys:**
@@ -3658,6 +3679,12 @@
 **Foreign Keys:**
   - gm_profile -> gm.GMProfile [OneToOne]
   - game_week -> game_clock.GameWeek [FK] (nullable)
+
+### TableUpdateRequest
+**Foreign Keys:**
+  - membership -> gm.GMTableMembership [FK]
+**Pointed to by:**
+  - distinction_change_details <- distinctions.DistinctionChangeDetails
 
 ### Service Functions
 - `approve_application_as_gm(gm: 'GMProfile', application: 'RosterApplication') -> 'None' — Approve a roster application on behalf of the overseeing GM.`
@@ -4388,34 +4415,6 @@
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
 
-### AudereMajoraThreshold
-**Foreign Keys:**
-  - minimum_intensity_tier -> magic.IntensityTier [FK]
-  - minimum_warp_stage -> conditions.ConditionStage [FK]
-  - archetypes -> societies.PhilosophicalArchetype [M2M]
-**Pointed to by:**
-  - pending_offers <- magic.PendingAudereMajoraOffer
-  - crossings <- magic.AudereMajoraCrossing
-
-### PendingAudereMajoraOffer
-**Foreign Keys:**
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - threshold -> magic.AudereMajoraThreshold [FK]
-
-### AudereMajoraCrossing
-**Foreign Keys:**
-  - scene -> scenes.Scene [FK] (nullable)
-  - declaration_interaction -> scenes.Interaction [FK] (nullable)
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - threshold -> magic.AudereMajoraThreshold [FK]
-  - chosen_path -> classes.Path [FK]
-  - legend_entry -> societies.LegendEntry [OneToOne] (nullable)
-
-### PendingEntryFlourishOffer
-**Foreign Keys:**
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - scene -> scenes.Scene [FK] (nullable)
-
 ### Affinity
 **Pointed to by:**
   - resonances <- magic.Resonance
@@ -4633,6 +4632,55 @@
 **Foreign Keys:**
   - damage_type -> conditions.DamageType [FK] (nullable)
   - technique -> magic.Technique [FK]
+
+### AudereMajoraThreshold
+**Foreign Keys:**
+  - minimum_intensity_tier -> magic.IntensityTier [FK]
+  - minimum_warp_stage -> conditions.ConditionStage [FK]
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
+**Pointed to by:**
+  - pending_offers <- magic.PendingAudereMajoraOffer
+  - crossings <- magic.AudereMajoraCrossing
+  - faith_variants <- magic.AudereMajoraFaithVariant
+
+### PendingAudereMajoraOffer
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - threshold -> magic.AudereMajoraThreshold [FK]
+  - faith_variant -> magic.AudereMajoraFaithVariant [FK] (nullable)
+
+### AudereMajoraCrossing
+**Foreign Keys:**
+  - scene -> scenes.Scene [FK] (nullable)
+  - declaration_interaction -> scenes.Interaction [FK] (nullable)
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - threshold -> magic.AudereMajoraThreshold [FK]
+  - chosen_path -> classes.Path [FK]
+  - legend_entry -> societies.LegendEntry [OneToOne] (nullable)
+
+### AudereMajoraFaithVariant
+**Foreign Keys:**
+  - threshold -> magic.AudereMajoraThreshold [FK]
+  - being -> worship.WorshippedBeing [FK]
+**Pointed to by:**
+  - pending_offers <- magic.PendingAudereMajoraOffer
+  - capability_grants <- magic.AudereMajoraFaithVariantCapabilityGrant
+  - condition_applications <- magic.AudereMajoraFaithVariantAppliedCondition
+
+### AudereMajoraFaithVariantCapabilityGrant
+**Foreign Keys:**
+  - capability -> conditions.CapabilityType [FK]
+  - faith_variant -> magic.AudereMajoraFaithVariant [FK]
+
+### AudereMajoraFaithVariantAppliedCondition
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
+  - faith_variant -> magic.AudereMajoraFaithVariant [FK]
+
+### PendingEntryFlourishOffer
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK] (nullable)
 
 ### MagicalAlterationTemplate
 **Foreign Keys:**
@@ -6802,6 +6850,7 @@
 - `can_modify_room_features(persona: 'Persona', room: 'DefaultObject') -> 'bool' — Standing required to install or upgrade a feature in this room.`
 - `complete_defense_installation(project: 'Project', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — Handle resolution of a ROOM_DEFENSE_INSTALLATION project (#2177).`
 - `complete_room_feature_progression(project: 'Project', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — Handle resolution of a ROOM_FEATURE_PROGRESSION project.`
+- `handle_bank_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — BANK strategy (#2540 Layer 4): row-only install.`
 - `handle_captains_quarters_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — CAPTAINS_QUARTERS strategy (#675): row-only install.`
 - `handle_command_center_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — COMMAND_CENTER strategy (#930): install or level the feature instance.`
 - `handle_library_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — LIBRARY strategy (#675): row-only install/level.`
@@ -7050,6 +7099,7 @@
   - affection_shifts <- relationships.AffectionShift
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - deaths <- vitals.CharacterVitals
+  - miracle_performances <- worship.MiraclePerformance
   - ceremonies <- ceremonies.Ceremony
   - combat_encounters <- combat.CombatEncounter
   - battle <- battles.Battle
@@ -8723,10 +8773,13 @@
   - tradition -> worship.WorshipTradition [FK]
   - avatar_sheet -> character_sheets.CharacterSheet [OneToOne] (nullable)
 **Pointed to by:**
+  - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
   - grants <- worship.WorshipGrant
   - devotion_standings <- worship.DevotionStanding
   - public_worshippers <- worship.WorshipDeclaration
   - secret_worshippers <- worship.WorshipDeclaration
+  - miracles <- worship.Miracle
+  - miracle_performances <- worship.MiraclePerformance
   - ceremonies <- ceremonies.Ceremony
 
 ### WorshipGrant
@@ -8746,7 +8799,53 @@
   - secret_being -> worship.WorshippedBeing [FK] (nullable)
   - secret -> secrets.Secret [FK] (nullable)
 
+### DivineInterventionConfig
+
+### Miracle
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+**Pointed to by:**
+  - capability_grants <- worship.MiracleCapabilityGrant
+  - condition_applications <- worship.MiracleAppliedCondition
+  - damage_profiles <- worship.MiracleDamageProfile
+  - performances <- worship.MiraclePerformance
+
+### MiracleCapabilityGrant
+**Foreign Keys:**
+  - capability -> conditions.CapabilityType [FK]
+  - miracle -> worship.Miracle [FK]
+
+### MiracleAppliedCondition
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
+  - miracle -> worship.Miracle [FK]
+
+### MiracleDamageProfile
+**Foreign Keys:**
+  - damage_type -> conditions.DamageType [FK] (nullable)
+  - miracle -> worship.Miracle [FK]
+
+### MiraclePerformance
+**Foreign Keys:**
+  - miracle -> worship.Miracle [FK]
+  - being -> worship.WorshippedBeing [FK]
+  - target_character -> character_sheets.CharacterSheet [FK] (nullable)
+  - scene -> scenes.Scene [FK] (nullable)
+
+### ChosenFavorConfig
+
 ### Service Functions
+- `active_patronage_for(sheet: 'CharacterSheet') -> list[world.worship.models.DevotionStanding] — Return all active patronages for a character, ordered by favor descending.`
+- `best_patronage_favor(sheet: 'CharacterSheet') -> int — Return the favor of the highest-favor active patronage, or 0.`
 - `bump_devotion(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, amount: int) -> world.worship.models.DevotionStanding — Upsert the (sheet, being) standing and run the God's Favorite check.`
+- `establish_patronage(sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, valence: world.worship.models.PatronageValence) -> world.worship.models.DevotionStanding — Get-or-create a DevotionStanding and mark it as a patronage.`
+- `get_chosen_favor_config() -> world.worship.models.ChosenFavorConfig — Lazy-create the ChosenFavorConfig singleton (pk=1).`
+- `get_divine_intervention_config() -> 'DivineInterventionConfig' — Lazy-create the singleton (pk=1) divine intervention config (#2360).`
 - `gods_favorite_achievement_for(character_sheet: 'CharacterSheet') -> 'Achievement | None' — Resolve the gender-matched God's Favorite achievement row (Decision 6).`
 - `grant_worship(being: world.worship.models.WorshippedBeing, amount: int, *, granted_by: 'CharacterSheet | None' = None, reason: str = '') -> world.worship.models.WorshipGrant — Add worship to a being's pool and record the audit ledger row.`
+- `install_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None — Install the divine intervention Trigger on the character's ObjectDB.`
+- `maybe_fire_divine_intervention(character, payload=None) -> None — Trigger handler: fire a divine miracle when a high-devotion PC is incapacitated.`
+- `perform_divine_intervention(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, miracle: 'Miracle', *, scene=None) -> 'MiraclePerformance' — Commit seam for a divine intervention: spend pool, apply conditions, audit.`
+- `release_patronage(standing: world.worship.models.DevotionStanding) -> None — Mark a patronage as released (dormant).`
+- `remove_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None — Remove the divine intervention trigger when favor drops below threshold.`
+- `spend_worship_pool(being: world.worship.models.WorshippedBeing, amount: int, *, reason: str = '') -> bool — Deduct ``amount`` from ``being.resonance_pool`` (the spend counterpart to ``grant_worship``).`

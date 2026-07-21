@@ -139,6 +139,38 @@ checking, the create/rank-up branch, or the narrative message.
 
 ---
 
+## Post-CG removal — the `revoke_distinction` seam + table change requests (#2607)
+
+The counterpart to `grant_distinction`, promoted from the ad-hoc
+`CharacterDistinction.objects.filter(...).delete()` pattern to a real seam.
+`revoke_distinction(character_distinction)` (`services.py`) atomically clears any relocated
+Secret (`clear_distinction_secret` — else the row-delete orphans it), deletes the modifier
+sources (`delete_distinction_modifiers`, cascading to `CharacterModifier`), then deletes the
+row. `ActionEnhancement` gating is derived-on-read from the template, so it falls away for
+free. **It refuses (`DistinctionRevokeError`) a distinction carrying resonance/asset/codex
+grants** — those have no clean unwind (resonance `lifetime_earned` is monotonic, #1834) — as a
+defensive last line behind the submit-time guard.
+
+**Eligibility is two guards, no per-distinction teachability audit.** `change_supported(distinction)`:
+(1) the derived technical block — false if the distinction has any `resonance_grants` /
+`asset_grants` / `codex_grants` (queried live, no authoring); (2) the `Distinction.post_cg_immutable`
+opt-out denylist (`BooleanField`, default False — reactively curated, nothing flagged before
+ship). The IC "should this character change this?" question is pure GM judgment on the player's
+RP justification, not a flag.
+
+**XP cost** (`distinction_change_xp_cost`): `3 × |cost_per_rank × rank|`, charged **only on the
+benefit direction** — gaining a positive distinction or shedding a negative one — free otherwise.
+This kills the points-pump (take −50 at CG for +50 CG points, pay 150 XP to shed it later).
+The `3` is `DISTINCTION_CHANGE_XP_PER_CG_POINT` (`types.py`).
+
+**The flow** lives in `world.gm` (the general `TableUpdateRequest` framework) with distinctions as
+the first kind: a table member submits (`submit_distinction_request`), the GM signs off
+(`signoff_request`), and the member completes (`complete_request` → the registered handler in
+`table_request_handlers.py` charges XP and calls `grant_distinction`/`revoke_distinction`). See
+`src/world/gm/CLAUDE.md` for the framework and the `register_request_handler` extension pattern.
+
+---
+
 ## Distinctions grant/shape Resonance (#1834)
 
 A distinction can affect a character's `magic.Resonance` standing along **two independent

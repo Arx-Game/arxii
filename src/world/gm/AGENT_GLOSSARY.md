@@ -104,3 +104,11 @@ rating on GM performance. Scaled by players served (never a flat amount) and cap
 per event and per `GameWeek` (`GMWeeklyRewardTracker`); every award value lives on the
 `GMRewardConfig` singleton, never a module constant (#2123).
 _Avoid_: GM payout, GM stipend, session pay.
+
+**Table update request**:
+A member's end-of-session ask for their table GM to change something on their sheet (`TableUpdateRequest`, #2607). The GM signs off yes/no; on approval the member completes it (spending any XP). A general framework with a `kind`→handler registry; distinction add/remove is the first kind.
+_Avoid_: sheet change, GM request, petition (petition is the #2288 emergency staff line, unrelated)
+
+**Sign-off**:
+The GM's approve/reject decision on a pending `TableUpdateRequest` — the veto gate. Distinct from *completion*, which is the member's later step that actually applies the change.
+_Avoid_: approval (ambiguous with spec:approved), GM review
