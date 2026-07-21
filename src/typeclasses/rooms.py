@@ -14,6 +14,9 @@ from flows.scene_data_manager import SceneDataManager
 from typeclasses.mixins import ObjectParent
 from world.scenes.models import Scene
 
+# Typeclass path repeated across is_typeclass checks; centralized for dedup.
+_CHARACTER_TYPECLASS = "typeclasses.characters.Character"
+
 
 class Room(ObjectParent, DefaultRoom):
     """
@@ -150,7 +153,7 @@ class Room(ObjectParent, DefaultRoom):
         No-op for non-characters and non-hub rooms (the latter short-circuits cheaply, so this
         never touches the region closure on ordinary moves).
         """
-        if not obj.is_typeclass("typeclasses.characters.Character", exact=False):
+        if not obj.is_typeclass(_CHARACTER_TYPECLASS, exact=False):
             return
         from world.secrets.gossip import public_gossip_lines
 
@@ -165,7 +168,7 @@ class Room(ObjectParent, DefaultRoom):
         so ordinary moves short-circuit on one cheap feature lookup. Echoes the two
         freshest items; ``tidings local`` is the full read.
         """
-        if not obj.is_typeclass("typeclasses.characters.Character", exact=False):
+        if not obj.is_typeclass(_CHARACTER_TYPECLASS, exact=False):
             return
         from world.areas.services import get_room_profile
         from world.room_features.constants import RoomFeatureServiceStrategy
@@ -216,7 +219,7 @@ class Room(ObjectParent, DefaultRoom):
 
         maybe_finish_empty_scene(self, leaving=obj)
         # #2356: remove a departing character from the room's speaker queue.
-        if obj.is_typeclass("typeclasses.characters.Character", exact=False):
+        if obj.is_typeclass(_CHARACTER_TYPECLASS, exact=False):
             from world.scenes.models import Persona
             from world.scenes.services import active_persona_for_sheet
             from world.scenes.speaker_queue_services import (

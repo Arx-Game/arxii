@@ -64,6 +64,11 @@ logger = logging.getLogger(__name__)
 # helper must stay callable independent of cluster order.
 RESERVED_FALLBACK_AREA_SLUG = "arx"
 
+# Shared description for magic-tied distinction seeds.
+_MAGIC_DISTINCTION_DESCRIPTION = (
+    "Distinctions tied to a character's magical tradition, practice, or gifts."
+)
+
 # The canonical 12 stat names. Mirrors the set FinalizationTestMixin uses; kept
 # here as the single seed-time source (factories-as-seed-data). The test mixin's
 # DEFAULT_STATS dict carries per-stat starting *values* for a different purpose
@@ -296,9 +301,7 @@ def ensure_tradition_training_distinction() -> None:
         slug="arcane",
         defaults={
             "name": "Arcane",
-            "description": (
-                "Distinctions tied to a character's magical tradition, practice, or gifts."
-            ),
+            "description": (_MAGIC_DISTINCTION_DESCRIPTION),
         },
     )
     distinction, _ = Distinction.objects.get_or_create(
@@ -427,9 +430,7 @@ def ensure_unbound_drawback_distinction():
         slug="arcane",
         defaults={
             "name": "Arcane",
-            "description": (
-                "Distinctions tied to a character's magical tradition, practice, or gifts."
-            ),
+            "description": (_MAGIC_DISTINCTION_DESCRIPTION),
         },
     )
     distinction, _ = Distinction.objects.get_or_create(
@@ -581,9 +582,7 @@ def ensure_orphaned_tradition_distinction():
         slug="arcane",
         defaults={
             "name": "Arcane",
-            "description": (
-                "Distinctions tied to a character's magical tradition, practice, or gifts."
-            ),
+            "description": (_MAGIC_DISTINCTION_DESCRIPTION),
         },
     )
     distinction, _ = Distinction.objects.get_or_create(

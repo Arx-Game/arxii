@@ -47,7 +47,7 @@ if TYPE_CHECKING:
         DraftApplication,
         DraftApplicationComment,
     )
-    from world.character_sheets.models import CharacterSheet
+    from world.character_sheets.models import CharacterSheet, Profile
     from world.scenes.models import Persona
     from world.stories.models import Story
 
@@ -414,79 +414,86 @@ def _finalize_origin_slots(sheet: CharacterSheet, origin_slots: dict[str, str]) 
     return assemble_origin_prose(sheet)
 
 
-def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:  # noqa: C901, PLR0912, PLR0915
-    """
-    Populate demographic, heritage, descriptive, and physical fields on a CharacterSheet
-    from a CharacterDraft and save it.
-
-    Covers: gender/pronouns, age, species, family, tarot, heritage, origin realm,
-    descriptive text (description/background/personality/concept/quote), and
-    physical characteristics (height/build/weight).
-    """
-    from world.character_sheets.models import Heritage  # noqa: PLC0415
-
-    # Set demographic data from draft's FK references
+def _set_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
+    """Apply gender, pronouns, age, species, and family from the draft."""
     if draft.selected_gender:
         sheet.gender = draft.selected_gender
         # Auto-derive pronouns from gender
         _set_pronouns_from_gender(sheet, draft.selected_gender)
     if draft.age:
         sheet.age = draft.age
-
-    # Set species from draft's selected species
     if draft.selected_species:
         sheet.species = draft.selected_species
-
-    # Set family from draft
     if draft.family:
         sheet.family = draft.family
 
-    # Set tarot card from draft (best-effort)
+
+def _set_tarot_card(sheet: CharacterSheet, draft: CharacterDraft) -> None:
+    """Best-effort set the tarot card and reversed flag from draft_data."""
     tarot_card_name = draft.draft_data.get("tarot_card_name")
-    if tarot_card_name:
-        from world.tarot.models import TarotCard  # noqa: PLC0415
+    if not tarot_card_name:
+        return
+    from world.tarot.models import TarotCard  # noqa: PLC0415
 
-        try:
-            sheet.tarot_card = TarotCard.objects.get(name=tarot_card_name)
-            sheet.tarot_reversed = draft.draft_data.get("tarot_reversed", False)
-        except (TarotCard.DoesNotExist, KeyError, TypeError):
-            logger.exception(
-                "Failed to set tarot card on CharacterSheet for card_name=%s",
-                tarot_card_name,
-            )
+    try:
+        sheet.tarot_card = TarotCard.objects.get(name=tarot_card_name)
+        sheet.tarot_reversed = draft.draft_data.get("tarot_reversed", False)
+    except (TarotCard.DoesNotExist, KeyError, TypeError):
+        logger.exception(
+            "Failed to set tarot card on CharacterSheet for card_name=%s",
+            tarot_card_name,
+        )
 
-    # Set heritage from Beginnings if available, otherwise default to Normal
+
+def _set_heritage(sheet: CharacterSheet, draft: CharacterDraft) -> None:
+    """Set heritage from Beginnings if available, otherwise default to Normal."""
+    from world.character_sheets.models import Heritage  # noqa: PLC0415
+
     if draft.selected_beginnings and draft.selected_beginnings.heritage:
         sheet.heritage = draft.selected_beginnings.heritage
-    else:
-        normal_heritage, _ = Heritage.objects.get_or_create(
-            name="Normal",
-            defaults={
-                "description": "Standard upbringing with known family.",
-                "is_special": False,
-                "family_known": True,
-            },
-        )
-        sheet.heritage = normal_heritage
+        return
+    normal_heritage, _ = Heritage.objects.get_or_create(
+        name="Normal",
+        defaults={
+            "description": "Standard upbringing with known family.",
+            "is_special": False,
+            "family_known": True,
+        },
+    )
+    sheet.heritage = normal_heritage
 
-    # Set origin realm from the selected starting area
+
+def _set_origin_realm(sheet: CharacterSheet, draft: CharacterDraft) -> None:
+    """Set origin realm from the selected starting area if present."""
     if draft.selected_area and draft.selected_area.realm:
         sheet.origin_realm = draft.selected_area.realm
 
-    # Set descriptive text from draft_data. additional_desc is appearance text (stays on
-    # the sheet); the narrative bio lives on true_profile now (#1270).
-    draft_data = draft.draft_data
+
+def _ensure_profile(sheet: CharacterSheet) -> Profile:
+    """Return the sheet's true_profile, creating one if missing."""
+    profile = sheet.true_profile
+    if profile is not None:
+        return profile
+    from world.character_sheets.models import Profile  # noqa: PLC0415
+
+    profile = Profile.objects.create()
+    sheet.true_profile = profile
+    return profile
+
+
+def _set_descriptive_text(sheet: CharacterSheet, draft_data: dict) -> str | None:
+    """Apply descriptive/profile text fields from draft_data.
+
+    additional_desc is appearance text (stays on the sheet); the narrative bio
+    lives on true_profile now (#1270). Origin story: assemble prose from
+    structured slots if present (#2478), otherwise fall back to legacy
+    free-text background for backward compat. Returns the origin_slots dict
+    if prose was assembled (so the caller can refresh state), else None.
+    """
     if draft_data.get("description"):
         sheet.additional_desc = draft_data["description"]
 
-    profile = sheet.true_profile
-    if profile is None:
-        from world.character_sheets.models import Profile  # noqa: PLC0415
-
-        profile = Profile.objects.create()
-        sheet.true_profile = profile
-    # Origin story: assemble prose from structured slots if present (#2478),
-    # otherwise fall back to legacy free-text background for backward compat.
+    profile = _ensure_profile(sheet)
     origin_slots = draft_data.get("origin_slots")
     if origin_slots:
         profile.background = _finalize_origin_slots(sheet, origin_slots)
@@ -499,12 +506,11 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
     if draft_data.get("quote"):
         profile.quote = draft_data["quote"]
     profile.save()
+    return origin_slots
 
-    # Refresh origin-story state now that the assembled prose is persisted (#2478).
-    if origin_slots:
-        refresh_origin_story_state(sheet)
 
-    # Set physical characteristics from draft
+def _set_physical_characteristics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
+    """Apply height and build (plus derived weight) from the draft."""
     if draft.height_inches:
         sheet.true_height_inches = draft.height_inches
     if draft.build:
@@ -513,6 +519,27 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
         if draft.height_inches:
             sheet.weight_pounds = calculate_weight(draft.height_inches, draft.build)
 
+
+def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
+    """
+    Populate demographic, heritage, descriptive, and physical fields on a CharacterSheet
+    from a CharacterDraft and save it.
+
+    Covers: gender/pronouns, age, species, family, tarot, heritage, origin realm,
+    descriptive text (description/background/personality/concept/quote), and
+    physical characteristics (height/build/weight).
+    """
+    _set_demographics(sheet, draft)
+    _set_tarot_card(sheet, draft)
+    _set_heritage(sheet, draft)
+    _set_origin_realm(sheet, draft)
+
+    origin_slots = _set_descriptive_text(sheet, draft.draft_data)
+    # Refresh origin-story state now that the assembled prose is persisted (#2478).
+    if origin_slots:
+        refresh_origin_story_state(sheet)
+
+    _set_physical_characteristics(sheet, draft)
     sheet.save()
 
 

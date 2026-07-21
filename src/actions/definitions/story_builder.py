@@ -21,6 +21,10 @@ from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionResult, TargetType
 from world.gm.constants import GMLevel
 
+# Shared error messages.
+_NO_SUCH_ROOM = "No such room."
+_GM_TRUST_REQUIRED = "GM trust required."
+
 if TYPE_CHECKING:
     from actions.types import ActionContext
     from evennia_extensions.models import RoomProfile
@@ -81,12 +85,12 @@ def _resolve_owned_story_room(
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
 
     if not room_id:
-        return None, "No such room."
+        return None, _NO_SUCH_ROOM
     room_profile = (
         RoomProfile.objects.filter(objectdb_id=room_id).select_related("objectdb", "area").first()
     )
     if room_profile is None or room_profile.area_id is None:
-        return None, "No such room."
+        return None, _NO_SUCH_ROOM
     _area, error = _resolve_owned_story_area(actor, room_profile.area_id)
     if error is not None:
         return None, error
@@ -101,18 +105,18 @@ def _resolve_owned_instance(
     from world.instances.models import InstancedRoom  # noqa: PLC0415
 
     if not room_id:
-        return None, "No such room."
+        return None, _NO_SUCH_ROOM
     qs = InstancedRoom.objects.filter(
         room_id=room_id, status=InstanceStatus.ACTIVE, gm_owner__isnull=False
     ).select_related("room")
     if not _is_staff(actor):
         profile = _gm_profile_for(actor)
         if profile is None:
-            return None, "GM trust required."
+            return None, _GM_TRUST_REQUIRED
         qs = qs.filter(gm_owner=profile)
     instance = qs.first()
     if instance is None:
-        return None, "No such room."
+        return None, _NO_SUCH_ROOM
     return instance, None
 
 
@@ -123,7 +127,7 @@ def _resolve_owned_story_or_temp_room(
 
     Tries the story-area resolver first (the common case); falls back to the
     temp-instance resolver only when that fails, so a foreign GM's story room
-    still gets story_room's own error message rather than "No such room."
+    still gets story_room's own error message rather than _NO_SUCH_ROOM
     """
     room_profile, error = _resolve_owned_story_room(actor, room_id)
     if room_profile is not None:
@@ -251,7 +255,7 @@ class CreateStoryAreaAction(_StoryBuilderAction):
 
         profile = _gm_profile_for(actor)
         if profile is None:
-            return ActionResult(success=False, message="GM trust required.")
+            return ActionResult(success=False, message=_GM_TRUST_REQUIRED)
         area_name = (kwargs.get("name") or "").strip()
         if not area_name:
             return ActionResult(success=False, message="Name the area.")
@@ -346,7 +350,7 @@ class StoryDigRoomAction(_StoryBuilderAction):
             # Staff is uncapped (mirrors staff_dig_room); a GM is always cap-checked.
             profile = _gm_profile_for(actor)
             if profile is None:
-                return ActionResult(success=False, message="GM trust required.")
+                return ActionResult(success=False, message=_GM_TRUST_REQUIRED)
             try:
                 story_room_cap_check(gm=profile, area=area)
             except StoryServiceError as exc:
@@ -599,7 +603,7 @@ class GrantStoryRoomAccessAction(_StoryBuilderAction):
             return ActionResult(success=False, message=error)
         profile = _gm_profile_for(actor)
         if profile is None:
-            return ActionResult(success=False, message="GM trust required.")
+            return ActionResult(success=False, message=_GM_TRUST_REQUIRED)
         character_name = (kwargs.get("character_name") or "").strip()
         if not character_name:
             return ActionResult(success=False, message="Name the character.")
@@ -668,7 +672,7 @@ class SpinUpSceneRoomAction(_StoryBuilderAction):
 
         profile = _gm_profile_for(actor)
         if profile is None:
-            return ActionResult(success=False, message="GM trust required.")
+            return ActionResult(success=False, message=_GM_TRUST_REQUIRED)
         room_name = (kwargs.get("name") or "").strip()
         if not room_name:
             return ActionResult(success=False, message="Name the room.")
@@ -746,7 +750,7 @@ class JoinStoryRoomAction(_StoryRoomPlayerAction):
             return ActionResult(success=False, message="You have no character sheet.")
         room_profile = RoomProfile.objects.filter(objectdb_id=kwargs.get("room_id")).first()
         if room_profile is None:
-            return ActionResult(success=False, message="No such room.")
+            return ActionResult(success=False, message=_NO_SUCH_ROOM)
         try:
             join_story_room(sheet=sheet, room_profile=room_profile)
         except StoryServiceError as exc:

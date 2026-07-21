@@ -19,6 +19,9 @@ from world.traits.models import CharacterTraitValue
 
 # XP Cost System
 
+# Polymorphic related_name shared by requirement subclasses.
+_REQUIREMENTS_RELATED_NAME = "%(class)s_requirements"
+
 # Cost modifier constants
 NORMAL_COST_PERCENTAGE = 100
 
@@ -260,14 +263,14 @@ class AbstractUnlockRequirement(models.Model):
     class_level_unlock = models.ForeignKey(
         "ClassLevelUnlock",
         on_delete=models.CASCADE,
-        related_name="%(class)s_requirements",
+        related_name=_REQUIREMENTS_RELATED_NAME,
         null=True,
         blank=True,
     )
     thread_crossing_threshold = models.ForeignKey(
         "magic.ThreadCrossingThreshold",
         on_delete=models.CASCADE,
-        related_name="%(class)s_requirements",
+        related_name=_REQUIREMENTS_RELATED_NAME,
         null=True,
         blank=True,
         help_text=(
@@ -278,7 +281,7 @@ class AbstractUnlockRequirement(models.Model):
     path = models.ForeignKey(
         "classes.Path",
         on_delete=models.CASCADE,
-        related_name="%(class)s_requirements",
+        related_name=_REQUIREMENTS_RELATED_NAME,
         null=True,
         blank=True,
         help_text=(

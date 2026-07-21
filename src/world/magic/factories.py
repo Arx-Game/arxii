@@ -119,6 +119,8 @@ _CAPABILITY_TYPE_FACTORY = "world.conditions.factories.CapabilityTypeFactory"
 _PAYLOAD_PARAM = "@payload"
 # Progression unlock URL path for path-crossing seed rows.
 _MAGIC_PROGRESSION_PATH = "/magic/progression"
+# SubFactory import paths, extracted to satisfy S1192.
+_DISTINCTION_FACTORY = "world.distinctions.factories.DistinctionFactory"
 
 
 class EffectTypeFactory(factory.django.DjangoModelFactory):
@@ -250,7 +252,7 @@ class DistinctionResonanceGrantFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "magic.DistinctionResonanceGrant"
 
-    distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
+    distinction = factory.SubFactory(_DISTINCTION_FACTORY)
     resonance = factory.SubFactory(ResonanceFactory)
     flat_amount_per_rank = 0
     earn_rate_bonus_per_rank = Decimal(0)
@@ -262,7 +264,7 @@ class DistinctionResonanceRankThresholdFactory(factory.django.DjangoModelFactory
     class Meta:
         model = "magic.DistinctionResonanceRankThreshold"
 
-    distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
+    distinction = factory.SubFactory(_DISTINCTION_FACTORY)
     resonance = factory.SubFactory(ResonanceFactory)
     rank = 2
     lifetime_earned_threshold = 10
@@ -1531,7 +1533,7 @@ class GlimpseTagDistinctionSuggestionFactory(factory.django.DjangoModelFactory):
         model = GlimpseTagDistinctionSuggestion
 
     tag = factory.SubFactory(GlimpseTagFactory)
-    distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
+    distinction = factory.SubFactory(_DISTINCTION_FACTORY)
     sort_order = 0
 
 

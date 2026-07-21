@@ -98,7 +98,7 @@ class ContentExportTests(TestCase):
 
         # Now load the exported files back
         load_result = build_all(self.root)
-        created, _updated = load_entries(load_result)
+        created, _updated, _ = load_entries(load_result)
         # All records should already exist — 0 created, N updated
         assert created == 0, f"Round-trip created {created} new records (expected 0)"
 
@@ -129,7 +129,7 @@ class ContentExportTests(TestCase):
         result = export_to_content_repo(self.root)
         assert result.errors == []
         load_result = build_all(self.root)
-        created, _updated = load_entries(load_result)
+        created, _updated, _ = load_entries(load_result)
         assert created == 0
 
     def test_media_export_excludes_player_uploaded_rows(self) -> None:
@@ -212,13 +212,13 @@ class ContentExportTests(TestCase):
         result = export_to_content_repo(self.root)
         assert result.errors == []
         load_result = build_all(self.root)
-        created, _updated = load_entries(load_result)
+        created, _updated, _ = load_entries(load_result)
         assert created == 0, f"Round-trip created {created} new records (expected 0)"
 
         # Re-run to prove idempotency isn't order-dependent luck: a second
         # import of the same export must also create nothing.
         load_result_again = build_all(self.root)
-        created_again, _updated_again = load_entries(load_result_again)
+        created_again, _updated_again, _ = load_entries(load_result_again)
         assert created_again == 0, (
             f"Second round-trip created {created_again} new records (expected 0)"
         )
@@ -648,7 +648,7 @@ class CovenantRoleContentExportTests(TestCase):
         from core_management.content_fixtures import build_all, load_entries
 
         load_result = build_all(self.root)
-        created, _updated = load_entries(load_result)
+        created, _updated, _ = load_entries(load_result)
         assert created == 0, f"Round-trip created {created} new records (expected 0)"
 
         primary.refresh_from_db()
@@ -698,7 +698,7 @@ class CovenantRoleContentExportTests(TestCase):
         from core_management.content_fixtures import build_all, load_entries
 
         load_result = build_all(self.root)
-        created, _updated = load_entries(load_result)
+        created, _updated, _ = load_entries(load_result)
         assert created == 0, f"Round-trip created {created} new records (expected 0)"
 
         profile.refresh_from_db()
@@ -802,7 +802,7 @@ class VowSituationalPerkContentExportTests(TestCase):
         from core_management.content_fixtures import build_all, load_entries
 
         load_result = build_all(self.root)
-        created, _updated = load_entries(load_result)
+        created, _updated, _ = load_entries(load_result)
         assert created == 0, f"Round-trip created {created} new records (expected 0)"
 
         perk.refresh_from_db()
@@ -849,7 +849,7 @@ class VowSituationalPerkContentExportTests(TestCase):
         from core_management.content_fixtures import build_all, load_entries
 
         load_result = build_all(self.root)
-        created, _updated = load_entries(load_result)
+        created, _updated, _ = load_entries(load_result)
         assert created == 0
 
         perk.refresh_from_db()
@@ -905,7 +905,7 @@ class TechniqueFunctionTagContentExportTests(TestCase):
         from core_management.content_fixtures import build_all, load_entries
 
         load_result = build_all(self.root)
-        created, _updated = load_entries(load_result)
+        created, _updated, _ = load_entries(load_result)
         assert created == 0, f"Round-trip created {created} new records (expected 0)"
 
         weaken_tag.refresh_from_db()
@@ -996,7 +996,7 @@ class CovenantRoleTechniqueSpecialtyContentExportTests(TestCase):
         from core_management.content_fixtures import build_all, load_entries
 
         load_result = build_all(self.root)
-        created, _updated = load_entries(load_result)
+        created, _updated, _ = load_entries(load_result)
         assert created == 0, f"Round-trip created {created} new records (expected 0)"
 
         primary_specialty.refresh_from_db()
@@ -1066,7 +1066,7 @@ class VowStatScalingContentExportTests(TestCase):
         from core_management.content_fixtures import build_all, load_entries
 
         load_result = build_all(self.root)
-        created, _updated = load_entries(load_result)
+        created, _updated, _ = load_entries(load_result)
         assert created == 0, f"Round-trip created {created} new records (expected 0)"
 
         scaling.refresh_from_db()
@@ -1131,7 +1131,7 @@ class CovenantRoleBonusContentExportTests(TestCase):
         from core_management.content_fixtures import build_all, load_entries
 
         load_result = build_all(self.root)
-        created, _updated = load_entries(load_result)
+        created, _updated, _ = load_entries(load_result)
         assert created == 0, f"Round-trip created {created} new records (expected 0)"
 
         bonus.refresh_from_db()
@@ -1191,7 +1191,7 @@ class GearArchetypeCompatibilityContentExportTests(TestCase):
         from core_management.content_fixtures import build_all, load_entries
 
         load_result = build_all(self.root)
-        created, _updated = load_entries(load_result)
+        created, _updated, _ = load_entries(load_result)
         assert created == 0, f"Round-trip created {created} new records (expected 0)"
 
         compat.refresh_from_db()

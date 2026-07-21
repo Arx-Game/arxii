@@ -118,24 +118,43 @@ def check_admin_fk_widgets(app_configs, **kwargs):  # noqa: ARG001
     for model, admin_cls in admin.site._registry.items():  # noqa: SLF001
         exempt = _get_exempt_fields(admin_cls)
         protected = _get_protected_fields(admin_cls)
-        for field in model._meta.get_fields():  # noqa: SLF001
-            if not field.is_relation or field.name in exempt or field.name in protected:
-                continue
-            if field.many_to_one or field.one_to_one or field.many_to_many:
-                target = field.related_model
-                if target and _is_large_table(target):
-                    errors.append(
-                        Error(
-                            f"{type(admin_cls).__name__}.{field.name} is a FK/M2M to "
-                            f"large table {target.__name__} but is not in "
-                            f"autocomplete_fields or raw_id_fields.",
-                            hint=(
-                                "Add the field to autocomplete_fields (preferred) "
-                                "or raw_id_fields. If a default <select> is "
-                                "intentional, add the field name to "
-                                "large_table_widget_exempt with a comment."
-                            ),
-                            id="web_admin.W001",
-                        )
-                    )
+        errors.extend(_find_large_table_fk_violations(model, admin_cls, exempt, protected))
     return errors
+
+
+def _find_large_table_fk_violations(model, admin_cls, exempt, protected):
+    """Yield ``web_admin.W001`` errors for unprotected FK/M2M fields to large tables.
+
+    Args:
+        model: The Django model class being inspected.
+        admin_cls: The registered ModelAdmin class for ``model``.
+        exempt: Set of field names exempted via ``large_table_widget_exempt``.
+        protected: Set of field names protected from the check.
+
+    Yields:
+        ``Error`` instances for each violating field.
+    """
+    violations = []
+    for field in model._meta.get_fields():  # noqa: SLF001
+        if not field.is_relation or field.name in exempt or field.name in protected:
+            continue
+        if not (field.many_to_one or field.one_to_one or field.many_to_many):
+            continue
+        target = field.related_model
+        if not target or not _is_large_table(target):
+            continue
+        violations.append(
+            Error(
+                f"{type(admin_cls).__name__}.{field.name} is a FK/M2M to "
+                f"large table {target.__name__} but is not in "
+                f"autocomplete_fields or raw_id_fields.",
+                hint=(
+                    "Add the field to autocomplete_fields (preferred) "
+                    "or raw_id_fields. If a default <select> is "
+                    "intentional, add the field name to "
+                    "large_table_widget_exempt with a comment."
+                ),
+                id="web_admin.W001",
+            )
+        )
+    return violations

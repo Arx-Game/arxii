@@ -15,6 +15,9 @@ from world.justice.constants import DEFAULT_HEAT_WEIGHT, EVIDENCE_BASE_QUALITY, 
 
 # App-qualified model path repeated across FK references; centralized for dedup.
 _LEGEND_ENTRY_MODEL = "societies.LegendEntry"
+_SOCIETY_MODEL = "societies.Society"
+_AREA_MODEL = "areas.Area"
+_PERSONA_MODEL = "scenes.Persona"
 
 
 class CrimeKind(SharedMemoryModel):
@@ -52,7 +55,7 @@ class AreaLaw(SharedMemoryModel):
     """
 
     area = models.ForeignKey(
-        "areas.Area",
+        _AREA_MODEL,
         on_delete=models.CASCADE,
         related_name="laws",
     )
@@ -128,17 +131,17 @@ class PersonaHeat(SharedMemoryModel):
     """
 
     persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="heat_rows",
     )
     area = models.ForeignKey(
-        "areas.Area",
+        _AREA_MODEL,
         on_delete=models.CASCADE,
         related_name="heat_rows",
     )
     society = models.ForeignKey(
-        "societies.Society",
+        _SOCIETY_MODEL,
         on_delete=models.CASCADE,
         related_name="heat_rows",
     )
@@ -438,12 +441,12 @@ class LieLowState(SharedMemoryModel):
     """
 
     persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="lie_low_states",
     )
     area = models.ForeignKey(
-        "areas.Area",
+        _AREA_MODEL,
         on_delete=models.CASCADE,
         related_name="lie_low_states",
     )
@@ -469,22 +472,22 @@ class PardonGrant(SharedMemoryModel):
     """Audit row for a lord's pardon (#1826) — a public act with a real holder."""
 
     granter_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL,
         on_delete=models.PROTECT,
         related_name="pardons_granted",
     )
     target_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="pardons_received",
     )
     area = models.ForeignKey(
-        "areas.Area",
+        _AREA_MODEL,
         on_delete=models.CASCADE,
         related_name="pardons",
     )
     society = models.ForeignKey(
-        "societies.Society",
+        _SOCIETY_MODEL,
         on_delete=models.CASCADE,
         related_name="pardons",
     )
@@ -507,11 +510,9 @@ class GuardEncounter(SharedMemoryModel):
     """
 
     persona = models.ForeignKey(
-        "scenes.Persona", on_delete=models.CASCADE, related_name="guard_encounters"
+        _PERSONA_MODEL, on_delete=models.CASCADE, related_name="guard_encounters"
     )
-    area = models.ForeignKey(
-        "areas.Area", on_delete=models.CASCADE, related_name="guard_encounters"
-    )
+    area = models.ForeignKey(_AREA_MODEL, on_delete=models.CASCADE, related_name="guard_encounters")
     trigger = models.CharField(max_length=30)
     outcome = models.CharField(max_length=20, blank=True, default="")
     opened_at = models.DateTimeField(auto_now_add=True)
@@ -535,11 +536,11 @@ class JusticeCase(SharedMemoryModel):
     """
 
     persona = models.ForeignKey(
-        "scenes.Persona", on_delete=models.CASCADE, related_name="justice_cases"
+        _PERSONA_MODEL, on_delete=models.CASCADE, related_name="justice_cases"
     )
-    area = models.ForeignKey("areas.Area", on_delete=models.CASCADE, related_name="justice_cases")
+    area = models.ForeignKey(_AREA_MODEL, on_delete=models.CASCADE, related_name="justice_cases")
     society = models.ForeignKey(
-        "societies.Society", on_delete=models.CASCADE, related_name="justice_cases"
+        _SOCIETY_MODEL, on_delete=models.CASCADE, related_name="justice_cases"
     )
     captivity = models.ForeignKey(
         "captivity.Captivity",
@@ -587,7 +588,7 @@ class ExculpatoryEvidence(SharedMemoryModel):
         JusticeCase, on_delete=models.CASCADE, related_name="exculpatory_evidence"
     )
     submitter_persona = models.ForeignKey(
-        "scenes.Persona", on_delete=models.CASCADE, related_name="exculpatory_submissions"
+        _PERSONA_MODEL, on_delete=models.CASCADE, related_name="exculpatory_submissions"
     )
     weight = models.PositiveIntegerField(default=0)
     manufactured = models.BooleanField(default=False)

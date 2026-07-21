@@ -36,6 +36,10 @@ from actions.constants import ActionCategory
 from actions.prerequisites import Prerequisite, StaffOnlyPrerequisite
 from actions.types import ActionResult, TargetType
 
+# Shared error messages.
+_NO_SUCH_AREA = "No such area."
+_NO_SUCH_ROOM_MSG = "No such room."
+
 if TYPE_CHECKING:
     from actions.types import ActionContext
     from evennia_extensions.models import RoomProfile
@@ -122,7 +126,7 @@ def _resolve_authored_area(area_id: Any) -> tuple[Area | None, str | None]:
 
     area = _resolve_area(area_id)
     if area is None:
-        return None, "No such area."
+        return None, _NO_SUCH_AREA
     if area.origin != GridOrigin.AUTHORED:
         return None, "This area must be AUTHORED before rooms can be dug into it."
     return area, None
@@ -249,7 +253,7 @@ class EditAreaAction(_WorldBuilderAction):
 
         area = _resolve_area(kwargs.get("area_id"))
         if area is None:
-            return ActionResult(success=False, message="No such area.")
+            return ActionResult(success=False, message=_NO_SUCH_AREA)
         new_slug = kwargs.get("slug")
         refusal = ensure_slug_change_allowed(area, new_slug)
         if refusal is not None:
@@ -377,7 +381,7 @@ class StaffEditRoomAction(_WorldBuilderAction):
 
         profile = _resolve_room_profile(kwargs.get("room_id"))
         if profile is None:
-            return ActionResult(success=False, message="No such room.")
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
         display_name = kwargs.get("name")
         description = kwargs.get("description")
         is_public = kwargs.get("is_public")
@@ -435,7 +439,7 @@ class StaffLinkRoomsAction(_WorldBuilderAction):
         room_a = _resolve_room_profile(kwargs.get("room_a_id"))
         room_b = _resolve_room_profile(kwargs.get("room_b_id"))
         if room_a is None or room_b is None:
-            return ActionResult(success=False, message="No such room.")
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
         name_ab = (kwargs.get("name_ab") or "").strip()
         name_ba = (kwargs.get("name_ba") or "").strip()
         if not name_ab or not name_ba:
@@ -538,7 +542,7 @@ class StaffPlaceRoomAction(_WorldBuilderAction):
 
         profile = _resolve_room_profile(kwargs.get("room_id"))
         if profile is None:
-            return ActionResult(success=False, message="No such room.")
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
         try:
             grid_x, grid_y = int(kwargs["grid_x"]), int(kwargs["grid_y"])
         except (KeyError, TypeError, ValueError):
@@ -586,7 +590,7 @@ class StaffRemoveRoomAction(_WorldBuilderAction):
 
         profile = _resolve_room_profile(kwargs.get("room_id"))
         if profile is None:
-            return ActionResult(success=False, message="No such room.")
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
         room = profile.objectdb
         if has_non_exit_contents(room):
             return ActionResult(success=False, message="This room isn't empty; empty it first.")
@@ -629,7 +633,7 @@ class PromoteRoomAction(_WorldBuilderAction):
 
         profile = _resolve_room_profile(kwargs.get("room_id"))
         if profile is None:
-            return ActionResult(success=False, message="No such room.")
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
         fixture_key = kwargs.get("fixture_key")
         if not fixture_key:
             if profile.area is None:
@@ -667,7 +671,7 @@ class PromoteAreaAction(_WorldBuilderAction):
 
         area = _resolve_area(kwargs.get("area_id"))
         if area is None:
-            return ActionResult(success=False, message="No such area.")
+            return ActionResult(success=False, message=_NO_SUCH_AREA)
         slug = kwargs.get("slug") or slugify(area.name)
         try:
             promote_to_authored(area=area, key=slug)
@@ -697,7 +701,7 @@ class StaffPlaceClueAction(_WorldBuilderAction):
 
         room_profile = _resolve_room_profile(kwargs.get("room_id"))
         if room_profile is None:
-            return ActionResult(success=False, message="No such room.")
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
         clue_slug = (kwargs.get("clue_slug") or "").strip()
         clue = Clue.objects.filter(slug=clue_slug).first() if clue_slug else None
         if clue is None:
@@ -758,7 +762,7 @@ class StaffPlaceClueTriggerAction(_WorldBuilderAction):
 
         room_profile = _resolve_room_profile(kwargs.get("room_id"))
         if room_profile is None:
-            return ActionResult(success=False, message="No such room.")
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
         clue_slug = (kwargs.get("clue_slug") or "").strip()
         clue = Clue.objects.filter(slug=clue_slug).first() if clue_slug else None
         if clue is None:
@@ -824,7 +828,7 @@ class StaffPlacePortalAnchorAction(_WorldBuilderAction):
 
         room_profile = _resolve_room_profile(kwargs.get("room_id"))
         if room_profile is None:
-            return ActionResult(success=False, message="No such room.")
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
         kind_name = (kwargs.get("kind_name") or "").strip()
         kind = PortalAnchorKind.objects.filter(name__iexact=kind_name).first()
         if kind is None:

@@ -49,6 +49,9 @@ const reconnectAttempts: Record<string, number> = {};
 const reconnectTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 const MAX_RECONNECT_ATTEMPTS = 6;
 
+/** Swallow reconnect failures so a transient socket error doesn't reject the timer. */
+const swallowReconnectError = (): void => {};
+
 function clearReconnect(character: string) {
   reconnectAttempts[character] = 0;
   const timer = reconnectTimers[character];
@@ -130,7 +133,7 @@ export function useGameSocket() {
         const delay = Math.min(1000 * 2 ** (attempt - 1), 30_000);
         reconnectTimers[character] = setTimeout(() => {
           delete reconnectTimers[character];
-          connect(character).catch(() => {});
+          connect(character).catch(swallowReconnectError);
         }, delay);
       });
 

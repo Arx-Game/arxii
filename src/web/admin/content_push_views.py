@@ -25,6 +25,8 @@ from django.views.decorators.http import require_GET, require_POST
 
 from core_management.content_repo import resolve_content_root
 
+_CONFIRM_TEMPLATE = "admin/content_push_confirm.html"
+
 GIT_TRUE = "true"
 
 
@@ -65,11 +67,11 @@ def content_push_preview(request: HttpRequest) -> HttpResponse:
     }
 
     if not content_root:
-        return render(request, "admin/content_push_confirm.html", context)
+        return render(request, _CONFIRM_TEMPLATE, context)
 
     if not _is_git_repo(content_root):
         context["error"] = f"{content_root} is not a git repository."
-        return render(request, "admin/content_push_confirm.html", context)
+        return render(request, _CONFIRM_TEMPLATE, context)
 
     _, branch, _ = _git(content_root, "branch", "--show-current")
     context["branch"] = branch
@@ -85,7 +87,7 @@ def content_push_preview(request: HttpRequest) -> HttpResponse:
     if status_out:
         context["file_count"] = len([line for line in status_out.splitlines() if line.strip()])
 
-    return render(request, "admin/content_push_confirm.html", context)
+    return render(request, _CONFIRM_TEMPLATE, context)
 
 
 @staff_member_required

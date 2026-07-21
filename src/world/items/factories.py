@@ -34,6 +34,7 @@ from world.mechanics.factories import ModifierTargetFactory, PropertyFactory
 
 # SubFactory import path, extracted to satisfy S1192.
 _SOCIETY_FACTORY = "world.societies.factories.SocietyFactory"
+_CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
 
 
 class QualityTierFactory(factory.django.DjangoModelFactory):
@@ -273,7 +274,7 @@ class MantleLevelClearanceFactory(factory.django.DjangoModelFactory):
         model = MantleLevelClearance
         django_get_or_create = ("character_sheet", "mantle", "level")
 
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     mantle = factory.SubFactory(MantleFactory)
     level = 1
 
@@ -300,7 +301,7 @@ class FashionPresentationFactory(factory.django.DjangoModelFactory):
         model = FashionPresentation
 
     event = factory.SubFactory("world.events.factories.EventFactory")
-    presenter = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    presenter = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     outfit = None
     perceiving_society = factory.SubFactory(_SOCIETY_FACTORY)
     base_score = 0
@@ -643,6 +644,6 @@ class CommonGemBucketFactory(factory.django.DjangoModelFactory):
         model = "items.CommonGemBucket"
         django_get_or_create = ("character_sheet", "tier")
 
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     tier = factory.SubFactory(MaterialCategoryFactory)
     value = 0

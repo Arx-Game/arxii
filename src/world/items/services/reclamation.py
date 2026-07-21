@@ -38,6 +38,9 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.estates.models import EstateClaim
 
+# Shared error message for settled-claim rejections.
+_CLAIM_SETTLED_MSG = "That claim is settled."
+
 
 class ReclamationError(Exception):
     """A reclamation rule was violated. Carries a safe user message."""
@@ -94,7 +97,7 @@ def assign_claim(claim: ReclamationClaim, new_claimant: CharacterSheet) -> Recla
     """
     if claim.status != ClaimStatus.OPEN:
         msg = f"claim {claim.pk} is not open"
-        raise ReclamationError(msg, user_message="That claim is settled.")
+        raise ReclamationError(msg, user_message=_CLAIM_SETTLED_MSG)
     new_claim = ReclamationClaim.objects.create(
         item_instance=claim.item_instance,
         claimant_sheet=new_claimant,
@@ -159,7 +162,7 @@ def advance_trace(claim: ReclamationClaim, *, check_level: int | None = None) ->
     """
     if claim.status != ClaimStatus.OPEN:
         msg = f"claim {claim.pk} is not open"
-        raise ReclamationError(msg, user_message="That claim is settled.")
+        raise ReclamationError(msg, user_message=_CLAIM_SETTLED_MSG)
     now = timezone.now()
     if claim.trace_chilled_until and claim.trace_chilled_until > now:
         msg = f"claim {claim.pk} trace is chilled"
@@ -294,7 +297,7 @@ def record_steal_back(claim: ReclamationClaim, taker_sheet: CharacterSheet) -> R
 def _require_traced(claim: ReclamationClaim) -> None:
     if claim.status != ClaimStatus.OPEN:
         msg = f"claim {claim.pk} is not open"
-        raise ReclamationError(msg, user_message="That claim is settled.")
+        raise ReclamationError(msg, user_message=_CLAIM_SETTLED_MSG)
     if not trace_complete(claim):
         msg = f"claim {claim.pk} trace incomplete"
         raise ReclamationError(msg, user_message="You have not yet traced the item to its holder.")

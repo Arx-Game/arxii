@@ -89,6 +89,9 @@ from world.roster.models import RosterEntry
 # queryset filters, so they're validated manually rather than via a FilterSet).
 REQUIRED_QUERY_PARAM_MESSAGE = "This query parameter is required."
 
+# Shared error detail for unknown reclamation claims.
+_UNKNOWN_CLAIM_MSG = "Unknown claim."
+
 
 def _user_plays_pk(user: AccountDB, pk: int) -> bool:
     """True if ``user`` has an active roster tenure on the character_sheet at ``pk``.
@@ -1718,7 +1721,7 @@ class ReclamationClaimViewSet(viewsets.ViewSet):
 
         claim = self._own_claim(request, pk)
         if claim is None:
-            return Response({"detail": "Unknown claim."}, status=400)
+            return Response({"detail": _UNKNOWN_CLAIM_MSG}, status=400)
         try:
             outcome = advance_trace(claim)
         except ReclamationError as exc:
@@ -1735,7 +1738,7 @@ class ReclamationClaimViewSet(viewsets.ViewSet):
 
         claim = self._own_claim(request, pk)
         if claim is None:
-            return Response({"detail": "Unknown claim."}, status=400)
+            return Response({"detail": _UNKNOWN_CLAIM_MSG}, status=400)
         try:
             minted = file_reclamation_accusation(claim)
         except ReclamationError as exc:
@@ -1751,7 +1754,7 @@ class ReclamationClaimViewSet(viewsets.ViewSet):
 
         claim = self._own_claim(request, pk)
         if claim is None:
-            return Response({"detail": "Unknown claim."}, status=400)
+            return Response({"detail": _UNKNOWN_CLAIM_MSG}, status=400)
         try:
             record_steal_back(claim, claim.original_claimant_sheet)
         except ReclamationError as exc:

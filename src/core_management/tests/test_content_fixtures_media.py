@@ -34,7 +34,7 @@ class MediaContentPipelineTest(TestCase):
         result = BuildResult()
         result.fixtures[key] = objects
         result.source_paths[key] = [Path(key)] * len(objects)
-        created, _updated = load_entries(result)
+        created, _updated, _ = load_entries(result)
         assert result.skipped == [], f"Unexpected skips loading {key}: {result.skipped}"
         return created
 

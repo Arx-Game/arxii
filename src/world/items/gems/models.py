@@ -20,6 +20,7 @@ from world.items.gems.constants import (
 _ITEM_TEMPLATE_FK = "items.ItemTemplate"
 _ITEM_INSTANCE_FK = "items.ItemInstance"
 _GEM_GRADE_FK = "items.GemGrade"
+_MATERIAL_CATEGORY_FK = "items.MaterialCategory"
 
 
 class GemGrade(SharedMemoryModel):
@@ -210,7 +211,7 @@ class CommonGemBucket(SharedMemoryModel):
         related_name="common_gem_buckets",
     )
     tier = models.ForeignKey(
-        "items.MaterialCategory",
+        _MATERIAL_CATEGORY_FK,
         on_delete=models.PROTECT,
         related_name="common_gem_buckets",
         help_text="The gem tier (a MaterialCategory) this value is denominated in.",
@@ -247,7 +248,7 @@ class StreamCommonGemPool(SharedMemoryModel):
         related_name="common_gem_pools",
     )
     tier = models.ForeignKey(
-        "items.MaterialCategory",
+        _MATERIAL_CATEGORY_FK,
         on_delete=models.PROTECT,
         related_name="+",
     )
@@ -310,7 +311,7 @@ class OrgGemStock(SharedMemoryModel):
         related_name="gem_stocks",
     )
     tier = models.ForeignKey(
-        "items.MaterialCategory",
+        _MATERIAL_CATEGORY_FK,
         on_delete=models.PROTECT,
         related_name="+",
     )

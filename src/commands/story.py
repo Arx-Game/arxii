@@ -20,7 +20,7 @@ permission classes (``IsProtectedSubjectStoryOwnerOrStaff`` /
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from commands.exceptions import CommandError
 from commands.namespace import ArxNamespaceCommand
@@ -72,6 +72,8 @@ _REVIEW_STATUS_USAGE = "Usage: story review-status <story-id>"
 _SURRENDER_USAGE = "Usage: story surrender <story-id>"
 
 _COMPLETE_USAGE = "Usage: story complete <story-id>"
+_HIDDEN_BEAT_TITLE = "(Hidden Beat)"
+_DEFAULT_BEAT_TITLE = "Beat"
 _RESOLVE_USAGE = "Usage: story resolve <episode-id> [transition-id] [notes]"
 _PROMOTE_USAGE = "Usage: story promote <episode-id> <pitch|outline|plot>"
 _MARK_USAGE = "Usage: story mark <beat-id> <success|failure> [notes]"
@@ -233,7 +235,6 @@ class CmdStory(ArxNamespaceCommand):
 
     def _handle_beats(self, rest: str) -> None:
         """List a caller's-own-active-episode's beats, flagging pending sign-offs (#1853)."""
-        from world.stories.constants import BeatVisibility  # noqa: PLC0415
         from world.stories.models import Beat  # noqa: PLC0415
         from world.stories.services.boundaries import (  # noqa: PLC0415
             player_pending_treasured_signoffs,
@@ -284,19 +285,31 @@ class CmdStory(ArxNamespaceCommand):
 
         lines = ["Beats:"]
         for beat in beats:
-            if beat.player_hint and beat.player_hint.strip():
-                title = beat.player_hint
-            elif beat.visibility == BeatVisibility.SECRET:
-                title = "(Hidden Beat)"
-            else:
-                title = "Beat"
+            title = self._beat_title(beat)
             outcome = beat.outcome or "unsatisfied"
             line = f"  [{beat.pk}] {title} ({outcome})"
-            pending_ids = pending_by_beat.get(beat.pk, ())
-            for tid in pending_ids:
+            for tid in pending_by_beat.get(beat.pk, ()):
                 line += f"\n      SIGN-OFF NEEDED: {label_by_id.get(tid, '(unknown)')}"
             lines.append(line)
         self.msg("\n".join(lines))
+
+    @staticmethod
+    def _beat_title(beat: Any) -> str:
+        """Resolve the display title for a beat based on its hint and visibility.
+
+        Args:
+            beat: A ``Beat`` object with ``player_hint`` and ``visibility`` attributes.
+
+        Returns:
+            The player hint if non-empty, "(Hidden Beat)" for secret beats, else "Beat".
+        """
+        from world.stories.constants import BeatVisibility  # noqa: PLC0415
+
+        if beat.player_hint and beat.player_hint.strip():
+            return beat.player_hint
+        if beat.visibility == BeatVisibility.SECRET:
+            return _HIDDEN_BEAT_TITLE
+        return _DEFAULT_BEAT_TITLE
 
     def _handle_complete(self, rest: str) -> None:
         """Parse ``complete <story-id>`` and dispatch CompleteStoryAction."""

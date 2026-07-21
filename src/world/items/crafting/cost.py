@@ -194,8 +194,6 @@ def consume_cost(
         Summary dict of what was actually consumed:
         ``{"action_points": n, "anima": n, "materials": k}``.
     """
-    from world.action_points.models import ActionPointPool  # noqa: PLC0415
-    from world.magic.services.anima import deduct_anima  # noqa: PLC0415
 
     if consumption == CostConsumption.NONE:
         return {"action_points": 0, "anima": 0, "materials": 0, "common_gem_value": 0}
@@ -207,46 +205,15 @@ def consume_cost(
         ap_to_spend = staged.action_points
         anima_to_spend = staged.anima
 
-    # Deduct AP
-    if ap_to_spend > 0:
-        pool = ActionPointPool.get_or_create_for_character(crafter_character)
-        if not pool.spend(ap_to_spend):
-            msg = "Action points were spent elsewhere before crafting completed."
-            raise CraftingCostUnaffordable(msg)
-
-    # Deduct Anima — symmetric with the AP path above. ``deduct_anima(lethal=False)``
-    # *clamps* to available anima and never draws life force, so a concurrent spend that
-    # dropped the balance below ``anima_to_spend`` (between staging and now) would be
-    # silently absorbed and the consumed-summary would over-report. Assert sufficiency
-    # first and fail-hard like AP does, so the returned ``anima`` is always truthful.
-    if anima_to_spend > 0:
-        from world.magic.models import CharacterAnima  # noqa: PLC0415
-
-        anima_row = CharacterAnima.objects.filter(character=crafter_character).first()
-        current_anima = anima_row.current if anima_row is not None else 0
-        if current_anima < anima_to_spend:
-            msg = "Anima was spent elsewhere before crafting completed."
-            raise CraftingCostUnaffordable(msg)
-        deduct_anima(crafter_character, anima_to_spend, lethal=False)
+    _deduct_action_points(crafter_character, ap_to_spend)
+    _deduct_anima(crafter_character, anima_to_spend)
 
     # Consume materials (PARTIAL and FULL both consume ALL materials)
     materials_consumed = len(staged.material_allocations)
     consume_materials(staged.material_allocations)
 
     # Spend common-gem bulk value (PARTIAL and FULL both spend it in full, like materials).
-    bucket_value_spent = 0
-    sheet = staged.crafter_character_sheet
-    if staged.bucket_spends and sheet is not None:
-        from world.items.exceptions import InsufficientCommonGems  # noqa: PLC0415
-        from world.items.gems.buckets import spend_common_gems  # noqa: PLC0415
-
-        for tier, value in staged.bucket_spends:
-            try:
-                spend_common_gems(sheet, tier, value)
-            except InsufficientCommonGems as exc:
-                msg = "Common gems were spent elsewhere before crafting completed."
-                raise CraftingCostUnaffordable(msg) from exc
-            bucket_value_spent += value
+    bucket_value_spent = _spend_common_gem_buckets(staged)
 
     return {
         "action_points": ap_to_spend,
@@ -254,3 +221,60 @@ def consume_cost(
         "materials": materials_consumed,
         "common_gem_value": bucket_value_spent,
     }
+
+
+def _deduct_action_points(crafter_character: ObjectDB, ap_to_spend: int) -> None:
+    """Deduct action points, raising if a concurrent spend left the pool short."""
+    if ap_to_spend <= 0:
+        return
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+
+    pool = ActionPointPool.get_or_create_for_character(crafter_character)
+    if not pool.spend(ap_to_spend):
+        msg = "Action points were spent elsewhere before crafting completed."
+        raise CraftingCostUnaffordable(msg)
+
+
+def _deduct_anima(crafter_character: ObjectDB, anima_to_spend: int) -> None:
+    """Deduct anima, asserting sufficiency first so the summary is truthful.
+
+    ``deduct_anima(lethal=False)`` *clamps* to available anima and never draws life
+    force, so a concurrent spend that dropped the balance below ``anima_to_spend``
+    (between staging and now) would be silently absorbed and the consumed-summary
+    would over-report. Assert sufficiency first and fail-hard like AP does, so the
+    returned ``anima`` is always truthful.
+    """
+    if anima_to_spend <= 0:
+        return
+    from world.magic.models import CharacterAnima  # noqa: PLC0415
+    from world.magic.services.anima import deduct_anima  # noqa: PLC0415
+
+    anima_row = CharacterAnima.objects.filter(character=crafter_character).first()
+    current_anima = anima_row.current if anima_row is not None else 0
+    if current_anima < anima_to_spend:
+        msg = "Anima was spent elsewhere before crafting completed."
+        raise CraftingCostUnaffordable(msg)
+    deduct_anima(crafter_character, anima_to_spend, lethal=False)
+
+
+def _spend_common_gem_buckets(staged: StagedCost) -> int:
+    """Spend common-gem bulk value for each tier in ``staged.bucket_spends``.
+
+    Returns the total gem value spent. Raises ``CraftingCostUnaffordable`` if a
+    concurrent spend left a tier short.
+    """
+    sheet = staged.crafter_character_sheet
+    if not staged.bucket_spends or sheet is None:
+        return 0
+    from world.items.exceptions import InsufficientCommonGems  # noqa: PLC0415
+    from world.items.gems.buckets import spend_common_gems  # noqa: PLC0415
+
+    bucket_value_spent = 0
+    for tier, value in staged.bucket_spends:
+        try:
+            spend_common_gems(sheet, tier, value)
+        except InsufficientCommonGems as exc:
+            msg = "Common gems were spent elsewhere before crafting completed."
+            raise CraftingCostUnaffordable(msg) from exc
+        bucket_value_spent += value
+    return bucket_value_spent

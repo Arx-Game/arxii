@@ -22,6 +22,8 @@ from world.scenes.models import Persona
 from world.scenes.speaker_queue_models import SpeakerQueue, SpeakerQueueEntry
 from world.scenes.speaker_queue_services import get_active_queue, queue_entries
 
+_NO_CHARACTER_FOUND = "No character found."
+
 
 class SpeakerQueueEntrySerializer(serializers.ModelSerializer):
     persona_name = serializers.CharField(source="persona.name", read_only=True)
@@ -100,7 +102,7 @@ class SpeakerQueueViewSet(viewsets.ReadOnlyModelViewSet):
         character = self._get_character(request)
         if character is None:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_FOUND},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         result = CloseSpeakerQueueAction().run(actor=character)
@@ -115,7 +117,7 @@ class SpeakerQueueViewSet(viewsets.ReadOnlyModelViewSet):
         character = self._get_character(request)
         if character is None:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_FOUND},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         result = JoinSpeakerQueueAction().run(actor=character)
@@ -131,7 +133,7 @@ class SpeakerQueueViewSet(viewsets.ReadOnlyModelViewSet):
         character = self._get_character(request)
         if character is None:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_FOUND},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         result = LeaveSpeakerQueueAction().run(actor=character)
@@ -146,7 +148,7 @@ class SpeakerQueueViewSet(viewsets.ReadOnlyModelViewSet):
         character = self._get_character(request)
         if character is None:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_FOUND},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         result = AdvanceSpeakerQueueAction().run(actor=character)
@@ -168,7 +170,7 @@ class SpeakerQueueViewSet(viewsets.ReadOnlyModelViewSet):
         character = self._get_character(request)
         if character is None:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_FOUND},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         result = SkipSpeakerAction().run(actor=character, target_name=target_name)

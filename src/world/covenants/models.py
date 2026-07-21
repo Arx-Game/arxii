@@ -561,7 +561,7 @@ class GearArchetypeCompatibility(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["covenant_role", "gear_archetype"]
-        dependencies = ["covenants.CovenantRole"]
+        dependencies = [COVENANT_ROLE_MODEL]
 
     def __str__(self) -> str:
         return f"{self.covenant_role.name} compatible with {self.get_gear_archetype_display()}"
@@ -879,7 +879,7 @@ class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["covenant_role", "modifier_target"]
-        dependencies = ["covenants.CovenantRole", "mechanics.ModifierTarget"]
+        dependencies = [COVENANT_ROLE_MODEL, "mechanics.ModifierTarget"]
 
     def __str__(self) -> str:
         return (
@@ -937,7 +937,7 @@ class CovenantRoleActionScaling(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["covenant_role", "action_key"]
-        dependencies = ["covenants.CovenantRole"]
+        dependencies = [COVENANT_ROLE_MODEL]
 
     def __str__(self) -> str:
         return (
@@ -987,7 +987,7 @@ class CovenantRoleTechniqueSpecialty(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["covenant_role", "function"]
-        dependencies = ["covenants.CovenantRole"]
+        dependencies = [COVENANT_ROLE_MODEL]
 
     def __str__(self) -> str:
         return (
@@ -1040,7 +1040,7 @@ class CovenantRoleDefenseProfile(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["covenant_role"]
-        dependencies = ["covenants.CovenantRole"]
+        dependencies = [COVENANT_ROLE_MODEL]
 
     def __str__(self) -> str:
         return f"{self.covenant_role.name}: {self.get_style_display()}"
@@ -1130,7 +1130,7 @@ class CovenantRoleBonus(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["covenant_role", "modifier_target"]
-        dependencies = ["covenants.CovenantRole", "mechanics.ModifierTarget"]
+        dependencies = [COVENANT_ROLE_MODEL, "mechanics.ModifierTarget"]
 
     def __str__(self) -> str:
         return (
@@ -1729,7 +1729,7 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["covenant_role", "name"]
-        dependencies = ["covenants.CovenantRole"]
+        dependencies = [COVENANT_ROLE_MODEL]
 
     def clean(self) -> None:
         super().clean()

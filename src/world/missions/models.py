@@ -46,6 +46,7 @@ from world.missions.constants import (
 from world.societies.constants import RenownMagnitude, RenownReach, RenownRisk
 
 _PERSONA_MODEL_PATH = "scenes.Persona"
+_MISSION_OPTION_ROUTE_MODEL = "missions.MissionOptionRoute"
 
 # MissionOptionRouteReward XOR (route, candidate) — module-level so the
 # clean() messages stay readable and the magic 2 has a name.
@@ -902,7 +903,7 @@ class MissionOptionRouteCandidate(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["route", "target_node"]
-        dependencies = ["missions.MissionOptionRoute"]
+        dependencies = [_MISSION_OPTION_ROUTE_MODEL]
 
     class Meta:
         constraints = [
@@ -1064,7 +1065,7 @@ class MissionOptionRouteReward(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["route", "candidate", "sequence"]
-        dependencies = ["missions.MissionOptionRoute", "missions.MissionOptionRouteCandidate"]
+        dependencies = [_MISSION_OPTION_ROUTE_MODEL, "missions.MissionOptionRouteCandidate"]
 
     class Meta:
         constraints = [
@@ -1210,7 +1211,7 @@ class MissionRenownAward(NaturalKeyMixin, SharedMemoryModel):
     """
 
     route = models.ForeignKey(
-        "missions.MissionOptionRoute",
+        _MISSION_OPTION_ROUTE_MODEL,
         on_delete=models.CASCADE,
         related_name="renown_awards",
     )
@@ -1276,7 +1277,7 @@ class MissionRenownAward(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["route", "sequence"]
-        dependencies = ["missions.MissionOptionRoute"]
+        dependencies = [_MISSION_OPTION_ROUTE_MODEL]
 
     class Meta:
         constraints = [

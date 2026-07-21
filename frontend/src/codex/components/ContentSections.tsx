@@ -42,36 +42,29 @@ function renderContent(
 
     // Find the matching link ref
     const linkRef = links.find((l) => l.match_text === matchText);
-    if (linkRef) {
-      if (linkRef.accessible && linkRef.entry_id !== null) {
-        if (onNavigate) {
-          segments.push(
-            <CodexInlineLink key={key++} entryId={linkRef.entry_id} onNavigate={onNavigate}>
-              {linkRef.display_text}
-            </CodexInlineLink>
-          );
-        } else {
-          // Accessible but no navigation callback — render as styled text
-          segments.push(
-            <span
-              key={key++}
-              className="text-primary underline decoration-dotted underline-offset-2"
-            >
-              {linkRef.display_text}
-            </span>
-          );
-        }
-      } else {
-        segments.push(
-          <span
-            key={key++}
-            className="cursor-help italic text-muted-foreground"
-            title="You have not yet discovered this."
-          >
-            ???
-          </span>
-        );
-      }
+    if (linkRef && linkRef.accessible && linkRef.entry_id !== null && onNavigate) {
+      segments.push(
+        <CodexInlineLink key={key++} entryId={linkRef.entry_id} onNavigate={onNavigate}>
+          {linkRef.display_text}
+        </CodexInlineLink>
+      );
+    } else if (linkRef && linkRef.accessible && linkRef.entry_id !== null) {
+      // Accessible but no navigation callback — render as styled text
+      segments.push(
+        <span key={key++} className="text-primary underline decoration-dotted underline-offset-2">
+          {linkRef.display_text}
+        </span>
+      );
+    } else if (linkRef) {
+      segments.push(
+        <span
+          key={key++}
+          className="cursor-help italic text-muted-foreground"
+          title="You have not yet discovered this."
+        >
+          ???
+        </span>
+      );
     } else {
       // No matching link ref — render the raw text
       segments.push(<span key={key++}>{matchText}</span>);
