@@ -783,6 +783,9 @@ def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
             AffinityType.CELESTIAL: aura.celestial,
             AffinityType.PRIMAL: aura.primal,
             AffinityType.ABYSSAL: aura.abyssal,
-        }[params.affinity]
-        return axis_value >= params.threshold_percent
+        }.get(params.affinity)
+        # ``.get()`` (not ``[...]``) — a non-choice affinity string bypassing
+        # full_clean (e.g. a row authored directly in the DB) yields None
+        # here rather than a KeyError; never raise, just miss.
+        return axis_value is not None and axis_value >= params.threshold_percent
     return aura.dominant_affinity == params.affinity

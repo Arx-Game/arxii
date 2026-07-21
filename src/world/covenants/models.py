@@ -12,7 +12,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -1806,12 +1806,13 @@ class SituationRequirementMixin(models.Model):
     threshold_percent = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
-        validators=[MaxValueValidator(100)],
-        help_text="Percent-shaped floor (0-100): aura-axis floor, ally-health fraction.",
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="Percent-shaped floor (1-100): aura-axis floor, ally-health fraction.",
     )
     count_threshold = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
+        validators=[MinValueValidator(1)],
         help_text="Count-shaped floor: surrounded lock count, minimum affection.",
     )
     affinity = models.CharField(

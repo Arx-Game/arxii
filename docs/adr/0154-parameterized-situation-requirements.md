@@ -75,7 +75,10 @@ hashable dataclass built from a requirement row's `.params` property; `_PerkReso
 situation at a tighter parameter without cache collision. `initiated_by_pc_side` being honestly
 `NULL`-heavy in v1 (no NPC-initiated creation path stamps `False` yet) is a recorded, not
 invented, gap — `origin_side=THEIRS` perks are authorable now and will start firing the moment
-an NPC-initiated encounter service exists, with no further schema change.
+an NPC-initiated encounter service exists, with no further schema change (for
+`AMBUSH_UNDERWAY`, provided it also produces the round-1 surprise shape `ambush_underway`
+requires — `opened_from_parley` or a round-1 `from_entrance` action; `origin_side` alone does
+not suffice there).
 
 > Status: accepted · Source: issue #2623 · Amends: ADR-0153 (`ATTACKER_ABYSSAL` v1 approximation
 > superseded by `ATTACKER_AFFINITY`) · Related: ADR-0149 (four-layer vow-power model — Layer 4),
