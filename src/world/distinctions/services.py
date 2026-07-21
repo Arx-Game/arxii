@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.distinctions.exceptions import DistinctionExclusionError
+from world.distinctions.exceptions import DistinctionExclusionError, DistinctionRevokeError
 from world.distinctions.types import DISTINCTION_CHANGE_XP_PER_CG_POINT
 from world.secrets.constants import SecretProvenance
 from world.secrets.models import Secret
@@ -223,3 +223,35 @@ def distinction_change_xp_cost(distinction: Distinction, *, rank: int, removing:
     if not benefits:
         return 0
     return DISTINCTION_CHANGE_XP_PER_CG_POINT * abs(cost_per_rank * rank)
+
+
+@transaction.atomic
+def revoke_distinction(character_distinction: CharacterDistinction) -> None:
+    """Remove a held distinction and reverse everything the grant built (#2607).
+
+    The removal counterpart to ``grant_distinction`` — promoted from the ad-hoc
+    ``.filter(...).delete()`` pattern to a real seam (see this app's CLAUDE.md).
+    Valid only for ``change_supported`` distinctions (no resonance/asset/codex
+    grants — those have no clean unwind: resonance ``lifetime_earned`` is
+    monotonic). Refuses defensively if one reaches here; ``change_supported``
+    gates upstream at request submit.
+
+    Order matters: clear any relocated Secret first (else deleting the row
+    orphans the ``secrets.Secret``), then delete the modifier sources (cascades
+    to ``CharacterModifier``), then the row. ``ActionEnhancement`` gating is
+    derived-on-read from the template, so deleting the row removes access
+    automatically — nothing to unwind there.
+    """
+    from world.mechanics.services import delete_distinction_modifiers  # noqa: PLC0415
+
+    distinction = character_distinction.distinction
+    if not change_supported(distinction):
+        msg = (
+            f"{distinction.name} cannot be removed automatically — it carries "
+            "resonance/asset/codex grants or is denylisted."
+        )
+        raise DistinctionRevokeError(msg)
+
+    clear_distinction_secret(character_distinction)
+    delete_distinction_modifiers(character_distinction)
+    character_distinction.delete()
