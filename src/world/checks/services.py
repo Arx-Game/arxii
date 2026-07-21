@@ -237,7 +237,10 @@ def _situational_perk_check_bonus(
     thread-level scaling, same integer truncation after summing in
     ``Decimal``) but scopes fired perks to ``check_type``: a perk with
     ``check_type=None`` fires on any check; a perk scoped to a specific
-    ``CheckType`` fires only when it matches THIS check.
+    ``CheckType`` fires only when it matches THIS check. Also applies
+    ``perks.services.perk_scope_matches`` (#2536 slice 3) — the shared
+    mission/battle scope filter both this function and
+    ``vow_situational_power_term`` run every fired perk through.
 
     Returns 0 with no query beyond resolving the character's
     ``CharacterSheet`` when ``situation_ctx`` is ``None`` — the
@@ -264,6 +267,7 @@ def _situational_perk_check_bonus(
     from world.covenants.perks.services import (  # noqa: PLC0415
         announce_fired_perks,
         applicable_perks,
+        perk_scope_matches,
     )
     from world.magic.services.threads import (  # noqa: PLC0415
         total_thread_level_across_all_kinds,
@@ -280,6 +284,7 @@ def _situational_perk_check_bonus(
         for firing in fired
         if firing.perk.check_type_id is None or firing.perk.check_type_id == check_type.pk
     ]
+    scoped = [f for f in scoped if perk_scope_matches(f.perk, situation_ctx)]
     if not scoped:
         return 0
 

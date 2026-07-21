@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
+from world.battles.constants import BattleActionKind
 from world.checks.factories import CheckTypeFactory
 from world.covenants.constants import CovenantType
 from world.covenants.factories import (
@@ -28,6 +29,7 @@ from world.covenants.models import (
     VowSituationalPerkSituation,
 )
 from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+from world.missions.factories import MissionCategoryFactory, MissionTemplateFactory
 
 
 class VowSituationalPerkModelTests(TestCase):
@@ -177,6 +179,74 @@ class VowSituationalPerkModelTests(TestCase):
             floor_success_level=1,
         )
         perk.full_clean()  # must not raise
+
+    def test_mission_category_null_means_any_mission(self) -> None:
+        perk = VowSituationalPerkFactory(effect_kind=PerkEffectKind.CHECK_BONUS)
+        self.assertIsNone(perk.mission_category)
+        self.assertIsNone(perk.mission_template)
+
+    def test_mission_category_rejected_on_non_check_bonus_perk(self) -> None:
+        """#2536 slice 3 content-authoring guard: mission_category/mission_template
+        are only meaningful on a CHECK_BONUS perk — clean() rejects either on any
+        other effect_kind."""
+        category = MissionCategoryFactory()
+        perk = VowSituationalPerkFactory.build(
+            effect_kind=PerkEffectKind.POWER_BONUS, mission_category=category
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            perk.full_clean()
+        self.assertIn("mission_category", ctx.exception.message_dict)
+
+    def test_mission_template_rejected_on_non_check_bonus_perk(self) -> None:
+        template = MissionTemplateFactory()
+        perk = VowSituationalPerkFactory.build(
+            effect_kind=PerkEffectKind.TIER_FLOOR,
+            floor_success_level=1,
+            mission_template=template,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            perk.full_clean()
+        self.assertIn("mission_template", ctx.exception.message_dict)
+
+    def test_mission_category_allowed_on_check_bonus_perk_clean(self) -> None:
+        """Sanity: the guard does not block the legitimate CHECK_BONUS+mission
+        scope pairing — full_clean() passes cleanly."""
+        category = MissionCategoryFactory()
+        perk = VowSituationalPerkFactory(
+            effect_kind=PerkEffectKind.CHECK_BONUS, mission_category=category
+        )
+        perk.full_clean()
+
+    def test_battle_action_kind_rejected_on_tier_floor_perk(self) -> None:
+        """#2536 slice 3 content-authoring guard: battle_action_kind is only
+        meaningful on CHECK_BONUS/POWER_BONUS perks — clean() rejects it on
+        TIER_FLOOR (and BOTCH_IMMUNITY)."""
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
+        perk = VowSituationalPerkFactory.build(
+            covenant_role=role,
+            effect_kind=PerkEffectKind.TIER_FLOOR,
+            floor_success_level=1,
+            battle_action_kind=BattleActionKind.ROUT,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            perk.full_clean()
+        self.assertIn("battle_action_kind", ctx.exception.message_dict)
+
+    def test_battle_action_kind_allowed_on_power_bonus_perk_clean(self) -> None:
+        """Spec §4: Battle scopes both kinds — battle_action_kind is valid on
+        POWER_BONUS perks (not just CHECK_BONUS)."""
+        perk = VowSituationalPerkFactory(
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            battle_action_kind=BattleActionKind.ROUT,
+        )
+        perk.full_clean()
+
+    def test_battle_action_kind_allowed_on_check_bonus_perk_clean(self) -> None:
+        perk = VowSituationalPerkFactory(
+            effect_kind=PerkEffectKind.CHECK_BONUS,
+            battle_action_kind=BattleActionKind.ROUT,
+        )
+        perk.full_clean()
 
 
 class VowSituationalPerkSituationModelTests(TestCase):

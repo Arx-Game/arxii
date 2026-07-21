@@ -1338,6 +1338,54 @@ class VowSituationalPowerTermTests(TestCase):
         technique = TechniqueFactory()
         self.assertEqual(vow_situational_power_term(self._ctx(technique)), 0)
 
+    def test_battle_action_kind_scope_requires_matching_ctx(self):
+        """#2536 slice 3 Battle scoping: a POWER_BONUS perk scoped to
+        battle_action_kind=ROUT does not fire without a matching ctx kind, and
+        fires once the ctx supplies it. 10 * 10 / 10 = 10."""
+        from world.battles.constants import BattleActionKind
+        from world.covenants.factories import VowSituationalPerkFactory
+        from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind
+        from world.covenants.perks.context import SituationContext
+        from world.magic.services.power_terms import vow_situational_power_term
+
+        role = self._engage_role()
+        VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            magnitude_tenths=10,
+            battle_action_kind=BattleActionKind.ROUT,
+        )
+        self._thread(level=10)
+        technique = TechniqueFactory()
+
+        ctx_no_kind = self._ctx(technique)
+        self.assertEqual(vow_situational_power_term(ctx_no_kind), 0)
+
+        ctx_wrong_kind = self._ctx(
+            technique,
+            situation_ctx=SituationContext(
+                holder=self.sheet,
+                subject=self.sheet,
+                target=None,
+                resolution=None,
+                battle_action_kind=BattleActionKind.RALLY,
+            ),
+        )
+        self.assertEqual(vow_situational_power_term(ctx_wrong_kind), 0)
+
+        ctx_matching_kind = self._ctx(
+            technique,
+            situation_ctx=SituationContext(
+                holder=self.sheet,
+                subject=self.sheet,
+                target=None,
+                resolution=None,
+                battle_action_kind=BattleActionKind.ROUT,
+            ),
+        )
+        self.assertEqual(vow_situational_power_term(ctx_matching_kind), 10)
+
     def test_perk_fires_with_combat_situation_ctx_exact_arithmetic(self):
         """AT_RANGE (a combat-positioning situation) holds; the fired perk's
         magnitude scales by the subject's total thread level, int-truncated —

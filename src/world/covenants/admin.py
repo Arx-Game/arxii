@@ -132,8 +132,15 @@ class VowSituationalPerkAdmin(admin.ModelAdmin):
         "beneficiary",
         "magnitude_tenths",
         "floor_success_level",
+        "battle_action_kind",
     )
     list_filter = ("effect_kind", "beneficiary")
     search_fields = ("name", "covenant_role__name")
     autocomplete_fields = ("covenant_role", "check_type")
+    # mission_category/mission_template are NOT autocomplete_fields: the
+    # missions app has no ModelAdmin registration (no world/missions/admin.py
+    # exists) — Django's admin system check (E039) requires the related
+    # model be registered with search_fields for autocomplete_fields to be
+    # valid. raw_id_fields has no such registration requirement.
+    raw_id_fields = ("mission_category", "mission_template")
     inlines = [VowSituationalPerkSituationInline, VowSituationalPerkRungInline]

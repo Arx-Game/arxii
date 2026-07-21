@@ -441,9 +441,11 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     from decimal import Decimal  # noqa: PLC0415
 
     from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
+    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
     from world.covenants.perks.services import (  # noqa: PLC0415
         announce_fired_perks,
         applicable_perks,
+        perk_scope_matches,
     )
     from world.magic.services.threads import (  # noqa: PLC0415
         total_thread_level_across_all_kinds,
@@ -463,6 +465,32 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
         resolution=ctx.situation_ctx,
         target=ctx.target_sheet,
     )
+    if fired:
+        # #2536 slice 3: battle_action_kind is the only scope column clean()
+        # permits on a POWER_BONUS row (mission scopes are CHECK_BONUS-only),
+        # but this runs through the SAME shared perk_scope_matches helper the
+        # CHECK_BONUS seam uses — one rule, one place. ``ctx.situation_ctx``
+        # carries ``battle_action_kind`` when a caller threads a real
+        # ``SituationContext`` through as the resolution (Battle warfare
+        # casts, slice 3 Task 3, via typed attribute access — not a duck
+        # read); an ordinary combat ``CombatRoundContext`` or ``None`` is
+        # not a ``SituationContext``, so the isinstance guard leaves
+        # ``battle_action_kind`` at ``None`` and every battle_action_kind
+        # scope column simply no-ops there. Folded into the SAME truthiness
+        # check as the fetch above (rather than a second early return) to
+        # keep this provider's return count within the lint budget — see
+        # the empty-``fired`` guard below.
+        battle_action_kind = None
+        if isinstance(ctx.situation_ctx, SituationContext):
+            battle_action_kind = ctx.situation_ctx.battle_action_kind
+        scope_ctx = SituationContext(
+            holder=ctx.sheet,
+            subject=ctx.sheet,
+            target=ctx.target_sheet,
+            resolution=ctx.situation_ctx,
+            battle_action_kind=battle_action_kind,
+        )
+        fired = [firing for firing in fired if perk_scope_matches(firing.perk, scope_ctx)]
     if not fired:
         return 0
 

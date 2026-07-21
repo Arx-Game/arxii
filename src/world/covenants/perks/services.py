@@ -175,6 +175,34 @@ def applicable_perks(
     return fired
 
 
+def perk_scope_matches(perk: VowSituationalPerk, ctx: SituationContext) -> bool:
+    """Every authored scope column on ``perk`` must match ``ctx`` (AND); empty scopes
+    always match. Mission-category membership is checked against the template's
+    prefetched/cached ``categories`` (SharedMemoryModel + M2M — one query per template
+    per call at most, cached on the instance's prefetch cache when present).
+
+    Shared by both fired-perk seams (#2536 slice 3): ``checks.services
+    ._situational_perk_check_bonus`` (CHECK_BONUS) and ``magic.services.power_terms
+    .vow_situational_power_term`` (POWER_BONUS) — one rule, one place. Callers with
+    more than one scoped perk in a single resolution should hoist the
+    ``ctx.mission.template.categories`` set OUTSIDE their per-perk loop rather than
+    calling this per-perk when ``ctx.mission`` is set; this function itself queries
+    fresh per call for a single perk.
+    """
+    if perk.battle_action_kind and perk.battle_action_kind != (ctx.battle_action_kind or ""):
+        return False
+    if perk.mission_template_id is not None:
+        if ctx.mission is None or ctx.mission.template_id != perk.mission_template_id:
+            return False
+    if perk.mission_category_id is not None:
+        if ctx.mission is None:
+            return False
+        category_ids = {c.pk for c in ctx.mission.template.categories.all()}
+        if perk.mission_category_id not in category_ids:
+            return False
+    return True
+
+
 def _self_candidates(subject: CharacterSheet) -> list[_Candidate]:
     """Subject's own engaged roles — anchor AND resolved sub-role both apply.
 

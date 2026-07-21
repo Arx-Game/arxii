@@ -18,6 +18,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.battles.constants import BattleActionKind
 from world.covenants.constants import (
     MENTOR_BOND_ADJACENCY_OFFSET,
     MENTOR_BOND_BAND_WIDTH,
@@ -1637,6 +1638,20 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
     symmetry as ``check_type`` applies both directions — ``clean()`` requires
     it on a TIER_FLOOR row and rejects it on any other ``effect_kind`` (#2536
     slice 2).
+
+    Three scope columns narrow WHEN a fired perk actually applies — Court and
+    Battle scoping (#2536 slice 3). Every NON-empty scope on a row must match
+    the resolving ``SituationContext`` (AND semantics — see
+    ``perks.services.perk_scope_matches``, the single seam both
+    ``checks.services._situational_perk_check_bonus`` and
+    ``magic.services.power_terms.vow_situational_power_term`` filter through)
+    for the firing to survive; an empty scope always matches. ``mission_category``
+    and ``mission_template`` are only meaningful when ``effect_kind=CHECK_BONUS``
+    (mission checks are CHECK_BONUS-only) — ``clean()`` rejects either authored
+    on any other ``effect_kind``. ``battle_action_kind`` is meaningful on
+    ``CHECK_BONUS`` **or** ``POWER_BONUS`` (spec §4: a Battle warfare roll scopes
+    both the check AND the technique cast it may carry) — ``clean()`` rejects it
+    authored on ``TIER_FLOOR``/``BOTCH_IMMUNITY``.
     """
 
     covenant_role = models.ForeignKey(
@@ -1675,6 +1690,31 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
             "guarantees never thread-scale."
         ),
     )
+    mission_category = models.ForeignKey(
+        "missions.MissionCategory",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="situational_perks",
+        help_text=(
+            "CHECK_BONUS scope: fires only on a mission whose template carries this category."
+        ),
+    )
+    mission_template = models.ForeignKey(
+        "missions.MissionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="situational_perks",
+        help_text="CHECK_BONUS scope: fires only on a check driven by this specific mission.",
+    )
+    battle_action_kind = models.CharField(
+        max_length=20,
+        choices=BattleActionKind.choices,
+        blank=True,
+        default="",
+        help_text="CHECK_BONUS/POWER_BONUS scope: fires only on this declared warfare action kind.",
+    )
 
     objects = VowSituationalPerkManager()
 
@@ -1706,6 +1746,34 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
                 {
                     "floor_success_level": (
                         "floor_success_level is only meaningful when effect_kind=TIER_FLOOR."
+                    )
+                }
+            )
+        if self.mission_category_id is not None and self.effect_kind != PerkEffectKind.CHECK_BONUS:
+            raise ValidationError(
+                {
+                    "mission_category": (
+                        "mission_category is only meaningful when effect_kind=CHECK_BONUS."
+                    )
+                }
+            )
+        if self.mission_template_id is not None and self.effect_kind != PerkEffectKind.CHECK_BONUS:
+            raise ValidationError(
+                {
+                    "mission_template": (
+                        "mission_template is only meaningful when effect_kind=CHECK_BONUS."
+                    )
+                }
+            )
+        if self.battle_action_kind and self.effect_kind not in (
+            PerkEffectKind.CHECK_BONUS,
+            PerkEffectKind.POWER_BONUS,
+        ):
+            raise ValidationError(
+                {
+                    "battle_action_kind": (
+                        "battle_action_kind is only meaningful when effect_kind=CHECK_BONUS "
+                        "or effect_kind=POWER_BONUS."
                     )
                 }
             )

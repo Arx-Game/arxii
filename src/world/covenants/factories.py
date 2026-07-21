@@ -157,6 +157,9 @@ class VowSituationalPerkFactory(factory_django.DjangoModelFactory):
     announce_template = "{holder}'s vow answers!"
     check_type = None
     floor_success_level = None
+    mission_category = None
+    mission_template = None
+    battle_action_kind = ""
 
 
 class VowSituationalPerkSituationFactory(factory_django.DjangoModelFactory):
