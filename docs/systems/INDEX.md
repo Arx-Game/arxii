@@ -4080,12 +4080,20 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     from a `Situation`, which asks whether the game state holds at all).
     `VowSituationalPerkSituation` (AND-composed situation attachments) + `VowSituationalPerkRung`
     (cumulative escalation tiers — rung N requires rungs 1..N-1 too, highest qualifying rung's
-    magnitude replaces the base). All lore-repo content. Situations are drawn from
-    `world.covenants.perks.constants.Situation`, a code-defined library (14 values as of
-    slice 3: slice 1's 9 plus `CHAMPION_DUEL`, `COMBAT_OPENED_FROM_PARLEY`, `AMBUSH_UNDERWAY`,
-    `ALLY_INTERCEPTED_FOR_ME`, `ATTACKER_ABYSSAL`) with a registered evaluator per value
+    magnitude replaces the base). Both inherit `SituationRequirementMixin` (#2623, ADR-0154) —
+    four typed, nullable/blank parameter columns (Situation Parameters): `threshold_percent`
+    (0-100), `count_threshold`, `affinity` (`AffinityType` axis), `origin_side`
+    (`SituationOriginSide.OURS`/`THEIRS`, blank = side-blind). No JSON (ADR-0007). Which
+    situation reads/requires which params is `SITUATION_PARAM_SPECS`
+    (`world.covenants.perks.constants`); the mixin's `clean()` enforces both directions. All
+    lore-repo content. Situations are drawn from `world.covenants.perks.constants.Situation`, a
+    code-defined library (still 14 values as of #2623: slice 1's 9 plus `CHAMPION_DUEL`,
+    `COMBAT_OPENED_FROM_PARLEY`, `AMBUSH_UNDERWAY`, `ALLY_INTERCEPTED_FOR_ME`, and
+    `ATTACKER_AFFINITY` — the Abyssal-only attacker-typing situation renamed and parameterized to
+    all three `AffinityType` axes by #2623) with a registered evaluator per value
     (`world.covenants.perks.evaluators.SITUATION_EVALUATORS`) — attaching a situation to a perk
-    is content; adding a new situation to the library is code. `world.covenants.perks.services
+    (and tuning its params) is content; adding a new situation to the library is code.
+    `world.covenants.perks.services
     .applicable_perks(subject, *, effect_kind, resolution, target, attacker=None)` is the
     beneficiary evaluation point every delivery seam calls (`effect_kind` accepts a single kind
     or a `tuple[str, ...]`, slice 2 — same fixed query ceiling; `attacker`, slice 3, threads the
@@ -4401,24 +4409,37 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     flag is True) and `Situation.AMBUSH_UNDERWAY` (round-1-only: `opened_from_parley` True OR a
     round-1 `from_entrance=True` `CombatRoundAction` exists, per the technique-entrance
     integration above; False from round 2 on).
+  - `CombatEncounter.initiated_by_pc_side` (`BooleanField(null=True)`, #2623, ADR-0154) — who
+    sprang the fight: `True` = a PC participant's action opened it, `False` = the opposing side
+    did, `NULL` = unknown/undirected (duels, battles, staff-opened). Stamped `True`
+    unconditionally by `seed_or_feed_encounter_from_cast` at CREATE — every verified
+    encounter-creation path today is PC-cast, so no code path stamps `False` yet (honest gap,
+    recorded not invented; `False` is admin/GM-stampable via combat admin in v1). Read by an
+    `origin_side` Situation Parameter on `COMBAT_OPENED_FROM_PARLEY`/`AMBUSH_UNDERWAY`:
+    `OURS` requires `True`, `THEIRS` requires `False`, a `NULL` initiator with a non-blank
+    `origin_side` never holds (direction unprovable); blank `origin_side` ignores this column
+    entirely (today's side-blind behavior).
   - `CombatEncounter.is_champion_duel` (bool, default False) — see `docs/systems/battles.md`'s
     "Command Hierarchy & the Champion" section; read by `Situation.CHAMPION_DUEL`.
   - `CombatOpponent.affinity` (`AffinityType` CharField, blank default) — authored magical
     affinity typing for non-persona/generic NPCs that carry no `CharacterAura` row to infer
-    from. Read by `Situation.ATTACKER_ABYSSAL`'s evaluator FIRST (authored typing wins outright
-    when present), falling back to a reachable `ObjectDB`'s `CharacterAura.dominant_affinity`
-    (`attacker.objectdb.aura` for a `CombatOpponent` — covers both persona-backed story NPCs and
-    PvP attackers, whose `objectdb` is the attacking PC — or `attacker.aura` for a bare
-    `ObjectDB` attacker) when blank.
+    from. Read by `Situation.ATTACKER_AFFINITY`'s evaluator FIRST against the row's required
+    `affinity` Situation Parameter (authored typing wins outright when present, matching that
+    axis is definitional and any `threshold_percent` is ignored), falling back to a reachable
+    `ObjectDB`'s `CharacterAura` (`attacker.objectdb.aura` for a `CombatOpponent` — covers both
+    persona-backed story NPCs and PvP attackers, whose `objectdb` is the attacking PC — or
+    `attacker.aura` for a bare `ObjectDB` attacker) when blank: with `threshold_percent` set,
+    that axis's Decimal percentage must be ≥ the threshold; unset, `dominant_affinity` must
+    equal the axis (the pre-#2623 parameterless default).
   - `world.combat.services.resolve_npc_attack` threads a `SituationContext(attacker=
     opponent_action.opponent, resolution=CombatRoundContext(participant), holder=subject=
     participant.character_sheet, target=None, ...)` into the defender's real `perform_check` —
     the defense-side seam (the one context where the SUBJECT is not the aggressor), and the
     ONLY defense-check site threading `attacker` in v1. Makes CHECK_BONUS/TIER_FLOOR/
-    BOTCH_IMMUNITY situational perks — including `ATTACKER_ABYSSAL`-gated ones — live on
+    BOTCH_IMMUNITY situational perks — including `ATTACKER_AFFINITY`-gated ones — live on
     defense rolls for the first time. `world.covenants.perks.services.applicable_perks` and its
     `_PerkResolver` gained the matching `attacker` parameter/field to propagate it into each
-    candidate holder's `SituationContext`. See ADR-0153 and `docs/systems/covenants.md`'s
+    candidate holder's `SituationContext`. See ADR-0153/ADR-0154 and `docs/systems/covenants.md`'s
     "Court/Battle scoping + defense-side seam" for the full design.
 - **Effect-palette / summon / allegiance additions (#1584):**
   - `CombatOpponent.allegiance` (`CombatAllegiance`: ENEMY default / ALLY) — mutable

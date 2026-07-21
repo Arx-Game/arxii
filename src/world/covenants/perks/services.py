@@ -95,7 +95,7 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ObjectDoesNotExist
 
 from world.covenants.perks.constants import PerkBeneficiary
-from world.covenants.perks.context import SituationContext
+from world.covenants.perks.context import SituationContext, SituationParams
 from world.covenants.perks.evaluators import SITUATION_EVALUATORS
 
 if TYPE_CHECKING:
@@ -158,7 +158,7 @@ def applicable_perks(
     action target, or ``None``. ``attacker`` (#2536 slice 3, Task 6) is the
     SUBJECT's defense-side attacking entity, or ``None`` (the default, and
     every offense-side caller) — threaded through to every candidate
-    holder's ``SituationContext`` so the ``ATTACKER_ABYSSAL`` evaluator can
+    holder's ``SituationContext`` so the ``ATTACKER_AFFINITY`` evaluator can
     read it.
     """
     candidates = _self_candidates(subject) + _ally_candidates(subject, resolution)
@@ -640,8 +640,14 @@ class _PerkResolver:
     """Evaluates candidate perks against the ONE (subject, target, resolution,
     attacker) tuple shared by every candidate holder in a single
     ``applicable_perks`` call. Holds a per-call situation-evaluation cache
-    (keyed on ``(situation, holder_pk)``) so a situation shared by multiple
-    candidate perks/holders is evaluated at most once.
+    (keyed on ``(situation, params, holder_pk)`` — #2623 spec §2: two rows
+    authoring the SAME situation with DIFFERENT params are distinct cache
+    entries, since ``SituationParams`` is a hashable frozen dataclass) so a
+    (situation, params) pair shared by multiple candidate perks/holders is
+    evaluated at most once. Zero new queries — params ride the prefetched
+    ``situations``/``rungs`` rows (each row's ``.params`` property reads its
+    own already-fetched columns) alongside the situation string that was
+    already there.
     """
 
     def __init__(
@@ -656,10 +662,10 @@ class _PerkResolver:
         self.target = target
         self.resolution = resolution
         self.attacker = attacker
-        self._eval_cache: dict[tuple[str, int], bool] = {}
+        self._eval_cache: dict[tuple[str, SituationParams, int], bool] = {}
 
-    def _holds(self, situation: str, holder: CharacterSheet) -> bool:
-        key = (situation, holder.pk)
+    def _holds(self, situation: str, params: SituationParams, holder: CharacterSheet) -> bool:
+        key = (situation, params, holder.pk)
         if key not in self._eval_cache:
             ctx = SituationContext(
                 holder=holder,
@@ -668,25 +674,31 @@ class _PerkResolver:
                 resolution=self.resolution,
                 attacker=self.attacker,
             )
-            self._eval_cache[key] = SITUATION_EVALUATORS[situation](ctx)
+            self._eval_cache[key] = SITUATION_EVALUATORS[situation](ctx, params)
         return self._eval_cache[key]
 
     def resolve(self, perk: VowSituationalPerk, *, holder: CharacterSheet) -> FiredPerk | None:
         """``None`` if the perk's base situations don't all hold; else a
         ``FiredPerk`` at base or the highest qualifying rung (spec §2's
         cumulative rung-resolution rule — each rung requires every lower
-        rung's extra situation to also hold).
+        rung's extra situation to also hold, each with its OWN authored
+        params).
         """
-        base_situations = [row.situation for row in perk.situations.all()]
-        if not all(self._holds(situation, holder) for situation in base_situations):
+        base_requirements = [(row.situation, row.params) for row in perk.situations.all()]
+        if not all(
+            self._holds(situation, params, holder) for situation, params in base_requirements
+        ):
             return None
 
         magnitude_tenths = perk.magnitude_tenths
         rung_number: int | None = None
-        cumulative_situations = list(base_situations)
+        cumulative_requirements = list(base_requirements)
         for rung in perk.rungs.all():  # Meta.ordering = ["perk", "rung_number"]
-            cumulative_situations.append(rung.extra_situation)
-            if not all(self._holds(situation, holder) for situation in cumulative_situations):
+            cumulative_requirements.append((rung.extra_situation, rung.params))
+            if not all(
+                self._holds(situation, params, holder)
+                for situation, params in cumulative_requirements
+            ):
                 break
             magnitude_tenths = rung.magnitude_tenths
             rung_number = rung.rung_number

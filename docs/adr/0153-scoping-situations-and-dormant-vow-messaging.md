@@ -6,6 +6,9 @@ Battle contexts, four deferred situations plus a bonus fifth, a defense-side eva
 and ruling 2's "loud OFF state" for a disengaged vow. It records the decisions worth keeping,
 not a restatement of the spec (`gh issue view 2536`).
 
+> Editor's note (2026-07-21): `ATTACKER_ABYSSAL` below was renamed to `ATTACKER_AFFINITY` and
+> parameterized in #2623 — see ADR-0154.
+
 ## Three scope columns, AND semantics, per-kind clean gates
 
 `VowSituationalPerk` gains `mission_category`/`mission_template` (FKs) and `battle_action_kind`

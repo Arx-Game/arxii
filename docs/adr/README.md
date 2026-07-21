@@ -182,6 +182,7 @@ treat those names as hints to confirm, not gospel.
 - [0151 — Situational-perk machinery, slice 1: registry pattern, beneficiary evaluation point, dual-dispatch announce](0151-situational-perk-machinery-slice-1.md) (#2536 slice 1; related ADR-0055, ADR-0118, ADR-0149)
 - [0152 — Outcome guarantees (TIER_FLOOR / BOTCH_IMMUNITY) are absolute floors, not scaled bonuses](0152-outcome-guarantees-are-absolute-floors.md) (#2536 slice 2; amends ADR-0151; related ADR-0149)
 - [0153 — Court/Battle scoping, five new situations, the defense-side seam, and dormant-vow messaging](0153-scoping-situations-and-dormant-vow-messaging.md) (#2536 slice 3; related ADR-0149, ADR-0151, ADR-0152, #2183, ADR-0118)
+- [0154 — Situation requirements grow typed parameter columns, not new enum values per axis](0154-parameterized-situation-requirements.md) (#2623; amends ADR-0153; related ADR-0149, ADR-0151, ADR-0152, ADR-0007, ADR-0013)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
