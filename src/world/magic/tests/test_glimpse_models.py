@@ -55,10 +55,12 @@ class GlimpseSuggestionModelTests(TestCase):
 
 class CharacterDistinctionFromGlimpseTests(TestCase):
     def test_set_null_on_aura_delete(self):
+        from world.character_sheets.factories import CharacterSheetFactory
         from world.distinctions.factories import CharacterDistinctionFactory
 
         aura = CharacterAuraFactory()
-        cd = CharacterDistinctionFactory(character=aura.character, from_glimpse=aura)
+        sheet = CharacterSheetFactory(character=aura.character)
+        cd = CharacterDistinctionFactory(character=sheet, from_glimpse=aura)
         cd_pk = cd.pk
         aura.delete()
         from world.distinctions.models import CharacterDistinction

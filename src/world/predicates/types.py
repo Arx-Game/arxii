@@ -33,10 +33,10 @@ class ResolverContext:
     Resolvers that gate on sheet-keyed state (achievements, threads,
     resonance, codex knowledge, etc.) use ``ctx.sheet`` directly.
     The handful of resolvers that gate on models still keyed by
-    ObjectDB (CharacterDistinction.character, ConditionInstance.target
-    via the conditions service, CharacterTraitValue.character) walk
-    ``ctx.character`` — a convenience property that returns
-    ``ctx.sheet.character``.
+    ObjectDB (ConditionInstance.target via the conditions service,
+    CharacterTraitValue.character) walk ``ctx.character`` — a
+    convenience property that returns ``ctx.sheet.character``.
+    (CharacterDistinction.character now FKs CharacterSheet — #2608.)
 
     ``presented_persona`` is the persona the character is currently
     presenting as (the mask they're wearing), or None if the caller
@@ -56,8 +56,8 @@ class ResolverContext:
 
         Most resolvers should prefer ``ctx.sheet`` directly. This
         property exists for the handful of legacy-keyed models
-        (CharacterDistinction, ConditionInstance, CharacterTraitValue)
-        that FK ObjectDB. SharedMemoryModel identity map keeps the
+        (ConditionInstance, CharacterTraitValue) that FK ObjectDB.
+        SharedMemoryModel identity map keeps the
         ObjectDB cached on the sheet — this is a cheap attribute walk,
         not a query.
         """

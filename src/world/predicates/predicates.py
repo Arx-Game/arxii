@@ -109,10 +109,11 @@ def evaluate(rule: dict, ctx: PredicateContext) -> bool:
 # carries ``sheet`` (the CharacterSheet — canonical handle per project
 # convention) and ``presented_persona`` (the mask, or None). Most
 # resolvers read ``ctx.sheet`` directly. The few resolvers gating on
-# models still keyed by ObjectDB (CharacterDistinction.character,
-# ConditionInstance via has_condition service, CharacterTraitValue.
-# character) walk ``ctx.character`` — the @property on ResolverContext
-# that returns ``sheet.character``. Persona-aware resolvers consult
+# models still keyed by ObjectDB (ConditionInstance via has_condition
+# service, CharacterTraitValue.character) walk ``ctx.character`` — the
+# @property on ResolverContext that returns ``sheet.character``.
+# (CharacterDistinction.character now points at CharacterSheet — #2608 —
+# so has_distinction reads ``ctx.sheet``.) Persona-aware resolvers consult
 # ``ctx.presented_persona`` (incl. NPC standing + persona-scoped item
 # ownership).
 #
@@ -133,7 +134,7 @@ def _resolve_has_distinction(ctx: ResolverContext, *, slug: str) -> bool:
     from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
 
     return CharacterDistinction.objects.filter(
-        character=ctx.character,
+        character=ctx.sheet,
         distinction__slug=slug,
     ).exists()
 

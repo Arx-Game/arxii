@@ -102,7 +102,7 @@ class GlimpseDistinctionLinkActionTest(GlimpseAuraActionTestBase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.character_distinction = CharacterDistinctionFactory(character=cls.character)
+        cls.character_distinction = CharacterDistinctionFactory(character=cls.character.sheet_data)
         cls.foreign_distinction = CharacterDistinctionFactory()  # different character
 
     def test_link_sets_from_glimpse(self):

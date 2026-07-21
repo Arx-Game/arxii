@@ -371,7 +371,7 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
         from world.mechanics.models import CharacterModifier, ModifierSource
 
         effect = DistinctionEffectFactory(target=target, value_per_rank=value)
-        char_distinction = CharacterDistinctionFactory(character=self.character)
+        char_distinction = CharacterDistinctionFactory(character=self.sheet)
         source = ModifierSource.objects.create(
             distinction_effect=effect,
             character_distinction=char_distinction,

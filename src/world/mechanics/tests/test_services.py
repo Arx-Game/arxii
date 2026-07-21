@@ -59,7 +59,7 @@ class TestGetModifierBreakdown(TestCase):
             value_per_rank=5,
         )
         char_distinction = CharacterDistinctionFactory(
-            character=self.character.character,
+            character=self.character,
             distinction=distinction,
             rank=2,
         )
@@ -88,7 +88,7 @@ class TestGetModifierBreakdown(TestCase):
             value_per_rank=5,
         )
         char_distinction = CharacterDistinctionFactory(
-            character=self.character.character,
+            character=self.character,
             distinction=distinction,
             rank=1,
         )
@@ -152,17 +152,13 @@ class TestGetModifierBreakdown(TestCase):
         # First distinction
         d1 = DistinctionFactory(name="Attractive")
         DistinctionEffectFactory(distinction=d1, target=self.allure, value_per_rank=5)
-        cd1 = CharacterDistinctionFactory(
-            character=self.character.character, distinction=d1, rank=1
-        )
+        cd1 = CharacterDistinctionFactory(character=self.character, distinction=d1, rank=1)
         create_distinction_modifiers(cd1)
 
         # Second distinction
         d2 = DistinctionFactory(name="Charming")
         DistinctionEffectFactory(distinction=d2, target=self.allure, value_per_rank=3)
-        cd2 = CharacterDistinctionFactory(
-            character=self.character.character, distinction=d2, rank=1
-        )
+        cd2 = CharacterDistinctionFactory(character=self.character, distinction=d2, rank=1)
         create_distinction_modifiers(cd2)
 
         breakdown = get_modifier_breakdown(self.character, self.allure)
@@ -190,12 +186,12 @@ class TestGetModifierBreakdown(TestCase):
 
         # Grant both distinctions
         cd_attractive = CharacterDistinctionFactory(
-            character=self.character.character,
+            character=self.character,
             distinction=attractive,
             rank=1,
         )
         cd_cleans = CharacterDistinctionFactory(
-            character=self.character.character,
+            character=self.character,
             distinction=cleans_up,
             rank=1,
         )
@@ -240,15 +236,9 @@ class TestGetModifierBreakdown(TestCase):
         )
 
         # Grant all
-        cd_base = CharacterDistinctionFactory(
-            character=self.character.character, distinction=base, rank=1
-        )
-        cd_amp1 = CharacterDistinctionFactory(
-            character=self.character.character, distinction=amp1, rank=1
-        )
-        cd_amp2 = CharacterDistinctionFactory(
-            character=self.character.character, distinction=amp2, rank=1
-        )
+        cd_base = CharacterDistinctionFactory(character=self.character, distinction=base, rank=1)
+        cd_amp1 = CharacterDistinctionFactory(character=self.character, distinction=amp1, rank=1)
+        cd_amp2 = CharacterDistinctionFactory(character=self.character, distinction=amp2, rank=1)
         create_distinction_modifiers(cd_base)
         create_distinction_modifiers(cd_amp1)
         create_distinction_modifiers(cd_amp2)
@@ -282,12 +272,12 @@ class TestGetModifierBreakdown(TestCase):
 
         # Grant both
         cd_spotless = CharacterDistinctionFactory(
-            character=self.character.character,
+            character=self.character,
             distinction=spotless,
             rank=1,
         )
         cd_cursed = CharacterDistinctionFactory(
-            character=self.character.character,
+            character=self.character,
             distinction=cursed,
             rank=1,
         )
@@ -332,13 +322,13 @@ class TestGetModifierBreakdown(TestCase):
 
         # Grant all three
         cd_attractive = CharacterDistinctionFactory(
-            character=self.character.character, distinction=attractive, rank=1
+            character=self.character, distinction=attractive, rank=1
         )
         cd_cleans = CharacterDistinctionFactory(
-            character=self.character.character, distinction=cleans_up, rank=1
+            character=self.character, distinction=cleans_up, rank=1
         )
         cd_spotless = CharacterDistinctionFactory(
-            character=self.character.character, distinction=spotless, rank=1
+            character=self.character, distinction=spotless, rank=1
         )
         create_distinction_modifiers(cd_attractive)
         create_distinction_modifiers(cd_cleans)
@@ -371,7 +361,7 @@ class TestGetModifierTotal(TestCase):
             value_per_rank=5,
         )
         cd = CharacterDistinctionFactory(
-            character=self.character.character,
+            character=self.character,
             distinction=distinction,
             rank=2,
         )
@@ -394,7 +384,7 @@ class TestDeleteDistinctionModifiers(TestCase):
         distinction = DistinctionFactory(name="Attractive")
         DistinctionEffectFactory(distinction=distinction, target=self.allure, value_per_rank=5)
         cd = CharacterDistinctionFactory(
-            character=self.character.character,
+            character=self.character,
             distinction=distinction,
             rank=1,
         )
@@ -423,7 +413,7 @@ class TestUpdateDistinctionRank(TestCase):
         distinction = DistinctionFactory(name="Attractive")
         DistinctionEffectFactory(distinction=distinction, target=self.allure, value_per_rank=5)
         cd = CharacterDistinctionFactory(
-            character=self.character.character,
+            character=self.character,
             distinction=distinction,
             rank=1,
         )
@@ -929,9 +919,7 @@ class GetModifierTotalEquipmentWalkTests(TestCase):
 
         distinction = DistinctionFactory(name="EqWalkDistinction")
         DistinctionEffectFactory(distinction=distinction, target=self.eq_target, value_per_rank=10)
-        cd = CharacterDistinctionFactory(
-            character=self.character.character, distinction=distinction, rank=1
-        )
+        cd = CharacterDistinctionFactory(character=self.character, distinction=distinction, rank=1)
         create_distinction_modifiers(cd)
 
         with (

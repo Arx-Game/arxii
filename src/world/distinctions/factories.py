@@ -83,7 +83,7 @@ class CharacterDistinctionFactory(DjangoModelFactory):
     class Meta:
         model = CharacterDistinction
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     distinction = factory.SubFactory(DistinctionFactory)
     rank = 1
     origin = DistinctionOrigin.CHARACTER_CREATION
@@ -95,6 +95,6 @@ class CharacterDistinctionOtherFactory(DjangoModelFactory):
     class Meta:
         model = CharacterDistinctionOther
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     parent_distinction = factory.SubFactory(DistinctionFactory, allow_other=True)
     freeform_text = factory.Faker("word")

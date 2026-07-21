@@ -43,7 +43,7 @@ def mint_distinction_secret(
         return character_distinction.secret
     distinction = character_distinction.distinction
     secret = Secret.objects.create(
-        subject_sheet=character_distinction.character.sheet_data,
+        subject_sheet=character_distinction.character,
         level=level if level is not None else distinction.default_secret_level,
         provenance=provenance,
         author_persona=author_persona,
@@ -84,7 +84,7 @@ def _check_exclusions(character: CharacterSheet, distinction: Distinction) -> No
     )
 
     existing_ids = set(
-        CharacterDistinction.objects.filter(character=character.character)
+        CharacterDistinction.objects.filter(character=character)
         .exclude(distinction=distinction)
         .values_list("distinction_id", flat=True)
     )
@@ -150,14 +150,14 @@ def grant_distinction(
     _check_exclusions(character, distinction)
 
     existing = CharacterDistinction.objects.filter(
-        character=character.character, distinction=distinction
+        character=character, distinction=distinction
     ).first()
 
     with transaction.atomic():
         if existing is None:
             new_rank = rank or 1
             char_distinction = CharacterDistinction.objects.create(
-                character=character.character,
+                character=character,
                 distinction=distinction,
                 rank=new_rank,
                 origin=origin,

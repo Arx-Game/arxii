@@ -1411,7 +1411,7 @@ class ConditionPercentageModifiersTest(TestCase):
 
         # Grant Wrathful distinction
         char_distinction = CharacterDistinction.objects.create(
-            character=self.target,
+            character=self.target.sheet_data,
             distinction=self.wrathful,
             rank=1,
         )
@@ -1429,7 +1429,7 @@ class ConditionPercentageModifiersTest(TestCase):
 
         # Grant Wrathful distinction
         char_distinction = CharacterDistinction.objects.create(
-            character=self.target,
+            character=self.target.sheet_data,
             distinction=self.wrathful,
             rank=1,
         )
@@ -1447,7 +1447,7 @@ class ConditionPercentageModifiersTest(TestCase):
 
         # Grant Hubris distinction
         char_distinction = CharacterDistinction.objects.create(
-            character=self.target,
+            character=self.target.sheet_data,
             distinction=self.hubris,
             rank=1,
         )
@@ -1464,7 +1464,7 @@ class ConditionPercentageModifiersTest(TestCase):
         from world.mechanics.services import create_distinction_modifiers
 
         char_distinction = CharacterDistinction.objects.create(
-            character=self.target,
+            character=self.target.sheet_data,
             distinction=self.wrathful,
             rank=1,
         )
@@ -1505,14 +1505,14 @@ class ConditionPercentageModifiersTest(TestCase):
 
         # Grant both distinctions
         wrathful_cd = CharacterDistinction.objects.create(
-            character=self.target,
+            character=self.target.sheet_data,
             distinction=self.wrathful,
             rank=1,
         )
         create_distinction_modifiers(wrathful_cd)
 
         other_cd = CharacterDistinction.objects.create(
-            character=self.target,
+            character=self.target.sheet_data,
             distinction=other,
             rank=1,
         )

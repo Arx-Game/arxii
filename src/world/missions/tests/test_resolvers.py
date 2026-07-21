@@ -59,7 +59,7 @@ class DistinctionAchievementResolverTests(TestCase):
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.distinction = DistinctionFactory(slug="brave")
-        CharacterDistinctionFactory(character=cls.character, distinction=cls.distinction)
+        CharacterDistinctionFactory(character=cls.sheet, distinction=cls.distinction)
         cls.achievement = AchievementFactory(slug="first-blood")
         CharacterAchievementFactory(
             character_sheet=cls.sheet,

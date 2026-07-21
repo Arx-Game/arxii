@@ -44,7 +44,7 @@ class CheckDistinctionRankThresholdsTests(TestCase):
             lifetime_earned_threshold=10,
         )
         cd = CharacterDistinctionFactory(
-            character=sheet.character,
+            character=sheet,
             distinction=distinction,
             rank=1,
             origin=DistinctionOrigin.CHARACTER_CREATION,
@@ -74,7 +74,7 @@ class CheckDistinctionRankThresholdsTests(TestCase):
             rank=2,
             lifetime_earned_threshold=10,
         )
-        cd = CharacterDistinctionFactory(character=sheet.character, distinction=distinction, rank=1)
+        cd = CharacterDistinctionFactory(character=sheet, distinction=distinction, rank=1)
 
         grant_resonance(
             sheet,
@@ -109,7 +109,7 @@ class CheckDistinctionRankThresholdsTests(TestCase):
             rank=2,
             lifetime_earned_threshold=10,
         )
-        cd = CharacterDistinctionFactory(character=sheet.character, distinction=distinction, rank=1)
+        cd = CharacterDistinctionFactory(character=sheet, distinction=distinction, rank=1)
 
         grant_resonance(
             sheet,
@@ -132,7 +132,7 @@ class CheckDistinctionRankThresholdsTests(TestCase):
             rank=2,
             lifetime_earned_threshold=100,
         )
-        cd = CharacterDistinctionFactory(character=sheet.character, distinction=distinction, rank=1)
+        cd = CharacterDistinctionFactory(character=sheet, distinction=distinction, rank=1)
 
         grant_resonance(
             sheet,
@@ -166,9 +166,7 @@ class CheckDistinctionRankThresholdsTests(TestCase):
         )
 
         self.assertFalse(
-            CharacterDistinction.objects.filter(
-                character=sheet.character, distinction=distinction
-            ).exists()
+            CharacterDistinction.objects.filter(character=sheet, distinction=distinction).exists()
         )
 
     def test_multi_threshold_catch_up_in_one_grant(self) -> None:
@@ -185,7 +183,7 @@ class CheckDistinctionRankThresholdsTests(TestCase):
         DistinctionResonanceRankThresholdFactory(
             distinction=distinction, resonance=resonance, rank=4, lifetime_earned_threshold=30
         )
-        cd = CharacterDistinctionFactory(character=sheet.character, distinction=distinction, rank=1)
+        cd = CharacterDistinctionFactory(character=sheet, distinction=distinction, rank=1)
 
         # One grant that jumps lifetime_earned straight past all three thresholds.
         grant_resonance(
@@ -208,10 +206,8 @@ class CheckDistinctionRankThresholdsTests(TestCase):
         DistinctionResonanceRankThresholdFactory(
             distinction=distinction_a, resonance=resonance, rank=2, lifetime_earned_threshold=5
         )
-        cd_a = CharacterDistinctionFactory(
-            character=sheet.character, distinction=distinction_a, rank=1
-        )
-        CharacterDistinctionFactory(character=sheet.character, distinction=distinction_b, rank=1)
+        cd_a = CharacterDistinctionFactory(character=sheet, distinction=distinction_a, rank=1)
+        CharacterDistinctionFactory(character=sheet, distinction=distinction_b, rank=1)
 
         # Must not raise — the exclusion conflict is caught, logged, and skipped.
         grant_resonance(

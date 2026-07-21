@@ -70,7 +70,7 @@ class BuildOptionListTests(TestCase):
         self.assertNotIn(self.gated_option, {o.option for o in options})
 
     def test_gated_option_shown_when_predicate_passes(self) -> None:
-        CharacterDistinctionFactory(character=self.character, distinction=self.gate_dist)
+        CharacterDistinctionFactory(character=self.sheet, distinction=self.gate_dist)
         options = build_option_list(self.instance, self.node, self.participant)
         gated = [o for o in options if o.option == self.gated_option]
         self.assertEqual(len(gated), 1)
@@ -82,7 +82,7 @@ class BuildOptionListTests(TestCase):
         self.assertIn(self.ungated_option, {o.option for o in options})
 
     def test_order_is_stable_by_option_order(self) -> None:
-        CharacterDistinctionFactory(character=self.character, distinction=self.gate_dist)
+        CharacterDistinctionFactory(character=self.sheet, distinction=self.gate_dist)
         options = build_option_list(self.instance, self.node, self.participant)
         # order=0 gated entry precedes order=1 ungated entry.
         self.assertEqual(

@@ -1573,6 +1573,8 @@
   - story_progress <- stories.StoryProgress
   - alternate_selves <- forms.AlternateSelf
   - active_alternate_self <- forms.ActiveAlternateSelf
+  - distinctions <- distinctions.CharacterDistinction
+  - distinction_other_entries <- distinctions.CharacterDistinctionOther
   - org_obligations <- societies.OrganizationObligation
   - purse <- currency.CharacterPurse
   - employments <- currency.CharacterEmployment
@@ -1808,6 +1810,7 @@
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - allowed_styles <- magic.TechniqueStyle
   - gift_unlocks <- magic.GiftUnlock
+  - glimpse_trigger_tags <- magic.GlimpseTag
   - ritual_grants <- magic.PathRitualGrant
   - gift_grants <- magic.PathGiftGrant
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
@@ -3186,7 +3189,7 @@
 
 ### CharacterDistinction
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - distinction -> distinctions.Distinction [FK]
   - secret -> secrets.Secret [OneToOne] (nullable)
   - from_glimpse -> magic.CharacterAura [FK] (nullable)
@@ -3196,7 +3199,7 @@
 
 ### CharacterDistinctionOther
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - parent_distinction -> distinctions.Distinction [FK]
   - staff_mapped_distinction -> distinctions.Distinction [FK] (nullable)
 
@@ -4838,6 +4841,8 @@
 ### GiftAcquisitionConfig
 
 ### GlimpseTag
+**Foreign Keys:**
+  - paths -> classes.Path [M2M]
 **Pointed to by:**
   - character_rows <- magic.CharacterGlimpseTag
   - distinction_suggestions <- magic.GlimpseTagDistinctionSuggestion

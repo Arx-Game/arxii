@@ -153,7 +153,7 @@ def reconcile_distinction_regard_seeds(character_distinction: CharacterDistincti
     from world.npc_services.models import DistinctionRegardSeed  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
 
-    sheet = character_distinction.character.sheet_data
+    sheet = character_distinction.character
     try:
         primary_persona = sheet.primary_persona
     except Persona.DoesNotExist:

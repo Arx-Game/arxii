@@ -653,7 +653,7 @@ class ImmunityBlockedFlatSourceTests(TestCase):
             grants_immunity_to_negative=True,
         )
         cd_immunity = CharacterDistinctionFactory(
-            character=self.character,
+            character=self.sheet,
             distinction=self.immunity_distinction,
             rank=1,
         )
@@ -667,7 +667,7 @@ class ImmunityBlockedFlatSourceTests(TestCase):
             value_per_rank=-3,
         )
         cd_negative = CharacterDistinctionFactory(
-            character=self.character,
+            character=self.sheet,
             distinction=self.negative_distinction,
             rank=1,
         )

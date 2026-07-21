@@ -39,12 +39,12 @@ class SheetDistinctionSectionTests(TestCase):
 
     def test_lists_distinctions_with_rank_and_secret_marker(self) -> None:
         public = CharacterDistinctionFactory(
-            character=self.character,
+            character=self.sheet,
             distinction=DistinctionFactory(name="Silver Tongue"),
             rank=2,
         )
         hidden = CharacterDistinctionFactory(
-            character=self.character,
+            character=self.sheet,
             distinction=DistinctionFactory(name="Blood Debt"),
             rank=1,
             secret=SecretFactory(),

@@ -156,7 +156,7 @@ class CharacterModifierTests(TestCase):
         # Create a distinction effect with a known modifier target
         cls.effect = DistinctionEffectFactory()
         cls.char_distinction = CharacterDistinctionFactory(
-            character=cls.sheet.character, distinction=cls.effect.distinction
+            character=cls.sheet, distinction=cls.effect.distinction
         )
         cls.source = ModifierSource.objects.create(
             distinction_effect=cls.effect, character_distinction=cls.char_distinction

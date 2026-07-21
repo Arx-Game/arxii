@@ -20,7 +20,7 @@ class DistinctionSecretServiceTests(TestCase):
     def _character_distinction(self, **distinction_kwargs):
         sheet = CharacterSheetFactory()
         distinction = DistinctionFactory(**distinction_kwargs)
-        cd = CharacterDistinctionFactory(character=sheet.character, distinction=distinction)
+        cd = CharacterDistinctionFactory(character=sheet, distinction=distinction)
         return cd, sheet
 
     def test_mint_creates_a_secret_about_the_subject_and_links_it(self) -> None:

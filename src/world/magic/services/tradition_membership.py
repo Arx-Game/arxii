@@ -95,7 +95,7 @@ def _shed_traditionless_drawbacks(sheet: CharacterSheet) -> None:
     from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
 
     CharacterDistinction.objects.filter(
-        character=sheet.character,
+        character=sheet,
         distinction__slug__in=_SHED_ON_JOIN_SLUGS,
     ).delete()
 

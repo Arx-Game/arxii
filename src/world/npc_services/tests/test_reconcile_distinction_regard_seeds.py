@@ -17,7 +17,7 @@ class ReconcileDistinctionRegardSeedsTests(TestCase):
         npc = PersonaFactory()
         DistinctionRegardSeedFactory(distinction=distinction, npc_persona=npc, starting_value=-80)
         sheet = CharacterSheetFactory()
-        char_dist = CharacterDistinctionFactory(character=sheet.character, distinction=distinction)
+        char_dist = CharacterDistinctionFactory(character=sheet, distinction=distinction)
 
         reconcile_distinction_regard_seeds(char_dist)
 
@@ -31,6 +31,6 @@ class ReconcileDistinctionRegardSeedsTests(TestCase):
     def test_distinction_with_no_seeds_is_a_no_op(self):
         distinction = DistinctionFactory()
         sheet = CharacterSheetFactory()
-        char_dist = CharacterDistinctionFactory(character=sheet.character, distinction=distinction)
+        char_dist = CharacterDistinctionFactory(character=sheet, distinction=distinction)
         reconcile_distinction_regard_seeds(char_dist)
         self.assertEqual(NpcRegard.objects.count(), 0)

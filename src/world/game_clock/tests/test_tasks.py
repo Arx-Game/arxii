@@ -116,7 +116,7 @@ class BatchApDailyRegenTests(TestCase):
 
         sheet = CharacterSheetFactory(character=self.character)
         effect = DistinctionEffectFactory(target=self.daily_target, value_per_rank=3)
-        char_dist = CharacterDistinctionFactory(character=self.character)
+        char_dist = CharacterDistinctionFactory(character=sheet)
         source = ModifierSource.objects.create(
             distinction_effect=effect, character_distinction=char_dist
         )
@@ -143,7 +143,7 @@ class BatchApDailyRegenTests(TestCase):
 
         sheet = CharacterSheetFactory(character=self.character)
         effect = DistinctionEffectFactory(target=self.max_target, value_per_rank=100)
-        char_dist = CharacterDistinctionFactory(character=self.character)
+        char_dist = CharacterDistinctionFactory(character=sheet)
         source = ModifierSource.objects.create(
             distinction_effect=effect, character_distinction=char_dist
         )

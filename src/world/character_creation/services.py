@@ -774,7 +774,7 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
             continue
         char_distinctions.append(
             CharacterDistinction(
-                character=character,
+                character=character.sheet_data,
                 distinction=distinction,
                 rank=entry.get("rank", 1),
                 notes=entry.get("notes", ""),
@@ -1365,9 +1365,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     if linked_ids:
         from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
 
-        linked = CharacterDistinction.objects.filter(
-            character=sheet.character, distinction_id__in=linked_ids
-        )
+        linked = CharacterDistinction.objects.filter(character=sheet, distinction_id__in=linked_ids)
         for character_distinction in linked:
             link_distinction_to_glimpse(character_distinction, aura)
 

@@ -303,11 +303,11 @@ class ProfileIdentityPrivacyTests(APITestCase):
         # it. It surfaces for a learner on the secret tab, not here.
         sheet = self._character_sheet(AccountFactory(), fake_active=False)
         CharacterDistinctionFactory(
-            character=sheet.character,
+            character=sheet,
             distinction=DistinctionFactory(name="Renowned Duelist"),
         )
         secret_cd = CharacterDistinctionFactory(
-            character=sheet.character,
+            character=sheet,
             distinction=DistinctionFactory(name="Wanted Criminal"),
         )
         mint_distinction_secret(secret_cd)
@@ -324,7 +324,7 @@ class ProfileIdentityPrivacyTests(APITestCase):
         owner = AccountFactory()
         sheet = self._character_sheet(owner, fake_active=False)
         secret_cd = CharacterDistinctionFactory(
-            character=sheet.character,
+            character=sheet,
             distinction=DistinctionFactory(name="Wanted Criminal"),
         )
         mint_distinction_secret(secret_cd)
@@ -336,7 +336,7 @@ class ProfileIdentityPrivacyTests(APITestCase):
         # non-owner no longer sees it on the public list.
         sheet = self._character_sheet(AccountFactory(), fake_active=False)
         gated = CharacterDistinctionFactory(
-            character=sheet.character,
+            character=sheet,
             distinction=DistinctionFactory(name="Secret Affair"),
         )
         mint_distinction_secret(gated)

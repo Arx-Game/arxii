@@ -89,7 +89,7 @@ def reconcile_distinction_resonance_grants(character_distinction: CharacterDisti
     from world.magic.models.grants import DistinctionResonanceGrant  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 
-    sheet = character_distinction.character.sheet_data
+    sheet = character_distinction.character
 
     grants = DistinctionResonanceGrant.objects.filter(distinction=character_distinction.distinction)
     for grant in grants:
@@ -176,7 +176,7 @@ def check_distinction_rank_thresholds(
 
         candidates = list(
             CharacterDistinction.objects.filter(
-                character=character_sheet.character,
+                character=character_sheet,
                 distinction__resonance_rank_thresholds__resonance=resonance,
                 distinction__resonance_rank_thresholds__rank=models.F("rank") + 1,
                 distinction__resonance_rank_thresholds__lifetime_earned_threshold__lte=(
