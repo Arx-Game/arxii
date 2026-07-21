@@ -261,12 +261,13 @@ class TargetFocusedElsewhereEvaluatorTests(TestCase):
 
 
 class AllyLowHealthEvaluatorTests(TestCase):
-    """ALLY_LOW_HEALTH: an ENGAGED covenant-mate's health falls below the fraction.
+    """ALLY_LOW_HEALTH: a covenant-mate's health falls below the fraction.
 
-    "Ally" is scoped to a covenant-mate holding an ENGAGED role in a covenant
-    the holder is also actively a member of (#2536 ruling: perks are a
-    benefit of ACTIVE vows — an unengaged covenant-mate is "in civilian
-    garb" and does not count).
+    "Ally" is scoped to a covenant-mate holding a non-departed role in a
+    covenant the holder is also actively engaged in (#2536 reversal, Tehom
+    2026-07-20: the MATE's own ``engaged`` flag is irrelevant — a KO'd or
+    disengaged covenant-mate still in the encounter keeps counting, so
+    losing allies mid-fight never weakens the survivors).
     """
 
     def setUp(self) -> None:
@@ -307,11 +308,12 @@ class AllyLowHealthEvaluatorTests(TestCase):
         CharacterVitals.objects.create(character_sheet=self.mate_sheet, health=90, max_health=100)
         self.assertFalse(evaluators.ally_low_health(self._ctx(self.resolution)))
 
-    def test_false_when_mate_unengaged(self) -> None:
-        """An unengaged covenant-mate ("civilian garb") does not count as an ally."""
+    def test_true_when_mate_unengaged(self) -> None:
+        """Reversal (Tehom 2026-07-20): an unengaged low-health covenant-mate still
+        counts — Last Bulwark fires hardest exactly when mates are down."""
         self._mate_membership(engaged=False)
         CharacterVitals.objects.create(character_sheet=self.mate_sheet, health=10, max_health=100)
-        self.assertFalse(evaluators.ally_low_health(self._ctx(self.resolution)))
+        self.assertTrue(evaluators.ally_low_health(self._ctx(self.resolution)))
 
     def test_missing_context_returns_false(self) -> None:
         self._mate_membership(engaged=True)

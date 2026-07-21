@@ -178,6 +178,9 @@ treat those names as hints to confirm, not gospel.
 - [0147 — Bare-object affordances mint challenges lazily from authored per-Application templates](0147-bare-object-affordances-mint-challenges-lazily.md) (#2503; extends ADR-0009; related ADR-0143/0144/0145, `docs/architecture/property-capability-action.md`)
 - [0148 — Ambient-reaction TriggerDefinition/Flow rows are derived from content, not authored or fixed config](0148-ambient-reaction-triggers-are-derived-from-content.md) (#2471; related ADR-0140, ADR-0007)
 - [0149 — Covenant-role combat identity is a SWORD/SHIELD/CROWN blend, not a single archetype — Layer 1 of a four-layer vow-power model](0149-covenant-role-blend-four-layer-vow-power.md) (#2529; supersedes ADR-0108; related ADR-0055, ADR-0013; Layers 2-4 tracked in #2443/#2533/#2536)
+- [0150 — Weekly income lands before upkeep drains](0150-income-lands-before-upkeep.md) (#2540, #2609)
+- [0151 — Situational-perk machinery, slice 1: registry pattern, beneficiary evaluation point, dual-dispatch announce](0151-situational-perk-machinery-slice-1.md) (#2536 slice 1; related ADR-0055, ADR-0118, ADR-0149)
+- [0152 — Outcome guarantees (TIER_FLOOR / BOTCH_IMMUNITY) are absolute floors, not scaled bonuses](0152-outcome-guarantees-are-absolute-floors.md) (#2536 slice 2; amends ADR-0151; related ADR-0149)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

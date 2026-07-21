@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, NamedTuple, cast
 
 from django.core.exceptions import ObjectDoesNotExist
 
-from world.checks.constants import ModifierSourceKind
+from world.checks.constants import BOTCH_SUCCESS_LEVEL_MAX, ModifierSourceKind
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.types import CheckResult, ModifierBreakdown, ModifierContribution
 from world.classes.models import CharacterClassLevel, PathAspect
@@ -74,7 +74,12 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             (``world.covenants.perks``) scoped to ``check_type`` (or
             scope-less perks) and folds their thread-level-scaled magnitude
             into the same total ``extra_modifiers`` feeds — see
-            ``_situational_perk_check_bonus``.
+            ``_situational_perk_check_bonus``. It also fires
+            ``TIER_FLOOR``/``BOTCH_IMMUNITY`` outcome guarantees (#2536 slice 2)
+            AFTER the outcome lands (both the rolled and the test-rig forced
+            path), raising the outcome to the effective floor when it landed
+            below one and announcing only when a guarantee actually altered
+            the outcome — see ``_apply_outcome_guarantees``.
     """
     # Test-rig seam (NOT a production code path).
     from world.checks.test_helpers import _consume_forced_outcome, _record_capture  # noqa: PLC0415
@@ -110,6 +115,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     rollmod = get_rollmod(character)
     effective_roll = max(1, min(100, roll + rollmod))
     outcome = _get_outcome_for_roll(breakdown.chart, effective_roll) if breakdown.chart else None
+    outcome = _apply_outcome_guarantees(character, outcome, breakdown.chart, situation_ctx)
 
     return _check_result(check_type, outcome, breakdown)
 
@@ -130,6 +136,11 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
     Computes real rank breakdowns from target_difficulty so callers that
     inspect ranks see something reasonable. Skips the dice roll entirely.
     NOT a production code path — only reached inside force_check_outcome().
+
+    Outcome guarantees (#2536 slice 2, ``_apply_outcome_guarantees``) apply to
+    forced outcomes too — the deterministic way tests exercise TIER_FLOOR /
+    BOTCH_IMMUNITY (e.g. a forced botch through a botch-immune character's
+    check comes out a plain failure), not just the real dice-roll path.
     """
     breakdown = _compute_check_breakdown(
         character,
@@ -141,7 +152,8 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
         specialization=specialization,
         situation_ctx=situation_ctx,
     )
-    return _check_result(check_type, forced_outcome, breakdown)
+    outcome = _apply_outcome_guarantees(character, forced_outcome, breakdown.chart, situation_ctx)
+    return _check_result(check_type, outcome, breakdown)
 
 
 class _CheckBreakdown(NamedTuple):
@@ -281,6 +293,94 @@ def _situational_perk_check_bonus(
     for firing in scoped:
         total += Decimal(total_threads) * firing.magnitude_tenths / 10
     return int(total)
+
+
+def _apply_outcome_guarantees(
+    character: "ObjectDB",
+    outcome: "CheckOutcome | None",
+    chart: "ResultChart | None",
+    situation_ctx: "SituationContext | None",
+) -> "CheckOutcome | None":
+    """Raise ``outcome`` to the effective TIER_FLOOR / BOTCH_IMMUNITY floor (#2536 slice 2).
+
+    Apostate's principle: you can't botch at the thing your character is
+    specifically here to do — outcome GUARANTEES, not numeric bonuses. Both
+    kinds fire through ``applicable_perks`` in ONE call (tuple effect_kind) and
+    are ABSOLUTE: no thread-level scaling, no thread-level gate (ungated ruling,
+    2026-07-20). A TIER_FLOOR firing guarantees ``success_level >=
+    perk.floor_success_level``; a BOTCH_IMMUNITY firing only binds when the raw
+    outcome is a botch (``success_level <= BOTCH_SUCCESS_LEVEL_MAX``) and floors
+    it at the least-bad non-botch level. The replacement outcome is the chart's
+    lowest outcome at/above the effective floor, falling back to the global
+    ``CheckOutcome`` table when the chart has none (degenerate charts, forced
+    outcomes without chart rows). Announces ONLY the binding perks, ONLY when
+    the outcome actually changed — a guarantee that didn't bind is silence, not
+    spam. ``situation_ctx=None`` (every pre-slice-2 caller) or ``outcome=None``
+    returns unchanged with zero queries.
+    """
+    if situation_ctx is None or outcome is None:
+        return outcome
+
+    try:
+        sheet = character.sheet_data  # type: ignore[attr-defined] — ObjectDB typeclass extension
+    except (ObjectDoesNotExist, AttributeError):
+        return outcome
+
+    from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
+    from world.covenants.perks.services import (  # noqa: PLC0415
+        announce_fired_perks,
+        applicable_perks,
+    )
+
+    fired = applicable_perks(
+        sheet,
+        effect_kind=(PerkEffectKind.TIER_FLOOR, PerkEffectKind.BOTCH_IMMUNITY),
+        resolution=situation_ctx.resolution,
+        target=situation_ctx.target,
+    )
+    if not fired:
+        return outcome
+
+    raw_level = int(outcome.success_level)
+    non_botch_floor = BOTCH_SUCCESS_LEVEL_MAX + 1
+    binding = []
+    for firing in fired:
+        if firing.perk.effect_kind == PerkEffectKind.TIER_FLOOR:
+            floor = firing.perk.floor_success_level
+        else:  # BOTCH_IMMUNITY — binds only against an actual botch
+            floor = non_botch_floor if raw_level <= BOTCH_SUCCESS_LEVEL_MAX else None
+        if floor is not None and floor > raw_level:
+            binding.append((floor, firing))
+    if not binding:
+        return outcome
+
+    effective_floor = max(floor for floor, _firing in binding)
+    replacement = _lowest_outcome_at_or_above(chart, effective_floor)
+    if replacement is None:
+        return outcome
+
+    announce_fired_perks(
+        [firing for _floor, firing in binding], subject=sheet, location=character.location
+    )
+    return replacement
+
+
+def _lowest_outcome_at_or_above(chart: "ResultChart | None", floor: int) -> "CheckOutcome | None":
+    """The least-good outcome satisfying a guarantee floor: chart-scoped first
+    (guarantees respect what this chart can produce), global ``CheckOutcome``
+    fallback when the chart has no row at/above the floor, ``None`` when no such
+    outcome is authored anywhere (guarantee is then a no-op — never invent rows).
+    """
+    if chart is not None:
+        row = (
+            ResultChartOutcome.objects.filter(chart=chart, outcome__success_level__gte=floor)
+            .select_related("outcome")
+            .order_by("outcome__success_level")
+            .first()
+        )
+        if row is not None:
+            return row.outcome
+    return CheckOutcome.objects.filter(success_level__gte=floor).order_by("success_level").first()
 
 
 def compute_check_rating(

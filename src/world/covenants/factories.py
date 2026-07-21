@@ -156,6 +156,7 @@ class VowSituationalPerkFactory(factory_django.DjangoModelFactory):
     magnitude_tenths = 10
     announce_template = "{holder}'s vow answers!"
     check_type = None
+    floor_success_level = None
 
 
 class VowSituationalPerkSituationFactory(factory_django.DjangoModelFactory):

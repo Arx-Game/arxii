@@ -1609,8 +1609,11 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
     ``beneficiary`` decides who benefits when this perk fires at ANOTHER
     character's resolution moment (``perks.services.applicable_perks``, Task
     3): SELF perks fire only for the holder's own actions; COVENANT_ALLIES /
-    WHOLE_GROUP perks may fire for an engaged covenant-mate's action too
-    (WHOLE_GROUP includes the holder, COVENANT_ALLIES excludes them).
+    WHOLE_GROUP perks fire for a co-present covenant-mate's action too
+    (membership + co-presence — the mate's OWN engaged flag is irrelevant,
+    Tehom's 2026-07-20 reversal; the ACTING character still needs their own
+    engaged vow) (WHOLE_GROUP includes the holder, COVENANT_ALLIES excludes
+    them).
 
     ``magnitude_tenths`` is the base numeric contribution (integer-tenths,
     10 = ×1.0), scaled by the acting character's thread level at resolution
@@ -1626,6 +1629,14 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
     content-authoring guard (a stray scope on a POWER_BONUS/TIER_FLOOR/
     BOTCH_IMMUNITY perk can never be read by any resolution service, so it is
     caught at author time rather than silently ignored).
+
+    ``floor_success_level`` is the authored outcome-guarantee floor (canonical
+    -10..+10 scale) for a ``TIER_FLOOR`` perk — the resolved outcome cannot
+    land below this ``success_level``. Absolute, never thread-scaled (spec §6).
+    Only meaningful when ``effect_kind=TIER_FLOOR``; the same authoring-guard
+    symmetry as ``check_type`` applies both directions — ``clean()`` requires
+    it on a TIER_FLOOR row and rejects it on any other ``effect_kind`` (#2536
+    slice 2).
     """
 
     covenant_role = models.ForeignKey(
@@ -1655,6 +1666,15 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
         related_name="situational_perks",
         help_text="CHECK_BONUS scope; null = any check.",
     )
+    floor_success_level = models.SmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "TIER_FLOOR only: the resolved outcome cannot land below this "
+            "success_level (canonical -10..+10 scale). Absolute — outcome "
+            "guarantees never thread-scale."
+        ),
+    )
 
     objects = VowSituationalPerkManager()
 
@@ -1676,6 +1696,18 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
         if self.check_type_id is not None and self.effect_kind != PerkEffectKind.CHECK_BONUS:
             raise ValidationError(
                 {"check_type": "check_type is only meaningful when effect_kind=CHECK_BONUS."}
+            )
+        if self.effect_kind == PerkEffectKind.TIER_FLOOR and self.floor_success_level is None:
+            raise ValidationError(
+                {"floor_success_level": "TIER_FLOOR perks must set floor_success_level."}
+            )
+        if self.floor_success_level is not None and self.effect_kind != PerkEffectKind.TIER_FLOOR:
+            raise ValidationError(
+                {
+                    "floor_success_level": (
+                        "floor_success_level is only meaningful when effect_kind=TIER_FLOOR."
+                    )
+                }
             )
 
     def __str__(self) -> str:

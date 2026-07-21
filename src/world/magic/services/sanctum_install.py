@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
+from world.checks.constants import BOTCH_SUCCESS_LEVEL_MAX
 from world.covenants.constants import COVENANT_ORG_TYPE_NAME
 from world.covenants.models import CharacterCovenantRole
 from world.locations.constants import HolderType
@@ -118,7 +119,7 @@ MINIMUM_SANCTIFICATION_SUCCESS_LEVEL = 1
 SANCTIFICATION_CRIT_SUCCESS_LEVEL = 2
 """At/above this, Sanctification crits (formerly OutcomeTier.CRIT)."""
 
-CRITICAL_FAILURE_SUCCESS_LEVEL = -2
+CRITICAL_FAILURE_SUCCESS_LEVEL = BOTCH_SUCCESS_LEVEL_MAX
 """At/below this, the roll is a Critical Failure (formerly OutcomeTier.BOTCH)."""
 
 
