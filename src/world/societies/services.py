@@ -139,6 +139,7 @@ def create_solo_deed(  # noqa: PLR0913
         )
     new_credits = credit_engaged_covenants(entry=entry)
     refresh_legend_views()
+    entry.persona.clear_cached_properties()
     from world.covenants.services import recompute_covenant_level  # noqa: PLC0415
 
     for credit in new_credits:
@@ -147,7 +148,7 @@ def create_solo_deed(  # noqa: PLR0913
 
 
 @transaction.atomic
-def create_legend_event(  # noqa: PLR0913
+def create_legend_event(  # noqa: PLR0913, C901
     title: str,
     source_type: LegendSourceType,
     base_value: int,
@@ -258,6 +259,8 @@ def create_legend_event(  # noqa: PLR0913
     for e in entries:
         all_credits.extend(credit_engaged_covenants(entry=e))
     refresh_legend_views()
+    for e in entries:
+        e.persona.clear_cached_properties()
     from world.covenants.services import recompute_covenant_level  # noqa: PLC0415
 
     seen_covenant_ids: set[int] = set()
@@ -319,6 +322,7 @@ def spread_deed(  # noqa: PLR0913
     if societies_reached:
         spread.societies_reached.set(societies_reached)
     refresh_legend_views()
+    deed.persona.clear_cached_properties()
     from world.covenants.services import recompute_covenant_level  # noqa: PLC0415
     from world.societies.renown import (  # noqa: PLC0415
         apply_spread_fame_bump,
@@ -385,6 +389,8 @@ def spread_event(  # noqa: PLR0913
             spread.societies_reached.set(societies_reached)
         spreads.append(spread)
     refresh_legend_views()
+    for spread in spreads:
+        spread.legend_entry.persona.clear_cached_properties()
     from world.covenants.services import recompute_covenant_level  # noqa: PLC0415
 
     seen_covenant_ids: set[int] = set()

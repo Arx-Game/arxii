@@ -4,6 +4,6 @@
 # reviewed exception — justify it in the commit message.
 # Plain tokens count '# noqa: <TOKEN>' suppressions; 'pattern:' tokens count
 # the regexes defined in lint_noqa_ratchet.py's PATTERNS map.
-GETATTR_LITERAL 62
+GETATTR_LITERAL 63
 pattern:BARE_OBJECTDB_CREATE 2
 pattern:BROAD_EXCEPT 109

@@ -506,6 +506,19 @@ def is_imbuing_ritual(*, name: str, service_function_path: str) -> bool:
     )
 
 
+GHOST_TUTOR_SERVICE_PATH = "world.magic.services.ghost_tutor.summon_ghost_tutor"
+
+
+def is_ghost_tutor_ritual(*, name: str, service_function_path: str) -> bool:  # noqa: ARG001
+    """Whether a Ritual is the ghost-tutor summoning ritual (#2460).
+
+    Matches on the service function path, not the name (which is
+    content-authorable). Mirrors ``is_imbuing_ritual``. The ``name``
+    parameter is kept for signature parity with ``is_imbuing_ritual``.
+    """
+    return service_function_path == GHOST_TUTOR_SERVICE_PATH
+
+
 # Unbound magic-learning AP surcharge (#2442). Shared contract between the seed
 # (world.seeds.character_creation.wire_magic_learning_ap_cost_target /
 # ensure_unbound_drawback_distinction) and the live read at the technique-acquisition
@@ -518,12 +531,13 @@ MAGIC_MODIFIER_CATEGORY_NAME = "magic"
 
 
 class GlimpseTagAxis(models.TextChoices):
-    """Narrative axis of a GlimpseTag (#2427): the four guided glimpse steps."""
+    """Narrative axis of a GlimpseTag (#2427): the guided glimpse steps."""
 
     TONE = "TONE", "Tone"
     CONSEQUENCE = "CONSEQUENCE", "Consequence"
     WITNESS = "WITNESS", "Witness & Secrecy"
     SENSORY = "SENSORY", "Sensory & Discovery"
+    TRIGGER = "TRIGGER", "Trigger"
 
 
 class GlimpseState(models.TextChoices):
@@ -554,4 +568,5 @@ GLIMPSE_AXIS_CONFIG: dict[GlimpseTagAxis, GlimpseAxisRule] = {
     GlimpseTagAxis.CONSEQUENCE: GlimpseAxisRule(multi=True, prose_prompt=False),
     GlimpseTagAxis.WITNESS: GlimpseAxisRule(multi=True, prose_prompt=False),
     GlimpseTagAxis.SENSORY: GlimpseAxisRule(multi=True, prose_prompt=True),
+    GlimpseTagAxis.TRIGGER: GlimpseAxisRule(multi=False, prose_prompt=False),
 }

@@ -188,3 +188,15 @@ the old single-archetype key, and Layer 3's actual design need (a vow whose defe
 gear should be able to substitute for gear, not fine-tune which gear archetype it likes) is
 fully served by the coarser per-role fraction. The matrix would have been more authoring
 surface for a need the simpler dial already meets.
+
+## Amendment (2026-07-20, #2536 slice 1 implementation)
+
+**Layer 4 (deterministic situational perks) slice 1 of 3 has shipped.** The situation-library
+registry pattern, the `VowSituationalPerk`/`VowSituationalPerkSituation`/`VowSituationalPerkRung`
+authoring models, the `POWER_BONUS`/`CHECK_BONUS` delivery seams, and the dual-dispatch presentation
+contract (ruling 1) are recorded in their own sibling ADR — see **ADR-0151** — rather than folded
+into this one, since the decisions worth keeping (registry pattern, beneficiary evaluation point,
+why `broadcast_action_outcome` alone was insufficient for telnet parity, the query-ceiling posture,
+the deferred situations/effect kinds) are substantial enough to need their own record. Slices 2
+(`TIER_FLOOR`/`BOTCH_IMMUNITY` outcome guarantees) and 3 (Court/Battle scoping + dormant-vow
+messaging) remain tracked against #2536.

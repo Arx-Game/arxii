@@ -443,6 +443,16 @@ class CmdRitual(ArxCommand):
                 raise CommandError(msg)
             service_kwargs["thread"] = thread
 
+        tradition_id = raw_kwargs.pop("tradition_id", None)
+        if tradition_id is not None:
+            from world.magic.models import Tradition  # noqa: PLC0415
+
+            tradition = Tradition.objects.filter(pk=tradition_id, is_active=True).first()
+            if tradition is None:
+                msg = f"No active tradition with id {tradition_id}."
+                raise CommandError(msg)
+            service_kwargs["tradition"] = tradition
+
         service_kwargs.update(raw_kwargs)
 
         components = self._gather_components()

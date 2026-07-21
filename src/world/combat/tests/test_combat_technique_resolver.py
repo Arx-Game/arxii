@@ -142,6 +142,28 @@ class CombatTechniqueResolverRollCheckTests(TestCase):
         # Bare character: breakdown total == effort, plus pull_flat_bonus == 3.
         self.assertEqual(mock_perform.call_args.kwargs["extra_modifiers"], expected_effort + 3)
 
+    def test_situation_ctx_threaded_with_live_round_context(self) -> None:
+        """#2536 Task 5: _roll_check must thread a SituationContext into
+        perform_check whose .resolution wraps the resolver's own participant
+        (a real CombatRoundContext, not None) and whose .holder/.subject are
+        the checking character's own sheet — the check-side sibling of
+        resolve_combat_technique's POWER_BONUS situation_ctx threading."""
+        from world.combat.round_context import CombatRoundContext
+        from world.covenants.perks.context import SituationContext
+
+        resolver = _build_resolver()
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            resolver._roll_check()
+
+        situation_ctx = mock_perform.call_args.kwargs["situation_ctx"]
+        self.assertIsInstance(situation_ctx, SituationContext)
+        self.assertEqual(situation_ctx.holder, resolver.participant.character_sheet)
+        self.assertEqual(situation_ctx.subject, resolver.participant.character_sheet)
+        self.assertIsInstance(situation_ctx.resolution, CombatRoundContext)
+        self.assertEqual(situation_ctx.resolution.participant, resolver.participant)
+
     def test_pull_bonus_routed_as_labeled_contribution(self) -> None:
         """pull_flat_bonus must be expressed as a labeled PULL ModifierContribution
         routed through collect_check_modifiers, so the recorded breakdown is

@@ -9,6 +9,7 @@ from django.db import models
 
 from world.game_clock.task_registry import (
     CronDefinition,
+    CronPhase,
     register_task,
 )
 
@@ -589,6 +590,13 @@ def register_all_tasks() -> None:
             task_key="buildings.weekly_upkeep",
             callable=apply_weekly_upkeep_all_buildings,
             interval=timedelta(days=7),
+            # #2609: shares the rollover's anchor so upkeep and the economy
+            # pass fall due in the same tick, and sits in UPKEEP so it drains
+            # AFTER income lands (see ADR-0150). Both halves are required —
+            # a phase only orders tasks that are already due together.
+            anchor_weekday=0,
+            anchor_hour_utc=5,
+            phase=CronPhase.UPKEEP,
             description=(
                 "Weekly upkeep sweep: all-or-nothing deduction from the "
                 "owner wallet; misses accrue capped arrears then slide the "
@@ -741,6 +749,8 @@ def register_all_tasks() -> None:
             # moment, per Apostate's #932 ruling. EST fixed (no DST shift).
             anchor_weekday=0,
             anchor_hour_utc=5,
+            # #2609: income lands before upkeep drains (ADR-0150).
+            phase=CronPhase.ECONOMY,
             description="Weekly rollover: advance GameWeek and process all weekly systems.",
         )
     )

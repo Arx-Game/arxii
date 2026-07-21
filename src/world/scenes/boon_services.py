@@ -12,11 +12,13 @@ accept. It must NOT ride ``BoonAction.execute()``: the consent paths never call
 ``SHIFT_AFFECTION`` ``ConsequenceEffect`` either — the consent path resolves with a
 sceneless ``ResolutionContext``, where scene-keyed data effects skip.
 
-Only ``MONEY`` fulfillment moves value in this slice: it routes through the single
-currency mutation point (``transfer``), target purse → asker purse. ``HELD_ITEM``
-awaits an item-ownership-transfer seam, ``VAULT_ITEM`` awaits the org vault (#2540
-Layer 4), and ``DEED`` is RP-only (no mechanical transfer). Idempotent: a fulfilled
-Boon is a no-op (claimed under row lock, so concurrent fulfills cannot double-move).
+Every kind now fulfills: ``MONEY`` through the single currency mutation point
+(``transfer``, target purse → asker purse), ``VAULT_ITEM`` through the org vault's
+audited withdraw (target as authority, asker as recipient), ``HELD_ITEM`` through a
+lean sheet-level hand-over (unequip → object move/dematerialize → holder switch →
+``OwnershipEvent(TRANSFERRED)``), and ``DEED`` is RP-only (no mechanical transfer).
+Idempotent: a fulfilled Boon is a no-op (claimed under row lock, so concurrent
+fulfills cannot double-move).
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from world.scenes.action_constants import BoonKind
+from world.scenes.action_constants import BoonKind, BoonSumTier
 from world.scenes.action_resolvers import register_resolver
 from world.scenes.boon_models import Boon
 
@@ -43,18 +45,19 @@ logger = logging.getLogger(__name__)
 
 BOON_ACTION_KEY = "boon"
 
-# Dial 2 — relative-cost band (#2540 addendum): a MONEY ask's difficulty shift derives
-# from the amount as a fraction of the target's purse, in percent. Each (threshold_pct,
-# tier_shift) row reads "asks up to this fraction shift the check this many tiers".
-# PLACEHOLDER thresholds and shifts — magnitudes are Apostate's tuning call.
-BOON_MONEY_BAND_TIERS: tuple[tuple[int, int], ...] = (
-    (5, 0),  # trivial — pocket change to them
-    (20, 1),  # notable
-    (50, 2),  # painful
-    (100, 3),  # ruinous
-)
-# PLACEHOLDER flat shifts for the non-money kinds until item appraisal-vs-means and the
-# vault land: asking for a named possession is painful; a deed is notable.
+# Money asks are RELATIVE sum tiers (#2540 ruling 2026-07-20): the asker picks
+# minor/fair/great *to the target*, the concrete coppers derive from the target's purse
+# at ask time (and freeze onto Boon.amount), and the chosen tier IS the dial-2 cost
+# band. Raw-amount asks do not exist — nothing to binary-search a purse with, and an
+# impossible ask can never be presented. PLACEHOLDER pcts/shifts — Apostate's tuning.
+BOON_SUM_TIERS: dict[str, tuple[int, int]] = {
+    # sum_tier -> (pct of target's purse, difficulty tier shift)
+    BoonSumTier.MINOR: (5, 0),  # pocket change to them
+    BoonSumTier.FAIR: (20, 1),  # notable
+    BoonSumTier.GREAT: (50, 2),  # painful
+}
+# PLACEHOLDER flat shifts for the non-money kinds until item appraisal-vs-means lands:
+# asking for a named possession is painful; a deed is notable.
 BOON_HELD_ITEM_TIER_SHIFT = 2
 BOON_DEED_TIER_SHIFT = 1
 
@@ -68,21 +71,41 @@ BOON_AFFECTION_COST = 15
 
 @dataclass(frozen=True)
 class BoonAsk:
-    """The structured payload of a boon ask, passed into ``create_action_request``."""
+    """The structured payload of a boon ask, passed into ``create_action_request``.
+
+    MONEY asks carry a ``sum_tier`` (never a raw amount — #2540 ruling); the concrete
+    coppers are computed from the target's purse at validation time.
+    """
 
     kind: str
-    amount: int = 0
+    sum_tier: str = ""
     item_instance_id: int | None = None
     deed_text: str = ""
 
 
-def validate_boon_ask(*, ask: BoonAsk, target_persona: Persona | None) -> None:
-    """Ask-time eligibility (dial 1): reject an ask the target could not fulfill.
+def boon_sum_values(target_sheet: CharacterSheet) -> dict[str, int]:
+    """The concrete coppers each sum tier means against this target — the UI display seam.
 
-    Raises ``ValidationError`` on: no target, an unknown kind, a MONEY ask the target
-    cannot cover (so a granted boon can never hit insufficient funds), a HELD_ITEM ask
-    for an item the target does not hold, an empty DEED, or a VAULT_ITEM ask (stubbed
-    until the org vault, #2540 Layer 4).
+    Returns an empty dict for a penniless target: no money-boon option is presented at
+    all (options only show when the target could actually grant them). The OOC reveal
+    of these values to the asker is accepted per the ruling; IC, you still can't know
+    their purse.
+    """
+    from world.currency.services import get_or_create_purse  # noqa: PLC0415
+
+    balance = get_or_create_purse(target_sheet).balance
+    if balance <= 0:
+        return {}
+    return {tier: max(1, balance * pct // 100) for tier, (pct, _shift) in BOON_SUM_TIERS.items()}
+
+
+def validate_boon_ask(*, ask: BoonAsk, target_persona: Persona | None) -> None:
+    """Ask-time eligibility (dial 1): an ask the target could not grant never exists.
+
+    Raises ``ValidationError`` on: no target, an unknown kind, a MONEY ask with no
+    valid sum tier or against a penniless target (options only present when grantable
+    — #2540 ruling), a HELD_ITEM ask for an item the target does not hold, an empty
+    DEED, or a VAULT_ITEM ask for an item outside the target's withdraw authority.
     """
     if target_persona is None:
         msg = "A boon is asked of someone — it needs a target."
@@ -102,14 +125,20 @@ def validate_boon_ask(*, ask: BoonAsk, target_persona: Persona | None) -> None:
 
 
 def _validate_money_ask(ask: BoonAsk, target_sheet: CharacterSheet) -> None:
-    from world.currency.services import get_or_create_purse  # noqa: PLC0415
+    """A money ask names a sum tier; the option only exists when the purse could pay it."""
+    if ask.sum_tier not in BOON_SUM_TIERS:
+        msg = "A money boon asks for a minor, fair, or great sum."
+        raise ValidationError(msg)
+    if not boon_sum_values(target_sheet):
+        msg = "They have nothing worth asking for."
+        raise ValidationError(msg)
 
-    if ask.amount <= 0:
-        msg = "A money boon asks for a positive number of coppers."
-        raise ValidationError(msg)
-    if ask.amount > get_or_create_purse(target_sheet).balance:
-        msg = "They could not cover that even if they wanted to."
-        raise ValidationError(msg)
+
+def _money_amount_for(ask: BoonAsk, target_sheet: CharacterSheet) -> int:
+    """Freeze the tier into concrete coppers at ask time (0 for non-money kinds)."""
+    if ask.kind != BoonKind.MONEY:
+        return 0
+    return boon_sum_values(target_sheet).get(ask.sum_tier, 0)
 
 
 def _validate_held_item_ask(ask: BoonAsk, target_sheet: CharacterSheet) -> None:
@@ -150,29 +179,32 @@ def _validate_vault_item_ask(ask: BoonAsk, target_persona: Persona) -> None:
 
 
 def create_boon_for_request(request: SceneActionRequest, ask: BoonAsk) -> Boon:
-    """Persist the validated ask payload on its request (before NPC auto-resolve fires)."""
+    """Persist the validated ask payload on its request (before NPC auto-resolve fires).
+
+    MONEY asks freeze the tier's concrete coppers onto ``amount`` here — the target's
+    purse may move later, but the granted sum is what was asked.
+    """
+    target_sheet = request.target_persona.character_sheet
     return Boon.objects.create(
         action_request=request,
         kind=ask.kind,
-        amount=ask.amount,
+        sum_tier=ask.sum_tier,
+        amount=_money_amount_for(ask, target_sheet),
         item_instance_id=ask.item_instance_id,
         deed_text=ask.deed_text,
     )
 
 
-def boon_cost_tier_shift(boon: Boon, target_sheet: CharacterSheet) -> int:
-    """Dial 2: how many difficulty tiers this ask's relative cost adds."""
-    if boon.kind == BoonKind.MONEY:
-        from world.currency.services import get_or_create_purse  # noqa: PLC0415
+def boon_cost_tier_shift(boon: Boon, target_sheet: CharacterSheet) -> int:  # noqa: ARG001
+    """Dial 2: how many difficulty tiers this ask's relative cost adds.
 
-        balance = get_or_create_purse(target_sheet).balance
-        if balance <= 0:
-            return BOON_MONEY_BAND_TIERS[-1][1]
-        pct = boon.amount * 100 // balance
-        for threshold_pct, shift in BOON_MONEY_BAND_TIERS:
-            if pct <= threshold_pct:
-                return shift
-        return BOON_MONEY_BAND_TIERS[-1][1]
+    For MONEY the chosen sum tier IS the band (#2540 ruling — relative by construction).
+    ``target_sheet`` stays in the signature for the item kinds' future appraisal-vs-means
+    computation.
+    """
+    if boon.kind == BoonKind.MONEY:
+        _pct, shift = BOON_SUM_TIERS.get(boon.sum_tier, BOON_SUM_TIERS[BoonSumTier.GREAT])
+        return shift
     if boon.kind in (BoonKind.HELD_ITEM, BoonKind.VAULT_ITEM):
         return BOON_HELD_ITEM_TIER_SHIFT
     return BOON_DEED_TIER_SHIFT
@@ -223,11 +255,55 @@ def fulfill_boon(boon: Boon) -> bool:
         )
     elif boon.kind == BoonKind.VAULT_ITEM and boon.item_instance_id is not None:
         _fulfill_vault_item(boon, request)
-    # HELD_ITEM fulfillment: follow-up slice (needs the ownership-transfer seam, #2540).
+    elif boon.kind == BoonKind.HELD_ITEM and boon.item_instance_id is not None:
+        _fulfill_held_item(boon, request)
 
     boon.fulfilled_at = timezone.now()
     boon.save(update_fields=["fulfilled_at"])
     return True
+
+
+def _fulfill_held_item(boon: Boon, request: SceneActionRequest) -> None:
+    """The granted held-item boon: the target hands the named item to the asker.
+
+    A lean sheet-level transfer reusing ``give``'s pieces without its co-location and
+    CharacterState requirements (the grant may resolve at consent time, not from a live
+    command): unequip if worn, move the physical object to the asker when one exists
+    (dematerialize on a failed move — custody is the row, the prop can rematerialize),
+    switch the holder, and book an ``OwnershipEvent(TRANSFERRED)`` snapshotting the
+    personas each side presented in the scene. Raises ``ValidationError`` (surfaced by
+    the resolver's unfulfillable branch) if the target no longer holds the item.
+    """
+    from world.items.constants import OwnershipEventType  # noqa: PLC0415
+    from world.items.models import ItemInstance, OwnershipEvent  # noqa: PLC0415
+    from world.items.services.equip import unequip_item  # noqa: PLC0415
+
+    target_sheet = request.target_persona.character_sheet
+    asker_sheet = request.initiator_persona.character_sheet
+    item = ItemInstance.objects.select_for_update().get(pk=boon.item_instance_id)
+    if item.holder_character_sheet_id != target_sheet.pk:
+        msg = "They no longer hold the asked item."
+        raise ValidationError(msg)
+
+    # Snapshot rows before iteration — unequip_item deletes them as we go (give's pattern).
+    for equipped in list(item.equipped_slots.all()):
+        unequip_item(equipped_item=equipped)
+    if item.game_object is not None:
+        asker_character = asker_sheet.character
+        if not item.game_object.move_to(asker_character, quiet=True):
+            item.game_object.delete()
+            item.game_object = None
+    item.holder_character_sheet = asker_sheet
+    item.save(update_fields=["holder_character_sheet", "game_object"])
+    OwnershipEvent.objects.create(
+        item_instance=item,
+        event_type=OwnershipEventType.TRANSFERRED,
+        from_character_sheet=target_sheet,
+        to_character_sheet=asker_sheet,
+        from_persona_display=request.target_persona,
+        to_persona_display=request.initiator_persona,
+        notes="boon",
+    )
 
 
 def _fulfill_vault_item(boon: Boon, request: SceneActionRequest) -> None:

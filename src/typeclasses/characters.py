@@ -346,6 +346,29 @@ class Character(ObjectParent, DefaultCharacter):
         perceived_index = max(0, FAME_TIER_ORDER.index(persona.fame_tier) + offset)
         return perceived_index >= FAME_TIER_ORDER.index(spec["min_tier"])
 
+    def has_legend_deeds(self, value=None) -> bool:
+        """True if the active persona has common-knowledge, non-secret deeds (#2523).
+
+        Backs the reactive-filter ``has_legend_deeds`` op. Used by the
+        LEGEND_DEED AmbientEmoteCondition to gate legend-murmur lines.
+        ``value`` is unused (the op is a presence check) but accepted to
+        match the method-dispatch contract (see ``fame_tier_at_least``).
+        """
+        del value  # placate ARG001 — presence check takes no parameter
+        from world.scenes.models import Persona
+        from world.scenes.services import active_persona_for_sheet
+
+        sheet = self.character_sheet
+        if sheet is None:
+            return False
+        try:
+            persona = active_persona_for_sheet(sheet)
+        except Persona.DoesNotExist:
+            return False
+        if persona is None or not persona.is_established_or_primary:
+            return False
+        return persona.legend_murmur.has_murmurable_deeds
+
     def do_look(self, target):
         desc = self.at_look(target)
         self.msg(desc)

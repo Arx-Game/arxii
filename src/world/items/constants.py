@@ -213,3 +213,10 @@ class OrgVaultEventKind(models.TextChoices):
 
     DEPOSIT = "deposit", "Deposit"
     WITHDRAW = "withdraw", "Withdraw"
+
+
+class VaultTransitResolution(models.TextChoices):
+    """How an in-transit collection item resolved (#2540 gems return leg)."""
+
+    DEPOSITED = "deposited", "Deposited"
+    KEPT = "kept", "Kept"  # embezzled — consent-double-gated; staff-side record only

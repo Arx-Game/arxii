@@ -325,6 +325,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneActionRequest'
           description: ''
+  /api/action-requests/boon-options/:
+    get:
+      operationId: action_requests_boon_options_retrieve
+      description: |-
+        Boon money-sum options against a prospective target (#2540 ruling display seam).
+
+        Returns each ``BoonSumTier`` with the concrete coppers it means against THIS
+        target — the ask UI renders 'Minor (50g)' / 'Fair (200g)' / 'Great (500g)'.
+        An empty list means the target presents no money-boon option at all (a
+        penniless target — the option never shows, so 'no because I can't' never
+        happens). The OOC reveal of these values is accepted per the ruling.
+      parameters:
+      - in: query
+        name: target_persona
+        schema:
+          type: integer
+        required: true
+      tags:
+      - action-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoonOptions'
+          description: ''
   /api/action-requests/cast/:
     post:
       operationId: action_requests_cast_create
@@ -4063,6 +4091,7 @@ paths:
           - CONSEQUENCE
           - SENSORY
           - TONE
+          - TRIGGER
           - WITNESS
         description: |-
           Which guided step this tag belongs to.
@@ -4071,6 +4100,11 @@ paths:
           * `CONSEQUENCE` - Consequence
           * `WITNESS` - Witness & Secrecy
           * `SENSORY` - Sensory & Discovery
+          * `TRIGGER` - Trigger
+      - in: query
+        name: path_id
+        schema:
+          type: integer
       tags:
       - character-creation
       security:
@@ -33206,12 +33240,14 @@ components:
       - CONSEQUENCE
       - WITNESS
       - SENSORY
+      - TRIGGER
       type: string
       description: |-
         * `TONE` - Tone
         * `CONSEQUENCE` - Consequence
         * `WITNESS` - Witness & Secrecy
         * `SENSORY` - Sensory & Discovery
+        * `TRIGGER` - Trigger
     BattleBindingEnum:
       enum:
       - standing
@@ -34487,6 +34523,70 @@ components:
         * `right_finger` - Right Finger
         * `left_ear` - Left Ear
         * `right_ear` - Right Ear
+    BoonAskKindEnum:
+      enum:
+      - money
+      - held_item
+      - vault_item
+      - deed
+      type: string
+      description: |-
+        * `money` - Money
+        * `held_item` - A held item
+        * `vault_item` - A vault item
+        * `deed` - A deed
+    BoonAskRequest:
+      type: object
+      description: |-
+        The structured-ask payload on a `boon` dispatch (#2540).
+
+        MONEY asks carry a ``sum_tier`` (never a raw amount — the concrete coppers derive
+        from the target's purse server-side); item asks name an ``item_instance_id``; DEED
+        asks carry the deed text. Eligibility itself is validated by
+        ``validate_boon_ask`` inside ``create_action_request`` — this serializer only
+        shapes the payload.
+      properties:
+        kind:
+          $ref: '#/components/schemas/BoonAskKindEnum'
+        sum_tier:
+          default: ''
+          oneOf:
+          - $ref: '#/components/schemas/SumTierEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        item_instance_id:
+          type: integer
+          nullable: true
+        deed_text:
+          type: string
+          default: ''
+          maxLength: 2000
+      required:
+      - kind
+    BoonOptions:
+      type: object
+      description: Schema shape for the boon-options read (empty list = no money option
+        shown).
+      properties:
+        sum_tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoonSumOption'
+      required:
+      - sum_tiers
+    BoonSumOption:
+      type: object
+      description: One money-sum option against a specific target (#2540 — 'Fair (200g)').
+      properties:
+        tier:
+          $ref: '#/components/schemas/Tier756Enum'
+        label:
+          type: string
+        coppers:
+          type: integer
+      required:
+      - coppers
+      - label
+      - tier
     BugReportCreate:
       type: object
       description: Frontend supplies ``reporter_persona``; ``location`` is server-derived.
@@ -34754,6 +34854,7 @@ components:
             * `CONSEQUENCE` - Consequence
             * `WITNESS` - Witness & Secrecy
             * `SENSORY` - Sensory & Discovery
+            * `TRIGGER` - Trigger
         name:
           type: string
           readOnly: true
@@ -60171,6 +60272,17 @@ components:
             Same shape as the BeatViewSet stakes-summary payload (one entry per
             staked beat); branch contents are never included.
           readOnly: true
+        boon:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            The structured ask riding this request (#2540) — what the defender is asked for.
+
+            The specified-up-front payload is what lets a piloted target gauge whether it's
+            an easy "just no": kind, the sum tier + frozen coppers for money, the item's
+            display name, or the deed text.
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -60183,6 +60295,7 @@ components:
           description: When this action was resolved
       required:
       - action_interaction
+      - boon
       - combat_risk_level
       - combat_stakes
       - created_at
@@ -60258,6 +60371,10 @@ components:
         pull:
           allOf:
           - $ref: '#/components/schemas/CastPullRequestRequest'
+          nullable: true
+        boon:
+          allOf:
+          - $ref: '#/components/schemas/BoonAskRequest'
           nullable: true
       required:
       - action_key
@@ -64004,6 +64121,16 @@ components:
         * `cups` - Cups
         * `wands` - Wands
         * `coins` - Coins
+    SumTierEnum:
+      enum:
+      - minor
+      - fair
+      - great
+      type: string
+      description: |-
+        * `minor` - A minor sum
+        * `fair` - A fair sum
+        * `great` - A great sum
     SummonsRespondRequest:
       type: object
       description: POST body for responding to a summons.

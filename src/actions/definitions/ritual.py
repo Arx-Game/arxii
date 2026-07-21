@@ -60,6 +60,7 @@ class PerformRitualAction(Action):
         from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
         from world.magic.exceptions import (  # noqa: PLC0415
             AnchorCapExceeded,
+            GhostTutorError,
             InvalidImbueAmount,
             ResonanceInsufficient,
             RitualComponentError,
@@ -90,6 +91,7 @@ class PerformRitualAction(Action):
             AnchorCapExceeded,
             InvalidImbueAmount,
             XPInsufficient,
+            GhostTutorError,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 

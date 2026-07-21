@@ -15,7 +15,12 @@ import {
   respondToRequest,
   toastDispositionMessage,
 } from '../actionQueries';
-import type { ActionRequest, PendingActionTarget, StakesSummary } from '../actionTypes';
+import type {
+  ActionRequest,
+  BoonReadPayload,
+  PendingActionTarget,
+  StakesSummary,
+} from '../actionTypes';
 
 interface Props {
   sceneId: string;
@@ -47,6 +52,8 @@ interface ConsentCardProps {
   strainCommitment: number;
   combatRiskLevel?: string | null;
   combatStakes?: StakesSummary[] | null;
+  /** The structured ask on a boon request (#2540) — what granting costs you. */
+  boon?: BoonReadPayload | null;
   resistEffort: string;
   onResistChange: (v: string) => void;
   onDeny: () => void;
@@ -62,6 +69,7 @@ function ConsentCard({
   strainCommitment,
   combatRiskLevel,
   combatStakes,
+  boon,
   resistEffort,
   onResistChange,
   onDeny,
@@ -81,6 +89,15 @@ function ConsentCard({
           </span>{' '}
           on your character.
         </p>
+        {boon && (
+          <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+            {boon.kind === 'money' &&
+              `They ask for ${boon.sum_tier ? `a ${boon.sum_tier} sum — ` : ''}${boon.amount} coppers.`}
+            {boon.kind === 'deed' && `They ask a deed of you: "${boon.deed_text}"`}
+            {(boon.kind === 'held_item' || boon.kind === 'vault_item') &&
+              `They ask for ${boon.item_name ?? 'an item'}${boon.kind === 'vault_item' ? ' from your vault' : ''}.`}
+          </p>
+        )}
         {strainCommitment > 0 && (
           <p className="mt-1 text-xs text-muted-foreground">
             {initiatorName} is committing {strainCommitment} strain.
@@ -266,6 +283,7 @@ export function ConsentPrompt({ sceneId }: Props) {
             strainCommitment={req.strain_commitment}
             combatRiskLevel={req.combat_risk_level}
             combatStakes={req.combat_stakes}
+            boon={req.boon}
             resistEffort={selectedResist}
             onResistChange={(val) => setResistEffort((prev) => ({ ...prev, [cardKey]: val }))}
             onDeny={() => respond.mutate({ requestId: req.id, accept: false })}

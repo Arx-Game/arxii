@@ -47,6 +47,12 @@ class GlimpseTag(NaturalKeyMixin, SharedMemoryModel):
     is_active = models.BooleanField(
         default=True, help_text="Inactive tags are hidden from the CG flow."
     )
+    paths = models.ManyToManyField(
+        "classes.Path",
+        blank=True,
+        related_name="glimpse_trigger_tags",
+        help_text="Restricts this tag to these paths. Empty = available to all paths.",
+    )
 
     objects = GlimpseTagManager()
 

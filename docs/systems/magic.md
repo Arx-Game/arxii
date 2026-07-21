@@ -217,20 +217,22 @@ plumbing were fully removed in #2426 Task 8.
 The Glimpse is the narrative of a character's first magical awakening
 (`CharacterAura.glimpse_story`, prose). #2427 replaced the old always-visible
 freeform textarea with a guided, tag-driven flow: pick authored tags across
-four narrative axes, then write (or keep writing) the prose, with curated
-distinction suggestions surfaced along the way.
+five narrative axes, then write (or keep writing) the prose, with curated
+distinction suggestions surfaced along the way. #2611 added the TRIGGER axis
+(what *caused* the awakening) and path-gated tag filtering.
 
 **Models** (`models/glimpse.py`):
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `GlimpseTag` | Authored catalog choice, one per axis. Content model — `CONTENT_MODELS` (`magic.glimpsetag`), lore-repo authored, no factory-seeded catalog | `axis` (`GlimpseTagAxis`), `name`, `slug` (natural key), `description`, `example`, `sort_order`, `is_active` |
+| `GlimpseTag` | Authored catalog choice, one per axis. Content model — `CONTENT_MODELS` (`magic.glimpsetag`), lore-repo authored, no factory-seeded catalog | `axis` (`GlimpseTagAxis`), `name`, `slug` (natural key), `description`, `example`, `sort_order`, `is_active`, `paths` (M2M to `classes.Path`, empty = all paths; #2611) |
 | `CharacterGlimpseTag` | A character's chosen tag. Instance data — never exported | `aura` FK (`CharacterAura`, `related_name="glimpse_tags"`), `tag` FK (PROTECT); unique per `(aura, tag)` |
 | `GlimpseTagDistinctionSuggestion` | Curated tag→distinction suggestion. Content model (`magic.glimpsetagdistinctionsuggestion`) — grants nothing, purely a CG-flow suggestion surface. FK points *into* `distinctions.Distinction` (specific→general, ADR-0010) | `tag` FK (CASCADE), `distinction` FK (CASCADE), `sort_order`; unique per `(tag, distinction)` |
 
 **Enums + config** (`constants.py`):
 
-- `GlimpseTagAxis` — the four guided steps: `TONE` (single-select), `CONSEQUENCE`
+- `GlimpseTagAxis` — the five guided steps: `TRIGGER` (single-select, what
+  caused the awakening; #2611), `TONE` (single-select), `CONSEQUENCE`
   (multi-select), `WITNESS` (Witness & Secrecy, multi-select), `SENSORY`
   (Sensory & Discovery, multi-select, renders as prose prompts rather than hard
   tags in the writing step — authored SENSORY tags remain possible).
@@ -281,7 +283,11 @@ ids — resolved to the character's own `CharacterDistinction` rows by
 **API surfaces:**
 
 - **CG catalog** — `GET /api/character-creation/glimpse-tags/`
-  (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=`).
+  (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=` and
+  `?path_id=<N>`). The `path_id` filter (#2611) excludes tags whose `paths`
+  M2M is non-empty and does not contain the given path — used by the CG flow
+  to hide path-restricted trigger tags (e.g. "Patron Chose You" is Path of
+  the Chosen only). Omitting `path_id` returns all tags (post-CG editor mode).
   Global authored catalog, not draft-dependent, so the same endpoint also
   backs the post-CG "finish your glimpse later" surface. Each row embeds its
   `suggested_distinctions` (prefetched `GlimpseTagDistinctionSuggestion` rows,
@@ -415,9 +421,9 @@ COVENANT_ROLE, SANCTUM, ...) — not the bucketed `thread_level_multiplier`
 `survivability_baseline` uses. `CovenantRoleBlendConfig` (pk=1 singleton,
 `get_covenant_role_blend_config()`, lazy-created) holds the tunable
 `multiplier_tenths` (default 10 = ×1.0). Kept as its own provider (not folded into an
-existing term) so the contribution stays attributable in cast breakdowns — a future
-presentation contract (#2536) needs to show "this much came from your vow" as a
-distinct line.
+existing term) so the contribution stays attributable in cast breakdowns — Layer 4's
+presentation contract (#2536 slice 1, ADR-0151, now built — see "Vow Situational Power
+Term" below) shows "this much came from your vow" as a distinct announced line.
 
 ### Covenant-Role Technique Specialty Power Term (#2443, ADR-0149 amendment) [BUILT & WIRED]
 
@@ -439,6 +445,51 @@ or no specialty row matches. **Sub-role rows ADD to the anchor's — they are ne
 normalized away** — the opposite of the anchor-only rule
 `covenant_role_action_scaling_bonus` uses; a promoted (specialized) member reads as
 strictly more specialized than an unpromoted one.
+
+### Vow Situational Power Term (#2536 slice 1, ADR-0151) [BUILT & WIRED]
+
+`vow_situational_power_term` is a conditional `_PROVIDERS` entry — **Layer 4** of
+`covenants`' four-layer vow-power model ("the point of vows", see
+`docs/systems/covenants.md`'s "Layer 4: Situational Perks" and ADR-0151). Unlike Layers
+1-2 (always-on), this term is 0 unless a `POWER_BONUS` `VowSituationalPerk` actually fires
+for the cast — see `world.covenants.perks.services.applicable_perks` for the full
+beneficiary/situation resolution.
+
+`PowerTermContext` gained two optional fields for this term (both defaulted so every
+existing constructor is unaffected): `situation_ctx` (the live resolution context — a
+`CombatRoundContext`, `world/combat/round_context.py`, when the cast resolves inside
+combat; `None` for a standalone/non-combat cast) and `target_sheet` (the cast's primary
+target's `CharacterSheet`, resolved by `world.combat.services._resolve_primary_target_sheet`
+on the combat round path — `None` for a targetless cast, an NPC-only opponent with no
+linked `CharacterSheet`, or a non-combat cast). `situation_ctx` is threaded from the combat
+cast path (`resolve_combat_technique`) and from clash (`commit_to_clash`); `target_sheet`
+is threaded from the combat round path only (clash contributions have no explicit target
+concept yet, so target-keyed situations correctly read `False` there, same as any other
+targetless cast).
+
+Guards: no technique → 0 (perks are cast-scoped); no engaged covenant role on the caster →
+0 (a cheap exit that never skips a case `applicable_perks` would otherwise have fired,
+since `applicable_perks`'s own ally-candidate path also requires the subject to hold at
+least one engaged role before a mate's group-beneficiary perk can reach them). When perks
+fire, the term sums, per firing, `total_thread_level_across_all_kinds(sheet) ×
+magnitude_tenths / 10` (int-truncated after summing in `Decimal` — the same arithmetic
+Layers 1-2 use) and calls `announce_fired_perks` (the presentation-contract seam, see
+`docs/systems/covenants.md`) exactly once, since `_derive_power` calls this provider
+exactly once per real cast resolution (`use_technique`'s single orchestration call).
+
+**Attributability gap (documented, not fixed this slice):** the ledger's TERM-stage label
+for this provider is the same static function-name-derived string every other
+multi-source provider in this file gets (`_derive_power`'s TERM loop labels once per
+provider, not once per return value) — a cast boosted by two different firing perks shows
+one summed "vow situational power" line, not two named lines. The per-perk name reaches
+the player through `announce_fired_perks`'s dual-dispatch line instead, which is where
+ruling 1's "loud, visible moment" actually needs to land. See ADR-0151 for the reasoning.
+
+`CHECK_BONUS`'s parallel seam lives in `world.checks.services._situational_perk_check_bonus`
+(`docs/systems/covenants.md` covers the shared delivery contract) — `perform_check` gains
+an optional keyword-only `situation_ctx` parameter, `None` by default (byte-identical to
+every pre-#2536 call site; existing checks tests pass unmodified as the proof), scoped by
+each fired perk's `check_type` (null = any check).
 
 ### Targeting Model (#1321) [BUILT & WIRED]
 

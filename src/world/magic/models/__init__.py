@@ -103,6 +103,7 @@ from world.magic.models.fall_redemption import (
 )
 from world.magic.models.fury import FuryConfig, FuryTier
 from world.magic.models.gain_config import ResonanceGainConfig
+from world.magic.models.ghost_tutor import GhostTutelage
 from world.magic.models.gift_unlocks import (
     CharacterGiftUnlock,
     GiftAcquisitionConfig,
@@ -312,6 +313,8 @@ __all__ = [
     # fury lever
     "FuryConfig",
     "FuryTier",
+    # ghost-tutor tutelage (#2460)
+    "GhostTutelage",
     "Gift",
     "GiftAcquisitionConfig",
     "GiftManager",

@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter, CombatParticipant
+    from world.covenants.perks.context import SituationContext
     from world.magic.types.pull import CastPullDeclaration
 
 
@@ -230,7 +231,26 @@ def commit_combat_pull(
     beseech_bonus_thread_id = None
     applied_bonus = 0
     if cast_pull.beseech_bonus > 0:
-        beseech_bonus_thread_id, applied_bonus = _resolve_emergency_draw(sheet, cast_pull)
+        # #2536 Task 5 review fix: this combat call site has `participant` +
+        # `encounter` on hand — the same ingredients every other combat check
+        # threads — so hand the petition check a live round context. A future
+        # CHECK_BONUS situational perk scoped to the Court petition CheckType
+        # (spec §4's named use case) must not silently never fire just because
+        # this sibling roll skipped the seam. `target` is None: the petition is
+        # a Court-favor roll about the servant↔master bond, not directed at the
+        # pull's combat target.
+        from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+        from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+
+        situation_ctx = SituationContext(
+            holder=sheet,
+            subject=sheet,
+            target=None,
+            resolution=CombatRoundContext(participant),
+        )
+        beseech_bonus_thread_id, applied_bonus = _resolve_emergency_draw(
+            sheet, cast_pull, situation_ctx=situation_ctx
+        )
 
     try:
         spend_resonance_for_pull(
@@ -251,6 +271,8 @@ def commit_combat_pull(
 def _resolve_emergency_draw(
     sheet: CharacterSheet,
     cast_pull: CastPullDeclaration,
+    *,
+    situation_ctx: SituationContext | None = None,
 ) -> tuple[int | None, int]:
     """Roll the Court-grant petition check for an emergency thread-bond draw (#1718).
 
@@ -258,6 +280,15 @@ def _resolve_emergency_draw(
     so it is combat-agnostic and reused directly by the non-combat cast path
     (``world.magic.services.techniques._charge_cast_pull``) as well as
     ``commit_combat_pull`` below. Do not add a combat-only parameter here.
+
+    ``situation_ctx`` is the ONE exception — and it is not combat-only. It is the
+    general per-vow situational-perk seam (#2536): the combat caller
+    (``commit_combat_pull``) builds one from its live ``CombatRoundContext`` so a
+    ``CHECK_BONUS`` perk scoped to the Court petition CheckType (spec §4) can fire
+    on this roll; the non-combat caller (``_charge_cast_pull``) passes ``None``
+    because a petition outside combat has no combat positioning to evaluate
+    (combat-positioning situations simply never hold — the evaluators return
+    ``False`` on a ``None`` resolution). Threaded straight into ``perform_check``.
 
     Returns ``(thread_id, applied_bonus)`` — ``(None, 0)`` on failure or when the
     pulled thread isn't a COURT-covenant COVENANT_ROLE thread (nothing to
@@ -319,6 +350,7 @@ def _resolve_emergency_draw(
         config.petition_check_type,
         target_difficulty=config.petition_base_difficulty,
         extra_modifiers=ease,
+        situation_ctx=situation_ctx,
     )
     # CheckResult.success_level (world.checks.types) safely returns 0 when
     # outcome is None — no separate None-check needed.

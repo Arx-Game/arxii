@@ -8,7 +8,7 @@ import django_filters
 
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path
-from world.magic.models import Gift, Technique, Tradition
+from world.magic.models import Gift, GlimpseTag, Technique, Tradition
 from world.roster.models import Family
 from world.species.models import Species
 
@@ -156,3 +156,24 @@ class CGTechniqueOptionFilter(django_filters.FilterSet):
     ) -> QuerySet[Technique]:
         """No-op — the view's ``get_queryset`` already narrowed by draft_id/gift_id."""
         return queryset
+
+
+class GlimpseTagFilter(django_filters.FilterSet):
+    """Filter glimpse tags by path restriction (#2611).
+
+    ``path_id`` filters out tags whose ``paths`` M2M is non-empty and does not
+    contain the given path. Tags with empty ``paths`` (the default) are always
+    included. Omitting ``path_id`` returns all tags (post-CG editor mode).
+    """
+
+    path_id = django_filters.NumberFilter(method="filter_path_id")
+
+    class Meta:
+        model = GlimpseTag
+        fields = ["axis", "path_id"]
+
+    def filter_path_id(
+        self, queryset: QuerySet[GlimpseTag], name: str, value: int
+    ) -> QuerySet[GlimpseTag]:
+        """Include tags with no path restriction OR tags restricted to this path."""
+        return queryset.filter(models.Q(paths__isnull=True) | models.Q(paths=value)).distinct()

@@ -26,6 +26,7 @@ from world.currency.constants import (
     CHORE_MULTIPLIER_FAIL,
     CHORE_MULTIPLIER_SUCCESS,
     CONTRACT_DEFAULT_AFTER_MISSES,
+    DEBT_PRINCIPAL_GROSS_PCT,
     DENOMINATION_VALUES,
     GRAFT_FLOOR_PCT,
     MINT_FEE_PCT,
@@ -51,7 +52,12 @@ from world.currency.models import (
     OrgIncomeStream,
     OrgObligation,
 )
-from world.currency.types import AllowanceResult, CollectionResult, ImprovementResult
+from world.currency.types import (
+    AllowanceResult,
+    CollectionResult,
+    DistributionResult,
+    ImprovementResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -681,6 +687,70 @@ def distribute_allowance(*, organization: Organization, surplus: int) -> Allowan
         distributed += per_member
     return AllowanceResult(
         total_distributed=distributed, per_member=per_member, member_count=len(active_sheets)
+    )
+
+
+@transaction.atomic
+def service_debt_principal(*, organization: Organization, basis: int) -> int:
+    """Pay a flat share of ``basis`` (the collection's gross) toward debt principal.
+
+    The debt-first leg of the distribution dispatch (#2540, ruled 2026-07-20): a
+    mandatory ``DEBT_PRINCIPAL_GROSS_PCT`` of gross goes to creditors BEFORE the member
+    allowance draws anything — like an allowance the head cannot withhold, owed to the
+    bank instead of the members. Complements the weekly at-source ARREARS withholding
+    (#927 — interest); this pays PRINCIPAL, oldest debt first (PLACEHOLDER ordering),
+    capped by each principal and the treasury balance. ``diverting`` debts are skipped
+    (the cheat routes income past servicing — arrears balloon, discovery is story).
+    A debt paid to zero deactivates. Returns the total coppers paid.
+    """
+    target = basis * DEBT_PRINCIPAL_GROSS_PCT // 100
+    if target <= 0:
+        return 0
+    treasury = get_or_create_treasury(organization)
+    paid_total = 0
+    debts = DebtInstrument.objects.filter(
+        debtor_organization=organization, active=True, diverting=False, principal__gt=0
+    ).order_by("created_at")
+    for debt in debts:
+        if paid_total >= target:
+            break
+        treasury.refresh_from_db(fields=["balance"])
+        payment = min(target - paid_total, debt.principal, treasury.balance)
+        if payment <= 0:
+            break
+        transfer(
+            amount=payment,
+            reason=f"debt principal: {debt.creditor_organization.name}",
+            from_treasury=treasury,
+            to_treasury=get_or_create_treasury(debt.creditor_organization),
+        )
+        debt.principal -= payment
+        if debt.principal == 0:
+            debt.active = False
+        debt.save(update_fields=["principal", "active"])
+        paid_total += payment
+    return paid_total
+
+
+def collect_and_distribute(*, organization: Organization, character) -> DistributionResult:
+    """The full collection-distribution dispatch (#2540, ruled 2026-07-20).
+
+    Sequence: ``collect_org_income`` (the active piloted collection — band, graft,
+    catastrophe, gems all as before) → ``service_debt_principal`` (the mandatory
+    debt-first share of GROSS) → ``distribute_allowance`` on the post-debt remainder
+    of what actually landed. Each phase is independently atomic (a later phase's
+    failure never claws back an earlier one, mirroring ``run_weekly_economy``); the
+    remainder after the allowance simply stays in the treasury.
+    """
+    collection = collect_org_income(organization=organization, character=character)
+    # A catastrophe landed nothing — this collection funds no debt service (old treasury
+    # funds are not clawed; the creditor's share rides actual collections only).
+    basis = 0 if collection.catastrophe else collection.gathered
+    debt_paid = service_debt_principal(organization=organization, basis=basis)
+    surplus = max(0, collection.landed - debt_paid)
+    allowance = distribute_allowance(organization=organization, surplus=surplus)
+    return DistributionResult(
+        collection=collection, debt_principal_paid=debt_paid, allowance=allowance
     )
 
 

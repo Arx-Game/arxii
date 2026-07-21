@@ -395,3 +395,47 @@ class SpecCResonanceGainTaskRegistrationTests(TestCase):
 
         weekly_summary = resonance_weekly_settlement_tick()
         self.assertIsNotNone(weekly_summary)
+
+
+class WeeklyMoneyOrderingWiringTests(TestCase):
+    """The real registrations carry the anchor and bands ADR-0150 depends on (#2609)."""
+
+    def setUp(self) -> None:
+        from world.game_clock.task_registry import clear_registry
+
+        clear_registry()
+
+    def tearDown(self) -> None:
+        from world.game_clock.task_registry import clear_registry
+
+        clear_registry()
+
+    def _registered(self) -> dict:
+        from world.game_clock.task_registry import get_registered_tasks
+        from world.game_clock.tasks import register_all_tasks
+
+        register_all_tasks()
+        return {t.task_key: t for t in get_registered_tasks()}
+
+    def test_upkeep_shares_the_rollover_anchor(self) -> None:
+        """Without a shared anchor the bands never come into play at all."""
+        tasks = self._registered()
+        upkeep = tasks["buildings.weekly_upkeep"]
+        rollover = tasks["weekly_rollover"]
+
+        self.assertEqual(upkeep.anchor_weekday, rollover.anchor_weekday)
+        self.assertEqual(upkeep.anchor_hour_utc, rollover.anchor_hour_utc)
+        self.assertIsNotNone(upkeep.anchor_weekday)
+
+    def test_rollover_outranks_upkeep(self) -> None:
+        """Income lands before upkeep drains (ADR-0150)."""
+        from world.game_clock.task_registry import CronPhase
+
+        tasks = self._registered()
+
+        self.assertEqual(tasks["weekly_rollover"].phase, CronPhase.ECONOMY)
+        self.assertEqual(tasks["buildings.weekly_upkeep"].phase, CronPhase.UPKEEP)
+        self.assertLess(
+            tasks["weekly_rollover"].phase,
+            tasks["buildings.weekly_upkeep"].phase,
+        )

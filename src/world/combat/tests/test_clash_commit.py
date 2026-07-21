@@ -517,3 +517,182 @@ class CommitToClashLethalFlagTests(TestCase):
 
     def test_lethal_encounter_threads_lethal_true(self) -> None:
         self.assertIs(self._captured_lethal(risk_level=RiskLevel.LETHAL), True)
+
+
+class CommitToClashSituationContextTests(TestCase):
+    """commit_to_clash threads situation_ctx into use_technique (#2536, Task 4
+    review fix) — the clash cast path was previously silently un-threaded even
+    though a CombatParticipant is genuinely resolvable at this call site (the
+    step-9 Interaction-recording block already resolved one, just too late to
+    reach use_technique). Mirrors CommitToClashLethalFlagTests' spy pattern.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.config_strain = StrainConfigFactory()
+        cls.config_clash = ClashConfigFactory()
+        cls.check_type = ActionTemplateFactory().check_type
+        cls.success_outcome = CheckOutcomeFactory(name="situation_ctx_success", success_level=1)
+
+    def _make_character_with_anima(self) -> CharacterSheetFactory:
+        sheet = CharacterSheetFactory()
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet.character)
+        return sheet
+
+    def _make_technique(self) -> object:
+        template = ActionTemplateFactory(check_type=self.check_type)
+        return TechniqueFactory(intensity=5, control=10, anima_cost=3, action_template=template)
+
+    def test_situation_ctx_threaded_when_participant_resolves(self) -> None:
+        from world.combat.factories import CombatParticipantFactory
+        from world.combat.round_context import CombatRoundContext
+
+        sheet = self._make_character_with_anima()
+        technique = self._make_technique()
+        clash = ClashFactory()
+        participant = CombatParticipantFactory(encounter=clash.encounter, character_sheet=sheet)
+
+        with force_check_outcome(self.success_outcome):
+            with patch.object(
+                clash_module, "use_technique", wraps=clash_module.use_technique
+            ) as spy:
+                commit_to_clash(
+                    character_sheet=sheet,
+                    technique=technique,
+                    clash=clash,
+                    strain_commitment=0,
+                    action_slot="FOCUSED",
+                    config_clash=self.config_clash,
+                    config_strain=self.config_strain,
+                )
+
+        captured_ctx = spy.call_args.kwargs["situation_ctx"]
+        self.assertIsInstance(captured_ctx, CombatRoundContext)
+        self.assertEqual(captured_ctx.participant, participant)
+
+    def test_situation_ctx_none_when_no_participant_resolves(self) -> None:
+        """Legacy fixtures / isolated unit tests without a wired CombatParticipant
+        degrade gracefully to situation_ctx=None, exactly like a non-combat cast —
+        never an exception."""
+        sheet = self._make_character_with_anima()
+        technique = self._make_technique()
+        clash = ClashFactory()  # no CombatParticipant created for `sheet`
+
+        with force_check_outcome(self.success_outcome):
+            with patch.object(
+                clash_module, "use_technique", wraps=clash_module.use_technique
+            ) as spy:
+                commit_to_clash(
+                    character_sheet=sheet,
+                    technique=technique,
+                    clash=clash,
+                    strain_commitment=0,
+                    action_slot="FOCUSED",
+                    config_clash=self.config_clash,
+                    config_strain=self.config_strain,
+                )
+
+        self.assertIsNone(spy.call_args.kwargs["situation_ctx"])
+
+
+class CommitToClashSituationalPerkTests(TestCase):
+    """A combat-positioning situational perk (AT_RANGE) fires for POWER_BONUS
+    through the clash contribution path now that situation_ctx is threaded
+    (#2536, Task 4 review fix). Mirrors
+    world.magic.tests.test_power_derivation
+    .VowSituationalPowerTermTests.test_perk_fires_with_combat_situation_ctx_exact_arithmetic
+    but exercised through commit_to_clash end-to-end instead of calling the
+    provider directly.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.config_strain = StrainConfigFactory()
+        cls.config_clash = ClashConfigFactory()
+        cls.check_type = ActionTemplateFactory().check_type
+        cls.success_outcome = CheckOutcomeFactory(name="clash_at_range_success", success_level=1)
+
+    def _make_character_with_anima(self) -> CharacterSheetFactory:
+        sheet = CharacterSheetFactory()
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet.character)
+        return sheet
+
+    def _make_technique(self) -> object:
+        template = ActionTemplateFactory(check_type=self.check_type)
+        return TechniqueFactory(intensity=5, control=10, anima_cost=3, action_template=template)
+
+    def _commit_with_at_range_perk(self, *, at_range: bool) -> int:
+        """Build a fresh clash + PC + AT_RANGE-gated SELF perk (magnitude 13,
+        thread level 7) and return the resulting result.power. `at_range`
+        controls whether the opponent shares the PC's position (IN_MELEE) or
+        not (AT_RANGE)."""
+        from world.areas.positioning.services import (
+            connect_positions,
+            create_position,
+            place_in_position,
+        )
+        from world.combat.factories import (
+            CombatOpponentFactory,
+            CombatParticipantFactory,
+            EngagementLockFactory,
+        )
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+            VowSituationalPerkFactory,
+            VowSituationalPerkSituationFactory,
+        )
+        from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+        from world.magic.factories import ThreadFactory
+
+        sheet = self._make_character_with_anima()
+        technique = self._make_technique()
+        clash = ClashFactory()
+
+        room = clash.encounter.room
+        pos_a = create_position(room, "pos_a")
+        pos_b = create_position(room, "pos_b")
+        connect_positions(pos_a, pos_b, is_passable=True)
+
+        sheet.character.location = room
+        sheet.character.save()
+        place_in_position(sheet.character, pos_a)
+
+        participant = CombatParticipantFactory(encounter=clash.encounter, character_sheet=sheet)
+        opponent = CombatOpponentFactory(encounter=clash.encounter)
+        place_in_position(opponent.objectdb, pos_a if not at_range else pos_b)
+        EngagementLockFactory(encounter=clash.encounter, participant=participant, opponent=opponent)
+
+        role = CovenantRoleFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=sheet, covenant=CovenantFactory(), covenant_role=role, engaged=True
+        )
+        perk = VowSituationalPerkFactory(
+            covenant_role=role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            magnitude_tenths=13,
+        )
+        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.AT_RANGE)
+        ThreadFactory(owner=sheet, level=7)
+
+        with force_check_outcome(self.success_outcome):
+            result = commit_to_clash(
+                character_sheet=sheet,
+                technique=technique,
+                clash=clash,
+                strain_commitment=0,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+            )
+        return result.power
+
+    def test_at_range_perk_raises_clash_power(self) -> None:
+        power_at_range = self._commit_with_at_range_perk(at_range=True)
+        power_in_melee = self._commit_with_at_range_perk(at_range=False)
+        # 7 * 13 / 10 = 9.1 -> 9, mirrors the round-path arithmetic exactly.
+        self.assertEqual(power_at_range - power_in_melee, 9)

@@ -319,9 +319,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `GlimpseTagDistinctionSuggestion` (content model — `magic.glimpsetagdistinctionsuggestion`
     — `tag`/`distinction` FKs, specific→general per ADR-0010, grants nothing, purely a
     suggestion surface). `GlimpseTagAxis`/`GlimpseState`/`GLIMPSE_AXIS_CONFIG`
-    (`constants.py`) — four axes (TONE single-select; CONSEQUENCE, WITNESS, SENSORY
+    (`constants.py`) — five axes (TRIGGER single-select, what caused the
+    awakening [#2611]; TONE single-select; CONSEQUENCE, WITNESS, SENSORY
     multi-select, SENSORY renders as prose prompts) and the NOT_STARTED/TAGS_ONLY/
-    COMPLETE deferral cache. `CharacterAura.glimpse_state` (cache maintained
+    COMPLETE deferral cache. `GlimpseTag.paths` (M2M to `classes.Path`, empty =
+    all paths; #2611) gates tag visibility by path. `CharacterAura.glimpse_state` (cache maintained
     exclusively by `world.magic.services.glimpse`, mirrors the `is_secret`
     FK-presence precedent) + `world.distinctions.models.CharacterDistinction
     .from_glimpse` (nullable FK → `CharacterAura`, SET_NULL — provenance, mirrors
@@ -332,7 +334,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     (`world.character_creation.services.finalize_magic_data`) consumes
     `draft_data["glimpse_tag_ids"/"glimpse_story"/"glimpse_linked_distinction_ids"]`
     through these services. API: CG catalog `GET
-    /api/character-creation/glimpse-tags/` (`CGGlimpseTagViewSet`, embeds
+    /api/character-creation/glimpse-tags/` (`CGGlimpseTagViewSet`, filterable
+    by `?axis=` and `?path_id=<N>` [#2611], embeds
     `suggested_distinctions`) + four `CharacterAuraViewSet` actions
     (`set-glimpse-tags` / `set-glimpse-prose` / `link-glimpse-distinction` /
     `unlink-glimpse-distinction`). Sheet payload: `AuraData.glimpse_story` /
@@ -1853,15 +1856,22 @@ action consent flow, and a three-mode non-combat round framework.
   `Boon` (#2540, `boon_models.py` — the payload of a structured social ask, 1:1 with its
   `SceneActionRequest`: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`,
   `item_instance`, `deed_text`, `fulfilled_at`. Slice 2 wired the full loop (`boon_services`):
-  `BoonAsk` + `validate_boon_ask` (dial-1 ask-time eligibility — uncoverable money, unheld item,
-  empty deed, and vault-stub asks are rejected before any row exists), the `boon` action key on
+  `BoonAsk` + `validate_boon_ask` (dial-1 ask-time eligibility — an ask the target could not
+  grant never exists: penniless-target money, unheld item, empty deed rejected before any row).
+  **Money asks are relative sum tiers (#2540 ruling): `BoonSumTier` MINOR/FAIR/GREAT *to the
+  target* (PLACEHOLDER pcts of their purse), never raw coppers — nothing to probe a purse with;
+  `boon_sum_values` is the UI display seam (tier → concrete coppers, OOC reveal accepted) and
+  the coppers freeze onto `Boon.amount` at ask time.** The `boon` action key on
   `BoonAction` (`actions/definitions/social.py`) + `ActionTemplate`/`boon`-consent-category seeds,
-  `npc_boon_tier_shift` (the mandatory dial-2 NPC relative-cost band, fed into
+  `npc_boon_tier_shift` (the mandatory dial-2 NPC band — for money, the chosen tier IS the band,
+  fed into
   `resolved_base_difficulty(extra_tier_modifier=…)`; piloted defenders are never band-shifted),
   and the `boon` resolver (`register_resolver`) — fulfillment + the per-Boon stacking affection
   cost (`BOON_AFFECTION_COST`, PLACEHOLDER) fire on BOTH consent paths, never via `execute()`.
-  MONEY fulfillment moves coppers via `currency.transfer`; HELD_ITEM/VAULT_ITEM transfer are
-  follow-up slices)
+  Every kind fulfills: MONEY via `currency.transfer`, VAULT_ITEM via the org vault's audited
+  withdraw (target as authority, asker as recipient), HELD_ITEM via a lean sheet-level
+  hand-over — unequip → object move/dematerialize → holder switch → `OwnershipEvent(TRANSFERRED)`
+  snapshotting the scene's presented personas — and DEED RP-only)
 - **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance).
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).
@@ -2254,10 +2264,14 @@ General-purpose IC message delivery — GM/Staff/automated messages to character
 - **Integrates with:** stories (beat completions + episode resolutions emit messages via `stories.services.narrative`), character_sheets (recipient), accounts (sender)
 - **Ambient room reactions (#2471 v2):** `AmbientEmoteLine` (authored prose + weight/cooldown/
   fire-chance) + `AmbientEmoteCondition` (0+ leaf conditions per line, AND/OR-composed) — species/
-  resonance-threshold/distinction/fame-tier conditions compile (`world.narrative.ambient_content
+  resonance-threshold/distinction/fame-tier/legend-deed conditions compile (`world.narrative.ambient_content
   .compile_line_filter`) to real Trigger-system filter conditions, extending the DSL's existing
   method-dispatch pattern (`Character.has_property`/`has_capability`/`shares_covenant_with`) with
-  three new methods (`has_resonance_at_least`/`has_public_distinction`/`fame_tier_at_least`).
+  four methods (`has_resonance_at_least`/`has_public_distinction`/`fame_tier_at_least`/
+  `has_legend_deeds`). The `LEGEND_DEED` condition (#2523) gates on the entering persona having
+  common-knowledge, non-secret deeds (via `Persona.legend_murmur` handler, cached). Lines with
+  `{name}`/`{deeds}` placeholders in their body are dynamically templated from the entering
+  persona's display name and deed titles (`_render_body`); static lines pass through unchanged.
   Dispatched via the existing Flows/Triggers `MOVED` event: at grid-bundle import
   (`core_management.grid_import._install_ambient_triggers`), lines are grouped by their compiled,
   identical condition set, and each distinct group gets one DERIVED `TriggerDefinition`/
@@ -2390,6 +2404,21 @@ register as additional kinds.
   character is the lore-repo quest's job, not this seed's. Self-study teaches the shared
   (Path × Gift) pool only — it does **not** restore an orphaned tradition's own signature
   technique list; that recovery is story content, not a mechanical unlock.
+- **Ghost tutors — summoned teachers for orphaned traditions (#2460):** a SERVICE-kind
+  `Ritual` ("Summon Ghostly Tutor") dispatches `world.magic.services.ghost_tutor
+  .summon_ghost_tutor`, which validates the performer has an active
+  `CharacterTradition` membership for the target tradition (members-only) and
+  creates a permanent `GhostTutelage` record. The tutelage extends
+  `_technique_available_to_learner` (`world.npc_services.effects`) so the existing
+  generalist Academy trainer (whose `teaches_tradition=None`) can surface that
+  tradition's signature techniques for the summoning learner — the learner still
+  pays AP + coin + a Golden Hare via the standard TRAIN offer / `charge_and_learn`
+  seam. One summoning unlocks the entire tradition signature list (per-tradition
+  scope); the tutelage is permanent (the story-gate is the summoning ritual's
+  components + site access, not an upkeep loop). This is one route into the broader
+  Path-discovery system (#2603); it does not model the full research/discovery
+  progression that gates Path selection. Seeded by `wire_ghost_tutor_content()`
+  (`world.magic.factories`), called by `seed_magic_dev()`.
 - **SETTLE_OBLIGATION — the Academy Registrar (#2428 whole-branch fix):** closes the gap
   where `societies.obligation_services.settle_obligation` (Task 1) shipped with no live
   caller — an Unbound Prospect had no in-game way to ever pay off their Academy entrance
@@ -2641,7 +2670,13 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   `distribute_allowance(*, organization, surplus)` (#2540 — the non-discretionary allowance rail:
   a PLACEHOLDER `ALLOWANCE_SURPLUS_PCT` share of surplus auto-splits treasury→purse among *active
   piloted* members [account login within `ACTIVE_WEEK_LOGIN_DAYS`; pure NPCs excluded], the head
-  cannot withhold it. Meant to fire off the collection event via the future domain dispatch)
+  cannot withhold it),
+  `collect_and_distribute(*, organization, character)` (#2540, ruled 2026-07-20 — THE distribution
+  dispatch: collect → `service_debt_principal` [a mandatory PLACEHOLDER `DEBT_PRINCIPAL_GROSS_PCT`
+  of GROSS toward debt principal, oldest first, diverting debts skipped, capped by treasury; a
+  catastrophe funds no debt service; complements the weekly at-source ARREARS/interest withholding
+  #927] → `distribute_allowance` on the post-debt remainder of what landed; each phase
+  independently atomic; the rest stays in the treasury. Returns `DistributionResult`)
 - **Checks (#930):** Tax Collection / Household Command (presence + Leadership + Stewardship) and Domain
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
 - **Books surface:** `GET /api/currency/org-books/{org}/` (`OrgBooksViewSet`) — treasury,
@@ -3764,16 +3799,28 @@ holder is never notified a claim exists.
   `withdraw_rank_max`), `deposit_item_to_vault` (any active member, must hold the item; holder
   goes null + `game_object` dematerialized — custody is the row, not the prop),
   `withdraw_item_from_vault` (rank-gated; `to_persona` directs the item elsewhere — the
-  VAULT_ITEM boon shape, its first live caller). **The WHERE gate is wired:**
+  VAULT_ITEM boon shape, its first live caller). **Collection return leg (#2540 ruling
+  2026-07-20):** `VaultTransit` — collection is a mission; `collect_org_gems` mints one
+  in-transit custody row per stone delivered to the collector's hands, and
+  `resolve_vault_transit(organization, carrier_persona, keep_item_ids)` completes the mission:
+  unlisted items resolve DEPOSITED (→ `VaultHolding` + audited event, reason "collection
+  deposit"), `keep_item_ids` resolve KEPT (embezzled) behind the **double gate** —
+  `can_embezzle_from` requires at least one *piloted* org leader whose dedicated
+  `embezzlement` consent category (seeded under `antagonism`) admits the carrier (strict-all
+  across piloted heads, PLACEHOLDER semantic), AND the carrier's explicit keep list is the
+  opt-in. A KEPT stone stays in the carrier's hands and books NO vault event — the resolved
+  transit row is the staff-side record; the tally-vs-deposits gap is the in-world discovery
+  hook. In-transit loss deliberately not built (loss lives in the collection roll). **The
+  WHERE gate is now wired** (#2540 economy wiring — supersedes the earlier follow-up note):
   `VaultDepositAction`/`VaultWithdrawAction` (`actions/definitions/org_vault.py`, keys
   `vault_deposit`/`vault_withdraw`, REST int kwargs) are performable only where an active
   **BANK** `RoomFeatureServiceStrategy` feature stands (a bank room on grid or an
   owner-installed bank-access decor feature — the ratified access surface; reachability-only
-  handler in `room_features`, COMMAND_CENTER's shape). Distinct from the physical
-  room-feature VAULT (#2179), which secures loose items in a room. **Weekly gem accrual is
-  wired**: `run_weekly_economy`'s `gem_mines` phase (`_weekly_mine_accrual`) runs one
-  `accrue_mine_cycle` per configured holding (`common_gem_tier` set) — haul amasses
-  uncollected per ADR-0081; only an active collection delivers it.
+  handler in `room_features`, COMMAND_CENTER's shape). Distinct from the physical room-feature
+  VAULT (#2179), which secures loose items in a room. **Weekly gem accrual is wired**:
+  `run_weekly_economy`'s `gem_mines` phase (`_weekly_mine_accrual`) runs one `accrue_mine_cycle`
+  per configured holding (`common_gem_tier` set) — haul amasses uncollected per ADR-0081; only
+  an active collection delivers it.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
@@ -4000,6 +4047,30 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     weights/action-scaling anchor-only rule). Read by
     `covenant_role_specialty_power_term` (`world.magic.services.power_terms`).
     Lore-repo content.
+  - `VowSituationalPerk` / `VowSituationalPerkSituation` / `VowSituationalPerkRung`
+    (#2536 slice 1, ADR-0151; **Layer 4** of the vow-power model — "the point of vows")
+    — deterministic, situational bonuses. `VowSituationalPerk` (NK `(covenant_role,
+    name)`): `beneficiary` (SELF/COVENANT_ALLIES/WHOLE_GROUP), `effect_kind`
+    (POWER_BONUS/CHECK_BONUS live this slice; TIER_FLOOR/BOTCH_IMMUNITY schema-only),
+    `magnitude_tenths` (no negatives — structural, `PositiveIntegerField`),
+    `announce_template`, optional `check_type` scope. `VowSituationalPerkSituation`
+    (AND-composed situation attachments) + `VowSituationalPerkRung` (cumulative
+    escalation tiers — rung N requires rungs 1..N-1 too, highest qualifying rung's
+    magnitude replaces the base). All lore-repo content. Situations are drawn from
+    `world.covenants.perks.constants.Situation`, a code-defined library with a
+    registered evaluator per value (`world.covenants.perks.evaluators
+    .SITUATION_EVALUATORS`) — attaching a situation to a perk is content; adding a new
+    situation to the library is code. `world.covenants.perks.services
+    .applicable_perks(subject, *, effect_kind, resolution, target)` is the beneficiary
+    evaluation point every delivery seam calls; `announce_fired_perks` is the
+    dual-dispatch (WS + a direct telnet `location.msg_contents()` call, NOT
+    `message_location`) presentation-contract seam — see
+    `docs/systems/covenants.md`'s "Layer 4: Situational Perks" and ADR-0151 for the
+    full design (registry pattern, query ceiling, why `broadcast_action_outcome`
+    alone was insufficient for telnet parity). Delivery: `POWER_BONUS` via
+    `vow_situational_power_term` (`world.magic.services.power_terms`, see the Magic
+    section above); `CHECK_BONUS` via `perform_check`'s optional `situation_ctx`
+    parameter (`world.checks.services`).
   - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
     compatible with which `GearArchetype` values (read-only authored content)
   - `CovenantRoleBonus` — authored config: one row per

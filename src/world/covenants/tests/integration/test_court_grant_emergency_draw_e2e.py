@@ -185,6 +185,58 @@ class EmergencyDrawE2ETests(TestCase):
             "The base pull must still commit even when the emergency draw fails.",
         )
 
+    def test_combat_emergency_draw_threads_situation_ctx(self) -> None:
+        """#2536 Task 5 review fix: the combat emergency-draw petition check must
+        thread a live SituationContext into perform_check.
+
+        The combat call site (commit_combat_pull) has participant + encounter on
+        hand, so a CHECK_BONUS situational perk scoped to the Court petition
+        CheckType (spec §4's named use case) must be able to fire — which it
+        cannot unless the resolution context reaches perform_check. Spies on the
+        real perform_check (wrapped, not stubbed) and asserts the threaded
+        SituationContext carries a live CombatRoundContext for this participant.
+        """
+        from unittest.mock import patch
+
+        from world.checks import services as checks_services
+        from world.combat.round_context import CombatRoundContext
+        from world.covenants.perks.context import SituationContext
+
+        declaration = CastPullDeclaration(
+            resonance=self.resonance, tier=1, threads=(self.thread,), beseech_bonus=8
+        )
+        success_outcome = CheckOutcomeFactory(name="beseech_ctx_success", success_level=1)
+        real_perform_check = checks_services.perform_check
+        with (
+            force_check_outcome(success_outcome),
+            patch("world.checks.services.perform_check", wraps=real_perform_check) as spy,
+        ):
+            commit_combat_pull(declaration, self.participant, self.encounter, technique_id=0)
+
+        config = get_court_grant_config()
+        petition_calls = [
+            call
+            for call in spy.call_args_list
+            if len(call.args) > 1 and call.args[1] == config.petition_check_type
+        ]
+        self.assertEqual(
+            len(petition_calls), 1, "the emergency draw rolls the petition check exactly once"
+        )
+        situation_ctx = petition_calls[0].kwargs.get("situation_ctx")
+        self.assertIsInstance(
+            situation_ctx,
+            SituationContext,
+            "the combat petition check must thread a SituationContext (was never wired)",
+        )
+        self.assertEqual(situation_ctx.holder, self.servant_sheet)
+        self.assertEqual(situation_ctx.subject, self.servant_sheet)
+        self.assertIsNone(
+            situation_ctx.target,
+            "a Court-favor petition is not directed at the pull's combat target",
+        )
+        self.assertIsInstance(situation_ctx.resolution, CombatRoundContext)
+        self.assertEqual(situation_ctx.resolution.participant, self.participant)
+
     def test_escalation_pool_fires_after_consecutive_failure_threshold(self) -> None:
         """Regression (#1718 final-review Finding 2).
 

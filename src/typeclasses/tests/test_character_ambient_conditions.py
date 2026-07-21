@@ -100,3 +100,49 @@ class FameTierAtLeastTests(TestCase):
                 {"min_tier": FameTier.CELEBRITY, "perceiving_society": insular.name}
             )
         )
+
+
+class HasLegendDeedsTests(TestCase):
+    def test_false_when_no_deeds(self) -> None:
+        character = _character_with_sheet()
+        self.assertFalse(character.has_legend_deeds())
+
+    def test_true_when_common_knowledge_deed_exists(self) -> None:
+        from world.societies.factories import (
+            LegendEntryFactory,
+            LegendSpreadFactory,
+        )
+
+        character = _character_with_sheet()
+        persona = character.character_sheet.primary_persona
+        deed = LegendEntryFactory(persona=persona, base_value=10, is_active=True)
+        LegendSpreadFactory(legend_entry=deed, value_added=40)
+        self.assertTrue(character.has_legend_deeds())
+
+    def test_false_when_only_non_common_knowledge_deeds(self) -> None:
+        from world.societies.factories import LegendEntryFactory
+
+        character = _character_with_sheet()
+        persona = character.character_sheet.primary_persona
+        LegendEntryFactory(persona=persona, base_value=10, is_active=True)
+        self.assertFalse(character.has_legend_deeds())
+
+    def test_false_when_only_secret_linked_deeds(self) -> None:
+        from world.secrets.factories import SecretFactory
+        from world.societies.factories import (
+            LegendEntryFactory,
+            LegendSpreadFactory,
+        )
+
+        character = _character_with_sheet()
+        persona = character.character_sheet.primary_persona
+        deed = LegendEntryFactory(persona=persona, base_value=10, is_active=True)
+        LegendSpreadFactory(legend_entry=deed, value_added=40)
+        SecretFactory(legend_deed=deed)
+        self.assertFalse(character.has_legend_deeds())
+
+    def test_false_when_no_sheet(self) -> None:
+        from evennia_extensions.factories import CharacterFactory
+
+        character = CharacterFactory()
+        self.assertFalse(character.has_legend_deeds())

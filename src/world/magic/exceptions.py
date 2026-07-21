@@ -638,3 +638,30 @@ class NoActiveTraditionError(MagicError):
     ``CharacterTradition`` row (#2441) — already traditionless, nothing to leave."""
 
     user_message = "You have no tradition to leave."
+
+
+class GhostTutorError(MagicError):
+    """Base for ghost-tutor summoning failures (#2460)."""
+
+    user_message = "The summoning fails."
+
+
+class NotTraditionMemberError(GhostTutorError):
+    """Raised when the summoner is not an active member of the target tradition.
+
+    You can only summon a tutor for *your* tradition — the tutelage substitutes
+    for the dead-trainer side, it doesn't bypass membership.
+    """
+
+    user_message = "You are not a member of that tradition."
+
+
+class GhostTutelageAlreadyExistsError(GhostTutorError):
+    """Raised when a GhostTutelage already exists for (character, tradition).
+
+    Raised (not silently succeeded) so the transaction rolls back and the
+    consumed ritual components are refunded — the player loses nothing and
+    gets a clear 'already summoned' message.
+    """
+
+    user_message = "You have already summoned a tutor for that tradition."

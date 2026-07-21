@@ -423,11 +423,29 @@ class CombatTechniqueResolver:
             extra_contributions=extra_contributions,
         )
         extra_modifiers = breakdown.total
+
+        # #2536 Task 5: thread the live round context so CHECK_BONUS situational
+        # perks can fire on the technique's own offense check — the check-side
+        # sibling of resolve_combat_technique's POWER_BONUS threading above.
+        # holder/subject are both the checking character's own sheet (perform_check
+        # only reads .resolution/.target off this); target mirrors the cast's
+        # POWER_BONUS target resolution (_resolve_primary_target_sheet) so the same
+        # target-keyed situations are reachable for CHECK_BONUS perks too.
+        from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+        from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+
+        situation_ctx = SituationContext(
+            holder=self.participant.character_sheet,
+            subject=self.participant.character_sheet,
+            target=_resolve_primary_target_sheet(self.action),
+            resolution=CombatRoundContext(self.participant),
+        )
         return check_fn(
             character,
             self.offense_check_type,
             extra_modifiers=extra_modifiers,
             fatigue_penalty=penalty,
+            situation_ctx=situation_ctx,
         )
 
     def _sum_intensity_bump_pulls(self) -> int:
@@ -816,11 +834,26 @@ class CombatTechniqueResolver:
             pen_check_type,
             scene=self.participant.encounter.scene,
         )
+        # #2536 Task 5 review fix: thread the same live round context the
+        # offense check gets (_roll_check) — same class, same self.participant,
+        # same target resolution. A future CHECK_BONUS perk scoped to the
+        # penetration CheckType must not silently never fire just because this
+        # sibling roll skipped the seam every other combat check now honors.
+        from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+        from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+
+        situation_ctx = SituationContext(
+            holder=self.participant.character_sheet,
+            subject=self.participant.character_sheet,
+            target=_resolve_primary_target_sheet(self.action),
+            resolution=CombatRoundContext(self.participant),
+        )
         pen_result = perform_check(
             caster,
             pen_check_type,
             target_difficulty=ward,
             extra_modifiers=pen_breakdown.total,
+            situation_ctx=situation_ctx,
         )
         factor = get_penetration_factor(pen_result.success_level)
         builder = PowerLedgerBuilder.from_ledger(combat_ledger)
@@ -1031,6 +1064,41 @@ def _build_affected_targets(
     return targets
 
 
+def _resolve_primary_target_sheet(action: CombatRoundAction) -> CharacterSheet | None:
+    """Resolve the cast's primary target's ``CharacterSheet`` for situational perks (#2536).
+
+    Mirrors ``_build_affected_targets``'s ordering (opponent target takes
+    precedence over ally target when a technique somehow declares both — the
+    dispatcher never actually does this, but the ordering is kept consistent).
+    Only a PC/sheet-backed target can populate a ``CharacterSheet``:
+
+    - ``focused_ally_target`` → ``CombatParticipant.character_sheet`` (always
+      a real ``CharacterSheet`` — every ``CombatParticipant`` is a PC).
+    - ``focused_opponent_target`` → a ``CombatOpponent`` is NPC-only and has
+      no ``CharacterSheet`` FK of its own, UNLESS it is a "story NPC" linked
+      to a persistent ``scenes.Persona`` (``CombatOpponent.persona``, see
+      ``world/combat/escalation.py``'s ``opponent.persona.character_sheet``
+      for the same resolution pattern) — that gives a real ``CharacterSheet``
+      target-keyed situations can read. A bare (non-persona) NPC opponent
+      correctly resolves to ``None``: target-keyed situations (
+      ``TARGET_DISTRACTED``/``TARGET_SWAYED_BY_ALLY``/
+      ``TARGET_FOCUSED_ELSEWHERE``/``TARGET_FAVORABLY_DISPOSED``) simply
+      never hold against it, same as any other targetless cast.
+
+    For a multi-target/AoE cast only this single primary target is resolved
+    — per-target perk evaluation for AoE is a legitimate slice-2+
+    refinement (see ``vow_situational_power_term``'s docstring).
+    """
+    if action.focused_opponent_target_id:
+        opponent = action.focused_opponent_target
+        if opponent.persona_id is not None:
+            return opponent.persona.character_sheet
+        return None
+    if action.focused_ally_target_id:
+        return action.focused_ally_target.character_sheet
+    return None
+
+
 def _check_combat_target_prerequisites(
     technique: Technique, caster_od: ObjectDB, targets: list[ObjectDB]
 ) -> None:
@@ -1184,6 +1252,7 @@ def resolve_combat_technique(
     - NARRATIVE_ONLY: cosmetic surfacing
     - VITAL_BONUS: already wired through recompute_max_health_with_threads
     """
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.magic.services import use_technique  # noqa: PLC0415
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
 
@@ -1233,6 +1302,17 @@ def resolve_combat_technique(
             + sig_intensity_delta
             + _vulnerability_intensity_bonus(action)
         ),
+        # #2536 Task 4: thread the live round context so situational-perk
+        # POWER_BONUS providers can read combat-positioning situations
+        # (AT_RANGE/IN_MELEE/SURROUNDED/...). Cheap to build — CombatRoundContext
+        # just wraps the already-resolved participant (its encounter rides the
+        # SharedMemoryModel identity map), no extra query.
+        situation_ctx=CombatRoundContext(participant),
+        # #2536 Task 4 review fix: thread the cast's primary target's
+        # CharacterSheet so target-keyed situational-perk POWER_BONUS
+        # providers (TARGET_DISTRACTED/TARGET_SWAYED_BY_ALLY/
+        # TARGET_FOCUSED_ELSEWHERE/TARGET_FAVORABLY_DISPOSED) can fire.
+        target_sheet=_resolve_primary_target_sheet(action),
     )
 
     return _build_combat_result(
@@ -5509,15 +5589,28 @@ def _resolve_social_check(
     participant: CombatParticipant,
     check_type_name: str,
     target_difficulty: int,
+    target: CharacterSheet | None = None,
 ) -> int:
     """Roll a social-combat check and return the success_level (#2015).
 
     Resolves the CheckType by name (seeded by social_combat_content). Routes
     modifiers through ``collect_check_modifiers`` (the same seam combat uses),
     then ``perform_check``. Returns ``check_result.success_level``.
+
+    ``target`` (#2536 Task 6 fold-in fix, extended to Parley on review): the
+    acting participant's declared opponent, when this social action has one
+    — threaded into ``SituationContext.target`` so target-keyed CHECK_BONUS
+    perks (``TARGET_DISTRACTED``/``TARGET_SWAYED_BY_ALLY``/
+    ``TARGET_FOCUSED_ELSEWHERE``/``TARGET_FAVORABLY_DISPOSED``) can fire on
+    Demoralize/Taunt/Parley, whose callers all resolve
+    ``_resolve_primary_target_sheet(action)`` and pass it through. Rally
+    (targets an ally, not an opponent) keeps the default ``None`` — it has no
+    opposing target for a TARGET_* situation to key off.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import collect_check_modifiers, perform_check  # noqa: PLC0415
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
 
     check_type = CheckType.objects.filter(name=check_type_name, is_active=True).first()
     if check_type is None:
@@ -5527,11 +5620,21 @@ def _resolve_social_check(
     breakdown = collect_check_modifiers(
         participant.character_sheet, check_type, scene=participant.encounter.scene
     )
+    # #2536 Task 5 review fix (Task 6: now target-threaded for callers that
+    # have one — see the docstring above): thread the live round context so
+    # CHECK_BONUS situational perks can fire on Rally/Demoralize/Taunt/Parley.
+    situation_ctx = SituationContext(
+        holder=participant.character_sheet,
+        subject=participant.character_sheet,
+        target=target,
+        resolution=CombatRoundContext(participant),
+    )
     result = perform_check(
         character,
         check_type,
         target_difficulty=target_difficulty,
         extra_modifiers=breakdown.total,
+        situation_ctx=situation_ctx,
     )
     return result.success_level or 0
 
@@ -5605,7 +5708,9 @@ def _resolve_demoralize(
         return outcome
 
     target_difficulty = _social_combat_difficulty(target)
-    success_level = _resolve_social_check(participant, "Demoralize", target_difficulty)
+    success_level = _resolve_social_check(
+        participant, "Demoralize", target_difficulty, target=_resolve_primary_target_sheet(action)
+    )
 
     if success_level < 1:
         # Failed: mindless targets narrate "the construct is unmoved."
@@ -5633,7 +5738,9 @@ def _resolve_taunt(
     target = action.focused_opponent_target
     if target is not None:
         target_difficulty = _social_combat_difficulty(target)
-        success_level = _resolve_social_check(participant, "Taunt", target_difficulty)
+        success_level = _resolve_social_check(
+            participant, "Taunt", target_difficulty, target=_resolve_primary_target_sheet(action)
+        )
 
         if success_level >= 1:
             accumulate_threat(
@@ -5682,7 +5789,9 @@ def _resolve_parley(
         return outcome
 
     target_difficulty = _social_combat_difficulty(target)
-    success_level = _resolve_social_check(participant, "Parley", target_difficulty)
+    success_level = _resolve_social_check(
+        participant, "Parley", target_difficulty, target=_resolve_primary_target_sheet(action)
+    )
 
     if success_level < 1:
         # Failed: mindless targets narrate "it has no mind to reach."
@@ -7665,11 +7774,28 @@ def _try_technique_interpose(
         # same pairing) — fail safe like the resolved-is-None branch above:
         # no roll, no cost, damage proceeds to the next protection layer.
         return
+    # #2536 Task 5 review fix: thread the live round context — action.participant
+    # is already dereferenced elsewhere in this function (current_position below),
+    # so the plumbing a CHECK_BONUS perk needs is trivially available; skipping it
+    # would silently strand a future perk scoped to the guardian's protective
+    # technique CheckType. No natural offense `target` exists on a reactive
+    # protective roll (there is no opposing actor being checked against), so
+    # target stays None — only holder/subject/resolution-keyed situations apply.
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+
+    situation_ctx = SituationContext(
+        holder=action.participant.character_sheet,
+        subject=action.participant.character_sheet,
+        target=None,
+        resolution=CombatRoundContext(action.participant),
+    )
     check_result = perform_check(
         interposer,
         check_type,
         target_difficulty=severity,
         extra_modifiers=extra_modifiers,
+        situation_ctx=situation_ctx,
     )
 
     # Debit on fire (any non-fizzle resolution) — anima, not fatigue.

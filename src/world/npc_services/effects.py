@@ -657,9 +657,17 @@ def _technique_available_to_learner(
     options = get_technique_options(path, gift, trainer_tradition)
     if technique in options.pool:
         return True
-    if technique not in options.signature:
-        return False
     if trainer_tradition is None:
+        # Generalist trainer: check for ghost tutelage (#2460).
+        # The signature list from get_technique_options(path, gift, None) is
+        # empty (TraditionGiftGrant.tradition is non-nullable), so re-query
+        # with each tutelage's tradition to get the real signature list.
+        for tutelage in sheet.ghost_tutelages.select_related("tradition"):
+            tutelage_options = get_technique_options(path, gift, tutelage.tradition)
+            if technique in tutelage_options.signature:
+                return True
+        return False
+    if technique not in options.signature:
         return False
     return sheet.character_traditions.filter(
         tradition=trainer_tradition, left_at__isnull=True

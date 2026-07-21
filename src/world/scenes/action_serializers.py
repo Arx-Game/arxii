@@ -13,6 +13,8 @@ from world.magic.services.hostility import is_technique_hostile
 from world.scenes.action_constants import (
     ActionDelivery,
     ActionRequestStatus,
+    BoonKind,
+    BoonSumTier,
     ConsentDecision,
     DifficultyChoice,
 )
@@ -367,10 +369,31 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
     technique_name = serializers.SerializerMethodField()
     combat_risk_level = serializers.SerializerMethodField()
     combat_stakes = serializers.SerializerMethodField()
+    boon = serializers.SerializerMethodField()
 
     def get_technique_name(self, obj: SceneActionRequest) -> str | None:
         """Human label for the enhancing technique (#892 — ConsentPrompt display)."""
         return obj.technique.name if obj.technique_id else None
+
+    def get_boon(self, obj: SceneActionRequest) -> dict | None:
+        """The structured ask riding this request (#2540) — what the defender is asked for.
+
+        The specified-up-front payload is what lets a piloted target gauge whether it's
+        an easy "just no": kind, the sum tier + frozen coppers for money, the item's
+        display name, or the deed text.
+        """
+        from world.scenes.boon_models import Boon  # noqa: PLC0415
+
+        row = Boon.objects.filter(action_request=obj).first()
+        if row is None:
+            return None
+        return {
+            "kind": row.kind,
+            "sum_tier": row.sum_tier,
+            "amount": row.amount,
+            "item_name": str(row.item_instance) if row.item_instance_id else None,
+            "deed_text": row.deed_text,
+        }
 
     def _compute_gating_risk(self, obj: SceneActionRequest) -> str | None:
         if obj.status != ActionRequestStatus.PENDING or not obj.is_standalone_cast:
@@ -421,6 +444,7 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
             "strain_commitment",
             "combat_risk_level",
             "combat_stakes",
+            "boon",
             "created_at",
             "resolved_at",
         ]
@@ -429,12 +453,45 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
             "status",
             "combat_risk_level",
             "combat_stakes",
+            "boon",
             "resolved_difficulty",
             "result_interaction",
             "action_interaction",
             "created_at",
             "resolved_at",
         ]
+
+
+class BoonSumOptionSerializer(serializers.Serializer):
+    """One money-sum option against a specific target (#2540 — 'Fair (200g)')."""
+
+    tier = serializers.ChoiceField(choices=BoonSumTier.choices)
+    label = serializers.CharField()
+    coppers = serializers.IntegerField()
+
+
+class BoonOptionsSerializer(serializers.Serializer):
+    """Schema shape for the boon-options read (empty list = no money option shown)."""
+
+    sum_tiers = BoonSumOptionSerializer(many=True)
+
+
+class BoonAskSerializer(serializers.Serializer):
+    """The structured-ask payload on a `boon` dispatch (#2540).
+
+    MONEY asks carry a ``sum_tier`` (never a raw amount — the concrete coppers derive
+    from the target's purse server-side); item asks name an ``item_instance_id``; DEED
+    asks carry the deed text. Eligibility itself is validated by
+    ``validate_boon_ask`` inside ``create_action_request`` — this serializer only
+    shapes the payload.
+    """
+
+    kind = serializers.ChoiceField(choices=BoonKind.choices)
+    sum_tier = serializers.ChoiceField(
+        choices=BoonSumTier.choices, required=False, allow_blank=True, default=""
+    )
+    item_instance_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    deed_text = serializers.CharField(required=False, allow_blank=True, default="", max_length=2000)
 
 
 class SceneActionRequestCreateSerializer(serializers.Serializer):
@@ -478,6 +535,9 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
     # #1919: Optional thread-pull declaration on social actions. Validated via
     # _validate_pull_declaration (social path — no hostile-technique check).
     pull = CastPullRequestSerializer(required=False, allow_null=True)
+    # #2540: the structured-ask payload — only meaningful when action_key == "boon".
+    # Eligibility (dial 1) is validated by create_action_request before any row exists.
+    boon = BoonAskSerializer(required=False, allow_null=True)
 
     def validate(self, attrs: dict) -> dict:
         """Normalize target fields into ``target_ids``; cap strain and fury.

@@ -709,3 +709,42 @@ class CGGlimpseTagEndpointTest(TestCase):
         assert response.status_code == status.HTTP_200_OK
 
         assert len(big.captured_queries) == len(small.captured_queries)
+
+    def test_path_filter_excludes_tags_not_on_path(self):
+        """Tags with a non-empty paths M2M not containing path_id are excluded."""
+        path_a = PathFactory(name="Path of Steel")
+        path_b = PathFactory(name="Path of Shadows")
+        GlimpseTagFactory(axis=GlimpseTagAxis.TRIGGER, slug="trauma")
+        restricted_to_a = GlimpseTagFactory(axis=GlimpseTagAxis.TRIGGER, slug="patron-chose-you")
+        restricted_to_a.paths.add(path_a)
+
+        response = self.client.get("/api/character-creation/glimpse-tags/", {"path_id": path_b.id})
+
+        assert response.status_code == status.HTTP_200_OK
+        slugs = {row["slug"] for row in response.data}
+        assert "trauma" in slugs
+        assert "patron-chose-you" not in slugs
+
+    def test_path_filter_includes_tags_on_matching_path(self):
+        """Tags restricted to the requested path are included."""
+        path_a = PathFactory(name="Path of Steel")
+        restricted = GlimpseTagFactory(axis=GlimpseTagAxis.TRIGGER, slug="patron-chose-you")
+        restricted.paths.add(path_a)
+
+        response = self.client.get("/api/character-creation/glimpse-tags/", {"path_id": path_a.id})
+
+        assert response.status_code == status.HTTP_200_OK
+        slugs = {row["slug"] for row in response.data}
+        assert "patron-chose-you" in slugs
+
+    def test_no_path_filter_returns_all_tags(self):
+        """Omitting path_id returns all active tags (post-CG editor mode)."""
+        path_a = PathFactory(name="Path of Steel")
+        restricted = GlimpseTagFactory(axis=GlimpseTagAxis.TRIGGER, slug="patron-chose-you")
+        restricted.paths.add(path_a)
+
+        response = self.client.get("/api/character-creation/glimpse-tags/")
+
+        assert response.status_code == status.HTTP_200_OK
+        slugs = {row["slug"] for row in response.data}
+        assert "patron-chose-you" in slugs

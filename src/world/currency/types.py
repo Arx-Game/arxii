@@ -53,3 +53,17 @@ class ImprovementResult:
     gross_raised: bool
     graft_cracked: bool
     new_graft_pct: int
+
+
+@dataclass(frozen=True)
+class DistributionResult:
+    """Outcome of one full collection-distribution dispatch (#2540, ruled 2026-07-20).
+
+    Sequence: collect -> debt principal (a flat share of gross, first) -> member
+    allowance (from the post-debt remainder). ``debt_principal_paid`` is the coppers
+    that left the treasury toward principal this dispatch.
+    """
+
+    collection: CollectionResult
+    debt_principal_paid: int
+    allowance: AllowanceResult
