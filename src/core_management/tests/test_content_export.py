@@ -867,7 +867,7 @@ class VowSituationalPerkContentExportTests(TestCase):
         from core_management.content_fixtures import build_all, load_entries
 
         load_result = build_all(self.root)
-        created, _updated = load_entries(load_result)
+        created, _updated, _ = load_entries(load_result)
         assert created == 0, f"Round-trip created {created} new records (expected 0)"
 
         situation.refresh_from_db()
