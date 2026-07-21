@@ -512,3 +512,13 @@ class CharacterDistinctionOtherTests(TestCase):
         )
         self.assertEqual(other_entry.status, OtherStatus.MAPPED)
         self.assertEqual(other_entry.staff_mapped_distinction, caffeine_addiction)
+
+
+class DistinctionPostCgImmutableTests(TestCase):
+    """The #2607 opt-out denylist flag defaults to available."""
+
+    def test_defaults_false(self) -> None:
+        from world.distinctions.factories import DistinctionFactory
+
+        distinction = DistinctionFactory()
+        self.assertFalse(distinction.post_cg_immutable)

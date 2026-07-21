@@ -210,6 +210,16 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
         default=True,
         help_text="Whether this distinction is available for selection.",
     )
+    post_cg_immutable = models.BooleanField(
+        default=False,
+        help_text=(
+            "Denylist for post-CG table change requests (#2607): when True this "
+            "distinction is hidden from the request list and cannot be gained or "
+            "shed through a GM table request. Reactively curated; default False. "
+            "This is the soft/thematic guard; the hard technical guard (resonance/"
+            "asset/codex grants) is derived, see change_supported() in services.py."
+        ),
+    )
 
     # Privacy (#1334): instead of a public/private flag, a sensitive kind *relocates* into a
     # Secret. Most kinds are public; criminal / scandalous kinds set ``secret_by_default`` so
