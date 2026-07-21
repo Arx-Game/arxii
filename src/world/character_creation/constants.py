@@ -58,6 +58,10 @@ SHROUDWATCH_ACADEMY_NAME = "Shroudwatch Academy"
 # finalize hook does the same rather than inventing a new marker.
 UNBOUND_TRADITION_NAME = "Unbound"
 
+# Path of the Chosen name — mirrors the constant in worship_content.py so the
+# CG finalize hook can match without importing the seed module (#2550).
+PATH_OF_THE_CHOSEN_NAME = "Path of the Chosen"
+
 # Slug of the "Unbound" drawback Distinction (#2442) — seeded by
 # ``world.seeds.character_creation.ensure_unbound_drawback_distinction`` and
 # wired onto Unbound's own ``BeginningTradition.required_distinction`` (same

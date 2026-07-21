@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from world.worship.models import (
+    ChosenFavorConfig,
     DevotionStanding,
     DivineInterventionConfig,
     Miracle,
@@ -38,8 +39,16 @@ class WorshipGrantAdmin(admin.ModelAdmin):
 
 @admin.register(DevotionStanding)
 class DevotionStandingAdmin(admin.ModelAdmin):
-    list_display = ("character_sheet", "being", "favor", "lifetime_favor")
-    list_filter = ("being",)
+    list_display = (
+        "character_sheet",
+        "being",
+        "favor",
+        "lifetime_favor",
+        "valence",
+        "established_at",
+        "released_at",
+    )
+    list_filter = ("being", "valence")
     raw_id_fields = ("character_sheet",)
 
 
@@ -109,3 +118,8 @@ class MiraclePerformanceAdmin(admin.ModelAdmin):
 @admin.register(DivineInterventionConfig)
 class DivineInterventionConfigAdmin(admin.ModelAdmin):
     list_display = ("favor_threshold", "cooldown_hours", "min_pool_for_intervention")
+
+
+@admin.register(ChosenFavorConfig)
+class ChosenFavorConfigAdmin(admin.ModelAdmin):
+    list_display = ("id", "anima_recovery_threshold", "anima_recovery_bonus")
