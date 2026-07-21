@@ -382,10 +382,11 @@ class ResolveNpcAttackSituationalPerkTests(TestCase):
         self.assertGreater(result.success_level, BOTCH_SUCCESS_LEVEL_MAX)
         self.assertEqual(result.success_level, -1)
 
-    def test_attacker_abyssal_tier_floor_binds_only_vs_authored_abyssal_opponent(self) -> None:
-        """A TIER_FLOOR perk gated on ATTACKER_AFFINITY raises the defender's forced
-        failure to the floor only when the attacking opponent is authored Abyssal —
-        an otherwise-identical non-Abyssal attacker leaves the outcome untouched.
+    def test_attacker_affinity_tier_floor_binds_only_vs_authored_matching_opponent(self) -> None:
+        """A TIER_FLOOR perk gated on ATTACKER_AFFINITY (authored affinity=ABYSSAL,
+        #2623 spec §2 — a required param) raises the defender's forced failure to
+        the floor only when the attacking opponent is authored Abyssal — an
+        otherwise-identical non-Abyssal attacker leaves the outcome untouched.
         """
         _chart, outcomes = self._chart(-1, 0, 1)
         perk = VowSituationalPerkFactory(
@@ -394,7 +395,9 @@ class ResolveNpcAttackSituationalPerkTests(TestCase):
             floor_success_level=1,
             beneficiary=PerkBeneficiary.SELF,
         )
-        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.ATTACKER_AFFINITY)
+        VowSituationalPerkSituationFactory(
+            perk=perk, situation=Situation.ATTACKER_AFFINITY, affinity=AffinityType.ABYSSAL
+        )
 
         abyssal_action = self._npc_action(affinity=AffinityType.ABYSSAL)
         with force_check_outcome(outcomes[-1]):

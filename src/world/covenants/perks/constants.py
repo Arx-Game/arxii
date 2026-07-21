@@ -20,11 +20,13 @@ class Situation(models.TextChoices):
     addition (#2536 Task 3); ``COMBAT_OPENED_FROM_PARLEY`` and
     ``AMBUSH_UNDERWAY`` are slice 3's origin-marker addition (#2536 Task 4);
     ``ALLY_INTERCEPTED_FOR_ME`` is slice 3's declared-guard addition (#2536
-    Task 5); ``ATTACKER_AFFINITY`` (renamed from ``ATTACKER_ABYSSAL``, #2623)
-    is slice 3's defense-side seam addition (#2536 Task 6) — the enum ships
-    no other inert entries; every value here
-    has a registered evaluator with signature ``(ctx: SituationContext) ->
-    bool``.
+    Task 5); ``ATTACKER_AFFINITY`` (renamed from its original Abyssal-only
+    v1 spelling, #2623) is slice 3's defense-side seam addition (#2536 Task
+    6) — the enum ships no other inert entries; every value here has a
+    registered evaluator with signature ``(ctx: SituationContext, params:
+    SituationParams) -> bool`` (params parameterization landed #2623 Task 3 —
+    see ``SITUATION_PARAM_SPECS`` below for which situations read which
+    columns).
     ``SituationContext`` (``perks.context``) carries four required fields plus
     slice-3 scoping/defense fields: ``holder`` (the perk-owning vow-holder),
     ``subject`` (the acting character whose cast/check is resolving — equals

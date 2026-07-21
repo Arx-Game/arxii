@@ -37,6 +37,7 @@ from world.magic.factories import (
 )
 from world.npc_services.factories import NPCStandingFactory
 from world.scenes.factories import SceneFactory
+from world.vitals.models import CharacterVitals
 
 
 class SelfPerkTests(TestCase):
@@ -555,6 +556,82 @@ class AndCompositionAndRungLadderTests(TestCase):
         self.assertEqual(len(fired), 1)
         self.assertEqual(fired[0].magnitude_tenths, 10)
         self.assertIsNone(fired[0].rung_number)
+
+
+class RungParamOverrideTests(TestCase):
+    """A rung's OWN authored params scope its extra requirement independently
+    of the base row's (paramless) requirement (#2623 spec §2) — regression for
+    the resolver's per-row ``(situation, params, holder_pk)`` cache key: the
+    SAME situation (``ALLY_LOW_HEALTH``) attached twice with DIFFERENT
+    ``threshold_percent`` values must evaluate as two distinct requirements,
+    not collapse to one cached result.
+    """
+
+    def setUp(self) -> None:
+        self.covenant = CovenantFactory()
+        self.role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
+        self.subject_sheet = CharacterSheetFactory()
+        self.mate_sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=self.subject_sheet,
+            covenant=self.covenant,
+            covenant_role=self.role,
+            engaged=True,
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=self.mate_sheet,
+            covenant=self.covenant,
+            covenant_role=self.role,
+            engaged=True,
+        )
+        self.encounter = CombatEncounterFactory()
+        self.subject_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.subject_sheet
+        )
+        CombatParticipantFactory(encounter=self.encounter, character_sheet=self.mate_sheet)
+        self.resolution = CombatRoundContext(self.subject_participant)
+
+        self.perk = VowSituationalPerkFactory(
+            covenant_role=self.role,
+            beneficiary=PerkBeneficiary.SELF,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            magnitude_tenths=10,
+        )
+        VowSituationalPerkSituationFactory(perk=self.perk, situation=Situation.ALLY_LOW_HEALTH)
+        self.rung1 = VowSituationalPerkRungFactory(
+            perk=self.perk,
+            rung_number=1,
+            extra_situation=Situation.ALLY_LOW_HEALTH,
+            magnitude_tenths=20,
+            threshold_percent=25,
+        )
+
+    def _fire(self) -> list[FiredPerk]:
+        return applicable_perks(
+            self.subject_sheet,
+            effect_kind=PerkEffectKind.POWER_BONUS,
+            resolution=self.resolution,
+            target=None,
+        )
+
+    def test_base_only_when_rung_threshold_not_met(self) -> None:
+        """Mate at 40% health: the base row (paramless -> module default 50%)
+        holds, but rung 1's OWN authored threshold_percent=25 does not -- base
+        only, not the rung."""
+        CharacterVitals.objects.create(character_sheet=self.mate_sheet, health=40, max_health=100)
+        fired = self._fire()
+        self.assertEqual(len(fired), 1)
+        self.assertEqual(fired[0].magnitude_tenths, 10)
+        self.assertIsNone(fired[0].rung_number)
+
+    def test_rung_fires_when_rung_threshold_met(self) -> None:
+        """Mate at 20% health meets both the base row's module default AND
+        rung 1's own authored threshold_percent=25 -- rung 1 fires."""
+        CharacterVitals.objects.create(character_sheet=self.mate_sheet, health=20, max_health=100)
+        fired = self._fire()
+        self.assertEqual(len(fired), 1)
+        self.assertEqual(fired[0].magnitude_tenths, 20)
+        self.assertEqual(fired[0].rung_number, 1)
 
 
 class PerkResolutionQueryBudgetTests(TestCase):

@@ -1,8 +1,10 @@
-"""Situation evaluator registry for per-vow situational perks (#2536, Task 2).
+"""Situation evaluator registry for per-vow situational perks (#2536, Task 2;
+parameterized #2623 Task 3).
 
-Every registered evaluator has signature ``(ctx: SituationContext) -> bool``,
-registered under a ``Situation`` value via ``@register(Situation.X)``. Rules
-(spec §1, enforced by convention here, not by the type system):
+Every registered evaluator has signature ``(ctx: SituationContext, params:
+SituationParams) -> bool``, registered under a ``Situation`` value via
+``@register(Situation.X)``. Rules (spec §1, enforced by convention here, not
+by the type system):
 
 - Pure read — no writes, ever.
 - At most one query, or a small fixed number of BATCHED queries when a
@@ -11,6 +13,14 @@ registered under a ``Situation`` value via ``@register(Situation.X)``. Rules
 - Missing required context (``None`` field, absent resolution shape) ->
   ``False``. A combat-positioning evaluator simply never holds outside
   combat; a DB-state evaluator evaluates anywhere.
+- ``params`` (#2623 spec §2) carries the authored row's parameter columns —
+  ``NO_PARAMS`` for every pre-#2623 row shape. A blank/``None`` field on
+  ``params`` means "use this evaluator's documented module-constant default"
+  UNLESS the situation's ``SITUATION_PARAM_SPECS`` entry marks the field
+  required (``perks/constants.py``), in which case a blank value means the
+  situation never holds — see ``attacker_affinity``'s required ``affinity``.
+  Evaluators that read no params at all still accept the argument (signature
+  uniformity across the registry) and simply ignore it.
 
 Import direction (ADR-0010): this module is part of ``world.covenants`` and
 reaches into ``world.combat`` / ``world.conditions`` / ``world.magic`` /
@@ -23,14 +33,15 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from world.covenants.perks.constants import Situation
-from world.covenants.perks.context import SituationContext
+from world.covenants.perks.constants import Situation, SituationOriginSide
+from world.covenants.perks.context import SituationContext, SituationParams
 
 if TYPE_CHECKING:
-    from world.combat.models import CombatParticipant, CombatRoundAction
+    from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
     from world.conditions.models import ConditionInstance
+    from world.magic.models.aura import CharacterAura
 
-SITUATION_EVALUATORS: dict[str, Callable[[SituationContext], bool]] = {}
+SITUATION_EVALUATORS: dict[str, Callable[[SituationContext, SituationParams], bool]] = {}
 
 # --- Module-tuned thresholds (spec §1's "document the threshold as a module
 # constant" instruction) ---
@@ -52,16 +63,33 @@ FAVORABLY_DISPOSED_MIN_AFFECTION = 1
 
 def register(
     situation: str,
-) -> Callable[[Callable[[SituationContext], bool]], Callable[[SituationContext], bool]]:
+) -> Callable[
+    [Callable[[SituationContext, SituationParams], bool]],
+    Callable[[SituationContext, SituationParams], bool],
+]:
     """Decorator registering an evaluator function under a ``Situation`` value."""
 
     def _decorator(
-        func: Callable[[SituationContext], bool],
-    ) -> Callable[[SituationContext], bool]:
+        func: Callable[[SituationContext, SituationParams], bool],
+    ) -> Callable[[SituationContext, SituationParams], bool]:
         SITUATION_EVALUATORS[situation] = func
         return func
 
     return _decorator
+
+
+def _origin_side_matches(encounter: CombatEncounter, origin_side: str) -> bool:
+    """Directed-origin gate (#2623 spec §3): blank = side-blind; a non-blank
+    side with a NULL ``initiated_by_pc_side`` never holds (direction
+    unprovable). v1 side model: the subject is always a PC, so PC side =
+    "ours"."""
+    if not origin_side:
+        return True
+    if encounter.initiated_by_pc_side is None:
+        return False
+    if origin_side == SituationOriginSide.OURS:
+        return encounter.initiated_by_pc_side
+    return not encounter.initiated_by_pc_side
 
 
 def _resolution_participant(resolution: object | None) -> CombatParticipant | None:
@@ -130,20 +158,26 @@ def _melee_state(ctx: SituationContext) -> bool | None:
 
 
 @register(Situation.AT_RANGE)
-def at_range(ctx: SituationContext) -> bool:
-    """See ``_melee_state``. AT_RANGE holds when engaged but none are adjacent."""
+def at_range(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """See ``_melee_state``. AT_RANGE holds when engaged but none are adjacent.
+
+    Reads no params (absent from ``SITUATION_PARAM_SPECS``)."""
     return _melee_state(ctx) is False
 
 
 @register(Situation.IN_MELEE)
-def in_melee(ctx: SituationContext) -> bool:
-    """See ``_melee_state``. IN_MELEE holds when an engaged enemy shares position."""
+def in_melee(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """See ``_melee_state``. IN_MELEE holds when an engaged enemy shares position.
+
+    Reads no params (absent from ``SITUATION_PARAM_SPECS``)."""
     return _melee_state(ctx) is True
 
 
 @register(Situation.SURROUNDED)
-def surrounded(ctx: SituationContext) -> bool:
-    """Subject has >= SURROUNDED_LOCK_THRESHOLD active EngagementLock rows.
+def surrounded(ctx: SituationContext, params: SituationParams) -> bool:
+    """Subject has >= the authored (or ``SURROUNDED_LOCK_THRESHOLD`` default)
+    count of active EngagementLock rows (#2623 spec §2: optional
+    ``count_threshold`` param, ``SITUATION_PARAM_SPECS``).
 
     Data source, verified: ``EngagementLock`` (``world/combat/models.py:3011``),
     filtered on the subject's participant + ``status=ACTIVE``. Adjacency is
@@ -169,7 +203,10 @@ def surrounded(ctx: SituationContext) -> bool:
         participant=participant,
         status=EngagementLockStatus.ACTIVE,
     ).count()
-    return count >= SURROUNDED_LOCK_THRESHOLD
+    threshold = (
+        params.count_threshold if params.count_threshold is not None else SURROUNDED_LOCK_THRESHOLD
+    )
+    return count >= threshold
 
 
 def _distraction_condition_instance(target_character: object) -> ConditionInstance | None:
@@ -204,15 +241,17 @@ def _distraction_condition_instance(target_character: object) -> ConditionInstan
 
 
 @register(Situation.TARGET_DISTRACTED)
-def target_distracted(ctx: SituationContext) -> bool:
-    """See ``_distraction_condition_instance``. False when ``target`` is None."""
+def target_distracted(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """See ``_distraction_condition_instance``. False when ``target`` is None.
+
+    Reads no params (absent from ``SITUATION_PARAM_SPECS``)."""
     if ctx.target is None:
         return False
     return _distraction_condition_instance(ctx.target.character) is not None
 
 
 @register(Situation.TARGET_SWAYED_BY_ALLY)
-def target_swayed_by_ally(ctx: SituationContext) -> bool:
+def target_swayed_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
     """Same condition as TARGET_DISTRACTED, applied by holder or a covenant-mate.
 
     Deliberately reads HISTORY via ``shares_covenant_with`` (ACTIVE membership
@@ -227,7 +266,8 @@ def target_swayed_by_ally(ctx: SituationContext) -> bool:
     (``typeclasses/characters.py:247`` — reads the cached covenant-role
     handler, "used by the reactive-filter ``shares_covenant`` op"). One query
     for the condition instance; ``shares_covenant_with`` is a cached-handler
-    read (no fresh query once the handler is warm).
+    read (no fresh query once the handler is warm). Reads no params (absent
+    from ``SITUATION_PARAM_SPECS``).
     """
     if ctx.holder is None or ctx.target is None:
         return False
@@ -281,7 +321,10 @@ def _target_declared_action(ctx: SituationContext) -> CombatRoundAction | None:
 
 
 @register(Situation.TARGET_FOCUSED_ELSEWHERE)
-def target_focused_elsewhere(ctx: SituationContext) -> bool:
+def target_focused_elsewhere(
+    ctx: SituationContext,
+    params: SituationParams,  # noqa: ARG001
+) -> bool:
     """Target's declared CombatRoundAction this round targets someone != subject.
 
     Data source, verified: ``CombatRoundAction.focused_opponent_target`` /
@@ -295,7 +338,8 @@ def target_focused_elsewhere(ctx: SituationContext) -> bool:
     branch. ``focused_opponent_target`` is an NPC (never the subject, since
     ``subject`` is always a PC) so its presence alone means "elsewhere"; a
     ``focused_ally_target`` must be compared against the subject directly.
-    One query (see ``_target_declared_action``).
+    One query (see ``_target_declared_action``). Reads no params (absent from
+    ``SITUATION_PARAM_SPECS``).
     """
     action = _target_declared_action(ctx)
     if action is None:
@@ -308,8 +352,12 @@ def target_focused_elsewhere(ctx: SituationContext) -> bool:
 
 
 @register(Situation.ALLY_LOW_HEALTH)
-def ally_low_health(ctx: SituationContext) -> bool:
-    """Any covenant-mate of the holder is below ALLY_LOW_HEALTH_FRACTION.
+def ally_low_health(ctx: SituationContext, params: SituationParams) -> bool:
+    """Any covenant-mate of the holder is below the authored (or
+    ``ALLY_LOW_HEALTH_FRACTION`` default) health fraction (#2623 spec §2:
+    optional ``threshold_percent`` param — an authored percent, e.g. 25 means
+    "below 25% health," converted to the same 0-1 fraction scale
+    ``health_percentage`` uses).
 
     "Ally" scoping rule (Tehom's 2026-07-20 reversal of #2536's slice-1
     ruling): a candidate mate counts if they hold a non-departed
@@ -373,6 +421,11 @@ def ally_low_health(ctx: SituationContext) -> bool:
     if not mate_sheet_ids:
         return False
 
+    fraction = (
+        params.threshold_percent / 100
+        if params.threshold_percent is not None
+        else ALLY_LOW_HEALTH_FRACTION
+    )
     for mate in mates:
         if mate.character_sheet_id not in mate_sheet_ids:
             continue
@@ -380,13 +433,13 @@ def ally_low_health(ctx: SituationContext) -> bool:
             vitals = mate.character_sheet.vitals
         except CharacterVitals.DoesNotExist:
             continue
-        if vitals.health_percentage < ALLY_LOW_HEALTH_FRACTION:
+        if vitals.health_percentage < fraction:
             return True
     return False
 
 
 @register(Situation.DURING_NEGOTIATION)
-def during_negotiation(ctx: SituationContext) -> bool:
+def during_negotiation(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
     """Subject is in an active Scene and NOT resolving via a combat context.
 
     Simplest honest version per the plan (no dedicated social/parley scene
@@ -400,7 +453,8 @@ def during_negotiation(ctx: SituationContext) -> bool:
     ``CombatEncounter`` is not a ``Battle``) — the explicit
     ``resolution.participant`` check above is what actually guards against a
     false positive during real PC/NPC combat. One query (cached on the
-    location after the first lookup).
+    location after the first lookup). Reads no params (absent from
+    ``SITUATION_PARAM_SPECS``).
     """
     if ctx.subject is None:
         return False
@@ -417,8 +471,10 @@ def during_negotiation(ctx: SituationContext) -> bool:
 
 
 @register(Situation.TARGET_FAVORABLY_DISPOSED)
-def target_favorably_disposed(ctx: SituationContext) -> bool:
-    """Target's NPCStanding.affection toward holder is >= FAVORABLY_DISPOSED_MIN_AFFECTION.
+def target_favorably_disposed(ctx: SituationContext, params: SituationParams) -> bool:
+    """Target's NPCStanding.affection toward holder is >= the authored (or
+    ``FAVORABLY_DISPOSED_MIN_AFFECTION`` default) minimum (#2623 spec §2:
+    optional ``count_threshold`` param, ``SITUATION_PARAM_SPECS``).
 
     Data source, verified: ``NPCStanding`` (``world/npc_services/models.py:44``
     — "Per-(PC persona, NPC persona) durable disposition"), the exact ledger
@@ -445,15 +501,20 @@ def target_favorably_disposed(ctx: SituationContext) -> bool:
     except MissingPrimaryPersonaError:
         return False
 
+    minimum = (
+        params.count_threshold
+        if params.count_threshold is not None
+        else FAVORABLY_DISPOSED_MIN_AFFECTION
+    )
     return NPCStanding.objects.filter(
         persona=holder_persona,
         npc_persona=target_persona,
-        affection__gte=FAVORABLY_DISPOSED_MIN_AFFECTION,
+        affection__gte=minimum,
     ).exists()
 
 
 @register(Situation.CHAMPION_DUEL)
-def champion_duel(ctx: SituationContext) -> bool:
+def champion_duel(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
     """True when the SUBJECT is a participant in a Champion-duel combat encounter.
 
     ``is_champion_duel`` (#2536 slice 3) is stamped exclusively by
@@ -465,6 +526,7 @@ def champion_duel(ctx: SituationContext) -> bool:
     ``CombatRoundContext``) into every ``SituationContext``, so no new
     threading is needed for this situation — one cached FK read
     (``participant.encounter``, idmapper-cached) and False outside combat.
+    Reads no params (absent from ``SITUATION_PARAM_SPECS``).
     """
     participant = _resolution_participant(ctx.resolution)
     if participant is None:
@@ -473,8 +535,12 @@ def champion_duel(ctx: SituationContext) -> bool:
 
 
 @register(Situation.COMBAT_OPENED_FROM_PARLEY)
-def combat_opened_from_parley(ctx: SituationContext) -> bool:
-    """True for every combat resolution in an encounter that opened as a parley.
+def combat_opened_from_parley(ctx: SituationContext, params: SituationParams) -> bool:
+    """True for every combat resolution in an encounter that opened as a parley,
+    gated by the optional directed ``origin_side`` param (#2623 spec §3 — blank
+    = side-blind, today's behavior; ``ours``/``theirs`` requires
+    ``CombatEncounter.initiated_by_pc_side`` to match, and NULL never holds a
+    directed side — see ``_origin_side_matches``).
 
     ``opened_from_parley`` (#2536 slice 3, Task 4) is stamped exclusively by
     ``world.combat.cast_seed.seed_or_feed_encounter_from_cast`` when it CREATES a
@@ -484,17 +550,23 @@ def combat_opened_from_parley(ctx: SituationContext) -> bool:
     judgment call): the flag holds for the encounter's ENTIRE lifetime, not just
     its opening moment — "this fight started as a conversation that turned
     hostile" stays true throughout. One cached FK read (``participant.encounter``,
-    idmapper-cached) and False outside combat.
+    idmapper-cached) and False outside combat; the origin-side gate reads an
+    already-loaded field, no extra query.
     """
     participant = _resolution_participant(ctx.resolution)
     if participant is None:
         return False
-    return participant.encounter.opened_from_parley is True
+    encounter = participant.encounter
+    if not encounter.opened_from_parley:
+        return False
+    return _origin_side_matches(encounter, params.origin_side)
 
 
 @register(Situation.AMBUSH_UNDERWAY)
-def ambush_underway(ctx: SituationContext) -> bool:
-    """True only during ROUND 1 of an encounter that opened as a surprise.
+def ambush_underway(ctx: SituationContext, params: SituationParams) -> bool:
+    """True only during ROUND 1 of an encounter that opened as a surprise,
+    gated by the optional directed ``origin_side`` param (#2623 spec §3 — same
+    gate ``combat_opened_from_parley`` documents, see ``_origin_side_matches``).
 
     v1 semantics (documented approximation, #2536 slice 3 Task 4): holds when
     the encounter's CURRENT round (``CombatEncounter.round_number``, the
@@ -510,7 +582,8 @@ def ambush_underway(ctx: SituationContext) -> bool:
     counts) + ``round_number=1``. Two queries at most: the cached
     ``participant.encounter`` FK read, plus (only when ``opened_from_parley``
     is False) a single ``CombatRoundAction.objects.filter(...).exists()``
-    lookup — never a query inside a loop. False outside combat.
+    lookup — never a query inside a loop. False outside combat; the
+    origin-side gate reads an already-loaded field, no extra query.
     """
     participant = _resolution_participant(ctx.resolution)
     if participant is None:
@@ -518,20 +591,24 @@ def ambush_underway(ctx: SituationContext) -> bool:
     encounter = participant.encounter
     if encounter.round_number != 1:
         return False
-    if encounter.opened_from_parley:
-        return True
 
-    from world.combat.models import CombatRoundAction  # noqa: PLC0415
+    surprised = encounter.opened_from_parley
+    if not surprised:
+        from world.combat.models import CombatRoundAction  # noqa: PLC0415
 
-    return CombatRoundAction.objects.filter(
-        participant__encounter_id=encounter.pk,
-        round_number=1,
-        from_entrance=True,
-    ).exists()
+        surprised = CombatRoundAction.objects.filter(
+            participant__encounter_id=encounter.pk,
+            round_number=1,
+            from_entrance=True,
+        ).exists()
+    if not surprised:
+        return False
+
+    return _origin_side_matches(encounter, params.origin_side)
 
 
 @register(Situation.ALLY_INTERCEPTED_FOR_ME)
-def ally_intercepted_for_me(ctx: SituationContext) -> bool:
+def ally_intercepted_for_me(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
     """A covenant-mate of the holder has an armed INTERPOSE guarding the subject.
 
     Ratified v1 judgment call (#2536 slice 3, Task 5): DECLARED-guard
@@ -565,7 +642,7 @@ def ally_intercepted_for_me(ctx: SituationContext) -> bool:
     ``CharacterCovenantRole`` membership query across every guarding
     interposer's sheet id (never one query per candidate — "no queries in
     loops"). Two queries total, fixed regardless of interposer count. False
-    outside combat.
+    outside combat. Reads no params (absent from ``SITUATION_PARAM_SPECS``).
     """
     participant = _resolution_participant(ctx.resolution)
     if participant is None or ctx.holder is None:
@@ -616,14 +693,37 @@ def ally_intercepted_for_me(ctx: SituationContext) -> bool:
     return any(d.participant.character_sheet_id in mate_sheet_ids for d in guarding)
 
 
-@register(Situation.ATTACKER_AFFINITY)
-def attacker_abyssal(ctx: SituationContext) -> bool:
-    """True when ``ctx.attacker`` is Abyssal-affiliated (#2536 slice 3, Task 6).
+def _attacker_aura(attacker: object) -> CharacterAura | None:
+    """Reachable ``CharacterAura`` for ``attacker`` — ``attacker.objectdb.aura`` for
+    a ``CombatOpponent`` (``objectdb`` nullable), else ``attacker.aura`` for a bare
+    ObjectDB attacker. ``None`` on any missing relation; never raises. Split out of
+    ``attacker_affinity`` to keep that function's return-statement count under the
+    repo's lint threshold.
+    """
+    try:
+        objectdb = attacker.objectdb
+    except AttributeError:
+        # Not a CombatOpponent (no `.objectdb` indirection) — treat the
+        # attacker itself as the ObjectDB to read `.aura` off directly.
+        objectdb = attacker
+    if objectdb is None:
+        return None
 
-    Enum renamed to ``ATTACKER_AFFINITY`` + parameterized with ``affinity``/
-    ``threshold_percent`` (#2623 spec §2); this evaluator still hardcodes the
-    Abyssal-only v1 check and ignores the row's params — Task 3 wires the
-    ``params`` argument through to read the authored axis/threshold.
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        return objectdb.aura
+    except (ObjectDoesNotExist, AttributeError):
+        return None
+
+
+@register(Situation.ATTACKER_AFFINITY)
+def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
+    """True when ``ctx.attacker`` is typed to ``params.affinity``, the required
+    authored axis (#2536 slice 3 Task 6; renamed + parameterized #2623 spec §2 —
+    required ``affinity``, optional ``threshold_percent``, ``SITUATION_PARAM_SPECS``).
+    ``affinity`` is REQUIRED — ``NO_PARAMS`` (blank ``affinity``) never holds,
+    regardless of what data the attacker carries.
 
     ``ctx.attacker`` is populated ONLY on a defense-side resolution (see
     ``SituationContext``'s docstring, "attacker") — a ``CombatOpponent`` or an
@@ -634,16 +734,19 @@ def attacker_abyssal(ctx: SituationContext) -> bool:
     1. A ``CombatOpponent`` with a non-empty AUTHORED ``affinity``
        (``world/combat/models.py`` — #2536 slice 3 field, for non-persona/
        generic NPCs that carry no ``CharacterAura`` row to infer from) —
-       compared directly against ``AffinityType.ABYSSAL``. Authored typing
-       wins outright when present; the aura fallback below is never
-       consulted.
+       compared directly against ``params.affinity``. Authored typing wins
+       outright when present (``threshold_percent`` is IGNORED on this path —
+       an authored type is definitional, not a percentage); the aura
+       fallback below is never consulted.
     2. A reachable ``ObjectDB`` carrying a ``CharacterAura``
        (``world/magic/models/aura.py`` — a ``OneToOneField`` with
        ``related_name="aura"``) — read via ``attacker.objectdb.aura`` for a
        ``CombatOpponent`` (``objectdb`` is nullable — covers persona-backed
        story NPCs AND PvP attackers, see the PvP note below) or
-       ``attacker.aura`` for a bare ``ObjectDB`` attacker. Holds when
-       ``dominant_affinity == AffinityType.ABYSSAL``.
+       ``attacker.aura`` for a bare ``ObjectDB`` attacker. With
+       ``params.threshold_percent`` set, holds when ``params.affinity``'s own
+       axis percentage is >= the threshold; unset, holds when
+       ``dominant_affinity == params.affinity``.
     3. Otherwise False — no attacker, no authored affinity, and no aura data
        reachable (an ephemeral/generic NPC with neither).
 
@@ -657,6 +760,8 @@ def attacker_abyssal(ctx: SituationContext) -> bool:
     At most one query (the ``CharacterAura`` OneToOne fetch, reached only
     when no authored affinity short-circuits path 1 first).
     """
+    if not params.affinity:
+        return False
     attacker = ctx.attacker
     if attacker is None:
         return False
@@ -668,21 +773,16 @@ def attacker_abyssal(ctx: SituationContext) -> bool:
     except AttributeError:
         affinity = ""
     if affinity:
-        return affinity == AffinityType.ABYSSAL
+        return affinity == params.affinity
 
-    try:
-        objectdb = attacker.objectdb
-    except AttributeError:
-        # Not a CombatOpponent (no `.objectdb` indirection) — treat the
-        # attacker itself as the ObjectDB to read `.aura` off directly.
-        objectdb = attacker
-    if objectdb is None:
+    aura = _attacker_aura(attacker)
+    if aura is None:
         return False
-
-    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-    try:
-        aura = objectdb.aura
-    except (ObjectDoesNotExist, AttributeError):
-        return False
-    return aura.dominant_affinity == AffinityType.ABYSSAL
+    if params.threshold_percent is not None:
+        axis_value = {
+            AffinityType.CELESTIAL: aura.celestial,
+            AffinityType.PRIMAL: aura.primal,
+            AffinityType.ABYSSAL: aura.abyssal,
+        }[params.affinity]
+        return axis_value >= params.threshold_percent
+    return aura.dominant_affinity == params.affinity
