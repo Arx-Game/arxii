@@ -92,6 +92,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from world.covenants.perks.constants import PerkBeneficiary
 from world.covenants.perks.context import SituationContext
 from world.covenants.perks.evaluators import SITUATION_EVALUATORS
@@ -101,6 +103,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.covenants.models import CharacterCovenantRole, VowSituationalPerk
+    from world.missions.models import MissionInstance
 
 #: Beneficiaries that fire on the perk-owning holder's OWN action.
 _SELF_BENEFICIARIES = frozenset({PerkBeneficiary.SELF, PerkBeneficiary.WHOLE_GROUP})
@@ -235,6 +238,168 @@ def perk_scope_matches(
     return True
 
 
+def dormant_perk_firings(  # noqa: PLR0913 - applicable_perks' resolution/target/attacker
+    # triple plus the Task-1 scope columns (mission/battle_action_kind) baked in here, unlike
+    # applicable_perks, which leaves scope filtering to the caller.
+    subject: CharacterSheet,
+    *,
+    effect_kind: str | tuple[str, ...],
+    resolution: object | None,
+    target: CharacterSheet | None,
+    mission: MissionInstance | None = None,
+    battle_action_kind: str | None = None,
+    attacker: object | None = None,
+) -> list[FiredPerk]:
+    """Every ``VowSituationalPerk`` of ``effect_kind`` that would have fired for
+    ``subject``'s resolution if their vow were still engaged (#2536 slice 3,
+    Task 7 — ruling 2's "loud OFF state").
+
+    Candidates are the SUBJECT'S OWN active-but-DISENGAGED memberships ONLY
+    (``_dormant_self_candidates`` — the inverted mirror of ``_self_candidates``'s
+    engaged-only filter); a co-present ally's perk is never dormant — ally
+    beneficiaries key on the MATE's role, not the subject's, so a mate's own
+    disengagement is simply invisible here (the slice-2 reversal already made
+    a mate's engagement irrelevant to whether their perk reaches the subject
+    at all). Runs the SAME ``_PerkResolver`` situation evaluation
+    ``applicable_perks`` runs, **plus** the Task-1 scope filter
+    (``perk_scope_matches``, hoisted mission-category ids) inline — unlike
+    ``applicable_perks``, which leaves scope filtering to each call site, this
+    function returns an already-scope-filtered set so every wiring seam can
+    hand its result straight to ``announce_dormant_perks`` (a CHECK_BONUS
+    caller still applies its OWN ``check_type`` filter on top, same as it does
+    for the live set).
+
+    **Zero queries when the subject has no disengaged active membership** —
+    ``_dormant_self_candidates`` reads the SAME cached
+    ``character.covenant_roles.active_memberships`` list the live
+    ``applicable_perks`` call (made immediately before this one at every
+    wiring seam) has already warmed; this is the every-check fast path.
+    """
+    candidates = _dormant_self_candidates(subject)
+    if not candidates:
+        return []
+
+    kinds = (effect_kind,) if isinstance(effect_kind, str) else tuple(effect_kind)
+    role_ids = {role_id for role_id, _holder, _beneficiaries in candidates}
+    perks_by_role = _fetch_candidate_perks(role_ids, kinds)
+    if not perks_by_role:
+        return []
+
+    resolver = _PerkResolver(
+        subject=subject, target=target, resolution=resolution, attacker=attacker
+    )
+    fired: list[FiredPerk] = []
+    for role_id, holder, allowed_beneficiaries in candidates:
+        for perk in perks_by_role.get(role_id, ()):
+            if perk.beneficiary not in allowed_beneficiaries:
+                continue
+            result = resolver.resolve(perk, holder=holder)
+            if result is not None:
+                fired.append(result)
+    if not fired:
+        return []
+
+    scope_ctx = SituationContext(
+        holder=subject,
+        subject=subject,
+        target=target,
+        resolution=resolution,
+        mission=mission,
+        battle_action_kind=battle_action_kind,
+        attacker=attacker,
+    )
+    mission_category_ids = mission_category_ids_for(scope_ctx)
+    return [
+        firing
+        for firing in fired
+        if perk_scope_matches(firing.perk, scope_ctx, mission_category_ids=mission_category_ids)
+    ]
+
+
+def announce_dormant_perks(dormant: list[FiredPerk], *, subject: CharacterSheet) -> None:
+    """Announce every dormant firing as the "loud OFF state" (#2536 slice 3,
+    Task 7, ruling 2): a disengaged vow says so out loud, at the exact moment
+    it would have answered, instead of silently doing nothing.
+
+    Exact line: ``"your vow lies dormant — {perk.name} would have answered
+    here"`` — delivered to the HOLDER (= ``subject``) ONLY, never the room
+    (unlike ``announce_fired_perks``, which broadcasts). Dual dispatch, single
+    recipient:
+
+    - A narrator-authored WHISPER-mode ``Interaction``, receiver-scoped to the
+      subject's PRIMARY persona — mirrors ``record_whisper_interaction``'s
+      receiver/target-persona shape (``receivers=[subject_persona],
+      target_personas=[subject_persona]``), but is NOT built by calling
+      ``record_whisper_interaction`` directly: that function derives its
+      AUTHOR persona from a ``character`` argument (the whisperer), which
+      would wrongly attribute the line to the subject narrating to
+      themselves rather than to the system Narrator. This function instead
+      calls ``create_interaction`` directly with ``persona=narrator``.
+    - The WS payload is sent ONLY to ``subject.character`` via
+      ``_send_to_objects`` — deliberately NOT via ``push_interaction``, which
+      would resolve the broadcast location from the WRITER persona's
+      (narrator's) own — usually unset — character location, the exact
+      "resolve delivery off the wrong object" bug class ``announce_fired_perks``'s
+      docstring documents for ``message_location``. Sending directly to
+      ``[subject.character]`` sidesteps location resolution entirely — there
+      is nowhere to broadcast to; this is a single addressed message.
+    - A direct ``subject.character.msg(text)`` telnet companion, mirroring
+      ``announce_fired_perks``'s own dual-dispatch discipline.
+
+    No-op (no query, no dispatch) when ``dormant`` is empty, ``subject`` has
+    no character, or the character has no primary persona.
+    """
+    if not dormant:
+        return
+
+    subject_character = subject.character
+    if subject_character is None:
+        return
+
+    try:
+        subject_persona = subject.primary_persona
+    except ObjectDoesNotExist:
+        return
+
+    from world.scenes.constants import InteractionMode  # noqa: PLC0415
+    from world.scenes.interaction_services import (  # noqa: PLC0415
+        _build_interaction_payload,
+        _send_to_objects,
+        create_interaction,
+        get_active_scene,
+    )
+    from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
+
+    narrator = get_or_create_narrator_persona()
+    scene = get_active_scene(subject_character.location)
+
+    for firing in dormant:
+        text = f"your vow lies dormant — {firing.perk.name} would have answered here"
+
+        interaction = create_interaction(
+            persona=narrator,
+            content=text,
+            mode=InteractionMode.WHISPER,
+            scene=scene,
+            receivers=[subject_persona],
+            target_personas=[subject_persona],
+        )
+        payload = _build_interaction_payload(
+            interaction_id=interaction.pk,
+            persona=narrator,
+            content=interaction.content,
+            mode=interaction.mode,
+            timestamp=interaction.timestamp.isoformat(),
+            scene_id=interaction.scene_id,
+            receiver_persona_ids=[subject_persona.pk],
+            target_persona_ids=[subject_persona.pk],
+        )
+        _send_to_objects([subject_character], payload)
+        # Telnet companion (mirrors announce_fired_perks's dual-dispatch
+        # discipline) — addressed directly, HOLDER-only, never the room.
+        subject_character.msg(text)
+
+
 def _self_candidates(subject: CharacterSheet) -> list[_Candidate]:
     """Subject's own engaged roles — anchor AND resolved sub-role both apply.
 
@@ -251,6 +416,39 @@ def _self_candidates(subject: CharacterSheet) -> list[_Candidate]:
     role_ids: set[int] = set()
     for membership in character.covenant_roles.active_memberships:
         if not membership.engaged:
+            continue
+        role_ids.add(membership.covenant_role_id)
+        resolved_role = resolve_effective_role(character=character, role=membership.covenant_role)
+        role_ids.add(resolved_role.pk)
+
+    return [(role_id, subject, _SELF_BENEFICIARIES) for role_id in role_ids]
+
+
+def _dormant_self_candidates(subject: CharacterSheet) -> list[_Candidate]:
+    """Subject's own DISENGAGED (but still active) roles — the dormant-vow
+    mirror of ``_self_candidates`` (#2536 slice 3, Task 7, ruling 2's "loud
+    OFF state"). Same anchor + resolved sub-role ADD semantics, same
+    ``_SELF_BENEFICIARIES`` set — a disengaged vow never buffs allies (dormant
+    perks are never ``COVENANT_ALLIES``/``WHOLE_GROUP``-for-a-mate; the
+    slice-2 reversal documented at the top of this module only concerns a
+    co-present MATE's own engagement, never the SUBJECT's).
+
+    Zero queries beyond the cached handler list: ``character.covenant_roles
+    .active_memberships`` is the SAME cached ``_rows`` list ``_self_candidates``
+    already reads — every wiring seam calls this function right after its own
+    live ``applicable_perks`` call, which has already warmed the cache, so
+    this never issues a query of its own (the every-check fast path the
+    module docstring's query-discipline section documents for the live path).
+    """
+    character = subject.character
+    if character is None:
+        return []
+
+    from world.covenants.services import resolve_effective_role  # noqa: PLC0415
+
+    role_ids: set[int] = set()
+    for membership in character.covenant_roles.active_memberships:
+        if membership.engaged:
             continue
         role_ids.add(membership.covenant_role_id)
         resolved_role = resolve_effective_role(character=character, role=membership.covenant_role)
