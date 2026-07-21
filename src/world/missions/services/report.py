@@ -30,6 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -46,6 +47,7 @@ from world.missions.services.rewards import apply_deed_rewards
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.covenants.perks.context import SituationContext
     from world.missions.models import MissionDeedRecord, MissionInstance
     from world.npc_services.models import Functionary, NPCRole
     from world.skills.models import Specialization
@@ -53,6 +55,25 @@ if TYPE_CHECKING:
 # PLACEHOLDER tuning — fame/prestige swing per report style, and the resonance a style grants.
 _FAME_PRESTIGE_DELTA = 5
 _STYLE_RESONANCE = {ReportStyle.HUMBLE: "Bene", ReportStyle.EMBELLISHED: "Insidia"}
+
+
+def _mission_situation_ctx(
+    character: ObjectDB, instance: MissionInstance
+) -> SituationContext | None:
+    """The ``SituationContext`` for a mission check by ``character`` in ``instance``
+    (#2536 slice 3 Court wiring). ``None`` when the character has no
+    ``CharacterSheet`` — mirrors the guard ``_situational_perk_check_bonus`` applies
+    itself, so a checker without a sheet is byte-identical to the pre-#2536 default.
+    """
+    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+
+    try:
+        sheet = character.sheet_data
+    except (ObjectDoesNotExist, AttributeError):
+        return None
+    return SituationContext(
+        holder=sheet, subject=sheet, target=None, resolution=None, mission=instance
+    )
 
 
 class MissionReportError(BeatActionError):
@@ -146,7 +167,9 @@ def _embellish_difficulty(functionary: Functionary) -> int:  # noqa: ARG001
     return DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
 
 
-def _run_embellish_check(reporter: ObjectDB, functionary: Functionary) -> bool:
+def _run_embellish_check(
+    reporter: ObjectDB, functionary: Functionary, instance: MissionInstance
+) -> bool:
     """Roll the manipulation check against the giver. Raises if the reporter can't embellish."""
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check  # noqa: PLC0415
@@ -163,11 +186,14 @@ def _run_embellish_check(reporter: ObjectDB, functionary: Functionary) -> bool:
         check_type,
         target_difficulty=_embellish_difficulty(functionary),
         specialization=_manipulation_specialization(reporter),
+        situation_ctx=_mission_situation_ctx(reporter, instance),
     )
     return result.outcome is not None and result.outcome.success_level >= 0
 
 
-def _run_consequence_dodge_check(reporter: ObjectDB, functionary: Functionary) -> bool:
+def _run_consequence_dodge_check(
+    reporter: ObjectDB, functionary: Functionary, instance: MissionInstance
+) -> bool:
     """The mostly-accurate check: report around the truth to dodge the criminal fallout (#1765).
 
     Ratified (Apostate 2026-07-03): rides **Con** (charm + Persuasion +
@@ -189,6 +215,7 @@ def _run_consequence_dodge_check(reporter: ObjectDB, functionary: Functionary) -
         reporter,
         check_type,
         target_difficulty=_embellish_difficulty(functionary),
+        situation_ctx=_mission_situation_ctx(reporter, instance),
     )
     return result.outcome is not None and result.outcome.success_level >= 0
 
@@ -228,6 +255,7 @@ def _apply_masked_deed_association(
             reporter,
             check_type,
             target_difficulty=_embellish_difficulty(functionary),
+            situation_ctx=_mission_situation_ctx(reporter, instance),
         )
         if result.outcome is not None and result.outcome.success_level >= 0:
             return  # slipped away clean — nobody connected the faces.
@@ -296,10 +324,10 @@ def _apply_style_payout(
 
     embellish_success: bool | None = None
     if style == ReportStyle.EMBELLISHED:
-        embellish_success = _run_embellish_check(reporter, functionary)
+        embellish_success = _run_embellish_check(reporter, functionary, instance)
     dodge_success: bool | None = None
     if style == ReportStyle.MOSTLY_ACCURATE:
-        dodge_success = _run_consequence_dodge_check(reporter, functionary)
+        dodge_success = _run_consequence_dodge_check(reporter, functionary, instance)
 
     # Baseline money (all styles) — the authored lines. CRIME_WATCH is live
     # (#1765): it mints at the report room unless the dodge succeeded; RUMOR

@@ -59,6 +59,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from evennia_extensions.models import RoomProfile
@@ -91,6 +92,7 @@ if TYPE_CHECKING:
 
     from evennia_extensions.models import RoomProfile
     from world.checks.models import CheckType
+    from world.covenants.perks.context import SituationContext
     from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
         MissionInstance,
@@ -340,10 +342,30 @@ def _auto_success_result(check_type: CheckType) -> CheckResult:
     )
 
 
+def _mission_situation_ctx(
+    character: ObjectDB, instance: MissionInstance
+) -> SituationContext | None:
+    """The ``SituationContext`` for a mission check by ``character`` in ``instance``
+    (#2536 slice 3 Court wiring). ``None`` when the character has no
+    ``CharacterSheet`` — mirrors the guard ``_situational_perk_check_bonus`` applies
+    itself, so a checker without a sheet is byte-identical to the pre-#2536 default.
+    """
+    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+
+    try:
+        sheet = character.sheet_data
+    except (ObjectDoesNotExist, AttributeError):
+        return None
+    return SituationContext(
+        holder=sheet, subject=sheet, target=None, resolution=None, mission=instance
+    )
+
+
 def _resolve_challenge_check(
     option: MissionOption,
     character: ObjectDB,
     chosen_approach: ChallengeApproach | None,
+    instance: MissionInstance,
     *,
     extra_modifiers: int = 0,
 ) -> CheckResult:
@@ -374,6 +396,7 @@ def _resolve_challenge_check(
         chosen_approach.check_type,
         target_difficulty=challenge.severity,
         extra_modifiers=extra_modifiers,
+        situation_ctx=_mission_situation_ctx(character, instance),
     )
 
 
@@ -595,7 +618,7 @@ def resolve_option(  # noqa: PLR0913
         # severity is the difficulty. Routing below is unchanged — it keys
         # on the resulting CheckOutcome exactly like an AUTHORED CHECK.
         result = _resolve_challenge_check(
-            option, character, chosen_approach, extra_modifiers=extra_modifiers
+            option, character, chosen_approach, instance, extra_modifiers=extra_modifiers
         )
     else:
         check_type = _resolve_check_type(option)
@@ -604,6 +627,7 @@ def resolve_option(  # noqa: PLR0913
             check_type,
             target_difficulty=instance.template.risk_tier,
             extra_modifiers=extra_modifiers,
+            situation_ctx=_mission_situation_ctx(character, instance),
         )
 
     route = MissionOptionRoute.objects.filter(
