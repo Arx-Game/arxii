@@ -47,7 +47,8 @@ from world.vitals.models import CharacterVitals
 
 
 class SituationEvaluatorRegistryTests(TestCase):
-    """The registry carries exactly the 9 surviving Situation values."""
+    """The registry carries exactly every live ``Situation`` value (9 from slice 1
+    plus ``CHAMPION_DUEL`` from slice 3, #2536 Task 3)."""
 
     def test_registry_covers_every_surviving_situation(self) -> None:
         self.assertEqual(set(SITUATION_EVALUATORS), set(Situation.values))
@@ -441,3 +442,33 @@ class TargetFavorablyDisposedEvaluatorTests(TestCase):
 
     def test_missing_context_returns_false(self) -> None:
         self.assertFalse(evaluators.target_favorably_disposed(self._ctx(None)))
+
+
+class ChampionDuelEvaluatorTests(TestCase):
+    """CHAMPION_DUEL reads the subject's resolution participant's encounter flag
+    (#2536 slice 3 Battle wiring)."""
+
+    def setUp(self) -> None:
+        self.room = create_object("typeclasses.rooms.Room", key="ChampionDuelRoom", nohome=True)
+        self.scene = SceneFactory(location=self.room)
+        self.sheet = CharacterSheetFactory()
+
+    def _ctx(self, resolution) -> SituationContext:
+        return SituationContext(
+            holder=self.sheet, subject=self.sheet, target=None, resolution=resolution
+        )
+
+    def test_true_in_champion_duel_encounter(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room, is_champion_duel=True)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        resolution = CombatRoundContext(participant)
+        self.assertTrue(evaluators.champion_duel(self._ctx(resolution)))
+
+    def test_false_in_ordinary_encounter(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        resolution = CombatRoundContext(participant)
+        self.assertFalse(evaluators.champion_duel(self._ctx(resolution)))
+
+    def test_false_outside_combat(self) -> None:
+        self.assertFalse(evaluators.champion_duel(self._ctx(None)))

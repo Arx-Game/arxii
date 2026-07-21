@@ -450,3 +450,23 @@ def target_favorably_disposed(ctx: SituationContext) -> bool:
         npc_persona=target_persona,
         affection__gte=FAVORABLY_DISPOSED_MIN_AFFECTION,
     ).exists()
+
+
+@register(Situation.CHAMPION_DUEL)
+def champion_duel(ctx: SituationContext) -> bool:
+    """True when the SUBJECT is a participant in a Champion-duel combat encounter.
+
+    ``is_champion_duel`` (#2536 slice 3) is stamped exclusively by
+    ``world.battles.services.open_champion_duel`` on the ``CombatEncounter`` it
+    creates — every other DUEL creation path, including the siege-engine
+    skirmish opened by ``open_siege_engine_encounter`` (shares the same
+    ``create_lethal_duel`` helper, no Champion-role requirement), leaves the
+    flag False. Combat checks/casts already thread ``resolution`` (a
+    ``CombatRoundContext``) into every ``SituationContext``, so no new
+    threading is needed for this situation — one cached FK read
+    (``participant.encounter``, idmapper-cached) and False outside combat.
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+    return participant.encounter.is_champion_duel is True

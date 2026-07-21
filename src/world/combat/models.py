@@ -137,6 +137,18 @@ class CombatEncounter(AbstractRound):
         related_name="duels_won",
         help_text="Recorded duel victor; null while ongoing or for an abandoned/mutual stop.",
     )
+    is_champion_duel = models.BooleanField(
+        default=False,
+        help_text=(
+            "True iff this DUEL encounter was opened by "
+            "world.battles.services.open_champion_duel (#2536 slice 3 Battle wiring) — a "
+            "PC Champion's duel against an enemy boss. Stamped exclusively there; every "
+            "other DUEL creation path (world.combat.duels.create_lethal_duel's other "
+            "callers, world.battles.services.open_siege_engine_encounter) leaves this "
+            "False. Read by the Situation.CHAMPION_DUEL evaluator "
+            "(world.covenants.perks.evaluators) for per-vow situational perk scoping."
+        ),
+    )
     story_beat = models.ForeignKey(
         "stories.Beat",
         on_delete=models.SET_NULL,

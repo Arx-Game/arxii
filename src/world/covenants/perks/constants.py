@@ -14,21 +14,22 @@ from django.db import models
 class Situation(models.TextChoices):
     """Code-defined situation library for per-vow situational perks (#2536).
 
-    Slice 1 ships these 9 values ONLY — the enum ships no inert entries;
-    every value here has (or, per Task 2, will get) a registered evaluator
-    with signature ``(ctx: SituationContext) -> bool``. ``SituationContext``
-    (``perks.context``, Task 2) carries four fields: ``holder`` (the
-    perk-owning vow-holder), ``subject`` (the acting character whose
-    cast/check is resolving — equals ``holder`` for SELF perks), ``target``
-    (the action's target sheet, ``None`` when the action has none), and
-    ``resolution`` (the live resolution context — ``CombatRoundContext`` in
-    combat, the check's context otherwise, ``None`` when absent). An
-    evaluator whose required field is missing/``None`` returns False (a
-    combat-positioning situation simply never holds outside combat; a
-    DB-state situation like ``TARGET_DISTRACTED`` evaluates anywhere).
-    DEFERRED to slices 2/3 (each arrives with its own machinery, not listed
-    here): ``combat_opened_from_parley``, ``ambush_underway``,
-    ``ally_intercepted_for_me``, ``attacker_abyssal``.
+    Slice 1 shipped 9 values; ``CHAMPION_DUEL`` is slice 3's Battle-wiring
+    addition (#2536 Task 3) — the enum ships no other inert entries; every
+    value here has a registered evaluator with signature ``(ctx:
+    SituationContext) -> bool``. ``SituationContext`` (``perks.context``)
+    carries four required fields plus slice-3 scoping/defense fields:
+    ``holder`` (the perk-owning vow-holder), ``subject`` (the acting
+    character whose cast/check is resolving — equals ``holder`` for SELF
+    perks), ``target`` (the action's target sheet, ``None`` when the action
+    has none), and ``resolution`` (the live resolution context —
+    ``CombatRoundContext`` in combat, the check's context otherwise,
+    ``None`` when absent). An evaluator whose required field is
+    missing/``None`` returns False (a combat-positioning situation simply
+    never holds outside combat; a DB-state situation like
+    ``TARGET_DISTRACTED`` evaluates anywhere). DEFERRED (each arrives with
+    its own machinery, not listed here): ``combat_opened_from_parley``,
+    ``ambush_underway``, ``ally_intercepted_for_me``, ``attacker_abyssal``.
 
     - ``AT_RANGE`` — the SUBJECT's engagement distance profile this round is
       ranged (has at least one actively-engaged enemy, none of them sharing
@@ -73,6 +74,17 @@ class Situation(models.TextChoices):
       (distinct from ``TARGET_SWAYED_BY_ALLY``, which reads applied
       conditions rather than disposition state). Reads ``holder`` +
       ``target``; DB-state, evaluates anywhere.
+    - ``CHAMPION_DUEL`` — the SUBJECT is a participant in a Champion-duel
+      combat encounter (#2536 slice 3 Battle wiring). The flag is stamped
+      exclusively by ``world.battles.services.open_champion_duel`` on the
+      ``CombatEncounter`` it creates — every other DUEL creation path,
+      including the siege-engine skirmish opened by
+      ``open_siege_engine_encounter`` (same ``create_lethal_duel`` helper,
+      no Champion-role requirement), leaves ``is_champion_duel`` False.
+      Combat checks/casts already thread ``resolution`` (a
+      ``CombatRoundContext``) into every ``SituationContext``, so no new
+      threading was needed for this situation. Reads ``resolution``; False
+      outside combat.
     """
 
     AT_RANGE = "at_range", "At Range"
@@ -84,6 +96,7 @@ class Situation(models.TextChoices):
     ALLY_LOW_HEALTH = "ally_low_health", "Ally Low Health"
     DURING_NEGOTIATION = "during_negotiation", "During Negotiation"
     TARGET_FAVORABLY_DISPOSED = "target_favorably_disposed", "Target Favorably Disposed"
+    CHAMPION_DUEL = "champion_duel", "Champion Duel"
 
 
 class PerkEffectKind(models.TextChoices):

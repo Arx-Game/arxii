@@ -1187,6 +1187,11 @@ def open_champion_duel(
         room,
         tier=tier,
     )
+    # Stamped exclusively here (#2536 slice 3) — the narrowest point that ONLY
+    # Champion duels reach. open_siege_engine_encounter shares create_lethal_duel
+    # but never sets this, so siege-engine DUEL encounters stay False.
+    enc.is_champion_duel = True
+    enc.save(update_fields=["is_champion_duel"])
     battle_place.combat_encounter = enc
     battle_place.save(update_fields=["combat_encounter"])
     install_champion_duel_trigger(enc)
