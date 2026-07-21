@@ -616,9 +616,14 @@ def ally_intercepted_for_me(ctx: SituationContext) -> bool:
     return any(d.participant.character_sheet_id in mate_sheet_ids for d in guarding)
 
 
-@register(Situation.ATTACKER_ABYSSAL)
+@register(Situation.ATTACKER_AFFINITY)
 def attacker_abyssal(ctx: SituationContext) -> bool:
     """True when ``ctx.attacker`` is Abyssal-affiliated (#2536 slice 3, Task 6).
+
+    Enum renamed to ``ATTACKER_AFFINITY`` + parameterized with ``affinity``/
+    ``threshold_percent`` (#2623 spec §2); this evaluator still hardcodes the
+    Abyssal-only v1 check and ignores the row's params — Task 3 wires the
+    ``params`` argument through to read the authored axis/threshold.
 
     ``ctx.attacker`` is populated ONLY on a defense-side resolution (see
     ``SituationContext``'s docstring, "attacker") — a ``CombatOpponent`` or an

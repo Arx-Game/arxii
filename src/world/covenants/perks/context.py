@@ -77,3 +77,22 @@ class SituationContext:
     mission: MissionInstance | None = None
     battle_action_kind: str | None = None
     attacker: object | None = None
+
+
+@dataclass(frozen=True)
+class SituationParams:
+    """Authored parameters of one situation-requirement row (#2623 spec §2).
+
+    Hashable so ``_PerkResolver`` can key its evaluation cache on
+    ``(situation, params, holder_pk)``. Blank/None fields mean "use the
+    evaluator's documented default" (module constants in ``perks.evaluators``).
+    """
+
+    threshold_percent: int | None = None
+    count_threshold: int | None = None
+    affinity: str = ""
+    origin_side: str = ""
+
+
+#: Shared no-parameter instance (the default for every pre-#2623 row shape).
+NO_PARAMS = SituationParams()

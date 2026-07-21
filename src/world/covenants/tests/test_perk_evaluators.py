@@ -57,7 +57,7 @@ class SituationEvaluatorRegistryTests(TestCase):
     """The registry carries exactly every live ``Situation`` value (9 from slice 1,
     ``CHAMPION_DUEL`` from slice 3 Task 3, ``COMBAT_OPENED_FROM_PARLEY`` and
     ``AMBUSH_UNDERWAY`` from slice 3 Task 4, ``ALLY_INTERCEPTED_FOR_ME`` from
-    slice 3 Task 5, plus ``ATTACKER_ABYSSAL`` from slice 3 Task 6, #2536)."""
+    slice 3 Task 5, plus ``ATTACKER_AFFINITY`` from slice 3 Task 6, #2536)."""
 
     def test_registry_covers_every_surviving_situation(self) -> None:
         self.assertEqual(set(SITUATION_EVALUATORS), set(Situation.values))
@@ -788,7 +788,7 @@ class AllyInterceptedForMeQueryBudgetTests(TestCase):
 
 
 class AttackerAbyssalEvaluatorTests(TestCase):
-    """ATTACKER_ABYSSAL (#2536 slice 3, Task 6): resolution order —
+    """ATTACKER_AFFINITY (#2536 slice 3, Task 6): resolution order —
     (1) a ``CombatOpponent`` with a non-empty authored ``affinity`` compares
     directly, (2) a reachable ``ObjectDB``'s ``CharacterAura.dominant_affinity``
     is the fallback, (3) otherwise False. Never raises on missing relations;

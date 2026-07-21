@@ -8,6 +8,8 @@ magnitudes, and authoring perk rows are data edits forever after.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from django.db import models
 
 
@@ -18,8 +20,9 @@ class Situation(models.TextChoices):
     addition (#2536 Task 3); ``COMBAT_OPENED_FROM_PARLEY`` and
     ``AMBUSH_UNDERWAY`` are slice 3's origin-marker addition (#2536 Task 4);
     ``ALLY_INTERCEPTED_FOR_ME`` is slice 3's declared-guard addition (#2536
-    Task 5); ``ATTACKER_ABYSSAL`` is slice 3's defense-side seam addition
-    (#2536 Task 6) — the enum ships no other inert entries; every value here
+    Task 5); ``ATTACKER_AFFINITY`` (renamed from ``ATTACKER_ABYSSAL``, #2623)
+    is slice 3's defense-side seam addition (#2536 Task 6) — the enum ships
+    no other inert entries; every value here
     has a registered evaluator with signature ``(ctx: SituationContext) ->
     bool``.
     ``SituationContext`` (``perks.context``) carries four required fields plus
@@ -30,7 +33,7 @@ class Situation(models.TextChoices):
     resolution context — ``CombatRoundContext`` in combat, the check's
     context otherwise, ``None`` when absent), and ``attacker`` (the attacking
     entity on a defense-side resolution, ``None`` on every offense-side one —
-    see ``ATTACKER_ABYSSAL`` below). An evaluator whose required field is
+    see ``ATTACKER_AFFINITY`` below). An evaluator whose required field is
     missing/``None`` returns False (a combat-positioning situation simply
     never holds outside combat; a DB-state situation like
     ``TARGET_DISTRACTED`` evaluates anywhere).
@@ -111,14 +114,20 @@ class Situation(models.TextChoices):
       counts as soon as it is armed; the situation does not wait for the
       interpose to actually intercept damage. Reads ``holder`` + ``resolution``;
       False outside combat.
-    - ``ATTACKER_ABYSSAL`` — the attacking entity on a DEFENSE resolution is
-      Abyssal-affiliated (#2536 slice 3, Task 6): a ``CombatOpponent`` with a
-      non-empty authored ``affinity`` matching ``AffinityType.ABYSSAL``, or
-      (falling back) a reachable ObjectDB whose ``CharacterAura.
-      dominant_affinity`` is Abyssal. Reads ``attacker``; False when
-      ``attacker`` is ``None`` (every offense-side resolution) or carries no
-      affinity/aura data. ``world.combat.services.resolve_npc_attack`` is the
-      only defense-check site that threads ``attacker`` in v1.
+    - ``ATTACKER_AFFINITY`` — the attacking entity on a DEFENSE resolution is
+      typed to an authored affinity axis (#2536 slice 3 Task 6; renamed +
+      parameterized #2623, see ``SITUATION_PARAM_SPECS`` below — required
+      param ``affinity``, optional ``threshold_percent``): a ``CombatOpponent``
+      with a non-empty authored ``affinity`` matching the row's ``affinity``
+      is definitional (threshold ignored); otherwise falls back to a
+      reachable ObjectDB's ``CharacterAura`` — with ``threshold_percent`` set,
+      that axis's percentage must be >= the threshold; unset, the aura's
+      ``dominant_affinity`` must equal the axis. Reads ``attacker``; False
+      when ``attacker`` is ``None`` (every offense-side resolution) or
+      carries no affinity/aura data. ``world.combat.services.
+      resolve_npc_attack`` is the only defense-check site that threads
+      ``attacker`` in v1. Task 3 wires the evaluator itself to the params
+      contract; the enum rename lands here (#2623).
     """
 
     AT_RANGE = "at_range", "At Range"
@@ -134,7 +143,7 @@ class Situation(models.TextChoices):
     COMBAT_OPENED_FROM_PARLEY = "combat_opened_from_parley", "Combat Opened From Parley"
     AMBUSH_UNDERWAY = "ambush_underway", "Ambush Underway"
     ALLY_INTERCEPTED_FOR_ME = "ally_intercepted_for_me", "Ally Intercepted for Me"
-    ATTACKER_ABYSSAL = "attacker_abyssal", "Attacker Abyssal"
+    ATTACKER_AFFINITY = "attacker_affinity", "Attacker Affinity"
 
 
 class PerkEffectKind(models.TextChoices):
@@ -183,3 +192,37 @@ class PerkBeneficiary(models.TextChoices):
     SELF = "self", "Self"
     COVENANT_ALLIES = "covenant_allies", "Covenant Allies"
     WHOLE_GROUP = "whole_group", "Whole Group"
+
+
+class SituationOriginSide(models.TextChoices):
+    """Which side sprang a directed combat-origin situation (#2623).
+
+    Read against ``CombatEncounter.initiated_by_pc_side``; v1 side model: the
+    subject is always a PC, so the PC side is "ours".
+    """
+
+    OURS = "ours", "Our Side Sprang It"
+    THEIRS = "theirs", "Their Side Sprang It"
+
+
+@dataclass(frozen=True)
+class SituationParamSpec:
+    """Which parameter columns a situation reads (#2623 spec §2)."""
+
+    allowed: frozenset[str]
+    required: frozenset[str] = frozenset()
+
+
+#: Per-situation parameter contract. A situation absent here reads NO params;
+#: clean() rejects any authored param it does not read, both directions.
+SITUATION_PARAM_SPECS: dict[str, SituationParamSpec] = {
+    Situation.ATTACKER_AFFINITY: SituationParamSpec(
+        allowed=frozenset({"affinity", "threshold_percent"}),
+        required=frozenset({"affinity"}),
+    ),
+    Situation.ALLY_LOW_HEALTH: SituationParamSpec(allowed=frozenset({"threshold_percent"})),
+    Situation.SURROUNDED: SituationParamSpec(allowed=frozenset({"count_threshold"})),
+    Situation.TARGET_FAVORABLY_DISPOSED: SituationParamSpec(allowed=frozenset({"count_threshold"})),
+    Situation.AMBUSH_UNDERWAY: SituationParamSpec(allowed=frozenset({"origin_side"})),
+    Situation.COMBAT_OPENED_FROM_PARLEY: SituationParamSpec(allowed=frozenset({"origin_side"})),
+}

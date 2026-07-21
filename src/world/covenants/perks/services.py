@@ -158,7 +158,7 @@ def applicable_perks(
     action target, or ``None``. ``attacker`` (#2536 slice 3, Task 6) is the
     SUBJECT's defense-side attacking entity, or ``None`` (the default, and
     every offense-side caller) — threaded through to every candidate
-    holder's ``SituationContext`` so the ``ATTACKER_ABYSSAL`` evaluator can
+    holder's ``SituationContext`` so the ``ATTACKER_AFFINITY`` evaluator can
     read it.
     """
     candidates = _self_candidates(subject) + _ally_candidates(subject, resolution)

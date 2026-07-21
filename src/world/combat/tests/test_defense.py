@@ -308,7 +308,7 @@ class ResolveNpcAttackSituationalPerkTests(TestCase):
     threads a ``SituationContext`` (holder/subject = defender, attacker = the NPC's
     ``CombatOpponent``) into the REAL ``perform_check`` (no ``perform_check_fn``
     override), so ``BOTCH_IMMUNITY``/``TIER_FLOOR`` situational perks — including
-    ``ATTACKER_ABYSSAL``-gated ones — live on the PC's defensive roll.
+    ``ATTACKER_AFFINITY``-gated ones — live on the PC's defensive roll.
 
     Not ``setUpTestData`` — factories here create Evennia ``ObjectDB`` instances
     (``DbHolder``, not deepcopyable), same rationale as ``ResolveNpcAttackTests``
@@ -383,7 +383,7 @@ class ResolveNpcAttackSituationalPerkTests(TestCase):
         self.assertEqual(result.success_level, -1)
 
     def test_attacker_abyssal_tier_floor_binds_only_vs_authored_abyssal_opponent(self) -> None:
-        """A TIER_FLOOR perk gated on ATTACKER_ABYSSAL raises the defender's forced
+        """A TIER_FLOOR perk gated on ATTACKER_AFFINITY raises the defender's forced
         failure to the floor only when the attacking opponent is authored Abyssal —
         an otherwise-identical non-Abyssal attacker leaves the outcome untouched.
         """
@@ -394,7 +394,7 @@ class ResolveNpcAttackSituationalPerkTests(TestCase):
             floor_success_level=1,
             beneficiary=PerkBeneficiary.SELF,
         )
-        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.ATTACKER_ABYSSAL)
+        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.ATTACKER_AFFINITY)
 
         abyssal_action = self._npc_action(affinity=AffinityType.ABYSSAL)
         with force_check_outcome(outcomes[-1]):

@@ -5285,7 +5285,7 @@ def resolve_npc_attack(
     threads a ``SituationContext`` with ``attacker`` populated
     (``opponent_action.opponent``) into ``perform_check`` — making
     CHECK_BONUS/TIER_FLOOR/BOTCH_IMMUNITY situational perks, including
-    ``Situation.ATTACKER_ABYSSAL``-gated ones, live on the defender's roll.
+    ``Situation.ATTACKER_AFFINITY``-gated ones, live on the defender's roll.
 
     Args:
         opponent_action: The NPC's chosen action for the round.
@@ -5378,7 +5378,7 @@ def resolve_npc_attack(
     # CHECK_BONUS/TIER_FLOOR/BOTCH_IMMUNITY situational perks can fire on the
     # PC's defensive roll — the one context where the SUBJECT is not the
     # aggressor, so `target` stays None and `attacker` carries the NPC's
-    # opponent row instead (the ATTACKER_ABYSSAL evaluator's data source).
+    # opponent row instead (the ATTACKER_AFFINITY evaluator's data source).
     # Mirrors the offense sites' sheet + CombatRoundContext construction
     # (services.py:435-448) with `holder`/`subject` both the defender's own
     # sheet, matching `_resolve_social_check`'s pattern above.
