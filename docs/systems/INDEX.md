@@ -1445,6 +1445,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
     rows (tier >= `minimum_tier`, optionally narrowed to `required_track_kind`) against
     `minimum_count` (#2116)
   - `ItemRequirement` — possession-only check of a physical touchstone/trophy item, template or touchstone mode (#1859)
+  - `CodexKnowledgeRequirement` — checks `CharacterCodexKnowledge` at `KNOWN` status for a specific `CodexEntry`; gates Path selection behind codex knowledge (#2603)
 - **Key Functions:**
   - `check_requirements_for_unlock(character, unlock) -> tuple[bool, list[str]]`
   - `get_available_unlocks_for_character(character) -> AvailableUnlocks`
