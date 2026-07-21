@@ -88,8 +88,9 @@ class CombatOpponentAdmin(admin.ModelAdmin):
         "health",
         "max_health",
         "status",
+        "affinity",
     ]
-    list_filter = ["tier", "status"]
+    list_filter = ["tier", "status", "affinity"]
     inlines = [BossPhaseInline]
 
 

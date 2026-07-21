@@ -4,7 +4,11 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
+from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.constants import BOTCH_SUCCESS_LEVEL_MAX
+from world.checks.factories import CheckTypeFactory
+from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import (
     DEFENSE_CRITICAL_MULTIPLIER,
     DEFENSE_FULL_MULTIPLIER,
@@ -22,7 +26,22 @@ from world.combat.services import (
     _damage_multiplier_for_success,
     resolve_npc_attack,
 )
+from world.covenants.factories import (
+    CharacterCovenantRoleFactory,
+    CovenantFactory,
+    CovenantRoleFactory,
+    VowSituationalPerkFactory,
+    VowSituationalPerkSituationFactory,
+)
+from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
+from world.magic.types.aura import AffinityType
 from world.scenes.constants import RoundStatus
+from world.traits.factories import (
+    CheckOutcomeFactory,
+    ResultChartFactory,
+    ResultChartOutcomeFactory,
+)
+from world.traits.models import ResultChart
 from world.vitals.models import CharacterVitals
 
 
@@ -282,3 +301,109 @@ class DefensiveFashionWiringTests(TestCase):
             perform_check_fn=spy,
         )
         self.assertEqual(captured["extra_modifiers"], FASHION_MATCH_BASE)
+
+
+class ResolveNpcAttackSituationalPerkTests(TestCase):
+    """The defense-side situation seam (#2536 slice 3, Task 6): ``resolve_npc_attack``
+    threads a ``SituationContext`` (holder/subject = defender, attacker = the NPC's
+    ``CombatOpponent``) into the REAL ``perform_check`` (no ``perform_check_fn``
+    override), so ``BOTCH_IMMUNITY``/``TIER_FLOOR`` situational perks — including
+    ``ATTACKER_ABYSSAL``-gated ones — live on the PC's defensive roll.
+
+    Not ``setUpTestData`` — factories here create Evennia ``ObjectDB`` instances
+    (``DbHolder``, not deepcopyable), same rationale as ``ResolveNpcAttackTests``
+    above and ``OutcomeGuaranteeTests`` (``world/checks/tests/test_outcome_guarantees.py``),
+    whose ``_chart``/force-outcome pattern this mirrors.
+    """
+
+    def setUp(self) -> None:
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.check_type = CheckTypeFactory(name="NPC Defense Guarantee")
+        ResultChart.clear_cache()
+
+        self.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.sheet
+        )
+        CharacterVitals.objects.create(character_sheet=self.sheet, health=200, max_health=200)
+
+        self.pool = ThreatPoolFactory()
+        self.entry = ThreatPoolEntryFactory(pool=self.pool, base_damage=100)
+
+        self.covenant = CovenantFactory()
+        self.role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
+        CharacterCovenantRoleFactory(
+            character_sheet=self.sheet,
+            covenant=self.covenant,
+            covenant_role=self.role,
+            engaged=True,
+        )
+
+    def _chart(self, *levels: int) -> tuple[ResultChart, dict[int, object]]:
+        """One rank-0 chart with one outcome per success_level, roll bands stacked
+        (mirrors ``OutcomeGuaranteeTests._chart``)."""
+        chart = ResultChartFactory(rank_difference=0)
+        outcomes = {}
+        lo = 1
+        for level in levels:
+            outcome = CheckOutcomeFactory(name=f"L{level}", success_level=level)
+            ResultChartOutcomeFactory(chart=chart, outcome=outcome, min_roll=lo, max_roll=lo + 9)
+            outcomes[level] = outcome
+            lo += 10
+        return chart, outcomes
+
+    def _npc_action(self, *, affinity: str = "") -> CombatOpponentAction:
+        opponent = CombatOpponentFactory(
+            encounter=self.encounter, threat_pool=self.pool, affinity=affinity
+        )
+        action = CombatOpponentAction.objects.create(
+            opponent=opponent, round_number=1, threat_entry=self.entry
+        )
+        action.targets.add(self.participant)
+        return action
+
+    def test_botch_immunity_perk_suppresses_forced_botch_on_defense(self) -> None:
+        """A BOTCH_IMMUNITY perk on the defender's engaged role means a forced
+        botch on the defensive roll comes out a plain (least-bad) non-botch —
+        a Stalwart Defender cannot botch a block while their perk holds.
+        """
+        _chart, outcomes = self._chart(-2, -1, 1)
+        VowSituationalPerkFactory(
+            covenant_role=self.role,
+            effect_kind=PerkEffectKind.BOTCH_IMMUNITY,
+            beneficiary=PerkBeneficiary.SELF,
+        )
+        action = self._npc_action()
+
+        with force_check_outcome(outcomes[-2]):
+            result = resolve_npc_attack(action, self.participant, self.check_type)
+
+        self.assertGreater(result.success_level, BOTCH_SUCCESS_LEVEL_MAX)
+        self.assertEqual(result.success_level, -1)
+
+    def test_attacker_abyssal_tier_floor_binds_only_vs_authored_abyssal_opponent(self) -> None:
+        """A TIER_FLOOR perk gated on ATTACKER_ABYSSAL raises the defender's forced
+        failure to the floor only when the attacking opponent is authored Abyssal —
+        an otherwise-identical non-Abyssal attacker leaves the outcome untouched.
+        """
+        _chart, outcomes = self._chart(-1, 0, 1)
+        perk = VowSituationalPerkFactory(
+            covenant_role=self.role,
+            effect_kind=PerkEffectKind.TIER_FLOOR,
+            floor_success_level=1,
+            beneficiary=PerkBeneficiary.SELF,
+        )
+        VowSituationalPerkSituationFactory(perk=perk, situation=Situation.ATTACKER_ABYSSAL)
+
+        abyssal_action = self._npc_action(affinity=AffinityType.ABYSSAL)
+        with force_check_outcome(outcomes[-1]):
+            bound_result = resolve_npc_attack(abyssal_action, self.participant, self.check_type)
+        self.assertEqual(bound_result.success_level, 1)
+
+        non_abyssal_action = self._npc_action(affinity=AffinityType.CELESTIAL)
+        with force_check_outcome(outcomes[-1]):
+            unbound_result = resolve_npc_attack(
+                non_abyssal_action, self.participant, self.check_type
+            )
+        self.assertEqual(unbound_result.success_level, -1)

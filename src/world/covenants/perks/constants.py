@@ -18,19 +18,22 @@ class Situation(models.TextChoices):
     addition (#2536 Task 3); ``COMBAT_OPENED_FROM_PARLEY`` and
     ``AMBUSH_UNDERWAY`` are slice 3's origin-marker addition (#2536 Task 4);
     ``ALLY_INTERCEPTED_FOR_ME`` is slice 3's declared-guard addition (#2536
-    Task 5) — the enum ships no other inert entries; every value here has a
-    registered evaluator with signature ``(ctx: SituationContext) -> bool``.
+    Task 5); ``ATTACKER_ABYSSAL`` is slice 3's defense-side seam addition
+    (#2536 Task 6) — the enum ships no other inert entries; every value here
+    has a registered evaluator with signature ``(ctx: SituationContext) ->
+    bool``.
     ``SituationContext`` (``perks.context``) carries four required fields plus
     slice-3 scoping/defense fields: ``holder`` (the perk-owning vow-holder),
     ``subject`` (the acting character whose cast/check is resolving — equals
     ``holder`` for SELF perks), ``target`` (the action's target sheet,
-    ``None`` when the action has none), and ``resolution`` (the live
+    ``None`` when the action has none), ``resolution`` (the live
     resolution context — ``CombatRoundContext`` in combat, the check's
-    context otherwise, ``None`` when absent). An evaluator whose required
-    field is missing/``None`` returns False (a combat-positioning situation
-    simply never holds outside combat; a DB-state situation like
-    ``TARGET_DISTRACTED`` evaluates anywhere). DEFERRED (arrives with its own
-    machinery, not listed here): ``attacker_abyssal``.
+    context otherwise, ``None`` when absent), and ``attacker`` (the attacking
+    entity on a defense-side resolution, ``None`` on every offense-side one —
+    see ``ATTACKER_ABYSSAL`` below). An evaluator whose required field is
+    missing/``None`` returns False (a combat-positioning situation simply
+    never holds outside combat; a DB-state situation like
+    ``TARGET_DISTRACTED`` evaluates anywhere).
 
     - ``AT_RANGE`` — the SUBJECT's engagement distance profile this round is
       ranged (has at least one actively-engaged enemy, none of them sharing
@@ -108,6 +111,14 @@ class Situation(models.TextChoices):
       counts as soon as it is armed; the situation does not wait for the
       interpose to actually intercept damage. Reads ``holder`` + ``resolution``;
       False outside combat.
+    - ``ATTACKER_ABYSSAL`` — the attacking entity on a DEFENSE resolution is
+      Abyssal-affiliated (#2536 slice 3, Task 6): a ``CombatOpponent`` with a
+      non-empty authored ``affinity`` matching ``AffinityType.ABYSSAL``, or
+      (falling back) a reachable ObjectDB whose ``CharacterAura.
+      dominant_affinity`` is Abyssal. Reads ``attacker``; False when
+      ``attacker`` is ``None`` (every offense-side resolution) or carries no
+      affinity/aura data. ``world.combat.services.resolve_npc_attack`` is the
+      only defense-check site that threads ``attacker`` in v1.
     """
 
     AT_RANGE = "at_range", "At Range"
@@ -123,6 +134,7 @@ class Situation(models.TextChoices):
     COMBAT_OPENED_FROM_PARLEY = "combat_opened_from_parley", "Combat Opened From Parley"
     AMBUSH_UNDERWAY = "ambush_underway", "Ambush Underway"
     ALLY_INTERCEPTED_FOR_ME = "ally_intercepted_for_me", "Ally Intercepted for Me"
+    ATTACKER_ABYSSAL = "attacker_abyssal", "Attacker Abyssal"
 
 
 class PerkEffectKind(models.TextChoices):

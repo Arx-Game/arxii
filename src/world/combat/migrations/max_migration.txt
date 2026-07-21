@@ -1,1 +1,1 @@
-0050_combatencounter_opened_from_parley
+0051_combatopponent_affinity

@@ -142,6 +142,7 @@ class CombatOpponentFactory(factory_django.DjangoModelFactory):
     max_health = 50
     threat_pool = factory.SubFactory(ThreatPoolFactory)
     persona = None
+    affinity = ""
 
     @factory.lazy_attribute
     def objectdb_is_ephemeral(self) -> bool:

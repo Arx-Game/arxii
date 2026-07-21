@@ -64,10 +64,12 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
         extra_modifiers: Additional modifiers from caller (goals, magic, etc.).
         effort_level: Optional EffortLevel value. Applies effort check modifier.
         fatigue_penalty: Penalty from fatigue zone (caller-computed, typically negative).
-        situation_ctx: (#2536, Task 5) the checking character's own
-            ``SituationContext`` — only ``.resolution`` (a ``CombatRoundContext``
-            or ``None``) and ``.target`` are read; ``.holder``/``.subject`` are
-            unused here (the checking character's ``CharacterSheet`` is
+        situation_ctx: (#2536, Task 5; ``.attacker`` added slice 3 Task 6) the
+            checking character's own ``SituationContext`` — only
+            ``.resolution`` (a ``CombatRoundContext`` or ``None``),
+            ``.target``, and ``.attacker`` (the defense-side attacking
+            entity, or ``None`` on offense) are read; ``.holder``/``.subject``
+            are unused here (the checking character's ``CharacterSheet`` is
             resolved from ``character`` directly). ``None`` (the default) is
             byte-identical to pre-#2536 behavior — no query, no perk lookup.
             When provided, fires ``CHECK_BONUS`` situational perks
@@ -279,6 +281,7 @@ def _situational_perk_check_bonus(
         effect_kind=PerkEffectKind.CHECK_BONUS,
         resolution=situation_ctx.resolution,
         target=situation_ctx.target,
+        attacker=situation_ctx.attacker,
     )
     scoped = [
         firing
@@ -350,6 +353,7 @@ def _apply_outcome_guarantees(
         effect_kind=(PerkEffectKind.TIER_FLOOR, PerkEffectKind.BOTCH_IMMUNITY),
         resolution=situation_ctx.resolution,
         target=situation_ctx.target,
+        attacker=situation_ctx.attacker,
     )
     if not fired:
         return outcome

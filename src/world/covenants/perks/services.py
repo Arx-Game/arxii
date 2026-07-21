@@ -137,6 +137,7 @@ def applicable_perks(
     effect_kind: str | tuple[str, ...],
     resolution: object | None,
     target: CharacterSheet | None,
+    attacker: object | None = None,
 ) -> list[FiredPerk]:
     """Return every ``VowSituationalPerk`` of ``effect_kind`` that fires for
     ``subject``'s resolution right now (#2536 spec §2, Task 3).
@@ -151,7 +152,11 @@ def applicable_perks(
     ``CombatRoundContext`` in combat, a check-pipeline context otherwise, or
     ``None``) — see ``SituationContext``'s docstring; it is reused unchanged
     across every candidate holder evaluated here. ``target`` is the subject's
-    action target, or ``None``.
+    action target, or ``None``. ``attacker`` (#2536 slice 3, Task 6) is the
+    SUBJECT's defense-side attacking entity, or ``None`` (the default, and
+    every offense-side caller) — threaded through to every candidate
+    holder's ``SituationContext`` so the ``ATTACKER_ABYSSAL`` evaluator can
+    read it.
     """
     candidates = _self_candidates(subject) + _ally_candidates(subject, resolution)
     if not candidates:
@@ -163,7 +168,9 @@ def applicable_perks(
     if not perks_by_role:
         return []
 
-    resolver = _PerkResolver(subject=subject, target=target, resolution=resolution)
+    resolver = _PerkResolver(
+        subject=subject, target=target, resolution=resolution, attacker=attacker
+    )
     fired: list[FiredPerk] = []
     for role_id, holder, allowed_beneficiaries in candidates:
         for perk in perks_by_role.get(role_id, ()):
@@ -432,11 +439,11 @@ def _fetch_candidate_perks(
 
 
 class _PerkResolver:
-    """Evaluates candidate perks against the ONE (subject, target, resolution)
-    triple shared by every candidate holder in a single ``applicable_perks``
-    call. Holds a per-call situation-evaluation cache (keyed on
-    ``(situation, holder_pk)``) so a situation shared by multiple candidate
-    perks/holders is evaluated at most once.
+    """Evaluates candidate perks against the ONE (subject, target, resolution,
+    attacker) tuple shared by every candidate holder in a single
+    ``applicable_perks`` call. Holds a per-call situation-evaluation cache
+    (keyed on ``(situation, holder_pk)``) so a situation shared by multiple
+    candidate perks/holders is evaluated at most once.
     """
 
     def __init__(
@@ -445,17 +452,23 @@ class _PerkResolver:
         subject: CharacterSheet,
         target: CharacterSheet | None,
         resolution: object | None,
+        attacker: object | None = None,
     ) -> None:
         self.subject = subject
         self.target = target
         self.resolution = resolution
+        self.attacker = attacker
         self._eval_cache: dict[tuple[str, int], bool] = {}
 
     def _holds(self, situation: str, holder: CharacterSheet) -> bool:
         key = (situation, holder.pk)
         if key not in self._eval_cache:
             ctx = SituationContext(
-                holder=holder, subject=self.subject, target=self.target, resolution=self.resolution
+                holder=holder,
+                subject=self.subject,
+                target=self.target,
+                resolution=self.resolution,
+                attacker=self.attacker,
             )
             self._eval_cache[key] = SITUATION_EVALUATORS[situation](ctx)
         return self._eval_cache[key]

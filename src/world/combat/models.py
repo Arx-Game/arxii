@@ -58,6 +58,7 @@ from world.fatigue.constants import EffortLevel
 from world.gm.constants import GMLevel
 from world.magic.constants import EffectKind, VitalBonusTarget
 from world.magic.models.commitments import CommittingDeclaration
+from world.magic.types.aura import AffinityType
 from world.scenes.round_models import AbstractRound
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
@@ -622,6 +623,21 @@ class CombatOpponent(SharedMemoryModel):
     vulnerability_intensity_bonus = models.PositiveIntegerField(
         default=0,
         help_text="Intensity bonus during vulnerability window; from BreakBarConfig.",
+    )
+
+    # === Affinity field (#2536 slice 3 Task 6) ===
+    affinity = models.CharField(
+        max_length=20,
+        choices=AffinityType.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Authored magical affinity for non-persona NPCs (generic/ephemeral "
+            "opponents carry no CharacterAura row to infer from). Blank = "
+            "untyped/unauthored — the ATTACKER_ABYSSAL situational-perk evaluator "
+            "(world.covenants.perks.evaluators) falls back to a reachable "
+            "ObjectDB's CharacterAura.dominant_affinity when this is blank."
+        ),
     )
 
     class Meta:

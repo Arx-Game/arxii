@@ -614,3 +614,70 @@ def ally_intercepted_for_me(ctx: SituationContext) -> bool:
         ).values_list("character_sheet_id", flat=True)
     )
     return any(d.participant.character_sheet_id in mate_sheet_ids for d in guarding)
+
+
+@register(Situation.ATTACKER_ABYSSAL)
+def attacker_abyssal(ctx: SituationContext) -> bool:
+    """True when ``ctx.attacker`` is Abyssal-affiliated (#2536 slice 3, Task 6).
+
+    ``ctx.attacker`` is populated ONLY on a defense-side resolution (see
+    ``SituationContext``'s docstring, "attacker") — a ``CombatOpponent`` or an
+    ObjectDB-backed attacker; ``None`` on every offense-side resolution, which
+    this evaluator reads as False. Resolution order, never raising on missing
+    relations:
+
+    1. A ``CombatOpponent`` with a non-empty AUTHORED ``affinity``
+       (``world/combat/models.py`` — #2536 slice 3 field, for non-persona/
+       generic NPCs that carry no ``CharacterAura`` row to infer from) —
+       compared directly against ``AffinityType.ABYSSAL``. Authored typing
+       wins outright when present; the aura fallback below is never
+       consulted.
+    2. A reachable ``ObjectDB`` carrying a ``CharacterAura``
+       (``world/magic/models/aura.py`` — a ``OneToOneField`` with
+       ``related_name="aura"``) — read via ``attacker.objectdb.aura`` for a
+       ``CombatOpponent`` (``objectdb`` is nullable — covers persona-backed
+       story NPCs AND PvP attackers, see the PvP note below) or
+       ``attacker.aura`` for a bare ``ObjectDB`` attacker. Holds when
+       ``dominant_affinity == AffinityType.ABYSSAL``.
+    3. Otherwise False — no attacker, no authored affinity, and no aura data
+       reachable (an ephemeral/generic NPC with neither).
+
+    PvP note (v1 scope): a PvP attacker is a ``CombatOpponent`` row with
+    ``objectdb`` set to the attacking PC (never an authored ``affinity`` —
+    that field is generic-NPC-only), so path (2) is what covers PvP.
+    ``world.combat.services.resolve_npc_attack`` is the ONLY defense-check
+    site threaded with ``ctx.attacker`` in v1 — the penetration-vs-ward PvP
+    path has no defender roll to thread this into.
+
+    At most one query (the ``CharacterAura`` OneToOne fetch, reached only
+    when no authored affinity short-circuits path 1 first).
+    """
+    attacker = ctx.attacker
+    if attacker is None:
+        return False
+
+    from world.magic.types.aura import AffinityType  # noqa: PLC0415
+
+    try:
+        affinity = attacker.affinity
+    except AttributeError:
+        affinity = ""
+    if affinity:
+        return affinity == AffinityType.ABYSSAL
+
+    try:
+        objectdb = attacker.objectdb
+    except AttributeError:
+        # Not a CombatOpponent (no `.objectdb` indirection) — treat the
+        # attacker itself as the ObjectDB to read `.aura` off directly.
+        objectdb = attacker
+    if objectdb is None:
+        return False
+
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        aura = objectdb.aura
+    except (ObjectDoesNotExist, AttributeError):
+        return False
+    return aura.dominant_affinity == AffinityType.ABYSSAL

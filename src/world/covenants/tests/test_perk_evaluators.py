@@ -12,6 +12,8 @@ would break ``setUpTestData``'s deepcopy (same rationale as
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -40,17 +42,22 @@ from world.covenants.perks.constants import Situation
 from world.covenants.perks.context import SituationContext
 from world.covenants.perks.evaluators import SITUATION_EVALUATORS
 from world.magic.constants import TechniqueFunction
-from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
+from world.magic.factories import (
+    CharacterAuraFactory,
+    TechniqueFactory,
+    TechniqueFunctionTagFactory,
+)
+from world.magic.types.aura import AffinityType
 from world.npc_services.factories import NPCStandingFactory
-from world.scenes.factories import SceneFactory
+from world.scenes.factories import PersonaFactory, SceneFactory
 from world.vitals.models import CharacterVitals
 
 
 class SituationEvaluatorRegistryTests(TestCase):
     """The registry carries exactly every live ``Situation`` value (9 from slice 1,
     ``CHAMPION_DUEL`` from slice 3 Task 3, ``COMBAT_OPENED_FROM_PARLEY`` and
-    ``AMBUSH_UNDERWAY`` from slice 3 Task 4, plus ``ALLY_INTERCEPTED_FOR_ME`` from
-    slice 3 Task 5, #2536)."""
+    ``AMBUSH_UNDERWAY`` from slice 3 Task 4, ``ALLY_INTERCEPTED_FOR_ME`` from
+    slice 3 Task 5, plus ``ATTACKER_ABYSSAL`` from slice 3 Task 6, #2536)."""
 
     def test_registry_covers_every_surviving_situation(self) -> None:
         self.assertEqual(set(SITUATION_EVALUATORS), set(Situation.values))
@@ -778,3 +785,64 @@ class AllyInterceptedForMeQueryBudgetTests(TestCase):
 
         self.assertEqual(count_with_one, count_with_three)
         self.assertEqual(count_with_one, 2)
+
+
+class AttackerAbyssalEvaluatorTests(TestCase):
+    """ATTACKER_ABYSSAL (#2536 slice 3, Task 6): resolution order —
+    (1) a ``CombatOpponent`` with a non-empty authored ``affinity`` compares
+    directly, (2) a reachable ``ObjectDB``'s ``CharacterAura.dominant_affinity``
+    is the fallback, (3) otherwise False. Never raises on missing relations;
+    False when ``ctx.attacker`` is ``None``.
+    """
+
+    def setUp(self) -> None:
+        self.holder_sheet = CharacterSheetFactory()
+        self.subject_sheet = CharacterSheetFactory()
+
+    def _ctx(self, attacker: object | None) -> SituationContext:
+        return SituationContext(
+            holder=self.holder_sheet,
+            subject=self.subject_sheet,
+            target=None,
+            resolution=None,
+            attacker=attacker,
+        )
+
+    def test_true_for_authored_abyssal_opponent(self) -> None:
+        opponent = CombatOpponentFactory(affinity=AffinityType.ABYSSAL)
+        self.assertTrue(evaluators.attacker_abyssal(self._ctx(opponent)))
+
+    def test_false_for_authored_non_abyssal_opponent(self) -> None:
+        opponent = CombatOpponentFactory(affinity=AffinityType.CELESTIAL)
+        self.assertFalse(evaluators.attacker_abyssal(self._ctx(opponent)))
+
+    def test_true_for_persona_backed_opponent_with_abyssal_dominant_aura(self) -> None:
+        """No authored affinity — falls back to the persona's ObjectDB CharacterAura."""
+        persona = PersonaFactory()
+        CharacterAuraFactory(
+            character=persona.character_sheet.character,
+            celestial=Decimal("10.00"),
+            primal=Decimal("10.00"),
+            abyssal=Decimal("80.00"),
+        )
+        opponent = CombatOpponentFactory(persona=persona)
+        self.assertTrue(evaluators.attacker_abyssal(self._ctx(opponent)))
+
+    def test_false_for_persona_backed_opponent_with_non_abyssal_aura(self) -> None:
+        persona = PersonaFactory()
+        CharacterAuraFactory(
+            character=persona.character_sheet.character,
+            celestial=Decimal("10.00"),
+            primal=Decimal("80.00"),
+            abyssal=Decimal("10.00"),
+        )
+        opponent = CombatOpponentFactory(persona=persona)
+        self.assertFalse(evaluators.attacker_abyssal(self._ctx(opponent)))
+
+    def test_false_with_no_affinity_and_no_aura_data(self) -> None:
+        """A generic ephemeral opponent: no authored affinity, no CharacterAura row."""
+        opponent = CombatOpponentFactory()
+        self.assertFalse(evaluators.attacker_abyssal(self._ctx(opponent)))
+
+    def test_false_when_no_attacker(self) -> None:
+        self.assertFalse(evaluators.attacker_abyssal(self._ctx(None)))
