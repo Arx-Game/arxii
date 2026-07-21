@@ -13,10 +13,10 @@ from world.distinctions.models import (
     CharacterDistinctionOther,
     Distinction,
     DistinctionCategory,
-    DistinctionChangeAuthorization,
     DistinctionEffect,
     DistinctionPrerequisite,
     DistinctionTag,
+    SheetUpdateRequest,
 )
 from world.distinctions.types import OtherStatus
 
@@ -182,14 +182,15 @@ class CharacterDistinctionOtherAdmin(admin.ModelAdmin):
         self.message_user(request, f"{updated} entries marked as approved.")
 
 
-@admin.register(DistinctionChangeAuthorization)
-class DistinctionChangeAuthorizationAdmin(admin.ModelAdmin):
-    list_display = ("character_sheet", "action", "xp_cost", "is_consumed", "created_at")
-    list_filter = ("action", "is_consumed")
-    readonly_fields = ("created_at", "consumed_at")
+@admin.register(SheetUpdateRequest)
+class SheetUpdateRequestAdmin(admin.ModelAdmin):
+    list_display = ("character_sheet", "request_type", "status", "xp_cost", "created_at")
+    list_filter = ("request_type", "status")
+    readonly_fields = ("created_at", "reviewed_at")
     raw_id_fields = (
         "character_sheet",
         "target_distinction",
         "target_character_distinction",
-        "authorized_by",
+        "reviewed_by",
+        "submitted_by",
     )
