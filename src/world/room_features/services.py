@@ -196,6 +196,20 @@ def handle_command_center_progression(
     _install_or_level_feature(project, target_level)
 
 
+def handle_bank_progression(
+    project: Project,
+    target_level: int,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """BANK strategy (#2540 Layer 4): row-only install.
+
+    The feature's 'content' is reachability — where one stands, the org-vault
+    deposit/withdraw actions may be performed. Custody itself lives in
+    ``world.items``' ``OrganizationVault``, never in the room.
+    """
+    _install_or_level_feature(project, target_level)
+
+
 def handle_notice_board_progression(
     project: Project,
     target_level: int,

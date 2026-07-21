@@ -3829,10 +3829,17 @@ holder is never notified a claim exists.
   across piloted heads, PLACEHOLDER semantic), AND the carrier's explicit keep list is the
   opt-in. A KEPT stone stays in the carrier's hands and books NO vault event — the resolved
   transit row is the staff-side record; the tally-vs-deposits gap is the in-world discovery
-  hook. In-transit loss deliberately not built (loss lives in the collection roll). WHERE
-  deposit/withdraw may be performed (bank room / bank-access room feature) is a follow-up
-  action-layer prerequisite gate; distinct from the physical room-feature VAULT (#2179),
-  which secures loose items in a room.
+  hook. In-transit loss deliberately not built (loss lives in the collection roll). **The
+  WHERE gate is now wired** (#2540 economy wiring — supersedes the earlier follow-up note):
+  `VaultDepositAction`/`VaultWithdrawAction` (`actions/definitions/org_vault.py`, keys
+  `vault_deposit`/`vault_withdraw`, REST int kwargs) are performable only where an active
+  **BANK** `RoomFeatureServiceStrategy` feature stands (a bank room on grid or an
+  owner-installed bank-access decor feature — the ratified access surface; reachability-only
+  handler in `room_features`, COMMAND_CENTER's shape). Distinct from the physical room-feature
+  VAULT (#2179), which secures loose items in a room. **Weekly gem accrual is wired**:
+  `run_weekly_economy`'s `gem_mines` phase (`_weekly_mine_accrual`) runs one `accrue_mine_cycle`
+  per configured holding (`common_gem_tier` set) — haul amasses uncollected per ADR-0081; only
+  an active collection delivers it.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)

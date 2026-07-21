@@ -264,6 +264,7 @@ from actions.definitions.npc_services import (
     resolve_npc_offer,
     start_npc_interaction,
 )
+from actions.definitions.org_vault import vault_deposit, vault_withdraw
 from actions.definitions.organizations import (
     org_apply_action,
     org_demote_action,
@@ -670,6 +671,8 @@ _ALL_ACTIONS: list[Action] = [
     seduce,
     blackmail,
     boon,
+    vault_deposit,
+    vault_withdraw,
     coerce,
     reveal_secret,
     CharmAssetAction(),

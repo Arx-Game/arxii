@@ -1414,12 +1414,34 @@ def run_weekly_economy() -> dict[str, int]:
     return {
         "interest": _weekly_interest_accrual(),
         "income": _weekly_income_streams(),
+        "gem_mines": _weekly_mine_accrual(),
         "assets": _weekly_asset_income(),
         "debt_service": _weekly_debt_service(),
         "contracts": _weekly_contract_settlement(),
         "wages": _weekly_wages(),
         "businesses": _weekly_business_fortunes(),
     }
+
+
+def _weekly_mine_accrual() -> int:
+    """One weekly gem cycle per configured mine holding (#2540, Build 0b wiring).
+
+    Rides the same rollover as the coin pools: haul amasses UNCOLLECTED
+    (``StreamCommonGemPool`` / ``PendingRareFind``) and only an active collection
+    dispatch delivers it (ADR-0081 — automatic loss is fine, automatic gain is not).
+    Lazy import keeps currency free of an items dependency at load (FK direction).
+    """
+    from world.items.gems.mining import accrue_mine_cycle  # noqa: PLC0415
+    from world.societies.houses.models import DomainHolding  # noqa: PLC0415
+
+    count = 0
+    for holding in DomainHolding.objects.filter(common_gem_tier__isnull=False):
+        try:
+            accrue_mine_cycle(holding=holding)
+            count += 1
+        except Exception:
+            logger.exception("weekly economy: mine accrual failed for holding %s", holding.pk)
+    return count
 
 
 def _weekly_debt_service() -> int:
