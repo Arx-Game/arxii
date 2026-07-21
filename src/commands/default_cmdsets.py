@@ -126,6 +126,7 @@ from commands.scene import CmdScene
 from commands.seance import CmdSeance
 from commands.setsituation import CmdSetSituation
 from commands.setstage import CmdSetStage
+from commands.sheet_request import CmdSheetRequest  # #2628 — sheet-update requests.
 from commands.ships import CmdShip
 from commands.signature import CmdSignature
 from commands.social.accusations import CmdAccuse, CmdFrame
@@ -361,6 +362,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdGrantItem,
             # #2037 — GM: award/rank-up a catalog Distinction (post-CG acquisition).
             CmdGrantDistinction,
+            # #2628 — player/GM sheet-update request namespace.
+            CmdSheetRequest,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdRoom,
             # #2178 — NPC guard assignment (assign/unassign/list).
