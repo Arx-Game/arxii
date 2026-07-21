@@ -9,7 +9,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("conditions", "0021_durationtype_ingame_time"),
-        ("magic", "0117_ghosttutelage"),
+        ("magic", "0118_glimpse_tag_trigger_axis_paths"),
         ("worship", "0002_miracles_divine_intervention"),
     ]
 
