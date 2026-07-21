@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.distinctions.services import (
+    change_supported,
     distinction_change_xp_cost,
     grant_distinction,
     revoke_distinction,
@@ -21,7 +22,8 @@ from world.distinctions.services import (
 from world.distinctions.types import DistinctionOrigin
 
 if TYPE_CHECKING:
-    from world.gm.models import TableUpdateRequest
+    from world.distinctions.models import Distinction
+    from world.gm.models import GMTableMembership, TableUpdateRequest
 
 
 class XPInsufficient(Exception):
@@ -85,3 +87,53 @@ def complete_distinction_remove(request: TableUpdateRequest) -> None:
         distinction=details.distinction,
     )
     revoke_distinction(character_distinction)
+
+
+def submit_distinction_request(
+    *,
+    membership: GMTableMembership,
+    distinction: Distinction,
+    removing: bool,
+    reasoning: str,
+) -> TableUpdateRequest:
+    """File a PENDING distinction add/remove request at a table (#2607).
+
+    Validates eligibility (``change_supported``; for a remove, the character must
+    hold the distinction), computes the XP cost, and creates the request plus its
+    details row. Raises ``TableRequestStateError`` on an ineligible submit.
+    """
+    from world.distinctions.models import (  # noqa: PLC0415
+        CharacterDistinction,
+        DistinctionChangeDetails,
+    )
+    from world.gm.constants import TableRequestKind  # noqa: PLC0415
+    from world.gm.models import TableUpdateRequest  # noqa: PLC0415
+    from world.gm.table_request_services import TableRequestStateError  # noqa: PLC0415
+
+    if not change_supported(distinction):
+        raise TableRequestStateError(
+            f"{distinction.name} can't be changed through a table request — "
+            "it involves magic, assets, or lore, or is staff-locked."
+        )
+
+    sheet = membership.persona.character_sheet
+    if removing:
+        held = CharacterDistinction.objects.filter(
+            character=sheet, distinction=distinction
+        ).first()
+        if held is None:
+            raise TableRequestStateError(f"This character does not hold {distinction.name}.")
+        rank = held.rank
+        kind = TableRequestKind.DISTINCTION_REMOVE
+    else:
+        rank = 1
+        kind = TableRequestKind.DISTINCTION_ADD
+
+    cost = distinction_change_xp_cost(distinction, rank=rank, removing=removing)
+    request = TableUpdateRequest.objects.create(
+        membership=membership, kind=kind, player_reasoning=reasoning
+    )
+    DistinctionChangeDetails.objects.create(
+        request=request, distinction=distinction, rank=rank, xp_cost=cost
+    )
+    return request
