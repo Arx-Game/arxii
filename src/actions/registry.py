@@ -407,6 +407,12 @@ from actions.definitions.story_builder import (
     StoryRemoveRoomAction,
     StoryUnlinkRoomsAction,
 )
+from actions.definitions.table_requests import (
+    TableRequestCompleteAction,
+    TableRequestSignoffAction,
+    TableRequestSubmitAction,
+    TableRequestWithdrawAction,
+)
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
 from actions.definitions.traps import DisarmTrapAction
@@ -522,6 +528,11 @@ _ALL_ACTIONS: list[Action] = [
     UseItemAction(),
     GrantItemAction(),
     GMAwardDistinctionAction(),
+    # #2607 — table sheet-update requests (distinction add/remove).
+    TableRequestSubmitAction(),
+    TableRequestWithdrawAction(),
+    TableRequestCompleteAction(),
+    TableRequestSignoffAction(),
     # #2183 — dramatic-moment suggestion confirm/dismiss (account-authorized GM inbox).
     ConfirmDramaticMomentSuggestionAction(),
     DismissDramaticMomentSuggestionAction(),

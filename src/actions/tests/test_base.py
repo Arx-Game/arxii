@@ -207,6 +207,11 @@ class ActionRegistryTests(TestCase):
             "use_item",
             "grant_item",
             "gm_award_distinction",
+            # #2607 — table sheet-update requests.
+            "table_request_submit",
+            "table_request_withdraw",
+            "table_request_complete",
+            "table_request_signoff",
             # #2183 — dramatic-moment suggestion confirm/dismiss (account-authorized GM inbox).
             "confirm_dramatic_moment_suggestion",
             "dismiss_dramatic_moment_suggestion",
