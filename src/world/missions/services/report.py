@@ -30,7 +30,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -41,13 +40,13 @@ from world.missions.constants import (
     MissionStatus,
     ReportStyle,
 )
+from world.missions.services._situation import mission_situation_ctx
 from world.missions.services.play import BeatActionError, participant_for
 from world.missions.services.rewards import apply_deed_rewards
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.covenants.perks.context import SituationContext
     from world.missions.models import MissionDeedRecord, MissionInstance
     from world.npc_services.models import Functionary, NPCRole
     from world.skills.models import Specialization
@@ -55,25 +54,6 @@ if TYPE_CHECKING:
 # PLACEHOLDER tuning — fame/prestige swing per report style, and the resonance a style grants.
 _FAME_PRESTIGE_DELTA = 5
 _STYLE_RESONANCE = {ReportStyle.HUMBLE: "Bene", ReportStyle.EMBELLISHED: "Insidia"}
-
-
-def _mission_situation_ctx(
-    character: ObjectDB, instance: MissionInstance
-) -> SituationContext | None:
-    """The ``SituationContext`` for a mission check by ``character`` in ``instance``
-    (#2536 slice 3 Court wiring). ``None`` when the character has no
-    ``CharacterSheet`` — mirrors the guard ``_situational_perk_check_bonus`` applies
-    itself, so a checker without a sheet is byte-identical to the pre-#2536 default.
-    """
-    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
-
-    try:
-        sheet = character.sheet_data
-    except (ObjectDoesNotExist, AttributeError):
-        return None
-    return SituationContext(
-        holder=sheet, subject=sheet, target=None, resolution=None, mission=instance
-    )
 
 
 class MissionReportError(BeatActionError):
@@ -186,7 +166,7 @@ def _run_embellish_check(
         check_type,
         target_difficulty=_embellish_difficulty(functionary),
         specialization=_manipulation_specialization(reporter),
-        situation_ctx=_mission_situation_ctx(reporter, instance),
+        situation_ctx=mission_situation_ctx(reporter, instance),
     )
     return result.outcome is not None and result.outcome.success_level >= 0
 
@@ -215,7 +195,7 @@ def _run_consequence_dodge_check(
         reporter,
         check_type,
         target_difficulty=_embellish_difficulty(functionary),
-        situation_ctx=_mission_situation_ctx(reporter, instance),
+        situation_ctx=mission_situation_ctx(reporter, instance),
     )
     return result.outcome is not None and result.outcome.success_level >= 0
 
@@ -255,7 +235,7 @@ def _apply_masked_deed_association(
             reporter,
             check_type,
             target_difficulty=_embellish_difficulty(functionary),
-            situation_ctx=_mission_situation_ctx(reporter, instance),
+            situation_ctx=mission_situation_ctx(reporter, instance),
         )
         if result.outcome is not None and result.outcome.success_level >= 0:
             return  # slipped away clean — nobody connected the faces.

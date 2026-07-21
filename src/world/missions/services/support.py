@@ -16,13 +16,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 
 from world.checks.consequence_resolution import apply_resolution
 from world.checks.services import perform_check
 from world.checks.types import ResolutionContext
 from world.conditions.services import get_effective_capability_value
+from world.missions.services._situation import mission_situation_ctx
 from world.missions.types import SupportMove
 from world.predicates.predicates import CharacterPredicateContext, evaluate
 
@@ -36,7 +36,6 @@ _ERR_UNKNOWN_SOURCE = "Unknown support source kind: {kind}"
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.covenants.perks.context import SituationContext
     from world.missions.models import (
         MissionAssistPattern,
         MissionInstance,
@@ -189,25 +188,6 @@ def support_moves_for(
     return moves
 
 
-def _mission_situation_ctx(
-    character: ObjectDB, instance: MissionInstance
-) -> SituationContext | None:
-    """The ``SituationContext`` for a mission check by ``character`` in ``instance``
-    (#2536 slice 3 Court wiring). ``None`` when the character has no
-    ``CharacterSheet`` — mirrors the guard ``_situational_perk_check_bonus`` applies
-    itself, so a checker without a sheet is byte-identical to the pre-#2536 default.
-    """
-    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
-
-    try:
-        sheet = character.sheet_data
-    except (ObjectDoesNotExist, AttributeError):
-        return None
-    return SituationContext(
-        holder=sheet, subject=sheet, target=None, resolution=None, mission=instance
-    )
-
-
 def _participant_or_raise(instance: MissionInstance, character: ObjectDB) -> MissionParticipant:
     """Return the participant row or raise BeatActionError."""
     from world.missions.services.play import BeatActionError  # noqa: PLC0415
@@ -268,7 +248,7 @@ def _roll_and_bank(  # noqa: PLR0913
             character,
             move.support_check_type,
             target_difficulty=move.difficulty,
-            situation_ctx=_mission_situation_ctx(character, instance),
+            situation_ctx=mission_situation_ctx(character, instance),
         )
         is_success = result.success_level >= 1
         easing_banked = move.easing if is_success else 0

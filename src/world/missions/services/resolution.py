@@ -59,7 +59,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from evennia_extensions.models import RoomProfile
@@ -77,6 +76,7 @@ from world.missions.models import (
     MissionOptionRoute,
     MissionOptionRouteCandidate,
 )
+from world.missions.services._situation import mission_situation_ctx
 from world.missions.services.beat import on_mission_complete_for_beat
 from world.missions.services.challenge_options import challenge_options_for_character
 from world.missions.services.renown_emission import emit_terminal_renown_awards
@@ -92,7 +92,6 @@ if TYPE_CHECKING:
 
     from evennia_extensions.models import RoomProfile
     from world.checks.models import CheckType
-    from world.covenants.perks.context import SituationContext
     from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
         MissionInstance,
@@ -342,25 +341,6 @@ def _auto_success_result(check_type: CheckType) -> CheckResult:
     )
 
 
-def _mission_situation_ctx(
-    character: ObjectDB, instance: MissionInstance
-) -> SituationContext | None:
-    """The ``SituationContext`` for a mission check by ``character`` in ``instance``
-    (#2536 slice 3 Court wiring). ``None`` when the character has no
-    ``CharacterSheet`` — mirrors the guard ``_situational_perk_check_bonus`` applies
-    itself, so a checker without a sheet is byte-identical to the pre-#2536 default.
-    """
-    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
-
-    try:
-        sheet = character.sheet_data
-    except (ObjectDoesNotExist, AttributeError):
-        return None
-    return SituationContext(
-        holder=sheet, subject=sheet, target=None, resolution=None, mission=instance
-    )
-
-
 def _resolve_challenge_check(
     option: MissionOption,
     character: ObjectDB,
@@ -396,7 +376,7 @@ def _resolve_challenge_check(
         chosen_approach.check_type,
         target_difficulty=challenge.severity,
         extra_modifiers=extra_modifiers,
-        situation_ctx=_mission_situation_ctx(character, instance),
+        situation_ctx=mission_situation_ctx(character, instance),
     )
 
 
@@ -627,7 +607,7 @@ def resolve_option(  # noqa: PLR0913
             check_type,
             target_difficulty=instance.template.risk_tier,
             extra_modifiers=extra_modifiers,
-            situation_ctx=_mission_situation_ctx(character, instance),
+            situation_ctx=mission_situation_ctx(character, instance),
         )
 
     route = MissionOptionRoute.objects.filter(
