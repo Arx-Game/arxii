@@ -248,3 +248,57 @@ class PCStylistTests(TestCase):
         self._tenure_for(self.stylist_sheet)
         result = use_item(item_instance=self.item, user=self.stylist, target=self.stylist)
         self.assertEqual(len(result.appearance_changes), 1)
+
+
+class DescriptorFlavorTests(TestCase):
+    """Multi-color hair: free-text descriptors ride cosmetic item uses (#2632)."""
+
+    def setUp(self) -> None:
+        self.trait = FormTraitFactory(name="hair_color_flavor", is_cosmetic=True)
+        self.black = FormTraitOptionFactory(trait=self.trait, name="onyx")
+        self.silver = FormTraitOptionFactory(trait=self.trait, name="silver")
+        self.template = ItemTemplateFactory(
+            name="Silver Dye",
+            is_consumable=True,
+            max_charges=2,
+        )
+        ItemTemplateAppearanceEffect.objects.create(
+            item_template=self.template,
+            trait=self.trait,
+            target_option=self.silver,
+        )
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        self.persona = self.sheet.primary_persona
+        self.form = CharacterFormFactory(character=self.character)
+        CharacterFormValueFactory(form=self.form, trait=self.trait, option=self.black)
+        self.item = ItemInstanceFactory(
+            template=self.template,
+            holder_character_sheet=self.sheet,
+            charges=2,
+        )
+
+    def test_descriptor_sets_presentation_flavor(self) -> None:
+        from world.forms.models import PersonaTraitDescriptor
+
+        use_item(
+            item_instance=self.item,
+            user=self.character,
+            descriptor="onyx shot through with silver streaks",
+        )
+        row = PersonaTraitDescriptor.objects.get(persona=self.persona, trait=self.trait)
+        self.assertEqual(row.text, "onyx shot through with silver streaks")
+
+    def test_use_without_descriptor_clears_stale_flavor(self) -> None:
+        from world.forms.models import PersonaTraitDescriptor
+
+        use_item(
+            item_instance=self.item,
+            user=self.character,
+            descriptor="onyx shot through with silver streaks",
+        )
+        self.item.refresh_from_db()
+        use_item(item_instance=self.item, user=self.character)
+        self.assertFalse(
+            PersonaTraitDescriptor.objects.filter(persona=self.persona, trait=self.trait).exists()
+        )

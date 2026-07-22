@@ -480,9 +480,14 @@ class UseItemAction(Action):
             return ActionResult(success=False, message="Use what?")
 
         target = kwargs.get("target")  # validated by prerequisites; None = self-use
+        # #2632 — optional free-text presentation flavor for cosmetic uses
+        # (multi-color hair, ornate work). Ignored by non-cosmetic items.
+        descriptor = (kwargs.get("descriptor") or "").strip() or None
 
         try:
-            result = use_item(item_instance=item_instance, user=actor, target=target)
+            result = use_item(
+                item_instance=item_instance, user=actor, target=target, descriptor=descriptor
+            )
         except ItemError as exc:
             return ActionResult(success=False, message=exc.user_message)
 

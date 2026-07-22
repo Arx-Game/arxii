@@ -32641,8 +32641,6 @@ export interface components {
        *     * `alternate` - Alternate
        */
       persona_type?: components['schemas']['PersonaTypeEnum'];
-      /** @description Physical description text */
-      description?: string;
       /** Format: uri */
       thumbnail_url?: string;
       readonly thumbnail_media_url: string | null;
@@ -37648,6 +37646,22 @@ export interface components {
      */
     UpdateBulletinReplyInputRequest: {
       body: string;
+    };
+    /**
+     * @description Request body for the inventory ``use`` action.
+     *
+     *     Deliberately near-empty: the REST endpoint applies on-use effects to the
+     *     holder (self) only. Targeted use belongs in the use-item Action layer,
+     *     which has proximity/prerequisite checks; accepting a target pk here would
+     *     let a player apply on-use effects to any character by pk.
+     *
+     *     ``descriptor`` (#2632) — optional free-text presentation flavor for
+     *     cosmetic self-uses ("raven shot through with silver streaks"); replaces
+     *     or clears the trait's descriptor per ``use_item``'s semantics.
+     */
+    UseItemRequest: {
+      /** @default  */
+      descriptor: string;
     };
     /** @description Response shape mirroring ``UseItemResult`` (issue #509). */
     UseItemResult: {
@@ -49953,7 +49967,11 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['UseItemRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {

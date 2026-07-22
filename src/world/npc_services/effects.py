@@ -805,6 +805,9 @@ def run_styling_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
             details.target_option,
             persona=persona,
             actor_persona=persona,
+            # Clear any stale flavor text — the stylist's work replaces the
+            # old look (#2632 replace-or-clear rule, same as item uses).
+            descriptor="",
             note=f"{stylist_label}: {offer.label}",
         )
     except NonCosmeticTraitError:

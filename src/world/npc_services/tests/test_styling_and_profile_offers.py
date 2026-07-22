@@ -135,3 +135,17 @@ class ProfileRecordingOfferTests(TestCase):
         profile = RecordedProfile.objects.get(pk=result.object_pk)
         with self.assertRaises(RecordedProfileError):
             complete_recorded_profile(profile, "   ")
+
+
+class DisplayDescriptionFallbackTests(TestCase):
+    """The display-desc chain reads additional_desc now (#2632 rewire)."""
+
+    def test_roster_description_shows_additional_desc(self) -> None:
+        from world.character_sheets.services import set_physical_description
+
+        persona = PersonaFactory()
+        sheet = persona.character_sheet
+        set_physical_description(sheet, "A weathered traveler.")
+        self.assertEqual(
+            sheet.character.item_data.get_display_description(), "A weathered traveler."
+        )
