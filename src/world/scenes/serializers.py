@@ -38,7 +38,6 @@ class PersonaSerializer(serializers.ModelSerializer):
             "name",
             "is_fake_name",
             "persona_type",
-            "description",
             "thumbnail_url",
             "thumbnail_media_url",
             "roster_entry",

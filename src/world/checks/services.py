@@ -283,6 +283,7 @@ def _situational_perk_check_bonus(
         dormant_perk_firings,
         mission_category_ids_for,
         perk_scope_matches,
+        sum_potency_scaled_magnitudes,
     )
     from world.magic.services.threads import (  # noqa: PLC0415
         total_thread_level_across_all_kinds,
@@ -335,25 +336,34 @@ def _situational_perk_check_bonus(
     if total_threads == 0:
         return 0
 
-    total = Decimal(0)
-    for firing in scoped:
-        total += Decimal(total_threads) * firing.magnitude_tenths / 10
-    return int(total)
+    return sum_potency_scaled_magnitudes(scoped, total_threads)
 
 
 def _guarantee_floor(
-    perk: "VowSituationalPerk", *, raw_level: int, non_botch_floor: int
+    perk: "VowSituationalPerk",
+    *,
+    raw_level: int,
+    non_botch_floor: int,
+    is_secondary: bool = False,
 ) -> int | None:
     """The floor a TIER_FLOOR/BOTCH_IMMUNITY perk demands against ``raw_level``,
     or ``None`` when it never applies here (#2536 slice 2/3). Shared by the
     live-binding computation and the dormant "would it have bound" check in
     ``_apply_outcome_guarantees`` — one rule, one place.
+
+    ``is_secondary`` (#2641): a secondary-sourced TIER_FLOOR guarantee is one
+    tier weaker than authored (``floor_success_level - 1``) — outcome
+    guarantees from a secondary vow fire, but softer, per the ratified rule.
+    BOTCH_IMMUNITY is deliberately left UNWEAKENED (judgment call — it has no
+    numeric field to soften; the guarantee is binary, and "half-immune to a
+    botch" has no coherent meaning).
     """
     from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
 
     if perk.effect_kind == PerkEffectKind.TIER_FLOOR:
-        return perk.floor_success_level
-    # BOTCH_IMMUNITY -- binds only against an actual botch.
+        floor = perk.floor_success_level
+        return floor - 1 if is_secondary else floor
+    # BOTCH_IMMUNITY -- binds only against an actual botch. Unweakened for secondaries.
     return non_botch_floor if raw_level <= BOTCH_SUCCESS_LEVEL_MAX else None
 
 
@@ -389,7 +399,12 @@ def _announce_dormant_outcome_guarantees(
     non_botch_floor = BOTCH_SUCCESS_LEVEL_MAX + 1
     would_have_bound = []
     for firing in dormant:
-        floor = _guarantee_floor(firing.perk, raw_level=raw_level, non_botch_floor=non_botch_floor)
+        floor = _guarantee_floor(
+            firing.perk,
+            raw_level=raw_level,
+            non_botch_floor=non_botch_floor,
+            is_secondary=firing.is_secondary,
+        )
         if floor is not None and floor > raw_level:
             would_have_bound.append(firing)
     if would_have_bound:
@@ -427,6 +442,12 @@ def _apply_outcome_guarantees(
     perk exists. Runs whether or not the live set has any binding perk: a
     wholly-disengaged vow has no live firings at all, which is exactly the
     case ruling 2 wants to be loud about.
+
+    **Secondary-vow weakening (#2641):** a secondary-sourced (``firing
+    .is_secondary``) TIER_FLOOR guarantee binds one tier weaker than authored
+    (``floor_success_level - 1`` — see ``_guarantee_floor``); BOTCH_IMMUNITY
+    still fires at full strength for a secondary (deliberately unweakened —
+    it has no numeric field to soften).
     """
     if situation_ctx is None or outcome is None:
         return outcome
@@ -461,7 +482,12 @@ def _apply_outcome_guarantees(
 
     binding = []
     for firing in fired:
-        floor = _guarantee_floor(firing.perk, raw_level=raw_level, non_botch_floor=non_botch_floor)
+        floor = _guarantee_floor(
+            firing.perk,
+            raw_level=raw_level,
+            non_botch_floor=non_botch_floor,
+            is_secondary=firing.is_secondary,
+        )
         if floor is not None and floor > raw_level:
             binding.append((floor, firing))
     if not binding:

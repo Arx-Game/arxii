@@ -294,6 +294,24 @@ def theft_category() -> SocialConsentCategory:
     return category
 
 
+def makeover_category() -> SocialConsentCategory:
+    """Lazy seeded row for the makeover/styling gate (#2632) — default-deny.
+
+    Another character applying a cosmetic item to your REAL form (hair dye, a
+    restyle, lenses) is a body-autonomy call, so it defaults to allowlist even
+    though it's friendly rather than antagonistic — you opt your stylists in.
+    """
+    category, _ = SocialConsentCategory.objects.get_or_create(
+        key="makeover",
+        defaults={
+            "name": "Makeovers & Styling",
+            "description": "Other characters restyling your appearance (dye, cuts, cosmetics).",
+            "default_mode": ConsentMode.ALLOWLIST,
+        },
+    )
+    return category
+
+
 def receiving_stolen_goods_category() -> SocialConsentCategory:
     """Lazy seeded row for the hot-goods receipt gate (#1985) — default-deny.
 

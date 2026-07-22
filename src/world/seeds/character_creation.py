@@ -939,10 +939,27 @@ _APPEARANCE_TRAITS: tuple[tuple[str, str, str, bool, tuple[tuple[str, str], ...]
         ),
     ),
     (
+        "hair_style",
+        "Hair Style",
+        FormTraitType.STYLE,
+        True,
+        (
+            # PLACEHOLDER style list (#2632) — staff/content can extend freely.
+            ("loose", "Loose"),
+            ("braided", "Braided"),
+            ("cropped", "Cropped"),
+            ("swept_up", "Swept Up"),
+            ("shaved", "Shaved"),
+        ),
+    ),
+    (
         "eye_color",
         "Eye Color",
         FormTraitType.COLOR,
-        False,
+        # Cosmetic as of #2632 (ApostateCD ruling via the approved spec): eye
+        # color has no mundane restyle path — the enchanted-lens ItemTemplate
+        # is the gate, because the item IS the gate.
+        True,
         (
             ("brown", "Brown"),
             ("blue", "Blue"),

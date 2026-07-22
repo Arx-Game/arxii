@@ -11,6 +11,7 @@ import logging
 from typing import TYPE_CHECKING, Literal
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 from django.utils import timezone
 
 from world.checks.models import CheckCategory, CheckType
@@ -24,6 +25,7 @@ from world.vitals.constants import (
     DERIVED_STATUS_INCAPACITATED,
     ENDURANCE_CHECK_NAME,
     KNOCKOUT_HEALTH_THRESHOLD,
+    NEVER_TO_FULL_FRACTION,
     PERMANENT_WOUND_THRESHOLD,
     SURVIVABILITY_CHECK_CATEGORY,
     CharacterLifeState,
@@ -426,6 +428,39 @@ def _wounds_from(pending: PendingResolution) -> list[ConditionTemplate]:
     return [e.condition_template for e in _apply_condition_effects(pending)]
 
 
+def _record_wound_details(
+    character_sheet: CharacterSheet,
+    wounds: list[ConditionTemplate],
+    damage_dealt: int,
+) -> None:
+    """Stamp WoundDetails (mend-cap provenance) onto each applied wound instance (#2644).
+
+    Looks up the active instance apply_condition just created for each wound
+    template (synchronous — apply_resolution has already run by the time this
+    is called). Re-wounding an already-active wound (stacking/refresh reuses
+    the same ConditionInstance) accumulates the extra damage onto the same
+    WoundDetails row rather than minting a second one — a second grievous hit
+    on the same wound legitimately raises its total mend cap.
+    """
+    if not wounds or damage_dealt <= 0:
+        return
+    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+    from world.vitals.models import WoundDetails  # noqa: PLC0415
+
+    character = character_sheet.character
+    for template in wounds:
+        instance = get_active_conditions(character, condition=template).first()
+        if instance is None:
+            continue
+        details, created = WoundDetails.objects.get_or_create(
+            condition_instance=instance,
+            defaults={"damage_taken": damage_dealt},
+        )
+        if not created:
+            details.damage_taken += damage_dealt
+            details.save(update_fields=["damage_taken"])
+
+
 def _apply_wound_tier(  # noqa: PLR0913 - one keyword arg per resolved tier input
     *,
     character_sheet: CharacterSheet,
@@ -435,6 +470,7 @@ def _apply_wound_tier(  # noqa: PLR0913 - one keyword arg per resolved tier inpu
     wound_pool: ConsequencePool,
     extra_modifiers: int,
     combat_interaction_factory: Callable[[], Interaction] | None,
+    damage_dealt: int,
 ) -> None:
     """Resolve the permanent-wound tier and record any wounds onto ``result``."""
     wound_breakdown = collect_check_modifiers(character_sheet, wound_check_type)
@@ -449,6 +485,7 @@ def _apply_wound_tier(  # noqa: PLR0913 - one keyword arg per resolved tier inpu
     if wounds:
         result.wounds_applied.extend(wounds)
         result.modifier_breakdown = wound_breakdown
+        _record_wound_details(character_sheet, wounds, damage_dealt)
         _record_combat_outcome(
             character_sheet,
             wound_check_type,
@@ -458,6 +495,68 @@ def _apply_wound_tier(  # noqa: PLR0913 - one keyword arg per resolved tier inpu
             combat_interaction_factory,
             "permanent wound",
         )
+
+
+@transaction.atomic
+def mend_wound(
+    healer_sheet: CharacterSheet,  # noqa: ARG001 - signature parity, see docstring
+    target_sheet: CharacterSheet,
+    wound_instance: ConditionInstance,
+    amount: int,
+) -> int:
+    """Raise a wounded target's health, double-bounded (#2644 — the attrition invariant).
+
+    ``healer_sheet`` is accepted but unused inside this function — kept for
+    call-site parity with ``perform_treatment`` (helper, target, effect,
+    amount) and reserved for future healer-side provenance/logging on this
+    seam; it plays no role in either bound described below.
+
+    Two independent bounds compose to guarantee the party is always net-weaker
+    for having fought (ADR-0156):
+
+    - **Bound 1 (here): the never-to-full fraction.** The total ever mended on
+      *this* wound, across every healer who has ever tended it, cannot exceed
+      ``NEVER_TO_FULL_FRACTION x wound_details.damage_taken``. The remainder
+      is permanent attrition, by design.
+    - **Bound 2 (one layer up, in ``perform_treatment``):** each healer gets
+      exactly one tending per wound, ever (an incompetent healer cannot burn
+      the wound's only chance for everyone else) — enforced by
+      ``TreatmentAttempt``'s partial UniqueConstraint on
+      ``(helper, target_condition_instance)``, not by this function.
+
+    Also clamps to ``target_sheet.vitals.max_health``. Mends
+    ``min(amount, remaining_fraction_cap, room_to_max_health)`` — 0 is a legal,
+    non-error result (a wound already at its cap, or a target already at full
+    health), never an exception.
+
+    Raises:
+        NotAWoundError: ``wound_instance`` has no ``WoundDetails`` — it isn't a
+            wound (e.g. a plain debuff condition). Never callable outside the
+            treatment flow; this is not a general condition-severity API.
+    """
+    from world.vitals.exceptions import NotAWoundError  # noqa: PLC0415
+
+    try:
+        details = wound_instance.wound_details
+    except (AttributeError, ObjectDoesNotExist) as exc:
+        raise NotAWoundError from exc
+
+    cap_total = int(NEVER_TO_FULL_FRACTION * details.damage_taken)
+    remaining_cap = max(0, cap_total - details.health_mended_total)
+    if remaining_cap <= 0 or amount <= 0:
+        return 0
+
+    vitals = target_sheet.vitals
+    room_to_max = max(0, vitals.max_health - vitals.health)
+    mended = min(amount, remaining_cap, room_to_max)
+    if mended <= 0:
+        return 0
+
+    vitals.health += mended
+    vitals.save(update_fields=["health"])
+    details.health_mended_total += mended
+    details.save(update_fields=["health_mended_total"])
+    return mended
 
 
 def _apply_death_tier(  # noqa: PLR0913 - one keyword arg per resolved tier input
@@ -616,6 +715,7 @@ def process_damage_consequences(  # noqa: PLR0913 - each param is a distinct sur
             wound_pool=wound_pool,
             extra_modifiers=extra_modifiers + saves.wound,
             combat_interaction_factory=combat_interaction_factory,
+            damage_dealt=damage_dealt,
         )
 
     # 2. Death check (health <= 0)
@@ -1352,12 +1452,14 @@ def recompute_max_health(
 
 
 def covenant_role_health(character: object, level: int) -> int:  # noqa: OBJECTDB_PARAM
-    """Level-scaled covenant-role 'armor': sum of level * bonus_per_level over engaged roles'
-    MAX_HEALTH CovenantRoleBonus rows.
+    """Level-scaled covenant-role 'armor': sum of level * bonus_per_level over engaged
+    PRIMARY roles' MAX_HEALTH CovenantRoleBonus rows.
 
-    For each covenant role the character is currently ENGAGED in (engaged=True, left_at IS NULL),
-    sums ``level * CovenantRoleBonus.bonus_per_level`` where the bonus targets the MAX_HEALTH
-    ModifierTarget. One DB query for the bonuses; no query-in-loop.
+    For each covenant role the character is currently engaged in as a PRIMARY vow
+    (engaged=True, is_secondary=False, left_at IS NULL), sums
+    ``level * CovenantRoleBonus.bonus_per_level`` where the bonus targets the MAX_HEALTH
+    ModifierTarget. One DB query for the bonuses; no query-in-loop. PRIMARY-only (#2641,
+    Layer 3 — chassis): a secondary vow never contributes covenant-role health armor.
 
     Args:
         character: The Character typeclass instance (has .covenant_roles handler).
@@ -1369,7 +1471,7 @@ def covenant_role_health(character: object, level: int) -> int:  # noqa: OBJECTD
     from world.covenants.models import CovenantRoleBonus  # noqa: PLC0415
     from world.vitals.constants import MAX_HEALTH_MODIFIER_TARGET  # noqa: PLC0415
 
-    engaged = character.covenant_roles.currently_engaged_roles()
+    engaged = character.covenant_roles.currently_engaged_primary_roles()
     role_ids = [role.pk for role in engaged]
     if not role_ids:
         return 0

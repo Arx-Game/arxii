@@ -25,7 +25,7 @@ machinery grades HOW MUCH of a landing hit's amount a block reduces, which has n
 for a mid-air catch (a binary rescue). "Fires" means what
 `_dispatch_interpose_action`'s own docstring already establishes: an attempt that clears
 `REACTIONS_PER_ROUND`, independent of any roll. No new challenge/roll content is
-authored — the armed declaration alone, already proven out by ADR-0118 and ADR-0156,
+authored — the armed declaration alone, already proven out by ADR-0118 and ADR-0161,
 carries the mechanical weight.
 
 **The plummet chain is a handoff, not a reimplementation.** An unanswered marker resolves
@@ -48,7 +48,7 @@ unanswered marker's hard-landing impact — `floor(sent_flying_damage *
 SENT_FLYING_IMPACT_FRACTION)` (0.5) as Physical damage through the standard
 `apply_damage_to_participant` + `process_damage_consequences` path — gets NO extra
 narration beyond whatever that standard path already produces. This mirrors the wind-up
-family's own celebrate/silence boundary (ADR-0156): the game marks victories, not misses.
+family's own celebrate/silence boundary (ADR-0161): the game marks victories, not misses.
 
 **Bug fix folded in, not filed:** while writing `_try_catch_sent_flying`'s query, mirroring
 `_try_interpose`'s `focused_ally_target__in=[participant, None]` surfaced that Django
@@ -75,4 +75,4 @@ Q(focused_ally_target__isnull=True)`.
   applied at its full value with no further downgrade, not that it skips the standard
   damage pipeline every other combat hit goes through.
 
-> Status: accepted · Source: issue #2638 / lore `design/2026-07-22-vow-transcripts-batch-3.md` (Transcript 1 R4) / ADR-0118 / ADR-0156
+> Status: accepted · Source: issue #2638 / lore `design/2026-07-22-vow-transcripts-batch-3.md` (Transcript 1 R4) / ADR-0118 / ADR-0161

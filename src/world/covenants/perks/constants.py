@@ -12,6 +12,8 @@ from dataclasses import dataclass
 
 from django.db import models
 
+from world.magic.constants import TechniqueFunction
+
 
 class Situation(models.TextChoices):
     """Code-defined situation library for per-vow situational perks (#2536).
@@ -22,7 +24,8 @@ class Situation(models.TextChoices):
     ``ALLY_INTERCEPTED_FOR_ME`` is slice 3's declared-guard addition (#2536
     Task 5); ``ATTACKER_AFFINITY`` (renamed from its original Abyssal-only
     v1 spelling, #2623) is slice 3's defense-side seam addition (#2536 Task
-    6); ``ENEMY_WINDUP_UNDERWAY`` and ``ENEMY_WINDUP_CALLED_OUT`` are the
+    6); ``ON_CHOSEN_GROUND`` is #2646's whole-encounter chosen-ground
+    addition; ``ENEMY_WINDUP_UNDERWAY`` and ``ENEMY_WINDUP_CALLED_OUT`` are the
     telegraphed-enemy-wind-up addition (#2637); ``ALLY_SENT_FLYING`` is the
     sent-flying consequence addition (#2638) — the enum ships no other
     inert entries; every value here has a
@@ -133,6 +136,17 @@ class Situation(models.TextChoices):
       resolve_npc_attack`` is the only defense-check site that threads
       ``attacker`` in v1. Task 3 wires the evaluator itself to the params
       contract; the enum rename lands here (#2623).
+    - ``ON_CHOSEN_GROUND`` — the SUBJECT's combat encounter was created on ground
+      the caster's side prepared ahead of time (#2646) — "the fight was won
+      yesterday." The flag is stamped exclusively at encounter-CREATE time by
+      ``world.combat.chosen_ground.compute_on_chosen_ground``, called from the
+      three PC-vs-NPC encounter-creation seams (``world.combat.cast_seed.
+      seed_or_feed_encounter_from_cast``, ``world.combat.duels.
+      create_lethal_duel``, ``world.battles.services.open_place_encounter``);
+      ``world.combat.duels.create_pvp_duel`` never stamps it (PvP is never
+      lethal). False outside combat, mirroring ``CHAMPION_DUEL``'s shape — a
+      whole-encounter stamp that holds every round once set, never re-derived
+      mid-fight. Reads ``resolution``.
     - ``ENEMY_WINDUP_UNDERWAY`` — the SUBJECT's encounter has at least one
       not-yet-matured ``PendingOpponentAttack`` (``resolves_round`` >= the
       encounter's current round_number, #2637). Mirrors
@@ -167,6 +181,7 @@ class Situation(models.TextChoices):
     AMBUSH_UNDERWAY = "ambush_underway", "Ambush Underway"
     ALLY_INTERCEPTED_FOR_ME = "ally_intercepted_for_me", "Ally Intercepted for Me"
     ATTACKER_AFFINITY = "attacker_affinity", "Attacker Affinity"
+    ON_CHOSEN_GROUND = "on_chosen_ground", "On Chosen Ground"
     ENEMY_WINDUP_UNDERWAY = "enemy_windup_underway", "Enemy Wind-Up Underway"
     ENEMY_WINDUP_CALLED_OUT = "enemy_windup_called_out", "Enemy Wind-Up Called Out"
     ALLY_SENT_FLYING = "ally_sent_flying", "Ally Sent Flying"
@@ -251,4 +266,25 @@ SITUATION_PARAM_SPECS: dict[str, SituationParamSpec] = {
     Situation.TARGET_FAVORABLY_DISPOSED: SituationParamSpec(allowed=frozenset({"count_threshold"})),
     Situation.AMBUSH_UNDERWAY: SituationParamSpec(allowed=frozenset({"origin_side"})),
     Situation.COMBAT_OPENED_FROM_PARLEY: SituationParamSpec(allowed=frozenset({"origin_side"})),
+}
+
+
+#: Which ``TechniqueFunction`` casts can CREATE each DB-state ``Situation`` (#2640,
+#: the Sphinx of Black Quartz) — the ``target_swayed_by_ally``/``target_distracted``
+#: provenance mapping (``perks.evaluators``, which reads applied-condition rows for
+#: LIVE resolution) run in REVERSE as a static report: "which of my kit's function
+#: tags could plausibly have produced this DB-state situation in the first place."
+#: A situation absent from this dict demands nothing from a kit — it is a
+#: positional/encounter state (``AT_RANGE``, ``SURROUNDED``, ``CHAMPION_DUEL``, ...)
+#: with no single-cast provenance, not an oversight. Extending this mapping (a new
+#: row, or a new function added to an existing set) is a deliberate one-line change
+#: — see ``world.covenants.sphinx`` for the only reader.
+SITUATION_CREATOR_FUNCTIONS: dict[str, frozenset[str]] = {
+    Situation.TARGET_SWAYED_BY_ALLY: frozenset(
+        {TechniqueFunction.CHARM, TechniqueFunction.DISTRACTION}
+    ),
+    Situation.TARGET_DISTRACTED: frozenset(
+        {TechniqueFunction.CHARM, TechniqueFunction.DISTRACTION}
+    ),
+    Situation.TARGET_FAVORABLY_DISPOSED: frozenset({TechniqueFunction.CHARM}),
 }

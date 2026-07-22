@@ -17,6 +17,7 @@ from world.gm.views import (
     GMTableMembershipViewSet,
     GMTableViewSet,
     LookingForTableBrowseView,
+    TableUpdateRequestViewSet,
 )
 
 app_name = "gm"
@@ -30,6 +31,7 @@ router.register("invites", GMRosterInviteViewSet, basename="gm-invite")
 router.register("catalog-suggestions", CatalogSuggestionViewSet, basename="catalog-suggestion")
 router.register("story-areas", StoryBuilderViewSet, basename="gm-story-area")
 router.register("my-story-grants", MyStoryGrantsViewSet, basename="my-story-grant")
+router.register("table-update-requests", TableUpdateRequestViewSet, basename="table-update-request")
 
 # Ordering is load-bearing: ``invites/claim/`` MUST be registered before
 # ``router.urls``. DRF's default detail regex for the ``invites`` viewset

@@ -162,3 +162,143 @@ class UseItemAppearanceEffectTests(TestCase):
         result = use_item(item_instance=reusable_item, user=self.character)
         self.assertEqual(len(result.appearance_changes), 1)
         self.assertFalse(result.destroyed)
+
+
+class PCStylistTests(TestCase):
+    """Styling another character with a cosmetic item (#2632)."""
+
+    def setUp(self) -> None:
+        self.trait = FormTraitFactory(name="hair_color_stylist", is_cosmetic=True)
+        self.black = FormTraitOptionFactory(trait=self.trait, name="raven")
+        self.crimson = FormTraitOptionFactory(trait=self.trait, name="crimson")
+        self.template = ItemTemplateFactory(
+            name="Crimson Dye",
+            is_consumable=True,
+            max_charges=1,
+        )
+        ItemTemplateAppearanceEffect.objects.create(
+            item_template=self.template,
+            trait=self.trait,
+            target_option=self.crimson,
+        )
+        self.stylist_sheet = CharacterSheetFactory()
+        self.stylist = self.stylist_sheet.character
+        self.client_sheet = CharacterSheetFactory()
+        self.client_char = self.client_sheet.character
+        self.client_form = CharacterFormFactory(character=self.client_char)
+        CharacterFormValueFactory(
+            form=self.client_form,
+            trait=self.trait,
+            option=self.black,
+        )
+        self.item = ItemInstanceFactory(
+            template=self.template,
+            holder_character_sheet=self.stylist_sheet,
+            charges=1,
+        )
+
+    def _tenure_for(self, sheet):
+        from evennia_extensions.factories import AccountFactory
+        from evennia_extensions.models import PlayerData
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+
+        account = AccountFactory()
+        player_data, _ = PlayerData.objects.get_or_create(account=account)
+        entry = RosterEntryFactory(character_sheet=sheet)
+        return RosterTenureFactory(player_data=player_data, roster_entry=entry)
+
+    def test_styling_npc_target_applies_to_their_form(self) -> None:
+        """No active tenure on the target -> NPC, no consent gate."""
+        result = use_item(item_instance=self.item, user=self.stylist, target=self.client_char)
+        value = self.client_form.values.get(trait=self.trait)
+        self.assertEqual(value.option, self.crimson)
+        self.assertEqual(len(result.appearance_changes), 1)
+
+    def test_styling_player_target_blocked_by_default(self) -> None:
+        """Makeover category defaults to allowlist — strangers are refused, no charge burnt."""
+        from world.items.exceptions import MakeoverNotPermitted
+
+        self._tenure_for(self.client_sheet)
+        with self.assertRaises(MakeoverNotPermitted):
+            use_item(item_instance=self.item, user=self.stylist, target=self.client_char)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.charges, 1)
+        value = self.client_form.values.get(trait=self.trait)
+        self.assertEqual(value.option, self.black)
+
+    def test_styling_whitelisted_stylist_allowed(self) -> None:
+        """A whitelisted stylist restyles the target's real form; stylist is the actor."""
+        from world.consent.services import add_social_consent_whitelist, makeover_category
+        from world.forms.models import AppearanceChangeLog
+
+        owner_tenure = self._tenure_for(self.client_sheet)
+        stylist_tenure = self._tenure_for(self.stylist_sheet)
+        add_social_consent_whitelist(owner_tenure, stylist_tenure, makeover_category())
+
+        use_item(item_instance=self.item, user=self.stylist, target=self.client_char)
+        value = self.client_form.values.get(trait=self.trait)
+        self.assertEqual(value.option, self.crimson)
+        log = AppearanceChangeLog.objects.get(form=self.client_form)
+        self.assertEqual(log.note, "Crimson Dye")
+
+    def test_styling_self_unaffected_by_gate(self) -> None:
+        """Passing target=user behaves as self-makeover (no consent check)."""
+        stylist_form = CharacterFormFactory(character=self.stylist)
+        CharacterFormValueFactory(form=stylist_form, trait=self.trait, option=self.black)
+        self._tenure_for(self.stylist_sheet)
+        result = use_item(item_instance=self.item, user=self.stylist, target=self.stylist)
+        self.assertEqual(len(result.appearance_changes), 1)
+
+
+class DescriptorFlavorTests(TestCase):
+    """Multi-color hair: free-text descriptors ride cosmetic item uses (#2632)."""
+
+    def setUp(self) -> None:
+        self.trait = FormTraitFactory(name="hair_color_flavor", is_cosmetic=True)
+        self.black = FormTraitOptionFactory(trait=self.trait, name="onyx")
+        self.silver = FormTraitOptionFactory(trait=self.trait, name="silver")
+        self.template = ItemTemplateFactory(
+            name="Silver Dye",
+            is_consumable=True,
+            max_charges=2,
+        )
+        ItemTemplateAppearanceEffect.objects.create(
+            item_template=self.template,
+            trait=self.trait,
+            target_option=self.silver,
+        )
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        self.persona = self.sheet.primary_persona
+        self.form = CharacterFormFactory(character=self.character)
+        CharacterFormValueFactory(form=self.form, trait=self.trait, option=self.black)
+        self.item = ItemInstanceFactory(
+            template=self.template,
+            holder_character_sheet=self.sheet,
+            charges=2,
+        )
+
+    def test_descriptor_sets_presentation_flavor(self) -> None:
+        from world.forms.models import PersonaTraitDescriptor
+
+        use_item(
+            item_instance=self.item,
+            user=self.character,
+            descriptor="onyx shot through with silver streaks",
+        )
+        row = PersonaTraitDescriptor.objects.get(persona=self.persona, trait=self.trait)
+        self.assertEqual(row.text, "onyx shot through with silver streaks")
+
+    def test_use_without_descriptor_clears_stale_flavor(self) -> None:
+        from world.forms.models import PersonaTraitDescriptor
+
+        use_item(
+            item_instance=self.item,
+            user=self.character,
+            descriptor="onyx shot through with silver streaks",
+        )
+        self.item.refresh_from_db()
+        use_item(item_instance=self.item, user=self.character)
+        self.assertFalse(
+            PersonaTraitDescriptor.objects.filter(persona=self.persona, trait=self.trait).exists()
+        )

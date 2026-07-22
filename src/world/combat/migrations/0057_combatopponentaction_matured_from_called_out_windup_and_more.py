@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("combat", "0053_combatopponentaction_damage_scale_and_more"),
+        ("combat", "0056_combatopponentaction_damage_scale_and_more"),
     ]
 
     operations = [

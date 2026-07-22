@@ -57,7 +57,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   Web: the Guard panel's technique picker no longer excludes `redirect`; picking one
   reveals a destination select sourced from `EncounterDetailSerializer.
   volatile_objects` + `encounter.opponents`.
-- **Telegraphed enemy wind-ups + reaction economy (#2637, #2639, ADR-0156),
+- **Telegraphed enemy wind-ups + reaction economy (#2637, #2639, ADR-0161),
   SQLite tier, journey-proven.** A `ThreatPoolEntry.windup_rounds > 0` entry telegraphs
   instead of landing same-round — declares a `PendingOpponentAttack` (dual-dispatch
   WS+telnet broadcast), can be wrecked (downgraded, not cancelled outright until 3
@@ -73,8 +73,8 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   (`world/combat/tests/test_reaction_economy.py`: second reaction declines, resets
   next round, a third answer on one payload declines). In-PR investigation found
   `select_npc_actions` had zero production callers — `resolve_round` now auto-selects
-  as a conservative fallback when a round has no NPC selection yet (see ADR-0156).
-- **Sent Flying — consequence events in flight (#2638, ADR-0157), SQLite tier
+  as a conservative fallback when a round has no NPC selection yet (see ADR-0161).
+- **Sent Flying — consequence events in flight (#2638, ADR-0162), SQLite tier
   (except the marker-application/plummet-handoff paths, tagged postgres for the same
   `apply_condition` DISTINCT ON reason the plummet suite already carries), journey-proven.**
   A `ThreatPoolEntry.sends_flying` entry that lands damage > 0 applies the seeded "Sent
@@ -194,6 +194,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   for why that's now PROVEN, not the reverse "onto the boss" direction). Scenario
   composed by `BossFightScenarioFactory` (`world/combat/factories.py`); journey test:
   `src/integration_tests/test_boss_fight_journey.py`.
+- **Boss-fight structure: diversity-weighted break accrual, lieutenant gate, pacing floor,
+  break celebration (#2642, ADR-0160).** Extends #2016/#2095's break-bar anatomy so a boss
+  fight reads as suppress-the-court → break-the-wall → the earned one-shot without anyone
+  authoring acts. `BreakBarContribution` persists one row per qualifying feed (DAMAGE / COMBO
+  / HOLD — a PC-side LOCK-clash win / DEBUFF — a new behavior-altering condition on the boss /
+  SUPPRESSION — a reinforcing lieutenant newly suppressed), replacing the retired flat
+  per-actor chip; `CombatOpponent.reinforces` (self-FK) marks a lieutenant, whose active
+  presence proportionally slows depletion (never a hard block); `minimum_break_bar_threshold()`
+  clamps a boss's authored threshold to the Soulfray staging depth so the anima → Soulfray →
+  audere arc has room to play out; BOSS-tier opponents resist a decisive Parley calm by one
+  success-level step; the break broadcasts a celebration naming every distinct contributor.
 - **Combat offense standalone-cast flavor catalog (#1995).** A PHYSICAL technique's
   standalone cast (not a combat round) can pick a curated consequence-pool flavor
   ("Brutal"/"Precise") off the "Melee Attack" `ActionTemplate`, mirroring magic's
@@ -223,6 +234,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   (dead-action whitelist, scene/IC-day emit window); the retire off-ramp (player/staff/auto);
   and capped death-kudos. Unit/service-tier proven (vitals/actions suites); no combat journey
   test yet — a KO-to-wake / death-to-retire journey is fair game for the journeys list.
+
+- **Healing rework: wound conditions wired + double-bounded HP mends (#2644, ADR-0161).**
+  Closed the wound-tier's central audit gap: the permanent-wound pool now actually applies
+  mechanical conditions (Lingering Ache / Crippling Wound / Bleeding Wound) instead of
+  effect-free narrative labels. `WoundDetails` stamps mend-cap provenance
+  (`damage_taken`/`health_mended_total`) on every applied wound; `mend_wound()` bounds any HP
+  restoration to `NEVER_TO_FULL_FRACTION` (0.75) of the causing damage, and
+  `TreatmentAttempt`'s partial UniqueConstraint caps each wound to one tending per healer,
+  ever. Condition cleansing (dispel/severity-decay) stays unrestricted — only the HP mend is
+  double-bounded. Unit/service-tier proven (vitals/conditions suites); no combat journey test
+  yet — a wound→treat→attrition journey is fair game for the journeys list.
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
@@ -381,8 +403,25 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   a per-situation `SITUATION_PARAM_SPECS` allowed/required contract, `ATTACKER_AFFINITY`
   authorable against any `AffinityType` axis (was Abyssal-only), and
   `CombatEncounter.initiated_by_pc_side` recording who sprang a fight for `origin_side`-gated
-  ambush/parley perks. When the vow dims (#2051), the engaged flag drops and every
+  ambush/parley perks. #2646 follow-up adds a 15th situation, `ON_CHOSEN_GROUND` — "the fight
+  was won yesterday": `CombatEncounter.on_chosen_ground` is stamped at CREATE time in the three
+  PC-vs-NPC encounter-creation seams whenever the encounter's room holds a
+  `room_features.PreparedGround` (one active per character) whose preparer is physically
+  present; a ground gets prepared as a RIDER — no new player verb — on an out-of-combat
+  standalone cast of a PERCEPTION-tagged technique by a character holding an engaged covenant
+  role flagged `prepares_ground`. When the vow dims (#2051), the engaged flag drops and every
   layer's contribution returns to 0 — which is why soloing legend content is lethal.
+  **The damage identity** (#2643, ADR-0158, shipped): team damage = Strike's bases
+  (execute-scaled) × Uplift's team-wide % × Undermine's enemy-side % (lore repo
+  `design/covenant-vows-consolidated.md` §5). Built the two percent lanes' shared
+  bound (a flat cap on the SUMMED contribution, never a second multiplicative
+  stage — the EQ2 lane guard), Uplift's per-target-level pricing, vow-keyed
+  diminishing returns on `ConditionInstance.source_vow` (100/50/25/25%... within
+  one vow, full stacking across vows — rewarding the SAME multi-vow-engagement
+  incentive the four-layer power-term model already teaches), and a smooth
+  pre-hit-health execute ramp (`AbstractDamageProfile
+  .execute_missing_health_multiplier`). See `docs/systems/magic.md`'s "The Damage
+  Identity" section for the full composition.
 - Magic is predominant; relationship bonuses matter; **difficulty scales on party size + average level
   only** (ADR-0037); combat merits Legend, never XP (ADR-0036).
 
@@ -390,4 +429,4 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
 
 - Capability tiers + MVP slate: [`player-capability-ledger.md`](player-capability-ledger.md)
 - Build history (the old combat.md): [`combat-build-history.md`](combat-build-history.md)
-- Decisions: [`../adr/README.md`](../adr/README.md) (esp. 0002–0004, 0023, 0036–0040, 0046, 0055, 0057)
+- Decisions: [`../adr/README.md`](../adr/README.md) (esp. 0002–0004, 0023, 0036–0040, 0046, 0055, 0057, 0149, 0155)

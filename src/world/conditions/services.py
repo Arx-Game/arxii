@@ -94,6 +94,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.covenants.models import CovenantRole
     from world.magic.models import PendingAlteration, Technique, Thread
     from world.mechanics.models import ModifierTarget
     from world.scenes.models import Scene
@@ -386,6 +387,42 @@ def active_concealments(target: "ObjectDB") -> QuerySet[ConditionInstance]:  # n
     )
 
 
+def _resolve_source_vow_anchor(
+    source_character: "ObjectDB | None",  # noqa: OBJECTDB_PARAM
+) -> "CovenantRole | None":
+    """Resolve the applier's engaged-vow anchor for ``ConditionInstance.source_vow`` (#2643).
+
+    The FIRST of ``character.covenant_roles.currently_engaged_roles()`` determines the
+    vow key (list order today; a deliberately-chosen "primary vow" concept is a
+    #2536-family follow-up, not built here). Its ANCHOR — ``parent_role`` when the
+    engaged role resolved to a sub-role, else the role itself — is stamped, never the
+    resolved sub-role, matching Thread's ``target_covenant_role_id`` anchor convention
+    (a resonance-specialized sub-role is a read-time view, not a distinct vow key).
+
+    Returns ``None`` when there is no source character, the character has no
+    ``covenant_roles`` handler (not a real Character typeclass instance — e.g. some
+    test doubles), the character has no ``CharacterSheet`` at all (NPCs, unfinalized
+    characters — the handler's row-fetch requires one), or the character has no
+    currently-engaged role.
+    """
+    if source_character is None:
+        return None
+    try:
+        roles = source_character.covenant_roles.currently_engaged_roles()
+    except AttributeError:
+        # Not a real Character typeclass instance (no covenant_roles handler) —
+        # some test doubles.
+        return None
+    except ObjectDoesNotExist:
+        # No CharacterSheet (e.g. an NPC-backed or not-yet-finalized caster) — no
+        # engaged role is derivable, mirroring every other "no sheet -> no vow" path.
+        return None
+    if not roles:
+        return None
+    first = roles[0]
+    return first.parent_role or first
+
+
 @dataclass
 class _ApplyConditionParams:
     """Parameters for applying a condition (reduces argument count)."""
@@ -397,6 +434,7 @@ class _ApplyConditionParams:
     source_character: "ObjectDB | None" = None
     source_technique: "Technique | None" = None
     source_description: str = ""
+    source_vow: "CovenantRole | None" = None
 
 
 @dataclass
@@ -692,6 +730,7 @@ def _create_instance_from_context(
         source_character=params.source_character,
         source_technique=params.source_technique,
         source_description=params.source_description,
+        source_vow=params.source_vow,
     )
 
     return ApplyConditionResult(
@@ -879,6 +918,7 @@ def apply_condition(  # noqa: PLR0913
         source_character=source_character,
         source_technique=source_technique,
         source_description=source_description,
+        source_vow=_resolve_source_vow_anchor(source_character),
     )
     result = _apply_single(target, condition, params, ctx)
 
@@ -955,6 +995,10 @@ def bulk_apply_conditions(
     templates = list({app.template for app in applications})
 
     ctx = _build_bulk_context(targets, templates)
+    # Resolved once per batch (#2643) — a single cast is the source of every entry
+    # (see the docstring above), so the vow anchor is shared across the whole batch
+    # exactly like source_character/source_technique/source_description already are.
+    source_vow = _resolve_source_vow_anchor(source_character)
 
     results: list[ApplyConditionResult] = []
     for app in applications:
@@ -1004,6 +1048,7 @@ def bulk_apply_conditions(
             source_character=source_character,
             source_technique=source_technique,
             source_description=source_description,
+            source_vow=source_vow,
         )
         result = _apply_single(app.target, app.template, params, ctx)
 
@@ -1696,6 +1741,104 @@ def get_condition_modifier_breakdown(
             rows.append((instance.condition.name, value))
 
     return rows
+
+
+@dataclass(frozen=True)
+class ConditionModifierVowContribution:
+    """One per-instance contribution to a ModifierTarget, carrying its source_vow (#2643).
+
+    Vow-keyed sibling of the ``(source_label, value)`` tuples
+    ``get_condition_modifier_breakdown`` returns — used where the caller needs to
+    GROUP contributions by the applying condition instance's ``source_vow_id`` (the
+    bounded team-damage-percent lane's diminishing-returns read) rather than just sum
+    or label them.
+    """
+
+    source_vow_id: int | None
+    source_name: str
+    value: int
+
+
+def get_condition_modifier_vow_contributions(
+    character_sheet: "CharacterSheet",
+    modifier_target: "ModifierTarget",
+) -> list["ConditionModifierVowContribution"]:
+    """Vow-keyed sibling of get_condition_modifier_breakdown (#2643).
+
+    Identical walk/scaling to ``get_condition_modifier_breakdown``, but each row also
+    carries the applying ``ConditionInstance.source_vow_id`` — the bounded
+    team-damage-percent lane's read groups contributions by this before running vow-keyed
+    diminishing returns (``world.magic.services.techniques.vow_keyed_diminished_total``)
+    and clamping. A row with ``source_vow_id=None`` (no engaged role at apply time) is
+    its own DR group, same as any named vow. The sum of returned values MUST equal
+    ``get_condition_modifier_total`` for the same inputs. Empty list when no
+    contributions.
+    """
+    target = character_sheet.character
+    rows: list[ConditionModifierVowContribution] = []
+
+    for instance in get_active_conditions(target):
+        query = Q(condition=instance.condition)
+        if instance.current_stage:
+            query |= Q(stage=instance.current_stage)
+        effects = ConditionModifierEffect.objects.filter(query, modifier_target=modifier_target)
+
+        for effect in effects:
+            value = effect.value
+            if effect.scales_with_severity:
+                value = int(value * instance.effective_severity)
+            elif instance.current_stage:
+                value = int(value * instance.current_stage.severity_multiplier)
+            rows.append(
+                ConditionModifierVowContribution(
+                    source_vow_id=instance.source_vow_id,
+                    source_name=instance.condition.name,
+                    value=value,
+                )
+            )
+
+    return rows
+
+
+def priced_percent_severity(*, eff_intensity: int, target: "ObjectDB") -> int:  # noqa: OBJECTDB_PARAM
+    """Apply-time percent severity for the bounded team-damage-percent lane (#2643).
+
+    Power buys the percentage; the price scales inversely with the buffed target's
+    level — the same cast power buys a smaller percentage on a higher-level target::
+
+        severity = clamp(round(eff_intensity * PCT_PER_POWER_TENTHS / 10
+                                / max(1, target_level)),
+                          1, TEAM_BUFF_LANE_CAP_PERCENT)
+
+    ``target_level`` resolves generically for whoever the condition landed on (a
+    team_damage_percent-carrying condition can target an ally OR an enemy — see
+    ``world.magic.services.condition_application.apply_technique_conditions``):
+    a PC target reads ``CharacterSheet.current_level``; a ``CombatOpponent`` target
+    reads its pseudo-level from ``OPPONENT_TIER_LEVEL`` (tier -> level,
+    ``world.combat.constants``); an unresolvable target defaults to level 1 (no
+    dampening). Floor 1 (a landed buff always grants something); ceiling is the
+    bounded lane's own cap — the read side clamps again after vow-keyed DR, but a
+    single write should never itself exceed what the lane could legally display.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.combat.constants import OPPONENT_TIER_LEVEL  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+    from world.magic.constants import (  # noqa: PLC0415
+        PCT_PER_POWER_TENTHS,
+        TEAM_BUFF_LANE_CAP_PERCENT,
+    )
+
+    target_level = 1
+    sheet = CharacterSheet.objects.filter(character=target).first()
+    if sheet is not None:
+        target_level = sheet.current_level
+    else:
+        opponent = CombatOpponent.objects.filter(objectdb=target).first()
+        if opponent is not None:
+            target_level = OPPONENT_TIER_LEVEL.get(opponent.tier, 1)
+
+    raw = eff_intensity * PCT_PER_POWER_TENTHS / 10 / max(1, target_level)
+    return max(1, min(TEAM_BUFF_LANE_CAP_PERCENT, round(raw)))
 
 
 def get_capability_value(
@@ -2860,6 +3003,25 @@ def _is_failure_outcome(outcome: "object") -> bool:
     return int(outcome.success_level) < _PARTIAL_LEVEL  # type: ignore[union-attr]
 
 
+def _map_outcome_to_mend(outcome: "object", treatment: TreatmentTemplate) -> int:
+    """Map a CheckOutcome to a raw HP-mend amount via success_level (#2644).
+
+    Mirrors _map_outcome_to_reduction exactly, but reads the mend_on_* columns.
+    No mend_on_failure column exists — a failed treatment never mends (heals
+    always cost, never reward incompetence); this always returns 0 for a
+    failure outcome (also reachable via _is_failure_outcome for callers that
+    need the boolean).
+    """
+    level = int(outcome.success_level)  # type: ignore[union-attr]
+    if level >= _CRIT_SUCCESS_LEVEL:
+        return treatment.mend_on_crit
+    if level >= _SUCCESS_LEVEL:
+        return treatment.mend_on_success
+    if level == _PARTIAL_LEVEL:
+        return treatment.mend_on_partial
+    return 0
+
+
 def _thread_anchors_to_character(thread: "Thread", target_sheet: "CharacterSheet") -> bool:
     """Return True if a Thread's anchor resolves to target_sheet.
 
@@ -3131,7 +3293,19 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     # ------------------------------------------------------------------
     # Gate 6: duplicate pre-check (racy; INSERT-time constraint is authoritative)
     # ------------------------------------------------------------------
-    if (
+    # #2644: once_per_wound_per_helper treatments gate on (helper, wound
+    # instance) instead of (helper, scene) — scene-independent, each healer
+    # gets exactly one tending per wound, ever. Mutually exclusive with the
+    # once_per_scene_per_helper gate below (a wound treatment authors
+    # once_per_scene_per_helper=False).
+    if treatment.once_per_wound_per_helper:
+        if TreatmentAttempt.objects.filter(
+            helper=helper,
+            target_condition_instance=target_effect,
+            once_per_wound_guard=True,
+        ).exists():
+            raise TreatmentAlreadyAttempted
+    elif (
         treatment.once_per_scene_per_helper
         and TreatmentAttempt.objects.filter(
             helper=helper,
@@ -3218,6 +3392,26 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
             target_resolved = tier_result.resolved
 
     # ------------------------------------------------------------------
+    # Bounded HP mend (#2644) — independent of severity reduction above;
+    # routes through vitals.mend_wound() so the never-to-full fraction cap
+    # and the max_health clamp both apply (the attrition invariant,
+    # ADR-0156). No mend_on_failure column exists (heals never reward
+    # incompetence); a PENDING_ALTERATION target has no WoundDetails seam.
+    # ------------------------------------------------------------------
+    health_mended = 0
+    if not is_failure and isinstance(target_effect, ConditionInstance):
+        mend_amount = _map_outcome_to_mend(check_result.outcome, treatment)
+        if mend_amount > 0:
+            from world.vitals.services import mend_wound  # noqa: PLC0415
+
+            health_mended = mend_wound(
+                healer_sheet=helper_sheet,
+                target_sheet=target_sheet,
+                wound_instance=target_effect,
+                amount=mend_amount,
+            )
+
+    # ------------------------------------------------------------------
     # Failure backlash
     # ------------------------------------------------------------------
     helper_backlash = 0
@@ -3258,8 +3452,10 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
         "helper_backlash_applied": helper_backlash,
         "resonance_spent": resonance_spent,
         "anima_spent": anima_spent,
+        "health_mended": health_mended,
         "created_at": get_ic_now() or tz.now(),
         "once_per_scene_guard": treatment.once_per_scene_per_helper,
+        "once_per_wound_guard": treatment.once_per_wound_per_helper,
     }
     if treatment.target_kind == TreatmentTargetKind.PENDING_ALTERATION:
         attempt_kwargs["target_pending_alteration"] = target_effect
@@ -3276,11 +3472,12 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     return TreatmentOutcome(
         attempt=attempt,
         outcome=check_result.outcome,
-        effect_applied=(severity_reduced + tiers_reduced) > 0,
+        effect_applied=(severity_reduced + tiers_reduced + health_mended) > 0,
         severity_reduced=severity_reduced,
         tiers_reduced=tiers_reduced,
         helper_backlash_applied=helper_backlash,
         target_resolved=target_resolved,
+        health_mended=health_mended,
     )
 
 

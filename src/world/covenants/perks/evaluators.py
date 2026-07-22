@@ -534,6 +534,26 @@ def champion_duel(ctx: SituationContext, params: SituationParams) -> bool:  # no
     return participant.encounter.is_champion_duel is True
 
 
+@register(Situation.ON_CHOSEN_GROUND)
+def on_chosen_ground(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """True when the SUBJECT is a participant in an encounter stamped chosen-ground.
+
+    ``on_chosen_ground`` (#2646) is stamped exclusively at encounter-CREATE time by
+    ``world.combat.chosen_ground.compute_on_chosen_ground``, called from the three
+    PC-vs-NPC encounter-creation seams (``world.combat.cast_seed.
+    seed_or_feed_encounter_from_cast``, ``world.combat.duels.create_lethal_duel``,
+    ``world.battles.services.open_place_encounter``) — every other DUEL creation
+    path (``world.combat.duels.create_pvp_duel``) leaves it False. Mirrors
+    ``champion_duel``'s shape exactly: one cached FK read (``participant.encounter``,
+    idmapper-cached) and False outside combat. Reads no params (absent from
+    ``SITUATION_PARAM_SPECS``).
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+    return participant.encounter.on_chosen_ground is True
+
+
 @register(Situation.COMBAT_OPENED_FROM_PARLEY)
 def combat_opened_from_parley(ctx: SituationContext, params: SituationParams) -> bool:
     """True for every combat resolution in an encounter that opened as a parley,

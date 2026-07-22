@@ -10,6 +10,7 @@ from world.npc_services.models import (
     OfferCooldown,
     OfferSummons,
     PermitOfferDetails,
+    RecordedProfile,
 )
 
 
@@ -267,3 +268,35 @@ class SummonsRespondSerializer(serializers.Serializer):
 
     accept = serializers.BooleanField()
     acknowledge_risk = serializers.BooleanField(required=False, default=False)
+
+
+class RecordedProfileSerializer(serializers.ModelSerializer):
+    """A character's Archive profile sittings + recorded history (#2632)."""
+
+    persona_name = serializers.CharField(source="persona.name", read_only=True)
+    era_season_number = serializers.IntegerField(
+        source="era.season_number", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = RecordedProfile
+        fields = [
+            "id",
+            "persona",
+            "persona_name",
+            "status",
+            "text",
+            "recorded_by_label",
+            "price_paid",
+            "created_at",
+            "recorded_at",
+            "ic_date",
+            "era_season_number",
+        ]
+        read_only_fields = fields
+
+
+class RecordedProfileCompleteSerializer(serializers.Serializer):
+    """The write-up text for a COMMISSIONED sitting (#2632)."""
+
+    text = serializers.CharField()

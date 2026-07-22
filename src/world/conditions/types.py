@@ -251,3 +251,4 @@ class TreatmentOutcome:
     tiers_reduced: int
     helper_backlash_applied: int
     target_resolved: bool
+    health_mended: int = 0

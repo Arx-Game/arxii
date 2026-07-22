@@ -6,15 +6,11 @@ seeds (telekinesis/shield/barrier/pull_aside — "protecting someone bodily" spa
 an incoming blow and an environmental hazard; no new capability taxonomy needed), one
 Application + ChallengeApproach per capability, and a SUCCESS-tier DESTROY consequence.
 
-Mirrors world.combat.interpose_content.ensure_interpose_content exactly. Like that
-module (and world.areas.positioning.plummet_content), this is NOT wired into any
-production bootstrap path today — none of the sibling reactive-challenge content
-modules are (verified 2026-07-01: grepped src/ for callers of
-ensure_interpose_content/ensure_catch_content outside tests — zero hits). Seeding is
-staff-invoked (evennia shell) or test-fixture-invoked, consistent with this repo's
-existing convention for this whole content family; wiring an automatic seed hook for
-the family is out of scope for #1744 (would be a separate follow-up touching all
-siblings, not specific to Succor).
+Mirrors world.combat.interpose_content.ensure_interpose_content exactly. Like the
+whole reactive-challenge content family (interpose/catch/redirect siblings), this
+is seeded in production by the ``reactive_challenges`` cluster in
+``world.seeds.clusters`` (#2636) and also remains directly callable as
+integration-test setup or from the evennia shell.
 """
 
 from world.checks.models import CheckCategory, CheckType, Consequence

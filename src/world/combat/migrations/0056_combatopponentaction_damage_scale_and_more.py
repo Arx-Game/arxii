@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("combat", "0052_combatencounter_initiated_by_pc_side_and_more"),
+        ("combat", "0055_combatparticipant_insight_used"),
     ]
 
     operations = [

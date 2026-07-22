@@ -8,6 +8,7 @@ from web.admin.content_load_views import content_load_confirm, content_load_run
 from web.admin.content_push_views import content_push_preview, content_push_run
 from web.admin.game_setup_views import game_setup
 from web.admin.seed_views import seed_confirm, seed_run
+from web.admin.sphinx_views import sphinx_audit
 from web.admin.tuning.ops_views import (
     ops_dashboard,
     ops_economy_fragment,
@@ -68,6 +69,7 @@ urlpatterns = [
         name="admin_content_push_run",
     ),
     path("_game_setup/", game_setup, name="admin_game_setup"),
+    path("_sphinx/", sphinx_audit, name="admin_sphinx_audit"),
     path("_tuning/", tuning_dashboard, name="admin_tuning"),
     path("_tuning/checks/", tuning_checks_fragment, name="admin_tuning_checks"),
     path("_tuning/consequences/", tuning_consequences_fragment, name="admin_tuning_consequences"),

@@ -66,6 +66,23 @@ def _seed_battles() -> None:
     seed_war_funding_contribution_methods()
 
 
+def _seed_reactive_challenges() -> None:
+    from world.areas.positioning.plummet_content import ensure_fall_content  # noqa: PLC0415
+    from world.combat.interpose_content import ensure_interpose_content  # noqa: PLC0415
+    from world.combat.redirect_content import ensure_redirect_content  # noqa: PLC0415
+    from world.combat.succor_content import ensure_succor_content  # noqa: PLC0415
+
+    # Interpose first: it creates the four shared guardian CapabilityType rows
+    # (telekinesis/shield/barrier/pull_aside) that Succor reuses, and looks up
+    # the Melee Defense CheckType seeded by the "combat_checks" cluster.
+    ensure_interpose_content()
+    ensure_succor_content()
+    # Fall content also seeds the Catch-the-Faller challenge (shares the
+    # Reflexes catch CheckType with Interpose).
+    ensure_fall_content()
+    ensure_redirect_content()
+
+
 def _seed_checks() -> None:
     from world.seeds.checks import seed_check_resolution_tables  # noqa: PLC0415
 
@@ -166,6 +183,7 @@ def _seed_npc_services() -> None:
         ensure_academy_registrar_role,
         ensure_great_archive_librarian_role,
     )
+    from world.seeds.styling import seed_styling_content  # noqa: PLC0415
 
     ensure_great_archive_librarian_role()
     # #2428 whole-branch fix: the Registrar (settle the entrance debt) and an
@@ -174,6 +192,10 @@ def _seed_npc_services() -> None:
     # achievement-gated Great Archive self-study seed above.
     ensure_academy_registrar_role()
     ensure_academy_generalist_trainer_role()
+    # #2632 — stylist + Archive profile scribe roles, cosmetic item templates.
+    # Depends on the character_creation appearance traits (skips gracefully
+    # when absent).
+    seed_styling_content()
 
 
 def _seed_justice() -> None:
@@ -393,6 +415,15 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Battles: the Champion-duel-outcome ENCOUNTER_COMPLETED wiring (#1710). After
     # "combat" — depends on the combat seed cluster's content existing first.
     "battles": _seed_battles,
+    # Reactive challenges (#2636): the declared-guardian / environmental-rescue
+    # content family — Interpose, Succor, fall/Plummeting + Catch the Faller,
+    # and the redirect detonation example Property. Built for #1273/#1744/#1228/
+    # #2210 but previously staff/test-invoked only; wiring it here makes
+    # declared interpose, succor, and the reactive catch live in real play
+    # (covenant-vow reactive grammar, gap G1). After "combat_checks" (Interpose
+    # looks up its Melee Defense CheckType) and "combat" (same family of
+    # resolution content); all four seeds are get_or_create-idempotent.
+    "reactive_challenges": _seed_reactive_challenges,
     # Consent: seeds default SocialConsentCategory rows; tags ActionTemplates if present.
     "consent": _seed_consent,
     # Character-creation "world" content (Realm/StartingArea/Beginnings/Species/
@@ -578,6 +609,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance, Ritual  # noqa: PLC0415
     from world.magic.models.techniques import Technique  # noqa: PLC0415
+    from world.mechanics.models import ChallengeTemplate  # noqa: PLC0415
     from world.missions.models import MissionGiver, MissionTemplate  # noqa: PLC0415
     from world.npc_services.models import NPCRole  # noqa: PLC0415
     from world.progression.models import (  # noqa: PLC0415
@@ -644,6 +676,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # GM battle-staging catalog: 2 BattleMapBlueprint + 3 BattleUnitTemplate
         # rows (#2010).
         "battles": [BattleMapBlueprint, BattleUnitTemplate],
+        # Reactive challenges: Interpose/Succor/Catch-the-Faller ChallengeTemplates
+        # + the Plummeting marker condition + the redirect detonation Property
+        # (#2636 — activates the #1273/#1744/#1228/#2210 content family).
+        "reactive_challenges": [ChallengeTemplate],
         "consent": [SocialConsentCategory],
         "character_creation": [StartingArea, Beginnings, Species, CGExplanation],
         # Missions: the starter notice board (#2121) — 1 BOARD MissionGiver +

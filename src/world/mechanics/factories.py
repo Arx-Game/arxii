@@ -10,6 +10,7 @@ from factory.django import DjangoModelFactory
 from actions.factories import ConsequencePoolFactory
 from world.mechanics.constants import (
     POWER_MULTIPLIER_TARGET_NAME,
+    TEAM_DAMAGE_PERCENT_TARGET_NAME,
     EngagementType,
     PropertyHolder,
 )
@@ -95,6 +96,33 @@ class PowerMultiplierTargetFactory(ModifierTargetFactory):
     category = factory.SubFactory(PowerCategoryFactory)
     name = POWER_MULTIPLIER_TARGET_NAME
     target_resonance = None
+
+
+class TeamDamagePercentTargetFactory(ModifierTargetFactory):
+    """The bounded 'team_damage_percent' ModifierTarget — Uplift's team-wide %, priced
+    per-target-level, vow-keyed-DR'd, and clamped to ``TEAM_BUFF_LANE_CAP_PERCENT``
+    (#2643). Same "power" category as ``PowerMultiplierTargetFactory`` (so the
+    existing ``_get_power_targets()`` catalog read picks it up), but read/clamped as
+    its own separate lane — never folded into the legacy unbounded target. See
+    ``world.magic.services.techniques._apply_power_multiplier_stage``.
+    """
+
+    category = factory.SubFactory(PowerCategoryFactory)
+    name = TEAM_DAMAGE_PERCENT_TARGET_NAME
+    target_resonance = None
+
+
+def ensure_team_damage_percent_target() -> ModifierTarget:
+    """Idempotently ensure the bounded team-damage-percent lane's ModifierTarget row
+    exists (#2643). Mirrors ``world.magic.factories.wire_audere_power_multipliers``'s
+    ModifierTarget-ensure idiom for ``power_multiplier`` (factories-as-seed-data): the
+    row itself is mechanics config, not authored game content, so — unlike the
+    ConditionModifierEffect/ConditionTemplate rows that actually author a Uplift/
+    Undermine buff (lore-repo content) — it is safe and correct to seed directly.
+    Called from the magic dev seed (``world.seeds.game_content.magic.seed_magic_dev``)
+    and from test setup that needs the lane readable without authoring a full buff.
+    """
+    return TeamDamagePercentTargetFactory()
 
 
 class ModifierSourceFactory(DjangoModelFactory):
