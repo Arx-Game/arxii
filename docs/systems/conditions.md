@@ -104,7 +104,7 @@ without being listed (with justification) in that test's `ACKNOWLEDGED_START_OF_
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ConditionInstance` | Active condition on a target | `target` (FK to ObjectDB), `condition`, `current_stage`, `stacks`, `severity`, `applied_at`, `expires_at`, `rounds_remaining`, `stage_rounds_remaining`, `source_character`, `source_technique`, `source_description`, `is_suppressed`, `suppressed_until`, `resolved_at`, `abandoned_since_round` (#1479: round at which a downed bearer's acute peril was held/abandoned; cleared when a hostile party drives again) |
+| `ConditionInstance` | Active condition on a target | `target` (FK to ObjectDB), `condition`, `current_stage`, `stacks`, `severity`, `applied_at`, `expires_at`, `rounds_remaining`, `stage_rounds_remaining`, `source_character`, `source_technique`, `source_vow` (#2643: nullable FK → `covenants.CovenantRole`, `SET_NULL` — the applier's engaged-vow anchor at apply time; drives vow-keyed diminishing returns on the bounded team-damage-percent lane, see `docs/systems/magic.md`), `source_description`, `is_suppressed`, `suppressed_until`, `resolved_at`, `abandoned_since_round` (#1479: round at which a downed bearer's acute peril was held/abandoned; cleared when a hostile party drives again) |
 
 ---
 
@@ -135,6 +135,8 @@ from world.conditions.services import (
     get_resistance_modifier,       # ResistanceModifierResult (total + breakdown)
     get_turn_order_modifier,       # Int modifier to initiative
     get_aggro_priority,            # Int priority for targeting
+    get_condition_modifier_vow_contributions, # Per-instance (source_vow_id, name, value) rows for a ModifierTarget (#2643)
+    priced_percent_severity,       # Apply-time percent severity priced vs the landing target's level (#2643)
 
     # Round processing
     process_round_start,           # Start-of-round DoT and effects
@@ -201,6 +203,28 @@ or transform (`applies_condition` set) the condition.
 transition is silent math — this prevents spam while keeping dramatic
 moments visible. Authored `narration_snippet` text is used when present;
 otherwise a deterministic fallback is composed.
+
+**Enemy-side bound (#2643):** the summed `damage_modifier_percent` across every
+matching `ConditionDamageInteraction` row is clamped to
+`±combat.constants.ENEMY_LANE_CAP_PERCENT` (default 50) in
+`world.combat.services._apply_condition_damage_interactions` before it multiplies net
+damage — the clamp bounds only the live application; the unclamped sum still reports
+on the returned `DamageInteractionResult`. See `docs/systems/magic.md`'s "The Damage
+Identity" section for the sibling bounded percent lane (the ally-buff side) and
+ADR-0155.
+
+### Bounded-Percent Lane Pricing (#2643)
+
+`priced_percent_severity(*, eff_intensity, target)` computes an apply-time severity
+for a percent-lane condition (authored `value=1` + `scales_with_severity=True`),
+priced inversely against the landing target's level:
+`clamp(round(eff_intensity * PCT_PER_POWER_TENTHS / 10 / max(1, target_level)), 1,
+TEAM_BUFF_LANE_CAP_PERCENT)`. `target_level` resolves generically — a PC target reads
+`CharacterSheet.current_level`; a `CombatOpponent` target reads its pseudo-level from
+`combat.constants.OPPONENT_TIER_LEVEL`. Wired into the shared
+`world.magic.services.condition_application.apply_technique_conditions` seam — see
+`docs/systems/magic.md`'s "The Damage Identity" section for the full lane composition
+(vow-keyed stacking, the clamp, the execute ramp) and ADR-0155.
 
 ### Querying Modifiers
 

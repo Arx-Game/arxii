@@ -22169,6 +22169,14 @@ export interface components {
       readonly source_character_name: string | null;
       /** @description Get the name of the source technique. */
       readonly source_technique_name: string | null;
+      /**
+       * @description Get the name of the applier's engaged vow (covenant role) at apply time (#2643).
+       *
+       *     Lets a player see an armed team-damage-percent buff's vow provenance on an
+       *     ally BEFORE casting — the "which vow is this coming from" visibility the UI
+       *     requirement calls for.
+       */
+      readonly source_vow_name: string | null;
       /** @description Freeform description of source (e.g., 'poisoned wine') */
       readonly source_description: string;
     };

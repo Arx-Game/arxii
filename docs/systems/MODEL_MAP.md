@@ -292,6 +292,7 @@
   - current_stage -> conditions.ConditionStage [FK] (nullable)
   - source_character -> objects.ObjectDB [FK] (nullable)
   - source_technique -> magic.Technique [FK] (nullable)
+  - source_vow -> covenants.CovenantRole [FK] (nullable)
   - cast_destination -> areas.Position [FK] (nullable)
   - cast_position_a -> areas.Position [FK] (nullable)
   - cast_position_b -> areas.Position [FK] (nullable)
@@ -1580,6 +1581,7 @@
   - active_alternate_self <- forms.ActiveAlternateSelf
   - distinctions <- distinctions.CharacterDistinction
   - distinction_other_entries <- distinctions.CharacterDistinctionOther
+  - sheet_update_requests <- distinctions.SheetUpdateRequest
   - org_obligations <- societies.OrganizationObligation
   - purse <- currency.CharacterPurse
   - employments <- currency.CharacterEmployment
@@ -1814,6 +1816,7 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
   - allowed_styles <- magic.TechniqueStyle
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - gift_unlocks <- magic.GiftUnlock
@@ -1947,6 +1950,7 @@
   - prerequisites -> codex.CodexEntry [M2M]
 **Pointed to by:**
   - species <- species.Species
+  - codex_knowledge_requirements <- progression.CodexKnowledgeRequirement
   - resonances <- magic.Resonance
   - gifts <- magic.Gift
   - techniques <- magic.Technique
@@ -2315,8 +2319,8 @@
 - `acknowledge_encounter_risk(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet') -> 'EncounterRiskAcknowledgement' — Idempotently record that a character acknowledged the encounter's risk (#777).`
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None) -> 'CombatOpponent' — Create a CombatOpponent. Three sources for the ObjectDB:`
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' — Create a CombatParticipant linking a PC to an encounter.`
-- `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False) -> 'OpponentDamageResult' — Apply damage to an NPC opponent, accounting for soak, probing,`
-- `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'ParticipantDamageResult' — Apply damage to a PC via their CharacterVitals.`
+- `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'OpponentDamageResult' — Apply damage to an NPC opponent, accounting for soak, probing,`
+- `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'ParticipantDamageResult' — Apply damage to a PC via their CharacterVitals.`
 - `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' — Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533).`
 - `apply_fatigue(character_sheet: 'CharacterSheet', category: 'str', base_cost: 'int', effort_level: 'str') -> 'int' — Add fatigue to the pool.`
 - `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' — Map a graded interpose resolution onto *pre_payload*.`
@@ -2639,6 +2643,7 @@
   - current_stage -> conditions.ConditionStage [FK] (nullable)
   - source_character -> objects.ObjectDB [FK] (nullable)
   - source_technique -> magic.Technique [FK] (nullable)
+  - source_vow -> covenants.CovenantRole [FK] (nullable)
   - cast_destination -> areas.Position [FK] (nullable)
   - cast_position_a -> areas.Position [FK] (nullable)
   - cast_position_b -> areas.Position [FK] (nullable)
@@ -2703,6 +2708,7 @@
 - `get_condition_intensity_percent_modifier(character_sheet: 'CharacterSheet', condition_name: str) -> int — Get percentage modifier to intensity gain for a condition.`
 - `get_condition_modifier_breakdown(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget') -> list[tuple[str, int]] — Per-source sibling of get_condition_modifier_total (#639 power ledger).`
 - `get_condition_modifier_total(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget') -> int — Sum active-condition contributions to a mechanics ModifierTarget (#636).`
+- `get_condition_modifier_vow_contributions(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget') -> list['ConditionModifierVowContribution'] — Vow-keyed sibling of get_condition_modifier_breakdown (#2643).`
 - `get_condition_penalty_percent_modifier(character_sheet: 'CharacterSheet', condition_name: str) -> int — Get percentage modifier to check penalties for a condition.`
 - `get_damage_multiplier(success_level: int) -> decimal.Decimal — Look up the damage multiplier for a given success level.`
 - `get_effective_capability_value(character_sheet: 'CharacterSheet', capability: world.conditions.models.CapabilityType) -> int — Effective capability value = innate baseline + CharacterModifier contributions`
@@ -2717,6 +2723,7 @@
 - `is_untargetable(target: 'ObjectDB') -> bool — True if *target* holds any active intangibility condition.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None) -> world.conditions.types.TreatmentOutcome — Resolve a TreatmentTemplate against an effect instance.`
+- `priced_percent_severity(*, eff_intensity: int, target: 'ObjectDB') -> int — Apply-time percent severity for the bounded team-damage-percent lane (#2643).`
 - `process_action_tick(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process on-action damage for conditions (when target takes an action).`
 - `process_damage_interactions(target: 'ObjectDB', damage_type: world.conditions.models.DamageType) -> world.conditions.types.DamageInteractionResult — Process condition interactions when target takes damage.`
 - `process_round_end(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process end-of-round effects for all conditions on a target.`
@@ -3195,6 +3202,7 @@
   - character_grants <- distinctions.CharacterDistinction
   - other_entries <- distinctions.CharacterDistinctionOther
   - mapped_from_other <- distinctions.CharacterDistinctionOther
+  - add_sheet_update_requests <- distinctions.SheetUpdateRequest
   - purse_drain <- currency.DistinctionPurseDrain
   - codex_grants <- codex.DistinctionCodexGrant
   - asset_grants <- assets.DistinctionAssetGrant
@@ -3221,6 +3229,7 @@
   - from_glimpse -> magic.CharacterAura [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+  - remove_sheet_update_requests <- distinctions.SheetUpdateRequest
   - modifier_sources <- mechanics.ModifierSource
 
 ### CharacterDistinctionOther
@@ -3229,10 +3238,25 @@
   - parent_distinction -> distinctions.Distinction [FK]
   - staff_mapped_distinction -> distinctions.Distinction [FK] (nullable)
 
+### SheetUpdateRequest
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - target_distinction -> distinctions.Distinction [FK] (nullable)
+  - target_character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
+  - reviewed_by -> accounts.AccountDB [FK] (nullable)
+  - submitted_by -> accounts.AccountDB [FK] (nullable)
+
 ### Service Functions
+- `approve_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' — Approve a PENDING SheetUpdateRequest: XP debit + change firing.`
+- `cancel_sheet_update_request(request: 'SheetUpdateRequest', account: 'object') -> 'None' — Player-initiated cancellation of their own pending request.`
 - `clear_distinction_secret(character_distinction: 'CharacterDistinction') -> 'None' — Make a relocated distinction public again by deleting its Secret (#1334).`
+- `compute_distinction_change_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' — Compute the XP cost for a sheet-update request.`
+- `compute_sheet_update_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' — Compute the XP cost for a sheet-update request.`
+- `create_sheet_update_request(character_sheet: 'CharacterSheet', request_type: 'str', *, justification: 'str', target_distinction: 'Distinction | None' = None, target_character_distinction: 'CharacterDistinction | None' = None, submitted_by: 'object | None' = None, origin: 'str' = DistinctionOrigin.UNLOCK_PURCHASE) -> 'SheetUpdateRequest' — Create a PENDING SheetUpdateRequest.`
+- `deny_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' — Deny a PENDING SheetUpdateRequest. No XP debit, no change.`
 - `grant_distinction(character: 'CharacterSheet', distinction: 'Distinction', *, origin: 'str', rank: 'int | None' = None, source_description: 'str' = '') -> 'CharacterDistinction' — Grant a Distinction, or rank one up, through the single acquisition seam (#2037).`
 - `mint_distinction_secret(character_distinction: 'CharacterDistinction', *, level: 'int | None' = None, provenance: 'str' = SecretProvenance.GM_AUTHORED, author_persona: 'Persona | None' = None, content: 'str' = '') -> 'Secret' — Relocate a distinction into a Secret, returning it (#1334).`
+- `remove_distinction(character_distinction: 'CharacterDistinction', *, sheet_update_request: 'SheetUpdateRequest') -> 'None' — Remove a CharacterDistinction, reconciling all dependent systems.`
 
 
 ## world.dreams
@@ -4764,6 +4788,7 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
 
 ### DramaticMomentType
 **Foreign Keys:**
@@ -6351,6 +6376,7 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
 
 ### TraitRatingUnlock
 **Foreign Keys:**
@@ -6430,6 +6456,13 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+
+### CodexKnowledgeRequirement
+**Foreign Keys:**
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
+  - codex_entry -> codex.CodexEntry [FK]
 
 ### CharacterUnlock
 **Foreign Keys:**
@@ -6834,6 +6867,7 @@
 - `can_modify_room_features(persona: 'Persona', room: 'DefaultObject') -> 'bool' — Standing required to install or upgrade a feature in this room.`
 - `complete_defense_installation(project: 'Project', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — Handle resolution of a ROOM_DEFENSE_INSTALLATION project (#2177).`
 - `complete_room_feature_progression(project: 'Project', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — Handle resolution of a ROOM_FEATURE_PROGRESSION project.`
+- `handle_bank_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — BANK strategy (#2540 Layer 4): row-only install.`
 - `handle_captains_quarters_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — CAPTAINS_QUARTERS strategy (#675): row-only install.`
 - `handle_command_center_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — COMMAND_CENTER strategy (#930): install or level the feature instance.`
 - `handle_library_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — LIBRARY strategy (#675): row-only install/level.`

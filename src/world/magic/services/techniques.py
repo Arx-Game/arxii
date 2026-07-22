@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from decimal import ROUND_HALF_UP, Decimal
 import logging
 from typing import TYPE_CHECKING
 
@@ -208,15 +209,23 @@ def _partition_power_targets(
     *,
     technique: Technique | None,
     character: object,
-) -> tuple[ModifierTarget | None, list[ModifierTarget]]:
-    """Split scope-matched power targets into (multiplier_target, flat_targets).
+) -> tuple[ModifierTarget | None, ModifierTarget | None, list[ModifierTarget]]:
+    """Split scope-matched power targets into (multiplier_target, team_lane_target, flat_targets).
 
     A target matches when it passes both scope gates (AND semantics; null = global):
     - Resonance: target_resonance is None, or matches the character's GIFT-thread resonance.
     - Damage-type: target_damage_type is None, or matches a technique damage profile.
     Untyped damage profiles (damage_type=None) never count as a damage-type match.
+
+    ``team_lane_target`` (#2643) is the bounded ``team_damage_percent`` target — same
+    "power" category as ``power_multiplier`` (so it's caught by ``_get_power_targets()``
+    without a separate query), but bucketed OUT of ``flat_targets`` and read/clamped as
+    its own lane in ``_apply_power_multiplier_stage``, never additively via the FLAT stage.
     """
-    from world.mechanics.constants import POWER_MULTIPLIER_TARGET_NAME  # noqa: PLC0415
+    from world.mechanics.constants import (  # noqa: PLC0415
+        POWER_MULTIPLIER_TARGET_NAME,
+        TEAM_DAMAGE_PERCENT_TARGET_NAME,
+    )
 
     technique_resonance_ids: set[int] = set()
     technique_damage_type_ids: set[int] = set()
@@ -231,6 +240,7 @@ def _partition_power_targets(
         }
 
     multiplier_target: ModifierTarget | None = None
+    team_lane_target: ModifierTarget | None = None
     flat_targets: list[ModifierTarget] = []
     for target in _get_power_targets():
         resonance_matches = (
@@ -245,21 +255,95 @@ def _partition_power_targets(
             continue
         if target.name == POWER_MULTIPLIER_TARGET_NAME:
             multiplier_target = target
+        elif target.name == TEAM_DAMAGE_PERCENT_TARGET_NAME:
+            team_lane_target = target
         else:
             flat_targets.append(target)
-    return multiplier_target, flat_targets
+    return multiplier_target, team_lane_target, flat_targets
+
+
+_VOW_STACK_WEIGHTS: tuple[Decimal, ...] = (Decimal(1), Decimal("0.5"), Decimal("0.25"))
+
+
+def vow_keyed_diminished_total(deltas_by_vow: dict[int | None, list[int]]) -> int:
+    """Vow-keyed diminishing-returns total for the bounded team-damage-percent lane (#2643).
+
+    Contributions sharing one ``source_vow`` key (including the ``None`` "no engaged
+    role" key, which is its own group like any named vow) are sorted DESCENDING and
+    weighted 100% / 50% / 25% / 25%... — the 4th-and-beyond contribution in a group all
+    weight ×0.25, no further decay. Distinct vow groups stack FULLY against each other:
+    diminishing returns only bites WITHIN a single vow's stack — the whole point is to
+    reward multi-vow synergy over one vow spammed. (Today's identical-technique
+    single-instance-per-(target,template) stacking rule already prevents one condition
+    instance from appearing twice in a group's input list.)
+
+    Pure function — performs no clamping; the caller clamps the returned total to the
+    lane's band.
+    """
+    total = Decimal(0)
+    for deltas in deltas_by_vow.values():
+        for index, value in enumerate(sorted(deltas, reverse=True)):
+            weight = _VOW_STACK_WEIGHTS[min(index, len(_VOW_STACK_WEIGHTS) - 1)]
+            total += Decimal(value) * weight
+    return int(total.to_integral_value(rounding=ROUND_HALF_UP))
+
+
+def _team_lane_delta(
+    sheet: CharacterSheet, team_lane_target: ModifierTarget
+) -> tuple[int, list[str]]:
+    """Bounded team-damage-percent lane read: vow-keyed DR, then clamp (#2643).
+
+    Groups the lane's per-instance condition contributions
+    (``get_condition_modifier_vow_contributions``) by ``source_vow_id`` and runs them
+    through ``vow_keyed_diminished_total``, then clamps to
+    ``±TEAM_BUFF_LANE_CAP_PERCENT``. Returns ``(clamped_delta, source_names)`` — the
+    names feed the caller's combined ledger label.
+    """
+    from world.conditions.services import get_condition_modifier_vow_contributions  # noqa: PLC0415
+    from world.magic.constants import TEAM_BUFF_LANE_CAP_PERCENT  # noqa: PLC0415
+
+    contributions = get_condition_modifier_vow_contributions(sheet, team_lane_target)
+    if not contributions:
+        return 0, []
+
+    deltas_by_vow: dict[int | None, list[int]] = {}
+    names: list[str] = []
+    for contribution in contributions:
+        deltas_by_vow.setdefault(contribution.source_vow_id, []).append(contribution.value)
+        names.append(contribution.source_name)
+
+    raw_total = vow_keyed_diminished_total(deltas_by_vow)
+    clamped = max(-TEAM_BUFF_LANE_CAP_PERCENT, min(TEAM_BUFF_LANE_CAP_PERCENT, raw_total))
+    return clamped, names
 
 
 def _apply_power_multiplier_stage(
     builder: PowerLedgerBuilder,
     *,
     sheet: CharacterSheet,
-    multiplier_target: ModifierTarget,
+    multiplier_target: ModifierTarget | None,
+    team_lane_target: ModifierTarget | None,
 ) -> None:
-    """Add the aggregate MULTIPLIER entry (applies to base only) for ``multiplier_target``.
+    """Add ONE aggregate MULTIPLIER entry (applies to base only) — the composition of
+    the legacy unbounded ``power_multiplier`` target and the bounded
+    ``team_damage_percent`` lane (#2643).
 
-    The percent-delta and its source label are derived from identity + condition
-    modifiers; immunity-blocked sources are excluded from the label.
+    **Composition — the ONLY buff-multiplier lane, forever (ADR-0155, the EQ2 lane
+    guard: a second multiplicative stage would let two bounded lanes compound into an
+    effectively-unbounded one).** The two targets are read SEPARATELY, using the same
+    condition/CharacterModifier read helpers each already used, but folded into a
+    SINGLE ``builder.multiply`` call::
+
+        total_delta = lane_delta_clamped + legacy_delta
+
+    ``lane_delta_clamped`` is ``team_damage_percent``'s summed delta after vow-keyed
+    diminishing returns (see ``_team_lane_delta``), clamped to
+    ``±TEAM_BUFF_LANE_CAP_PERCENT``. ``legacy_delta`` is the untouched
+    ``power_multiplier`` aggregate — pre-existing percent sources on that target are
+    intentionally left OUTSIDE the band for this issue's scope (folding them into the
+    lane is flagged future within-lane tuning, not a #2643 requirement). Either target
+    may be ``None`` (not present in this cast's scope-matched set); the entry is only
+    added when at least one target IS present (guarded by the caller).
     """
     from world.conditions.services import (  # noqa: PLC0415
         get_condition_modifier_breakdown,
@@ -267,13 +351,25 @@ def _apply_power_multiplier_stage(
     )
     from world.mechanics.services import get_modifier_breakdown  # noqa: PLC0415
 
-    mult_breakdown = get_modifier_breakdown(sheet, multiplier_target)
-    mult_condition_rows = get_condition_modifier_breakdown(sheet, multiplier_target)
-    delta = mult_breakdown.total + get_condition_modifier_total(sheet, multiplier_target)
-    names = [
-        s.source_name for s in mult_breakdown.sources if s.source_name and not s.blocked_by_immunity
-    ]
-    names += [name for name, _value in mult_condition_rows if name]
+    names: list[str] = []
+    legacy_delta = 0
+    if multiplier_target is not None:
+        mult_breakdown = get_modifier_breakdown(sheet, multiplier_target)
+        mult_condition_rows = get_condition_modifier_breakdown(sheet, multiplier_target)
+        legacy_delta = mult_breakdown.total + get_condition_modifier_total(sheet, multiplier_target)
+        names += [
+            s.source_name
+            for s in mult_breakdown.sources
+            if s.source_name and not s.blocked_by_immunity
+        ]
+        names += [name for name, _value in mult_condition_rows if name]
+
+    lane_delta_clamped = 0
+    if team_lane_target is not None:
+        lane_delta_clamped, lane_names = _team_lane_delta(sheet, team_lane_target)
+        names += lane_names
+
+    delta = lane_delta_clamped + legacy_delta
     label = ", ".join(names) if names else "power multipliers"
     builder.multiply(PowerStage.MULTIPLIER, label, delta)
 
@@ -337,6 +433,12 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     TERM adds. The ledger therefore *displays* MULTIPLIER before FLAT; this is
     intentional and required for numeric fidelity.
 
+    **The bounded team-damage-percent lane (#2643)** rides the SAME MULTIPLIER stage —
+    see ``_apply_power_multiplier_stage`` for the two-target composition (legacy
+    unbounded ``power_multiplier`` + the vow-keyed-DR'd, clamped ``team_damage_percent``
+    lane, folded into one ``delta`` before this single multiply). It is never a second
+    multiplicative stage (ADR-0155).
+
     A target is matched when it passes both scope gates (AND semantics; null = global):
     - Resonance scope: target_resonance is None, or matches a technique gift resonance.
     - Damage-type scope: target_damage_type is None, or matches a technique damage profile.
@@ -357,18 +459,19 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     if sheet is None:
         return PowerLedgerBuilder(base=max(0, channeled_intensity)).build()
 
-    multiplier_target, flat_targets = _partition_power_targets(
+    multiplier_target, team_lane_target, flat_targets = _partition_power_targets(
         technique=technique, character=character
     )
 
     builder = PowerLedgerBuilder(base=channeled_intensity, base_label="channeled intensity")
 
     # --- MULTIPLIER stage (applies to base only; single aggregate call) ---
-    if multiplier_target is not None:
+    if multiplier_target is not None or team_lane_target is not None:
         _apply_power_multiplier_stage(
             builder,
             sheet=sheet,
             multiplier_target=multiplier_target,
+            team_lane_target=team_lane_target,
         )
 
     # --- FLAT stage (per source; addition does not round) ---

@@ -530,6 +530,21 @@ MAGIC_LEARNING_AP_COST_TARGET_NAME = "magic_learning_ap_cost"
 MAGIC_MODIFIER_CATEGORY_NAME = "magic"
 
 
+# #2643 — the bounded team-damage-percent lane (Uplift's team-wide %). The EQ2 lane
+# guard: a percent-buff lane left unbounded trivializes the damage identity once two
+# or three buffs stack in one round (the legacy ``power_multiplier`` target's known
+# failure mode — see ADR-0155). ``TEAM_BUFF_LANE_CAP_PERCENT`` is this lane's summed
+# ceiling (vow-keyed-DR'd contributions, clamped, folded into the single MULTIPLIER
+# stage alongside the untouched legacy aggregate — see
+# ``world.magic.services.techniques._apply_power_multiplier_stage``).
+# ``PCT_PER_POWER_TENTHS`` is the pricing rate: how many percent (in tenths, so 10 =
+# 1.0) one point of effective cast power buys per point of the buffed target's level —
+# see ``world.conditions.services.priced_percent_severity``. Both staff-tunable knobs,
+# not DB-authored (mechanics/engine config, not game content).
+TEAM_BUFF_LANE_CAP_PERCENT = 50
+PCT_PER_POWER_TENTHS = 10
+
+
 class GlimpseTagAxis(models.TextChoices):
     """Narrative axis of a GlimpseTag (#2427): the guided glimpse steps."""
 

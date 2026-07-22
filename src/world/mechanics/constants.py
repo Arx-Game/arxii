@@ -14,6 +14,10 @@ RESONANCE_CATEGORY_NAME = "resonance"
 CHECK_CATEGORY_NAME = "check"
 POWER_CATEGORY_NAME = "power"
 POWER_MULTIPLIER_TARGET_NAME = "power_multiplier"
+# #2643 — the bounded team-damage-percent lane's ModifierTarget name (same "power"
+# category as power_multiplier, but read/clamped SEPARATELY — see
+# world.magic.services.techniques._apply_power_multiplier_stage / ADR-0155).
+TEAM_DAMAGE_PERCENT_TARGET_NAME = "team_damage_percent"
 TECHNIQUE_STAT_CATEGORY_NAME = "technique_stat"
 TECHNIQUE_STAT_INTENSITY = "intensity"
 TECHNIQUE_STAT_CONTROL = "control"
