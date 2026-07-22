@@ -1,1 +1,1 @@
-0043_charactercovenantrole_is_secondary_and_more
+0044_covenantrole_grants_insight_insighttableentry

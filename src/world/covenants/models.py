@@ -29,6 +29,7 @@ from world.covenants.constants import (
     CommandTier,
     CovenantType,
     DefenseStyle,
+    InsightTargetKind,
     MentorBondAdjusted,
     RoleArchetype,
 )
@@ -328,6 +329,16 @@ class CovenantRole(NaturalKeyMixin, AbstractSpecializedVariant, SharedMemoryMode
         help_text=(
             "True if holding this role lets a character issue/answer a single-combat "
             "duel for the covenant (#1710). Only settable on CovenantType.BATTLE roles."
+        ),
+    )
+    grants_insight = models.BooleanField(
+        default=False,
+        help_text=(
+            "#2645: the Know need's once-per-fight Insight ace. A character with an "
+            "engaged membership in this role (or one of its sub-roles, which ride the "
+            "parent's grant like every other role-scoped flag in this table) may "
+            "produce an Insight when their PERCEPTION-tagged technique cast resolves "
+            "in combat — once per encounter (CombatParticipant.insight_used)."
         ),
     )
     granted_gifts = models.ManyToManyField(
@@ -2069,3 +2080,72 @@ class VowSituationalPerkRung(SituationRequirementMixin, NaturalKeyMixin, SharedM
 
     def __str__(self) -> str:
         return f"{self.perk.name} rung {self.rung_number}: {self.get_extra_situation_display()}"
+
+
+class InsightTableEntryManager(NaturalKeyManager):
+    """Manager for InsightTableEntry with natural key support."""
+
+
+class InsightTableEntry(NaturalKeyMixin, SharedMemoryModel):
+    """One curated entry in the Insight table (#2645 — the Know need's ace).
+
+    Ratified design: `design/covenant-vows-consolidated.md` §5 (lore repo).
+    Rides an existing PERCEPTION-tagged technique cast — see
+    ``world.covenants.insight.maybe_produce_insight``. Once per encounter, a
+    character with an engaged ``grants_insight`` role reads the fight and
+    shares a large, narrowly-scoped, ONE-ROUND effect drawn at random from
+    this table. **Never instant-win** — that ceiling belongs to the audere
+    arc, not the Insight. This is enforced editorially by curation (the
+    authored ``condition`` rows never carry a kill/win effect), not by any
+    engine check here.
+
+    Entries are lore-repo content (natural key ``name``, registered in
+    ``core_management.content_export.CONTENT_MODELS``) — **never seeded in
+    arxii**; the first dozen are authored in the companion lore commit.
+    Tests build rows via ``InsightTableEntryFactory`` only.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Curated entry name, e.g. 'A Gap in Their Guard'.",
+    )
+    prose = models.TextField(
+        help_text=(
+            "The announced reading, shared loudly on both the web broadcast and "
+            "telnet. Supports {caster}/{target} placeholders."
+        ),
+    )
+    condition = models.ForeignKey(
+        CONDITION_TEMPLATE_MODEL,
+        on_delete=models.PROTECT,
+        related_name="insight_entries",
+        help_text=(
+            "The authored one-round effect this entry applies. Author a one-round "
+            "duration on the condition itself — the Insight never overrides it."
+        ),
+    )
+    target_kind = models.CharField(
+        max_length=10,
+        choices=InsightTargetKind.choices,
+        help_text="Who the condition lands on when this entry is drawn.",
+    )
+    weight = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Relative weight in the weighted-random draw over active entries.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive entries are excluded from the draw without deleting them.",
+    )
+
+    objects = InsightTableEntryManager()
+
+    class Meta:
+        ordering = ["name"]
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name

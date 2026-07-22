@@ -21,8 +21,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `TechniqueFunctionTag` (#2443, NK `(technique, function)`, lore-repo content —
     which fine-grained `TechniqueFunction` labels a technique carries; see
     `constants.TechniqueFunction`, a 12-value code-defined vocabulary shared by
-    Layer 2 per-vow specialties (`covenants.CovenantRoleTechniqueSpecialty`) and
-    Layer 4 situational perks (#2536)),
+    Layer 2 per-vow specialties (`covenants.CovenantRoleTechniqueSpecialty`),
+    Layer 4 situational perks (#2536), and the #2645 Insight rider (PERCEPTION
+    gates `covenants.insight.maybe_produce_insight`)),
     `AbstractCapabilityGrant` / `AbstractDamageProfile` / `AbstractAppliedCondition`
     (abstract payload bases shared by `Technique*` and `TechniqueDraft*` rows),
     `TechniqueDraft` (one-per-CharacterSheet in-progress design workbench —
@@ -4196,6 +4197,36 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `SituationContext(attacker=opponent_action.opponent, ...)` into the defender's
     `perform_check` in `world.combat.services.resolve_npc_attack` — the defense-side seam, the
     only defense-check site carrying `attacker` in v1.
+  - `InsightTableEntry` (#2645, NK `["name"]`, `CONTENT_MODELS`) — the Know need's
+    once-per-fight ace: a curated random table of large, narrowly-scoped, ONE-ROUND
+    effects (never instant-win — that ceiling belongs to the audere arc; enforced
+    editorially by curation, not an engine check). Fields: `prose` (announced reading,
+    `{caster}`/`{target}` placeholders), `condition` FK → `conditions.ConditionTemplate`
+    (PROTECT — author a one-round `default_duration_value` on the condition itself),
+    `target_kind` (`InsightTargetKind`: SELF/ALLY/TEAM), `weight`
+    (`PositiveSmallIntegerField`, default 1 — weighted-random draw), `is_active`.
+    Lore-repo content — **never seeded in arxii**; the first dozen entries are a
+    companion lore commit. `CovenantRole.grants_insight` (BooleanField, riding rule —
+    a sub-role without its own grant rides an engaged parent's) is the rider flag.
+    `CombatParticipant.insight_used` (`world.combat.models`) is the per-encounter
+    once-only stamp — a per-encounter row needs no reset machinery. Rider service:
+    `world.covenants.insight.maybe_produce_insight(caster_sheet, technique,
+    resolution_participant) -> bool` — fires when the caster's engaged
+    `grants_insight` role's technique cast carries the PERCEPTION
+    `magic.TechniqueFunctionTag` and the participant hasn't used their Insight this
+    encounter; draws a weighted-random active entry, resolves targets (ALLY → the
+    cast's declared `CombatRoundAction.focused_ally_target`, falling back to the
+    caster; TEAM → every ACTIVE `CombatParticipant` in the encounter; SELF → the
+    caster), applies the entry's condition via `conditions.services.apply_condition`
+    (`source_character=caster`), and announces the entry's prose on BOTH channels
+    (`combat.interaction_services.broadcast_action_outcome` for the WS payload +
+    `encounter.room.msg_contents` for telnet parity, mirroring
+    `world.combat.escalation`'s room-wide surge narration). Hooked into
+    `world.combat.services._resolve_pc_action` right after a focused technique cast
+    resolves (`_maybe_produce_insight_for_cast`, best-effort/failure-isolated like the
+    sibling `_maybe_suggest_entrance_dramatic_moment`). Distinct in weight from the
+    light "Look out!" callout (#2637): the callout is frequent/small/names-no-counter,
+    the Insight is rare/large/specific.
   - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
     compatible with which `GearArchetype` values (read-only authored content)
   - `CovenantRoleBonus` — authored config: one row per

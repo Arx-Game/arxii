@@ -214,6 +214,7 @@
   - consequence_effects <- checks.ConsequenceEffect
   - stat_rules_for <- achievements.ConditionStatRule
   - rampart_signature_profiles <- areas.RampartElementProfile
+  - insight_entries <- covenants.InsightTableEntry
   - miracleappliedcondition_applied <- worship.MiracleAppliedCondition
   - threat_pool_entries <- combat.ThreatPoolEntry
   - ward_reactions <- room_features.RoomWardDetails
@@ -2590,6 +2591,7 @@
   - consequence_effects <- checks.ConsequenceEffect
   - stat_rules_for <- achievements.ConditionStatRule
   - rampart_signature_profiles <- areas.RampartElementProfile
+  - insight_entries <- covenants.InsightTableEntry
   - miracleappliedcondition_applied <- worship.MiracleAppliedCondition
   - threat_pool_entries <- combat.ThreatPoolEntry
   - ward_reactions <- room_features.RoomWardDetails
@@ -3002,6 +3004,10 @@
 ### VowSituationalPerkRung
 **Foreign Keys:**
   - perk -> covenants.VowSituationalPerk [FK]
+
+### InsightTableEntry
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
 
 ### Service Functions
 - `active_court_pact_for(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet') -> 'CourtPact | None' — Return the single active CourtPact for (covenant, servant_sheet), or None.`
