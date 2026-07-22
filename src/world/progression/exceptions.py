@@ -105,3 +105,9 @@ class PathRequirementsNotMet(ClassLevelAdvancementError):
             failed_messages
         )
         super().__init__(self.user_message)
+
+
+class AlreadyRegisteredForDuranceError(ClassLevelAdvancementError):
+    """Raised when a character attempts the intake registration rite twice."""
+
+    user_message = "You have already been registered into the Durance arc."

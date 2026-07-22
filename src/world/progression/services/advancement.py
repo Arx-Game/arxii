@@ -417,6 +417,50 @@ def convene_durance_at_site(*, inductee_sheet: CharacterSheet, room: ObjectDB) -
     raise NoDuranceSiteError
 
 
+# Service-function path for the intake registration rite (new character enters the
+# Durance arc, distinct from the ongoing level-advancement rite). #2479
+_DURANCE_REGISTRATION_SERVICE_PATH = (
+    "world.progression.services.durance_registration.register_durance_via_session"
+)
+
+
+def convene_durance_registration_at_site(
+    *,
+    inductee_sheet: CharacterSheet,
+    room: ObjectDB,
+) -> RitualSession:
+    """Open a registration-only Durance session at the Academy training site.
+
+    Unlike ``convene_durance_at_site``, this does NOT advance a class level. It
+    registers a new Gifted into the Durance arc via the intake cohort. The
+    officiant gate is relaxed because a new character has no path lineage yet.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from world.areas.services import get_room_profile
+    from world.magic.models import Ritual
+    from world.magic.services.sessions import draft_session
+    from world.progression.models import DuranceTrainingSite
+
+    profile = get_room_profile(room)
+    for site in DuranceTrainingSite.objects.filter(room_profile=profile, is_active=True):
+        ritual = Ritual.objects.get(service_function_path=_DURANCE_REGISTRATION_SERVICE_PATH)
+        return draft_session(
+            ritual=ritual,
+            initiator=site.officiant,
+            proposed_terms="",
+            session_kwargs={"site_convened": "1", "registration": "1"},
+            invitee_sheets=[inductee_sheet],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=timezone.now() + timedelta(hours=24),
+        )
+    raise NoDuranceSiteError
+
+
 def advance_class_level_via_session(*, session: RitualSession) -> list[ClassLevelAdvancement]:
     """Advance each ACCEPTED inductee one class level via the Ritual of the Durance.
 
