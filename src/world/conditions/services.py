@@ -3003,6 +3003,25 @@ def _is_failure_outcome(outcome: "object") -> bool:
     return int(outcome.success_level) < _PARTIAL_LEVEL  # type: ignore[union-attr]
 
 
+def _map_outcome_to_mend(outcome: "object", treatment: TreatmentTemplate) -> int:
+    """Map a CheckOutcome to a raw HP-mend amount via success_level (#2644).
+
+    Mirrors _map_outcome_to_reduction exactly, but reads the mend_on_* columns.
+    No mend_on_failure column exists — a failed treatment never mends (heals
+    always cost, never reward incompetence); this always returns 0 for a
+    failure outcome (also reachable via _is_failure_outcome for callers that
+    need the boolean).
+    """
+    level = int(outcome.success_level)  # type: ignore[union-attr]
+    if level >= _CRIT_SUCCESS_LEVEL:
+        return treatment.mend_on_crit
+    if level >= _SUCCESS_LEVEL:
+        return treatment.mend_on_success
+    if level == _PARTIAL_LEVEL:
+        return treatment.mend_on_partial
+    return 0
+
+
 def _thread_anchors_to_character(thread: "Thread", target_sheet: "CharacterSheet") -> bool:
     """Return True if a Thread's anchor resolves to target_sheet.
 
@@ -3274,7 +3293,19 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     # ------------------------------------------------------------------
     # Gate 6: duplicate pre-check (racy; INSERT-time constraint is authoritative)
     # ------------------------------------------------------------------
-    if (
+    # #2644: once_per_wound_per_helper treatments gate on (helper, wound
+    # instance) instead of (helper, scene) — scene-independent, each healer
+    # gets exactly one tending per wound, ever. Mutually exclusive with the
+    # once_per_scene_per_helper gate below (a wound treatment authors
+    # once_per_scene_per_helper=False).
+    if treatment.once_per_wound_per_helper:
+        if TreatmentAttempt.objects.filter(
+            helper=helper,
+            target_condition_instance=target_effect,
+            once_per_wound_guard=True,
+        ).exists():
+            raise TreatmentAlreadyAttempted
+    elif (
         treatment.once_per_scene_per_helper
         and TreatmentAttempt.objects.filter(
             helper=helper,
@@ -3361,6 +3392,26 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
             target_resolved = tier_result.resolved
 
     # ------------------------------------------------------------------
+    # Bounded HP mend (#2644) — independent of severity reduction above;
+    # routes through vitals.mend_wound() so the never-to-full fraction cap
+    # and the max_health clamp both apply (the attrition invariant,
+    # ADR-0156). No mend_on_failure column exists (heals never reward
+    # incompetence); a PENDING_ALTERATION target has no WoundDetails seam.
+    # ------------------------------------------------------------------
+    health_mended = 0
+    if not is_failure and isinstance(target_effect, ConditionInstance):
+        mend_amount = _map_outcome_to_mend(check_result.outcome, treatment)
+        if mend_amount > 0:
+            from world.vitals.services import mend_wound  # noqa: PLC0415
+
+            health_mended = mend_wound(
+                healer_sheet=helper_sheet,
+                target_sheet=target_sheet,
+                wound_instance=target_effect,
+                amount=mend_amount,
+            )
+
+    # ------------------------------------------------------------------
     # Failure backlash
     # ------------------------------------------------------------------
     helper_backlash = 0
@@ -3401,8 +3452,10 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
         "helper_backlash_applied": helper_backlash,
         "resonance_spent": resonance_spent,
         "anima_spent": anima_spent,
+        "health_mended": health_mended,
         "created_at": get_ic_now() or tz.now(),
         "once_per_scene_guard": treatment.once_per_scene_per_helper,
+        "once_per_wound_guard": treatment.once_per_wound_per_helper,
     }
     if treatment.target_kind == TreatmentTargetKind.PENDING_ALTERATION:
         attempt_kwargs["target_pending_alteration"] = target_effect
@@ -3419,11 +3472,12 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     return TreatmentOutcome(
         attempt=attempt,
         outcome=check_result.outcome,
-        effect_applied=(severity_reduced + tiers_reduced) > 0,
+        effect_applied=(severity_reduced + tiers_reduced + health_mended) > 0,
         severity_reduced=severity_reduced,
         tiers_reduced=tiers_reduced,
         helper_backlash_applied=helper_backlash,
         target_resolved=target_resolved,
+        health_mended=health_mended,
     )
 
 

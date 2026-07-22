@@ -184,8 +184,9 @@ treat those names as hints to confirm, not gospel.
 - [0153 — Court/Battle scoping, five new situations, the defense-side seam, and dormant-vow messaging](0153-scoping-situations-and-dormant-vow-messaging.md) (#2536 slice 3; related ADR-0149, ADR-0151, ADR-0152, #2183, ADR-0118)
 - [0154 — Situation requirements grow typed parameter columns, not new enum values per axis](0154-parameterized-situation-requirements.md) (#2623; amends ADR-0153; related ADR-0149, ADR-0151, ADR-0152, ADR-0007, ADR-0013)
 - [0155 — Sheet updates are player-proposed, GM-vetoed, never content-prompting — and history is never lost](0155-sheet-updates-propose-veto-never-prompt.md) (#2631; related ADR-0007, ADR-0009)
-- [0156 — The Sphinx of Black Quartz: a three-tier, code-defined, soft-gate vow-suitability oracle](0156-sphinx-of-black-quartz-vow-suitability-oracle.md) (#2640; related ADR-0149, ADR-0151, ADR-0153)
-- [0157 — The percentage-bounding model is the only buff-multiplier lane, forever; vow-keyed stacking weights; execute prices off pre-hit health](0157-bounded-percent-lane-vow-keyed-stacking-pre-hit-execute.md) (#2643; related ADR-0149, ADR-0151, ADR-0152, ADR-0153, ADR-0154, ADR-0007, ADR-0010)
+- [0156 — Wound HP mends are double-bounded — once per healer per wound, and never to full](0156-double-bounded-wound-mend-the-attrition-invariant.md) (#2644; related ADR-0010, ADR-0007, ADR-0013)
+- [0157 — The Sphinx of Black Quartz: a three-tier, code-defined, soft-gate vow-suitability oracle](0157-sphinx-of-black-quartz-vow-suitability-oracle.md) (#2640; related ADR-0149, ADR-0151, ADR-0153)
+- [0158 — The percentage-bounding model is the only buff-multiplier lane, forever; vow-keyed stacking weights; execute prices off pre-hit health](0158-bounded-percent-lane-vow-keyed-stacking-pre-hit-execute.md) (#2643; related ADR-0149, ADR-0151, ADR-0152, ADR-0153, ADR-0154, ADR-0007, ADR-0010)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

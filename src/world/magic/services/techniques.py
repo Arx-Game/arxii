@@ -328,7 +328,7 @@ def _apply_power_multiplier_stage(
     the legacy unbounded ``power_multiplier`` target and the bounded
     ``team_damage_percent`` lane (#2643).
 
-    **Composition — the ONLY buff-multiplier lane, forever (ADR-0157, the EQ2 lane
+    **Composition — the ONLY buff-multiplier lane, forever (ADR-0158, the EQ2 lane
     guard: a second multiplicative stage would let two bounded lanes compound into an
     effectively-unbounded one).** The two targets are read SEPARATELY, using the same
     condition/CharacterModifier read helpers each already used, but folded into a
@@ -437,7 +437,7 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     see ``_apply_power_multiplier_stage`` for the two-target composition (legacy
     unbounded ``power_multiplier`` + the vow-keyed-DR'd, clamped ``team_damage_percent``
     lane, folded into one ``delta`` before this single multiply). It is never a second
-    multiplicative stage (ADR-0157).
+    multiplicative stage (ADR-0158).
 
     A target is matched when it passes both scope gates (AND semantics; null = global):
     - Resonance scope: target_resonance is None, or matches a technique gift resonance.

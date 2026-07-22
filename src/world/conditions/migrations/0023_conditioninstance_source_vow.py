@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("conditions", "0021_durationtype_ingame_time"),
+        ("conditions", "0022_treatmentattempt_health_mended_and_more"),
         ("covenants", "0041_alter_vowsituationalperkrung_count_threshold_and_more"),
     ]
 

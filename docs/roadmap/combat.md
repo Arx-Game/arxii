@@ -190,6 +190,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   and capped death-kudos. Unit/service-tier proven (vitals/actions suites); no combat journey
   test yet — a KO-to-wake / death-to-retire journey is fair game for the journeys list.
 
+- **Healing rework: wound conditions wired + double-bounded HP mends (#2644, ADR-0156).**
+  Closed the wound-tier's central audit gap: the permanent-wound pool now actually applies
+  mechanical conditions (Lingering Ache / Crippling Wound / Bleeding Wound) instead of
+  effect-free narrative labels. `WoundDetails` stamps mend-cap provenance
+  (`damage_taken`/`health_mended_total`) on every applied wound; `mend_wound()` bounds any HP
+  restoration to `NEVER_TO_FULL_FRACTION` (0.75) of the causing damage, and
+  `TreatmentAttempt`'s partial UniqueConstraint caps each wound to one tending per healer,
+  ever. Condition cleansing (dispel/severity-decay) stays unrestricted — only the HP mend is
+  double-bounded. Unit/service-tier proven (vitals/conditions suites); no combat journey test
+  yet — a wound→treat→attrition journey is fair game for the journeys list.
+
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
 - Thread-pull final outcome in combat. (Combo full journey proven in #2017; enemy-NPC
@@ -349,7 +360,7 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   `CombatEncounter.initiated_by_pc_side` recording who sprang a fight for `origin_side`-gated
   ambush/parley perks. When the vow dims (#2051), the engaged flag drops and every
   layer's contribution returns to 0 — which is why soloing legend content is lethal.
-  **The damage identity** (#2643, ADR-0157, shipped): team damage = Strike's bases
+  **The damage identity** (#2643, ADR-0158, shipped): team damage = Strike's bases
   (execute-scaled) × Uplift's team-wide % × Undermine's enemy-side % (lore repo
   `design/covenant-vows-consolidated.md` §5). Built the two percent lanes' shared
   bound (a flat cap on the SUMMED contribution, never a second multiplicative

@@ -505,7 +505,7 @@ whose entire vow is disengaged has no engaged role at all, which is exactly the 
 pass exists to catch; it reads the same cached `covenant_roles` handler list that guard does, so
 running it first costs no extra query either way.
 
-### The Damage Identity — Bounded Team-% Lane, Vow-Keyed Stacking, Smooth Execute (#2643, ADR-0157) [BUILT & WIRED]
+### The Damage Identity — Bounded Team-% Lane, Vow-Keyed Stacking, Smooth Execute (#2643, ADR-0158) [BUILT & WIRED]
 
 The ratified composition (lore repo `design/covenant-vows-consolidated.md` §5): team
 damage = Strike's bases (execute-scaled) × Uplift's team-wide % × Undermine's
@@ -513,7 +513,7 @@ enemy-side %. This slice builds the two percent lanes' bound + pricing + stackin
 the execute ramp; Strike's own base-damage/intensity-coefficient authoring is unchanged.
 
 **The bounded team-damage-percent lane — the ONLY buff-multiplier lane, forever
-(ADR-0157, the EQ2 lane guard).** A dedicated `mechanics.ModifierTarget` row named
+(ADR-0158, the EQ2 lane guard).** A dedicated `mechanics.ModifierTarget` row named
 `team_damage_percent` (same `"power"` category as the legacy `power_multiplier`
 target, so `_get_power_targets()` picks it up for free; seeded idempotently via
 `world.mechanics.factories.ensure_team_damage_percent_target()`, called from
