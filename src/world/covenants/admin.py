@@ -12,6 +12,7 @@ from world.covenants.models import (
     CovenantRoleBonus,
     CovenantRoleDefenseProfile,
     CovenantRoleTechniqueSpecialty,
+    SecondaryVowConfig,
     VowSituationalPerk,
     VowSituationalPerkRung,
     VowSituationalPerkSituation,
@@ -107,6 +108,20 @@ class CovenantRoleBonusAdmin(admin.ModelAdmin):
 @admin.register(CovenantLevelBonus)
 class CovenantLevelBonusAdmin(admin.ModelAdmin):
     list_display = ("modifier_target", "bonus_per_level")
+
+
+@admin.register(SecondaryVowConfig)
+class SecondaryVowConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for the secondary-vow potency dial (#2641)."""
+
+    list_display = ("pk", "potency_tenths", "updated_at", "updated_by")
+    autocomplete_fields = ["updated_by"]
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not SecondaryVowConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
 
 
 class VowSituationalPerkSituationInline(admin.TabularInline):

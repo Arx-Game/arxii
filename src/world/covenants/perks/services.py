@@ -114,8 +114,8 @@ _SELF_BENEFICIARIES = frozenset({PerkBeneficiary.SELF, PerkBeneficiary.WHOLE_GRO
 #: holder's own — the mate query structurally excludes the subject).
 _ALLY_BENEFICIARIES = frozenset({PerkBeneficiary.COVENANT_ALLIES, PerkBeneficiary.WHOLE_GROUP})
 
-# (covenant_role_id, holder, beneficiaries-that-count-for-this-candidate)
-_Candidate = tuple[int, "CharacterSheet", frozenset[str]]
+# (covenant_role_id, holder, beneficiaries-that-count-for-this-candidate, is_secondary)
+_Candidate = tuple[int, "CharacterSheet", frozenset[str], bool]
 
 
 @dataclass(frozen=True)
@@ -128,12 +128,23 @@ class FiredPerk:
     the highest qualifying rung's number. Callers (Tasks 4-6) scale
     ``magnitude_tenths`` by the acting character's thread level and attribute
     the contribution to ``perk.name`` under ``holder``.
+
+    ``is_secondary`` (#2641, default False) — True when this firing was
+    sourced from a SECONDARY membership (the candidate's own, for a SELF/
+    WHOLE_GROUP-on-own-action firing; the beneficiary-granting MATE's, for a
+    COVENANT_ALLIES/WHOLE_GROUP-on-a-mate's-action firing). The two magnitude
+    seams (``vow_situational_power_term``, ``checks.services
+    ._situational_perk_check_bonus``) scale a secondary-sourced firing's
+    contribution by ``SecondaryVowConfig.potency_tenths / 10``; outcome
+    guarantees (``checks.services._apply_outcome_guarantees``) weaken a
+    secondary-sourced TIER_FLOOR by one tier.
     """
 
     perk: VowSituationalPerk
     holder: CharacterSheet
     magnitude_tenths: int
     rung_number: int | None
+    is_secondary: bool = False
 
 
 def applicable_perks(
@@ -168,7 +179,7 @@ def applicable_perks(
         return []
 
     kinds = (effect_kind,) if isinstance(effect_kind, str) else tuple(effect_kind)
-    role_ids = {role_id for role_id, _holder, _beneficiaries in candidates}
+    role_ids = {role_id for role_id, _holder, _beneficiaries, _is_secondary in candidates}
     perks_by_role = _fetch_candidate_perks(role_ids, kinds)
     if not perks_by_role:
         return []
@@ -177,11 +188,11 @@ def applicable_perks(
         subject=subject, target=target, resolution=resolution, attacker=attacker
     )
     fired: list[FiredPerk] = []
-    for role_id, holder, allowed_beneficiaries in candidates:
+    for role_id, holder, allowed_beneficiaries, is_secondary in candidates:
         for perk in perks_by_role.get(role_id, ()):
             if perk.beneficiary not in allowed_beneficiaries:
                 continue
-            result = resolver.resolve(perk, holder=holder)
+            result = resolver.resolve(perk, holder=holder, is_secondary=is_secondary)
             if result is not None:
                 fired.append(result)
     return fired
@@ -282,7 +293,7 @@ def dormant_perk_firings(  # noqa: PLR0913 - applicable_perks' resolution/target
         return []
 
     kinds = (effect_kind,) if isinstance(effect_kind, str) else tuple(effect_kind)
-    role_ids = {role_id for role_id, _holder, _beneficiaries in candidates}
+    role_ids = {role_id for role_id, _holder, _beneficiaries, _is_secondary in candidates}
     perks_by_role = _fetch_candidate_perks(role_ids, kinds)
     if not perks_by_role:
         return []
@@ -291,11 +302,11 @@ def dormant_perk_firings(  # noqa: PLR0913 - applicable_perks' resolution/target
         subject=subject, target=target, resolution=resolution, attacker=attacker
     )
     fired: list[FiredPerk] = []
-    for role_id, holder, allowed_beneficiaries in candidates:
+    for role_id, holder, allowed_beneficiaries, is_secondary in candidates:
         for perk in perks_by_role.get(role_id, ()):
             if perk.beneficiary not in allowed_beneficiaries:
                 continue
-            result = resolver.resolve(perk, holder=holder)
+            result = resolver.resolve(perk, holder=holder, is_secondary=is_secondary)
             if result is not None:
                 fired.append(result)
     if not fired:
@@ -406,8 +417,13 @@ def _self_candidates(subject: CharacterSheet) -> list[_Candidate]:
     """Subject's own engaged roles — anchor AND resolved sub-role both apply.
 
     One query (the covenant-roles handler's cached ``active_memberships``) +
-    a resolve call per subject's own engaged membership (bounded by the
-    subject's own role count, not by perk count or mate count).
+    a resolve call per subject's own engaged PRIMARY membership (bounded by
+    the subject's own role count, not by perk count or mate count).
+
+    **Secondary memberships (#2641):** contribute their ANCHOR role ONLY — no
+    resolved-sub-role candidate (depth stays primary-only; deep rungs/
+    graduation never apply to a secondary vow). Tagged ``is_secondary=True``
+    so the resolver can potency-scale the firing.
     """
     character = subject.character
     if character is None:
@@ -415,15 +431,23 @@ def _self_candidates(subject: CharacterSheet) -> list[_Candidate]:
 
     from world.covenants.services import resolve_effective_role  # noqa: PLC0415
 
-    role_ids: set[int] = set()
+    primary_role_ids: set[int] = set()
+    secondary_role_ids: set[int] = set()
     for membership in character.covenant_roles.active_memberships:
         if not membership.engaged:
             continue
-        role_ids.add(membership.covenant_role_id)
+        if membership.is_secondary:
+            secondary_role_ids.add(membership.covenant_role_id)
+            continue
+        primary_role_ids.add(membership.covenant_role_id)
         resolved_role = resolve_effective_role(character=character, role=membership.covenant_role)
-        role_ids.add(resolved_role.pk)
+        primary_role_ids.add(resolved_role.pk)
 
-    return [(role_id, subject, _SELF_BENEFICIARIES) for role_id in role_ids]
+    candidates = [(role_id, subject, _SELF_BENEFICIARIES, False) for role_id in primary_role_ids]
+    candidates.extend(
+        (role_id, subject, _SELF_BENEFICIARIES, True) for role_id in secondary_role_ids
+    )
+    return candidates
 
 
 def _dormant_self_candidates(subject: CharacterSheet) -> list[_Candidate]:
@@ -433,7 +457,8 @@ def _dormant_self_candidates(subject: CharacterSheet) -> list[_Candidate]:
     ``_SELF_BENEFICIARIES`` set — a disengaged vow never buffs allies (dormant
     perks are never ``COVENANT_ALLIES``/``WHOLE_GROUP``-for-a-mate; the
     slice-2 reversal documented at the top of this module only concerns a
-    co-present MATE's own engagement, never the SUBJECT's).
+    co-present MATE's own engagement, never the SUBJECT's). Same
+    secondary-anchor-only rule as ``_self_candidates`` (#2641).
 
     Zero queries beyond the cached handler list: ``character.covenant_roles
     .active_memberships`` is the SAME cached ``_rows`` list ``_self_candidates``
@@ -448,15 +473,23 @@ def _dormant_self_candidates(subject: CharacterSheet) -> list[_Candidate]:
 
     from world.covenants.services import resolve_effective_role  # noqa: PLC0415
 
-    role_ids: set[int] = set()
+    primary_role_ids: set[int] = set()
+    secondary_role_ids: set[int] = set()
     for membership in character.covenant_roles.active_memberships:
         if membership.engaged:
             continue
-        role_ids.add(membership.covenant_role_id)
+        if membership.is_secondary:
+            secondary_role_ids.add(membership.covenant_role_id)
+            continue
+        primary_role_ids.add(membership.covenant_role_id)
         resolved_role = resolve_effective_role(character=character, role=membership.covenant_role)
-        role_ids.add(resolved_role.pk)
+        primary_role_ids.add(resolved_role.pk)
 
-    return [(role_id, subject, _SELF_BENEFICIARIES) for role_id in role_ids]
+    candidates = [(role_id, subject, _SELF_BENEFICIARIES, False) for role_id in primary_role_ids]
+    candidates.extend(
+        (role_id, subject, _SELF_BENEFICIARIES, True) for role_id in secondary_role_ids
+    )
+    return candidates
 
 
 def _ally_candidates(subject: CharacterSheet, resolution: object | None) -> list[_Candidate]:
@@ -469,7 +502,10 @@ def _ally_candidates(subject: CharacterSheet, resolution: object | None) -> list
     keeps buffing; no death-spiral). Ally roles use BOTH the mate's STORED
     (anchor) ``covenant_role`` AND their resolved sub-role (ADD semantics,
     mirroring ``_self_candidates``) — see ``_ally_sub_role_candidates`` for
-    the batched (not per-mate) resolution.
+    the batched (not per-mate) resolution. Each candidate carries the MATE
+    ROW's ``is_secondary`` flag (#2641) — a mate's secondary vow shares group
+    perks scaled by the potency dial, same as it scales for the mate's own
+    action.
     """
     character = subject.character
     if character is None:
@@ -498,7 +534,8 @@ def _ally_candidates(subject: CharacterSheet, resolution: object | None) -> list
         return []
 
     candidates = [
-        (row.covenant_role_id, row.character_sheet, _ALLY_BENEFICIARIES) for row in mate_rows
+        (row.covenant_role_id, row.character_sheet, _ALLY_BENEFICIARIES, row.is_secondary)
+        for row in mate_rows
     ]
     candidates.extend(_ally_sub_role_candidates(mate_rows))
     return candidates
@@ -521,6 +558,11 @@ def _ally_sub_role_candidates(mate_rows: list[CharacterCovenantRole]) -> list[_C
     ``cached_sub_roles`` query fires once per DISTINCT role held among the
     mates, never once per mate (see the module docstring's query-discipline
     section).
+
+    **Secondary memberships (#2641) contribute NO sub-role candidate** — depth
+    stays primary-only, so a mate's SECONDARY row is excluded before the
+    anchor filter below (its anchor-level candidate already came from
+    ``_ally_candidates``'s own loop).
     """
     from world.covenants.models import CovenantRole  # noqa: PLC0415
     from world.magic.constants import TargetKind  # noqa: PLC0415
@@ -529,8 +571,13 @@ def _ally_sub_role_candidates(mate_rows: list[CharacterCovenantRole]) -> list[_C
     # Threads anchor COVENANT_ROLE resonance investment on the PRIMARY role
     # only (mirrors `_resolve_covenant_role_variant`'s single-depth guard) --
     # a mate whose stored membership already points at a sub-role has no
-    # further sub-role to resolve.
-    anchor_rows = [row for row in mate_rows if row.covenant_role.parent_role_id is None]
+    # further sub-role to resolve. Secondary memberships never graduate
+    # either (#2641).
+    anchor_rows = [
+        row
+        for row in mate_rows
+        if row.covenant_role.parent_role_id is None and not row.is_secondary
+    ]
     if not anchor_rows:
         return []
 
@@ -558,7 +605,7 @@ def _ally_sub_role_candidates(mate_rows: list[CharacterCovenantRole]) -> list[_C
             row.covenant_role, resonance=thread.resonance, thread_level=thread.level
         )
         if variant is not None:
-            candidates.append((variant.pk, row.character_sheet, _ALLY_BENEFICIARIES))
+            candidates.append((variant.pk, row.character_sheet, _ALLY_BENEFICIARIES, False))
     return candidates
 
 
@@ -679,12 +726,18 @@ class _PerkResolver:
             self._eval_cache[key] = SITUATION_EVALUATORS[situation](ctx, params)
         return self._eval_cache[key]
 
-    def resolve(self, perk: VowSituationalPerk, *, holder: CharacterSheet) -> FiredPerk | None:
+    def resolve(
+        self, perk: VowSituationalPerk, *, holder: CharacterSheet, is_secondary: bool = False
+    ) -> FiredPerk | None:
         """``None`` if the perk's base situations don't all hold; else a
         ``FiredPerk`` at base or the highest qualifying rung (spec §2's
         cumulative rung-resolution rule — each rung requires every lower
         rung's extra situation to also hold, each with its OWN authored
         params).
+
+        ``is_secondary`` (#2641) is carried straight onto the returned
+        ``FiredPerk`` — this resolver doesn't scale magnitude itself, it just
+        tags provenance for the caller's magnitude/guarantee seam to read.
         """
         base_requirements = [(row.situation, row.params) for row in perk.situations.all()]
         if not all(
@@ -706,8 +759,39 @@ class _PerkResolver:
             rung_number = rung.rung_number
 
         return FiredPerk(
-            perk=perk, holder=holder, magnitude_tenths=magnitude_tenths, rung_number=rung_number
+            perk=perk,
+            holder=holder,
+            magnitude_tenths=magnitude_tenths,
+            rung_number=rung_number,
+            is_secondary=is_secondary,
         )
+
+
+def sum_potency_scaled_magnitudes(fired: list[FiredPerk], total_threads: int) -> int:
+    """Σ over ``fired`` of ``total_threads × magnitude_tenths / 10`` (#2536), with
+    each SECONDARY-sourced firing's contribution additionally scaled by
+    ``SecondaryVowConfig.potency_tenths / 10`` (#2641) before the final
+    int-truncation. Shared by every magnitude seam that sums ``FiredPerk`` rows —
+    ``vow_situational_power_term`` (``world.magic.services.power_terms``) and
+    ``_situational_perk_check_bonus`` (``world.checks.services``) — one rule, one
+    place. The potency config is fetched at most once per call, lazily (only when
+    a secondary firing is actually present), so the common all-primary case costs
+    no extra query.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    potency_tenths: int | None = None
+    total = Decimal(0)
+    for firing in fired:
+        contribution = Decimal(total_threads) * firing.magnitude_tenths / 10
+        if firing.is_secondary:
+            if potency_tenths is None:
+                from world.covenants.services import secondary_vow_config  # noqa: PLC0415
+
+                potency_tenths = secondary_vow_config().potency_tenths
+            contribution = contribution * Decimal(potency_tenths) / 10
+        total += contribution
+    return int(total)
 
 
 def announce_fired_perks(

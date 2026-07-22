@@ -13,7 +13,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 
 - **`CharacterCovenantRole`** — per-character membership row; `left_at IS NULL` =
   currently active. Fields include `covenant` FK, `covenant_role` FK, `engaged`
-  boolean, `rank` FK → `CovenantRank`.
+  boolean, `rank` FK → `CovenantRank`, `is_secondary` boolean (#2641 — see "Secondary
+  vows" below).
 - **`GearArchetypeCompatibility`** — existence-only join: which `CovenantRole`s are
   compatible with which `GearArchetype` values (read-only authored content).
   Lore-repo content as of #2533 (`NaturalKeyMixin` NK `["covenant_role",
@@ -341,16 +342,76 @@ discipline" section for the no-double-announce proof.
   - `dissolved_at` DateTimeField (null = still active; set on dissolution)
   - Custom manager method: `.active()` → filters `dissolved_at__isnull=True`.
 
+### Secondary vows (#2641, ADR-0159)
+
+A character may hold a SECONDARY vow — `CharacterCovenantRole.is_secondary=True` —
+alongside their PRIMARY (`is_secondary=False`) vow, at most one engaged of each per
+(character_sheet, covenant type). Fills a group gap or enables a hybrid fantasy;
+never a replacement for a real specialist (the specialist-supremacy invariant).
+
+- **Exclusivity** — `_another_same_type_engaged_exists` and the
+  `set_engaged_membership` un-engage loop are both scoped by `is_secondary`, so
+  engaging a new PRIMARY never un-engages an already-engaged SECONDARY of the same
+  type, and vice versa. The covenant-scoped SUPREME/Champion guards are NOT scoped
+  by `is_secondary` — a secondary engaged Champion row still trips them.
+- **Engage-time validation** (`validate_secondary_engage_rules`, called from both
+  `CharacterCovenantRole.clean()` and `set_engaged_membership`) — a secondary
+  requires an engaged primary of the SAME covenant type
+  (`SecondaryVowRequiresEngagedPrimaryError` otherwise), must not share its ANCHOR
+  role with that primary (`SecondaryVowSameAnchorError` — "no same-vow secondary":
+  doubling down on one vow is allocation, not a second vow), and its COVENANT_ROLE
+  thread level is capped at the primary's (`SecondaryVowThreadExceedsPrimaryError`
+  — a missing thread on either side counts as level 0). `set_engaged_membership`
+  gains a keyword-only `as_secondary: bool = False` that stamps the flag before
+  validation.
+- **Layer split** — chassis layers (Layer 1 combat-identity blend, Layer 3
+  defense/gear/stat scaling) read ONLY `currently_engaged_primary_roles()`; a
+  secondary membership never contributes to them (zero chassis leak). Layer 2
+  (technique specialty) and Layer 4 (situational perks) read
+  `currently_engaged_roles_with_flags()` / the perk candidate gatherers'
+  `is_secondary`-tagged `FiredPerk`s, and scale a secondary-sourced contribution by
+  `SecondaryVowConfig.potency_tenths / 10` (via the shared
+  `sum_potency_scaled_magnitudes` / the Layer 2 partition-and-scale helpers) —
+  situational, never raw. `covenant_level_bonus` (mechanics app) is a conservative
+  extra flip: not one of the four layers proper, but chassis-shaped, so it stays
+  primary-only too.
+- **Depth stays primary-only** — a secondary membership resolves at its ANCHOR
+  role only (`currently_engaged_roles_with_flags`, `currently_engaged_roles`, and
+  the Layer 4 candidate gatherers `_self_candidates`/`_ally_candidates`/
+  `_ally_sub_role_candidates`) — no sub-role graduation, no deep rungs, no
+  signature, no unique name. Outcome guarantees from a secondary-sourced
+  `TIER_FLOOR` firing bind one tier weaker (`floor_success_level - 1`);
+  `BOTCH_IMMUNITY` is deliberately left unweakened (no numeric field to soften).
+- **`SecondaryVowConfig`** (pk=1 singleton, `potency_tenths` default 6 = ×0.6, the
+  ratified batch-2 F-2 seed) — lazy-created via `secondary_vow_config()`
+  (`world.covenants.services`, `cached_singleton()` + `get_or_create` fallback —
+  unlike `MentorBondConfig`'s fail-loud seeded pattern, this dial ships with a
+  sane default so no pre-launch seeding step is required). Staff-tunable in admin.
+- **Typed exceptions** (`world.covenants.exceptions`) —
+  `SecondaryVowRequiresEngagedPrimaryError`, `SecondaryVowSameAnchorError`,
+  `SecondaryVowThreadExceedsPrimaryError`.
+
 ## Handlers
 
 - `character.covenant_roles` (`CharacterCovenantRoleHandler`):
   - `has_ever_held(role)` — True if the character has ever held this role (active or ended).
   - `currently_held_role_in(covenant)` — active role in the specified covenant, or None.
   - `currently_engaged_roles()` — list of **resolved (effective) roles** for every
-    active+engaged membership. Calls `resolve_effective_role` per row: if the character's
-    COVENANT_ROLE thread qualifies for a resonance sub-role, the sub-role is returned instead
-    of the parent. Consumers that must key on the stored anchor identity should use
-    `anchor_role_in()` instead.
+    active+engaged membership (PRIMARY and SECONDARY). Calls `resolve_effective_role` per
+    PRIMARY row: if the character's COVENANT_ROLE thread qualifies for a resonance sub-role,
+    the sub-role is returned instead of the parent. A SECONDARY row resolves at its stored
+    ANCHOR role only (#2641 — no sub-role graduation). Non-layer callers (eligibility gates,
+    precedence fallbacks) use this; chassis (Layer 1/3) callers use
+    `currently_engaged_primary_roles()` instead, and Layer 2/4 callers use
+    `currently_engaged_roles_with_flags()`. Consumers that must key on the stored anchor
+    identity should use `anchor_role_in()` instead.
+  - `currently_engaged_primary_roles()` (#2641) — resolved roles for engaged PRIMARY
+    (`is_secondary=False`) memberships only; sub-role graduation is unrestricted (primary
+    depth has no cap). Read by every chassis (Layer 1/3) consumer.
+  - `currently_engaged_roles_with_flags()` (#2641) — `(role, is_secondary)` pairs for every
+    active+engaged membership. PRIMARY rows resolve like `currently_engaged_primary_roles()`;
+    SECONDARY rows resolve at the anchor only. Read by Layer 2's
+    `covenant_role_specialty_power_term`.
   - `anchor_role_in(covenant)` — returns the **stored parent (anchor) role** for the active
     membership in `covenant`, ignoring sub-role resolution. Use this when the consumer must
     key on the thread's `target_covenant_role_id` or the raw membership row.
@@ -761,11 +822,12 @@ shrinks; an elevated sidekick's bonus grows.
 
 `gear_additive_fraction(character)` (`world.covenants.services`) returns the MAX
 `gear_additive_tenths` fraction (as `Decimal`, e.g. `Decimal("0.3")`) across the
-character's engaged roles' resolved `CovenantRoleDefenseProfile` rows. Per engaged
-role, the profile resolves to the role's own row when present, else its anchor's;
-no engaged role has a profile at all → `Decimal(1)` (legacy fully-additive
-behavior, byte-identical to pre-#2533). One batched query over the role + parent
-pks — no per-role query loop.
+character's engaged PRIMARY roles' resolved `CovenantRoleDefenseProfile` rows
+(#2641 — a secondary vow's defense profile never substitutes for gear). Per
+engaged role, the profile resolves to the role's own row when present, else its
+anchor's; no engaged role has a profile at all → `Decimal(1)` (legacy
+fully-additive behavior, byte-identical to pre-#2533). One batched query over the
+role + parent pks — no per-role query loop.
 
 `apply_equipped_armor_soak` (`world.combat.services`, #1174) applies the fraction
 to the COMPATIBLE armor bucket only, once, right after the role-compatibility
