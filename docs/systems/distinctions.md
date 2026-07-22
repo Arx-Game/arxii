@@ -106,6 +106,33 @@ CG finalization and Django admin — no in-play caller re-implements the create/
   purchase. CG-time distinctions remain point-costed (`Distinction.calculate_total_cost`); that
   budget economy does not extend past character creation.
 
+## Post-CG change flow — authorizations + table requests (#2624, repaired/extended #2631)
+
+The player-facing change loop is **propose → GM veto → accept**:
+
+- **`gm.TableUpdateRequest`** (kind `DISTINCTION_CHANGE`, payload on
+  `gm.DistinctionChangeRequestDetails`): a player at a GM table submits a concrete
+  add/rank-up/remove with a `Reason:`; the table's GM approves or rejects
+  (`world.gm.services.signoff_table_update_request`). Approval creates the authorization below
+  and the request goes APPROVED; the player's accept marks it COMPLETED (via
+  `mark_requests_completed_for_authorization`, called from the accept action — no signals).
+- **`DistinctionChangeAuthorization`** (`world.distinctions.models`): one authorized change —
+  ADD (with absolute target `rank`) or REMOVE — with an XP cost. Created ONLY through
+  `create_distinction_change_authorization` (also called directly by the JUNIOR-gated GM action
+  `authorize_distinction_change`), which notifies the player. `is_consumed` guards double-use.
+- **`spend_xp_on_distinction_unlock`** is the accept step (player action
+  `accept_distinction_change`): `select_for_update` on the authorization, XP debit +
+  `XPTransaction` (both skipped entirely at zero cost), then `grant_distinction(rank=auth.rank,
+  origin=UNLOCK_PURCHASE)` or `remove_distinction`.
+- **Pricing (`compute_distinction_change_xp_cost`) is benefit-direction only (#2631 ruling):**
+  gaining a positive-cost distinction charges `2 × cost_per_rank × (rank − current_rank)`;
+  shedding a negative-cost one charges `2 × |cost_per_rank| × rank × 1.5` (friction,
+  PLACEHOLDER tuning). Taking a detriment or dropping a benefit for story reasons is **free**
+  (computed cost 0), and the GM `xp_cost` override accepts 0.
+- **`remove_distinction`** is the removal counterpart of `grant_distinction`: authorization-
+  gated, tears down modifiers + relocated Secret, deliberately leaves resonance currency,
+  NPCAssets, and codex grants in place.
+
 ### Exclusion checks
 
 `_check_exclusions` (private to `services.py`) is a service-layer port of

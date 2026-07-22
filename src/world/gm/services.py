@@ -12,7 +12,12 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from world.gm.constants import GMLevel, GMTableStatus
+from world.gm.constants import (
+    GMLevel,
+    GMTableStatus,
+    TableRequestKind,
+    TableRequestStatus,
+)
 from world.gm.models import (
     CatalogSuggestion,
     GMLevelChange,
@@ -34,6 +39,8 @@ if TYPE_CHECKING:
 
     from evennia_extensions.models import PlayerData
     from world.character_sheets.models import CharacterSheet
+    from world.distinctions.models import CharacterDistinction, Distinction
+    from world.gm.models import TableUpdateRequest
     from world.progression.models import XPTransaction
     from world.roster.models import RosterEntry
     from world.roster.models.applications import RosterApplication
@@ -630,3 +637,265 @@ def award_gm_story_reward(
             gm_profile.pk,
         )
         return None
+
+
+# ---------------------------------------------------------------------------
+# Table update requests (#2631) — player proposes, GM vetoes, nobody authors.
+# ---------------------------------------------------------------------------
+
+
+class TableRequestError(Exception):
+    """A table update request operation was invalid.
+
+    ``user_message`` is safe to surface to the player/GM.
+    """
+
+    def __init__(self, msg: str) -> None:
+        super().__init__(msg)
+        self.user_message = msg
+
+
+def _notify_sheet(sheet: CharacterSheet, body: str, sender: AccountDB | None = None) -> None:
+    """Send a narrative message to one character sheet."""
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    send_narrative_message(
+        recipients=[sheet],
+        body=body,
+        category=NarrativeCategory.ABILITY,
+        sender_account=sender,
+    )
+
+
+def _require_active_membership(membership: GMTableMembership) -> None:
+    if membership.left_at is not None:
+        msg = "That table membership has ended — rejoin a table to submit updates."
+        raise TableRequestError(msg)
+
+
+def submit_profile_text_request(
+    membership: GMTableMembership,
+    *,
+    field: str,
+    proposed_text: str,
+    reasoning: str,
+) -> TableUpdateRequest:
+    """Submit a profile prose rewrite for the table GM's sign-off (#2631).
+
+    Args:
+        membership: The player's active table membership.
+        field: A ``character_sheets.ProfileTextField`` value.
+        proposed_text: The full replacement text (player-written).
+        reasoning: The player's Reason: text.
+
+    Returns:
+        The PENDING request.
+    """
+    from world.character_sheets.types import ProfileTextField  # noqa: PLC0415
+    from world.gm.models import ProfileTextRequestDetails, TableUpdateRequest  # noqa: PLC0415
+
+    _require_active_membership(membership)
+    if field not in ProfileTextField.values:
+        msg = f"{field!r} is not an updatable profile field."
+        raise TableRequestError(msg)
+    if not proposed_text.strip() or not reasoning.strip():
+        msg = "Both the new text and a reason are required."
+        raise TableRequestError(msg)
+
+    with transaction.atomic():
+        request = TableUpdateRequest.objects.create(
+            membership=membership,
+            kind=TableRequestKind.PROFILE_TEXT,
+            player_reasoning=reasoning,
+        )
+        ProfileTextRequestDetails.objects.create(
+            request=request,
+            field=field,
+            proposed_text=proposed_text,
+        )
+    return request
+
+
+def submit_distinction_change_request(  # noqa: PLR0913
+    membership: GMTableMembership,
+    *,
+    action: str,
+    reasoning: str,
+    distinction: Distinction | None = None,
+    character_distinction: CharacterDistinction | None = None,
+    rank: int = 1,
+) -> TableUpdateRequest:
+    """Submit a distinction add/rank-up/remove for the table GM's sign-off (#2631).
+
+    Args:
+        membership: The player's active table membership.
+        action: A ``DistinctionChangeAction`` value.
+        reasoning: The player's Reason: text.
+        distinction: For ADD — the catalog distinction.
+        character_distinction: For REMOVE — the held row (must belong to the
+            membership's character).
+        rank: Target rank for ADD (absolute).
+
+    Returns:
+        The PENDING request.
+    """
+    from world.gm.models import (  # noqa: PLC0415
+        DistinctionChangeRequestDetails,
+        TableUpdateRequest,
+    )
+
+    _require_active_membership(membership)
+    if not reasoning.strip():
+        msg = "A reason is required."
+        raise TableRequestError(msg)
+    sheet = membership.persona.character_sheet
+    if character_distinction is not None and character_distinction.character_id != sheet.pk:
+        msg = "That distinction belongs to a different character."
+        raise TableRequestError(msg)
+
+    with transaction.atomic():
+        request = TableUpdateRequest.objects.create(
+            membership=membership,
+            kind=TableRequestKind.DISTINCTION_CHANGE,
+            player_reasoning=reasoning,
+        )
+        details = DistinctionChangeRequestDetails(
+            request=request,
+            action=action,
+            distinction=distinction,
+            character_distinction=character_distinction,
+            rank=rank,
+        )
+        details.full_clean()
+        details.save()
+    return request
+
+
+def withdraw_table_update_request(request: TableUpdateRequest) -> None:
+    """Withdraw a PENDING request (player-initiated)."""
+    if request.status != TableRequestStatus.PENDING:
+        msg = "Only a pending request can be withdrawn."
+        raise TableRequestError(msg)
+    request.status = TableRequestStatus.WITHDRAWN
+    request.resolved_at = timezone.now()
+    request.save(update_fields=["status", "resolved_at"])
+
+
+def signoff_table_update_request(
+    request: TableUpdateRequest,
+    gm_profile: GMProfile,
+    *,
+    approve: bool,
+    notes: str = "",
+) -> TableUpdateRequest:
+    """Approve or reject a PENDING request — the GM's yes/no judgment call (#2631).
+
+    Only the table's GM (or staff via their own GMProfile) may sign off.
+    Rejection notifies the player with the notes. Approval branches by kind:
+
+    - PROFILE_TEXT: applies the rewrite immediately through
+      ``update_profile_text`` (zero cost — nothing to accept) → COMPLETED.
+    - DISTINCTION_CHANGE: creates a ``DistinctionChangeAuthorization`` (which
+      notifies the player) → APPROVED; the player accepts to spend and apply.
+
+    Returns:
+        The updated request.
+    """
+    from world.character_sheets.services import update_profile_text  # noqa: PLC0415
+    from world.distinctions.services import (  # noqa: PLC0415
+        create_distinction_change_authorization,
+    )
+
+    is_table_gm = request.membership.table.gm_id == gm_profile.pk
+    if not is_table_gm and not gm_profile.account.is_staff:
+        msg = "Only the table's GM may sign off on this request."
+        raise TableRequestError(msg)
+    if request.status != TableRequestStatus.PENDING:
+        msg = "This request has already been resolved."
+        raise TableRequestError(msg)
+
+    sheet = request.membership.persona.character_sheet
+    now = timezone.now()
+
+    if not approve:
+        request.status = TableRequestStatus.REJECTED
+        request.gm_notes = notes
+        request.resolved_by = gm_profile
+        request.resolved_at = now
+        request.save(update_fields=["status", "gm_notes", "resolved_by", "resolved_at"])
+        note_suffix = f" Notes: {notes}" if notes else ""
+        _notify_sheet(
+            sheet,
+            f"Your {request.get_kind_display()} update request was declined.{note_suffix}",
+            sender=gm_profile.account,
+        )
+        return request
+
+    with transaction.atomic():
+        if request.kind == TableRequestKind.PROFILE_TEXT:
+            details = request.profile_text_details
+            version = update_profile_text(
+                sheet.true_profile,
+                details.field,
+                details.proposed_text,
+            )
+            details.applied_version = version
+            details.save(update_fields=["applied_version"])
+            request.status = TableRequestStatus.COMPLETED
+            request.completed_at = now
+        else:
+            details = request.distinction_details
+            auth = create_distinction_change_authorization(
+                sheet,
+                action=details.action,
+                distinction=details.distinction,
+                character_distinction=details.character_distinction,
+                authorized_by=gm_profile.account,
+                reason=request.player_reasoning,
+                rank=details.rank,
+            )
+            details.authorization = auth
+            details.save(update_fields=["authorization"])
+            request.status = TableRequestStatus.APPROVED
+        request.gm_notes = notes
+        request.resolved_by = gm_profile
+        request.resolved_at = now
+        request.save(
+            update_fields=["status", "gm_notes", "resolved_by", "resolved_at", "completed_at"]
+        )
+
+    if request.kind == TableRequestKind.PROFILE_TEXT:
+        _notify_sheet(
+            sheet,
+            f"Your {request.get_kind_display()} update was approved and applied.",
+            sender=gm_profile.account,
+        )
+    return request
+
+
+def mark_requests_completed_for_authorization(authorization: object) -> int:
+    """Flip APPROVED requests linked to a consumed authorization to COMPLETED.
+
+    Called by the accept action after ``spend_xp_on_distinction_unlock``
+    succeeds — the explicit, no-signals completion sync (ADR-0009).
+
+    Returns:
+        The number of requests completed.
+    """
+    from world.gm.models import TableUpdateRequest  # noqa: PLC0415
+
+    now = timezone.now()
+    requests = TableUpdateRequest.objects.filter(
+        status=TableRequestStatus.APPROVED,
+        distinction_details__authorization=authorization,
+    )
+    count = 0
+    for request in requests:
+        # Instance saves, not queryset.update() — bulk update would leave the
+        # SharedMemoryModel identity-map instances stale.
+        request.status = TableRequestStatus.COMPLETED
+        request.completed_at = now
+        request.save(update_fields=["status", "completed_at"])
+        count += 1
+    return count

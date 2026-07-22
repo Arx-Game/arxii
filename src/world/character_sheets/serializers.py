@@ -19,7 +19,7 @@ from rest_framework import serializers
 from rest_framework.request import Request
 
 from world.character_creation.models import CharacterOriginSlot
-from world.character_sheets.models import CharacterSheet, Profile
+from world.character_sheets.models import CharacterSheet, Profile, ProfileTextVersion
 from world.character_sheets.services import can_edit_character_sheet
 from world.character_sheets.types import (
     SHEET_VISIBILITY_RANK,
@@ -1190,3 +1190,48 @@ class CharacterSheetSerializer(serializers.Serializer):
             "profile_picture": _build_profile_picture(sheet),
             "current_residence": _build_current_residence(sheet),
         }
+
+
+class ProfileTextVersionSerializer(serializers.ModelSerializer):
+    """One entry of a sheet's prose-history timeline (#2631).
+
+    ``reasoning`` is the player's Reason: from the table update request that
+    applied this version — the timeline's narrative caption. Era renders as
+    the player-facing "Season N".
+    """
+
+    era_season_number = serializers.IntegerField(
+        source="era.season_number", read_only=True, allow_null=True
+    )
+    era_display_name = serializers.CharField(
+        source="era.display_name", read_only=True, allow_null=True
+    )
+    reasoning = serializers.SerializerMethodField()
+    staff_edited = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProfileTextVersion
+        fields = [
+            "id",
+            "field",
+            "text",
+            "created_at",
+            "ic_date",
+            "era_season_number",
+            "era_display_name",
+            "reasoning",
+            "staff_edited",
+        ]
+        read_only_fields = fields
+
+    def get_reasoning(self, obj: ProfileTextVersion) -> str:
+        """The applying request's player reasoning, via serializer context.
+
+        The view builds ``reasoning_by_version`` in one query — never a
+        prefetch onto the SharedMemoryModel instances (identity-map instances
+        outlive the request; a stale prefetch cache would leak across views).
+        """
+        return self.context.get("reasoning_by_version", {}).get(obj.pk, "")
+
+    def get_staff_edited(self, obj: ProfileTextVersion) -> bool:
+        return obj.edited_by_id is not None

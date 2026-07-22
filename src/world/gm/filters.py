@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.db.models import QuerySet
 import django_filters
 
-from world.gm.constants import GMApplicationStatus, GMTableStatus
+from world.gm.constants import GMApplicationStatus, GMTableStatus, TableRequestRole
 from world.gm.models import (
     CatalogSuggestion,
     GMApplication,
@@ -13,6 +13,7 @@ from world.gm.models import (
     GMTable,
     GMTableMembership,
     StoryRoomGrant,
+    TableUpdateRequest,
 )
 from world.player_submissions.constants import SubmissionStatus
 
@@ -83,3 +84,32 @@ class StoryRoomGrantFilter(django_filters.FilterSet):
     class Meta:
         model = StoryRoomGrant
         fields = ["room"]
+
+
+class TableUpdateRequestFilter(django_filters.FilterSet):
+    """Filters for table update requests (#2631).
+
+    ``role=mine`` narrows to the caller's own requests; ``role=gm`` to
+    requests on tables the caller GMs. Without it, the viewset's base
+    scoping (own ∪ GM'd) applies.
+    """
+
+    status = django_filters.CharFilter()
+    kind = django_filters.CharFilter()
+    role = django_filters.CharFilter(method="filter_role")
+
+    class Meta:
+        model = TableUpdateRequest
+        fields = ["status", "kind"]
+
+    def filter_role(
+        self, queryset: QuerySet[TableUpdateRequest], name: str, value: str
+    ) -> QuerySet[TableUpdateRequest]:
+        user = self.request.user if self.request else None
+        if user is None or not user.is_authenticated:
+            return queryset.none()
+        if value == TableRequestRole.MINE:
+            return queryset.filter(membership__persona__character_sheet__character__db_account=user)
+        if value == TableRequestRole.GM:
+            return queryset.filter(membership__table__gm__account=user)
+        return queryset

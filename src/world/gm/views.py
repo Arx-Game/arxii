@@ -16,13 +16,15 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from world.gm.constants import GMApplicationStatus, GMTableStatus
+from world.distinctions.models import CharacterDistinction, Distinction
+from world.gm.constants import GMApplicationStatus, GMTableStatus, TableRequestKind
 from world.gm.filters import (
     CatalogSuggestionFilter,
     GMApplicationFilter,
     GMProfileFilter,
     GMTableFilter,
     GMTableMembershipFilter,
+    TableUpdateRequestFilter,
 )
 from world.gm.models import (
     CatalogSuggestion,
@@ -31,6 +33,7 @@ from world.gm.models import (
     GMRosterInvite,
     GMTable,
     GMTableMembership,
+    TableUpdateRequest,
 )
 from world.gm.permissions import IsGM, IsGMOrStaff
 from world.gm.serializers import (
@@ -48,8 +51,12 @@ from world.gm.serializers import (
     GMTableMembershipSerializer,
     GMTableSerializer,
     PromoteGMInputSerializer,
+    TableUpdateRequestCreateSerializer,
+    TableUpdateRequestSerializer,
+    TableUpdateRequestSignoffSerializer,
 )
 from world.gm.services import (
+    TableRequestError,
     archive_table,
     gm_application_queue,
     gm_evidence_summary,
@@ -57,7 +64,11 @@ from world.gm.services import (
     leave_table,
     promote_gm,
     set_looking_for_table,
+    signoff_table_update_request,
+    submit_distinction_change_request,
+    submit_profile_text_request,
     transfer_ownership as transfer_ownership_service,
+    withdraw_table_update_request,
 )
 from world.player_submissions.constants import SubmissionStatus
 from world.roster.models.applications import RosterApplication
@@ -692,3 +703,135 @@ class LookingForTableBrowseView(APIView):
         )
         serializer = LookingForTableEntrySerializer(entries, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class TableUpdateRequestViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Player-submitted sheet-update requests (#2631).
+
+    Players see their own requests; table GMs additionally see requests on
+    their tables; staff sees all. Creation validates the membership belongs to
+    the caller. ``signoff`` (GM) and ``withdraw`` (player) drive the state
+    machine through the service layer.
+    """
+
+    queryset = TableUpdateRequest.objects.select_related(
+        "membership__table__gm__account",
+        "membership__persona__character_sheet",
+        "resolved_by",
+    ).order_by("-created_at")
+    serializer_class = TableUpdateRequestSerializer
+    filterset_class = TableUpdateRequestFilter
+    filter_backends = [DjangoFilterBackend]
+    pagination_class = StandardResultsSetPagination
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self) -> QuerySet[TableUpdateRequest]:
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        return qs.filter(
+            Q(membership__persona__character_sheet__character__db_account=user)
+            | Q(membership__table__gm__account=user)
+        ).distinct()
+
+    @extend_schema(
+        request=TableUpdateRequestCreateSerializer,
+        responses={201: TableUpdateRequestSerializer},
+    )
+    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """Submit a request on one of the caller's own active memberships."""
+        input_serializer = TableUpdateRequestCreateSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        data = input_serializer.validated_data
+
+        membership = data["membership"]
+        owner = membership.persona.character_sheet.character.db_account
+        if owner != request.user:
+            msg = "That table membership is not yours."
+            raise serializers.ValidationError(msg)
+
+        try:
+            if data["kind"] == TableRequestKind.PROFILE_TEXT:
+                update_request = submit_profile_text_request(
+                    membership,
+                    field=data["field"],
+                    proposed_text=data["proposed_text"],
+                    reasoning=data["reasoning"],
+                )
+            else:
+                distinction = (
+                    Distinction.objects.filter(pk=data["distinction"]).first()
+                    if data.get("distinction")
+                    else None
+                )
+                character_distinction = (
+                    CharacterDistinction.objects.filter(pk=data["character_distinction"]).first()
+                    if data.get("character_distinction")
+                    else None
+                )
+                update_request = submit_distinction_change_request(
+                    membership,
+                    action=data["action"],
+                    distinction=distinction,
+                    character_distinction=character_distinction,
+                    rank=data.get("rank", 1),
+                    reasoning=data["reasoning"],
+                )
+        except TableRequestError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+        output = TableUpdateRequestSerializer(update_request)
+        return Response(output.data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        request=TableUpdateRequestSignoffSerializer,
+        responses={200: TableUpdateRequestSerializer},
+    )
+    @action(detail=True, methods=["post"])
+    def signoff(self, request: Request, pk: str | None = None) -> Response:
+        """Approve or reject a pending request (table GM or staff)."""
+        update_request = self.get_object()
+        input_serializer = TableUpdateRequestSignoffSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+
+        gm_profile = GMProfile.objects.filter(account=request.user).first()
+        if gm_profile is None:
+            msg = "You are not a GM."
+            raise serializers.ValidationError(msg)
+
+        try:
+            update_request = signoff_table_update_request(
+                update_request,
+                gm_profile,
+                approve=input_serializer.validated_data["approve"],
+                notes=input_serializer.validated_data.get("notes", ""),
+            )
+        except TableRequestError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+        return Response(TableUpdateRequestSerializer(update_request).data)
+
+    @extend_schema(request=None, responses={200: TableUpdateRequestSerializer})
+    @action(detail=True, methods=["post"])
+    def withdraw(self, request: Request, pk: str | None = None) -> Response:
+        """Withdraw the caller's own pending request."""
+        update_request = self.get_object()
+        owner = update_request.membership.persona.character_sheet.character.db_account
+        if owner != request.user and not request.user.is_staff:
+            msg = "You may only withdraw your own requests."
+            raise serializers.ValidationError(msg)
+
+        try:
+            withdraw_table_update_request(update_request)
+        except TableRequestError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+        return Response(TableUpdateRequestSerializer(update_request).data)

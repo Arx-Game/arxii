@@ -10,16 +10,24 @@ if TYPE_CHECKING:
     from world.projects.models import Project
 
 from world.areas.serializers import WorldBuilderAreaManagerSerializer, WorldBuilderRoomSerializer
-from world.gm.constants import GMApplicationStatus, GMLevel, GMTableViewerRole
+from world.gm.constants import (
+    GMApplicationStatus,
+    GMLevel,
+    GMTableViewerRole,
+    TableRequestKind,
+)
 from world.gm.models import (
     CatalogSuggestion,
+    DistinctionChangeRequestDetails,
     GMApplication,
     GMLevelChange,
     GMProfile,
     GMRosterInvite,
     GMTable,
     GMTableMembership,
+    ProfileTextRequestDetails,
     StoryRoomGrant,
+    TableUpdateRequest,
 )
 from world.instances.models import InstancedRoom
 from world.roster.models.applications import RosterApplication
@@ -678,3 +686,120 @@ class MyStoryGrantSerializer(serializers.ModelSerializer):
         extra query is needed beyond the character's own location.
         """
         return obj.character.character.db_location_id == obj.room_id
+
+
+class ProfileTextRequestDetailsSerializer(serializers.ModelSerializer):
+    """Read payload for PROFILE_TEXT requests (#2631)."""
+
+    current_text = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProfileTextRequestDetails
+        fields = ["field", "proposed_text", "current_text", "applied_version"]
+        read_only_fields = fields
+
+    def get_current_text(self, obj: ProfileTextRequestDetails) -> str:
+        """The field's live text — the GM's side-by-side left pane."""
+        sheet = obj.request.membership.persona.character_sheet
+        return getattr(sheet.true_profile, obj.field, "")
+
+
+class DistinctionChangeRequestDetailsSerializer(serializers.ModelSerializer):
+    """Read payload for DISTINCTION_CHANGE requests (#2631)."""
+
+    distinction_name = serializers.CharField(
+        source="distinction.name", read_only=True, allow_null=True
+    )
+    held_distinction_name = serializers.CharField(
+        source="character_distinction.distinction.name", read_only=True, allow_null=True
+    )
+    authorization_xp_cost = serializers.IntegerField(
+        source="authorization.xp_cost", read_only=True, allow_null=True
+    )
+    authorization_consumed = serializers.BooleanField(
+        source="authorization.is_consumed", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = DistinctionChangeRequestDetails
+        fields = [
+            "action",
+            "distinction",
+            "distinction_name",
+            "character_distinction",
+            "held_distinction_name",
+            "rank",
+            "authorization",
+            "authorization_xp_cost",
+            "authorization_consumed",
+        ]
+        read_only_fields = fields
+
+
+class TableUpdateRequestSerializer(serializers.ModelSerializer):
+    """Read serializer for table update requests (#2631)."""
+
+    table = serializers.IntegerField(source="membership.table_id", read_only=True)
+    table_name = serializers.CharField(source="membership.table.name", read_only=True)
+    persona_name = serializers.CharField(source="membership.persona.name", read_only=True)
+    character_sheet = serializers.IntegerField(
+        source="membership.persona.character_sheet_id", read_only=True
+    )
+    profile_text_details = ProfileTextRequestDetailsSerializer(read_only=True, allow_null=True)
+    distinction_details = DistinctionChangeRequestDetailsSerializer(read_only=True, allow_null=True)
+
+    class Meta:
+        model = TableUpdateRequest
+        fields = [
+            "id",
+            "kind",
+            "status",
+            "player_reasoning",
+            "gm_notes",
+            "table",
+            "table_name",
+            "persona_name",
+            "character_sheet",
+            "created_at",
+            "resolved_at",
+            "completed_at",
+            "profile_text_details",
+            "distinction_details",
+        ]
+        read_only_fields = fields
+
+
+class TableUpdateRequestCreateSerializer(serializers.Serializer):
+    """Create input for a table update request — kind-branched validation (#2631)."""
+
+    membership = serializers.PrimaryKeyRelatedField(
+        queryset=GMTableMembership.objects.filter(left_at__isnull=True)
+    )
+    kind = serializers.ChoiceField(choices=TableRequestKind.choices)
+    reasoning = serializers.CharField()
+    # PROFILE_TEXT payload
+    field = serializers.CharField(required=False, allow_blank=True)
+    proposed_text = serializers.CharField(required=False, allow_blank=True)
+    # DISTINCTION_CHANGE payload
+    action = serializers.CharField(required=False, allow_blank=True)
+    distinction = serializers.IntegerField(required=False, allow_null=True)
+    character_distinction = serializers.IntegerField(required=False, allow_null=True)
+    rank = serializers.IntegerField(required=False, min_value=1, default=1)
+
+    def validate(self, attrs: dict) -> dict:
+        kind = attrs["kind"]
+        if kind == TableRequestKind.PROFILE_TEXT:
+            if not attrs.get("field") or not attrs.get("proposed_text"):
+                msg = "PROFILE_TEXT requests need field and proposed_text."
+                raise serializers.ValidationError(msg)
+        elif not attrs.get("action"):
+            msg = "DISTINCTION_CHANGE requests need an action."
+            raise serializers.ValidationError(msg)
+        return attrs
+
+
+class TableUpdateRequestSignoffSerializer(serializers.Serializer):
+    """Signoff input: the GM's yes/no + notes (#2631)."""
+
+    approve = serializers.BooleanField()
+    notes = serializers.CharField(required=False, allow_blank=True, default="")

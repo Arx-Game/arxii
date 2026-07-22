@@ -6,6 +6,7 @@ from world.gm.models import (
     CatalogSuggestion,
     CheckTypeSituationFit,
     ConsequencePoolGuide,
+    DistinctionChangeRequestDetails,
     GMApplication,
     GMLevelCap,
     GMLevelChange,
@@ -15,10 +16,12 @@ from world.gm.models import (
     GMTable,
     GMTableMembership,
     GMWeeklyRewardTracker,
+    ProfileTextRequestDetails,
     SituationDifficultyGuide,
     SituationKind,
     StoryArea,
     StoryRoomGrant,
+    TableUpdateRequest,
 )
 
 
@@ -211,3 +214,30 @@ class GMWeeklyRewardTrackerAdmin(admin.ModelAdmin):
     list_filter = ["game_week"]
     raw_id_fields = ["gm_profile", "game_week"]
     search_fields = ["gm_profile__account__username"]
+
+
+class ProfileTextRequestDetailsInline(admin.StackedInline):
+    """Inline payload view for PROFILE_TEXT requests (#2631)."""
+
+    model = ProfileTextRequestDetails
+    extra = 0
+    raw_id_fields = ["applied_version"]
+
+
+class DistinctionChangeRequestDetailsInline(admin.StackedInline):
+    """Inline payload view for DISTINCTION_CHANGE requests (#2631)."""
+
+    model = DistinctionChangeRequestDetails
+    extra = 0
+    raw_id_fields = ["distinction", "character_distinction", "authorization"]
+
+
+@admin.register(TableUpdateRequest)
+class TableUpdateRequestAdmin(admin.ModelAdmin):
+    """Admin for player-submitted sheet-update requests (#2631)."""
+
+    list_display = ["__str__", "kind", "status", "created_at", "resolved_by"]
+    list_filter = ["kind", "status"]
+    raw_id_fields = ["membership", "resolved_by"]
+    readonly_fields = ["created_at", "resolved_at", "completed_at"]
+    inlines = [ProfileTextRequestDetailsInline, DistinctionChangeRequestDetailsInline]

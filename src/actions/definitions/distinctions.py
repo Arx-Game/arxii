@@ -391,6 +391,12 @@ class AcceptDistinctionChangeAction(Action):
         except DistinctionExclusionError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
+        from world.gm.services import (  # noqa: PLC0415
+            mark_requests_completed_for_authorization,
+        )
+
+        mark_requests_completed_for_authorization(auth)
+
         action_word = "added" if auth.action == DistinctionChangeAction.ADD else "removed"
         return ActionResult(
             success=True,

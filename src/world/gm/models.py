@@ -17,6 +17,8 @@ from world.gm.constants import (
     GMApplicationStatus,
     GMLevel,
     GMTableStatus,
+    TableRequestKind,
+    TableRequestStatus,
 )
 from world.player_submissions.constants import SubmissionStatus
 from world.scenes.action_constants import DifficultyChoice
@@ -785,3 +787,170 @@ class GMWeeklyRewardTracker(SharedMemoryModel):
     def __str__(self) -> str:
         username = self.gm_profile.account.username
         return f"GMWeeklyRewardTracker({username}: {self.xp_awarded_this_week})"
+
+
+class TableUpdateRequest(SharedMemoryModel):
+    """A player's proposed sheet change awaiting their table GM's sign-off (#2631).
+
+    The structural firewall against the Arx-1 +request failure mode: the player
+    proposes a CONCRETE change with their reasoning; the GM's job is a yes/no
+    judgment call ("does this fit the story we told"), never authorship. Routed
+    through ``GMTableMembership`` — joining a table is a GM taking
+    responsibility for a player's story, so no table means no requests.
+
+    Kind-specific payloads live on 1:1 details models (ADR-0007, no JSON):
+    ``ProfileTextRequestDetails`` / ``DistinctionChangeRequestDetails``.
+    """
+
+    membership = models.ForeignKey(
+        "gm.GMTableMembership",
+        on_delete=models.PROTECT,
+        related_name="update_requests",
+        help_text="The table membership this request rides on.",
+    )
+    kind = models.CharField(max_length=30, choices=TableRequestKind.choices)
+    player_reasoning = models.TextField(
+        help_text="The player's Reason: — why the story supports this change.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=TableRequestStatus.choices,
+        default=TableRequestStatus.PENDING,
+        db_index=True,
+    )
+    gm_notes = models.TextField(
+        blank=True,
+        default="",
+        help_text="The GM's sign-off/rejection notes.",
+    )
+    resolved_by = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="resolved_update_requests",
+        help_text="The GM who signed off or rejected.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["status", "membership"])]
+        verbose_name = "Table Update Request"
+        verbose_name_plural = "Table Update Requests"
+
+    def __str__(self) -> str:
+        return f"TableUpdateRequest({self.get_kind_display()}, {self.status}, #{self.pk})"
+
+
+class ProfileTextRequestDetails(SharedMemoryModel):
+    """PROFILE_TEXT payload: a full-replacement rewrite of one prose field (#2631).
+
+    Zero cost — prose changes apply at approval (no completion step; completion
+    exists only to time an XP spend). ``applied_version`` links the history row
+    the approval wrote, giving the version timeline its reasoning caption.
+    """
+
+    request = models.OneToOneField(
+        TableUpdateRequest,
+        on_delete=models.CASCADE,
+        related_name="profile_text_details",
+    )
+    field = models.CharField(
+        max_length=20,
+        help_text="A character_sheets.ProfileTextField value.",
+    )
+    proposed_text = models.TextField(
+        help_text="The full replacement text (player-written).",
+    )
+    applied_version = models.ForeignKey(
+        "character_sheets.ProfileTextVersion",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="applied_by_request_details",
+        help_text="The version row this request's approval created.",
+    )
+
+    class Meta:
+        verbose_name = "Profile Text Request Details"
+        verbose_name_plural = "Profile Text Request Details"
+
+    def __str__(self) -> str:
+        return f"ProfileTextRequestDetails({self.field}, request #{self.request_id})"
+
+
+class DistinctionChangeRequestDetails(SharedMemoryModel):
+    """DISTINCTION_CHANGE payload: a proposed add/rank-up/remove (#2631).
+
+    Approval creates a ``DistinctionChangeAuthorization`` (the merged #2624
+    accept/XP machinery — the player still controls when XP is spent);
+    ``authorization`` links it so accepting marks this request COMPLETED via
+    ``services.mark_requests_completed_for_authorization``.
+    """
+
+    request = models.OneToOneField(
+        TableUpdateRequest,
+        on_delete=models.CASCADE,
+        related_name="distinction_details",
+    )
+    action = models.CharField(
+        max_length=10,
+        help_text="A distinctions.DistinctionChangeAction value (add/remove).",
+    )
+    distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="table_update_request_details",
+        help_text="The distinction to add/rank up (ADD only).",
+    )
+    character_distinction = models.ForeignKey(
+        "distinctions.CharacterDistinction",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="table_update_request_details",
+        help_text="The held distinction to remove (REMOVE only; nulls after deletion).",
+    )
+    rank = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Target rank for ADD (absolute). Ignored for REMOVE.",
+    )
+    authorization = models.ForeignKey(
+        "distinctions.DistinctionChangeAuthorization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="table_update_request_details",
+        help_text="The authorization created at approval.",
+    )
+
+    class Meta:
+        verbose_name = "Distinction Change Request Details"
+        verbose_name_plural = "Distinction Change Request Details"
+
+    def __str__(self) -> str:
+        return f"DistinctionChangeRequestDetails({self.action}, request #{self.request_id})"
+
+    def clean(self) -> None:
+        """Exactly one target, matching the action (mirrors the auth model)."""
+        from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
+
+        if self.action == DistinctionChangeAction.ADD:
+            if not self.distinction_id:
+                msg = "ADD requires distinction."
+                raise ValidationError(msg)
+            if self.character_distinction_id:
+                msg = "ADD must not set character_distinction."
+                raise ValidationError(msg)
+        elif self.action == DistinctionChangeAction.REMOVE:
+            if not self.character_distinction_id:
+                msg = "REMOVE requires character_distinction."
+                raise ValidationError(msg)
+            if self.distinction_id:
+                msg = "REMOVE must not set distinction."
+                raise ValidationError(msg)

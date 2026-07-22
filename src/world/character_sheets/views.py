@@ -23,6 +23,10 @@ from world.character_sheets.serializers import (
     CharacterSheetSerializer,
     OriginSlotClearSerializer,
     OriginSlotInputSerializer,
+    ProfileTextVersionSerializer,
+    _resolve_active_persona,
+    _resolve_presented_identity,
+    _viewer_is_privileged,
     get_character_sheet_queryset,
 )
 from world.character_sheets.services import can_edit_character_sheet
@@ -100,3 +104,40 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
             return Response({"detail": "Slot not found."}, status=status.HTTP_404_NOT_FOUND)
         clear_origin_slot(sheet, slot)
         return Response(status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="profile-text-versions")
+    def profile_text_versions(self, request: Request, pk: int | None = None) -> Response:
+        """The sheet's prose-history timeline (#2631) — all versioned fields at once.
+
+        Only viewers who see the TRUE profile (owner/staff/revealed identity)
+        get history: a cover persona presents a fabricated bio, and serving
+        the real profile's past here would de-anonymize it. Non-revealed
+        viewers get an empty list, indistinguishable from "no history yet".
+        """
+        from world.gm.models import ProfileTextRequestDetails  # noqa: PLC0415
+
+        sheet = self.get_object()
+        user = request.user
+        privileged = _viewer_is_privileged(sheet, user)
+        active = _resolve_active_persona(sheet)
+        _display_name, reveal_identity = _resolve_presented_identity(
+            sheet, active, user, privileged
+        )
+        if not reveal_identity:
+            return Response([])
+
+        versions = list(
+            sheet.true_profile.text_versions.select_related("era").order_by("field", "-created_at")
+        )
+        reasoning_by_version = {
+            row.applied_version_id: row.request.player_reasoning
+            for row in ProfileTextRequestDetails.objects.filter(
+                applied_version__in=versions
+            ).select_related("request")
+        }
+        serializer = ProfileTextVersionSerializer(
+            versions,
+            many=True,
+            context={"reasoning_by_version": reasoning_by_version},
+        )
+        return Response(serializer.data)
