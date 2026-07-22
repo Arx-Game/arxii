@@ -418,6 +418,17 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     request.action_interaction = action_interaction
     request.save(update_fields=["action_interaction"])
 
+    # #2646: an out-of-combat PERCEPTION-tagged cast by a ground-preparing role
+    # holder rides this resolved cast to record/refresh a PreparedGround. Pure
+    # rider — no-op unless every condition holds (see the service docstring).
+    from world.covenants.perks.services import (  # noqa: PLC0415
+        record_ground_preparation_from_cast,
+    )
+
+    record_ground_preparation_from_cast(
+        caster_persona.character_sheet, technique, character.location
+    )
+
     return result, power_ledger, pose
 
 

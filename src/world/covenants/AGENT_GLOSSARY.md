@@ -65,7 +65,7 @@ The combat-power axis of membership: a role's Sword/Shield/Crown combat-identity
 _Avoid_: rank, position, office, archetype (retired single-enum field).
 
 **Secondary Vow (membership)**:
-`CharacterCovenantRole.is_secondary` (#2641, ADR-0155) — a SECONDARY vow membership, held alongside a character's PRIMARY (`is_secondary=False`) vow of the same covenant type: fills a group gap or enables a hybrid fantasy, never a replacement for a real specialist. At most one engaged PRIMARY and one engaged SECONDARY per (character_sheet, covenant type). A secondary requires an engaged primary of the same type, may not share its ANCHOR role with that primary ("no same-vow secondary"), and its COVENANT_ROLE thread level is capped at the primary's. Chassis layers (Layer 1 combat-identity blend above, Layer 3 defense/gear/stat scaling) never read a secondary membership; Layer 2 (Technique Specialty) and Layer 4 (Situational Perk) do, scaled down by `SecondaryVowConfig.potency_tenths` (seeded ×0.6). A secondary also resolves at its anchor role only — no sub-role graduation, no deep rungs, no signature, no unique name — and its `TIER_FLOOR` Outcome Guarantees bind one tier weaker; `BOTCH_IMMUNITY` is unweakened (no numeric field to soften).
+`CharacterCovenantRole.is_secondary` (#2641, ADR-0159) — a SECONDARY vow membership, held alongside a character's PRIMARY (`is_secondary=False`) vow of the same covenant type: fills a group gap or enables a hybrid fantasy, never a replacement for a real specialist. At most one engaged PRIMARY and one engaged SECONDARY per (character_sheet, covenant type). A secondary requires an engaged primary of the same type, may not share its ANCHOR role with that primary ("no same-vow secondary"), and its COVENANT_ROLE thread level is capped at the primary's. Chassis layers (Layer 1 combat-identity blend above, Layer 3 defense/gear/stat scaling) never read a secondary membership; Layer 2 (Technique Specialty) and Layer 4 (Situational Perk) do, scaled down by `SecondaryVowConfig.potency_tenths` (seeded ×0.6). A secondary also resolves at its anchor role only — no sub-role graduation, no deep rungs, no signature, no unique name — and its `TIER_FLOOR` Outcome Guarantees bind one tier weaker; `BOTCH_IMMUNITY` is unweakened (no numeric field to soften).
 _Avoid_: primary role / primary (this codebase already uses "primary" for the anchor-vs-sub-role axis on `CovenantRole.parent_role` — a role with no `parent_role` is a "primary role" in THAT sense regardless of whether the membership holding it is a character's PRIMARY or SECONDARY vow; don't conflate the two "primary"s), off-hand vow, minor vow.
 
 **Technique Specialty**:
@@ -185,6 +185,32 @@ Abyssal); target abyssal/target affinity (Situation's `target` field is the acti
 OWN action target — an unrelated concept on offense; `attacker` is the incoming threat on
 defense).
 
+**Chosen Ground (situation)**:
+`Situation.ON_CHOSEN_GROUND` — holds when the SUBJECT is a participant in a `CombatEncounter`
+whose `on_chosen_ground` flag is True — "the fight was won yesterday." Mirrors Champion Duel's
+shape exactly: one cached FK read off the resolution's participant, False outside combat.
+Stamped exclusively at encounter-CREATE time by `world.combat.chosen_ground
+.compute_on_chosen_ground`, called from the three PC-vs-NPC encounter-creation seams
+(`seed_or_feed_encounter_from_cast`, `create_lethal_duel`, `open_place_encounter`) — never by
+`create_pvp_duel` (PvP is never lethal). True iff the encounter's room holds a `Prepared
+Ground` whose preparer is physically present there. (#2646.)
+_Avoid_: home field, terrain advantage (this codebase's term is Chosen Ground / Prepared
+Ground, not a generic RPG "home turf" bonus).
+
+**Prepared Ground**:
+`world.room_features.models.PreparedGround` — a room a character has readied as their
+battleground ahead of time. Plain FK to `RoomProfile` (a room may hold several characters'
+prepared grounds) but `prepared_by` is a OneToOne to `CharacterSheet` — one active prepared
+ground per character; re-preparing elsewhere MOVES the row (`update_or_create`), never stacks
+a second one. Recorded by `world.covenants.perks.services
+.record_ground_preparation_from_cast` — a RIDER on an out-of-combat standalone cast of a
+PERCEPTION-tagged technique by a character holding an active engaged `CharacterCovenantRole`
+whose `covenant_role.prepares_ground` flag is set (data-authored — not every role prepares
+ground). "The vow never hands you a new verb": this is not a new player action, it answers to
+an existing one (the cast). Consumed by Chosen Ground's evaluator via `CombatEncounter
+.on_chosen_ground`. (#2646.)
+_Avoid_: scouted location, home base (this codebase's term is Prepared Ground).
+
 **Defense-Side Seam**:
 The evaluation point making situational perks reachable on a defender's OWN roll, not only the
 attacker's: `SituationContext.attacker` (populated only here, `None` on every offense-side
@@ -263,6 +289,27 @@ fired-perk delivery seams, right after each one's own live `applicable_perks` ca
 queries when nothing is disengaged. (#2536 slice 3, Task 7, ADR-0153.)
 _Avoid_: fired perk, live firing (the opposite concept — a Dormant Perk Firing is exactly the
 firing that did NOT happen).
+
+**Sphinx of Black Quartz**:
+The diegetic Shroudwatch Academy vow-suitability oracle (#2640, ADR-0157), invoked
+*"Sphinx of Black Quartz, judge my vow: [vow]."* A read-only report
+(`world.covenants.sphinx.judge_vow`) that re-runs the kit∩role-demand join
+`covenant_role_specialty_power_term` already uses, but as a **three-tier verdict**
+instead of a resolution-time bonus — never pass/fail, and never a gate (soft-gate
+ruling: a character may swear a vow the Sphinx warned about; Dormant Vow messaging
+carries the informed-mismatch follow-through). The three tiers (`SphinxTier`):
+- **TAKES** — "the vow will take": every authored demand is covered by the kit (or the
+  vow is unauthored and makes no demands at all — an unauthored vow cannot reject).
+- **DORMANT** — "the vow would lie dormant in places": at least one demand is covered,
+  at least one is not.
+- **NOT_YET** — "the vow will not take — yet": zero demands covered, paired with a
+  shopping list of learnable techniques that would change the answer.
+Surfaced three ways from one seam: the staff coverage audit (`audit_vow_coverage`,
+built FIRST per the spec — every active anchor role × every active Tradition), the
+player REST endpoint (self-character only), and the `sphinx <vow name>` telnet
+command.
+_Avoid_: qualification gate, prerequisite check (the Sphinx informs, it never blocks —
+do not build a hard gate at role assignment on top of it).
 
 **Covenant Rank**:
 The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals / request-gm. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).

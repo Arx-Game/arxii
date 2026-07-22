@@ -190,6 +190,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   and capped death-kudos. Unit/service-tier proven (vitals/actions suites); no combat journey
   test yet — a KO-to-wake / death-to-retire journey is fair game for the journeys list.
 
+- **Healing rework: wound conditions wired + double-bounded HP mends (#2644, ADR-0156).**
+  Closed the wound-tier's central audit gap: the permanent-wound pool now actually applies
+  mechanical conditions (Lingering Ache / Crippling Wound / Bleeding Wound) instead of
+  effect-free narrative labels. `WoundDetails` stamps mend-cap provenance
+  (`damage_taken`/`health_mended_total`) on every applied wound; `mend_wound()` bounds any HP
+  restoration to `NEVER_TO_FULL_FRACTION` (0.75) of the causing damage, and
+  `TreatmentAttempt`'s partial UniqueConstraint caps each wound to one tending per healer,
+  ever. Condition cleansing (dispel/severity-decay) stays unrestricted — only the HP mend is
+  double-bounded. Unit/service-tier proven (vitals/conditions suites); no combat journey test
+  yet — a wound→treat→attrition journey is fair game for the journeys list.
+
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
 - Thread-pull final outcome in combat. (Combo full journey proven in #2017; enemy-NPC
@@ -347,7 +358,13 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   a per-situation `SITUATION_PARAM_SPECS` allowed/required contract, `ATTACKER_AFFINITY`
   authorable against any `AffinityType` axis (was Abyssal-only), and
   `CombatEncounter.initiated_by_pc_side` recording who sprang a fight for `origin_side`-gated
-  ambush/parley perks. When the vow dims (#2051), the engaged flag drops and every
+  ambush/parley perks. #2646 follow-up adds a 15th situation, `ON_CHOSEN_GROUND` — "the fight
+  was won yesterday": `CombatEncounter.on_chosen_ground` is stamped at CREATE time in the three
+  PC-vs-NPC encounter-creation seams whenever the encounter's room holds a
+  `room_features.PreparedGround` (one active per character) whose preparer is physically
+  present; a ground gets prepared as a RIDER — no new player verb — on an out-of-combat
+  standalone cast of a PERCEPTION-tagged technique by a character holding an engaged covenant
+  role flagged `prepares_ground`. When the vow dims (#2051), the engaged flag drops and every
   layer's contribution returns to 0 — which is why soloing legend content is lethal.
 - Magic is predominant; relationship bonuses matter; **difficulty scales on party size + average level
   only** (ADR-0037); combat merits Legend, never XP (ADR-0036).

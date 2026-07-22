@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("covenants", "0041_alter_vowsituationalperkrung_count_threshold_and_more"),
+        ("covenants", "0042_covenantrole_prepares_ground_and_more"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

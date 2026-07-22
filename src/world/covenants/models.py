@@ -351,6 +351,15 @@ class CovenantRole(NaturalKeyMixin, AbstractSpecializedVariant, SharedMemoryMode
             "the character's capability ledger on engage; revoked on disengage."
         ),
     )
+    prepares_ground = models.BooleanField(
+        default=False,
+        help_text=(
+            "Data-authored flag: engaged holders of this role prepare the ground "
+            "when casting a PERCEPTION-tagged technique out of combat — see "
+            "world.covenants.perks.services.record_ground_preparation_from_cast "
+            "(#2646)."
+        ),
+    )
 
     objects = CovenantRoleManager()
 

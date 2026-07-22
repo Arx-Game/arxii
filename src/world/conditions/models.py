@@ -1417,6 +1417,31 @@ class TreatmentTemplate(SharedMemoryModel):
     reduction_on_partial = models.PositiveIntegerField(default=0)
     reduction_on_failure = models.PositiveIntegerField(default=0)
 
+    # === Bounded HP mend (#2644 — the attrition invariant) ===
+    # Default 0 on all three: an existing severity-decay-only treatment is
+    # unaffected (mend_on_* stay 0, mend_wound() never gets called for it).
+    mend_on_crit = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="HP mended on a critical success, routed through mend_wound() (0 = no mend).",
+    )
+    mend_on_success = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="HP mended on a success, routed through mend_wound() (0 = no mend).",
+    )
+    mend_on_partial = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="HP mended on a partial success, routed through mend_wound() (0 = no mend).",
+    )
+    once_per_wound_per_helper = models.BooleanField(
+        default=False,
+        help_text=(
+            "When true, the duplicate-attempt gate keys on (helper, wound instance) "
+            "instead of (helper, scene) — each healer gets exactly one tending per "
+            "wound, ever, scene-independent (#2644). Mend-bearing treatments should "
+            "set this True; leave once_per_scene_per_helper governing everything else."
+        ),
+    )
+
     def clean(self) -> None:
         super().clean()
         if self.resonance_cost > 0 and not self.requires_bond:
@@ -1497,6 +1522,15 @@ class TreatmentAttempt(SharedMemoryModel):
     helper_backlash_applied = models.IntegerField(default=0)
     resonance_spent = models.IntegerField(default=0)
     anima_spent = models.IntegerField(default=0)
+    health_mended = models.IntegerField(
+        default=0,
+        help_text=(
+            "HP actually mended by this attempt, as returned by "
+            "world.vitals.services.mend_wound() (#2644) — may be less than the "
+            "treatment's mend_on_* value when the fraction cap or max_health "
+            "clamp bit. 0 for non-wound treatments and for every failure."
+        ),
+    )
 
     created_at = models.DateTimeField(
         help_text="Stamped at save with get_ic_now() fallback in the service.",
@@ -1513,6 +1547,17 @@ class TreatmentAttempt(SharedMemoryModel):
             "2026-05-09 §4.10."
         ),
     )
+    once_per_wound_guard = models.BooleanField(
+        default=False,
+        editable=False,
+        help_text=(
+            "Denormalized from treatment.once_per_wound_per_helper at insert time "
+            "(#2644) — mirrors once_per_scene_guard's pattern. True = the partial "
+            "unique constraint enforces one attempt per (helper, target_condition_"
+            "instance), scene-independent. False = the once_per_scene_guard (or no) "
+            "gate governs instead."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -1520,6 +1565,11 @@ class TreatmentAttempt(SharedMemoryModel):
                 fields=["helper", "target", "scene", "treatment"],
                 condition=models.Q(once_per_scene_guard=True),
                 name="unique_treatment_attempt_per_helper_scene",
+            ),
+            models.UniqueConstraint(
+                fields=["helper", "target_condition_instance"],
+                condition=models.Q(once_per_wound_guard=True),
+                name="unique_treatment_attempt_per_helper_wound",
             ),
         ]
 

@@ -46,20 +46,27 @@ gain), and — as of #2441 Task 8 — `GAMEPLAY` (`world.magic.services.traditio
 leave_tradition` re-applying the Unbound drawback; previously vestigial/unassigned). Full
 per-source detail: `docs/systems/distinctions.md` "Post-CG acquisition" section.
 
-**There is no removal counterpart to `grant_distinction`.** Verified #2441 Task 8: nothing in
-this app (or elsewhere) revokes/deactivates a `CharacterDistinction` row outside CG-draft editing
-(`DraftDistinctionViewSet`, which operates on unsaved draft JSON, not `CharacterDistinction`) and
-admin. A caller that needs to strip a distinction in play does a direct
-`CharacterDistinction.objects.filter(...).delete()` — see `world.magic.services.
-tradition_membership._shed_traditionless_drawbacks` for the first such caller. If a second
-removal caller appears, promote this to a real `revoke_distinction` seam rather than letting a
-third ad hoc delete appear. Two traps a removal caller MUST reason about (verified #2441
-review): resonance currency seeded via `DistinctionResonanceGrant` is a permanent, monotonic
-ledger mutation — deleting the row never claws it back (its `ResonanceGrant` audit FK is
-SET_NULL by design), so removing a resonance-granting distinction leaves the currency behind
-deliberately; and `CharacterDistinction.secret` has no reverse cleanup — deleting a
-secret-relocated distinction orphans its `secrets.Secret` row (handle or forbid before
-deleting anything that may have been secretized via `mint_distinction_secret`).
+**The removal counterpart is `remove_distinction` (#2628/#2631).** It requires an APPROVED
+`SheetUpdateRequest` and tears down modifiers (`delete_distinction_modifiers`) and the
+relocated Secret (`clear_distinction_secret`) before deleting the row. Deliberately NOT torn
+down: resonance currency seeded via `DistinctionResonanceGrant` (permanent, monotonic ledger —
+no clawback), `NPCAsset` rows, and codex grants. Legacy ad hoc deleters (e.g.
+`world.magic.services.tradition_membership._shed_traditionless_drawbacks`) predate the seam;
+new removal callers go through `remove_distinction`.
+
+## Post-CG change requests — the `SheetUpdateRequest` framework (#2628, table-routed #2631)
+
+`create_sheet_update_request` (PENDING, XP cost stamped at creation on the sign-based model:
+add-beneficial and remove-detrimental charge `|cost_per_rank| × rank`; the other two quadrants
+are free) → `approve_sheet_update_request` (atomic XP auto-debit + `grant_distinction` /
+`remove_distinction`; no separate player accept step) or `deny_sheet_update_request`. An ADD
+for an already-held distinction is a one-step rank-up. GM-direct grants
+(`gm_award_distinction`) go through the same framework as auto-approved requests — no free
+bypass. **Review pool (#2631 ruling):** staff, or a GM whose table the target character
+actively sits at — enforced in both the `review_sheet_update` action and
+`world.gm.services.signoff_table_update_request` (the table-routed web flow, which
+creates-and-approves in one step). The cost gate lives on this framework, not on
+`grant_distinction` itself — the grant seam's "No XP path" invariant (above) still holds.
 
 ## Profile Visibility — Secrets, not a boolean (#1109 → #1334)
 
