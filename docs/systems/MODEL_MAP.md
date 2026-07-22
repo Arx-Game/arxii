@@ -302,6 +302,7 @@
   - treatment_action_requests <- scenes.SceneActionRequest
   - treatment_attempts_targeting_instance <- conditions.TreatmentAttempt
   - granted_properties <- mechanics.ObjectProperty
+  - wound_details <- vitals.WoundDetails
 
 ### TreatmentTemplate
 **Foreign Keys:**
@@ -2662,6 +2663,7 @@
   - treatment_action_requests <- scenes.SceneActionRequest
   - treatment_attempts_targeting_instance <- conditions.TreatmentAttempt
   - granted_properties <- mechanics.ObjectProperty
+  - wound_details <- vitals.WoundDetails
 
 ### TreatmentTemplate
 **Foreign Keys:**
@@ -8728,6 +8730,10 @@
   - default_wound_pool -> actions.ConsequencePool [FK] (nullable)
   - default_death_pool -> actions.ConsequencePool [FK] (nullable)
 
+### WoundDetails
+**Foreign Keys:**
+  - condition_instance -> conditions.ConditionInstance [OneToOne]
+
 ### Service Functions
 - `advance_bleed_out(character_sheet: 'CharacterSheet | None') -> 'bool' — Advance staged bleed-out conditions toward death.`
 - `advance_surrounded(character_sheet: 'CharacterSheet | None', *, battle: 'Battle') -> 'bool' — Advance staged Surrounded (battle acute-peril) conditions toward death (#1733).`
@@ -8748,6 +8754,7 @@
 - `is_alive(character_sheet: 'CharacterSheet | None') -> 'bool' — Return True if the character is not dead.`
 - `is_dead(character_sheet: 'CharacterSheet | None') -> 'bool' — Return True if the character's mortality marker is DEAD.`
 - `is_retired(character_sheet: 'CharacterSheet | None') -> 'bool' — True when the dead character has been released (retire fired, #2287).`
+- `mend_wound(healer_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', wound_instance: 'ConditionInstance', amount: 'int') -> 'int' — Raise a wounded target's health, double-bounded (#2644 — the attrition invariant).`
 - `perceives_dreamside(character_sheet: 'CharacterSheet | None') -> 'bool' — True when the character's perception is relocated to the dream side (#2287).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `process_damage_consequences(character_sheet: 'CharacterSheet | None', damage_dealt: 'int', damage_type: 'DamageType | None', *, extra_modifiers: 'int' = 0, combat_interaction_factory: 'Callable[[], Interaction] | None' = None, source_character: 'ObjectDB | None' = None) -> 'DamageConsequenceResult' — Process survivability consequences after damage is applied.`

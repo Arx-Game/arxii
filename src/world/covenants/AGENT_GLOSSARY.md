@@ -261,7 +261,7 @@ _Avoid_: fired perk, live firing (the opposite concept — a Dormant Perk Firing
 firing that did NOT happen).
 
 **Sphinx of Black Quartz**:
-The diegetic Shroudwatch Academy vow-suitability oracle (#2640, ADR-0156), invoked
+The diegetic Shroudwatch Academy vow-suitability oracle (#2640, ADR-0157), invoked
 *"Sphinx of Black Quartz, judge my vow: [vow]."* A read-only report
 (`world.covenants.sphinx.judge_vow`) that re-runs the kit∩role-demand join
 `covenant_role_specialty_power_term` already uses, but as a **three-tier verdict**
