@@ -156,6 +156,30 @@ export function AppearanceStage({
     });
   };
 
+  // #2632 — optional per-trait flavor text ("red" + "flowing crimson"). The
+  // normalized option stays the succinct/mechanical value; this text is what
+  // other characters read. Commit-on-blur to avoid a per-keystroke PATCH storm.
+  const getTraitDescriptor = (traitName: string): string => {
+    const descriptors = draftData.form_trait_descriptors as Record<string, string> | undefined;
+    return descriptors?.[traitName] ?? '';
+  };
+
+  const handleTraitDescriptorCommit = (traitName: string, text: string) => {
+    if (text.trim() === getTraitDescriptor(traitName).trim()) return;
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: {
+        draft_data: {
+          ...draftData,
+          form_trait_descriptors: {
+            ...((draftData.form_trait_descriptors as Record<string, string>) ?? {}),
+            [traitName]: text.trim(),
+          },
+        },
+      },
+    });
+  };
+
   const formatHeight = (inches: number): string => {
     const feet = Math.floor(inches / 12);
     const remainingInches = inches % 12;
@@ -330,6 +354,14 @@ export function AppearanceStage({
                       ))}
                     </SelectContent>
                   </Select>
+                  <Input
+                    aria-label={`Describe your ${formOption.trait.display_name.toLowerCase()}`}
+                    placeholder="Describe it (optional) — e.g. flowing crimson"
+                    defaultValue={getTraitDescriptor(formOption.trait.name)}
+                    onBlur={(e) =>
+                      handleTraitDescriptorCommit(formOption.trait.name, e.target.value)
+                    }
+                  />
                 </div>
               ))}
             </div>

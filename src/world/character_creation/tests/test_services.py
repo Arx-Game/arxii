@@ -532,6 +532,31 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         values = {v.trait.name: v.option.name for v in true_form.values.all()}
         assert values == {"hair_color": "black", "eye_color": "blue"}
 
+    def test_finalize_writes_cg_trait_descriptors(self):
+        """CG per-trait flavor text lands on the PRIMARY persona (#2632)."""
+        from world.forms.models import PersonaTraitDescriptor
+
+        hair_trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
+        multi_option = FormTraitOptionFactory(
+            trait=hair_trait, name="multihued", display_name="Multihued"
+        )
+
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
+        draft.draft_data["form_traits"] = {"hair_color": multi_option.id}
+        draft.draft_data["form_trait_descriptors"] = {
+            "hair_color": "onyx shot through with silver streaks",
+            "nonexistent_trait": "ignored",
+            "eye_color": "   ",
+        }
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        persona = character.character_sheet.primary_persona
+        row = PersonaTraitDescriptor.objects.get(persona=persona, trait=hair_trait)
+        assert row.text == "onyx shot through with silver streaks"
+        assert PersonaTraitDescriptor.objects.filter(persona=persona).count() == 1
+
     def test_finalize_skips_form_traits_when_empty(self):
         """No true form created when form_traits is empty or missing."""
         from world.forms.models import CharacterForm

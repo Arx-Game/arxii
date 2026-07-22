@@ -939,6 +939,27 @@ def _create_true_form(character: ObjectDB, draft_data: dict) -> None:
     if selections:
         create_true_form(character, selections)
 
+    # #2632 — CG-authored per-trait descriptors ("red" + "flowing crimson"):
+    # free-text presentation flavor written onto the PRIMARY persona. Only
+    # traits actually selected get a descriptor; player-authored here, so the
+    # descriptor-never-auto-attach privacy invariant (#1109) is untouched —
+    # nothing is copied, the player typed it for this face.
+    descriptors = draft_data.get("form_trait_descriptors", {})
+    if selections and isinstance(descriptors, dict):
+        from world.forms.models import PersonaTraitDescriptor  # noqa: PLC0415
+
+        sheet = character.character_sheet
+        persona = sheet.primary_persona if sheet else None
+        if persona is not None:
+            for trait in selections:
+                text = descriptors.get(trait.name)
+                if isinstance(text, str) and text.strip():
+                    PersonaTraitDescriptor.objects.update_or_create(
+                        persona=persona,
+                        trait=trait,
+                        defaults={"text": text.strip()},
+                    )
+
 
 def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
     """Create CharacterSkillValue and CharacterSpecializationValue records from draft."""
