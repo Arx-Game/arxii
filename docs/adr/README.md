@@ -184,6 +184,7 @@ treat those names as hints to confirm, not gospel.
 - [0153 — Court/Battle scoping, five new situations, the defense-side seam, and dormant-vow messaging](0153-scoping-situations-and-dormant-vow-messaging.md) (#2536 slice 3; related ADR-0149, ADR-0151, ADR-0152, #2183, ADR-0118)
 - [0154 — Situation requirements grow typed parameter columns, not new enum values per axis](0154-parameterized-situation-requirements.md) (#2623; amends ADR-0153; related ADR-0149, ADR-0151, ADR-0152, ADR-0007, ADR-0013)
 - [0155 — Sheet updates are player-proposed, GM-vetoed, never content-prompting — and history is never lost](0155-sheet-updates-propose-veto-never-prompt.md) (#2631; related ADR-0007, ADR-0009)
+- [0156 — Wound HP mends are double-bounded — once per healer per wound, and never to full](0156-double-bounded-wound-mend-the-attrition-invariant.md) (#2644; related ADR-0010, ADR-0007, ADR-0013)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

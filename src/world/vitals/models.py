@@ -232,3 +232,46 @@ class VitalsConsequenceConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"VitalsConsequenceConfig(pk={self.pk})"
+
+
+class WoundDetails(SharedMemoryModel):
+    """Mend-cap provenance for one applied wound ConditionInstance (#2644).
+
+    Stamped by the permanent-wound tier (``_record_wound_details`` in
+    ``services.py``) the moment a wound APPLY_CONDITION effect fires — never
+    authored directly. FK direction is specific->general (ADR-0010): this is
+    vitals-specific bookkeeping pointing at the general conditions primitive,
+    never the reverse.
+
+    ``damage_taken`` is the debit that caused the wound (accumulated on
+    re-wounding the same instance — see ``_record_wound_details``).
+    ``health_mended_total`` is the running sum every ``mend_wound()`` call has
+    ever restored on this wound, across every healer; it can never exceed
+    ``NEVER_TO_FULL_FRACTION * damage_taken`` (the attrition invariant,
+    ADR-0156) — the per-healer "one tending each" bound lives one layer up, on
+    ``TreatmentAttempt``'s partial UniqueConstraint.
+    """
+
+    condition_instance = models.OneToOneField(
+        "conditions.ConditionInstance",
+        on_delete=models.CASCADE,
+        related_name="wound_details",
+        help_text="The wound ConditionInstance this provenance row describes.",
+    )
+    damage_taken = models.PositiveIntegerField(
+        help_text="The damage debit that caused this wound (the mend-cap basis).",
+    )
+    health_mended_total = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Running total ever mended on this wound across every healer. "
+            "Capped at NEVER_TO_FULL_FRACTION x damage_taken by mend_wound()."
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"WoundDetails(instance={self.condition_instance_id}, damage={self.damage_taken})"
