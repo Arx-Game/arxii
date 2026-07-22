@@ -83,3 +83,37 @@ PROPOSAL_KIND_MIN_LEVEL: dict[str, str] = {
     CatalogSuggestionProposalKind.DIFFICULTY_GUIDE: GMLevel.GM,
     CatalogSuggestionProposalKind.POOL_GUIDE: GMLevel.EXPERIENCED,
 }
+
+
+class TableRequestKind(models.TextChoices):
+    """What a table update request proposes to change (#2631).
+
+    Extensible: each kind carries its payload on a 1:1 details model and its
+    apply logic in ``services.signoff_table_update_request``. Requests propose
+    a concrete change with a yes/no answer — never a prompt for content.
+    """
+
+    PROFILE_TEXT = "profile_text", "Profile Text"
+    DISTINCTION_CHANGE = "distinction_change", "Distinction Change"
+
+
+class TableRequestStatus(models.TextChoices):
+    """Lifecycle of a table update request (#2631).
+
+    PENDING → APPROVED (distinction kind: authorization created, player still
+    accepts/spends) → COMPLETED (change applied). Prose kinds apply at
+    approval and go straight to COMPLETED. REJECTED/WITHDRAWN are terminal.
+    """
+
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+    WITHDRAWN = "withdrawn", "Withdrawn"
+    COMPLETED = "completed", "Completed"
+
+
+class TableRequestRole(models.TextChoices):
+    """The ``role`` filter on table update requests (#2631)."""
+
+    MINE = "mine", "Mine"
+    GM = "gm", "GM"

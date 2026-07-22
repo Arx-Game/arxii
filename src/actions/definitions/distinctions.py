@@ -27,6 +27,25 @@ def _coerce_positive_int(value: Any) -> int | None:
     return coerced if coerced > 0 else None
 
 
+def _reviewer_has_table_access(reviewer_account: Any, req: Any) -> bool:
+    """The #2631 review-pool rule: staff, or a GM with table access.
+
+    A GM may review a request iff the requesting character has an ACTIVE
+    membership at one of that GM's tables. Shopping among known GMs is fine;
+    a GM the player has never sat with must not see their sheet.
+    """
+    if reviewer_account is None or reviewer_account.is_staff:
+        return True
+
+    from world.gm.models import GMTableMembership  # noqa: PLC0415
+
+    return GMTableMembership.objects.filter(
+        persona__character_sheet=req.character_sheet,
+        left_at__isnull=True,
+        table__gm__account=reviewer_account,
+    ).exists()
+
+
 @dataclass
 class GMAwardDistinctionAction(Action):
     """JUNIOR-tier GM action: add or remove a distinction via the request framework (#2628).
@@ -376,6 +395,12 @@ class ReviewSheetUpdateRequestAction(Action):
         req = SheetUpdateRequest.objects.filter(pk=request_id_int).first()
         if req is None:
             return ActionResult(success=False, message=f"Request #{request_id_int} not found.")
+
+        if not _reviewer_has_table_access(actor.account, req):
+            return ActionResult(
+                success=False,
+                message="You may only review requests from characters at your own tables.",
+            )
 
         if req.status != SheetUpdateRequestStatus.PENDING:
             return ActionResult(
