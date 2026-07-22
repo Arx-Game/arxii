@@ -3137,10 +3137,12 @@ export interface paths {
     /**
      * @description The sheet's prose-history timeline (#2631) — all versioned fields at once.
      *
-     *     Only viewers who see the TRUE profile (owner/staff/revealed identity)
-     *     get history: a cover persona presents a fabricated bio, and serving
-     *     the real profile's past here would de-anonymize it. Non-revealed
-     *     viewers get an empty list, indistinguishable from "no history yet".
+     *     Owner and staff only (per the #2631 ruling): past versions are the
+     *     character's private history by default, stricter than the current
+     *     text's own visibility. Everyone else gets an empty list,
+     *     indistinguishable from "no history yet". (A player-controlled
+     *     openness tier could relax this later via the SheetVisibility
+     *     machinery — deliberately not built now.)
      */
     get: operations['character_sheets_profile_text_versions_list'];
     put?: never;
