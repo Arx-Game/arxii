@@ -89,12 +89,22 @@ class AttackMissedPayload:
 
 @dataclass
 class DamagePreApplyPayload:
-    """PERSONAL scope, cancellable. Mutable so scars can modify damage."""
+    """PERSONAL scope, cancellable. Mutable so scars can modify damage.
+
+    ``answers_consumed`` (#2639): per-moment absorption cap counter. The
+    interpose fire seam (``world.combat.services._dispatch_interpose_action``)
+    increments this when it actually fires; once it reaches
+    ``world.combat.constants.ABSORPTION_CAP_PER_MOMENT`` further interceptors
+    on THIS payload decline. Standing defenses (absorb/reflect/blink
+    conditions) are deliberately outside this cap — flagged judgment call,
+    they carry their own reactive costs.
+    """
 
     target: Character
     amount: int
     damage_type: DamageType | None
     source: DamageSource
+    answers_consumed: int = 0
 
 
 @dataclass(frozen=True)

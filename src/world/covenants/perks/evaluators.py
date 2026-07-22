@@ -789,3 +789,45 @@ def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
         # here rather than a KeyError; never raise, just miss.
         return axis_value is not None and axis_value >= params.threshold_percent
     return aura.dominant_affinity == params.affinity
+
+
+@register(Situation.ENEMY_WINDUP_UNDERWAY)
+def enemy_windup_underway(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """A not-yet-matured enemy wind-up exists in the SUBJECT's encounter (#2637).
+
+    Mirrors ``ally_intercepted_for_me``'s "declared is the situation" v1
+    shape: holds the instant a ``PendingOpponentAttack`` is telegraphed,
+    regardless of which opponent it belongs to or who it targets. One query.
+    Reads ``resolution``; False outside combat. Reads no params (absent from
+    ``SITUATION_PARAM_SPECS``).
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+
+    from world.combat.models import PendingOpponentAttack  # noqa: PLC0415
+
+    return PendingOpponentAttack.objects.filter(
+        encounter_id=participant.encounter_id,
+        resolves_round__gte=participant.encounter.round_number,
+    ).exists()
+
+
+@register(Situation.ENEMY_WINDUP_CALLED_OUT)
+def enemy_windup_called_out(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """Same as ``enemy_windup_underway``, restricted to a called-out wind-up
+    (#2637 design 6 — a flagged engaged CovenantRole auto-called it). One
+    query. Reads ``resolution``; False outside combat. Reads no params
+    (absent from ``SITUATION_PARAM_SPECS``).
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+
+    from world.combat.models import PendingOpponentAttack  # noqa: PLC0415
+
+    return PendingOpponentAttack.objects.filter(
+        encounter_id=participant.encounter_id,
+        resolves_round__gte=participant.encounter.round_number,
+        called_out=True,
+    ).exists()

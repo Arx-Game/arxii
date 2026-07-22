@@ -83,6 +83,24 @@ _Avoid_: reflect target, bounce destination, deflection target
 The maneuver by which a PC shelters a specific ally from a round-ticked environmental hazard (sunlight, poison gas) this round — the environmental-DoT sibling of Interpose (which blocks an incoming attack, not a lingering hazard). Always names a specific ally; there is no "any ally" path like Interpose has, since environmental shelter is "I'm sheltering THIS person," not "I'll block whichever hazard lands on someone." Resolves through the same graded capability-check spine as Interpose.
 _Avoid_: shelter (as the maneuver name), cover, shield, protect
 
+**Wind-up** (#2637, ADR-0156):
+A telegraphed NPC attack: `ThreatPoolEntry.windup_rounds > 0` commits to a `PendingOpponentAttack`
+at declaration instead of a same-round `CombatOpponentAction`, telegraphs on both clients, then
+matures `windup_rounds` rounds later through the ordinary NPC-attack pipeline. Pre-armed, not a
+mid-round interrupt — the same declaration-time-commitment shape Interpose uses, mirrored for the
+NPC side. See `world/covenants/AGENT_GLOSSARY.md`'s Wind-up / Interception (wind-up) / Callout
+(wind-up) entries for the interception rider and the auto-callout role flag.
+_Avoid_: charge-up, cast time (a caster's own resolution delay, not an authored multi-round threat).
+
+**Reaction Economy** (#2639, ADR-0156):
+The two budgets gating the shared interpose fire seam (`_dispatch_interpose_action`):
+`CombatParticipant.reactions_used` vs `REACTIONS_PER_ROUND` (1, per-participant, reset each
+`begin_declaration_phase`) and `DamagePreApplyPayload.answers_consumed` vs
+`ABSORPTION_CAP_PER_MOMENT` (2, per-landing-hit, regardless of who fired). Standing defenses
+(absorb/reflect/blink — their own `reactive_anima_cost`, ADR-0060) sit outside both budgets.
+_Avoid_: reaction points, action economy (this is specifically the interpose-family reaction
+budget, not a general action-point system).
+
 **Clash**:
 The reserved combat primitive for a multi-round contest in which two sides pour magical energy into overpowering each other (the "beam-struggle" trope) — the clash of wills. Modelled by `Clash` with a flavor discriminator (CLASH / LOCK / WARD / BREAK). The word "clash" is reserved for this feature and must not name any other concept.
 _Avoid_: contest, struggle, beam struggle, push (colloquial in code for Clash's tug-of-war progress — see `clash.py` — but ambiguous with Strain and Knockback; prefer "clash"); backfire / rejection / dissonance for unrelated opposing-resonance effects

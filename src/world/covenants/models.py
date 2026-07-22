@@ -350,6 +350,17 @@ class CovenantRole(NaturalKeyMixin, AbstractSpecializedVariant, SharedMemoryMode
             "the character's capability ledger on engage; revoked on disengage."
         ),
     )
+    calls_out_windups = models.BooleanField(
+        default=False,
+        help_text=(
+            "#2637 design 6: an engaged member holding this role (or a sub-role "
+            "whose parent_role holds it — the riding rule mirrors blend_weight_for) "
+            "auto-calls out an enemy wind-up the instant it is telegraphed, at most "
+            "once per round per encounter. v1 is partially-passive: it picks THAT a "
+            "wind-up gets called, not WHICH one when several telegraph the same "
+            "round — the player-directed choice is a flagged upgrade path."
+        ),
+    )
 
     objects = CovenantRoleManager()
 

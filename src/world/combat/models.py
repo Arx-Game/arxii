@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -329,6 +329,26 @@ class ThreatPoolEntry(SharedMemoryModel):
     )
     minimum_phase = models.PositiveIntegerField(null=True, blank=True)
     cooldown_rounds = models.PositiveIntegerField(null=True, blank=True)
+    windup_rounds = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Rounds this attack telegraphs before it lands (#2637). 0 (default) is "
+            "today's same-round behavior. > 0 creates a PendingOpponentAttack at "
+            "declaration instead of a same-round CombatOpponentAction; the attack "
+            "matures resolves_round rounds later, and can be interrupted/downgraded "
+            "by PC hits on the opponent in the meantime."
+        ),
+    )
+    windup_telegraph = models.CharField(
+        max_length=300,
+        blank=True,
+        default="",
+        help_text=(
+            "Telegraph text broadcast when this wind-up is declared (#2637). Blank "
+            "falls back to a generic line ('The {opponent} begins something "
+            "enormous...') at broadcast time."
+        ),
+    )
     requires_steady = models.BooleanField(
         default=False,
         help_text="If True, this entry is skipped when the opponent is faltering "
@@ -1084,6 +1104,15 @@ class CombatParticipant(SharedMemoryModel):
         choices=ParticipantStatus.choices,
         default=ParticipantStatus.ACTIVE,
     )
+    reactions_used = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Reactions (e.g. INTERPOSE fires) this participant has spent this round "
+            "(#2639). Reset to 0 in begin_declaration_phase. Gated against "
+            "combat.constants.REACTIONS_PER_ROUND at the reaction fire seam "
+            "(_dispatch_interpose_action)."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -1398,9 +1427,101 @@ class CombatOpponentAction(SharedMemoryModel):
         "opponents. Exactly one of targets / opponent_targets is populated per "
         "action — the participant pool when it has hostile PCs, else this.",
     )
+    damage_scale = models.FloatField(
+        default=1.0,
+        help_text=(
+            "Multiplier applied to threat_entry.base_damage on resolution (#2637). "
+            "1.0 (default) is today's unscaled behavior. A matured wind-up "
+            "(PendingOpponentAttack) sets this from its downgrade ladder — "
+            "x(1 - 0.25*downgrades), floored at x0.25 — so a wrecked telegraph "
+            "lands weaker without touching the authored ThreatPoolEntry row."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.opponent.name} Round {self.round_number}: {self.threat_entry.name}"
+
+
+class PendingOpponentAttack(SharedMemoryModel):
+    """A telegraphed NPC attack winding up before it lands (#2637).
+
+    Created by ``world.combat.services._build_opponent_round_actions`` at NPC
+    declaration when the chosen ``ThreatPoolEntry.windup_rounds > 0``, INSTEAD
+    of a same-round ``CombatOpponentAction``. Matured by
+    ``world.combat.services._mature_pending_opponent_attacks`` at the top of
+    ``resolve_round`` once ``resolves_round`` is reached: fizzles outright at
+    ``downgrades >= 3`` (the "perfect chain" — F-6c), else synthesizes a real
+    ``CombatOpponentAction`` (``damage_scale`` carrying the downgrade ladder)
+    that the normal NPC-resolution pipeline resolves unmodified, then deletes
+    this row either way.
+
+    Clones the deferred-then-reactive shape of ``world.scenes.models.
+    PendingSuddenHarm`` (#1316) rather than importing it — that model is a
+    single-round out-of-combat bystander harm; this one is a multi-round,
+    combat-native, interceptible telegraph with its own maturation and
+    downgrade bookkeeping.
+    """
+
+    encounter = models.ForeignKey(
+        CombatEncounter,
+        on_delete=models.CASCADE,
+        related_name="pending_opponent_attacks",
+    )
+    opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        related_name="pending_attacks",
+    )
+    threat_entry = models.ForeignKey(
+        ThreatPoolEntry,
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    target = models.ForeignKey(
+        CombatParticipant,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="v1 single-target. Null when the entry is room-targeting.",
+    )
+    declared_round = models.PositiveIntegerField(
+        help_text="The round this wind-up was declared/telegraphed.",
+    )
+    resolves_round = models.PositiveIntegerField(
+        help_text="The round this wind-up matures and resolves. Always > declared_round.",
+    )
+    called_out = models.BooleanField(
+        default=False,
+        help_text=(
+            "Auto-called by a flagged CovenantRole.calls_out_windups engaged "
+            "member at most once per round per encounter (#2637 design 6). A "
+            "called-out wind-up's interception downgrade is +2 instead of +1."
+        ),
+    )
+    downgrades = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Interception hits landed on the winding-up opponent before maturation. "
+            ">= 3 fully cancels the attack; otherwise scales its damage down."
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["resolves_round", "pk"]
+        constraints = [
+            models.CheckConstraint(
+                check=Q(resolves_round__gt=F("declared_round")),
+                name="pendingopponentattack_resolves_after_declared",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"PendingOpponentAttack({self.opponent.name}: {self.threat_entry.name}, "
+            f"resolves round {self.resolves_round})"
+        )
 
 
 # =============================================================================

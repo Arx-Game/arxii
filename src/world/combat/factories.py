@@ -56,6 +56,7 @@ from world.combat.models import (
     EngagementLock,
     EscalationCurve,
     OpponentTierTemplate,
+    PendingOpponentAttack,
     RiskScalingModifier,
     StakesLevelRequirement,
     StrainConfig,
@@ -335,6 +336,21 @@ class CombatOpponentActionFactory(factory_django.DjangoModelFactory):
     opponent = factory.SubFactory(CombatOpponentFactory)
     round_number = 1
     threat_entry = factory.SubFactory(ThreatPoolEntryFactory)
+
+
+class PendingOpponentAttackFactory(factory_django.DjangoModelFactory):
+    """Factory for PendingOpponentAttack (#2637)."""
+
+    class Meta:
+        model = PendingOpponentAttack
+
+    encounter = factory.SubFactory(CombatEncounterFactory)
+    opponent = factory.SubFactory(CombatOpponentFactory)
+    threat_entry = factory.SubFactory(ThreatPoolEntryFactory)
+    target = None
+    declared_round = 1
+    resolves_round = 2
+    called_out = False
 
 
 # =============================================================================

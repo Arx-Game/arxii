@@ -349,6 +349,47 @@ ELEVATION_ADVANTAGE_TARGET_NAME: str = "elevation_advantage"
 INTERPOSE_BASE_FATIGUE_COST: int = 3
 
 # ---------------------------------------------------------------------------
+# Reaction economy (#2639)
+# ---------------------------------------------------------------------------
+
+# How many reactions (e.g. INTERPOSE fires) a single CombatParticipant may
+# spend per round. Gated + incremented at the reaction fire seam
+# (_dispatch_interpose_action); reset to 0 for every participant in
+# begin_declaration_phase. A second declared reaction this round declines
+# with the same "did not fire" shape as an unaffordable/failed one.
+REACTIONS_PER_ROUND: int = 1
+
+# Per-moment absorption cap: how many interceptors may answer ONE
+# DamagePreApplyPayload (one landing hit) before further interceptors
+# decline, tracked via DamagePreApplyPayload.answers_consumed. Standing
+# defenses (absorb/reflect/blink conditions) are deliberately outside this
+# cap — they carry their own reactive costs (flagged judgment call).
+ABSORPTION_CAP_PER_MOMENT: int = 2
+
+# ---------------------------------------------------------------------------
+# Telegraphed enemy wind-ups (#2637)
+# ---------------------------------------------------------------------------
+
+# downgrades >= this many fully cancels a winding-up attack (the "perfect
+# chain" — wreck is a downgrade, cancel is earned, never automatic).
+WINDUP_FIZZLE_DOWNGRADES: int = 3
+
+# Each interception downgrade scales matured damage down by this fraction
+# (x(1 - WINDUP_DOWNGRADE_STEP * downgrades)), floored at
+# WINDUP_MIN_DAMAGE_SCALE.
+WINDUP_DOWNGRADE_STEP: float = 0.25
+WINDUP_MIN_DAMAGE_SCALE: float = 0.25
+
+# A called-out wind-up's interception adds this many downgrades per landing
+# hit instead of the blind default of 1 (called-out beats blind, F-6c).
+WINDUP_CALLED_OUT_DOWNGRADE: int = 2
+WINDUP_BLIND_DOWNGRADE: int = 1
+
+# Fallback telegraph text when ThreatPoolEntry.windup_telegraph is blank.
+# {opponent} is substituted with the opponent's display name.
+WINDUP_GENERIC_TELEGRAPH: str = "{opponent} begins something enormous..."
+
+# ---------------------------------------------------------------------------
 # Succor (#1744)
 # ---------------------------------------------------------------------------
 
