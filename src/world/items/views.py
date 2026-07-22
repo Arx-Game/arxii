@@ -592,8 +592,11 @@ class ItemInstanceViewSet(viewsets.ViewSet):
         input_serializer = UseItemSerializer(data=request.data)
         input_serializer.is_valid(raise_exception=True)
         descriptor = input_serializer.validated_data.get("descriptor", "").strip() or None
+        option_id = input_serializer.validated_data.get("option_id")
         try:
-            result = use_item(item_instance=item, user=actor, descriptor=descriptor)
+            result = use_item(
+                item_instance=item, user=actor, descriptor=descriptor, option_id=option_id
+            )
         except ItemError as exc:
             raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         return Response(

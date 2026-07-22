@@ -149,6 +149,15 @@ class MakeoverNotPermitted(ItemError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"They are not letting you restyle them."})
 
 
+class StyleChoiceRequired(ItemError):
+    """A choose-at-use cosmetic was used without a valid option choice (#2632)."""
+
+    user_message = "Choose what look you're going for first."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"Choose what look you're going for first."}
+    )
+
+
 class CraftingStationRequired(ItemError):
     """Raised when a recipe requiring a station has none active in the room (#1234)."""
 

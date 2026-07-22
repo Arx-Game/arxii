@@ -45,8 +45,8 @@ class FormTraitSeedTests(TestCase):
         seed_character_creation_dev()
         seed_character_creation_dev()
         self.assertEqual(FormTrait.objects.filter(name="hair_color").count(), 1)
-        # 7 colors + the #2632 "multihued" umbrella value.
-        self.assertEqual(FormTraitOption.objects.filter(trait__name="hair_color").count(), 8)
+        # 7 natural + 5 chromatic dye colors + multihued + prismatic (#2632).
+        self.assertEqual(FormTraitOption.objects.filter(trait__name="hair_color").count(), 14)
         for species_name in ["Human", "Khati"]:
             sp = Species.objects.get(name=species_name)
             self.assertEqual(

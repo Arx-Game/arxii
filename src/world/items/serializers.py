@@ -73,6 +73,13 @@ class UseItemSerializer(serializers.Serializer):
     """
 
     descriptor = serializers.CharField(required=False, allow_blank=True, default="")
+    option_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        default=None,
+        help_text="Chosen FormTraitOption for a choose-at-use cosmetic (#2632 — "
+        "Styling Kit style, Ariwn Lenses color). Ignored by fixed-option items.",
+    )
 
 
 class UseItemResultSerializer(serializers.Serializer):

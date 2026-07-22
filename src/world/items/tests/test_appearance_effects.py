@@ -302,3 +302,57 @@ class DescriptorFlavorTests(TestCase):
         self.assertFalse(
             PersonaTraitDescriptor.objects.filter(persona=self.persona, trait=self.trait).exists()
         )
+
+
+class ChooseAtUseTests(TestCase):
+    """Choose-at-use cosmetics: null target_option, wearer names the option (#2632)."""
+
+    def setUp(self) -> None:
+        self.trait = FormTraitFactory(name="hair_style_kit", is_cosmetic=True)
+        self.loose = FormTraitOptionFactory(trait=self.trait, name="loose")
+        self.braided = FormTraitOptionFactory(trait=self.trait, name="braided")
+        self.other_trait = FormTraitFactory(name="eye_color_kit", is_cosmetic=True)
+        self.blue = FormTraitOptionFactory(trait=self.other_trait, name="blue")
+        self.kit = ItemTemplateFactory(name="Styling Kit Test", is_consumable=False)
+        ItemTemplateAppearanceEffect.objects.create(
+            item_template=self.kit, trait=self.trait, target_option=None
+        )
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        self.form = CharacterFormFactory(character=self.character)
+        CharacterFormValueFactory(form=self.form, trait=self.trait, option=self.loose)
+        self.item = ItemInstanceFactory(
+            template=self.kit,
+            holder_character_sheet=self.sheet,
+            charges=0,
+        )
+
+    def test_chosen_option_applies(self) -> None:
+        result = use_item(item_instance=self.item, user=self.character, option_id=self.braided.pk)
+        value = self.form.values.get(trait=self.trait)
+        self.assertEqual(value.option, self.braided)
+        self.assertEqual(len(result.appearance_changes), 1)
+
+    def test_missing_choice_raises_before_any_change(self) -> None:
+        from world.items.exceptions import StyleChoiceRequired
+
+        with self.assertRaises(StyleChoiceRequired):
+            use_item(item_instance=self.item, user=self.character)
+        value = self.form.values.get(trait=self.trait)
+        self.assertEqual(value.option, self.loose)
+
+    def test_wrong_trait_option_rejected(self) -> None:
+        from world.items.exceptions import StyleChoiceRequired
+
+        with self.assertRaises(StyleChoiceRequired):
+            use_item(item_instance=self.item, user=self.character, option_id=self.blue.pk)
+
+    def test_fixed_option_template_ignores_option_id(self) -> None:
+        fixed = ItemTemplateFactory(name="Fixed Dye Test", is_consumable=True, max_charges=1)
+        ItemTemplateAppearanceEffect.objects.create(
+            item_template=fixed, trait=self.trait, target_option=self.braided
+        )
+        item = ItemInstanceFactory(template=fixed, holder_character_sheet=self.sheet, charges=1)
+        use_item(item_instance=item, user=self.character, option_id=self.blue.pk)
+        value = self.form.values.get(trait=self.trait)
+        self.assertEqual(value.option, self.braided)

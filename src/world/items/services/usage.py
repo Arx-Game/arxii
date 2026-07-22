@@ -21,7 +21,12 @@ from world.checks.consequence_resolution import (
 )
 from world.checks.types import ResolutionContext
 from world.items.constants import OwnershipEventType
-from world.items.exceptions import ItemNotUsable, MakeoverNotPermitted, NoChargesRemaining
+from world.items.exceptions import (
+    ItemNotUsable,
+    MakeoverNotPermitted,
+    NoChargesRemaining,
+    StyleChoiceRequired,
+)
 from world.items.models import EquippedItem, ItemInstance, OwnershipEvent
 from world.items.types import UseItemResult
 
@@ -135,6 +140,7 @@ def use_item(
     user: ObjectDB,
     target: ObjectDB | None = None,
     descriptor: str | None = None,
+    option_id: int | None = None,
 ) -> UseItemResult:
     """Use an item with an on-use pool: apply its effects (deterministic when the
     template has no on_use_check_type, else check-gated). Consumables spend one
@@ -145,7 +151,12 @@ def use_item(
     for the restyled trait — "raven shot through with silver streaks" over a
     normalized hair color, the multi-color/ornate-work channel. An appearance
     use REPLACES the trait's presentation: the descriptor becomes the given
-    text, or is cleared when none is given (you dyed over the old look)."""
+    text, or is cleared when none is given (you dyed over the old look).
+
+    ``option_id`` (#2632) selects the target value for a CHOOSE-AT-USE cosmetic
+    (an appearance effect with a null ``target_option`` — the one Styling Kit
+    picks the style; Ariwn Lenses take "a drop of dye" in any color). Required
+    for such items; ignored for fixed-option cosmetics."""
     locked = ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
     template = locked.template
     has_appearance_effects = template.appearance_effects.exists()
@@ -163,6 +174,12 @@ def use_item(
     # so a refused makeover never burns a dye.
     if has_appearance_effects and target is not None and target != user:
         _require_makeover_consent(user, target)
+
+    # Choose-at-use cosmetics (#2632): resolve the chosen option BEFORE any
+    # charge is spent, so a missing/invalid choice never burns a use.
+    chosen_option = (
+        _resolve_choose_at_use_option(template, option_id) if has_appearance_effects else None
+    )
 
     context = ResolutionContext(character=user, target=target)
     check_result = None
@@ -197,7 +214,9 @@ def use_item(
         destroyed = False
         soft_deleted = False
 
-    appearance_changes = _apply_appearance_effects(template, user, target, descriptor)
+    appearance_changes = _apply_appearance_effects(
+        template, user, target, descriptor, chosen_option
+    )
 
     _apply_disguise_kit_effects(template, user, locked)
 
@@ -246,11 +265,37 @@ def _require_makeover_consent(user: ObjectDB, target: ObjectDB) -> None:
         raise MakeoverNotPermitted
 
 
+def _resolve_choose_at_use_option(
+    template: ItemTemplate, option_id: int | None
+) -> FormTraitOption | None:
+    """Resolve the chosen option for a choose-at-use cosmetic (#2632).
+
+    A choose-at-use effect (null ``target_option``) requires ``option_id`` to
+    name an option OF THAT EFFECT'S TRAIT; fixed-option templates ignore
+    ``option_id`` entirely. Raises StyleChoiceRequired on a missing or
+    mismatched choice — callers run this before spending any charge.
+    """
+    from world.forms.models import FormTraitOption  # noqa: PLC0415
+
+    open_effect = template.appearance_effects.filter(target_option__isnull=True).first()
+    if open_effect is None:
+        return None
+    option = (
+        FormTraitOption.objects.filter(pk=option_id, trait_id=open_effect.trait_id).first()
+        if option_id is not None
+        else None
+    )
+    if option is None:
+        raise StyleChoiceRequired
+    return option
+
+
 def _apply_appearance_effects(
     template: ItemTemplate,
     user: ObjectDB,
     target: ObjectDB | None = None,
     descriptor: str | None = None,
+    chosen_option: FormTraitOption | None = None,
 ) -> list[tuple[FormTrait, FormTraitOption]]:
     """Apply cosmetic appearance effects declared on the item template.
 
@@ -279,11 +324,14 @@ def _apply_appearance_effects(
     actor_persona = active_persona_for_sheet(actor_sheet) if actor_sheet is not None else persona
     changes = []
     for effect in effects:
+        applied_option = effect.target_option or chosen_option
+        if applied_option is None:
+            continue  # choose-at-use with no resolution; use_item validated earlier
         try:
             change_appearance(
                 recipient,
                 effect.trait,
-                effect.target_option,
+                applied_option,
                 persona=persona,
                 actor_persona=actor_persona,
                 # Replace-or-clear (#2632): the use's flavor text, or "" so a
@@ -291,7 +339,7 @@ def _apply_appearance_effects(
                 descriptor=(descriptor or "").strip(),
                 note=template.name,
             )
-            changes.append((effect.trait, effect.target_option))
+            changes.append((effect.trait, applied_option))
         except NonCosmeticTraitError:
             pass  # defense-in-depth; clean() should prevent this
     return changes
