@@ -106,3 +106,17 @@ predicate leaf (`world.predicates.predicates`) — no bespoke FK. Seeded via
 a fresh DB, but granting it to a character is lore-repo quest content, not
 this seed's job. _Avoid_: a new `required_achievement` FK — `eligibility_rule`
 is already the offer-visibility predicate for every `NPCServiceOffer` kind.
+
+**Recorded Profile** (`RecordedProfile`, #2632):
+A profile "written" by an Archive scholar — in fact player-authored prose, paid for as a
+PROFILE_RECORDING offer sitting. Completing the write-up sets the character's current
+physical description (via `character_sheets.set_physical_description`, THE desc seam) and
+archives the text forever with IC-date + Era stamps: desc history, in-world. Persona-scoped.
+_Avoid_: desc snapshot, description version (that's `ProfileTextVersion`, which is the
+background/personality history — a different surface).
+
+**Styling Offer** (`StylingOfferDetails`, #2632):
+A menu-driven NPC restyle: one offer per (cosmetic trait, option) because the interaction
+machinery has no free-input channel. Charges the purse, then applies through the same
+`change_appearance` seam dyes and PC stylists use.
+_Avoid_: makeover request, salon job.

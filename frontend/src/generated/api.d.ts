@@ -14190,6 +14190,73 @@ export interface paths {
     patch: operations['npc_services_permit_details_partial_update'];
     trace?: never;
   };
+  '/api/npc-services/recorded-profiles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A player's Archive profile sittings (#2632).
+     *
+     *     Lists the caller's own personas' recorded profiles (COMMISSIONED sittings
+     *     + the permanent RECORDED archive). ``complete`` finalizes a COMMISSIONED
+     *     sitting with the write-up text — it becomes the character's current
+     *     description and archives forever. Public in-world Archive browsing is a
+     *     future surface; this endpoint is owner-scoped.
+     */
+    get: operations['npc_services_recorded_profiles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/recorded-profiles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description A player's Archive profile sittings (#2632).
+     *
+     *     Lists the caller's own personas' recorded profiles (COMMISSIONED sittings
+     *     + the permanent RECORDED archive). ``complete`` finalizes a COMMISSIONED
+     *     sitting with the write-up text — it becomes the character's current
+     *     description and archives forever. Public in-world Archive browsing is a
+     *     future surface; this endpoint is owner-scoped.
+     */
+    get: operations['npc_services_recorded_profiles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/recorded-profiles/{id}/complete/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Finalize a commissioned sitting with the player-written profile text. */
+    post: operations['npc_services_recorded_profiles_complete_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/npc-services/roles/': {
     parameters: {
       query?: never;
@@ -27305,6 +27372,8 @@ export interface components {
        *     * `asset_task_collect` - Asset Task: Collect
        *     * `train` - Train
        *     * `settle_obligation` - Settle Obligation
+       *     * `styling` - Styling
+       *     * `profile_recording` - Profile Recording
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -27350,6 +27419,8 @@ export interface components {
      *     * `asset_task_collect` - Asset Task: Collect
      *     * `train` - Train
      *     * `settle_obligation` - Settle Obligation
+     *     * `styling` - Styling
+     *     * `profile_recording` - Profile Recording
      * @enum {string}
      */
     NPCServiceOfferKindEnum:
@@ -27368,7 +27439,9 @@ export interface components {
       | 'asset_task_intel'
       | 'asset_task_collect'
       | 'train'
-      | 'settle_obligation';
+      | 'settle_obligation'
+      | 'styling'
+      | 'profile_recording';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -27390,6 +27463,8 @@ export interface components {
        *     * `asset_task_collect` - Asset Task: Collect
        *     * `train` - Train
        *     * `settle_obligation` - Settle Obligation
+       *     * `styling` - Styling
+       *     * `profile_recording` - Profile Recording
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -29818,6 +29893,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['ReactionEmoji'][];
     };
+    PaginatedRecordedProfileList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RecordedProfile'][];
+    };
     PaginatedRelationshipCapstoneList: {
       /** @example 123 */
       count: number;
@@ -31504,6 +31594,8 @@ export interface components {
        *     * `asset_task_collect` - Asset Task: Collect
        *     * `train` - Train
        *     * `settle_obligation` - Settle Obligation
+       *     * `styling` - Styling
+       *     * `profile_recording` - Profile Recording
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -33455,6 +33547,40 @@ export interface components {
       valence?: components['schemas']['ValenceEnum'];
       sort_order?: number;
     };
+    /** @description A character's Archive profile sittings + recorded history (#2632). */
+    RecordedProfile: {
+      readonly id: number;
+      /** @description The persona whose profile was recorded. */
+      readonly persona: number;
+      readonly persona_name: string;
+      readonly status: components['schemas']['RecordedProfileStatusEnum'];
+      /** @description The recorded profile prose (player-written, diegetically NPC-authored). */
+      readonly text: string;
+      /** @description Display name of the recording scholar/institution. */
+      readonly recorded_by_label: string;
+      /** @description Coppers paid for the sitting. */
+      readonly price_paid: number;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly recorded_at: string | null;
+      /**
+       * Format: date-time
+       * @description IC datetime when the write-up was finalized.
+       */
+      readonly ic_date: string | null;
+      readonly era_season_number: number | null;
+    };
+    /** @description The write-up text for a COMMISSIONED sitting (#2632). */
+    RecordedProfileCompleteRequest: {
+      text: string;
+    };
+    /**
+     * @description * `commissioned` - Commissioned
+     *     * `recorded` - Recorded
+     * @enum {string}
+     */
+    RecordedProfileStatusEnum: 'commissioned' | 'recorded';
     /** @description Serializer for redistributing relationship points between tracks. */
     RedistributeWrite: {
       target_persona_id: number;
@@ -57238,6 +57364,80 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PermitOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_recorded_profiles_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        persona?: number;
+        status?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRecordedProfileList'];
+        };
+      };
+    };
+  };
+  npc_services_recorded_profiles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Recorded Profile. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RecordedProfile'];
+        };
+      };
+    };
+  };
+  npc_services_recorded_profiles_complete_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Recorded Profile. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RecordedProfileCompleteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RecordedProfile'];
         };
       };
     };
