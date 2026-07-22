@@ -1,12 +1,13 @@
 /**
  * UpdatesTab (#2631) — the character sheet's Updates & History section.
  *
- * Everyone who can see the sheet sees the prose version timeline (the server
- * gates true-profile history on reveal_identity — this component never
- * re-implements privacy client-side). The owner additionally gets the
- * update-request form (profile prose rewrite or distinction change, routed to
- * their table GM), their request list with withdraw, and Accept buttons for
- * approved distinction changes.
+ * The prose version timeline is owner/staff-only by default (the server
+ * returns an empty list for everyone else — this component never
+ * re-implements privacy client-side; it only hides the empty section for
+ * non-owners so strangers don't see a pointless header). The owner
+ * additionally gets the update-request form (profile prose rewrite or
+ * distinction change, routed to their table GM), their request list with
+ * withdraw, and Accept buttons for approved distinction changes.
  */
 
 import { useMemo, useState } from 'react';
@@ -75,7 +76,13 @@ function formatStamp(version: {
   return parts.join(' · ');
 }
 
-function VersionTimeline({ characterId }: { characterId: number }) {
+function VersionTimeline({
+  characterId,
+  showEmptyState,
+}: {
+  characterId: number;
+  showEmptyState: boolean;
+}) {
   const { data: versions, isLoading } = useProfileTextVersionsQuery(characterId);
 
   if (isLoading) {
@@ -86,7 +93,13 @@ function VersionTimeline({ characterId }: { characterId: number }) {
     );
   }
   if (!versions || versions.length === 0) {
-    return <p className="py-4 text-center text-muted-foreground">No recorded history yet.</p>;
+    if (!showEmptyState) return null;
+    return (
+      <section className="space-y-2">
+        <h3 className="text-xl font-semibold">Sheet history</h3>
+        <p className="py-4 text-center text-muted-foreground">No recorded history yet.</p>
+      </section>
+    );
   }
 
   const byField = new Map<string, typeof versions>();
@@ -98,6 +111,7 @@ function VersionTimeline({ characterId }: { characterId: number }) {
 
   return (
     <div className="space-y-6" data-testid="profile-version-timeline">
+      <h3 className="text-xl font-semibold">Sheet history</h3>
       {[...byField.entries()].map(([field, fieldVersions]) => (
         <section key={field} className="space-y-2">
           <h4 className="text-lg font-semibold capitalize">{field}</h4>
@@ -435,10 +449,7 @@ export function UpdatesTab({ characterId, isMyCharacter }: Props) {
         </section>
       )}
 
-      <section className="space-y-2">
-        <h3 className="text-xl font-semibold">Sheet history</h3>
-        <VersionTimeline characterId={characterId} />
-      </section>
+      <VersionTimeline characterId={characterId} showEmptyState={isMyCharacter} />
     </div>
   );
 }

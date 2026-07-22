@@ -1504,8 +1504,8 @@ Character identity, appearance, demographics, and guise system.
   original on the first post-CG write; admin edits route through it via
   `ProfileAdmin.save_model`), `Heritage`, `Gender`, `Pronouns`
 - **API:** `GET /api/character-sheets/{pk}/profile-text-versions/` — the prose-history
-  timeline; gated on `reveal_identity` so a presented cover never leaks true-profile
-  history; entries carry era/IC-date stamps + the applying request's reasoning caption
+  timeline; **owner/staff-only by default** (#2631 ruling — everyone else gets an empty
+  list); entries carry era/IC-date stamps + the applying request's reasoning caption
 - **Integrates with:** roster (character management), character_creation (sheet setup),
   gm (table update requests apply prose rewrites), stories (`Era` stamps)
 - **Source:** `src/world/character_sheets/`

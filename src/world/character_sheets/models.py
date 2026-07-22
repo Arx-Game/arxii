@@ -202,8 +202,9 @@ class ProfileTextVersion(SharedMemoryModel):
     version (not diffs). The first post-CG write also captures the CG-approved
     original as the initial row, so the earliest version is always the CG text.
 
-    Stamped with the IC datetime and active Era (season) at write time so a
-    roster browser reads the character's textual history as an in-world arc.
+    Stamped with the IC datetime and active Era (season) at write time so the
+    timeline reads as an in-world arc. Visible to owner and staff only by
+    default (#2631 ruling) — the API returns an empty list to anyone else.
     Finer narrative context (which story/chapter) derives from the causing
     request via the reverse link on ``gm.ProfileTextRequestDetails.applied_version``.
     """

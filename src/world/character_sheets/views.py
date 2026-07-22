@@ -25,8 +25,6 @@ from world.character_sheets.serializers import (
     OriginSlotClearSerializer,
     OriginSlotInputSerializer,
     ProfileTextVersionSerializer,
-    _resolve_active_persona,
-    _resolve_presented_identity,
     _viewer_is_privileged,
     get_character_sheet_queryset,
 )
@@ -111,21 +109,17 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
     def profile_text_versions(self, request: Request, pk: int | None = None) -> Response:
         """The sheet's prose-history timeline (#2631) — all versioned fields at once.
 
-        Only viewers who see the TRUE profile (owner/staff/revealed identity)
-        get history: a cover persona presents a fabricated bio, and serving
-        the real profile's past here would de-anonymize it. Non-revealed
-        viewers get an empty list, indistinguishable from "no history yet".
+        Owner and staff only (per the #2631 ruling): past versions are the
+        character's private history by default, stricter than the current
+        text's own visibility. Everyone else gets an empty list,
+        indistinguishable from "no history yet". (A player-controlled
+        openness tier could relax this later via the SheetVisibility
+        machinery — deliberately not built now.)
         """
         from world.gm.models import ProfileTextRequestDetails  # noqa: PLC0415
 
         sheet = self.get_object()
-        user = request.user
-        privileged = _viewer_is_privileged(sheet, user)
-        active = _resolve_active_persona(sheet)
-        _display_name, reveal_identity = _resolve_presented_identity(
-            sheet, active, user, privileged
-        )
-        if not reveal_identity:
+        if not _viewer_is_privileged(sheet, request.user):
             return Response([])
 
         versions = list(

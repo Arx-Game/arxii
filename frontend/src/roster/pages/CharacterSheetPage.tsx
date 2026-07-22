@@ -124,7 +124,7 @@ export function CharacterSheetPage() {
           <TabsTrigger value="reputation">Reputation</TabsTrigger>
           <TabsTrigger value="titles">Titles</TabsTrigger>
           <TabsTrigger value="distinctions">Distinctions</TabsTrigger>
-          <TabsTrigger value="updates">Updates</TabsTrigger>
+          {isMyCharacter && <TabsTrigger value="updates">Updates</TabsTrigger>}
           <TabsTrigger value="magic">Magic</TabsTrigger>
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
           {isMyCharacter && <TabsTrigger value="clues">Clues</TabsTrigger>}
@@ -202,9 +202,9 @@ export function CharacterSheetPage() {
         </TabsContent>
 
         <TabsContent value="updates" className="space-y-4">
-          {/* Ungated (#2631): the version-history endpoint gates true-profile history on
-              reveal_identity server-side, so every viewer sees this tab; the submit form and
-              request list render only for the owner. character.id is the CharacterSheet pk. */}
+          {/* Owner-gated (#2631 ruling): past sheet versions are owner/staff-only by default —
+              the endpoint returns [] for anyone else, and staff read history via admin.
+              character.id is the CharacterSheet pk. */}
           <UpdatesTab characterId={entry.character.id} isMyCharacter={isMyCharacter} />
         </TabsContent>
 

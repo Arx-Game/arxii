@@ -37,9 +37,18 @@ class ProfileTextVersionEndpointTests(TestCase):
         assert "The CG original." in texts
         assert "The rewrite." in texts
 
-    def test_other_player_sees_public_primary_timeline(self):
+    def test_other_player_gets_empty_history(self):
         stranger = AccountFactory()
         self.client.force_authenticate(user=stranger)
+        response = self.client.get(self.url)
+        assert response.status_code == 200, response.content[:800]
+        assert response.data == []
+
+    def test_staff_sees_timeline(self):
+        staff = AccountFactory()
+        staff.is_staff = True
+        staff.save()
+        self.client.force_authenticate(user=staff)
         response = self.client.get(self.url)
         assert response.status_code == 200, response.content[:800]
         assert len(response.data) == 2
