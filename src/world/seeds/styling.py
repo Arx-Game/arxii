@@ -26,6 +26,9 @@ _COSMETIC_TEMPLATES: tuple[tuple[str, str, str, bool], ...] = (
     ("Vermilion Hair Dye PLACEHOLDER", "hair_color", "red", True),
     ("Braiding Kit PLACEHOLDER", "hair_style", "braided", True),
     ("Enchanted Azure Lenses PLACEHOLDER", "eye_color", "blue", False),
+    # #2632 multi-color: sets the umbrella "multihued" value; the use's
+    # descriptor text carries the actual streak/design work.
+    ("Prismatic Dye PLACEHOLDER", "hair_color", "multihued", True),
 )
 
 
