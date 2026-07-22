@@ -68,6 +68,19 @@ MENTOR_BOND_ADJACENCY_OFFSET = 1
 MENTOR_BOND_MAX_SIDEKICKS: int | None = None
 
 
+class InsightTargetKind(models.TextChoices):
+    """Who an ``InsightTableEntry``'s condition lands on (#2645).
+
+    SELF -> the Know caster. ALLY -> the cast's declared ally target, falling
+    back to the caster when the cast declared none. TEAM -> every ACTIVE
+    PC-side ``CombatParticipant`` in the encounter.
+    """
+
+    SELF = "self", "Self"
+    ALLY = "ally", "Ally"
+    TEAM = "team", "Team"
+
+
 class DefenseStyle(models.TextChoices):
     """How a covenant vow defends (#2533, Layer 3).
 

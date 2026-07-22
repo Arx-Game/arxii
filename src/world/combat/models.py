@@ -1084,6 +1084,14 @@ class CombatParticipant(SharedMemoryModel):
         choices=ParticipantStatus.choices,
         default=ParticipantStatus.ACTIVE,
     )
+    insight_used = models.BooleanField(
+        default=False,
+        help_text=(
+            "#2645: True once this participant has produced their once-per-encounter "
+            "Insight (the Know need's ace). A per-encounter row needs no reset "
+            "machinery — a fresh encounter mints a fresh CombatParticipant."
+        ),
+    )
 
     class Meta:
         constraints = [

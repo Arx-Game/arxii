@@ -12,6 +12,7 @@ from world.covenants.constants import (
     MENTOR_BOND_MAX_SIDEKICKS,
     CovenantType,
     DefenseStyle,
+    InsightTargetKind,
     MentorBondAdjusted,
 )
 from world.covenants.models import (
@@ -29,6 +30,7 @@ from world.covenants.models import (
     CovenantRoleDefenseProfile,
     CovenantRoleTechniqueSpecialty,
     GearArchetypeCompatibility,
+    InsightTableEntry,
     MentorBond,
     MentorBondConfig,
     VowSituationalPerk,
@@ -184,6 +186,21 @@ class VowSituationalPerkRungFactory(factory_django.DjangoModelFactory):
     rung_number = 1
     extra_situation = Situation.ALLY_LOW_HEALTH
     magnitude_tenths = 20
+
+
+class InsightTableEntryFactory(factory_django.DjangoModelFactory):
+    """Factory for InsightTableEntry (#2645). Test-only — real entries are lore-repo content."""
+
+    class Meta:
+        model = InsightTableEntry
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Insight Entry {n}")
+    prose = "{caster} reads the fight and shares it with {target}!"
+    condition = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
+    target_kind = InsightTargetKind.ALLY
+    weight = 1
+    is_active = True
 
 
 class CovenantFactory(factory_django.DjangoModelFactory):

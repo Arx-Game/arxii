@@ -260,6 +260,23 @@ queries when nothing is disengaged. (#2536 slice 3, Task 7, ADR-0153.)
 _Avoid_: fired perk, live firing (the opposite concept — a Dormant Perk Firing is exactly the
 firing that did NOT happen).
 
+**Insight (the)**:
+The Know need's (scout/loremaster vows) once-per-fight ace (#2645). A character with an
+engaged `CovenantRole.grants_insight` role, casting a PERCEPTION-tagged technique in combat,
+reads the fight and shares one entry drawn at random from the curated `InsightTableEntry`
+table with an ally, the team, or themself — installing a large, narrowly-scoped, ONE-ROUND
+condition. Once per encounter (`CombatParticipant.insight_used`); rides the existing cast per
+the riding rule (no new button) — the skill expression is TIMING, holding the ace for the
+moment that turns the fight. **Never instant-win** — that ceiling belongs to the audere arc;
+enforced editorially by curation of the authored `condition` rows, not by any engine check.
+Heavy, rare, and specific — distinct in weight from the light "Look out!" callout (#2637),
+which is frequent/small/names-no-counter. Not a `VowSituationalPerk` (a deterministic,
+always-on situational bonus) — the Insight is a single random draw, gated by a boolean role
+flag, not the Layer 4 perk machinery above.
+_Avoid_: situational perk, dormant vow (a different mechanism entirely — the Insight has no
+dormant/disengaged variant, it simply doesn't fire off a disengaged role); "Look out!" callout
+(the light, frequent sibling — see #2637, not this ace).
+
 **Covenant Rank**:
 The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals / request-gm. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).
 _Avoid_: role, level.

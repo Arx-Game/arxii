@@ -735,6 +735,48 @@ gear-friendly one's fraction, not a stack of fractions. Durability still wears o
 every compatible piece whose (now-scaled) soak contributes to the result,
 unchanged from #1174.
 
+### The Insight rider (#2645)
+
+The Know need's (scout/loremaster vows) once-per-fight ace. `InsightTableEntry`
+(NK `["name"]`, `covenants.insighttableentry` in `CONTENT_MODELS` — lore-repo
+content, never seeded in arxii) is a curated table of large, narrowly-scoped,
+ONE-ROUND effects: `prose` (announced reading, `{caster}`/`{target}`
+placeholders), `condition` FK → `conditions.ConditionTemplate` (PROTECT —
+author a one-round `default_duration_value` on the condition itself),
+`target_kind` (`InsightTargetKind`: SELF/ALLY/TEAM), `weight`
+(weighted-random draw), `is_active`. **Never instant-win** — enforced
+editorially by curation of the `condition` rows, not an engine check.
+
+`CovenantRole.grants_insight` (BooleanField) is the rider flag — an engaged
+role grants it, and a sub-role without its own grant rides an engaged
+parent's (mirrors every other role-scoped flag in this table).
+`CombatParticipant.insight_used` (`world.combat.models`) is the once-per-
+encounter stamp — a per-encounter row needs no reset machinery.
+
+`world.covenants.insight.maybe_produce_insight(caster_sheet, technique,
+resolution_participant) -> bool` is the rider service, hooked into
+`world.combat.services._resolve_pc_action` right after a focused technique
+cast resolves (`_maybe_produce_insight_for_cast`, best-effort/failure-
+isolated like the sibling `_maybe_suggest_entrance_dramatic_moment`). Fires
+when: the resolved technique carries the PERCEPTION `magic.TechniqueFunctionTag`;
+the caster has an active engaged `CharacterCovenantRole` whose role (or that
+role's parent) has `grants_insight=True`; and the participant hasn't used
+their Insight this encounter. On success: draws a weighted-random active
+entry, resolves targets by `target_kind` (ALLY → the cast's declared
+`CombatRoundAction.focused_ally_target`, falling back to the caster; TEAM →
+every ACTIVE `CombatParticipant` in the encounter; SELF → the caster),
+applies the entry's condition via `conditions.services.apply_condition`
+(`source_character=caster`), announces the entry's prose on BOTH channels
+(`combat.interaction_services.broadcast_action_outcome` for the WS payload +
+a direct `encounter.room.msg_contents` call for telnet parity — mirrors
+`world.combat.escalation`'s room-wide surge narration), and stamps
+`insight_used=True`.
+
+Distinct in weight from the light "Look out!" callout (#2637): the callout
+is frequent/small/names-no-counter; the Insight is rare/large/specific. Not
+a `VowSituationalPerk` — the Insight is a single random draw gated by a
+boolean role flag, not the deterministic Layer 4 perk machinery above.
+
 ### Encounter scaling (#1165)
 
 `compute_party_profile` (in `world/combat/scaling.py`) calls `effective_combat_level`
