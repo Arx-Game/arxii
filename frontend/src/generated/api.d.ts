@@ -3127,6 +3127,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/profile-text-versions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The sheet's prose-history timeline (#2631) — all versioned fields at once.
+     *
+     *     Owner and staff only (per the #2631 ruling): past versions are the
+     *     character's private history by default, stricter than the current
+     *     text's own visibility. Everyone else gets an empty list,
+     *     indistinguishable from "no history yet". (A player-controlled
+     *     openness tier could relax this later via the SheetVisibility
+     *     machinery — deliberately not built now.)
+     */
+    get: operations['character_sheets_profile_text_versions_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-sheets/{id}/set-origin-slot/': {
     parameters: {
       query?: never;
@@ -5611,6 +5637,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/covenants/roles/sphinx/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/covenants/roles/sphinx/?role=<id-or-slug>
+     *
+     *     The Sphinx of Black Quartz's verdict (#2640) on the requesting
+     *     account's own active character taking up ``role``'s vow.
+     *     Self-character only, read-only — the Sphinx never gates, it informs.
+     */
+    get: operations['covenants_roles_sphinx_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/crossover-invites/': {
     parameters: {
       query?: never;
@@ -7955,6 +8004,89 @@ export interface paths {
      *     Destroy is a soft-leave — the record remains with left_at set.
      */
     patch: operations['gm_table_memberships_partial_update'];
+    trace?: never;
+  };
+  '/api/gm/table-update-requests/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Player-submitted sheet-update requests (#2631).
+     *
+     *     Players see their own requests; table GMs additionally see requests on
+     *     their tables; staff sees all. Creation validates the membership belongs to
+     *     the caller. ``signoff`` (GM) and ``withdraw`` (player) drive the state
+     *     machine through the service layer.
+     */
+    get: operations['gm_table_update_requests_list'];
+    put?: never;
+    /** @description Submit a request on one of the caller's own active memberships. */
+    post: operations['gm_table_update_requests_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/table-update-requests/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Player-submitted sheet-update requests (#2631).
+     *
+     *     Players see their own requests; table GMs additionally see requests on
+     *     their tables; staff sees all. Creation validates the membership belongs to
+     *     the caller. ``signoff`` (GM) and ``withdraw`` (player) drive the state
+     *     machine through the service layer.
+     */
+    get: operations['gm_table_update_requests_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/table-update-requests/{id}/signoff/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Approve or reject a pending request (table GM or staff). */
+    post: operations['gm_table_update_requests_signoff_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/table-update-requests/{id}/withdraw/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Withdraw the caller's own pending request. */
+    post: operations['gm_table_update_requests_withdraw_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/gm/tables/': {
@@ -23055,6 +23187,20 @@ export interface components {
       /** @description Order in which to display this category (lower = first). */
       readonly display_order: number;
     };
+    /** @description Read payload for DISTINCTION_CHANGE requests (#2631, on the #2628 engine). */
+    DistinctionChangeRequestDetails: {
+      /** @description A distinctions.SheetUpdateRequestType value (distinction_add/distinction_remove). */
+      readonly action: string;
+      /** @description The distinction to add/rank up (DISTINCTION_ADD only). */
+      readonly distinction: number | null;
+      readonly distinction_name: string | null;
+      /** @description The held distinction to remove (DISTINCTION_REMOVE only; nulls after deletion). */
+      readonly character_distinction: number | null;
+      readonly held_distinction_name: string | null;
+      /** @description The #2628 request created-and-approved at table sign-off. */
+      readonly sheet_update_request: number | null;
+      readonly xp_cost: number | null;
+    };
     /** @description Full serializer for Distinction detail views. */
     DistinctionDetail: {
       readonly id: number;
@@ -24246,6 +24392,12 @@ export interface components {
       percentage: number;
       zone: components['schemas']['ZoneEnum'];
     };
+    /**
+     * @description * `background` - Background
+     *     * `personality` - Personality
+     * @enum {string}
+     */
+    FieldEnum: 'background' | 'personality';
     /** @description Serializer for creating a first impression. */
     FirstImpressionWrite: {
       target_persona_id: number;
@@ -24571,8 +24723,11 @@ export interface components {
     GMTableMembership: {
       readonly id: number;
       table: number;
+      readonly table_name: string;
       persona: number;
       readonly persona_name: string;
+      /** @description The persona's CharacterSheet pk (#2631 — lets the sheet page find the viewer's memberships for the update-request form). */
+      readonly character_sheet: number;
       /** Format: date-time */
       readonly joined_at: string;
       /** Format: date-time */
@@ -25886,6 +26041,12 @@ export interface components {
      * @enum {string}
      */
     Kind989Enum: 'wall' | 'gate' | 'battlement' | 'hull';
+    /**
+     * @description * `profile_text` - Profile Text
+     *     * `distinction_change` - Distinction Change
+     * @enum {string}
+     */
+    KindF82Enum: 'profile_text' | 'distinction_change';
     /** @description One known secret, from the viewer's side, with locked layers shown as "Unknown". */
     KnownSecret: {
       readonly id: number;
@@ -30317,6 +30478,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['TableBulletinReply'][];
     };
+    PaginatedTableUpdateRequestList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['TableUpdateRequest'][];
+    };
     PaginatedTechniqueList: {
       /** @example 123 */
       count: number;
@@ -32986,6 +33162,54 @@ export interface components {
      * @enum {string}
      */
     PrivacyModeEnum: 'public' | 'private' | 'ephemeral';
+    /** @description Read payload for PROFILE_TEXT requests (#2631). */
+    ProfileTextRequestDetails: {
+      /** @description A character_sheets.ProfileTextField value. */
+      readonly field: string;
+      /** @description The full replacement text (player-written). */
+      readonly proposed_text: string;
+      /** @description The field's live text — the GM's side-by-side left pane. */
+      readonly current_text: string;
+      /** @description The version row this request's approval created. */
+      readonly applied_version: number | null;
+    };
+    /**
+     * @description One entry of a sheet's prose-history timeline (#2631).
+     *
+     *     ``reasoning`` is the player's Reason: from the table update request that
+     *     applied this version — the timeline's narrative caption. Era renders as
+     *     the player-facing "Season N".
+     */
+    ProfileTextVersion: {
+      readonly id: number;
+      /**
+       * @description Which Profile prose field this version belongs to.
+       *
+       *     * `background` - Background
+       *     * `personality` - Personality
+       */
+      readonly field: components['schemas']['FieldEnum'];
+      /** @description The full field text as of this version. */
+      readonly text: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * Format: date-time
+       * @description IC datetime at write time (null if the game clock was unset).
+       */
+      readonly ic_date: string | null;
+      readonly era_season_number: number | null;
+      readonly era_display_name: string | null;
+      /**
+       * @description The applying request's player reasoning, via serializer context.
+       *
+       *     The view builds ``reasoning_by_version`` in one query — never a
+       *     prefetch onto the SharedMemoryModel instances (identity-map instances
+       *     outlive the request; a stale prefetch cache would leak across views).
+       */
+      readonly reasoning: string;
+      readonly staff_edited: boolean;
+    };
     /** @description One milestone entry in a progression stage. */
     ProgressionMilestone: {
       kind: string;
@@ -36139,6 +36363,54 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
     };
+    /** @description Read serializer for table update requests (#2631). */
+    TableUpdateRequest: {
+      readonly id: number;
+      readonly kind: components['schemas']['KindF82Enum'];
+      readonly status: components['schemas']['TableUpdateStatusEnum'];
+      /** @description The player's Reason: — why the story supports this change. */
+      readonly player_reasoning: string;
+      /** @description The GM's sign-off/rejection notes. */
+      readonly gm_notes: string;
+      readonly table: number;
+      readonly table_name: string;
+      readonly persona_name: string;
+      readonly character_sheet: number;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly resolved_at: string | null;
+      /** Format: date-time */
+      readonly completed_at: string | null;
+      readonly profile_text_details: components['schemas']['ProfileTextRequestDetails'] | null;
+      readonly distinction_details: components['schemas']['DistinctionChangeRequestDetails'] | null;
+    };
+    /** @description Create input for a table update request — kind-branched validation (#2631). */
+    TableUpdateRequestCreateRequest: {
+      membership: number;
+      kind: components['schemas']['KindF82Enum'];
+      reasoning: string;
+      field?: string;
+      proposed_text?: string;
+      action?: string;
+      distinction?: number | null;
+      character_distinction?: number | null;
+    };
+    /** @description Signoff input: the GM's yes/no + notes (#2631). */
+    TableUpdateRequestSignoffRequest: {
+      approve: boolean;
+      /** @default  */
+      notes: string;
+    };
+    /**
+     * @description * `pending` - Pending
+     *     * `approved` - Approved
+     *     * `rejected` - Rejected
+     *     * `withdrawn` - Withdrawn
+     *     * `completed` - Completed
+     * @enum {string}
+     */
+    TableUpdateStatusEnum: 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'completed';
     /** @description POST body for the tale endpoint (#2047). */
     TaleRequestRequest: {
       text: string;
@@ -41614,6 +41886,27 @@ export interface operations {
       };
     };
   };
+  character_sheets_profile_text_versions_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ProfileTextVersion'][];
+        };
+      };
+    };
+  };
   character_sheets_set_origin_slot_create: {
     parameters: {
       query?: never;
@@ -44722,6 +45015,25 @@ export interface operations {
         /** @description A unique integer value identifying this covenant role. */
         id: number;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRole'];
+        };
+      };
+    };
+  };
+  covenants_roles_sphinx_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;
@@ -48313,6 +48625,126 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['GMTableMembership'];
+        };
+      };
+    };
+  };
+  gm_table_update_requests_list: {
+    parameters: {
+      query?: {
+        kind?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        role?: string;
+        status?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedTableUpdateRequestList'];
+        };
+      };
+    };
+  };
+  gm_table_update_requests_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TableUpdateRequestCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TableUpdateRequest'];
+        };
+      };
+    };
+  };
+  gm_table_update_requests_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Table Update Request. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TableUpdateRequest'];
+        };
+      };
+    };
+  };
+  gm_table_update_requests_signoff_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Table Update Request. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TableUpdateRequestSignoffRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TableUpdateRequest'];
+        };
+      };
+    };
+  };
+  gm_table_update_requests_withdraw_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Table Update Request. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TableUpdateRequest'];
         };
       };
     };

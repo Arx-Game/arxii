@@ -116,7 +116,7 @@ An NPC opponent whose `reinforces` self-FK points at a BOSS-tier opponent. While
 `EngagementLock`, acted this round), each lieutenant slows the boss's break-bar depletion —
 the **lieutenant gate** divides a round's depletion by `1 + active_unsuppressed_reinforcers`.
 A parked/idle lieutenant (didn't act this round) never gates. This is the "suppress the court"
-half of the boss-fight's emergent three-act shape (ADR-0155).
+half of the boss-fight's emergent three-act shape (ADR-0160).
 _Avoid_: minion, add (that's the reinforcement-spawn mechanism, a different thing — a lieutenant
 is authored on the opponent row, not spawned by a phase transition), sub-boss
 
@@ -126,7 +126,7 @@ boss's break bar — `BreakContributionKind`: DAMAGE, COMBO, HOLD (a PC-side LOC
 against the boss), DEBUFF (a new behavior-altering condition landed on the boss), SUPPRESSION
 (a reinforcing lieutenant newly suppressed). Depletion is diversity-weighted: 1 unit per
 distinct (actor, kind) pair this round, doubled for a (kind, effect_type) pair's first-ever
-occurrence in the encounter — replacing the retired flat per-actor chip (ADR-0155).
+occurrence in the encounter — replacing the retired flat per-actor chip (ADR-0160).
 _Avoid_: break-bar chip/tick (the old flat mechanism's name — don't reuse for the new per-row
 audit record)
 _Avoid_: rank, level, difficulty (for the NPC's class)

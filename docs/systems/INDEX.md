@@ -649,7 +649,15 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   `ConditionStage`, `ConditionInstance` (`absorb_remaining` int nullable — Aegis Field
   absorption buffer seeded by `init_absorb_buffer`), `ConditionCapabilityEffect`,
   `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageOverTime`,
-  `ConditionDamageInteraction`, `ConditionConditionInteraction`
+  `ConditionDamageInteraction`, `ConditionConditionInteraction`, `TreatmentTemplate`
+  (`mend_on_crit`/`mend_on_success`/`mend_on_partial` PositiveSmallInt, default 0 — HP mend
+  amounts routed through `world.vitals.services.mend_wound()`, #2644; `once_per_wound_per_helper`
+  bool, default False — duplicate-attempt gate keys on the wound instance instead of the scene
+  when set), `TreatmentAttempt` (`health_mended` int, default 0 — the actual amount
+  `mend_wound()` returned, may be less than the template's `mend_on_*` value; `once_per_wound_guard`
+  bool, denormalized from `once_per_wound_per_helper` at insert time, mirrors
+  `once_per_scene_guard`'s pattern — partial `UniqueConstraint` on
+  `(helper, target_condition_instance)` where true, #2644)
 - **Lookup Tables:** `CapabilityType`, `CheckType`, `DamageType`
 - **Handlers:** `obj.conditions` (`ConditionHandler` / `CharacterConditionHandler` in
   `world/conditions/handlers.py`, installed as `@cached_property` on `ObjectParent`).
@@ -658,7 +666,8 @@ Persistent states that modify capabilities, checks, and resistances with stage p
 - **Key Functions:** `apply_condition()`, `remove_condition()`, `get_capability_status()`,
   `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`,
   `process_round_end()`, `process_damage_interactions()` (wired into combat #2018), `get_treatment_candidates()`,
-  `perform_treatment()`
+  `perform_treatment()` (routes `mend_on_*` through `world.vitals.services.mend_wound()`
+  alongside its existing severity-decay path, #2644)
 - **Perception gate (#1225):** `can_perceive(actor, target)` composes co-location with
   per-observer concealment detection (`is_concealed()`, `active_concealments()`,
   `ConditionInstance.detected_by`). Consulted by `OnUseTargetPrerequisite` (item-use targeting),
@@ -1498,8 +1507,17 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 ### Character Sheets
 Character identity, appearance, demographics, and guise system.
 
-- **Models:** `CharacterSheet`, `Heritage`, `Characteristic`, `CharacteristicValue`, `Guise`
-- **Integrates with:** roster (character management), character_creation (sheet setup)
+- **Models:** `CharacterSheet`, `Profile` (bio + lineage, #1270), `ProfileTextVersion`
+  (#2631 — snapshot-on-write history for `ProfileTextField` prose (background,
+  personality): full text per version, stamped with IC datetime + active `stories.Era`;
+  written ONLY through `services.update_profile_text`, which also captures the CG
+  original on the first post-CG write; admin edits route through it via
+  `ProfileAdmin.save_model`), `Heritage`, `Gender`, `Pronouns`
+- **API:** `GET /api/character-sheets/{pk}/profile-text-versions/` — the prose-history
+  timeline; **owner/staff-only by default** (#2631 ruling — everyone else gets an empty
+  list); entries carry era/IC-date stamps + the applying request's reasoning caption
+- **Integrates with:** roster (character management), character_creation (sheet setup),
+  gm (table update requests apply prose rewrites), stories (`Era` stamps)
 - **Source:** `src/world/character_sheets/`
 - **Details:** [character_sheets.md](character_sheets.md)
 ### Character Creation
@@ -1649,7 +1667,24 @@ GM at a given level may author (#2000, ADR-0097).
   `GM_LEVEL_ORDER` + `gm_level_index(level)` (position on the ladder, 0–4),
   `GMApplicationStatus`, `GMTableStatus`, `CatalogSuggestionProposalKind`
   (NEW_SITUATION/CHECK_FIT/DIFFICULTY_GUIDE/POOL_GUIDE/OTHER) + `PROPOSAL_KIND_MIN_LEVEL`
-  (dict: the minimum `GMLevel` required to submit each kind — Decision 9)
+  (dict: the minimum `GMLevel` required to submit each kind — Decision 9),
+  `TableRequestKind` (PROFILE_TEXT/DISTINCTION_CHANGE), `TableRequestStatus`
+  (PENDING/APPROVED/REJECTED/WITHDRAWN/COMPLETED), `TableRequestRole` (MINE/GM)
+- **Table update requests (#2631, ADR-0155):** `TableUpdateRequest` (FK
+  `GMTableMembership` — table-routed by design: no table → no requests; `kind`,
+  `player_reasoning`, `status`, `gm_notes`, `resolved_by`, timestamps) with 1:1 payload
+  models `ProfileTextRequestDetails` (`field`, `proposed_text`, `applied_version` →
+  `character_sheets.ProfileTextVersion`) and `DistinctionChangeRequestDetails`
+  (`action`, `distinction`/`character_distinction`, `sheet_update_request` →
+  `distinctions.SheetUpdateRequest`). Services:
+  `submit_profile_text_request`/`submit_distinction_change_request`,
+  `signoff_table_update_request` (prose applies immediately; distinction
+  creates-and-approves a #2628 `SheetUpdateRequest` — XP auto-debits — both →
+  COMPLETED), `withdraw_table_update_request`, `gm_may_review_for_persona` (the
+  #2631 review-pool rule: staff or any GM whose table the persona actively sits at;
+  also gates the #2628 `review_sheet_update` action).
+  API: `TableUpdateRequestViewSet` (`/api/gm/table-update-requests/`, actions
+  `signoff`/`withdraw`, FilterSet `status`/`kind`/`role`)
 - **Types (`types.py`):** `GMEvidenceSummary` (dataclass: `profile_id`, `level`,
   `approved_at`, `last_active_at`, `stories_running`, `beats_completed_by_risk`,
   `feedback_by_category`, `level_changes`), `CategoryFeedback` (`category_name`,
@@ -3294,6 +3329,20 @@ registering a service strategy + per-kind details model.
   check/consequence-pool path — see `trap_services.py`'s `check_room_traps_on_entry` /
   `check_traps_at_position`. Not a `RoomFeatureInstance` kind; a plain FK to `RoomProfile`
   since a room may hold several.
+- **`PreparedGround`** (`world.room_features.models`, #2646): a room a character has
+  prepared as their battleground ahead of time — "the fight was won yesterday." Plain FK
+  to `RoomProfile` (a room may hold several characters' prepared grounds) but `prepared_by`
+  is a OneToOne to `character_sheets.CharacterSheet` — one active prepared ground per
+  character; re-preparing elsewhere MOVES the row rather than stacking a second one.
+  Recorded/refreshed by `world.covenants.perks.services.record_ground_preparation_from_cast`
+  — a rider on an out-of-combat standalone cast of a PERCEPTION-tagged (`magic.
+  TechniqueFunction.PERCEPTION`) technique by a character holding an active engaged
+  `CharacterCovenantRole` whose `covenant_role.prepares_ground` flag is set (data-authored;
+  not every role prepares ground), called from `world.scenes.cast_services.
+  _resolve_and_pose_cast` after the cast resolves — not a new player verb, an existing one's
+  side effect. Consumed by `world.combat.chosen_ground.compute_on_chosen_ground`, which
+  stamps `CombatEncounter.on_chosen_ground` (Combat section, "Situational-perk seams") at
+  encounter-CREATE time. Not a `RoomFeatureInstance` kind.
 - **Installable exit/room defenses — bars/ward/alarm** (`world.room_features.models`,
   #2177): three independent details models, siblings of `RoomFeatureInstance` (like
   `Trap` above) — **NOT** `RoomFeatureKind` instances. A room can hold a
@@ -4088,10 +4137,11 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     situation reads/requires which params is `SITUATION_PARAM_SPECS`
     (`world.covenants.perks.constants`); the mixin's `clean()` enforces both directions. All
     lore-repo content. Situations are drawn from `world.covenants.perks.constants.Situation`, a
-    code-defined library (still 14 values as of #2623: slice 1's 9 plus `CHAMPION_DUEL`,
+    code-defined library (15 values as of #2646: slice 1's 9 plus `CHAMPION_DUEL`,
     `COMBAT_OPENED_FROM_PARLEY`, `AMBUSH_UNDERWAY`, `ALLY_INTERCEPTED_FOR_ME`, and
     `ATTACKER_AFFINITY` — the Abyssal-only attacker-typing situation renamed and parameterized to
-    all three `AffinityType` axes by #2623) with a registered evaluator per value
+    all three `AffinityType` axes by #2623 — plus `ON_CHOSEN_GROUND` (#2646)) with a registered
+    evaluator per value
     (`world.covenants.perks.evaluators.SITUATION_EVALUATORS`) — attaching a situation to a perk
     (and tuning its params) is content; adding a new situation to the library is code.
     `world.covenants.perks.services
@@ -4265,6 +4315,25 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     - `power_tier_for_level(level: int) -> int` — maps levels 1–5 → tier 1,
       6–10 → tier 2, 11–15 → tier 3, etc. (`ceil(level / TIER_ONE_MAX_LEVEL)`).
       Used by the COURT gulf check in `assert_membership_level_allowed`.
+  - **The Sphinx of Black Quartz** (`world.covenants.sphinx`, #2640, ADR-0157) — read-only
+    vow-suitability oracle, never a gate. `judge_vow(sheet, role) -> SphinxVerdict`
+    re-runs `covenant_role_specialty_power_term`'s kit∩demand join as a three-tier report
+    (`SphinxTier.TAKES`/`DORMANT`/`NOT_YET`, `world.covenants.constants`): demand =
+    the role's (+ parent's, for a sub-role) `CovenantRoleTechniqueSpecialty` functions
+    UNION the creator-functions its SELF-beneficiary `VowSituationalPerk`
+    situations/rungs require (via the new code-defined
+    `SITUATION_CREATOR_FUNCTIONS: dict[str, frozenset[str]]`,
+    `world.covenants.perks.constants` — the `TARGET_DISTRACTED`/`TARGET_SWAYED_BY_ALLY`
+    provenance mapping run in reverse; a situation absent from it demands nothing).
+    `SphinxVerdict.shopping_list` — up to 3 learnable techniques per uncovered function
+    (`can_learn_technique` or tradition signature-pool membership). `audit_vow_coverage()
+    -> list[SphinxCoverageRow]` — the staff instrument (built first per the spec): every
+    active anchor role × every active Tradition, specialty-demand-only coverage
+    (`"full"`/`"partial"`/`"none"`), rendered at the staff-only `_sphinx/` admin page
+    (`admin_sphinx_audit`, linked from Game Setup). Player surface:
+    `GET /api/covenants/roles/sphinx/?role=<id-or-slug>` (self-character only) and the
+    `sphinx <vow name>` telnet command (`commands/sphinx.py`) — both call `judge_vow`
+    directly, no parallel logic.
 - **Combat seams (#985, #1174, #1165, #2533):** `apply_equipped_armor_soak` splits worn armor into
   role-compatible vs incompatible buckets; compatible soak is scaled once by
   `gear_additive_fraction(character)` (`world.covenants.services`, #2533 — MAX
@@ -4304,7 +4373,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `ritual draft ... covenant=<name>` / `ritual join <id> role=<role>` / `ritual fire <id>`,
   banner-call rise via `ritual draft ... covenant=<name>` / `ritual join <id>` /
   `ritual fire <id>` — both adapter-dispatched from `CmdRitual` via
-  `commands/ritual_adapters.py`.
+  `commands/ritual_adapters.py`; `sphinx <vow name>` (#2640, `commands/sphinx.py`) — the
+  Sphinx of Black Quartz's three-tier verdict, telnet parity for the REST endpoint below.
 - **Selectors (`world.covenants.selectors`):**
   `resolve_actor_membership(*, covenant, character_sheets, capability=None)`,
   `get_active_memberships(*, character_sheet)` — shared by viewsets and the covenant Actions.
@@ -4322,6 +4392,9 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   - `POST /api/covenants/ranks/reorder/` — bulk tier reorder
   - `POST /api/covenants/ranks/{pk}/assign-member/` — assign member to rank
   - `POST /api/covenants/ranks/{pk}/transfer-top/` — move top rank to member
+  - `GET /api/covenants/roles/sphinx/?role=<id-or-slug>` (#2640) — the Sphinx of Black
+    Quartz's verdict for the requesting account's own active character; self-character
+    only, read-only, never gates
 - **Permission classes:** `CanKickFromCovenant` (rank.can_kick + tier precedence),
   `CanInviteToCovenant` (unattached seam — delegates to `can_invite_to_covenant` with
   `account=`; NOT currently wired to any ViewSet; induction-draft authorization is
@@ -4423,6 +4496,16 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     entirely (today's side-blind behavior).
   - `CombatEncounter.is_champion_duel` (bool, default False) — see `docs/systems/battles.md`'s
     "Command Hierarchy & the Champion" section; read by `Situation.CHAMPION_DUEL`.
+  - `CombatEncounter.on_chosen_ground` (bool, default False, #2646) — "the fight was won
+    yesterday": stamped at CREATE time (never mutated after) in the three PC-vs-NPC
+    encounter-creation seams (`world.combat.cast_seed.seed_or_feed_encounter_from_cast`,
+    `world.combat.duels.create_lethal_duel`, `world.battles.services.open_place_encounter`) by
+    `world.combat.chosen_ground.compute_on_chosen_ground(room)` — True iff the encounter's room
+    holds a `room_features.PreparedGround` whose preparer is physically present in that room.
+    `world.combat.duels.create_pvp_duel` never stamps it (PvP is never lethal). See
+    `PreparedGround` (Room Features section below) for how a ground gets prepared. Read by
+    `Situation.ON_CHOSEN_GROUND`, which mirrors `Situation.CHAMPION_DUEL`'s shape exactly (one
+    cached FK read off the resolution's participant, False outside combat).
   - `CombatOpponent.affinity` (`AffinityType` CharField, blank default) — authored magical
     affinity typing for non-persona/generic NPCs that carry no `CharacterAura` row to infer
     from. Read by `Situation.ATTACKER_AFFINITY`'s evaluator FIRST against the row's required
@@ -4473,7 +4556,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   through the same `damage_rampart` seam, so interception (paused while that clash is
   ACTIVE) and clash-progress never drift apart.
 - **Boss-fight structure — diversity-weighted break accrual, lieutenant gate, pacing floor
-  (#2642, ADR-0155):** `assess_break_bar` (`world/combat/services.py`) persists a
+  (#2642, ADR-0160):** `assess_break_bar` (`world/combat/services.py`) persists a
   `BreakBarContribution` row (mirrors `ClashContribution`'s per-round audit shape; `opponent`,
   `participant` nullable, `round_number`, `kind` — `BreakContributionKind`: DAMAGE / COMBO /
   HOLD / DEBUFF / SUPPRESSION, `effect_type` nullable, `amount`) for each qualifying feed. Round
@@ -4766,7 +4849,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     returns the action backed by the higher-rated one (`_select_best_rated_action`) —
     deterministic (ADR-0019), no invented actions (ADR-0032). Existing callers (Succor,
     the scene-cover path) leave it `False` and keep the prior first-match behavior.
-- **Reactive content seeds:**
+- **Reactive content seeds:** (interpose/succor/fall-catch/redirect run in production
+  via the `reactive_challenges` cluster in `world.seeds.clusters`, #2636 — after
+  `combat_checks`, which seeds the Melee Defense `CheckType` Interpose looks up;
+  `ensure_defend_content` is deliberately NOT in the cluster: it seeds a placeholder
+  Gift/Technique, which is lore-repo content territory)
   - `ensure_interpose_content()` (`src/world/combat/interpose_content.py`) — idempotent
     seed for the INTERPOSE `ChallengeTemplate` + four capability-gated `Application` rows
     (telekinesis, shield, barrier, pull_aside) + Reflexes `CheckType` + SUCCESS-tier DESTROY
@@ -5258,12 +5345,27 @@ combat, poison, spells, exhaustion, and any damage source.
   the final puppet lock), `VitalsConsequenceConfig` (singleton pk=1; tunable difficulty scaling +
   pool FKs: `knockout_pool`, `default_wound_pool`, `default_death_pool`; #2287: wake-arc knobs
   `wake_base_difficulty`/`wake_scaling_per_percent`/`wake_ease_per_round`/`wake_guaranteed_rounds`,
-  `auto_retire_days`, admin-editable `death_condolence_body`)
+  `auto_retire_days`, admin-editable `death_condolence_body`), `WoundDetails` (#2644; OneToOne →
+  `conditions.ConditionInstance`, CASCADE, `related_name="wound_details"` — FK direction
+  specific→general per ADR-0010; `damage_taken` PositiveInt — the debit that caused the wound,
+  the mend-cap basis; `health_mended_total` PositiveInt, default 0 — running sum every
+  `mend_wound()` call has ever mended on this wound, across every healer; stamped by
+  `_record_wound_details` the moment the wound tier applies a wound condition)
 - **Key Services (`world/vitals/services.py`):**
   - `is_dead(sheet)`, `is_alive(sheet)`, `can_act(sheet)` — mortality/agency gates.
   - `derive_character_status(sheet) -> str` — compute dead/dying/incapacitated/alive at read time.
   - `process_damage_consequences(character_sheet, damage, ...)` — full survivability pipeline:
     knockout check → death check → permanent wound check; each tier rolls the configured pool.
+    The wound tier now actually applies conditions (#2644 — closed the audit's central gap) and
+    stamps `WoundDetails` on each applied instance via `_record_wound_details`.
+  - `mend_wound(healer_sheet, target_sheet, wound_instance, amount) -> int` (#2644) — double-
+    bounded HP mend, the attrition invariant (ADR-0156): caps at
+    `NEVER_TO_FULL_FRACTION x wound_details.damage_taken - health_mended_total`, clamps to
+    `max_health`, returns the amount actually mended (0 is legal, not an error). Raises
+    `world.vitals.exceptions.NotAWoundError` when the instance has no `WoundDetails`. Never
+    callable outside the treatment flow (`conditions.services.perform_treatment` is the sole
+    caller) — the once-per-healer-per-wound bound lives one layer up, on
+    `conditions.TreatmentAttempt`'s partial `UniqueConstraint`.
   - `advance_bleed_out(sheet) -> bool` — per-round progression; terminal stage routes to
     `_resolve_terminal_bleed_out` (guarded pool, not unconditional death; ADR-0049).
   - `_resolve_peril_via_pool(sheet, instance, pool, *, death_permitted) -> bool` — shared
@@ -5307,15 +5409,34 @@ combat, poison, spells, exhaustion, and any damage source.
     death→retire; offscreen = staff-only. Surfaces: `GiveDeathKudosAction`/`kudos death <name>`.
   - `seed_survivability_content()` (`seeds.py`, cluster `survivability`) — the production seeding
     that makes every tier fire: foundational CapabilityTypes, Unconscious effects, Bleeding Out
-    stages, knockout/default-death/default-wound pools, dream room, death KudosSourceCategory.
+    stages, knockout/default-death/default-wound pools, dream room, death KudosSourceCategory,
+    the three wound conditions + their TreatmentTemplates (#2644, see below).
+  - `ensure_wound_conditions()` (#2644) — seeds three mechanical wound `ConditionTemplate`s
+    (vocabulary, not lore content, mirroring `ensure_bleeding_out_condition`): **Lingering Ache**
+    (`ConditionCheckModifier` on the vitals-owned Endurance CheckType, -5), **Crippling Wound**
+    (`ConditionCapabilityEffect` on `limb_use`, -15), **Bleeding Wound** (`ConditionDamageOverTime`,
+    severity-scaled, authored but not wired into the default pool — see `ensure_default_wound_pool`'s
+    docstring for the documented single-default choice). `ensure_default_wound_pool` wires the
+    partial/failure outcomes to Lingering Ache / Crippling Wound via APPLY_CONDITION effects
+    (`update_or_create` on the pool row so a stale pre-#2644 description self-corrects on re-run).
+  - `ensure_wound_treatment_content()` (#2644) — one `TreatmentTemplate` per wound condition
+    (`treat_lingering_ache`/`treat_crippling_wound`/`treat_bleeding_wound`), `target_kind=PRIMARY`,
+    reuses the vitals-owned Endurance CheckType (documented fallback — no Medicine/first-aid
+    CheckType exists in seeded content), modest `anima_cost`, `once_per_wound_per_helper=True` +
+    `once_per_scene_per_helper=False`.
 - **Pool constants (`world/vitals/constants.py`):** `POOL_BLEED_OUT_TERMINAL`,
   `POOL_ABANDONMENT_ENEMY`, `POOL_ABANDONMENT_PVP`, `POOL_ABANDONMENT_ENVIRONMENTAL` (seeded via
   `world.vitals.factories`; `abandonment_enemy` includes a `captured_alive` CAPTURE outcome);
   #2287: `POOL_KNOCKOUT`, `POOL_DEFAULT_DEATH`, `POOL_DEFAULT_WOUND`, `BLEED_OUT_STAGE_SPECS`,
-  `DREAM_ROOM_KEY`/`DREAM_ROOM_TAG`.
+  `DREAM_ROOM_KEY`/`DREAM_ROOM_TAG`. #2644: `WOUND_LINGERING_ACHE_NAME`, `WOUND_CRIPPLING_NAME`,
+  `WOUND_BLEEDING_NAME`, `NEVER_TO_FULL_FRACTION` (Decimal, default 0.75 — the attrition
+  invariant's tunable fraction; a plain constant, not an admin-config field, mirroring
+  `PERMANENT_WOUND_THRESHOLD`'s precedent).
 - **Design invariants:** ADR-0049 (guarded pool, no unconditional death); ADR-0023 extended to the
   death layer (PC source can never produce death); ADR-0004 extended to dying state (grace window
-  counts round_number beats, not wall-clock); plummet exempt from hold/abandonment.
+  counts round_number beats, not wall-clock); plummet exempt from hold/abandonment; ADR-0156
+  (double-bounded mend — once-per-healer-per-wound + never-to-full fraction — heals are real but
+  the party is always net-weaker for having fought; never time-based or passive).
 - **Source:** `src/world/vitals/`
 - **Details:** `src/world/vitals/CLAUDE.md` · `docs/roadmap/combat.md` (§Phase 8, Phase 9)
 

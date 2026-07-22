@@ -539,7 +539,7 @@ for contribution in round_result.contributions:
 clash side (`progress_delta`, `anima_committed`, `was_audere`,
 `soulfray_severity_accrued`) — the panel reads those existing fields.
 
-#### Break-bar assessment ordering (#2642, ADR-0155)
+#### Break-bar assessment ordering (#2642, ADR-0160)
 
 `resolve_round`'s post-pass order changed: `assess_break_bar` now runs
 **after** the clash post-pass (`_resolve_clashes`), not before, though still
@@ -567,7 +567,7 @@ feed (`BreakContributionKind`: DAMAGE / COMBO / HOLD / DEBUFF / SUPPRESSION)
 instead of discarding ephemeral participant/effect_type sets — mirroring
 `ClashContribution`'s per-round audit shape. See `docs/systems/INDEX.md`'s
 "Boss-fight structure" bullet for the full feed/gate/pacing-floor design and
-ADR-0155 for the ratified rationale (diversity-weighted accrual replacing
+ADR-0160 for the ratified rationale (diversity-weighted accrual replacing
 the flat per-actor chip, the proportional lieutenant gate, the
 Soulfray-derived pacing floor).
 

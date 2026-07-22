@@ -608,7 +608,7 @@ class BreakContributionKind(models.TextChoices):
 # per-contribution multiplier — a qualifying (actor, kind) pair chips a flat 1
 # unit/round; see BREAK_NOVELTY_MULTIPLIER for the only per-pair scaling.
 # Replaces the old flat "≥2 distinct PCs x ≥2 distinct effect types = 1 chip"
-# gate (ruled dead — see ADR-0155).
+# gate (ruled dead — see ADR-0160).
 BAR_UNITS_PER_ROUND: int = 2
 
 # The first time a (kind, effect_type) pair appears anywhere in the encounter,

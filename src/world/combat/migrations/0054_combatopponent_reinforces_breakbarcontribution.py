@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("combat", "0052_combatencounter_initiated_by_pc_side_and_more"),
+        ("combat", "0053_combatencounter_on_chosen_ground"),
         ("magic", "0119_audere_majora_faith_variant"),
     ]
 

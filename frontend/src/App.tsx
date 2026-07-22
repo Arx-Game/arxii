@@ -155,6 +155,11 @@ const StoryAuthorPage = lazy(() =>
 const TablesListPage = lazy(() =>
   import('@/tables/pages/TablesListPage').then((m) => ({ default: m.TablesListPage }))
 );
+const GMUpdateRequestsPage = lazy(() =>
+  import('@/sheet_update_requests/pages/GMUpdateRequestsPage').then((m) => ({
+    default: m.GMUpdateRequestsPage,
+  }))
+);
 const TableDetailPage = lazy(() =>
   import('@/tables/pages/TableDetailPage').then((m) => ({ default: m.TableDetailPage }))
 );
@@ -853,6 +858,16 @@ function App() {
               <Suspense fallback={<PageLoadingFallback />}>
                 <ProtectedRoute>
                   <TableDetailPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/gm/update-requests"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <GMUpdateRequestsPage />
                 </ProtectedRoute>
               </Suspense>
             }
