@@ -19,6 +19,8 @@ from world.npc_services.models import (
     NPCStanding,
     OfferCooldown,
     PermitOfferDetails,
+    ProfileRecordingOfferDetails,
+    StylingOfferDetails,
     TrainOfferDetails,
 )
 
@@ -188,3 +190,24 @@ class DistinctionRegardSeedFactory(DjangoModelFactory):
     npc_persona = factory.SubFactory(_PERSONA_FACTORY)
     starting_value = 50
     reason = ""
+
+
+class StylingOfferDetailsFactory(DjangoModelFactory):
+    class Meta:
+        model = StylingOfferDetails
+
+    offer = factory.SubFactory(NPCServiceOfferFactory, kind=OfferKind.STYLING)
+    trait = factory.SubFactory("world.forms.factories.FormTraitFactory", is_cosmetic=True)
+    target_option = factory.SubFactory(
+        "world.forms.factories.FormTraitOptionFactory",
+        trait=factory.SelfAttribute("..trait"),
+    )
+    price_coppers = 100
+
+
+class ProfileRecordingOfferDetailsFactory(DjangoModelFactory):
+    class Meta:
+        model = ProfileRecordingOfferDetails
+
+    offer = factory.SubFactory(NPCServiceOfferFactory, kind=OfferKind.PROFILE_RECORDING)
+    price_coppers = 500

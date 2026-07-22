@@ -1683,6 +1683,7 @@
 - `count_active_ocs(account: 'AbstractBaseUser') -> 'int' — Count OCs an account currently holds against its cap.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' — Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `enforce_oc_cap(account: 'AbstractBaseUser', *, cap: 'int' = 3) -> 'None' — Raise OCCapError if creating another OC would exceed ``cap``.`
+- `set_physical_description(sheet: 'CharacterSheet', text: 'str') -> 'None' — THE seam for setting a character's free-text physical description (#2632).`
 - `update_profile_text(profile: 'Profile', field: 'str', text: 'str', *, edited_by: 'Any | None' = None, previous_text: 'str | None' = None) -> 'ProfileTextVersion' — Write a versioned Profile prose field — the ONLY sanctioned write path (#2631).`
 
 
@@ -2798,6 +2799,7 @@
 - `decide_consent_block(rule_mode: 'str | None', *, actor_present: 'bool', whitelisted: 'bool', blacklisted: 'bool', is_friend: 'bool', is_rival: 'bool') -> 'bool' — Per-category consent decision, given a pref exists with the master switch on.`
 - `effective_consent_mode(pref: 'SocialConsentPreference | None', category: 'SocialConsentCategory') -> 'str' — The ConsentMode governing *(pref, category)* after tree inheritance (#2170).`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
+- `makeover_category() -> 'SocialConsentCategory' — Lazy seeded row for the makeover/styling gate (#2632) — default-deny.`
 - `receiving_stolen_goods_category() -> 'SocialConsentCategory' — Lazy seeded row for the hot-goods receipt gate (#1985) — default-deny.`
 - `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
@@ -3431,6 +3433,7 @@
   - persona_descriptors <- forms.PersonaTraitDescriptor
   - appearance_changes <- forms.AppearanceChangeLog
   - item_template_effects <- items.ItemTemplateAppearanceEffect
+  - styling_offers <- npc_services.StylingOfferDetails
 
 ### FormTraitOption
 **Foreign Keys:**
@@ -3441,6 +3444,7 @@
   - natural_for_values <- forms.CharacterFormValue
   - temporary_changes <- forms.TemporaryFormChange
   - item_template_effects <- items.ItemTemplateAppearanceEffect
+  - styling_offers <- npc_services.StylingOfferDetails
 
 ### SpeciesFormTrait
 **Foreign Keys:**
@@ -6125,6 +6129,8 @@
   - train_offer_details <- npc_services.TrainOfferDetails
   - court_grant_offer_details <- npc_services.CourtGrantOfferDetails
   - summonses <- npc_services.OfferSummons
+  - styling_offer_details <- npc_services.StylingOfferDetails
+  - profile_recording_offer_details <- npc_services.ProfileRecordingOfferDetails
 
 ### OfferCooldown
 **Foreign Keys:**
@@ -6202,9 +6208,25 @@
   - room -> evennia_extensions.RoomProfile [FK]
   - assigned_by -> scenes.Persona [FK]
 
+### StylingOfferDetails
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [OneToOne]
+  - trait -> forms.FormTrait [FK]
+  - target_option -> forms.FormTraitOption [FK]
+
+### ProfileRecordingOfferDetails
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [OneToOne]
+
+### RecordedProfile
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - era -> stories.Era [FK] (nullable)
+
 ### Service Functions
 - `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' — Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
 - `available_offers(session: 'InteractionSession', *, pool_count: 'int | None' = None) -> 'list[NPCServiceOffer]' — Return offers the PC can currently see/select, in stable order.`
+- `complete_recorded_profile(profile: 'RecordedProfile', text: 'str') -> 'RecordedProfile' — Finalize a COMMISSIONED sitting: the write-up arrives (#2632).`
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
@@ -7277,6 +7299,7 @@
   - summonses_received <- npc_services.OfferSummons
   - regard_seeds_from_distinctions <- npc_services.DistinctionRegardSeed
   - npc_assignments_made <- npc_services.NPCAssignment
+  - recorded_profiles <- npc_services.RecordedProfile
   - owned_buildings <- buildings.Building
   - buildings_constructed <- buildings.Building
   - materials_contributed <- buildings.BuildingMaterial
@@ -8345,6 +8368,7 @@
   - beat_completions <- stories.BeatCompletion
   - episode_resolutions <- stories.EpisodeResolution
   - gemits <- narrative.Gemit
+  - recorded_profiles <- npc_services.RecordedProfile
 
 ### Transition
 **Foreign Keys:**
