@@ -559,7 +559,9 @@ you":
 
 **Plummet + catch content seed (`world/areas/positioning/plummet_content.py`).**
 `ensure_fall_content()` idempotently seeds all plummet + catch content (it calls
-`ensure_catch_content()`):
+`ensure_catch_content()`); it runs in production via the `reactive_challenges`
+cluster in `world.seeds.clusters` (#2636), alongside the Interpose/Succor/redirect
+siblings:
 
 - the `Fall` `DamageType` (null pools → config-default survivability) and the `Plummeting`
   `ConditionTemplate` — a simple non-progressive, `PERMANENT`-duration marker (no stages,
