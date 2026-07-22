@@ -37662,6 +37662,8 @@ export interface components {
     UseItemRequest: {
       /** @default  */
       descriptor: string;
+      /** @description Chosen FormTraitOption for a choose-at-use cosmetic (#2632 — Styling Kit style, Ariwn Lenses color). Ignored by fixed-option items. */
+      option_id?: number | null;
     };
     /** @description Response shape mirroring ``UseItemResult`` (issue #509). */
     UseItemResult: {

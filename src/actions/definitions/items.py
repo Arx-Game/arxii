@@ -483,10 +483,21 @@ class UseItemAction(Action):
         # #2632 — optional free-text presentation flavor for cosmetic uses
         # (multi-color hair, ornate work). Ignored by non-cosmetic items.
         descriptor = (kwargs.get("descriptor") or "").strip() or None
+        # #2632 — choose-at-use cosmetics (Styling Kit / Ariwn Lenses): the
+        # wearer names the FormTraitOption. Ignored by fixed-option items.
+        option_raw = kwargs.get("option_id")
+        try:
+            option_id = int(option_raw) if option_raw is not None else None
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="option_id must be a number.")
 
         try:
             result = use_item(
-                item_instance=item_instance, user=actor, target=target, descriptor=descriptor
+                item_instance=item_instance,
+                user=actor,
+                target=target,
+                descriptor=descriptor,
+                option_id=option_id,
             )
         except ItemError as exc:
             return ActionResult(success=False, message=exc.user_message)

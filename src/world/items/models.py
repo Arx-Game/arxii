@@ -981,9 +981,13 @@ class ItemTemplateAppearanceEffect(SharedMemoryModel):
     )
     target_option = models.ForeignKey(
         "forms.FormTraitOption",
+        null=True,
+        blank=True,
         on_delete=models.PROTECT,
         related_name="item_template_effects",
-        help_text="The value the trait is set to when this item is used.",
+        help_text="The value the trait is set to when this item is used. Null = the "
+        "user chooses any option of the trait at use time (#2632 — one Styling "
+        "Kit selects the style; Ariwn Lenses take 'a drop of dye' in any color).",
     )
 
     class Meta:

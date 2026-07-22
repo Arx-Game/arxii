@@ -1037,11 +1037,21 @@ _APPEARANCE_TRAITS: tuple[tuple[str, str, str, bool, tuple[tuple[str, str], ...]
             ("auburn", "Auburn"),
             ("white", "White"),
             ("gray", "Gray"),
+            # #2632 — basic chromatic dye colors (a magical world dyes freely;
+            # each has a matching "<Color> Dye" bottle in world.seeds.styling).
+            ("blue", "Blue"),
+            ("green", "Green"),
+            ("yellow", "Yellow"),
+            ("violet", "Violet"),
+            ("orange", "Orange"),
             # #2632 umbrella value: honest one-word form for multi-colored hair
             # (streaks, ornate dye work) — the descriptor carries the specifics;
             # under descriptor concealment a viewer still sees the true,
             # memorable fact ("multihued") without the detail.
             ("multihued", "Multihued"),
+            # #2632 — magical shimmer, distinct from mundane multihued combos;
+            # set by Prism's Dye ("blended with magical light").
+            ("prismatic", "Prismatic"),
         ),
     ),
     (
