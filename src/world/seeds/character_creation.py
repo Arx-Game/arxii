@@ -18,6 +18,7 @@ magic-cluster-seeded.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 import logging
 from typing import TYPE_CHECKING
@@ -41,6 +42,23 @@ from world.forms.models import (
     HeightBand,
     SpeciesFormTrait,
     TraitType as FormTraitType,
+)
+from world.magic.constants import ParticipationRule, RitualExecutionKind
+from world.magic.models import Ritual
+from world.missions.constants import (
+    ArcScope,
+    ConflictMode,
+    MissionVisibility,
+    OptionKind,
+    OptionSource,
+    RewardGroupRule,
+)
+from world.missions.models import (
+    MissionCategory,
+    MissionNode,
+    MissionOption,
+    MissionOptionRoute,
+    MissionTemplate,
 )
 from world.realms.models import Realm
 from world.roster.models import Roster
@@ -181,6 +199,7 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "review_glimpse_label": "What your character would speak of themselves",
     "review_record_heading": "The Record",
     "review_banner_submitted": "Your testament has been submitted for review.",
+    "review_approved_enter_world": "Enter the World",
 }
 
 
@@ -555,6 +574,86 @@ def ensure_shroudwatch_academy() -> Organization:
     return academy
 
 
+def ensure_durance_registration_ritual():
+    """Get or create the intake Ritual of the Durance row (#2479).
+
+    Liturgy text lives in the lore repo / content pipeline. This machinery row
+    only exists so the registration service path can be dispatched.
+    """
+    path = "world.progression.services.durance_registration.register_durance_via_session"
+    ritual, _ = Ritual.objects.get_or_create(
+        service_function_path=path,
+        defaults={
+            "name": "Ritual of the Durance: Registration",
+            "description": "The intake rite that enters a new Gifted into the Durance arc.",
+            "narrative_prose": "",
+            "execution_kind": RitualExecutionKind.SERVICE,
+            "participation_rule": ParticipationRule.INDUCTION,
+            "min_participants": 2,
+        },
+    )
+    return ritual
+
+
+def ensure_orientation_mission():
+    """Get or create the orientation mission that funnels to the registration rite (#2479).
+
+    Full authored prose is lore-repo content; this is a structural get-or-create.
+    A minimal entry node graph is created so ``staff_assign_mission`` can enter the
+    run immediately; future authoring will replace this with the real narrative graph.
+    """
+    category, _ = MissionCategory.objects.get_or_create(
+        name="Orientation",
+        defaults={"description": "New player experience orientation missions."},
+    )
+    template, created = MissionTemplate.objects.get_or_create(
+        name="Orientation at Shroudwatch Academy",
+        defaults={
+            "summary": "Learn what the Durance is and speak your name before the Academy.",
+            "epilogue": "",
+            "level_band_min": 1,
+            "level_band_max": 1,
+            "risk_tier": 1,
+            "base_weight": 0,
+            "arc_scope": ArcScope.GLOBAL,
+            "percent_replace": 0,
+            "cooldown": timedelta(0),
+            "reward_group_rule": RewardGroupRule.ALL_EQUAL,
+            "is_active": True,
+            "visibility": MissionVisibility.RESTRICTED,
+        },
+    )
+    template.categories.add(category)
+
+    if created or not template.nodes.exists():
+        entry, _ = MissionNode.objects.get_or_create(
+            template=template,
+            key="entry",
+            defaults={
+                "is_entry": True,
+                "conflict_mode": ConflictMode.GROUP_VOTE,
+                "flavor_text": "You stand at the threshold of the Academy.",
+            },
+        )
+        option, _ = MissionOption.objects.get_or_create(
+            node=entry,
+            key="begin",
+            defaults={
+                "order": 1,
+                "option_kind": OptionKind.BRANCH,
+                "source_kind": OptionSource.AUTHORED,
+                "authored_ic_framing": "Begin the orientation.",
+            },
+        )
+        MissionOptionRoute.objects.get_or_create(
+            option=option,
+            outcome_tier=None,
+            defaults={"target_node": None, "outcome_text": "Orientation begun."},
+        )
+
+    return template
+
+
 def ensure_orphaned_tradition_distinction():
     """Seed the 'Orphaned Tradition' drawback distinction (#2428 Task 5).
 
@@ -848,6 +947,8 @@ def seed_character_creation_dev() -> None:
     ensure_tradition_training_distinction()
     seed_beginning_traditions()
     ensure_shroudwatch_academy()
+    ensure_durance_registration_ritual()
+    ensure_orientation_mission()
     seed_metallic_order_tradition()
     ensure_somehow_always_broke_distinction()
 

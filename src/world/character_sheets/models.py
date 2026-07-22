@@ -1087,6 +1087,21 @@ class CharacterSheet(SharedMemoryModel):
             return False
         return persona.properties.filter(pk=prop.pk).exists()
 
+    # Durance intake arc (#2479)
+    durance_entered_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the character was registered into the Durance arc via the intake rite.",
+    )
+    durance_cohort = models.ForeignKey(
+        "progression.DuranceCohort",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="members",
+        help_text="Cached cohort for cheap reads; canonical membership is CohortEnrollment.",
+    )
+
     class Meta:
         verbose_name = "Character Sheet"
         verbose_name_plural = "Character Sheets"

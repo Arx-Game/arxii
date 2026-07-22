@@ -2139,11 +2139,15 @@ class FinalizeCharacterPreludeMissionTests(FinalizationTestMixin, TestCase):
 
     def test_finalize_is_a_no_op_when_beginnings_has_no_prelude_mission(self):
         from world.missions.models import MissionInstance
+        from world.seeds.character_creation import ensure_orientation_mission
 
         # self.beginnings.prelude_mission is None by default (Task 1's factory default).
         draft = self._create_base_draft()
         finalize_character(draft, add_to_roster=True)
-        assert not MissionInstance.objects.exists()
+        # The orientation mission (#2479) is always granted at finalization;
+        # assert no *prelude* mission was created.
+        orientation_template = ensure_orientation_mission()
+        assert not MissionInstance.objects.exclude(template=orientation_template).exists()
 
     def test_finalize_raises_when_prelude_mission_has_no_entry_node(self):
         from world.missions.factories import MissionTemplateFactory
