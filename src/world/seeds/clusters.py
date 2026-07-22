@@ -21,6 +21,7 @@ def _seed_combat() -> None:
     from world.combat.factories import (  # noqa: PLC0415
         wire_elevation_advantage_modifier_target,
     )
+    from world.combat.sent_flying_content import ensure_sent_flying_content  # noqa: PLC0415
     from world.seeds.game_content.combat import (  # noqa: PLC0415
         seed_dramatic_surge_content,
         seed_encounter_beat_wiring,
@@ -33,6 +34,15 @@ def _seed_combat() -> None:
     seed_encounter_beat_wiring()
     seed_dramatic_surge_content()
     wire_elevation_advantage_modifier_target()
+    # Sent Flying marker content (#2638). Belongs conceptually beside the
+    # reactive-challenge content family (interpose/catch/redirect — #2636's
+    # "reactive_challenges" cluster) but that cluster is not yet in this
+    # branch's ancestry (df34c23cf, #2636, is a main-tip sibling not merged
+    # into #2637/#2638's base as of this branch — see the #2638 commit body).
+    # Wired here instead, in the existing production "combat" cluster;
+    # trivially movable to "reactive_challenges" at the next rebase — both are
+    # idempotent get_or_create seeders, so no reconciliation risk either way.
+    ensure_sent_flying_content()
 
 
 def _seed_battles() -> None:

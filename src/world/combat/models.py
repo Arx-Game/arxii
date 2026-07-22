@@ -354,6 +354,19 @@ class ThreatPoolEntry(SharedMemoryModel):
         help_text="If True, this entry is skipped when the opponent is faltering "
         "(morale_state FALTER). Lets designers author 'weakened' entries (#2015).",
     )
+    sends_flying = models.BooleanField(
+        default=False,
+        help_text=(
+            "Big attacks that launch their victim on a damaging hit (#2638). "
+            "Pairs naturally with windup_rounds — a telegraphed haymaker that "
+            "connects sends the victim flying. Applies the seeded 'Sent Flying' "
+            "marker condition (world.combat.sent_flying_content) whenever this "
+            "entry's attack deals damage > 0; the marker is then reactable "
+            "(an armed guardian INTERPOSE may catch it mid-air) or resolves "
+            "explicitly at end of round — see world.combat.services."
+            "_resolve_sent_flying_markers."
+        ),
+    )
 
     # === Clash fields (Task 1.5) ===
     clash_capable = models.BooleanField(
@@ -1113,6 +1126,21 @@ class CombatParticipant(SharedMemoryModel):
             "(_dispatch_interpose_action)."
         ),
     )
+    sent_flying_damage = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "The triggering hit's damage, stamped when a `sends_flying` "
+            "ThreatPoolEntry's attack applies the Sent Flying marker condition "
+            "to this participant (#2638). v1 carrier choice: rather than a new "
+            "model, the amount rides this single field (only one Sent Flying "
+            "marker can be active on a participant at a time — the condition "
+            "is non-stackable) so world.combat.services._resolve_sent_flying_markers "
+            "can compute the unanswered-impact debit "
+            "(floor(sent_flying_damage * SENT_FLYING_IMPACT_FRACTION)) at end of "
+            "round without threading extra state through the condition system. "
+            "0 = not currently marked; cleared back to 0 on catch or landing."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -1435,6 +1463,19 @@ class CombatOpponentAction(SharedMemoryModel):
             "(PendingOpponentAttack) sets this from its downgrade ladder — "
             "x(1 - 0.25*downgrades), floored at x0.25 — so a wrecked telegraph "
             "lands weaker without touching the authored ThreatPoolEntry row."
+        ),
+    )
+    matured_from_called_out_windup = models.BooleanField(
+        default=False,
+        help_text=(
+            "Stamped True at wind-up maturation (#2638) when the "
+            "PendingOpponentAttack this action was synthesized from carried "
+            "called_out=True (#2637 design 6). PendingOpponentAttack is deleted "
+            "at maturation, so this is the only surviving record of whether the "
+            "attack that lands was called out — read by a sends_flying "
+            "consequence's celebration broadcast to credit the auto-caller "
+            "alongside the catcher. False (the default) for every non-wind-up "
+            "same-round action."
         ),
     )
 

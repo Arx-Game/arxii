@@ -390,6 +390,16 @@ WINDUP_BLIND_DOWNGRADE: int = 1
 WINDUP_GENERIC_TELEGRAPH: str = "{opponent} begins something enormous..."
 
 # ---------------------------------------------------------------------------
+# Sent flying (#2638) — the plummet-pattern's first "in-flight" consequence
+# ---------------------------------------------------------------------------
+
+# An unanswered Sent Flying marker's hard-landing impact is this fraction of
+# the triggering hit's damage (world.combat.services._resolve_sent_flying_markers),
+# floored to an int. Batch-3 gate F-6d's authored tunable — documented here
+# rather than a literal in engine code.
+SENT_FLYING_IMPACT_FRACTION: float = 0.5
+
+# ---------------------------------------------------------------------------
 # Succor (#1744)
 # ---------------------------------------------------------------------------
 

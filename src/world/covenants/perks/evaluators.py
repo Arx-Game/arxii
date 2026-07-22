@@ -831,3 +831,80 @@ def enemy_windup_called_out(ctx: SituationContext, params: SituationParams) -> b
         resolves_round__gte=participant.encounter.round_number,
         called_out=True,
     ).exists()
+
+
+@register(Situation.ALLY_SENT_FLYING)
+def ally_sent_flying(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """A covenant-mate of the holder currently carries the Sent Flying marker (#2638).
+
+    Mate scoping mirrors ``ally_low_health`` exactly (see that function's
+    docstring, "Ally scoping rule"): a candidate mate counts if they hold a
+    non-departed (``CharacterCovenantRole.left_at__isnull=True``) role in a
+    covenant the HOLDER is also actively engaged in AND are co-present
+    (an ACTIVE ``CombatParticipant``) in the SUBJECT's encounter roster — the
+    mate's own engagement is irrelevant. The holder themself is excluded from
+    the mate pool (mirrors ``ally_low_health``'s ``.exclude(character_sheet=
+    ctx.holder)``).
+
+    Data source, verified: one roster query (ACTIVE participants in the
+    subject's encounter, excluding the holder), one BATCHED
+    ``CharacterCovenantRole`` membership query across every candidate mate's
+    sheet id, and one BATCHED ``ConditionInstance`` existence check (Sent
+    Flying template) across the surviving mates' character ids — never a
+    query per candidate ("no queries in loops"). Three queries total, fixed
+    regardless of roster size. False outside combat. Reads no params (absent
+    from ``SITUATION_PARAM_SPECS``).
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None or ctx.holder is None:
+        return False
+    holder_character = ctx.holder.character
+    if holder_character is None:
+        return False
+
+    holder_covenant_ids = holder_character.active_covenant_ids()
+    if not holder_covenant_ids:
+        return False
+
+    from world.combat.constants import ParticipantStatus  # noqa: PLC0415
+    from world.combat.models import CombatParticipant as _CombatParticipant  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    mates = list(
+        _CombatParticipant.objects.filter(
+            encounter_id=participant.encounter_id,
+            status=ParticipantStatus.ACTIVE,
+        )
+        .exclude(character_sheet=ctx.holder)
+        .select_related("character_sheet__character")
+    )
+    if not mates:
+        return False
+
+    mate_sheet_ids = set(
+        CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=[m.character_sheet_id for m in mates],
+            covenant_id__in=holder_covenant_ids,
+            left_at__isnull=True,
+        ).values_list("character_sheet_id", flat=True)
+    )
+    # No early return on an empty mate_sheet_ids: the final query below
+    # naturally returns False against an empty target_id__in list, and
+    # skipping the extra branch keeps this function's return count under the
+    # repo's lint threshold.
+    from world.combat.sent_flying_content import SENT_FLYING_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance, ConditionTemplate  # noqa: PLC0415
+
+    try:
+        template = ConditionTemplate.get_by_name(SENT_FLYING_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
+        return False
+
+    mate_character_ids = [
+        m.character_sheet.character_id for m in mates if m.character_sheet_id in mate_sheet_ids
+    ]
+    return ConditionInstance.objects.filter(
+        condition=template,
+        target_id__in=mate_character_ids,
+        is_suppressed=False,
+    ).exists()
