@@ -10,7 +10,7 @@
  */
 
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -32,6 +32,7 @@ import {
   ExternalLink,
   Info,
   MessageSquare,
+  Play,
   Send,
   Undo2,
   UserPlus,
@@ -442,6 +443,7 @@ function getBannerMessage(
 }
 
 function ApplicationBanner({ application, copy }: ApplicationBannerProps) {
+  const navigate = useNavigate();
   const { status, reviewer_name, expires_at } = application;
   const { border, bg, Icon, iconClass } = BANNER_STYLES[status];
   const message = getBannerMessage(status, reviewer_name, expires_at, copy);
@@ -455,6 +457,12 @@ function ApplicationBanner({ application, copy }: ApplicationBannerProps) {
             <Badge variant={statusVariant(status)}>{statusLabel(status)}</Badge>
           </div>
           <p className="text-sm text-muted-foreground">{message}</p>
+          {status === 'approved' && (
+            <Button size="sm" className="w-fit" onClick={() => navigate('/game')}>
+              <Play className="mr-2 h-4 w-4" />
+              {copy?.review_approved_enter_world ?? 'Enter the World'}
+            </Button>
+          )}
           <Link
             to="/characters/create/application"
             className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
