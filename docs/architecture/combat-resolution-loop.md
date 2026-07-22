@@ -1331,3 +1331,106 @@ A clean INTERPOSE after DEFEND zeroes the remaining half.
   `{"field": "amount", "op": "multiply", "value": 0.5}`.
 - `bulk_apply_conditions` now calls `_install_reactive_side_effects` (was skipped before
   #1273); passive-applied conditions register their reactive triggers in the same batch.
+
+## Implementation addendum — telegraphed wind-ups + reaction economy (#2637, #2639)
+
+**Status: BUILT** (ADR-0161 — extends the pre-armed-declaration shape ADR-0118
+established for guardian reactions to a symmetric NPC-side commitment)
+
+### `resolve_round` ordering change
+
+Two new steps bracket the existing per-round pipeline:
+
+```
+enc.status != DECLARING? raise
+already_selected = CombatOpponentAction OR PendingOpponentAttack exists for this round?
+  no  → select_npc_actions(enc)        # 0. wiring-gap fallback — see below (still DECLARING)
+enc.status = RESOLVING; enc.save(...)
+round_number = enc.round_number
+_fire_round_start(enc, round_number)
+# ...vulnerability countdown...
+_mature_pending_opponent_attacks(enc, round_number)  # NEW — before the query below
+# --- Build action lookups (queries CombatOpponentAction for this round) ---
+_resolve_passive_actions(...)
+_refresh_participant_trigger_handlers(...)
+_ensure_reactive_challenges(...)
+_resolve_actions(...)  # PC loop calls _apply_windup_interception_rider after each landed hit
+```
+
+Maturation runs BEFORE the `CombatOpponentAction` query so a wind-up that matures THIS
+round is picked up by the normal NPC-resolution pipeline in the same pass — no second
+resolution pass, no special-cased NPC action type downstream of that query.
+
+### Wind-up declare → telegraph → wreck → mature flow
+
+```
+_build_opponent_round_actions (NPC declaration, still DECLARING)
+  chosen = weighted-random ThreatPoolEntry
+  chosen.windup_rounds > 0?
+    yes → _declare_windup_attack
+            → PendingOpponentAttack.objects.create(declared_round=N, resolves_round=N+windup_rounds)
+            → _find_windup_caller (auto-callout, at most 1/round/encounter, #2637 design 6)
+            → _broadcast_windup_telegraph → _dual_dispatch_combat_narration (WS + telnet)
+          (NO same-round CombatOpponentAction — the round's NPC action budget for this
+           attack is spent on the telegraph instead)
+    no  → CombatOpponentAction.objects.create(round_number=N, ...)   # unchanged
+
+# ...zero or more rounds pass; the PendingOpponentAttack just sits there...
+
+_resolve_pc_action (any PC's landed hit on the winding-up opponent, PC resolution loop)
+  target = action.focused_opponent_target
+  damage landed (> 0) on target?
+    yes → _apply_windup_interception_rider
+            → pending = PendingOpponentAttack.objects.filter(opponent=target,
+                          resolves_round__gte=round_number).first()
+            → pending.downgrades += (2 if pending.called_out else 1)
+            → _broadcast_windup_wreck                       # "X's strike staggers the wind-up!"
+
+# ...round advances until resolves_round == round_number...
+
+_mature_pending_opponent_attacks (top of resolve_round, resolves_round == round_number)
+  downgrades >= 3 (WINDUP_FIZZLE_DOWNGRADES)?
+    yes → _broadcast_windup_fizzled; pending.delete()         # the perfect chain — cancel, earned
+    no  → damage_scale = max(0.25, 1 - 0.25*downgrades)
+          CombatOpponentAction.objects.create(round_number=N, threat_entry=..., damage_scale=...)
+          (targets re-derived from the pending row's target / re-selected pool)
+          pending.delete()
+  # resolve_npc_attack / the flat-damage path both read damage_scale, multiplying it
+  # in AFTER opponent.damage_multiplier (a Decimal field) to avoid a Decimal*float TypeError
+```
+
+### The reaction economy fire seam (#2639, F-10c)
+
+`_dispatch_interpose_action` — the shared tail `_try_interpose` (PC ward) and
+`_try_interpose_for_opponent` (ALLY-summon ward) both call — gates on TWO independent
+budgets before doing anything else:
+
+```
+_dispatch_interpose_action(action, protected, pre_payload)
+  action.participant.reactions_used >= REACTIONS_PER_ROUND (1)?      → return (no-op)
+  pre_payload.answers_consumed >= ABSORPTION_CAP_PER_MOMENT (2)?     → return (no-op)
+  action.participant.reactions_used += 1; save()
+  pre_payload.answers_consumed += 1
+  # ...existing technique-vs-mundane branch, unchanged...
+```
+
+`reactions_used` resets to 0 for every `CombatParticipant` in `begin_declaration_phase`
+— via an identity-map-safe `bulk_update` over freshly-queried instances, NOT a raw
+queryset `.update()`. A raw `.update()` bypasses `SharedMemoryModel`'s instance cache
+entirely: any already-cached `CombatParticipant` Python object (the common case — the
+participant was already loaded upstream this request) keeps reading its stale
+pre-reset value, and `refresh_from_db()` does NOT fix this for an idmapper model — its
+`__call__` override returns the SAME cached instance instead of re-hydrating it from
+the row. `bulk_update` mutates the actual cached instances' attributes directly before
+persisting, so both the DB row and every live reference agree.
+
+### The `select_npc_actions` wiring gap (#2637 design 8)
+
+Investigated in-PR: `select_npc_actions` had zero production callers outside the
+simulation harness (`world/combat/simulation.py`) — `commands/battle.py`,
+`actions/definitions/gm_combat.py`, `world/combat/views.py`, and `world/combat/tasks.py`
+all call `resolve_round` directly, none of them call `select_npc_actions` first. NPCs
+never selected actions in live play. `resolve_round`'s new fallback (see the ordering
+change above) closes this conservatively — it only fires when the round has ZERO
+selection of either shape yet, so any explicit prior selection (staff, the simulation
+harness, tests that call `select_npc_actions` themselves) is left untouched.

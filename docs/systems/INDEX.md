@@ -4941,6 +4941,67 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `PropertyDetonation` sidecar + a small detonation `ConsequencePool` (one
     DEAL_DAMAGE `Consequence`). Mirrors `ensure_interpose_content`'s self-contained
     `get_or_create` idiom.
+- **Telegraphed enemy wind-ups + reaction economy (#2637, #2639; ADR-0161 — extends
+  ADR-0118's pre-armed-policy shape):**
+  - `ThreatPoolEntry.windup_rounds` (PositiveSmallInt, default 0) + `windup_telegraph`
+    (CharField, blank → generic fallback "`{opponent} begins something enormous...`" at
+    broadcast time) — authored data on existing threat pools; 0 is today's same-round
+    behavior unchanged.
+  - `PendingOpponentAttack` (`world/combat/models.py`) — clones the deferred-then-reactive
+    shape of `world.scenes.models.PendingSuddenHarm` (#1316) rather than importing it (that
+    model is single-round out-of-combat; this one is multi-round, combat-native, with its
+    own downgrade bookkeeping). Fields: `encounter`/`opponent`/`threat_entry` FKs,
+    `target` (nullable FK → `CombatParticipant`, v1 single-target — null when the entry is
+    room-targeting), `declared_round`/`resolves_round` (CheckConstraint `resolves_round >
+    declared_round`), `called_out` (bool), `downgrades` (PositiveSmallInt).
+  - **Declaration:** `_build_opponent_round_actions` (`world/combat/services.py`) creates a
+    `PendingOpponentAttack` INSTEAD OF a same-round `CombatOpponentAction` when the chosen
+    entry's `windup_rounds > 0`; `_batch_fetch_cooldown_data` also reads
+    `PendingOpponentAttack.declared_round` so a wind-up commits to its entry's cooldown
+    immediately, not only once it matures. Telegraph is dual-dispatched
+    (`_dual_dispatch_combat_narration` — `broadcast_action_outcome` WS + direct
+    `room.msg_contents` telnet, mirroring `announce_fired_perks`'s HARD-parity shape).
+  - **Auto-callout v1** (`CovenantRole.calls_out_windups`, bool): `_find_windup_caller`
+    auto-calls a wind-up (`called_out=True`) when any ACTIVE participant holds an
+    active-engaged `CharacterCovenantRole` whose role (or that role's `parent_role` — rides
+    the same shape as `blend_weight_for`) has the flag; at most one call-out per round per
+    encounter. v1 is partially-passive — it picks THAT a wind-up gets called, not WHICH one.
+  - **Maturation:** `_mature_pending_opponent_attacks` runs in `resolve_round` after the
+    encounter flips to RESOLVING but BEFORE the round's `CombatOpponentAction` rows are
+    queried, so a matured wind-up's synthesized action (real `CombatOpponentAction`,
+    `damage_scale` set) is picked up by the normal NPC-resolution pipeline unmodified in the
+    same pass. `downgrades >= WINDUP_FIZZLE_DOWNGRADES` (3) fully cancels; otherwise
+    `damage_scale = max(WINDUP_MIN_DAMAGE_SCALE, 1 - WINDUP_DOWNGRADE_STEP * downgrades)`
+    (0.25 floor). `CombatOpponentAction.damage_scale` (FloatField, default 1.0) is the new
+    persisted multiplier `resolve_npc_attack` and the flat (no-defense-check) NPC-damage
+    path both read.
+  - **Interception rider:** `_apply_windup_interception_rider`, called from `_resolve_pc_action`
+    right after the combo rider — any PC hit landing damage > 0 on an opponent with a
+    not-yet-matured `PendingOpponentAttack` adds `WINDUP_BLIND_DOWNGRADE` (1), or
+    `WINDUP_CALLED_OUT_DOWNGRADE` (2) when `called_out` — no new button, rides the existing
+    damage-landed moment.
+  - **Situations:** `Situation.ENEMY_WINDUP_UNDERWAY` / `ENEMY_WINDUP_CALLED_OUT`
+    (`world.covenants.perks`) — true while the subject's encounter has a not-yet-matured
+    `PendingOpponentAttack` (declared is the situation, mirrors `ALLY_INTERCEPTED_FOR_ME`);
+    the called-out variant additionally requires `called_out=True`. No params.
+  - **Reaction economy (#2639), shared fire seam per F-10c:** `CombatParticipant.
+    reactions_used` (reset to 0 for every participant in `begin_declaration_phase` via
+    identity-map-safe `bulk_update`, never a raw queryset `.update()` — that would leave any
+    already-cached instance reading a stale value) vs `REACTIONS_PER_ROUND` (1) — gated +
+    incremented in `_dispatch_interpose_action`, the shared tail both `_try_interpose` and
+    `_try_interpose_for_opponent` call. `DamagePreApplyPayload.answers_consumed` (int,
+    default 0) vs `ABSORPTION_CAP_PER_MOMENT` (2) — per-LANDING-HIT cap on how many
+    interceptors may answer, incremented at the same seam. Both budgets decline with the
+    same "did not fire" no-op shape as an unaffordable/failed reaction. Standing defenses
+    (absorb/reflect/blink conditions, flow-triggered) stay OUTSIDE both budgets — they carry
+    their own reactive costs (flagged judgment call).
+  - **`select_npc_actions` wiring gap (#2637 design 8):** investigated — it had ZERO
+    production callers outside the simulation harness (`world/combat/simulation.py`); no
+    Action/command/task called it before `resolve_round` in live play. `resolve_round` now
+    auto-selects (while status is still DECLARING, since `select_npc_actions` requires it)
+    when the round has no NPC selection of EITHER shape yet — no `CombatOpponentAction` AND
+    no `PendingOpponentAttack` declared this round — a conservative, idempotent fallback;
+    any explicit prior selection (staff, simulation, tests) is left alone.
 - **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE / SUCCOR / ENGAGE / DISENGAGE / RALLY / DEMORALIZE / TAUNT / PARLEY / USE_ITEM), `OpponentMoraleState` (STEADY / FALTER / BREAK — derived, `world.combat.morale`), `RoundStatus` (shared with
   `world.scenes.constants`; combat uses the same enum — DECLARING / RESOLVING / BETWEEN_ROUNDS /
   COMPLETED), `OpponentTier`, `ClashFlavor`, `EncounterOutcome`

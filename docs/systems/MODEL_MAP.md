@@ -2035,6 +2035,7 @@
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - opponents <- combat.CombatOpponent
   - participants <- combat.CombatParticipant
+  - pending_opponent_attacks <- combat.PendingOpponentAttack
   - combat_pulls <- combat.CombatPull
   - challenge_declarations <- combat.RoundChallengeDeclaration
   - clashes <- combat.Clash
@@ -2084,6 +2085,7 @@
   - action_targets <- combat.CombatRoundActionTarget
   - round_actions <- combat.CombatOpponentAction
   - incoming_opponent_attacks <- combat.CombatOpponentAction
+  - pending_attacks <- combat.PendingOpponentAttack
   - clashes <- combat.Clash
   - break_contributions <- combat.BreakBarContribution
   - threat_records <- combat.ThreatRecord
@@ -2175,6 +2177,13 @@
   - opponent_targets -> combat.CombatOpponent [M2M]
 **Pointed to by:**
   - npc_regard_events <- npc_services.NpcRegardEvent
+
+### PendingOpponentAttack
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - opponent -> combat.CombatOpponent [FK]
+  - threat_entry -> combat.ThreatPoolEntry [FK]
+  - target -> combat.CombatParticipant [FK] (nullable)
 
 ### CombatPull
 **Foreign Keys:**

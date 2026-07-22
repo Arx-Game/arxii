@@ -57,6 +57,23 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   Web: the Guard panel's technique picker no longer excludes `redirect`; picking one
   reveals a destination select sourced from `EncounterDetailSerializer.
   volatile_objects` + `encounter.opponents`.
+- **Telegraphed enemy wind-ups + reaction economy (#2637, #2639, ADR-0161),
+  SQLite tier, journey-proven.** A `ThreatPoolEntry.windup_rounds > 0` entry telegraphs
+  instead of landing same-round — declares a `PendingOpponentAttack` (dual-dispatch
+  WS+telnet broadcast), can be wrecked (downgraded, not cancelled outright until 3
+  downgrades) by a PC hit on the winding-up opponent before it matures, then resolves
+  through the ordinary NPC-attack pipeline with `damage_scale` applied
+  (`world/combat/tests/test_windup_lifecycle.py`: declare→pending→telegraph unmocked
+  telnet, cooldown bookkeeping, maturation ladder at 0/1/2/3 downgrades, the
+  interception rider, auto-callout). `CovenantRole.calls_out_windups` auto-calls at
+  most one wind-up per round per encounter (v1 partially-passive — player-directed
+  WHICH-to-call is a follow-up). `Situation.ENEMY_WINDUP_UNDERWAY`/
+  `ENEMY_WINDUP_CALLED_OUT` are live evaluators. Separately, `REACTIONS_PER_ROUND` (1)
+  and `ABSORPTION_CAP_PER_MOMENT` (2) now gate the shared interpose fire seam
+  (`world/combat/tests/test_reaction_economy.py`: second reaction declines, resets
+  next round, a third answer on one payload declines). In-PR investigation found
+  `select_npc_actions` had zero production callers — `resolve_round` now auto-selects
+  as a conservative fallback when a round has no NPC selection yet (see ADR-0161).
 - Escalation → Audere offer → accept → real power change.
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).
@@ -201,7 +218,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   and capped death-kudos. Unit/service-tier proven (vitals/actions suites); no combat journey
   test yet — a KO-to-wake / death-to-retire journey is fair game for the journeys list.
 
-- **Healing rework: wound conditions wired + double-bounded HP mends (#2644, ADR-0156).**
+- **Healing rework: wound conditions wired + double-bounded HP mends (#2644, ADR-0161).**
   Closed the wound-tier's central audit gap: the permanent-wound pool now actually applies
   mechanical conditions (Lingering Ache / Crippling Wound / Bleeding Wound) instead of
   effect-free narrative labels. `WoundDetails` stamps mend-cap provenance

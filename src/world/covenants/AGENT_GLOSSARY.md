@@ -211,6 +211,38 @@ an existing one (the cast). Consumed by Chosen Ground's evaluator via `CombatEnc
 .on_chosen_ground`. (#2646.)
 _Avoid_: scouted location, home base (this codebase's term is Prepared Ground).
 
+**Wind-up**:
+A telegraphed NPC attack: a `ThreatPoolEntry` with `windup_rounds > 0` commits to a
+`PendingOpponentAttack` at declaration instead of a same-round `CombatOpponentAction`, and
+matures `windup_rounds` rounds later — pre-armed, not a mid-round interrupt (mirrors ADR-0118's
+guardian-reaction shape, extended in ADR-0161). `Situation.ENEMY_WINDUP_UNDERWAY` holds for its
+whole not-yet-matured lifetime; `ENEMY_WINDUP_CALLED_OUT` additionally requires `called_out`
+(see Callout, below). `windup_telegraph` (blank → a generic fallback line) is the authored
+broadcast text. (#2637.)
+_Avoid_: charge-up, cast time (those describe a caster's own resolution delay, not an NPC's
+authored multi-round threat).
+
+**Interception (wind-up)**:
+A PC's landing hit (damage > 0) on a winding-up opponent, adding `downgrades` to its
+`PendingOpponentAttack` — `+1` blind, `+2` if the wind-up was called out. `downgrades >= 3`
+(the "perfect chain") fully cancels the attack; below that, matured damage scales down
+(`x(1 - 0.25*downgrades)`, floored at `x0.25`) via `CombatOpponentAction.damage_scale`. No new
+button — rides the existing PC-attack-lands-damage moment (`_apply_windup_interception_rider`,
+called from `_resolve_pc_action`). Distinct from `ALLY_INTERCEPTED_FOR_ME`'s guardian
+INTERPOSE — this interception is offensive (a PC striking the winding-up opponent), not
+protective. (#2637, ADR-0161.)
+_Avoid_: cancel, interrupt (a single interception downgrades; it does not by itself cancel).
+
+**Callout (wind-up)**:
+The v1, partially-passive auto-callout: `CovenantRole.calls_out_windups` — when an engaged
+member holds a flagged role (or rides its `parent_role`'s flag, mirroring
+`blend_weight_for`), the FIRST wind-up telegraphed each round in that member's encounter is
+automatically marked `called_out=True` (at most one call-out per round per encounter). Picks
+THAT a wind-up gets called, not WHICH one when several telegraph the same round — choosing
+WHICH is the flagged player-directed upgrade path, not yet built. (#2637 design 6.)
+_Avoid_: The Know (a lore-repo niche name for a role archetype that might carry this flag —
+the mechanic itself is generic data, not tied to any one authored role).
+
 **Defense-Side Seam**:
 The evaluation point making situational perks reachable on a defender's OWN roll, not only the
 attacker's: `SituationContext.attacker` (populated only here, `None` on every offense-side

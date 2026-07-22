@@ -67,6 +67,7 @@ from world.checks.constants import ModifierSourceKind
 from world.checks.services import collect_check_modifiers, perform_check
 from world.checks.types import ModifierContribution
 from world.combat.constants import (
+    ABSORPTION_CAP_PER_MOMENT,
     BAR_UNITS_PER_ROUND,
     BOSS_PARLEY_RESISTANCE_STEP,
     BREAK_NOVELTY_MULTIPLIER,
@@ -91,6 +92,13 @@ from world.combat.constants import (
     NPC_SPEED_RANK,
     PACING_FLOOR_ROUND_PADDING,
     PENETRATION_CHECK_TYPE_NAME,
+    REACTIONS_PER_ROUND,
+    WINDUP_BLIND_DOWNGRADE,
+    WINDUP_CALLED_OUT_DOWNGRADE,
+    WINDUP_DOWNGRADE_STEP,
+    WINDUP_FIZZLE_DOWNGRADES,
+    WINDUP_GENERIC_TELEGRAPH,
+    WINDUP_MIN_DAMAGE_SCALE,
     ActionCategory,
     BreakContributionKind,
     ClashFlavor,
@@ -131,6 +139,7 @@ from world.combat.models import (
     EngagementLock,
     FleeConfig,
     FleeTierModifier,
+    PendingOpponentAttack,
     RoundChallengeDeclaration,
     ThreatPool,
     ThreatPoolEntry,
@@ -2819,6 +2828,21 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     enc.round_started_at = timezone.now()
     enc.save(update_fields=["round_number", "status", "round_started_at"])
 
+    # Reaction economy (#2639): every participant's reaction budget refills
+    # each round. A raw queryset .update() would bypass the SharedMemoryModel
+    # identity map — any already-cached CombatParticipant instance (e.g. one
+    # a caller is still holding) would keep reading its stale pre-reset value
+    # forever, since refresh_from_db() on an idmapper model returns the SAME
+    # cached instance rather than re-hydrating it from the row. Mutate the
+    # identity-mapped instances directly, then persist with one bulk_update
+    # query — correct in-memory state AND a single query, not a per-
+    # participant save() loop.
+    reset_participants = list(CombatParticipant.objects.filter(encounter=enc))
+    for reset_participant in reset_participants:
+        reset_participant.reactions_used = 0
+    if reset_participants:
+        CombatParticipant.objects.bulk_update(reset_participants, ["reactions_used"])
+
     # --- Round-start per-participant upkeep: DoT tick + engagement ensure ---
     from world.vitals.services import tick_round_for_targets  # noqa: PLC0415
 
@@ -3574,8 +3598,15 @@ def _batch_fetch_cooldown_data(
     """Batch-fetch recently-used entry IDs per opponent for cooldown checks.
 
     Returns a mapping of opponent_id -> set of entry IDs that are on cooldown.
+
+    #2637: a wind-up entry is committed at DECLARATION, not maturation — it
+    does not get a CombatOpponentAction row until it matures rounds later, so
+    a pending PendingOpponentAttack's declared_round also counts as "used"
+    for cooldown purposes. Batched identically to the CombatOpponentAction
+    read below (one extra fixed query, never a query per opponent).
     """
     cooldown_filters = Q()
+    pending_cooldown_filters = Q()
     for opponent in opponents:
         opp_entries = entries_by_pool.get(opponent.threat_pool_id, [])
         cooldown_entry_ids = [e.pk for e in opp_entries if e.cooldown_rounds is not None]
@@ -3588,18 +3619,34 @@ def _batch_fetch_cooldown_data(
             threat_entry_id__in=cooldown_entry_ids,
             round_number__gte=earliest_allowed,
         )
+        pending_cooldown_filters |= Q(
+            opponent=opponent,
+            threat_entry_id__in=cooldown_entry_ids,
+            declared_round__gte=earliest_allowed,
+        )
 
     result: dict[int, set[int]] = defaultdict(set)
     if not cooldown_filters:
         return result
 
-    recent_actions = CombatOpponentAction.objects.filter(cooldown_filters).values_list(
-        "opponent_id", "threat_entry_id", "round_number"
-    )
     entry_cooldown_map = {
         e.pk: e.cooldown_rounds for e in all_entries if e.cooldown_rounds is not None
     }
+
+    recent_actions = CombatOpponentAction.objects.filter(cooldown_filters).values_list(
+        "opponent_id", "threat_entry_id", "round_number"
+    )
     for opp_id, entry_id, round_num in recent_actions:
+        cooldown = entry_cooldown_map.get(entry_id)
+        if cooldown is not None:
+            earliest = max(1, round_number - cooldown + 1)
+            if round_num >= earliest:
+                result[opp_id].add(entry_id)
+
+    recent_pending = PendingOpponentAttack.objects.filter(pending_cooldown_filters).values_list(
+        "opponent_id", "threat_entry_id", "declared_round"
+    )
+    for opp_id, entry_id, round_num in recent_pending:
         cooldown = entry_cooldown_map.get(entry_id)
         if cooldown is not None:
             earliest = max(1, round_number - cooldown + 1)
@@ -3756,7 +3803,7 @@ def _get_companion_order(opponent: CombatOpponent, round_number: int) -> object 
     ).first()
 
 
-def _build_opponent_round_actions(  # noqa: C901, PLR0913
+def _build_opponent_round_actions(  # noqa: C901, PLR0912, PLR0913
     opponent: CombatOpponent,
     pool_entries: list[ThreatPoolEntry],
     cooldown_used: set[int],
@@ -3833,6 +3880,23 @@ def _build_opponent_round_actions(  # noqa: C901, PLR0913
     for attack_index in range(n_attacks):
         weights = [e.weight for e in eligible]
         chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
+
+        # Telegraphed wind-up (#2637 design 2-3): a windup_rounds entry commits
+        # to a PendingOpponentAttack instead of a same-round CombatOpponentAction.
+        # No CombatOpponentAction row exists for this attack until it matures.
+        if chosen.windup_rounds > 0:
+            _declare_windup_attack(
+                opponent,
+                chosen,
+                encounter,
+                target_pool,
+                targeting_participants=targeting_participants,
+                rotation=attack_index,
+                threat_map=threat_map,
+                shield_participant_ids=shield_participant_ids,
+            )
+            continue
+
         action = CombatOpponentAction.objects.create(
             opponent=opponent,
             round_number=encounter.round_number,
@@ -3920,6 +3984,322 @@ def _set_npc_action_targets(  # noqa: PLR0913
                 _shield_participant_ids=shield_participant_ids,
             )
         )
+
+
+def _select_windup_targets(  # noqa: PLR0913
+    entry: ThreatPoolEntry,
+    target_pool: list,
+    *,
+    targeting_participants: bool,
+    rotation: int,
+    threat_map: dict[int, int] | None = None,
+    shield_participant_ids: set[int] | None = None,
+) -> list:
+    """Same selection ``_set_npc_action_targets`` uses, minus the M2M write (#2637).
+
+    A wind-up has no CombatOpponentAction row to attach an M2M to at
+    declaration time — ``PendingOpponentAttack.target`` is a single nullable
+    FK instead (v1 single-target). The caller collapses a one-element,
+    participant-targeting selection into that FK; anything else (multi/ALL,
+    or an opponent-targeting summon windup) stays room-targeting (``None``),
+    re-derived at maturation.
+    """
+    if targeting_participants:
+        return _select_targets(
+            entry,
+            target_pool,
+            rotation=rotation,
+            _threat_map=threat_map,
+            _shield_participant_ids=shield_participant_ids,
+        )
+    return _select_opponent_targets(
+        entry,
+        target_pool,
+        rotation=rotation,
+        _threat_map=threat_map,
+        _shield_participant_ids=shield_participant_ids,
+    )
+
+
+# =============================================================================
+# Telegraphed enemy wind-ups (#2637)
+# =============================================================================
+
+
+def _declare_windup_attack(  # noqa: PLR0913
+    opponent: CombatOpponent,
+    entry: ThreatPoolEntry,
+    encounter: CombatEncounter,
+    target_pool: list,
+    *,
+    targeting_participants: bool,
+    rotation: int,
+    threat_map: dict[int, int] | None = None,
+    shield_participant_ids: set[int] | None = None,
+) -> None:
+    """Select this wind-up's target(s) and create its PendingOpponentAttack.
+
+    Split out of ``_build_opponent_round_actions`` to keep that function's
+    branch count within the lint threshold (#2637).
+    """
+    selected = _select_windup_targets(
+        entry,
+        target_pool,
+        targeting_participants=targeting_participants,
+        rotation=rotation,
+        threat_map=threat_map,
+        shield_participant_ids=shield_participant_ids,
+    )
+    single_target = selected[0] if targeting_participants and len(selected) == 1 else None
+    _create_pending_opponent_attack(opponent, entry, encounter, single_target)
+
+
+def _dual_dispatch_combat_narration(encounter: CombatEncounter, narration: str) -> None:
+    """Broadcast a combat narration line to BOTH clients (HARD telnet parity).
+
+    Mirrors ``world.covenants.perks.services.announce_fired_perks``'s
+    dual-dispatch shape: a persisted, Narrator-authored OUTCOME Interaction
+    over the WS interaction payload
+    (``world.combat.interaction_services.broadcast_action_outcome``) PLUS a
+    direct ``room.msg_contents(narration)`` text companion so bare telnet
+    clients render the identical line — ``broadcast_action_outcome`` alone is
+    WS-only.
+    """
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+
+    broadcast_action_outcome(encounter=encounter, narration=narration)
+    room = encounter.room
+    if room is not None:
+        room.msg_contents(narration)
+
+
+def _find_windup_caller(encounter: CombatEncounter) -> CombatParticipant | None:
+    """First ACTIVE participant flagged to auto-call enemy wind-ups (#2637 design 6).
+
+    A participant qualifies when their character holds an active
+    (``left_at__isnull=True``), engaged ``CharacterCovenantRole`` whose
+    ``covenant_role`` (or that role's ``parent_role`` — the riding rule
+    mirrors ``CovenantRole.blend_weight_for``) has ``calls_out_windups=True``.
+    Deterministic by participant pk. Two queries total (participants, then one
+    batched membership query), never a query per candidate.
+    """
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    participants = list(
+        CombatParticipant.objects.filter(
+            encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        .select_related("character_sheet__character")
+        .order_by("pk")
+    )
+    if not participants:
+        return None
+
+    sheet_ids = [p.character_sheet_id for p in participants]
+    flagged_sheet_ids = set(
+        CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=sheet_ids,
+            engaged=True,
+            left_at__isnull=True,
+        )
+        .filter(
+            Q(covenant_role__calls_out_windups=True)
+            | Q(covenant_role__parent_role__calls_out_windups=True)
+        )
+        .values_list("character_sheet_id", flat=True)
+    )
+    for participant in participants:
+        if participant.character_sheet_id in flagged_sheet_ids:
+            return participant
+    return None
+
+
+def _broadcast_windup_telegraph(pending: PendingOpponentAttack, *, caller_name: str | None) -> None:
+    """Announce a newly-declared wind-up (#2637 design 2, 6)."""
+    template = pending.threat_entry.windup_telegraph or WINDUP_GENERIC_TELEGRAPH
+    narration = template.format(opponent=pending.opponent.name)
+    if caller_name:
+        narration = f"{narration} — {caller_name} calls it!"
+    _dual_dispatch_combat_narration(pending.encounter, narration)
+
+
+def _broadcast_windup_wreck(pending: PendingOpponentAttack, attacker_name: str) -> None:
+    """Announce a PC hit staggering a winding-up opponent (#2637 design 4)."""
+    narration = f"{attacker_name}'s strike staggers {pending.opponent.name}'s wind-up!"
+    _dual_dispatch_combat_narration(pending.encounter, narration)
+
+
+def _broadcast_windup_fizzled(pending: PendingOpponentAttack, *, reason: str = "") -> None:
+    """Announce a wind-up that never lands (#2637 design 3)."""
+    if reason:
+        narration = f"{pending.opponent.name}'s wind-up {reason} and comes to nothing!"
+    else:
+        narration = (
+            f"{pending.opponent.name}'s wind-up is broken entirely — the perfect chain cancels it!"
+        )
+    _dual_dispatch_combat_narration(pending.encounter, narration)
+
+
+def _create_pending_opponent_attack(
+    opponent: CombatOpponent,
+    entry: ThreatPoolEntry,
+    encounter: CombatEncounter,
+    target: CombatParticipant | None,
+) -> PendingOpponentAttack:
+    """Telegraph a wind-up instead of a same-round attack (#2637 design 2-3, 6).
+
+    Resolves auto-callout (at most one call-out per round per encounter) and
+    dual-dispatches the telegraph narration.
+    """
+    round_number = encounter.round_number
+    already_called_out = PendingOpponentAttack.objects.filter(
+        encounter=encounter,
+        declared_round=round_number,
+        called_out=True,
+    ).exists()
+    caller = None if already_called_out else _find_windup_caller(encounter)
+
+    pending = PendingOpponentAttack.objects.create(
+        encounter=encounter,
+        opponent=opponent,
+        threat_entry=entry,
+        target=target,
+        declared_round=round_number,
+        resolves_round=round_number + entry.windup_rounds,
+        called_out=caller is not None,
+    )
+    caller_name = str(caller.character_sheet.character) if caller is not None else None
+    _broadcast_windup_telegraph(pending, caller_name=caller_name)
+    return pending
+
+
+def _windup_damage_scale(downgrades: int) -> float:
+    """The downgrade ladder: x(1 - 0.25*downgrades), floored at x0.25 (#2637 design 3)."""
+    return max(WINDUP_MIN_DAMAGE_SCALE, 1.0 - WINDUP_DOWNGRADE_STEP * downgrades)
+
+
+def _mature_one_pending_attack(
+    encounter: CombatEncounter,
+    pending: PendingOpponentAttack,
+    round_number: int,
+) -> None:
+    """Resolve a single matured wind-up: fizzle, lose-target, or fire (#2637 design 3)."""
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    if pending.downgrades >= WINDUP_FIZZLE_DOWNGRADES:
+        _broadcast_windup_fizzled(pending)
+        pending.delete()
+        return
+
+    if pending.opponent.status != OpponentStatus.ACTIVE:
+        pending.delete()
+        return
+
+    entry = pending.threat_entry
+    scale = _windup_damage_scale(pending.downgrades)
+
+    if pending.target_id is not None:
+        target = pending.target
+        if target.status != ParticipantStatus.ACTIVE or is_dead(target.character_sheet):
+            _broadcast_windup_fizzled(pending, reason="loses its target")
+            pending.delete()
+            return
+        action = CombatOpponentAction.objects.create(
+            opponent=pending.opponent,
+            round_number=round_number,
+            threat_entry=entry,
+            damage_scale=scale,
+        )
+        action.targets.set([target])
+        pending.delete()
+        return
+
+    # Room-targeting wind-up (no single stored target): re-derive the pool at
+    # maturation the same way declaration did — participants may have fled,
+    # died, or joined since the wind-up was telegraphed.
+    active_participants = list(
+        CombatParticipant.objects.filter(
+            encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
+        ).select_related("character_sheet__character")
+    )
+    target_pool, targeting_participants = _npc_action_target_pool(
+        pending.opponent, active_participants, encounter
+    )
+    if not target_pool:
+        _broadcast_windup_fizzled(pending, reason="loses its target")
+        pending.delete()
+        return
+
+    action = CombatOpponentAction.objects.create(
+        opponent=pending.opponent,
+        round_number=round_number,
+        threat_entry=entry,
+        damage_scale=scale,
+    )
+    _set_npc_action_targets(
+        action,
+        entry,
+        target_pool,
+        targeting_participants=targeting_participants,
+        rotation=0,
+    )
+    pending.delete()
+
+
+def _mature_pending_opponent_attacks(encounter: CombatEncounter, round_number: int) -> None:
+    """Mature every wind-up whose delay has elapsed this round (#2637 design 3, 5).
+
+    Called from ``resolve_round`` after the encounter flips to RESOLVING but
+    BEFORE the round's ``CombatOpponentAction`` rows are queried, so a matured
+    wind-up's synthesized action is picked up by the normal NPC-resolution
+    pipeline unmodified in the same pass.
+    """
+    pending_rows = list(
+        PendingOpponentAttack.objects.filter(
+            encounter=encounter,
+            resolves_round=round_number,
+        ).select_related("opponent", "threat_entry", "target__character_sheet__character")
+    )
+    for pending in pending_rows:
+        _mature_one_pending_attack(encounter, pending, round_number)
+
+
+def _apply_windup_interception_rider(
+    target: CombatOpponent,
+    outcome: ActionOutcome,
+    attacker_participant: CombatParticipant,
+) -> None:
+    """A landing PC hit on a winding-up opponent adds downgrades (#2637 design 4).
+
+    Only fires on hits that dealt damage > 0 against ``target``. +1 downgrade
+    blind, +2 when the wind-up is ``called_out`` (called-out beats blind).
+    Only matches a NOT-YET-MATURED pending row (``resolves_round >=`` the
+    current round) — a wind-up maturing THIS round is already resolved and
+    deleted before PC actions resolve, so this can only ever reach a future
+    one.
+    """
+    landed = any(
+        isinstance(damage_result, OpponentDamageResult)
+        and damage_result.opponent_id == target.pk
+        and damage_result.damage_dealt > 0
+        for damage_result in outcome.damage_results
+    )
+    if not landed:
+        return
+
+    pending = PendingOpponentAttack.objects.filter(
+        opponent=target,
+        resolves_round__gte=target.encounter.round_number,
+    ).first()
+    if pending is None:
+        return
+
+    increment = WINDUP_CALLED_OUT_DOWNGRADE if pending.called_out else WINDUP_BLIND_DOWNGRADE
+    pending.downgrades += increment
+    pending.save(update_fields=["downgrades"])
+    _broadcast_windup_wreck(pending, str(attacker_participant.character_sheet.character))
 
 
 def swarm_kills(raw_damage: int, body_toughness: int) -> int:
@@ -5519,9 +5899,14 @@ def resolve_npc_attack(
     )
 
     multiplier = _damage_multiplier_for_success(result.success_level)
+    # damage_multiplier is a Decimal field (authored per-opponent scaling);
+    # damage_scale (#2637, the wind-up downgrade ladder) is a plain float —
+    # apply them in two steps so Decimal never multiplies directly against a
+    # float (TypeError).
     base_damage = int(
         opponent_action.threat_entry.base_damage * opponent_action.opponent.damage_multiplier
     )
+    base_damage = int(base_damage * opponent_action.damage_scale)
     final_damage = math.floor(base_damage * multiplier)
 
     damage_result = apply_damage_to_participant(
@@ -6683,6 +7068,12 @@ def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912
     if action.combo_upgrade and target is not None:
         _apply_combo_rider(participant, action, target, outcome)
 
+    # Wind-up interception rider (#2637 design 4): a landing hit on a
+    # winding-up opponent downgrades its telegraphed attack. No new button —
+    # rides the existing damage-landed moment.
+    if target is not None:
+        _apply_windup_interception_rider(target, outcome, participant)
+
     # Apply fatigue after action resolves
     apply_fatigue(
         participant.character_sheet,
@@ -6761,7 +7152,7 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
         else:
             dmg_result = apply_damage_to_participant(
                 target_participant,
-                npc_action.threat_entry.base_damage,
+                int(npc_action.threat_entry.base_damage * npc_action.damage_scale),
                 damage_type=npc_action.threat_entry.damage_type,
                 source=opponent,
                 on_hit_pool=npc_action.threat_entry.on_hit_consequence_pool,
@@ -6837,7 +7228,7 @@ def _resolve_npc_action_on_opponent_target(
 
     dmg_result = apply_damage_to_opponent(
         target_opponent,
-        npc_action.threat_entry.base_damage,
+        int(npc_action.threat_entry.base_damage * npc_action.damage_scale),
         damage_type=npc_action.threat_entry.damage_type,
         source_sheet=opponent.summoned_by,
     )
@@ -7827,7 +8218,26 @@ def _dispatch_interpose_action(
     ward (:func:`_try_interpose_for_opponent`). Handles the technique-vs-mundane
     branch, bond bonus, and interposer fatigue charge identically for both —
     extracted so the two callers don't duplicate this body (#2207).
+
+    **Reaction economy (#2639), shared fire seam per F-10c:** declines with
+    the same "did not fire" no-op shape (no dispatch, no fatigue, pre_payload
+    untouched) when either budget is exhausted — the interposer has already
+    spent their ``REACTIONS_PER_ROUND`` reaction this round, or this specific
+    payload has already been answered by ``ABSORPTION_CAP_PER_MOMENT``
+    interceptors. Both counters increment together on an actual attempt
+    (readiness is free; only firing spends the budget), regardless of whether
+    the guardian's own roll then succeeds.
     """
+    participant = action.participant
+    if participant.reactions_used >= REACTIONS_PER_ROUND:
+        return
+    if pre_payload.answers_consumed >= ABSORPTION_CAP_PER_MOMENT:
+        return
+
+    participant.reactions_used += 1
+    participant.save(update_fields=["reactions_used"])
+    pre_payload.answers_consumed += 1
+
     interposer = action.participant.character_sheet.character
 
     # Bond combat bonus (#2021): relationship-scaled protection.
@@ -9183,6 +9593,27 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         )
         raise ValueError(msg)
 
+    # NPC-selection wiring-gap fallback (#2637 design 8): select_npc_actions
+    # has zero production callers outside the simulation harness in v1 — no
+    # Action/command/task calls it before resolve_round. Auto-select here,
+    # while status is still DECLARING (select_npc_actions requires it), when
+    # this round has no NPC selection of EITHER shape yet (a normal
+    # CombatOpponentAction OR a wind-up's PendingOpponentAttack) — a
+    # conservative, idempotent fallback: any explicit prior selection (staff,
+    # simulation, tests) is left alone.
+    already_selected = (
+        CombatOpponentAction.objects.filter(
+            opponent__encounter=enc,
+            round_number=enc.round_number,
+        ).exists()
+        or PendingOpponentAttack.objects.filter(
+            encounter=enc,
+            declared_round=enc.round_number,
+        ).exists()
+    )
+    if not already_selected:
+        select_npc_actions(enc)
+
     enc.status = RoundStatus.RESOLVING
     enc.save(update_fields=["status"])
 
@@ -9197,6 +9628,11 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         encounter=encounter,
         vulnerability_rounds_remaining__gt=0,
     ).update(vulnerability_rounds_remaining=F("vulnerability_rounds_remaining") - 1)
+
+    # --- Wind-up maturation (#2637 design 5): before the round's
+    # CombatOpponentAction rows are queried below, so a matured wind-up's
+    # synthesized action is picked up in the same pass. ---
+    _mature_pending_opponent_attacks(enc, round_number)
 
     # --- Build action lookups ---
     pc_actions: dict[int, CombatRoundAction] = {}

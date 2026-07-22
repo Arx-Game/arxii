@@ -32,6 +32,7 @@ from world.combat.factories import (
     CombatParticipantFactory,
     CombatRoundActionFactory,
     EngagementLockFactory,
+    PendingOpponentAttackFactory,
 )
 from world.combat.models import CombatEncounter
 from world.combat.round_context import CombatRoundContext
@@ -985,3 +986,74 @@ class AttackerAffinityEvaluatorTests(TestCase):
     def test_false_when_no_attacker(self) -> None:
         params = SituationParams(affinity=AffinityType.ABYSSAL)
         self.assertFalse(evaluators.attacker_affinity(self._ctx(None), params))
+
+
+class EnemyWindupEvaluatorTests(TestCase):
+    """ENEMY_WINDUP_UNDERWAY / ENEMY_WINDUP_CALLED_OUT (#2637): true only while
+    a not-yet-matured PendingOpponentAttack exists in the subject's encounter."""
+
+    def setUp(self) -> None:
+        self.encounter = CombatEncounterFactory(round_number=2)
+        self.opponent = CombatOpponentFactory(encounter=self.encounter)
+        self.subject_sheet = CharacterSheetFactory()
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.subject_sheet
+        )
+        self.resolution = CombatRoundContext(self.participant)
+
+    def _ctx(self) -> SituationContext:
+        return SituationContext(
+            holder=self.subject_sheet,
+            subject=self.subject_sheet,
+            target=None,
+            resolution=self.resolution,
+        )
+
+    def test_underway_true_while_pending(self) -> None:
+        PendingOpponentAttackFactory(
+            encounter=self.encounter,
+            opponent=self.opponent,
+            declared_round=1,
+            resolves_round=2,
+        )
+        self.assertTrue(evaluators.enemy_windup_underway(self._ctx(), NO_PARAMS))
+
+    def test_underway_false_with_no_pending_row(self) -> None:
+        self.assertFalse(evaluators.enemy_windup_underway(self._ctx(), NO_PARAMS))
+
+    def test_underway_true_for_a_future_round_too(self) -> None:
+        PendingOpponentAttackFactory(
+            encounter=self.encounter,
+            opponent=self.opponent,
+            declared_round=1,
+            resolves_round=5,
+        )
+        self.assertTrue(evaluators.enemy_windup_underway(self._ctx(), NO_PARAMS))
+
+    def test_called_out_false_when_not_called_out(self) -> None:
+        PendingOpponentAttackFactory(
+            encounter=self.encounter,
+            opponent=self.opponent,
+            declared_round=1,
+            resolves_round=2,
+            called_out=False,
+        )
+        self.assertTrue(evaluators.enemy_windup_underway(self._ctx(), NO_PARAMS))
+        self.assertFalse(evaluators.enemy_windup_called_out(self._ctx(), NO_PARAMS))
+
+    def test_called_out_true_when_called_out(self) -> None:
+        PendingOpponentAttackFactory(
+            encounter=self.encounter,
+            opponent=self.opponent,
+            declared_round=1,
+            resolves_round=2,
+            called_out=True,
+        )
+        self.assertTrue(evaluators.enemy_windup_called_out(self._ctx(), NO_PARAMS))
+
+    def test_missing_resolution_returns_false_outside_combat(self) -> None:
+        ctx = SituationContext(
+            holder=self.subject_sheet, subject=self.subject_sheet, target=None, resolution=None
+        )
+        self.assertFalse(evaluators.enemy_windup_underway(ctx, NO_PARAMS))
+        self.assertFalse(evaluators.enemy_windup_called_out(ctx, NO_PARAMS))

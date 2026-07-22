@@ -25,7 +25,9 @@ class Situation(models.TextChoices):
     Task 5); ``ATTACKER_AFFINITY`` (renamed from its original Abyssal-only
     v1 spelling, #2623) is slice 3's defense-side seam addition (#2536 Task
     6); ``ON_CHOSEN_GROUND`` is #2646's whole-encounter chosen-ground
-    addition — the enum ships no other inert entries; every value here has a
+    addition; ``ENEMY_WINDUP_UNDERWAY`` and ``ENEMY_WINDUP_CALLED_OUT`` are the
+    telegraphed-enemy-wind-up addition (#2637) — the enum ships no other
+    inert entries; every value here has a
     registered evaluator with signature ``(ctx: SituationContext, params:
     SituationParams) -> bool`` (params parameterization landed #2623 Task 3 —
     see ``SITUATION_PARAM_SPECS`` below for which situations read which
@@ -144,6 +146,16 @@ class Situation(models.TextChoices):
       lethal). False outside combat, mirroring ``CHAMPION_DUEL``'s shape — a
       whole-encounter stamp that holds every round once set, never re-derived
       mid-fight. Reads ``resolution``.
+    - ``ENEMY_WINDUP_UNDERWAY`` — the SUBJECT's encounter has at least one
+      not-yet-matured ``PendingOpponentAttack`` (``resolves_round`` >= the
+      encounter's current round_number, #2637). Mirrors
+      ``ally_intercepted_for_me``'s "declared is the situation" v1 shape: it
+      holds the instant a wind-up is telegraphed, regardless of whose
+      opponent it is or who it targets. Reads ``resolution``; False outside
+      combat.
+    - ``ENEMY_WINDUP_CALLED_OUT`` — same as ``ENEMY_WINDUP_UNDERWAY``, plus
+      the pending row's ``called_out`` flag is True (#2637 design 6, the
+      flagged-role auto-callout). Reads ``resolution``; False outside combat.
     """
 
     AT_RANGE = "at_range", "At Range"
@@ -161,6 +173,8 @@ class Situation(models.TextChoices):
     ALLY_INTERCEPTED_FOR_ME = "ally_intercepted_for_me", "Ally Intercepted for Me"
     ATTACKER_AFFINITY = "attacker_affinity", "Attacker Affinity"
     ON_CHOSEN_GROUND = "on_chosen_ground", "On Chosen Ground"
+    ENEMY_WINDUP_UNDERWAY = "enemy_windup_underway", "Enemy Wind-Up Underway"
+    ENEMY_WINDUP_CALLED_OUT = "enemy_windup_called_out", "Enemy Wind-Up Called Out"
 
 
 class PerkEffectKind(models.TextChoices):
