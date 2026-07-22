@@ -801,6 +801,9 @@ def covenant_role_bonus(
     role bonus calculation. Only the combat path supplies this (bond-adjusted level
     for mentor/sidekick pairs, #1165). All non-combat callers omit it → unchanged.
 
+    PRIMARY-only (#2641, Layer 1 — chassis): a secondary vow never contributes
+    equipment-blended role bonuses.
+
     Args:
         sheet: CharacterSheet instance.
         target: The ModifierTarget to aggregate bonuses for.
@@ -808,7 +811,8 @@ def covenant_role_bonus(
             for the role bonus scaling. Defaults to None (use current_level).
 
     Returns:
-        Integer total of all engaged-covenant-role contributions across equipped items.
+        Integer total of all engaged-primary-covenant-role contributions across
+        equipped items.
     """
     from world.covenants.services import (  # noqa: PLC0415
         is_gear_compatible,
@@ -819,7 +823,7 @@ def covenant_role_bonus(
     # Character typeclass handlers. Skip the walk gracefully.
     if not hasattr(char, "covenant_roles") or not hasattr(char, "equipped_items"):
         return 0
-    engaged_roles = char.covenant_roles.currently_engaged_roles()
+    engaged_roles = char.covenant_roles.currently_engaged_primary_roles()
     if not engaged_roles:
         return 0
 
@@ -843,17 +847,19 @@ def covenant_role_bonus(
 
 
 def covenant_role_base_total(sheet: object, target: ModifierTarget) -> int:
-    """Raw engaged-covenant-role bonus for ``target`` — no per-gear marginal blend (#1174).
+    """Raw engaged-PRIMARY-covenant-role bonus for ``target`` — no per-gear marginal
+    blend (#1174).
 
-    Σ over engaged roles of ``current_level * bonus_per_level``. Unlike
+    Σ over engaged PRIMARY roles of ``current_level * bonus_per_level``. Unlike
     ``covenant_role_bonus`` (which subtracts the equipped gear stat per slot), this is
     the role's intrinsic resonant contribution, used by the armor-soak seam to pool all
-    resonant soak before its compatible-additive / incompatible-max blend.
+    resonant soak before its compatible-additive / incompatible-max blend. PRIMARY-only
+    (#2641, Layer 3 — chassis): a secondary vow never contributes resonant soak.
     """
     char = sheet.character
     if not hasattr(char, "covenant_roles"):
         return 0
-    engaged_roles = char.covenant_roles.currently_engaged_roles()
+    engaged_roles = char.covenant_roles.currently_engaged_primary_roles()
     if not engaged_roles:
         return 0
     return sum(
@@ -883,7 +889,8 @@ def equipment_walk_total_unblended(sheet: object, target: ModifierTarget) -> int
 
 
 def covenant_level_bonus(sheet: object, target: ModifierTarget) -> int:
-    """Sum the authored covenant-level passive bonus across engaged memberships (#762).
+    """Sum the authored covenant-level passive bonus across engaged PRIMARY
+    memberships (#762).
 
     A ``CovenantLevelBonus`` row authored against ``target`` grants each engaged
     member a derive-on-read modifier of ``covenant.level * bonus_per_level``.
@@ -891,12 +898,19 @@ def covenant_level_bonus(sheet: object, target: ModifierTarget) -> int:
     ``covenant_role_bonus`` (spec 2026-05-09 §3.6). No CharacterModifier rows are
     persisted. Most targets have no row → returns 0.
 
+    PRIMARY-only (#2641, conservative — flagged): the membership query below
+    filters ``is_secondary=False`` alongside the existing engagement gate. This
+    bonus isn't one of the four vow-power layers proper (it keys on covenant
+    LEVEL, not covenant ROLE), but it is chassis-shaped (a flat passive that
+    stacks with gear/stat scaling), so it stays primary-only rather than open
+    a fifth exception to "secondary never touches the chassis."
+
     Args:
         sheet: CharacterSheet instance.
         target: The ModifierTarget to aggregate the level bonus for.
 
     Returns:
-        Integer total of the engaged-covenant level bonus for ``target``.
+        Integer total of the engaged-primary-covenant level bonus for ``target``.
     """
     char = sheet.character
     # Defensive: raw ObjectDB fixtures (without _typeclass_path) lack the
@@ -907,7 +921,7 @@ def covenant_level_bonus(sheet: object, target: ModifierTarget) -> int:
     # new query when the character isn't engaged, so get_modifier_total's query
     # budget stays flat for the common case. The authored-config lookup only
     # fires for engaged members. Mirrors covenant_role_bonus's early-out.
-    if not char.covenant_roles.currently_engaged_roles():
+    if not char.covenant_roles.currently_engaged_primary_roles():
         return 0
 
     from world.covenants.models import (  # noqa: PLC0415
@@ -923,6 +937,7 @@ def covenant_level_bonus(sheet: object, target: ModifierTarget) -> int:
     memberships = CharacterCovenantRole.objects.filter(
         character_sheet=sheet,
         engaged=True,
+        is_secondary=False,
         left_at__isnull=True,
     ).select_related("covenant")
     return sum(m.covenant.level * config.bonus_per_level for m in memberships)
@@ -949,13 +964,14 @@ def role_base_bonus_for_target(
 
 
 def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
-    """Sum the vow-driven stat scaling across engaged roles (#2022).
+    """Sum the vow-driven stat scaling across engaged PRIMARY roles (#2022).
 
     Unlike ``covenant_role_bonus`` (which scales by ``character_level``), this
     scales by the character's **COVENANT_ROLE thread level** — so a deepened
     vow is a substantially stronger character. For each engaged role, reads
     the ``VowStatScaling`` row for ``(role, target)`` and returns
-    ``thread_level * bonus_per_level``. No row → 0 (most targets).
+    ``thread_level * bonus_per_level``. No row → 0 (most targets). PRIMARY-only
+    (#2641, Layer 3 — chassis): a secondary vow never scales a stat.
 
     Gated on engagement (the #2051 continuous enforcement ensures the engaged
     flag tracks co-presence). When the vow dims, the stat scaling drops — the
@@ -969,7 +985,7 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
     char = sheet.character
     if not hasattr(char, "covenant_roles"):
         return 0
-    engaged_roles = char.covenant_roles.currently_engaged_roles()
+    engaged_roles = char.covenant_roles.currently_engaged_primary_roles()
     if not engaged_roles:
         return 0
 

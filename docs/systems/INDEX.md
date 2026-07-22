@@ -4046,7 +4046,15 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 - **Models:**
   - `CharacterCovenantRole` — per-character membership row; `left_at IS NULL` =
     currently active. Fields include `covenant` FK, `covenant_role` FK, `engaged`
-    boolean, `rank` FK → `CovenantRank`.
+    boolean, `rank` FK → `CovenantRank`, `is_secondary` boolean (#2641, ADR-0155 —
+    marks an engaged SECONDARY vow; at most one engaged PRIMARY + one engaged
+    SECONDARY per (character_sheet, covenant type); chassis layers 1/3 never read
+    secondary memberships, Layers 2/4 scale a secondary's contribution by
+    `SecondaryVowConfig.potency_tenths`; see `docs/systems/covenants.md`'s
+    "Secondary vows" section for the full split).
+  - `SecondaryVowConfig` (#2641) — singleton (pk=1) potency dial,
+    `potency_tenths` (default 6 = ×0.6), lazy-created via
+    `secondary_vow_config()` (`world.covenants.services`).
   - `CovenantRole.sword_weight`/`.shield_weight`/`.crown_weight` (#2529, ADR-0149) —
     Decimal weights forming the combat-identity blend; stored on primary roles only
     (sum to 1), sub-roles delegate via `blend_weight_for(axis) -> Decimal`. Replaced

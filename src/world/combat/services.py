@@ -4776,13 +4776,15 @@ def _action_matches_slot(
 
 
 def _participant_has_archetype(participant: CombatParticipant, archetype: str) -> bool:
-    """True if an engaged CovenantRole has weight on the given blend axis (#2529).
+    """True if an engaged PRIMARY CovenantRole has weight on the given blend axis (#2529).
 
     ``ComboSlot.required_archetype`` values (SWORD/SHIELD/CROWN) are read as
-    blend-axis labels: any engaged role with a nonzero weight on that axis
-    satisfies the slot.
+    blend-axis labels: any engaged PRIMARY role with a nonzero weight on that
+    axis satisfies the slot. PRIMARY-only (#2641, Layer 1 — chassis): a
+    secondary vow never satisfies a combo slot's archetype requirement.
     """
-    for role in participant.character_sheet.character.covenant_roles.currently_engaged_roles():
+    covenant_roles = participant.character_sheet.character.covenant_roles
+    for role in covenant_roles.currently_engaged_primary_roles():
         if role.blend_weight_for(archetype) > 0:
             return True
     return False
@@ -9061,9 +9063,11 @@ def _split_armor_soak_by_compatibility(
 ) -> tuple[int, int, list[ItemInstance], list[ItemInstance]]:
     """Split worn armor's effective soak into role-compatible vs incompatible buckets (#1174).
 
-    A piece is compatible when ANY engaged covenant role is gear-compatible with its
-    archetype (existing GearArchetypeCompatibility). With no engaged role, all armor is
-    incompatible (it then competes via ``max`` against a 0 resonant pool → armor-only).
+    A piece is compatible when ANY engaged PRIMARY covenant role is gear-compatible with
+    its archetype (existing GearArchetypeCompatibility). With no engaged primary role,
+    all armor is incompatible (it then competes via ``max`` against a 0 resonant pool →
+    armor-only). PRIMARY-only (#2641, Layer 3 — chassis): a secondary vow never widens
+    gear compatibility.
 
     Returns ``(compat_soak, incompat_soak, compat_pieces, incompat_pieces)`` where the
     piece lists are the ItemInstances whose physical soak fell in each bucket (for
@@ -9072,7 +9076,7 @@ def _split_armor_soak_by_compatibility(
     from world.covenants.services import is_gear_compatible  # noqa: PLC0415
 
     engaged_roles = (
-        character.covenant_roles.currently_engaged_roles()
+        character.covenant_roles.currently_engaged_primary_roles()
         if hasattr(character, "covenant_roles")
         else []
     )
