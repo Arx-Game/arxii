@@ -37664,6 +37664,11 @@ export interface components {
       descriptor: string;
       /** @description Chosen FormTraitOption for a choose-at-use cosmetic (#2632 — Styling Kit style, Ariwn Lenses color). Ignored by fixed-option items. */
       option_id?: number | null;
+      /**
+       * @description Add the color instead of replacing (#2632) — green dye onto black hair yields Black-Green (composite value + component list).
+       * @default false
+       */
+      blend: boolean;
     };
     /** @description Response shape mirroring ``UseItemResult`` (issue #509). */
     UseItemResult: {

@@ -422,3 +422,19 @@ class InsufficientMaterials(ItemError):
         self.requirement = requirement
         self.provided_qty = provided_qty
         super().__init__(self.user_message)
+
+
+class StyleNotKnown(ItemError):
+    """The acting character doesn't know an exotic (requires_teaching) option (#2632)."""
+
+    user_message = "You don't know how to produce that look."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"You don't know how to produce that look."}
+    )
+
+
+class BlendNotSupported(ItemError):
+    """A blend was requested on a trait with no composite option (#2632)."""
+
+    user_message = "Those can't be blended together."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"Those can't be blended together."})
