@@ -366,6 +366,17 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   standalone cast of a PERCEPTION-tagged technique by a character holding an engaged covenant
   role flagged `prepares_ground`. When the vow dims (#2051), the engaged flag drops and every
   layer's contribution returns to 0 — which is why soloing legend content is lethal.
+  **The damage identity** (#2643, ADR-0158, shipped): team damage = Strike's bases
+  (execute-scaled) × Uplift's team-wide % × Undermine's enemy-side % (lore repo
+  `design/covenant-vows-consolidated.md` §5). Built the two percent lanes' shared
+  bound (a flat cap on the SUMMED contribution, never a second multiplicative
+  stage — the EQ2 lane guard), Uplift's per-target-level pricing, vow-keyed
+  diminishing returns on `ConditionInstance.source_vow` (100/50/25/25%... within
+  one vow, full stacking across vows — rewarding the SAME multi-vow-engagement
+  incentive the four-layer power-term model already teaches), and a smooth
+  pre-hit-health execute ramp (`AbstractDamageProfile
+  .execute_missing_health_multiplier`). See `docs/systems/magic.md`'s "The Damage
+  Identity" section for the full composition.
 - Magic is predominant; relationship bonuses matter; **difficulty scales on party size + average level
   only** (ADR-0037); combat merits Legend, never XP (ADR-0036).
 
@@ -373,4 +384,4 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
 
 - Capability tiers + MVP slate: [`player-capability-ledger.md`](player-capability-ledger.md)
 - Build history (the old combat.md): [`combat-build-history.md`](combat-build-history.md)
-- Decisions: [`../adr/README.md`](../adr/README.md) (esp. 0002–0004, 0023, 0036–0040, 0046, 0055, 0057)
+- Decisions: [`../adr/README.md`](../adr/README.md) (esp. 0002–0004, 0023, 0036–0040, 0046, 0055, 0057, 0149, 0155)

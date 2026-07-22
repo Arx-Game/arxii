@@ -142,6 +142,13 @@ class NoChargesRemaining(ItemError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That item has no uses left."})
 
 
+class MakeoverNotPermitted(ItemError):
+    """The target's consent settings exclude the actor from makeovers (#2632)."""
+
+    user_message = "They are not letting you restyle them."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"They are not letting you restyle them."})
+
+
 class CraftingStationRequired(ItemError):
     """Raised when a recipe requiring a station has none active in the room (#1234)."""
 

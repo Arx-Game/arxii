@@ -32,6 +32,13 @@ class OfferKind(models.TextChoices):
     # entrance obligation by redeeming a Golden Hare (see
     # world.npc_services.effects.run_settle_obligation_offer).
     SETTLE_OBLIGATION = "settle_obligation", "Settle Obligation"
+    # #2632 — NPC stylist restyles one cosmetic trait for coin (menu-driven:
+    # one offer per (trait, option); see run_styling_offer).
+    STYLING = "styling", "Styling"
+    # #2632 — Great Archive scholar records the character's profile: pays for
+    # a sitting; the write-up completes via RecordedProfile (the diegetic
+    # desc-update + permanent archive; see run_profile_recording_offer).
+    PROFILE_RECORDING = "profile_recording", "Profile Recording"
     # Future kinds: marriage/attunement.
 
 
@@ -112,3 +119,15 @@ class NpcRegardEventReason(models.TextChoices):
     STAKE_RESOLUTION = "stake_resolution", "Stake resolution fired"
     GM_MANUAL_ADJUSTMENT = "gm_manual", "GM manual adjustment"
     DISTINCTION_SEED = "distinction_seed", "CG distinction seed"
+
+
+class RecordedProfileStatus(models.TextChoices):
+    """Lifecycle of a Great Archive recorded profile (#2632).
+
+    COMMISSIONED — the sitting is paid for; the write-up hasn't arrived.
+    RECORDED — the profile text is finalized: it became the character's
+    current description and lives in the Archive forever.
+    """
+
+    COMMISSIONED = "commissioned", "Commissioned"
+    RECORDED = "recorded", "Recorded"

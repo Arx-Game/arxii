@@ -298,6 +298,7 @@ class ConditionInstanceFactory(DjangoModelFactory):
     stage_rounds_remaining = None
     source_character = None
     source_technique = None
+    source_vow = None
     source_description = ""
     is_suppressed = False
 

@@ -57,7 +57,7 @@ flowchart TD
     subgraph P1["Phase 1 · _derive_power (every cast)"]
         direction TB
         BASE["1 · BASE — SET to channeled intensity<br/>(stats.intensity + clash power_intensity_bonus)"]
-        MULT["2 · MULTIPLIER — ×(1 + Σ%/100), single aggregate"]
+        MULT["2 · MULTIPLIER — ×(1 + Σ%/100), single aggregate<br/>(legacy + bounded team-% lane composed, #2643)"]
         FLAT["3 · FLAT_MODIFIER — ADD per source"]
         TERM["4 · TERM — ADD per provider (level, aura, thread)"]
         ENV["5 · ENVIRONMENT — ADD iff ALIGNED AMPLIFY"]
@@ -87,7 +87,7 @@ flowchart TD
 | # | Stage | Source | How applied |
 |---|-------|--------|-------------|
 | 1 | **BASE** | The channeled intensity passed in: `stats.intensity` from `get_runtime_technique_stats` (identity + process modifiers, Audere intensity, tier penalty, social safety) plus the clash `power_intensity_bonus` (`strain_to_intensity` — power-only, never anima) | `SET` to channeled intensity |
-| 2 | **MULTIPLIER** | `power_multiplier` `ModifierTarget` via `get_modifier_breakdown` + `get_condition_modifier_breakdown`. Immunity-blocked sources excluded. | Single aggregate `×(1 + Σ%/100)` applied to BASE only — one `multiply` call, never per-source, to avoid repeated rounding drift |
+| 2 | **MULTIPLIER** | TWO percent sources composed into one delta (#2643, ADR-0158): (a) legacy `power_multiplier` `ModifierTarget` via `get_modifier_breakdown` + `get_condition_modifier_breakdown` (unbounded, immunity-blocked sources excluded), PLUS (b) the bounded `team_damage_percent` lane — its own condition-sourced deltas grouped by `ConditionInstance.source_vow` and run through vow-keyed diminishing returns (`vow_keyed_diminished_total`: 100/50/25/25%... within one vow, full stacking across distinct vows), then clamped to `±TEAM_BUFF_LANE_CAP_PERCENT`. `total_delta = lane_delta_clamped + legacy_delta`. | Single aggregate `×(1 + Σ%/100)` applied to BASE only — one `multiply` call, never per-source and never a second multiplicative stage for (b), to avoid repeated rounding drift AND the EQ2 lane-stacking failure mode |
 | 3 | **FLAT_MODIFIER** | Per-source additive power modifiers via `get_modifier_breakdown` (immunity-blocked excluded) + per-condition rows via `get_condition_modifier_breakdown` | `ADD` per non-zero source |
 | 4 | **TERM** | `get_power_term_providers()` — `level`, `aura`, and `thread` all live (#768), applied in registry order | `ADD` per provider |
 | 5 | **ENVIRONMENT** | Cast-time `evaluate_resonance_environment` AMPLIFY magnitude only | `ADD` if `kind == AMPLIFY and magnitude > 0` |
@@ -273,3 +273,9 @@ outcome clause into the combat outcome line; `render_cast_outcome_narration`
   §3.1 stage table to the as-built execution order (`REACTIVE` lands before `COMBAT_PULL`, not
   after `PENETRATION`); fixed the narration symbol references (`power_outcome_clause` lives in
   `world/magic/narration.py`, not `interaction_services.py`).
+- **#2643 (ADR-0158)** — split the MULTIPLIER stage's read into two composed lanes: the
+  untouched legacy `power_multiplier` aggregate, plus a new bounded `team_damage_percent`
+  lane (vow-keyed diminishing returns, then clamped to `TEAM_BUFF_LANE_CAP_PERCENT`) — still
+  ONE `multiply` call, never a second multiplicative stage. See `docs/systems/magic.md`'s
+  "The Damage Identity" section for the full composition (also covers the sibling
+  enemy-side clamp and the pre-hit-health execute ramp, both outside this pipeline).

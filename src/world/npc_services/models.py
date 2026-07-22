@@ -29,6 +29,7 @@ from world.npc_services.constants import (
     DrawMode,
     NpcRegardEventReason,
     OfferKind,
+    RecordedProfileStatus,
     RegardTargetType,
     SummonsStatus,
 )
@@ -1304,3 +1305,135 @@ class NPCAssignment(SharedMemoryModel, DiscriminatorMixin):
     def __str__(self) -> str:
         target = self.get_active_target_name()
         return f"{target} as {self.assignment_role} @ room {self.room_id}"
+
+
+class StylingOfferDetails(SharedMemoryModel):
+    """Per-kind details for ``NPCServiceOffer`` rows of kind=STYLING (#2632).
+
+    Menu-driven NPC styling: one offer row per (trait, option) — "Dye hair
+    crimson", "Braid hair" — because the interaction machinery has no free
+    input channel, and a menu of concrete services reads naturally anyway.
+    The same ``change_appearance`` seam PC stylists use applies the change;
+    only ``is_cosmetic`` traits validate (the offer IS the gate, mirroring
+    ``ItemTemplateAppearanceEffect``).
+    """
+
+    offer = models.OneToOneField(
+        NPCServiceOffer,
+        on_delete=models.CASCADE,
+        related_name="styling_offer_details",
+        help_text=_NPC_OFFER_DETAILS_HELP_TEXT,
+    )
+    trait = models.ForeignKey(
+        "forms.FormTrait",
+        on_delete=models.PROTECT,
+        related_name="styling_offers",
+        help_text="The cosmetic trait this service restyles.",
+    )
+    target_option = models.ForeignKey(
+        "forms.FormTraitOption",
+        on_delete=models.PROTECT,
+        related_name="styling_offers",
+        help_text="The value the trait is set to.",
+    )
+    price_coppers = models.PositiveBigIntegerField(
+        help_text="Coppers charged from the PC's purse. PLACEHOLDER magnitudes."
+    )
+
+    class Meta:
+        verbose_name = "Styling Offer Details"
+        verbose_name_plural = "Styling Offer Details"
+
+    def __str__(self) -> str:
+        return f"StylingOfferDetails({self.trait_id}->{self.target_option_id}, o{self.offer_id})"
+
+    def clean(self) -> None:
+        """Option must belong to the trait; the trait must be cosmetic."""
+        super().clean()
+        if self.target_option_id is not None and self.target_option.trait_id != self.trait_id:
+            raise ValidationError({"target_option": "Option does not belong to this trait."})
+        if self.trait_id is not None and not self.trait.is_cosmetic:
+            raise ValidationError({"trait": "Only cosmetic traits can be restyled."})
+
+
+class ProfileRecordingOfferDetails(SharedMemoryModel):
+    """Per-kind details for kind=PROFILE_RECORDING (#2632) — an Archive sitting.
+
+    Paying resolves the offer into a COMMISSIONED ``RecordedProfile``; the
+    player completes the write-up afterwards (the scholar "delivers" it),
+    which sets the character's description and archives the text forever.
+    """
+
+    offer = models.OneToOneField(
+        NPCServiceOffer,
+        on_delete=models.CASCADE,
+        related_name="profile_recording_offer_details",
+        help_text=_NPC_OFFER_DETAILS_HELP_TEXT,
+    )
+    price_coppers = models.PositiveBigIntegerField(
+        help_text="Coppers charged from the PC's purse. PLACEHOLDER magnitudes."
+    )
+
+    class Meta:
+        verbose_name = "Profile Recording Offer Details"
+        verbose_name_plural = "Profile Recording Offer Details"
+
+    def __str__(self) -> str:
+        return f"ProfileRecordingOfferDetails(offer {self.offer_id})"
+
+
+class RecordedProfile(SharedMemoryModel):
+    """A profile recorded at the Great Archive (or a similar institution) (#2632).
+
+    The diegetic description archive: an NPC scholar "writes" the character's
+    profile (the player authors the prose and pays for the privilege), the
+    text becomes the character's current description, and every recorded
+    profile persists forever — desc history, in-world. Persona-scoped (never
+    account): a cover face sits for its own profile.
+    """
+
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.PROTECT,
+        related_name="recorded_profiles",
+        help_text="The persona whose profile was recorded.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=RecordedProfileStatus.choices,
+        default=RecordedProfileStatus.COMMISSIONED,
+        db_index=True,
+    )
+    text = models.TextField(
+        blank=True,
+        default="",
+        help_text="The recorded profile prose (player-written, diegetically NPC-authored).",
+    )
+    recorded_by_label = models.CharField(
+        max_length=200,
+        help_text="Display name of the recording scholar/institution.",
+    )
+    price_paid = models.PositiveBigIntegerField(help_text="Coppers paid for the sitting.")
+    created_at = models.DateTimeField(auto_now_add=True)
+    recorded_at = models.DateTimeField(null=True, blank=True)
+    ic_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="IC datetime when the write-up was finalized.",
+    )
+    era = models.ForeignKey(
+        "stories.Era",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="recorded_profiles",
+        help_text="The active Era (season) at recording time.",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Recorded Profile"
+        verbose_name_plural = "Recorded Profiles"
+
+    def __str__(self) -> str:
+        return f"RecordedProfile({self.persona_id}, {self.status}, #{self.pk})"

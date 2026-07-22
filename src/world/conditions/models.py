@@ -1243,6 +1243,22 @@ class ConditionInstance(SharedMemoryModel):
         related_name="conditions_caused",
         help_text="Technique used to apply this condition",
     )
+    source_vow = models.ForeignKey(
+        "covenants.CovenantRole",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The applier's engaged-vow anchor at apply time (#2643) — the first of "
+            "``character.covenant_roles.currently_engaged_roles()``, resolved to its "
+            "anchor (``parent_role`` or itself, never a resolved sub-role). Null when "
+            "the applier had no engaged role. Drives vow-keyed diminishing returns on "
+            "the bounded team-damage-percent lane's read "
+            "(``world.magic.services.techniques._team_lane_delta``): contributions "
+            "sharing one vow diminish; distinct vows stack fully."
+        ),
+    )
     source_description = models.CharField(
         max_length=200,
         blank=True,

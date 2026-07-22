@@ -30,6 +30,7 @@ import {
   useUpdateRequestsQuery,
   useWithdrawMutation,
 } from '../queries';
+import { RecordedProfilesSection } from './RecordedProfilesSection';
 import {
   DISTINCTION_ACTIONS,
   PROFILE_TEXT_FIELDS,
@@ -417,6 +418,8 @@ export function UpdatesTab({ characterId, isMyCharacter }: Props) {
           ))}
         </section>
       )}
+
+      {isMyCharacter && <RecordedProfilesSection />}
 
       <VersionTimeline characterId={characterId} showEmptyState={isMyCharacter} />
     </div>

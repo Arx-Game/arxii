@@ -292,6 +292,7 @@
   - current_stage -> conditions.ConditionStage [FK] (nullable)
   - source_character -> objects.ObjectDB [FK] (nullable)
   - source_technique -> magic.Technique [FK] (nullable)
+  - source_vow -> covenants.CovenantRole [FK] (nullable)
   - cast_destination -> areas.Position [FK] (nullable)
   - cast_position_a -> areas.Position [FK] (nullable)
   - cast_position_b -> areas.Position [FK] (nullable)
@@ -1686,6 +1687,7 @@
 - `count_active_ocs(account: 'AbstractBaseUser') -> 'int' — Count OCs an account currently holds against its cap.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' — Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `enforce_oc_cap(account: 'AbstractBaseUser', *, cap: 'int' = 3) -> 'None' — Raise OCCapError if creating another OC would exceed ``cap``.`
+- `set_physical_description(sheet: 'CharacterSheet', text: 'str') -> 'None' — THE seam for setting a character's free-text physical description (#2632).`
 - `update_profile_text(profile: 'Profile', field: 'str', text: 'str', *, edited_by: 'Any | None' = None, previous_text: 'str | None' = None) -> 'ProfileTextVersion' — Write a versioned Profile prose field — the ONLY sanctioned write path (#2631).`
 
 
@@ -2331,8 +2333,8 @@
 - `acknowledge_encounter_risk(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet') -> 'EncounterRiskAcknowledgement' — Idempotently record that a character acknowledged the encounter's risk (#777).`
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None) -> 'CombatOpponent' — Create a CombatOpponent. Three sources for the ObjectDB:`
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' — Create a CombatParticipant linking a PC to an encounter.`
-- `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False) -> 'OpponentDamageResult' — Apply damage to an NPC opponent, accounting for soak, probing,`
-- `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'ParticipantDamageResult' — Apply damage to a PC via their CharacterVitals.`
+- `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'OpponentDamageResult' — Apply damage to an NPC opponent, accounting for soak, probing,`
+- `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'ParticipantDamageResult' — Apply damage to a PC via their CharacterVitals.`
 - `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' — Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533).`
 - `apply_fatigue(character_sheet: 'CharacterSheet', category: 'str', base_cost: 'int', effort_level: 'str') -> 'int' — Add fatigue to the pool.`
 - `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' — Map a graded interpose resolution onto *pre_payload*.`
@@ -2655,6 +2657,7 @@
   - current_stage -> conditions.ConditionStage [FK] (nullable)
   - source_character -> objects.ObjectDB [FK] (nullable)
   - source_technique -> magic.Technique [FK] (nullable)
+  - source_vow -> covenants.CovenantRole [FK] (nullable)
   - cast_destination -> areas.Position [FK] (nullable)
   - cast_position_a -> areas.Position [FK] (nullable)
   - cast_position_b -> areas.Position [FK] (nullable)
@@ -2720,6 +2723,7 @@
 - `get_condition_intensity_percent_modifier(character_sheet: 'CharacterSheet', condition_name: str) -> int — Get percentage modifier to intensity gain for a condition.`
 - `get_condition_modifier_breakdown(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget') -> list[tuple[str, int]] — Per-source sibling of get_condition_modifier_total (#639 power ledger).`
 - `get_condition_modifier_total(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget') -> int — Sum active-condition contributions to a mechanics ModifierTarget (#636).`
+- `get_condition_modifier_vow_contributions(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget') -> list['ConditionModifierVowContribution'] — Vow-keyed sibling of get_condition_modifier_breakdown (#2643).`
 - `get_condition_penalty_percent_modifier(character_sheet: 'CharacterSheet', condition_name: str) -> int — Get percentage modifier to check penalties for a condition.`
 - `get_damage_multiplier(success_level: int) -> decimal.Decimal — Look up the damage multiplier for a given success level.`
 - `get_effective_capability_value(character_sheet: 'CharacterSheet', capability: world.conditions.models.CapabilityType) -> int — Effective capability value = innate baseline + CharacterModifier contributions`
@@ -2734,6 +2738,7 @@
 - `is_untargetable(target: 'ObjectDB') -> bool — True if *target* holds any active intangibility condition.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None) -> world.conditions.types.TreatmentOutcome — Resolve a TreatmentTemplate against an effect instance.`
+- `priced_percent_severity(*, eff_intensity: int, target: 'ObjectDB') -> int — Apply-time percent severity for the bounded team-damage-percent lane (#2643).`
 - `process_action_tick(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process on-action damage for conditions (when target takes an action).`
 - `process_damage_interactions(target: 'ObjectDB', damage_type: world.conditions.models.DamageType) -> world.conditions.types.DamageInteractionResult — Process condition interactions when target takes damage.`
 - `process_round_end(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process end-of-round effects for all conditions on a target.`
@@ -2802,6 +2807,7 @@
 - `decide_consent_block(rule_mode: 'str | None', *, actor_present: 'bool', whitelisted: 'bool', blacklisted: 'bool', is_friend: 'bool', is_rival: 'bool') -> 'bool' — Per-category consent decision, given a pref exists with the master switch on.`
 - `effective_consent_mode(pref: 'SocialConsentPreference | None', category: 'SocialConsentCategory') -> 'str' — The ConsentMode governing *(pref, category)* after tree inheritance (#2170).`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
+- `makeover_category() -> 'SocialConsentCategory' — Lazy seeded row for the makeover/styling gate (#2632) — default-deny.`
 - `receiving_stolen_goods_category() -> 'SocialConsentCategory' — Lazy seeded row for the hot-goods receipt gate (#1985) — default-deny.`
 - `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
@@ -3441,6 +3447,7 @@
   - persona_descriptors <- forms.PersonaTraitDescriptor
   - appearance_changes <- forms.AppearanceChangeLog
   - item_template_effects <- items.ItemTemplateAppearanceEffect
+  - styling_offers <- npc_services.StylingOfferDetails
 
 ### FormTraitOption
 **Foreign Keys:**
@@ -3451,6 +3458,7 @@
   - natural_for_values <- forms.CharacterFormValue
   - temporary_changes <- forms.TemporaryFormChange
   - item_template_effects <- items.ItemTemplateAppearanceEffect
+  - styling_offers <- npc_services.StylingOfferDetails
 
 ### SpeciesFormTrait
 **Foreign Keys:**
@@ -6135,6 +6143,8 @@
   - train_offer_details <- npc_services.TrainOfferDetails
   - court_grant_offer_details <- npc_services.CourtGrantOfferDetails
   - summonses <- npc_services.OfferSummons
+  - styling_offer_details <- npc_services.StylingOfferDetails
+  - profile_recording_offer_details <- npc_services.ProfileRecordingOfferDetails
 
 ### OfferCooldown
 **Foreign Keys:**
@@ -6212,9 +6222,25 @@
   - room -> evennia_extensions.RoomProfile [FK]
   - assigned_by -> scenes.Persona [FK]
 
+### StylingOfferDetails
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [OneToOne]
+  - trait -> forms.FormTrait [FK]
+  - target_option -> forms.FormTraitOption [FK]
+
+### ProfileRecordingOfferDetails
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [OneToOne]
+
+### RecordedProfile
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - era -> stories.Era [FK] (nullable)
+
 ### Service Functions
 - `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' — Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
 - `available_offers(session: 'InteractionSession', *, pool_count: 'int | None' = None) -> 'list[NPCServiceOffer]' — Return offers the PC can currently see/select, in stable order.`
+- `complete_recorded_profile(profile: 'RecordedProfile', text: 'str') -> 'RecordedProfile' — Finalize a COMMISSIONED sitting: the write-up arrives (#2632).`
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
@@ -7292,6 +7318,7 @@
   - summonses_received <- npc_services.OfferSummons
   - regard_seeds_from_distinctions <- npc_services.DistinctionRegardSeed
   - npc_assignments_made <- npc_services.NPCAssignment
+  - recorded_profiles <- npc_services.RecordedProfile
   - owned_buildings <- buildings.Building
   - buildings_constructed <- buildings.Building
   - materials_contributed <- buildings.BuildingMaterial
@@ -8360,6 +8387,7 @@
   - beat_completions <- stories.BeatCompletion
   - episode_resolutions <- stories.EpisodeResolution
   - gemits <- narrative.Gemit
+  - recorded_profiles <- npc_services.RecordedProfile
 
 ### Transition
 **Foreign Keys:**

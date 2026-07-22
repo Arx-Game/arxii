@@ -219,3 +219,16 @@ def update_profile_text(
             era=era,
             edited_by=edited_by,
         )
+
+
+def set_physical_description(sheet: CharacterSheet, text: str) -> None:
+    """THE seam for setting a character's free-text physical description (#2632).
+
+    ``CharacterSheet.additional_desc`` is the field the web sheet's
+    appearance section and telnet ``sheet`` actually render; CG writes it
+    inline at finalize, and until now no post-CG caller existed. New writers
+    (the Great Archive recorded-profile flow, future desc surfaces) go
+    through here — never assign the attribute directly.
+    """
+    sheet.additional_desc = text
+    sheet.save(update_fields=["additional_desc"])
