@@ -4763,7 +4763,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     returns the action backed by the higher-rated one (`_select_best_rated_action`) —
     deterministic (ADR-0019), no invented actions (ADR-0032). Existing callers (Succor,
     the scene-cover path) leave it `False` and keep the prior first-match behavior.
-- **Reactive content seeds:**
+- **Reactive content seeds:** (interpose/succor/fall-catch/redirect run in production
+  via the `reactive_challenges` cluster in `world.seeds.clusters`, #2636 — after
+  `combat_checks`, which seeds the Melee Defense `CheckType` Interpose looks up;
+  `ensure_defend_content` is deliberately NOT in the cluster: it seeds a placeholder
+  Gift/Technique, which is lore-repo content territory)
   - `ensure_interpose_content()` (`src/world/combat/interpose_content.py`) — idempotent
     seed for the INTERPOSE `ChallengeTemplate` + four capability-gated `Application` rows
     (telekinesis, shield, barrier, pull_aside) + Reflexes `CheckType` + SUCCESS-tier DESTROY
