@@ -533,7 +533,7 @@ MAGIC_MODIFIER_CATEGORY_NAME = "magic"
 # #2643 — the bounded team-damage-percent lane (Uplift's team-wide %). The EQ2 lane
 # guard: a percent-buff lane left unbounded trivializes the damage identity once two
 # or three buffs stack in one round (the legacy ``power_multiplier`` target's known
-# failure mode — see ADR-0155). ``TEAM_BUFF_LANE_CAP_PERCENT`` is this lane's summed
+# failure mode — see ADR-0157). ``TEAM_BUFF_LANE_CAP_PERCENT`` is this lane's summed
 # ceiling (vow-keyed-DR'd contributions, clamped, folded into the single MULTIPLIER
 # stage alongside the untouched legacy aggregate — see
 # ``world.magic.services.techniques._apply_power_multiplier_stage``).

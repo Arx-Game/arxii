@@ -211,7 +211,7 @@ matching `ConditionDamageInteraction` row is clamped to
 damage — the clamp bounds only the live application; the unclamped sum still reports
 on the returned `DamageInteractionResult`. See `docs/systems/magic.md`'s "The Damage
 Identity" section for the sibling bounded percent lane (the ally-buff side) and
-ADR-0155.
+ADR-0157.
 
 ### Bounded-Percent Lane Pricing (#2643)
 
@@ -224,7 +224,7 @@ TEAM_BUFF_LANE_CAP_PERCENT)`. `target_level` resolves generically — a PC targe
 `combat.constants.OPPONENT_TIER_LEVEL`. Wired into the shared
 `world.magic.services.condition_application.apply_technique_conditions` seam — see
 `docs/systems/magic.md`'s "The Damage Identity" section for the full lane composition
-(vow-keyed stacking, the clamp, the execute ramp) and ADR-0155.
+(vow-keyed stacking, the clamp, the execute ramp) and ADR-0157.
 
 ### Querying Modifiers
 

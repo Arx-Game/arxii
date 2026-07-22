@@ -349,7 +349,7 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   `CombatEncounter.initiated_by_pc_side` recording who sprang a fight for `origin_side`-gated
   ambush/parley perks. When the vow dims (#2051), the engaged flag drops and every
   layer's contribution returns to 0 — which is why soloing legend content is lethal.
-  **The damage identity** (#2643, ADR-0155, shipped): team damage = Strike's bases
+  **The damage identity** (#2643, ADR-0157, shipped): team damage = Strike's bases
   (execute-scaled) × Uplift's team-wide % × Undermine's enemy-side % (lore repo
   `design/covenant-vows-consolidated.md` §5). Built the two percent lanes' shared
   bound (a flat cap on the SUMMED contribution, never a second multiplicative

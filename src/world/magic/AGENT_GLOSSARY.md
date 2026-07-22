@@ -265,7 +265,7 @@ modulation). True when `x_sheet == y_sheet` (direct) or `x_sheet` holds an activ
 mutually-consented, net-negative `CharacterRelationship` toward `y_sheet`
 (indirect — "threatening"). (#1849.)
 
-**Bounded Percent Lane** (#2643, ADR-0155):
+**Bounded Percent Lane** (#2643, ADR-0157):
 A percent-buff/debuff mechanic whose SUMMED contribution is clamped to a flat cap
 before it multiplies damage — the EQ2 lane guard against percent sources
 compounding into an unbounded spike. Two live lanes: the `team_damage_percent`
@@ -276,7 +276,7 @@ than adding a third.
 _Avoid_: "damage multiplier stack" (ambiguous with the unbounded legacy
 `power_multiplier` target, which this deliberately does NOT fold into).
 
-**Vow-Keyed Stacking** (#2643, ADR-0155):
+**Vow-Keyed Stacking** (#2643, ADR-0157):
 Diminishing returns applied WITHIN one vow's contributions to the bounded
 team-damage-percent lane (100/50/25/25%... descending), while distinct vows stack
 FULLY against each other — `world.magic.services.techniques

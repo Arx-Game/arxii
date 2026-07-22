@@ -23,6 +23,7 @@ class TestClusterRegistry(TestCase):
                 "items",
                 "combat",
                 "battles",
+                "reactive_challenges",
                 "consent",
                 "character_creation",
                 "missions",
@@ -61,6 +62,40 @@ class TestClusterRegistry(TestCase):
         keys = list(CLUSTER_SEEDERS)
         assert "character_creation" in keys
         self.assertLess(keys.index("magic"), keys.index("character_creation"))
+
+    def test_reactive_challenges_cluster_registered_after_combat_checks(self) -> None:
+        # Interpose's Melee-Defense twin approaches look up the "Melee Defense"
+        # CheckType seeded by the combat_checks cluster (#2636).
+        keys = list(CLUSTER_SEEDERS)
+        assert "reactive_challenges" in keys
+        self.assertLess(keys.index("combat_checks"), keys.index("reactive_challenges"))
+
+    def test_reactive_challenges_cluster_seeds_the_content_family(self) -> None:
+        from world.areas.positioning.constants import (
+            CATCH_THE_FALLER_NAME,
+            PLUMMETING_CONDITION_NAME,
+        )
+        from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME
+        from world.combat.redirect_content import (
+            VOLATILE_POWDER_PROPERTY_NAME,
+        )
+        from world.conditions.models import ConditionTemplate
+        from world.mechanics.models import ChallengeTemplate, Property
+        from world.mechanics.succor_shared import SUCCOR_CHALLENGE_NAME
+
+        CLUSTER_SEEDERS["reactive_challenges"]()
+
+        for name in (INTERPOSE_CHALLENGE_NAME, SUCCOR_CHALLENGE_NAME, CATCH_THE_FALLER_NAME):
+            self.assertTrue(
+                ChallengeTemplate.objects.filter(name=name).exists(),
+                f"expected seeded ChallengeTemplate {name!r}",
+            )
+        self.assertTrue(ConditionTemplate.objects.filter(name=PLUMMETING_CONDITION_NAME).exists())
+        self.assertTrue(Property.objects.filter(name=VOLATILE_POWDER_PROPERTY_NAME).exists())
+
+        # Idempotent on re-run: no duplicate challenge rows.
+        CLUSTER_SEEDERS["reactive_challenges"]()
+        self.assertEqual(ChallengeTemplate.objects.filter(name=INTERPOSE_CHALLENGE_NAME).count(), 1)
 
     def test_seeded_models_are_model_classes(self) -> None:
         models = seeded_models()
