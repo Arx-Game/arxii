@@ -6,6 +6,7 @@ from http import HTTPMethod
 
 from django.db.models import QuerySet
 from django.http import Http404
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.mixins import RetrieveModelMixin
@@ -105,6 +106,7 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
         clear_origin_slot(sheet, slot)
         return Response(status=status.HTTP_200_OK)
 
+    @extend_schema(responses={200: ProfileTextVersionSerializer(many=True)})
     @action(detail=True, methods=[HTTPMethod.GET], url_path="profile-text-versions")
     def profile_text_versions(self, request: Request, pk: int | None = None) -> Response:
         """The sheet's prose-history timeline (#2631) — all versioned fields at once.

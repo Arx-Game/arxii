@@ -315,11 +315,34 @@ class GMTableMembershipSerializer(serializers.ModelSerializer):
     """Serializer for persona memberships at GM tables."""
 
     persona_name = serializers.CharField(source="persona.name", read_only=True)
+    character_sheet = serializers.IntegerField(
+        source="persona.character_sheet_id",
+        read_only=True,
+        help_text="The persona's CharacterSheet pk (#2631 — lets the sheet page "
+        "find the viewer's memberships for the update-request form).",
+    )
+    table_name = serializers.CharField(source="table.name", read_only=True)
 
     class Meta:
         model = GMTableMembership
-        fields = ["id", "table", "persona", "persona_name", "joined_at", "left_at"]
-        read_only_fields = ["id", "persona_name", "joined_at", "left_at"]
+        fields = [
+            "id",
+            "table",
+            "table_name",
+            "persona",
+            "persona_name",
+            "character_sheet",
+            "joined_at",
+            "left_at",
+        ]
+        read_only_fields = [
+            "id",
+            "table_name",
+            "persona_name",
+            "character_sheet",
+            "joined_at",
+            "left_at",
+        ]
 
 
 class GMRosterInviteSerializer(serializers.ModelSerializer):

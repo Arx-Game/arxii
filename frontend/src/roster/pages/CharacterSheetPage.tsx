@@ -25,6 +25,7 @@ import { TitlesPanel } from '@/achievements/components/TitlesPanel';
 import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
+import { UpdatesTab } from '@/sheet_update_requests/components/UpdatesTab';
 import { SpellbookTab } from '@/magic/components/SpellbookTab';
 import { LocationsTab } from '@/locations/components/LocationsTab';
 import { AgreementsPanel } from '@/estates/components/AgreementsPanel';
@@ -123,6 +124,7 @@ export function CharacterSheetPage() {
           <TabsTrigger value="reputation">Reputation</TabsTrigger>
           <TabsTrigger value="titles">Titles</TabsTrigger>
           <TabsTrigger value="distinctions">Distinctions</TabsTrigger>
+          <TabsTrigger value="updates">Updates</TabsTrigger>
           <TabsTrigger value="magic">Magic</TabsTrigger>
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
           {isMyCharacter && <TabsTrigger value="clues">Clues</TabsTrigger>}
@@ -197,6 +199,13 @@ export function CharacterSheetPage() {
               character.id is the CharacterSheet pk (shared with the ObjectDB pk). Radix
               unmounts inactive tab content, so the query only fires when this tab is opened. */}
           <DistinctionsTab characterId={entry.character.id} />
+        </TabsContent>
+
+        <TabsContent value="updates" className="space-y-4">
+          {/* Ungated (#2631): the version-history endpoint gates true-profile history on
+              reveal_identity server-side, so every viewer sees this tab; the submit form and
+              request list render only for the owner. character.id is the CharacterSheet pk. */}
+          <UpdatesTab characterId={entry.character.id} isMyCharacter={isMyCharacter} />
         </TabsContent>
 
         <TabsContent value="magic" className="space-y-4">
