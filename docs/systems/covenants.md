@@ -440,7 +440,7 @@ discipline" section for the no-double-announce proof.
   participant is mentor vs. sidekick based on band position, and calls
   `establish_mentor_bond`.
 
-### The Sphinx of Black Quartz — vow-suitability oracle (#2640, ADR-0155)
+### The Sphinx of Black Quartz — vow-suitability oracle (#2640, ADR-0156)
 
 `src/world/covenants/sphinx.py` — a read-only report re-running the same kit∩demand join
 `covenant_role_specialty_power_term` uses, but as a verdict instead of a resolution-time
