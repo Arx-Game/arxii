@@ -8272,6 +8272,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/CovenantRole'
           description: ''
+  /api/covenants/roles/sphinx/:
+    get:
+      operationId: covenants_roles_sphinx_retrieve
+      description: |-
+        GET /api/covenants/roles/sphinx/?role=<id-or-slug>
+
+        The Sphinx of Black Quartz's verdict (#2640) on the requesting
+        account's own active character taking up ``role``'s vow.
+        Self-character only, read-only — the Sphinx never gates, it informs.
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRole'
+          description: ''
   /api/crossover-invites/:
     get:
       operationId: crossover_invites_list

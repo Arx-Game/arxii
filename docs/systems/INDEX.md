@@ -4265,6 +4265,25 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     - `power_tier_for_level(level: int) -> int` — maps levels 1–5 → tier 1,
       6–10 → tier 2, 11–15 → tier 3, etc. (`ceil(level / TIER_ONE_MAX_LEVEL)`).
       Used by the COURT gulf check in `assert_membership_level_allowed`.
+  - **The Sphinx of Black Quartz** (`world.covenants.sphinx`, #2640, ADR-0155) — read-only
+    vow-suitability oracle, never a gate. `judge_vow(sheet, role) -> SphinxVerdict`
+    re-runs `covenant_role_specialty_power_term`'s kit∩demand join as a three-tier report
+    (`SphinxTier.TAKES`/`DORMANT`/`NOT_YET`, `world.covenants.constants`): demand =
+    the role's (+ parent's, for a sub-role) `CovenantRoleTechniqueSpecialty` functions
+    UNION the creator-functions its SELF-beneficiary `VowSituationalPerk`
+    situations/rungs require (via the new code-defined
+    `SITUATION_CREATOR_FUNCTIONS: dict[str, frozenset[str]]`,
+    `world.covenants.perks.constants` — the `TARGET_DISTRACTED`/`TARGET_SWAYED_BY_ALLY`
+    provenance mapping run in reverse; a situation absent from it demands nothing).
+    `SphinxVerdict.shopping_list` — up to 3 learnable techniques per uncovered function
+    (`can_learn_technique` or tradition signature-pool membership). `audit_vow_coverage()
+    -> list[SphinxCoverageRow]` — the staff instrument (built first per the spec): every
+    active anchor role × every active Tradition, specialty-demand-only coverage
+    (`"full"`/`"partial"`/`"none"`), rendered at the staff-only `_sphinx/` admin page
+    (`admin_sphinx_audit`, linked from Game Setup). Player surface:
+    `GET /api/covenants/roles/sphinx/?role=<id-or-slug>` (self-character only) and the
+    `sphinx <vow name>` telnet command (`commands/sphinx.py`) — both call `judge_vow`
+    directly, no parallel logic.
 - **Combat seams (#985, #1174, #1165, #2533):** `apply_equipped_armor_soak` splits worn armor into
   role-compatible vs incompatible buckets; compatible soak is scaled once by
   `gear_additive_fraction(character)` (`world.covenants.services`, #2533 — MAX
@@ -4304,7 +4323,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `ritual draft ... covenant=<name>` / `ritual join <id> role=<role>` / `ritual fire <id>`,
   banner-call rise via `ritual draft ... covenant=<name>` / `ritual join <id>` /
   `ritual fire <id>` — both adapter-dispatched from `CmdRitual` via
-  `commands/ritual_adapters.py`.
+  `commands/ritual_adapters.py`; `sphinx <vow name>` (#2640, `commands/sphinx.py`) — the
+  Sphinx of Black Quartz's three-tier verdict, telnet parity for the REST endpoint below.
 - **Selectors (`world.covenants.selectors`):**
   `resolve_actor_membership(*, covenant, character_sheets, capability=None)`,
   `get_active_memberships(*, character_sheet)` — shared by viewsets and the covenant Actions.
@@ -4322,6 +4342,9 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   - `POST /api/covenants/ranks/reorder/` — bulk tier reorder
   - `POST /api/covenants/ranks/{pk}/assign-member/` — assign member to rank
   - `POST /api/covenants/ranks/{pk}/transfer-top/` — move top rank to member
+  - `GET /api/covenants/roles/sphinx/?role=<id-or-slug>` (#2640) — the Sphinx of Black
+    Quartz's verdict for the requesting account's own active character; self-character
+    only, read-only, never gates
 - **Permission classes:** `CanKickFromCovenant` (rank.can_kick + tier precedence),
   `CanInviteToCovenant` (unattached seam — delegates to `can_invite_to_covenant` with
   `account=`; NOT currently wired to any ViewSet; induction-draft authorization is

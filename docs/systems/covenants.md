@@ -440,6 +440,42 @@ discipline" section for the no-double-announce proof.
   participant is mentor vs. sidekick based on band position, and calls
   `establish_mentor_bond`.
 
+### The Sphinx of Black Quartz — vow-suitability oracle (#2640, ADR-0155)
+
+`src/world/covenants/sphinx.py` — a read-only report re-running the same kit∩demand join
+`covenant_role_specialty_power_term` uses, but as a verdict instead of a resolution-time
+bonus. No writes anywhere; never gates anything (soft-gate ruling — a player may swear a
+vow the Sphinx warned about).
+
+- **`judge_vow(sheet, role) -> SphinxVerdict`** — one character × one role.
+  - Demand = `role`'s (+ `role.parent_role`'s, when judging a sub-role) `CovenantRoleTechniqueSpecialty`
+    functions, UNION the creator-functions demanded by `situation`s attached to `role`'s
+    (+ parent's) **SELF**-beneficiary `VowSituationalPerk` rows (base `situations` + rung
+    `extra_situation`s) that appear in `SITUATION_CREATOR_FUNCTIONS`.
+  - Supply = the sheet's known-technique function tags (`CharacterTechnique` →
+    `Technique.cached_function_tags`, one prefetch, no N+1).
+  - **`SphinxTier`** (`world.covenants.constants`) — `TAKES` (every demand covered, or the
+    role is unauthored and makes no demands — an unauthored vow cannot reject), `DORMANT`
+    (≥1 covered, ≥1 not — "the vow would lie dormant in places"), `NOT_YET` (0 covered —
+    paired with a shopping list).
+  - `SphinxVerdict.shopping_list` — up to 3 learnable `Technique` rows per uncovered
+    function (`can_learn_technique` passes, or the technique is in the sheet's active
+    tradition's `TraditionGiftGrant.signature_techniques` pool), excluding techniques
+    already known.
+- **`SITUATION_CREATOR_FUNCTIONS: dict[str, frozenset[str]]`** (`world.covenants.perks.constants`)
+  — code-defined: which `TechniqueFunction` casts can CREATE each DB-state `Situation` (the
+  `TARGET_DISTRACTED`/`TARGET_SWAYED_BY_ALLY` provenance mapping run in reverse). v1 rows:
+  `TARGET_SWAYED_BY_ALLY`/`TARGET_DISTRACTED` → `{CHARM, DISTRACTION}`,
+  `TARGET_FAVORABLY_DISPOSED` → `{CHARM}`. A situation absent here demands nothing (positional/
+  encounter states). Extending it is a deliberate one-line change.
+- **`audit_vow_coverage() -> list[SphinxCoverageRow]`** — the staff instrument (build-order
+  FIRST per the spec): every active anchor `CovenantRole` (`parent_role IS NULL`) × every
+  active `Tradition`, comparing the role's specialty-function demand set (situation demands
+  excluded — they read live per-character DB state, not a catalog's technique pool) against
+  the union of function tags over the tradition's `TraditionGiftGrant.signature_techniques`.
+  `coverage` is `"full"`/`"partial"`/`"none"`. Rendered at `_sphinx/` (`admin_sphinx_audit`,
+  staff-only, linked from the Game Setup hub) via `templates/admin/sphinx_audit.html`.
+
 ## Telnet Surface
 
 ### CmdCovenant (`covenant`, #1346)
@@ -483,6 +519,14 @@ adapter-dispatched token parsing (`src/commands/ritual_adapters.py`):
 2. Members: `ritual join <id>` — simply accept (no role kwargs needed).
 3. Initiator: `ritual fire <id>` — calls `rise_battle_covenant_via_session`, which flips the
    covenant risen and auto-engages all accepted participants.
+
+### CmdSphinx (`sphinx`, #2640)
+
+`src/commands/sphinx.py` — `sphinx <vow name>` renders the same three-tier verdict as the
+REST endpoint (both call `judge_vow` directly; no parallel logic). v1: invocable anywhere
+(Academy-room anchoring is presentation/content, not mechanics). Output prose: "The vow
+will take." / "The vow would lie dormant in places: ..." / "The vow will not take — yet.
+Seek: ...".
 
 ### Selectors (`world.covenants.selectors`)
 
@@ -777,6 +821,9 @@ Graduation: when the adjusted party's real primary level re-enters the band,
 - `POST /api/covenants/ranks/reorder/` — bulk tier reorder
 - `POST /api/covenants/ranks/{pk}/assign-member/` — assign member to rank
 - `POST /api/covenants/ranks/{pk}/transfer-top/` — move top rank to member
+- `GET /api/covenants/roles/sphinx/?role=<id-or-slug>` (#2640) — the Sphinx of Black
+  Quartz's verdict (`SphinxVerdictSerializer`) for the requesting account's own active
+  character against `role`. Self-character only; read-only; never gates.
 
 ## Follow-ups
 
