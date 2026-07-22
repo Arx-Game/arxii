@@ -589,8 +589,11 @@ class ItemInstanceViewSet(viewsets.ViewSet):
             # AttributeError→500 if that invariant is ever violated.
             raise NotFound
         actor = item.game_object.db_location  # the holder character (its game object)
+        input_serializer = UseItemSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        descriptor = input_serializer.validated_data.get("descriptor", "").strip() or None
         try:
-            result = use_item(item_instance=item, user=actor)
+            result = use_item(item_instance=item, user=actor, descriptor=descriptor)
         except ItemError as exc:
             raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         return Response(

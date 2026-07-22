@@ -130,12 +130,22 @@ def forfeit_item_instance(*, item_instance: ItemInstance, note: str = "") -> Ite
 
 @transaction.atomic
 def use_item(
-    *, item_instance: ItemInstance, user: ObjectDB, target: ObjectDB | None = None
+    *,
+    item_instance: ItemInstance,
+    user: ObjectDB,
+    target: ObjectDB | None = None,
+    descriptor: str | None = None,
 ) -> UseItemResult:
     """Use an item with an on-use pool: apply its effects (deterministic when the
     template has no on_use_check_type, else check-gated). Consumables spend one
     charge (regardless of check outcome) and are destroyed at zero; non-consumable
-    usable items are reusable and keep their charges. user/target are ObjectDBs."""
+    usable items are reusable and keep their charges. user/target are ObjectDBs.
+
+    ``descriptor`` (#2632, cosmetic items only) is free-text presentation flavor
+    for the restyled trait — "raven shot through with silver streaks" over a
+    normalized hair color, the multi-color/ornate-work channel. An appearance
+    use REPLACES the trait's presentation: the descriptor becomes the given
+    text, or is cleared when none is given (you dyed over the old look)."""
     locked = ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
     template = locked.template
     has_appearance_effects = template.appearance_effects.exists()
@@ -187,7 +197,7 @@ def use_item(
         destroyed = False
         soft_deleted = False
 
-    appearance_changes = _apply_appearance_effects(template, user, target)
+    appearance_changes = _apply_appearance_effects(template, user, target, descriptor)
 
     _apply_disguise_kit_effects(template, user, locked)
 
@@ -237,7 +247,10 @@ def _require_makeover_consent(user: ObjectDB, target: ObjectDB) -> None:
 
 
 def _apply_appearance_effects(
-    template: ItemTemplate, user: ObjectDB, target: ObjectDB | None = None
+    template: ItemTemplate,
+    user: ObjectDB,
+    target: ObjectDB | None = None,
+    descriptor: str | None = None,
 ) -> list[tuple[FormTrait, FormTraitOption]]:
     """Apply cosmetic appearance effects declared on the item template.
 
@@ -273,6 +286,9 @@ def _apply_appearance_effects(
                 effect.target_option,
                 persona=persona,
                 actor_persona=actor_persona,
+                # Replace-or-clear (#2632): the use's flavor text, or "" so a
+                # stale descriptor never describes a dyed-over look.
+                descriptor=(descriptor or "").strip(),
                 note=template.name,
             )
             changes.append((effect.trait, effect.target_option))

@@ -319,7 +319,12 @@ class Persona(CachedPropertiesMixin, SharedMemoryModel):
         blank=True,
         help_text="Name with color formatting codes",
     )
-    description = models.TextField(blank=True, help_text="Physical description text")
+    # NOTE (#2632): the vestigial ``description`` TextField (from the pre-forms #347
+    # identity model) was removed — nothing ever wrote it. Free-text physical
+    # description lives on ``CharacterSheet.additional_desc`` (written via
+    # ``character_sheets.services.set_physical_description``); per-persona
+    # presentation flavor lives on ``PersonaTraitDescriptor``. A future mask-desc
+    # variation surface (appearance architecture slices 3-4) designs its own shape.
     # #1270 — the bio this face presents. The PRIMARY persona points at the sheet's
     # true_profile (the real bio); an established/cover persona may own its own Profile (a
     # fabricated bio) so it does not out itself with an empty one. Null falls back to the

@@ -38,7 +38,6 @@ class ProfileIdentityPrivacyTests(APITestCase):
                 character_sheet=sheet,
                 is_fake_name=True,
                 name="stag mask",
-                description="a masked figure",
             )
             sheet.active_persona = mask
         if extra_alt:
@@ -64,7 +63,6 @@ class ProfileIdentityPrivacyTests(APITestCase):
         # Only the presented face — never the secret alt list.
         assert len(data["personas"]) == 1
         assert data["personas"][0]["name"] == "a man wearing a stag mask"
-        assert data["personas"][0]["description"] == ""
 
     def test_owner_sees_their_full_sheet_including_every_persona(self) -> None:
         owner = AccountFactory()

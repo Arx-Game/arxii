@@ -253,7 +253,6 @@ class PersonaEntry(TypedDict):
 
     id: int
     name: str
-    description: str
     thumbnail: str | None
 
 

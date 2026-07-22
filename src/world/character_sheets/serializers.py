@@ -978,7 +978,6 @@ def _build_personas(
             PersonaEntry(
                 id=persona.pk,
                 name=persona.name,
-                description=persona.description,
                 thumbnail=_resolve_persona_thumbnail(persona, cached_conditions=cached_conditions),
             )
             for persona in sheet.cached_personas
@@ -990,7 +989,6 @@ def _build_personas(
         PersonaEntry(
             id=active.pk,
             name=active_display_name if active_display_name is not None else active.name,
-            description=active.description if active_revealed else "",
             thumbnail=(_resolve_persona_thumbnail(active) if active_revealed else None),
         )
     ]

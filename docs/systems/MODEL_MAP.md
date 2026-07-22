@@ -4270,7 +4270,7 @@
 - `record_mantle_clearances(sheet: 'CharacterSheet', mantle: 'Mantle') -> 'list[MantleLevelClearance]' — Idempotently record codex-gated mantle clearances for ``sheet``.`
 - `remove_facet_from_item(*, item_facet: 'ItemFacet') -> 'None' — Remove a facet attachment and invalidate wearers' handler caches.`
 - `unequip_item(*, equipped_item: 'EquippedItem') -> 'None' — Remove an EquippedItem and invalidate the character's handler cache.`
-- `use_item(*, item_instance: 'ItemInstance', user: 'ObjectDB', target: 'ObjectDB | None' = None) -> 'UseItemResult' — Use an item with an on-use pool: apply its effects (deterministic when the`
+- `use_item(*, item_instance: 'ItemInstance', user: 'ObjectDB', target: 'ObjectDB | None' = None, descriptor: 'str | None' = None) -> 'UseItemResult' — Use an item with an on-use pool: apply its effects (deterministic when the`
 - `visible_worn_items_for(character: 'ObjectDB', observer: 'object | None' = None) -> 'list[VisibleWornItem]' — Return ``character``'s worn items visible to ``observer``.`
 
 
