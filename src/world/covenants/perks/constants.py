@@ -12,6 +12,8 @@ from dataclasses import dataclass
 
 from django.db import models
 
+from world.magic.constants import TechniqueFunction
+
 
 class Situation(models.TextChoices):
     """Code-defined situation library for per-vow situational perks (#2536).
@@ -240,4 +242,25 @@ SITUATION_PARAM_SPECS: dict[str, SituationParamSpec] = {
     Situation.TARGET_FAVORABLY_DISPOSED: SituationParamSpec(allowed=frozenset({"count_threshold"})),
     Situation.AMBUSH_UNDERWAY: SituationParamSpec(allowed=frozenset({"origin_side"})),
     Situation.COMBAT_OPENED_FROM_PARLEY: SituationParamSpec(allowed=frozenset({"origin_side"})),
+}
+
+
+#: Which ``TechniqueFunction`` casts can CREATE each DB-state ``Situation`` (#2640,
+#: the Sphinx of Black Quartz) — the ``target_swayed_by_ally``/``target_distracted``
+#: provenance mapping (``perks.evaluators``, which reads applied-condition rows for
+#: LIVE resolution) run in REVERSE as a static report: "which of my kit's function
+#: tags could plausibly have produced this DB-state situation in the first place."
+#: A situation absent from this dict demands nothing from a kit — it is a
+#: positional/encounter state (``AT_RANGE``, ``SURROUNDED``, ``CHAMPION_DUEL``, ...)
+#: with no single-cast provenance, not an oversight. Extending this mapping (a new
+#: row, or a new function added to an existing set) is a deliberate one-line change
+#: — see ``world.covenants.sphinx`` for the only reader.
+SITUATION_CREATOR_FUNCTIONS: dict[str, frozenset[str]] = {
+    Situation.TARGET_SWAYED_BY_ALLY: frozenset(
+        {TechniqueFunction.CHARM, TechniqueFunction.DISTRACTION}
+    ),
+    Situation.TARGET_DISTRACTED: frozenset(
+        {TechniqueFunction.CHARM, TechniqueFunction.DISTRACTION}
+    ),
+    Situation.TARGET_FAVORABLY_DISPOSED: frozenset({TechniqueFunction.CHARM}),
 }

@@ -1,0 +1,39 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div id="content-main">
+  <h1>Sphinx of Black Quartz — Coverage Audit</h1>
+  <p>
+    Which anchor-role vows are swearable today, per Tradition: whether a
+    Tradition's signature-technique pool can fully, partially, or never cover
+    a role's authored specialty-function demands. Situation demands (from
+    per-vow situational perks) are excluded here — they depend on live
+    per-character state, not a catalog's technique pool. Read-only; changes
+    nothing.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Vow (anchor role)</th><th>Tradition</th><th>Coverage</th><th>Missing functions</th></tr>
+    </thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td>{{ row.role_name }}</td>
+        <td>{{ row.tradition_name }}</td>
+        <td>{{ row.coverage }}</td>
+        <td>
+          {% if row.missing_functions %}
+            {{ row.missing_functions|join:", " }}
+          {% else %}
+            &mdash;
+          {% endif %}
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4"><em>No active anchor roles or Traditions to audit yet.</em></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
