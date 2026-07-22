@@ -11,8 +11,13 @@ from world.distinctions.models import (
     DistinctionEffect,
     DistinctionPrerequisite,
     DistinctionTag,
+    SheetUpdateRequest,
 )
-from world.distinctions.types import DistinctionOrigin
+from world.distinctions.types import (
+    DistinctionOrigin,
+    SheetUpdateRequestStatus,
+    SheetUpdateRequestType,
+)
 
 
 class DistinctionCategoryFactory(DjangoModelFactory):
@@ -98,3 +103,18 @@ class CharacterDistinctionOtherFactory(DjangoModelFactory):
     character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     parent_distinction = factory.SubFactory(DistinctionFactory, allow_other=True)
     freeform_text = factory.Faker("word")
+
+
+class SheetUpdateRequestFactory(DjangoModelFactory):
+    """Factory for creating SheetUpdateRequest instances."""
+
+    class Meta:
+        model = SheetUpdateRequest
+
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    request_type = SheetUpdateRequestType.DISTINCTION_ADD
+    target_distinction = factory.SubFactory(DistinctionFactory)
+    justification = factory.Faker("sentence")
+    status = SheetUpdateRequestStatus.PENDING
+    xp_cost = 10
+    origin = DistinctionOrigin.UNLOCK_PURCHASE

@@ -31,6 +31,9 @@ from world.covenants.exceptions import (
     NotAuthorizedToKickError,
     NotAuthorizedToManageRanksError,
     NotEnoughMembersPresentError,
+    SecondaryVowRequiresEngagedPrimaryError,
+    SecondaryVowSameAnchorError,
+    SecondaryVowThreadExceedsPrimaryError,
 )
 from world.covenants.models import (
     CharacterCovenantRole,
@@ -45,6 +48,7 @@ from world.covenants.models import (
     GearArchetypeCompatibility,
     MentorBond,
     MentorBondConfig,
+    SecondaryVowConfig,
 )
 from world.covenants.types import CovenantFounder
 from world.magic.constants import ParticipantState, ReferenceKind
@@ -604,20 +608,100 @@ def _emit_dissolution_message(covenant: Covenant, recipients: list[CharacterShee
     )
 
 
+def _anchor_role_id(role: CovenantRole) -> int:
+    """The role's ANCHOR pk — itself for a primary role, ``parent_role_id`` for a
+    sub-role. Shared by every anchor-normalization call site in this module
+    (mirrors the inline idiom ``covenant_role_action_scaling_bonus`` and
+    ``gear_additive_fraction`` already use)."""
+    return role.parent_role_id if role.parent_role_id is not None else role.pk
+
+
+def validate_secondary_engage_rules(membership: CharacterCovenantRole) -> None:
+    """Secondary-vow engage-time validation (#2641).
+
+    A no-op unless ``membership.is_secondary``. Requires an engaged PRIMARY
+    membership of the SAME covenant type for the SAME character
+    (``SecondaryVowRequiresEngagedPrimaryError`` otherwise — a secondary is
+    never available solo), forbids the secondary sharing its ANCHOR role with
+    that primary (``SecondaryVowSameAnchorError`` — "no same-vow secondary":
+    doubling down on one vow is allocation, not a second vow), and caps the
+    secondary's COVENANT_ROLE thread level at the primary's
+    (``SecondaryVowThreadExceedsPrimaryError`` — a missing thread on either
+    side counts as level 0). Called by both ``CharacterCovenantRole.clean()``
+    and ``set_engaged_membership`` — one rule, one place.
+    """
+    if not membership.is_secondary:
+        return
+
+    primary = (
+        CharacterCovenantRole.objects.filter(
+            character_sheet=membership.character_sheet,
+            covenant__covenant_type=membership.covenant.covenant_type,
+            engaged=True,
+            is_secondary=False,
+            left_at__isnull=True,
+        )
+        .exclude(pk=membership.pk)
+        .select_related("covenant_role")
+        .first()
+    )
+    if primary is None:
+        raise SecondaryVowRequiresEngagedPrimaryError
+
+    if _anchor_role_id(membership.covenant_role) == _anchor_role_id(primary.covenant_role):
+        raise SecondaryVowSameAnchorError
+
+    secondary_thread = _covenant_role_thread_level(
+        membership.character_sheet, membership.covenant_role
+    )
+    primary_thread = _covenant_role_thread_level(primary.character_sheet, primary.covenant_role)
+    if secondary_thread > primary_thread:
+        raise SecondaryVowThreadExceedsPrimaryError
+
+
+def secondary_vow_config() -> SecondaryVowConfig:
+    """Lazy-create and return the SecondaryVowConfig singleton (pk=1, #2641).
+
+    Cached via ``cached_singleton()`` (avoids a repeat query once warm), then
+    ``get_or_create`` on a cache miss — the potency dial ships with a sane
+    authored default (``SECONDARY_VOW_POTENCY_TENTHS_DEFAULT``), so unlike
+    ``get_mentor_bond_config()`` this never needs a pre-launch seeding step
+    for secondary vows to function. Mirrors ``get_aesthetic_config``'s
+    lazy-create pattern (``world.mechanics.services``).
+    """
+    config = SecondaryVowConfig.objects.cached_singleton()
+    if config is None:
+        config, _ = SecondaryVowConfig.objects.get_or_create(pk=1)
+    return config
+
+
 @transaction.atomic
-def set_engaged_membership(*, membership: CharacterCovenantRole) -> None:
-    """Engage this membership; un-engage other same-type rows for the same character.
+def set_engaged_membership(
+    *, membership: CharacterCovenantRole, as_secondary: bool = False
+) -> None:
+    """Engage this membership; un-engage other same-type-and-standing rows (#2641).
 
     Atomic. The same-type un-engage step uses a filter on
-    covenant.covenant_type, which is naturally type-scoped.
+    covenant.covenant_type AND ``is_secondary``, which is naturally
+    type-and-standing-scoped — engaging a PRIMARY never un-engages an already
+    -engaged SECONDARY of the same type, and vice versa.
 
     Iterates and calls save() (rather than bulk update) so SharedMemoryModel's
     identity-map cache stays in sync for rows already held in memory.
 
     Raises ValidationError before engaging if the covenant already has another
     engaged SUPREME-tier or Champion-flagged membership (covenant-scoped
-    exclusivity, mirrored in CharacterCovenantRole.clean()).
+    exclusivity, mirrored in CharacterCovenantRole.clean() — NOT scoped by
+    ``is_secondary``, see that method's docstring).
+
+    ``as_secondary`` (#2641) stamps ``membership.is_secondary`` BEFORE
+    validation, then — when True — runs ``validate_secondary_engage_rules``
+    (requires an engaged primary of the same type, forbids a shared anchor
+    role, caps the secondary's thread level at the primary's).
     """
+    membership.is_secondary = as_secondary
+    if as_secondary:
+        validate_secondary_engage_rules(membership)
     if membership.covenant_role.command_tier == CommandTier.SUPREME:
         other_supreme = (
             CharacterCovenantRole.objects.filter(
@@ -656,6 +740,7 @@ def set_engaged_membership(*, membership: CharacterCovenantRole) -> None:
             character_sheet=sheet,
             covenant__covenant_type=membership.covenant.covenant_type,
             engaged=True,
+            is_secondary=as_secondary,
             left_at__isnull=True,
         ).exclude(pk=membership.pk)
     )
@@ -663,7 +748,7 @@ def set_engaged_membership(*, membership: CharacterCovenantRole) -> None:
         row.engaged = False
         row.save(update_fields=["engaged"])
     membership.engaged = True
-    membership.save(update_fields=["engaged"])
+    membership.save(update_fields=["engaged", "is_secondary"])
     sheet.character.covenant_roles.invalidate()
     _invalidate_role_caches(sheet)
     from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
@@ -845,12 +930,13 @@ def precedence_role_for_combat(character_sheet: CharacterSheet) -> CovenantRole 
     Battle covenant, the Battle role wins (it sets speed_rank / resolution
     order). Modifier bonuses still stack additively elsewhere
     (mechanics.covenant_role_bonus); this only chooses the one role attached to
-    the CombatParticipant. At most one engaged role per type, so the result is
-    deterministic.
+    the CombatParticipant. At most one engaged PRIMARY role per type, so the
+    result is deterministic. PRIMARY-only (#2641, Layer 1 — chassis): a
+    secondary vow never governs combat resolution order.
     """
     from world.covenants.constants import CovenantType  # noqa: PLC0415
 
-    engaged = character_sheet.character.covenant_roles.currently_engaged_roles()
+    engaged = character_sheet.character.covenant_roles.currently_engaged_primary_roles()
     if not engaged:
         return None
     for role in engaged:
@@ -874,19 +960,21 @@ def is_gear_compatible(role: CovenantRole, archetype: str) -> bool:
 
 
 def gear_additive_fraction(character: object) -> Decimal:
-    """MAX gear-additive fraction across engaged roles' defense profiles (#2533).
+    """MAX gear-additive fraction across engaged PRIMARY roles' defense profiles (#2533).
 
     Profile resolution per engaged (resolved) role: the sub-role's own profile
     when present, else the anchor's. No engaged role has a profile → Decimal(1)
     (legacy fully-additive behavior, byte-identical). Gear is physical and
     counts once — the most gear-friendly engaged vow governs (multi-vow
-    stacking lives on the vow side, never by re-counting armor).
+    stacking lives on the vow side, never by re-counting armor). PRIMARY-only
+    (#2641, Layer 3 — chassis): a secondary vow's defense profile never
+    substitutes for gear.
     """
     from world.covenants.models import CovenantRoleDefenseProfile  # noqa: PLC0415
 
     if not hasattr(character, "covenant_roles"):
         return Decimal(1)
-    engaged_roles = character.covenant_roles.currently_engaged_roles()
+    engaged_roles = character.covenant_roles.currently_engaged_primary_roles()
     if not engaged_roles:
         return Decimal(1)
 
@@ -918,11 +1006,12 @@ def gear_additive_fraction(character: object) -> Decimal:
 def covenant_role_action_scaling_bonus(character: object, action_key: str) -> float:
     """Return the per-role scaling bonus for a combat action (#2529, was #2022).
 
-    Sums ``thread_level × multiplier`` across the character's engaged roles
-    that have a ``CovenantRoleActionScaling`` row for ``action_key``. Rows and
-    COVENANT_ROLE threads key on the ANCHOR (parent) role — engaged roles are
-    resolved sub-roles (ADR-0055), so normalize before lookup. Returns 0.0
-    when no engaged role has a row.
+    Sums ``thread_level × multiplier`` across the character's engaged PRIMARY
+    roles that have a ``CovenantRoleActionScaling`` row for ``action_key``.
+    Rows and COVENANT_ROLE threads key on the ANCHOR (parent) role — engaged
+    roles are resolved sub-roles (ADR-0055), so normalize before lookup.
+    Returns 0.0 when no engaged role has a row. PRIMARY-only (#2641, Layer 1
+    — chassis): a secondary vow never scales a combat action.
 
     The returned float is a multiplier bonus — callers add it to the action's
     base effect (e.g. interpose partial-block divisor = ``2 + bonus``).
@@ -931,7 +1020,7 @@ def covenant_role_action_scaling_bonus(character: object, action_key: str) -> fl
 
     if not hasattr(character, "covenant_roles"):
         return 0.0
-    engaged_roles = character.covenant_roles.currently_engaged_roles()
+    engaged_roles = character.covenant_roles.currently_engaged_primary_roles()
     if not engaged_roles:
         return 0.0
     try:

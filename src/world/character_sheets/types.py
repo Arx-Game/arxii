@@ -253,7 +253,6 @@ class PersonaEntry(TypedDict):
 
     id: int
     name: str
-    description: str
     thumbnail: str | None
 
 
@@ -261,6 +260,17 @@ class ThemingSection(TypedDict):
     """The theming section with aura data for frontend styling."""
 
     aura: AuraThemingData | None
+
+
+class ProfileTextField(models.TextChoices):
+    """Profile prose fields covered by table update requests + version history (#2631).
+
+    Values are Profile attribute names — services setattr() by this value, so a
+    new member must match its Profile field name exactly.
+    """
+
+    BACKGROUND = "background", "Background"
+    PERSONALITY = "personality", "Personality"
 
 
 class MaritalStatus(models.TextChoices):

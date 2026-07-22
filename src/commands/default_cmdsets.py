@@ -126,6 +126,7 @@ from commands.scene import CmdScene
 from commands.seance import CmdSeance
 from commands.setsituation import CmdSetSituation
 from commands.setstage import CmdSetStage
+from commands.sheet_request import CmdSheetRequest  # #2628 — sheet-update requests.
 from commands.ships import CmdShip
 from commands.signature import CmdSignature
 from commands.social.accusations import CmdAccuse, CmdFrame
@@ -146,6 +147,7 @@ from commands.social.rivals import CmdRival, CmdRivals, CmdUnrival
 from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
 from commands.speaker_queue import CmdLine  # #2356
+from commands.sphinx import CmdSphinx  # #2640
 from commands.story import CmdStory
 from commands.story_rooms import CmdJoinRoom, CmdLeaveRoom, CmdSceneRoom  # #2450
 from commands.technique import CmdTechnique
@@ -361,6 +363,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdGrantItem,
             # #2037 — GM: award/rank-up a catalog Distinction (post-CG acquisition).
             CmdGrantDistinction,
+            # #2628 — player/GM sheet-update request namespace.
+            CmdSheetRequest,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdRoom,
             # #2178 — NPC guard assignment (assign/unassign/list).
@@ -443,6 +447,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdVault,
             # #2032 — spendable resonance balances + grant history (bare/history subverbs).
             CmdResonance,
+            # #2640 — the Sphinx of Black Quartz's vow-suitability verdict.
+            CmdSphinx,
         )
         for command_cls in command_classes:
             self.add(command_cls())

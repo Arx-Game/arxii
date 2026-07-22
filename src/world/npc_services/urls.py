@@ -11,6 +11,7 @@ from world.npc_services.views import (
     OfferCooldownViewSet,
     OfferSummonsViewSet,
     PermitOfferDetailsViewSet,
+    RecordedProfileViewSet,
 )
 
 router = DefaultRouter()
@@ -22,5 +23,6 @@ router.register(r"permit-details", PermitOfferDetailsViewSet, basename="npc-perm
 router.register(r"mission-details", MissionOfferDetailsViewSet, basename="npc-mission-details")
 router.register(r"interactions", InteractionViewSet, basename="npc-interaction")
 router.register(r"summons", OfferSummonsViewSet, basename="npc-summons")
+router.register(r"recorded-profiles", RecordedProfileViewSet, basename="npc-recorded-profile")
 
 urlpatterns = router.urls

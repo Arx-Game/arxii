@@ -39,6 +39,7 @@ from world.character_sheets.types import (
     ActivityState,
     LifecycleState,
     MaritalStatus,
+    ProfileTextField,
     SheetVisibility,
 )
 
@@ -190,6 +191,69 @@ _PROFILE_LINEAGE_FIELDS: tuple[str, ...] = (
     "tarot_reversed",
 )
 _PROFILE_FIELDS: tuple[str, ...] = _PROFILE_BIO_FIELDS + _PROFILE_LINEAGE_FIELDS
+
+
+class ProfileTextVersion(SharedMemoryModel):
+    """One accepted state of a Profile prose field — history is never lost (#2631).
+
+    Every write path to a versioned field (table-request approval, staff/admin
+    edit) snapshots through ``services.update_profile_text``; nothing may
+    overwrite ``Profile.background``/``personality`` silently. Full text per
+    version (not diffs). The first post-CG write also captures the CG-approved
+    original as the initial row, so the earliest version is always the CG text.
+
+    Stamped with the IC datetime and active Era (season) at write time so the
+    timeline reads as an in-world arc. Visible to owner and staff only by
+    default (#2631 ruling) — the API returns an empty list to anyone else.
+    Finer narrative context (which story/chapter) derives from the causing
+    request via the reverse link on ``gm.ProfileTextRequestDetails.applied_version``.
+    """
+
+    profile = models.ForeignKey(
+        "character_sheets.Profile",
+        on_delete=models.CASCADE,
+        related_name="text_versions",
+    )
+    field = models.CharField(
+        max_length=20,
+        choices=ProfileTextField.choices,
+        help_text="Which Profile prose field this version belongs to.",
+    )
+    text = models.TextField(help_text="The full field text as of this version.")
+    created_at = models.DateTimeField(auto_now_add=True)
+    ic_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="IC datetime at write time (null if the game clock was unset).",
+    )
+    era = models.ForeignKey(
+        "stories.Era",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="profile_text_versions",
+        help_text="The active Era (season) at write time.",
+    )
+    edited_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="profile_text_edits",
+        help_text="Staff editor for admin-path writes; null for request-driven "
+        "and CG-original snapshots.",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["profile", "field"])]
+        verbose_name = "Profile Text Version"
+        verbose_name_plural = "Profile Text Versions"
+
+    def __str__(self) -> str:
+        return (
+            f"{self.get_field_display()} v@{self.created_at:%Y-%m-%d} (profile {self.profile_id})"
+        )
 
 
 class CharacterSheet(SharedMemoryModel):

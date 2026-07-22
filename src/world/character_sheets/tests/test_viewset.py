@@ -1679,7 +1679,6 @@ class TestPersonasSection(TestCase):
         cls.persona_with_thumb = PersonaFactory(
             character_sheet=cls.char_identity.character.sheet_data,
             name="The Iron Voice",
-            description="A masked figure.",
             thumbnail=cls.media,
         )
 
@@ -1687,7 +1686,6 @@ class TestPersonasSection(TestCase):
         cls.persona_no_thumb = PersonaFactory(
             character_sheet=cls.char_identity.character.sheet_data,
             name="Shadow",
-            description="",
             thumbnail=None,
         )
 
@@ -1708,10 +1706,10 @@ class TestPersonasSection(TestCase):
         assert len(personas) == 3
 
     def test_persona_entry_keys(self) -> None:
-        """Each persona entry has id, name, description, thumbnail."""
+        """Each persona entry has id, name, thumbnail (#2632 dropped description)."""
         personas = self._get_personas()
         for entry in personas:
-            assert set(entry.keys()) == {"id", "name", "description", "thumbnail"}
+            assert set(entry.keys()) == {"id", "name", "thumbnail"}
 
     def test_persona_with_thumbnail(self) -> None:
         """Persona with thumbnail returns cloudinary URL."""
@@ -1719,7 +1717,6 @@ class TestPersonasSection(TestCase):
         by_name = {g["name"]: g for g in personas}
         iron = by_name["The Iron Voice"]
         assert iron["id"] == self.persona_with_thumb.pk
-        assert iron["description"] == "A masked figure."
         assert iron["thumbnail"] == ("https://res.cloudinary.com/test/image/upload/iron_voice.jpg")
 
     def test_persona_without_thumbnail(self) -> None:
@@ -2054,7 +2051,6 @@ class TestCharacterSheetQueryCount(TestCase):
         PersonaFactory(
             character_sheet=identity.character.sheet_data,
             name="FullPersona",
-            description="A persona.",
             thumbnail=media,
         )
 
@@ -2269,7 +2265,6 @@ class TestPrefetchCompleteness(TestCase):
         PersonaFactory(
             character_sheet=pf_identity.character.sheet_data,
             name="PFPersona",
-            description="A persona.",
             thumbnail=media,
         )
 

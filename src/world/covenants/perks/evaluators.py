@@ -534,6 +534,26 @@ def champion_duel(ctx: SituationContext, params: SituationParams) -> bool:  # no
     return participant.encounter.is_champion_duel is True
 
 
+@register(Situation.ON_CHOSEN_GROUND)
+def on_chosen_ground(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """True when the SUBJECT is a participant in an encounter stamped chosen-ground.
+
+    ``on_chosen_ground`` (#2646) is stamped exclusively at encounter-CREATE time by
+    ``world.combat.chosen_ground.compute_on_chosen_ground``, called from the three
+    PC-vs-NPC encounter-creation seams (``world.combat.cast_seed.
+    seed_or_feed_encounter_from_cast``, ``world.combat.duels.create_lethal_duel``,
+    ``world.battles.services.open_place_encounter``) — every other DUEL creation
+    path (``world.combat.duels.create_pvp_duel``) leaves it False. Mirrors
+    ``champion_duel``'s shape exactly: one cached FK read (``participant.encounter``,
+    idmapper-cached) and False outside combat. Reads no params (absent from
+    ``SITUATION_PARAM_SPECS``).
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+    return participant.encounter.on_chosen_ground is True
+
+
 @register(Situation.COMBAT_OPENED_FROM_PARLEY)
 def combat_opened_from_parley(ctx: SituationContext, params: SituationParams) -> bool:
     """True for every combat resolution in an encounter that opened as a parley,
@@ -789,3 +809,122 @@ def attacker_affinity(ctx: SituationContext, params: SituationParams) -> bool:
         # here rather than a KeyError; never raise, just miss.
         return axis_value is not None and axis_value >= params.threshold_percent
     return aura.dominant_affinity == params.affinity
+
+
+@register(Situation.ENEMY_WINDUP_UNDERWAY)
+def enemy_windup_underway(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """A not-yet-matured enemy wind-up exists in the SUBJECT's encounter (#2637).
+
+    Mirrors ``ally_intercepted_for_me``'s "declared is the situation" v1
+    shape: holds the instant a ``PendingOpponentAttack`` is telegraphed,
+    regardless of which opponent it belongs to or who it targets. One query.
+    Reads ``resolution``; False outside combat. Reads no params (absent from
+    ``SITUATION_PARAM_SPECS``).
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+
+    from world.combat.models import PendingOpponentAttack  # noqa: PLC0415
+
+    return PendingOpponentAttack.objects.filter(
+        encounter_id=participant.encounter_id,
+        resolves_round__gte=participant.encounter.round_number,
+    ).exists()
+
+
+@register(Situation.ENEMY_WINDUP_CALLED_OUT)
+def enemy_windup_called_out(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """Same as ``enemy_windup_underway``, restricted to a called-out wind-up
+    (#2637 design 6 — a flagged engaged CovenantRole auto-called it). One
+    query. Reads ``resolution``; False outside combat. Reads no params
+    (absent from ``SITUATION_PARAM_SPECS``).
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+
+    from world.combat.models import PendingOpponentAttack  # noqa: PLC0415
+
+    return PendingOpponentAttack.objects.filter(
+        encounter_id=participant.encounter_id,
+        resolves_round__gte=participant.encounter.round_number,
+        called_out=True,
+    ).exists()
+
+
+@register(Situation.ALLY_SENT_FLYING)
+def ally_sent_flying(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """A covenant-mate of the holder currently carries the Sent Flying marker (#2638).
+
+    Mate scoping mirrors ``ally_low_health`` exactly (see that function's
+    docstring, "Ally scoping rule"): a candidate mate counts if they hold a
+    non-departed (``CharacterCovenantRole.left_at__isnull=True``) role in a
+    covenant the HOLDER is also actively engaged in AND are co-present
+    (an ACTIVE ``CombatParticipant``) in the SUBJECT's encounter roster — the
+    mate's own engagement is irrelevant. The holder themself is excluded from
+    the mate pool (mirrors ``ally_low_health``'s ``.exclude(character_sheet=
+    ctx.holder)``).
+
+    Data source, verified: one roster query (ACTIVE participants in the
+    subject's encounter, excluding the holder), one BATCHED
+    ``CharacterCovenantRole`` membership query across every candidate mate's
+    sheet id, and one BATCHED ``ConditionInstance`` existence check (Sent
+    Flying template) across the surviving mates' character ids — never a
+    query per candidate ("no queries in loops"). Three queries total, fixed
+    regardless of roster size. False outside combat. Reads no params (absent
+    from ``SITUATION_PARAM_SPECS``).
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None or ctx.holder is None:
+        return False
+    holder_character = ctx.holder.character
+    if holder_character is None:
+        return False
+
+    holder_covenant_ids = holder_character.active_covenant_ids()
+    if not holder_covenant_ids:
+        return False
+
+    from world.combat.constants import ParticipantStatus  # noqa: PLC0415
+    from world.combat.models import CombatParticipant as _CombatParticipant  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    mates = list(
+        _CombatParticipant.objects.filter(
+            encounter_id=participant.encounter_id,
+            status=ParticipantStatus.ACTIVE,
+        )
+        .exclude(character_sheet=ctx.holder)
+        .select_related("character_sheet__character")
+    )
+    if not mates:
+        return False
+
+    mate_sheet_ids = set(
+        CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=[m.character_sheet_id for m in mates],
+            covenant_id__in=holder_covenant_ids,
+            left_at__isnull=True,
+        ).values_list("character_sheet_id", flat=True)
+    )
+    # No early return on an empty mate_sheet_ids: the final query below
+    # naturally returns False against an empty target_id__in list, and
+    # skipping the extra branch keeps this function's return count under the
+    # repo's lint threshold.
+    from world.combat.sent_flying_content import SENT_FLYING_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance, ConditionTemplate  # noqa: PLC0415
+
+    try:
+        template = ConditionTemplate.get_by_name(SENT_FLYING_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
+        return False
+
+    mate_character_ids = [
+        m.character_sheet.character_id for m in mates if m.character_sheet_id in mate_sheet_ids
+    ]
+    return ConditionInstance.objects.filter(
+        condition=template,
+        target_id__in=mate_character_ids,
+        is_suppressed=False,
+    ).exists()

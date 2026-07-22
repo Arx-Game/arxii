@@ -1037,19 +1037,44 @@ _APPEARANCE_TRAITS: tuple[tuple[str, str, str, bool, tuple[tuple[str, str], ...]
             ("auburn", "Auburn"),
             ("white", "White"),
             ("gray", "Gray"),
+            # #2632 umbrella value: honest one-word form for multi-colored hair
+            # (streaks, ornate dye work) — the descriptor carries the specifics;
+            # under descriptor concealment a viewer still sees the true,
+            # memorable fact ("multihued") without the detail.
+            ("multihued", "Multihued"),
+        ),
+    ),
+    (
+        "hair_style",
+        "Hair Style",
+        FormTraitType.STYLE,
+        True,
+        (
+            # PLACEHOLDER style list (#2632) — staff/content can extend freely.
+            ("loose", "Loose"),
+            ("braided", "Braided"),
+            ("cropped", "Cropped"),
+            ("swept_up", "Swept Up"),
+            ("shaved", "Shaved"),
         ),
     ),
     (
         "eye_color",
         "Eye Color",
         FormTraitType.COLOR,
-        False,
+        # Cosmetic as of #2632 (ApostateCD ruling via the approved spec): eye
+        # color has no mundane restyle path — the enchanted-lens ItemTemplate
+        # is the gate, because the item IS the gate.
+        True,
         (
             ("brown", "Brown"),
             ("blue", "Blue"),
             ("green", "Green"),
             ("gray", "Gray"),
             ("hazel", "Hazel"),
+            # #2632 umbrella value: heterochromia — the descriptor names the
+            # pair ("one blue, one amber"); the one-word form stays honest.
+            ("mismatched", "Mismatched"),
         ),
     ),
     (

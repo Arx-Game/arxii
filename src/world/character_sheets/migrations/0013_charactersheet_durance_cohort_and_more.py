@@ -6,8 +6,8 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("character_sheets", "0011_charactersheet_origin_story_state"),
-        ("progression", "0019_durancecohort_cohortenrollment"),
+        ("character_sheets", "0012_profiletextversion"),
+        ("progression", "0020_durancecohort_cohortenrollment"),
     ]
 
     operations = [

@@ -291,14 +291,17 @@ class CharacterItemDataHandler(BaseItemDataHandler):
         return super().get_display_name(include_colored=include_colored)
 
     def get_display_description(self):
-        """Get character's current display description with persona override support."""
-        # Check for primary persona first
-        primary_persona = self.get_primary_persona()
-        if primary_persona and primary_persona.description:
-            return primary_persona.description
+        """The character's current display description (#2632 rewire).
 
-        # Fall back to parent implementation (ObjectDisplayData)
-        return super().get_display_description()
+        The parent read (ObjectDisplayData) wins when set — for characters
+        that is the event-disguise ``temporary_description`` overlay, which
+        must mask the real look. Otherwise the sheet's ``additional_desc``
+        (the live free-text physical description: CG writes it, the Great
+        Archive recorded-profile flow updates it). The old first stop —
+        ``Persona.description`` — was a vestigial #347-era field nothing
+        ever wrote; removed.
+        """
+        return super().get_display_description() or self.additional_desc
 
     @property
     def _sheet_handler(self):

@@ -1,11 +1,16 @@
+from typing import Any
+
 from django.contrib import admin
+from django.http import HttpRequest
 
 from world.character_sheets.models import (
     CharacterSheet,
     Gender,
     Profile,
+    ProfileTextVersion,
     Pronouns,
 )
+from world.character_sheets.types import ProfileTextField
 
 
 @admin.register(Profile)
@@ -32,6 +37,40 @@ class ProfileAdmin(admin.ModelAdmin):
         "tarot_card",
         "tarot_reversed",
     )
+
+    def save_model(self, request: HttpRequest, obj: Profile, form: Any, change: bool) -> None:
+        """Route versioned prose fields through the snapshot service (#2631).
+
+        Staff edits must never overwrite background/personality silently — the
+        same history invariant the table-request flow holds. The pre-edit text
+        comes from ``form.initial``: the identity map means the instance (and
+        any refetch) already holds the new value by the time we get here.
+        """
+        from world.character_sheets.services import update_profile_text  # noqa: PLC0415
+
+        versioned_changed = [
+            f for f in ProfileTextField.values if change and f in form.changed_data
+        ]
+        previous = {f: form.initial.get(f) or "" for f in versioned_changed}
+        super().save_model(request, obj, form, change)
+        for field in versioned_changed:
+            update_profile_text(
+                obj,
+                field,
+                getattr(obj, field),
+                edited_by=request.user,
+                previous_text=previous[field],
+            )
+
+
+@admin.register(ProfileTextVersion)
+class ProfileTextVersionAdmin(admin.ModelAdmin):
+    """Read-oriented admin for the profile prose history (#2631)."""
+
+    list_display = ["__str__", "field", "created_at", "era", "edited_by"]
+    list_filter = ["field"]
+    raw_id_fields = ("profile", "era", "edited_by")
+    readonly_fields = ("created_at",)
 
 
 @admin.register(Gender)

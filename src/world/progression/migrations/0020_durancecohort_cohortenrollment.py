@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("progression", "0018_path_requirement_target"),
+        ("progression", "0019_codexknowledgerequirement"),
         ("scenes", "0054_boon_sum_tier_alter_boon_amount"),
         ("societies", "0033_domainholding_common_gem_tier_and_more"),
     ]

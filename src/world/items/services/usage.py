@@ -21,7 +21,7 @@ from world.checks.consequence_resolution import (
 )
 from world.checks.types import ResolutionContext
 from world.items.constants import OwnershipEventType
-from world.items.exceptions import ItemNotUsable, NoChargesRemaining
+from world.items.exceptions import ItemNotUsable, MakeoverNotPermitted, NoChargesRemaining
 from world.items.models import EquippedItem, ItemInstance, OwnershipEvent
 from world.items.types import UseItemResult
 
@@ -130,12 +130,22 @@ def forfeit_item_instance(*, item_instance: ItemInstance, note: str = "") -> Ite
 
 @transaction.atomic
 def use_item(
-    *, item_instance: ItemInstance, user: ObjectDB, target: ObjectDB | None = None
+    *,
+    item_instance: ItemInstance,
+    user: ObjectDB,
+    target: ObjectDB | None = None,
+    descriptor: str | None = None,
 ) -> UseItemResult:
     """Use an item with an on-use pool: apply its effects (deterministic when the
     template has no on_use_check_type, else check-gated). Consumables spend one
     charge (regardless of check outcome) and are destroyed at zero; non-consumable
-    usable items are reusable and keep their charges. user/target are ObjectDBs."""
+    usable items are reusable and keep their charges. user/target are ObjectDBs.
+
+    ``descriptor`` (#2632, cosmetic items only) is free-text presentation flavor
+    for the restyled trait — "raven shot through with silver streaks" over a
+    normalized hair color, the multi-color/ornate-work channel. An appearance
+    use REPLACES the trait's presentation: the descriptor becomes the given
+    text, or is cleared when none is given (you dyed over the old look)."""
     locked = ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
     template = locked.template
     has_appearance_effects = template.appearance_effects.exists()
@@ -148,6 +158,11 @@ def use_item(
         raise ItemNotUsable
     if template.is_consumable and locked.charges <= 0:
         raise NoChargesRemaining
+
+    # Styling someone else (#2632): consent-gate BEFORE any charge is spent,
+    # so a refused makeover never burns a dye.
+    if has_appearance_effects and target is not None and target != user:
+        _require_makeover_consent(user, target)
 
     context = ResolutionContext(character=user, target=target)
     check_result = None
@@ -182,7 +197,7 @@ def use_item(
         destroyed = False
         soft_deleted = False
 
-    appearance_changes = _apply_appearance_effects(template, user)
+    appearance_changes = _apply_appearance_effects(template, user, target, descriptor)
 
     _apply_disguise_kit_effects(template, user, locked)
 
@@ -196,13 +211,56 @@ def use_item(
     )
 
 
+def _require_makeover_consent(user: ObjectDB, target: ObjectDB) -> None:
+    """Raise MakeoverNotPermitted unless the target consents to styling (#2632).
+
+    An NPC target (no active tenure) never blocks; a player target's makeover
+    consent category gates (default allowlist — you opt your stylists in).
+    """
+    from world.consent.services import (  # noqa: PLC0415
+        consent_blocks_targeting,
+        makeover_category,
+    )
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    def _active_tenure_for_sheet(sheet: object) -> RosterTenure | None:
+        # Mirrors flows.service_functions.inventory's sheet→active-tenure resolution.
+        return RosterTenure.objects.filter(
+            roster_entry__character_sheet=sheet, end_date__isnull=True
+        ).first()
+
+    target_sheet = target.character_sheet
+    if target_sheet is None:
+        msg = "You can only restyle a character."
+        raise MakeoverNotPermitted(msg)
+    owner_tenure = _active_tenure_for_sheet(target_sheet)
+    if owner_tenure is None:
+        return  # NPC — no consent gate
+    user_sheet = user.character_sheet
+    actor_tenure = _active_tenure_for_sheet(user_sheet) if user_sheet else None
+    if consent_blocks_targeting(
+        owner_tenure=owner_tenure,
+        category=makeover_category(),
+        actor_tenure=actor_tenure,
+    ):
+        raise MakeoverNotPermitted
+
+
 def _apply_appearance_effects(
-    template: ItemTemplate, user: ObjectDB
+    template: ItemTemplate,
+    user: ObjectDB,
+    target: ObjectDB | None = None,
+    descriptor: str | None = None,
 ) -> list[tuple[FormTrait, FormTraitOption]]:
     """Apply cosmetic appearance effects declared on the item template.
 
+    Applies to ``target`` when one is given (PC stylists, #2632 — consent was
+    checked before any charge was spent), else to the user (self-makeover).
+    The stylist is recorded as ``actor_persona`` so the dye-history note shows
+    who did the work.
+
     Returns a list of (FormTrait, FormTraitOption) pairs that were changed.
-    Empty list if the template has no appearance effects or the character
+    Empty list if the template has no appearance effects or the recipient
     has no sheet (e.g., character creation never ran).
     """
     effects = list(template.appearance_effects.select_related("trait", "target_option"))
@@ -211,20 +269,26 @@ def _apply_appearance_effects(
     from world.forms.services import NonCosmeticTraitError, change_appearance  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    sheet = user.character_sheet
+    recipient = target if target is not None else user
+    sheet = recipient.character_sheet
     if sheet is None:
         return []
 
     persona = active_persona_for_sheet(sheet)
+    actor_sheet = user.character_sheet
+    actor_persona = active_persona_for_sheet(actor_sheet) if actor_sheet is not None else persona
     changes = []
     for effect in effects:
         try:
             change_appearance(
-                user,
+                recipient,
                 effect.trait,
                 effect.target_option,
                 persona=persona,
-                actor_persona=persona,
+                actor_persona=actor_persona,
+                # Replace-or-clear (#2632): the use's flavor text, or "" so a
+                # stale descriptor never describes a dyed-over look.
+                descriptor=(descriptor or "").strip(),
                 note=template.name,
             )
             changes.append((effect.trait, effect.target_option))

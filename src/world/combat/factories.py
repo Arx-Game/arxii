@@ -14,6 +14,7 @@ from world.combat.constants import (
     SCALING_CONFIG_PER_AVG_LEVEL_PCT,
     SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
     ActionCategory,
+    BreakContributionKind,
     ClashActionSlot,
     ClashFlavor,
     ComboLearningMethod,
@@ -34,6 +35,7 @@ from world.combat.constants import (
 from world.combat.models import (
     BossPhase,
     BreakBarConfig,
+    BreakBarContribution,
     Clash,
     ClashConfig,
     ClashContribution,
@@ -56,6 +58,7 @@ from world.combat.models import (
     EngagementLock,
     EscalationCurve,
     OpponentTierTemplate,
+    PendingOpponentAttack,
     RiskScalingModifier,
     StakesLevelRequirement,
     StrainConfig,
@@ -226,6 +229,19 @@ class CombatParticipantFactory(factory_django.DjangoModelFactory):
     status = ParticipantStatus.ACTIVE
 
 
+class BreakBarContributionFactory(factory_django.DjangoModelFactory):
+    """Factory for BreakBarContribution (#2642)."""
+
+    class Meta:
+        model = BreakBarContribution
+
+    opponent = factory.SubFactory(BossOpponentFactory)
+    participant = factory.SubFactory(CombatParticipantFactory)
+    round_number = 1
+    kind = BreakContributionKind.DAMAGE
+    amount = 1
+
+
 class ComboDefinitionFactory(factory_django.DjangoModelFactory):
     """Factory for ComboDefinition."""
 
@@ -335,6 +351,21 @@ class CombatOpponentActionFactory(factory_django.DjangoModelFactory):
     opponent = factory.SubFactory(CombatOpponentFactory)
     round_number = 1
     threat_entry = factory.SubFactory(ThreatPoolEntryFactory)
+
+
+class PendingOpponentAttackFactory(factory_django.DjangoModelFactory):
+    """Factory for PendingOpponentAttack (#2637)."""
+
+    class Meta:
+        model = PendingOpponentAttack
+
+    encounter = factory.SubFactory(CombatEncounterFactory)
+    opponent = factory.SubFactory(CombatOpponentFactory)
+    threat_entry = factory.SubFactory(ThreatPoolEntryFactory)
+    target = None
+    declared_round = 1
+    resolves_round = 2
+    called_out = False
 
 
 # =============================================================================
@@ -866,8 +897,8 @@ class BossFightScenarioFactory:
             soak_value=15,
             threat_pool=threat_pool,
             current_phase=1,
-            break_bar_threshold=6,
-            break_bar_current=6,
+            break_bar_threshold=10,
+            break_bar_current=10,
             vulnerability_rounds=2,
             vulnerability_intensity_bonus=2,
         )
@@ -883,7 +914,7 @@ class BossFightScenarioFactory:
             phase_number=1,
             threat_pool=threat_pool,
             soak_value=15,
-            break_bar_threshold=6,
+            break_bar_threshold=10,
             vulnerability_rounds=2,
             vulnerability_intensity_bonus=2,
             damage_multiplier=Decimal("1.0"),

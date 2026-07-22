@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -28,6 +28,7 @@ from world.combat.constants import (
     SCALING_CONFIG_PER_AVG_LEVEL_PCT,
     SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
     ActionCategory,
+    BreakContributionKind,
     ClashActionSlot,
     ClashFlavor,
     ClashResolution,
@@ -161,6 +162,22 @@ class CombatEncounter(AbstractRound):
             "(PR-body judgment call): stays True for the encounter's entire lifetime, not "
             "just its opening moment. Read by the Situation.COMBAT_OPENED_FROM_PARLEY and "
             "Situation.AMBUSH_UNDERWAY evaluators (world.covenants.perks.evaluators) for "
+            "per-vow situational perk scoping."
+        ),
+    )
+    on_chosen_ground = models.BooleanField(
+        default=False,
+        help_text=(
+            "True iff, at CREATE time, this encounter's room held a "
+            "world.room_features.models.PreparedGround whose preparer was physically "
+            "present (#2646) — see world.combat.chosen_ground.compute_on_chosen_ground. "
+            "Stamped exclusively at creation in the PC-vs-NPC seams "
+            "(world.combat.cast_seed.seed_or_feed_encounter_from_cast, "
+            "world.combat.duels.create_lethal_duel, "
+            "world.battles.services.open_place_encounter); never mutated afterward. "
+            "world.combat.duels.create_pvp_duel deliberately leaves this False (PvP is "
+            "never lethal, so 'chosen ground' does not apply). Read by the "
+            "Situation.ON_CHOSEN_GROUND evaluator (world.covenants.perks.evaluators) for "
             "per-vow situational perk scoping."
         ),
     )
@@ -329,10 +346,43 @@ class ThreatPoolEntry(SharedMemoryModel):
     )
     minimum_phase = models.PositiveIntegerField(null=True, blank=True)
     cooldown_rounds = models.PositiveIntegerField(null=True, blank=True)
+    windup_rounds = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Rounds this attack telegraphs before it lands (#2637). 0 (default) is "
+            "today's same-round behavior. > 0 creates a PendingOpponentAttack at "
+            "declaration instead of a same-round CombatOpponentAction; the attack "
+            "matures resolves_round rounds later, and can be interrupted/downgraded "
+            "by PC hits on the opponent in the meantime."
+        ),
+    )
+    windup_telegraph = models.CharField(
+        max_length=300,
+        blank=True,
+        default="",
+        help_text=(
+            "Telegraph text broadcast when this wind-up is declared (#2637). Blank "
+            "falls back to a generic line ('The {opponent} begins something "
+            "enormous...') at broadcast time."
+        ),
+    )
     requires_steady = models.BooleanField(
         default=False,
         help_text="If True, this entry is skipped when the opponent is faltering "
         "(morale_state FALTER). Lets designers author 'weakened' entries (#2015).",
+    )
+    sends_flying = models.BooleanField(
+        default=False,
+        help_text=(
+            "Big attacks that launch their victim on a damaging hit (#2638). "
+            "Pairs naturally with windup_rounds — a telegraphed haymaker that "
+            "connects sends the victim flying. Applies the seeded 'Sent Flying' "
+            "marker condition (world.combat.sent_flying_content) whenever this "
+            "entry's attack deals damage > 0; the marker is then reactable "
+            "(an armed guardian INTERPOSE may catch it mid-air) or resolves "
+            "explicitly at end of round — see world.combat.services."
+            "_resolve_sent_flying_markers."
+        ),
     )
 
     # === Clash fields (Task 1.5) ===
@@ -634,6 +684,22 @@ class CombatOpponent(SharedMemoryModel):
     vulnerability_intensity_bonus = models.PositiveIntegerField(
         default=0,
         help_text="Intensity bonus during vulnerability window; from BreakBarConfig.",
+    )
+
+    # === Boss-fight structure: lieutenant gate (#2642) ===
+    reinforces = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reinforced_by",
+        help_text=(
+            "Lieutenant->boss edge (#2642): set on a lieutenant opponent to the "
+            "BOSS-tier opponent it reinforces. Read by assess_break_bar's "
+            "lieutenant gate — an active, unsuppressed lieutenant slows the "
+            "boss's break-bar depletion proportionally. Null for non-lieutenant "
+            "opponents (including the boss itself)."
+        ),
     )
 
     # === Affinity field (#2536 slice 3 Task 6) ===
@@ -1084,6 +1150,38 @@ class CombatParticipant(SharedMemoryModel):
         choices=ParticipantStatus.choices,
         default=ParticipantStatus.ACTIVE,
     )
+    reactions_used = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Reactions (e.g. INTERPOSE fires) this participant has spent this round "
+            "(#2639). Reset to 0 in begin_declaration_phase. Gated against "
+            "combat.constants.REACTIONS_PER_ROUND at the reaction fire seam "
+            "(_dispatch_interpose_action)."
+        ),
+    )
+    insight_used = models.BooleanField(
+        default=False,
+        help_text=(
+            "#2645: True once this participant has produced their once-per-encounter "
+            "Insight (the Know need's ace). A per-encounter row needs no reset "
+            "machinery — a fresh encounter mints a fresh CombatParticipant."
+        ),
+    )
+    sent_flying_damage = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "The triggering hit's damage, stamped when a `sends_flying` "
+            "ThreatPoolEntry's attack applies the Sent Flying marker condition "
+            "to this participant (#2638). v1 carrier choice: rather than a new "
+            "model, the amount rides this single field (only one Sent Flying "
+            "marker can be active on a participant at a time — the condition "
+            "is non-stackable) so world.combat.services._resolve_sent_flying_markers "
+            "can compute the unanswered-impact debit "
+            "(floor(sent_flying_damage * SENT_FLYING_IMPACT_FRACTION)) at end of "
+            "round without threading extra state through the condition system. "
+            "0 = not currently marked; cleared back to 0 on catch or landing."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -1398,9 +1496,114 @@ class CombatOpponentAction(SharedMemoryModel):
         "opponents. Exactly one of targets / opponent_targets is populated per "
         "action — the participant pool when it has hostile PCs, else this.",
     )
+    damage_scale = models.FloatField(
+        default=1.0,
+        help_text=(
+            "Multiplier applied to threat_entry.base_damage on resolution (#2637). "
+            "1.0 (default) is today's unscaled behavior. A matured wind-up "
+            "(PendingOpponentAttack) sets this from its downgrade ladder — "
+            "x(1 - 0.25*downgrades), floored at x0.25 — so a wrecked telegraph "
+            "lands weaker without touching the authored ThreatPoolEntry row."
+        ),
+    )
+    matured_from_called_out_windup = models.BooleanField(
+        default=False,
+        help_text=(
+            "Stamped True at wind-up maturation (#2638) when the "
+            "PendingOpponentAttack this action was synthesized from carried "
+            "called_out=True (#2637 design 6). PendingOpponentAttack is deleted "
+            "at maturation, so this is the only surviving record of whether the "
+            "attack that lands was called out — read by a sends_flying "
+            "consequence's celebration broadcast to credit the auto-caller "
+            "alongside the catcher. False (the default) for every non-wind-up "
+            "same-round action."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.opponent.name} Round {self.round_number}: {self.threat_entry.name}"
+
+
+class PendingOpponentAttack(SharedMemoryModel):
+    """A telegraphed NPC attack winding up before it lands (#2637).
+
+    Created by ``world.combat.services._build_opponent_round_actions`` at NPC
+    declaration when the chosen ``ThreatPoolEntry.windup_rounds > 0``, INSTEAD
+    of a same-round ``CombatOpponentAction``. Matured by
+    ``world.combat.services._mature_pending_opponent_attacks`` at the top of
+    ``resolve_round`` once ``resolves_round`` is reached: fizzles outright at
+    ``downgrades >= 3`` (the "perfect chain" — F-6c), else synthesizes a real
+    ``CombatOpponentAction`` (``damage_scale`` carrying the downgrade ladder)
+    that the normal NPC-resolution pipeline resolves unmodified, then deletes
+    this row either way.
+
+    Clones the deferred-then-reactive shape of ``world.scenes.models.
+    PendingSuddenHarm`` (#1316) rather than importing it — that model is a
+    single-round out-of-combat bystander harm; this one is a multi-round,
+    combat-native, interceptible telegraph with its own maturation and
+    downgrade bookkeeping.
+    """
+
+    encounter = models.ForeignKey(
+        CombatEncounter,
+        on_delete=models.CASCADE,
+        related_name="pending_opponent_attacks",
+    )
+    opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        related_name="pending_attacks",
+    )
+    threat_entry = models.ForeignKey(
+        ThreatPoolEntry,
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    target = models.ForeignKey(
+        CombatParticipant,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="v1 single-target. Null when the entry is room-targeting.",
+    )
+    declared_round = models.PositiveIntegerField(
+        help_text="The round this wind-up was declared/telegraphed.",
+    )
+    resolves_round = models.PositiveIntegerField(
+        help_text="The round this wind-up matures and resolves. Always > declared_round.",
+    )
+    called_out = models.BooleanField(
+        default=False,
+        help_text=(
+            "Auto-called by a flagged CovenantRole.calls_out_windups engaged "
+            "member at most once per round per encounter (#2637 design 6). A "
+            "called-out wind-up's interception downgrade is +2 instead of +1."
+        ),
+    )
+    downgrades = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Interception hits landed on the winding-up opponent before maturation. "
+            ">= 3 fully cancels the attack; otherwise scales its damage down."
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["resolves_round", "pk"]
+        constraints = [
+            models.CheckConstraint(
+                check=Q(resolves_round__gt=F("declared_round")),
+                name="pendingopponentattack_resolves_after_declared",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"PendingOpponentAttack({self.opponent.name}: {self.threat_entry.name}, "
+            f"resolves round {self.resolves_round})"
+        )
 
 
 # =============================================================================
@@ -2672,6 +2875,79 @@ class ClashContribution(SharedMemoryModel):
         return (
             f"ClashContribution(round={self.clash_round_id} "
             f"character={self.character_id} slot={self.action_slot})"
+        )
+
+
+# =============================================================================
+# BreakBarContribution model (#2642) — per-round audit record of a boss
+# break-bar feed. Mirrors ClashContribution's shape: one row per qualifying
+# feed event, persisted where assess_break_bar previously discarded its
+# ephemeral participant/effect_type sets.
+# =============================================================================
+
+
+class BreakBarContribution(SharedMemoryModel):
+    """Per-round audit record of a single feed that chipped a boss's break bar.
+
+    One row per qualifying feed event assessed by ``assess_break_bar`` each
+    round: a damaging hit (DAMAGE), a landed combo (COMBO), a PC-side LOCK-clash
+    win against the boss (HOLD), a new behavior-altering condition landed on the
+    boss (DEBUFF), or a reinforcing lieutenant becoming suppressed (SUPPRESSION).
+    Feeds the diversity-weighted depletion formula (distinct actor x kind pairs
+    this round, novelty-doubled on each pair's first appearance in the
+    encounter) and the break celebration's contributor naming.
+    """
+
+    opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        related_name="break_contributions",
+        help_text="The BOSS-tier opponent whose break bar this contribution chipped.",
+    )
+    participant = models.ForeignKey(
+        COMBAT_PARTICIPANT_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="break_contributions",
+        help_text=(
+            "The PC credited with this contribution. Null for SUPPRESSION/DEBUFF "
+            "rows whose triggering event has no single attributable actor — "
+            "prefer non-null whenever the feed can be traced to one PC."
+        ),
+    )
+    round_number = models.PositiveIntegerField(
+        help_text="The encounter round this contribution was assessed in.",
+    )
+    kind = models.CharField(
+        max_length=15,
+        choices=BreakContributionKind.choices,
+        help_text="Which feed produced this contribution.",
+    )
+    effect_type = models.ForeignKey(
+        "magic.EffectType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The technique's effect type, when the feed carries one (DAMAGE/COMBO).",
+    )
+    amount = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="This row's unit weight toward the round's depletion total.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["round_number", "created_at"]
+        indexes = [
+            models.Index(fields=["opponent", "round_number"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"BreakBarContribution(opponent={self.opponent_id} "
+            f"round={self.round_number} kind={self.kind})"
         )
 
 

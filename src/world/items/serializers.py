@@ -62,11 +62,17 @@ class InteractionTypeSerializer(serializers.ModelSerializer):
 class UseItemSerializer(serializers.Serializer):
     """Request body for the inventory ``use`` action.
 
-    Intentionally empty: the REST endpoint applies on-use effects to the
-    holder (self) only. Targeted use belongs in the future use-item Action
-    layer, which has proximity/prerequisite checks; accepting a target pk
-    here would let a player apply on-use effects to any character by pk.
+    Deliberately near-empty: the REST endpoint applies on-use effects to the
+    holder (self) only. Targeted use belongs in the use-item Action layer,
+    which has proximity/prerequisite checks; accepting a target pk here would
+    let a player apply on-use effects to any character by pk.
+
+    ``descriptor`` (#2632) — optional free-text presentation flavor for
+    cosmetic self-uses ("raven shot through with silver streaks"); replaces
+    or clears the trait's descriptor per ``use_item``'s semantics.
     """
+
+    descriptor = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class UseItemResultSerializer(serializers.Serializer):

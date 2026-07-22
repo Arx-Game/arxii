@@ -2603,6 +2603,12 @@ def seed_magic_dev() -> MagicDevSeedResult:
 
     wire_ghost_tutor_content()
 
+    from world.mechanics.factories import ensure_team_damage_percent_target  # noqa: PLC0415
+
+    # #2643 — mechanics config (not authored content, see the factory docstring),
+    # so it's seeded directly here rather than deferred to lore-repo content.
+    ensure_team_damage_percent_target()
+
     return MagicDevSeedResult(
         config=config,
         rituals=rituals,

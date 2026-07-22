@@ -98,7 +98,6 @@ class PersonaFactory(factory_django.DjangoModelFactory):
     character_sheet = factory.SubFactory(CharacterSheetFactory)
     name = factory.Sequence(lambda n: f"Persona {n}")
     persona_type = PersonaType.ESTABLISHED
-    description = factory.Faker("text", max_nb_chars=100)
     thumbnail_url = factory.Faker("image_url")
     is_fake_name = False
 

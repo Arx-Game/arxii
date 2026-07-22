@@ -91,6 +91,37 @@ class CharacterCovenantRoleHandler:
         thread on a role qualifies for a resonance sub-role, the sub-role is returned
         instead of the parent. Anchor identity is always stored on the membership row;
         use ``anchor_role_in`` for consumers that must key on the stored parent role.
+
+        Secondary memberships (``is_secondary=True``, #2641) resolve at their
+        ANCHOR role ONLY — never a resolved sub-role — since deep rungs/
+        graduation/signature/name stay primary-only; primary memberships
+        resolve normally. Kept as the ALL-engaged-roles view for non-layer
+        callers (eligibility gates, precedence fallbacks); chassis callers
+        (Layer 1/3) use ``currently_engaged_primary_roles`` instead, and
+        Layer 2/4 callers use ``currently_engaged_roles_with_flags``.
+        """
+        from world.covenants.services import resolve_effective_role  # noqa: PLC0415
+
+        char = self._character
+        roles: list[CovenantRole] = []
+        for r in self._rows:
+            if not (r.engaged and r.left_at is None):
+                continue
+            if r.is_secondary:
+                roles.append(r.covenant_role)
+            else:
+                roles.append(resolve_effective_role(character=char, role=r.covenant_role))
+        return roles
+
+    def currently_engaged_primary_roles(self) -> list[CovenantRole]:
+        """Resolved roles for engaged PRIMARY (``is_secondary=False``) memberships
+        only (#2641).
+
+        Chassis layers (Layer 1 combat-identity blend, Layer 3 defense/gear/
+        stat scaling) key off primary vows exclusively — sub-role graduation
+        is unrestricted here (primary depth has no cap). Secondary vows never
+        reach the chassis; see ``currently_engaged_roles_with_flags`` for the
+        flagged view Layer 2/4 use instead.
         """
         from world.covenants.services import resolve_effective_role  # noqa: PLC0415
 
@@ -98,8 +129,32 @@ class CharacterCovenantRoleHandler:
         return [
             resolve_effective_role(character=char, role=r.covenant_role)
             for r in self._rows
-            if r.engaged and r.left_at is None
+            if r.engaged and r.left_at is None and not r.is_secondary
         ]
+
+    def currently_engaged_roles_with_flags(self) -> list[tuple[CovenantRole, bool]]:
+        """``(role, is_secondary)`` pairs for every active+engaged membership row (#2641).
+
+        PRIMARY rows resolve the same way ``currently_engaged_primary_roles``
+        does (sub-role graduation applies). SECONDARY rows resolve at their
+        ANCHOR role ONLY — a secondary's own sub-role investment never
+        surfaces here (depth stays primary-only). Layer 2
+        (``covenant_role_specialty_power_term``) and Layer 4 (the perk
+        candidate gatherers) read this to scale a secondary-sourced
+        contribution by ``SecondaryVowConfig.potency_tenths``.
+        """
+        from world.covenants.services import resolve_effective_role  # noqa: PLC0415
+
+        char = self._character
+        pairs: list[tuple[CovenantRole, bool]] = []
+        for r in self._rows:
+            if not (r.engaged and r.left_at is None):
+                continue
+            if r.is_secondary:
+                pairs.append((r.covenant_role, True))
+            else:
+                pairs.append((resolve_effective_role(character=char, role=r.covenant_role), False))
+        return pairs
 
     def anchor_role_in(self, covenant: Covenant) -> CovenantRole | None:
         """Return the stored (parent/anchor) covenant_role for the active membership in
