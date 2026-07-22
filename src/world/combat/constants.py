@@ -192,6 +192,29 @@ class OpponentTier(models.TextChoices):
     HERO_KILLER = "hero_killer", "Hero Killer"
 
 
+# #2643 — enemy-side bound on the summed condition-driven damage_modifier_percent
+# (Undermine's lane, ``_apply_condition_damage_interactions``). Mirrors
+# ``TEAM_BUFF_LANE_CAP_PERCENT`` (world.magic.constants) — the EQ2 lane guard: a
+# percentage lane must be bounded or a single-round unbounded stack trivializes the
+# damage identity. Staff-tunable-in-code, not DB-authored (a hard engine rail, not
+# game content).
+ENEMY_LANE_CAP_PERCENT: int = 50
+
+# #2643 — flagged seed pseudo-level table for opponents, who carry a tier instead of a
+# CharacterSheet.current_level. Consumed by ``world.conditions.services
+# .priced_percent_severity`` to price a percent-lane buff/debuff landing on an NPC
+# target the same way it prices one landing on a PC (current_level). Values are a
+# judgment call (roughly "how many PC levels is this tier worth"), not measured
+# content — revisit once real level/tier balance data exists.
+OPPONENT_TIER_LEVEL: dict[str, int] = {
+    OpponentTier.SWARM: 1,
+    OpponentTier.MOOK: 2,
+    OpponentTier.ELITE: 4,
+    OpponentTier.BOSS: 6,
+    OpponentTier.HERO_KILLER: 8,
+}
+
+
 class OpponentStatus(models.TextChoices):
     """Current status of an opponent in an encounter."""
 

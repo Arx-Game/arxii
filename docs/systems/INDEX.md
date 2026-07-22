@@ -1398,7 +1398,10 @@ so web and telnet converge on the same write path.
   parented under it (`world/seeds/consent.py`); theft's effective default becomes the root's
   `FRIENDS_WHITELIST` (its own `ALLOWLIST` survives only as the unseeded `theft_category()`
   fallback / orphaned-row case). `effective_consent_mode(pref, category)`
-  is the shared walk-up (nearest rule wins, else root default) — ADR-0113
+  is the shared walk-up (nearest rule wins, else root default) — ADR-0113.
+  `makeover_category()` (#2632, default `ALLOWLIST`, NOT under All Antagonism — friendly but
+  body-autonomy) gates PC stylists applying cosmetic items to another character's real form
+  (`use_item`'s pre-charge `_require_makeover_consent`; NPC targets never gate)
 - **Key Methods:** `VisibilityMixin.is_visible_to()`, `_tenure_blocks_actor()` (thin delegator
   to `consent_blocks_targeting`, #1909), `decide_consent_block()` (takes `is_rival`),
   `effective_consent_mode()`, `_social_consent_exclusions()` (`actions/player_interface.py`) —
@@ -2389,9 +2392,21 @@ register as additional kinds.
   `hire <name>` prefers a co-located Functionary, falling back to a global role lookup; staff place
   them with the `functionary place/remove` command (`commands/functionary.py`); they surface on
   `look` (`Room.return_appearance`).
+- **Styling & Archive profiles (#2632):** `StylingOfferDetails` (kind=STYLING — one offer
+  per (cosmetic `FormTrait`, `FormTraitOption`), coppers price; `run_styling_offer`
+  charges the purse then applies via the shared `change_appearance` seam),
+  `ProfileRecordingOfferDetails` + `RecordedProfile` (kind=PROFILE_RECORDING — pay for an
+  Archive sitting → COMMISSIONED `RecordedProfile`; the player's write-up completes via
+  `complete_recorded_profile`, which sets the character's description through
+  `character_sheets.set_physical_description` and archives the text forever with IC-date +
+  Era stamps — the diegetic desc history). API:
+  `/api/npc-services/recorded-profiles/` (owner-scoped list + `complete`). Seeds:
+  `world.seeds.styling` (stylist + scribe roles, cosmetic templates incl. the
+  enchanted-lens eye-color gate).
 - **Constants:** `OfferKind` (PERMIT / MISSION / LOAN / COLLECTION / IMPROVEMENT (#930) /
   INFORMANT / CONTACT / PERSONAL_FAVOR / GUARD / FAN / MINOR_ALLY / ASSET_TASK_INTEL /
-  ASSET_TASK_COLLECT / TRAIN (#2440) / SETTLE_OBLIGATION (#2428 whole-branch fix);
+  ASSET_TASK_COLLECT / TRAIN (#2440) / SETTLE_OBLIGATION (#2428 whole-branch fix) /
+  STYLING / PROFILE_RECORDING (#2632); `RecordedProfileStatus` (COMMISSIONED/RECORDED);
   future POLITICAL_FAVOR/...), `DrawMode` (MENU, POOL).
   `NPCServiceOffer.ap_cost` (#930) charges the resolving character before any effect
   dispatches (`InsufficientAPError` rolls the grant back) — a generic knob on every kind;
@@ -4526,6 +4541,20 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `_PerkResolver` gained the matching `attacker` parameter/field to propagate it into each
     candidate holder's `SituationContext`. See ADR-0153/ADR-0154 and `docs/systems/covenants.md`'s
     "Court/Battle scoping + defense-side seam" for the full design.
+- **The Damage Identity — bounded percent lanes, vow-keyed stacking, execute (#2643,
+  ADR-0158):** `combat.constants.ENEMY_LANE_CAP_PERCENT` (default 50) clamps the summed
+  `ConditionDamageInteraction.damage_modifier_percent` in
+  `_apply_condition_damage_interactions` (Undermine's enemy-side lane) before it multiplies
+  net damage. `AbstractDamageProfile.execute_missing_health_multiplier` (Decimal, default
+  0) scales a landing hit's damage by `1 + multiplier * missing_health_fraction`, computed
+  off the target's PRE-hit health; applied at both `apply_damage_to_opponent` (live caller:
+  `CombatTechniqueResolver._apply_profiles_to_target`, threading the resolving damage
+  profile's own value) and `apply_damage_to_participant` (kwarg accepted + tested; no live
+  caller yet — combat technique damage in this codebase only ever resolves against
+  `CombatOpponent` targets). The sibling bounded ally-buff lane (`team_damage_percent`,
+  vow-keyed diminishing returns via `ConditionInstance.source_vow`) lives in the magic app
+  — see `docs/systems/magic.md`'s "The Damage Identity" section and ADR-0158 for the full
+  composition.
 - **Effect-palette / summon / allegiance additions (#1584):**
   - `CombatOpponent.allegiance` (`CombatAllegiance`: ENEMY default / ALLY) — mutable
     side-field; ALLY opponents fight *for* the party (summons, and future charm/

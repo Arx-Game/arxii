@@ -184,6 +184,7 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
     # Source info (who/what caused this)
     source_character_name = serializers.SerializerMethodField()
     source_technique_name = serializers.SerializerMethodField()
+    source_vow_name = serializers.SerializerMethodField()
 
     # Computed fields
     effective_severity = serializers.IntegerField(read_only=True)
@@ -223,6 +224,7 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
             # Source
             "source_character_name",
             "source_technique_name",
+            "source_vow_name",
             "source_description",
         ]
         read_only_fields = fields
@@ -243,6 +245,17 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
         """Get the name of the source technique."""
         if obj.source_technique:
             return obj.source_technique.name
+        return None
+
+    def get_source_vow_name(self, obj: ConditionInstance) -> str | None:
+        """Get the name of the applier's engaged vow (covenant role) at apply time (#2643).
+
+        Lets a player see an armed team-damage-percent buff's vow provenance on an
+        ally BEFORE casting — the "which vow is this coming from" visibility the UI
+        requirement calls for.
+        """
+        if obj.source_vow:
+            return obj.source_vow.name
         return None
 
 

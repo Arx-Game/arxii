@@ -125,3 +125,65 @@ class ParticipantDamageInteractionTests(TestCase):
         self.assertEqual(result.damage_dealt, 150)
         self.assertIsNotNone(result.damage_interaction)
         self.assertEqual(result.damage_interaction.damage_modifier_percent, 50)
+
+
+class EnemyLaneClampTests(TestCase):
+    """Enemy-side bound (#2643): summed damage_modifier_percent clamps to
+    ±ENEMY_LANE_CAP_PERCENT before it multiplies net damage — Undermine's lane."""
+
+    def setUp(self):
+        self.lightning = DamageTypeFactory(name="Lightning-test-clamp")
+
+    def test_summed_percent_over_cap_clamps_to_cap(self):
+        """Two +40% interactions sum to +80% (over the 50 cap) but clamp to +50%."""
+        opponent = CombatOpponentFactory(health=10000, max_health=10000, soak_value=0)
+        cond_a = ConditionTemplateFactory(name="Undermine-A")
+        cond_b = ConditionTemplateFactory(name="Undermine-B")
+        ConditionInstanceFactory(target=opponent.objectdb, condition=cond_a)
+        ConditionInstanceFactory(target=opponent.objectdb, condition=cond_b)
+        ConditionDamageInteractionFactory(
+            condition=cond_a, damage_type=self.lightning, damage_modifier_percent=40
+        )
+        ConditionDamageInteractionFactory(
+            condition=cond_b, damage_type=self.lightning, damage_modifier_percent=40
+        )
+
+        result = apply_damage_to_opponent(opponent, 100, damage_type=self.lightning)
+
+        # Unclamped would be 100 * 1.8 = 180; clamped at +50% -> 150.
+        self.assertEqual(result.damage_dealt, 150)
+        # The unclamped sum is still visible on the raw interaction result (only the
+        # damage APPLICATION is bounded, not the authored/reported total).
+        self.assertEqual(result.damage_interaction.damage_modifier_percent, 80)
+
+    def test_summed_percent_under_cap_is_unaffected(self):
+        """A sum comfortably inside the band passes through unclamped."""
+        opponent = CombatOpponentFactory(health=10000, max_health=10000, soak_value=0)
+        cond = ConditionTemplateFactory(name="Undermine-small")
+        ConditionInstanceFactory(target=opponent.objectdb, condition=cond)
+        ConditionDamageInteractionFactory(
+            condition=cond, damage_type=self.lightning, damage_modifier_percent=20
+        )
+
+        result = apply_damage_to_opponent(opponent, 100, damage_type=self.lightning)
+
+        self.assertEqual(result.damage_dealt, 120)
+
+    def test_negative_summed_percent_clamps_to_negative_cap(self):
+        """Two -40% interactions sum to -80% but clamp to -50%."""
+        opponent = CombatOpponentFactory(health=10000, max_health=10000, soak_value=0)
+        cond_a = ConditionTemplateFactory(name="Dampen-A")
+        cond_b = ConditionTemplateFactory(name="Dampen-B")
+        ConditionInstanceFactory(target=opponent.objectdb, condition=cond_a)
+        ConditionInstanceFactory(target=opponent.objectdb, condition=cond_b)
+        ConditionDamageInteractionFactory(
+            condition=cond_a, damage_type=self.lightning, damage_modifier_percent=-40
+        )
+        ConditionDamageInteractionFactory(
+            condition=cond_b, damage_type=self.lightning, damage_modifier_percent=-40
+        )
+
+        result = apply_damage_to_opponent(opponent, 100, damage_type=self.lightning)
+
+        # Unclamped would be 100 * 0.2 = 20; clamped at -50% -> 50.
+        self.assertEqual(result.damage_dealt, 50)

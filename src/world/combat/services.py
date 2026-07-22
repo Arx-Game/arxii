@@ -80,6 +80,7 @@ from world.combat.constants import (
     DEFENSE_REDUCED_MULTIPLIER,
     DEFENSE_REDUCED_THRESHOLD,
     ELEVATION_ADVANTAGE_TARGET_NAME,
+    ENEMY_LANE_CAP_PERCENT,
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
     FLEE_PARTIAL_SUCCESS_LEVEL,
@@ -599,6 +600,10 @@ class CombatTechniqueResolver:
                     scaled,
                     damage_type=profile_damage_type,
                     source_sheet=self.participant.character_sheet,
+                    # #2643: the profile IS in hand here — the cleanest seam to thread
+                    # execute from (mirrors how damage_intensity_multiplier reaches
+                    # compute_damage_budget above, in _profile_damage).
+                    execute_missing_health_multiplier=profile.execute_missing_health_multiplier,
                 )
             )
             weapon_landed = weapon_landed or (profile.uses_equipped_weapon and weapon is not None)
@@ -4139,7 +4144,13 @@ def _apply_condition_damage_interactions(
     """Run condition-damage interactions on a target, returning modified damage + result.
 
     Called from both combat damage paths after soak/resistance/armor (#2018).
-    The interaction modifier is a final percentage multiplier on net damage.
+    The interaction modifier is a final percentage multiplier on net damage — SUMMED
+    across every matching ``ConditionDamageInteraction`` row, then clamped to
+    ``±ENEMY_LANE_CAP_PERCENT`` (#2643, Undermine's enemy-side lane; the same EQ2 lane
+    guard as the team-damage-percent lane — see ``world.magic.constants
+    .TEAM_BUFF_LANE_CAP_PERCENT``). The clamp applies to the summed percent, not to any
+    individual authored row — an authored row may itself exceed the band; only the
+    live total a target can accumulate is bounded.
     Returns ``(modified_damage, interaction_result)`` — ``interaction_result``
     is None when damage_type is None, a non-model value, or damage_amount is zero.
     """
@@ -4156,8 +4167,38 @@ def _apply_condition_damage_interactions(
 
     result = process_damage_interactions(target, damage_type)
     if result.damage_modifier_percent != 0:
-        damage_amount = max(0, int(damage_amount * (1 + result.damage_modifier_percent / 100)))
+        clamped_percent = max(
+            -ENEMY_LANE_CAP_PERCENT, min(ENEMY_LANE_CAP_PERCENT, result.damage_modifier_percent)
+        )
+        damage_amount = max(0, int(damage_amount * (1 + clamped_percent / 100)))
     return damage_amount, result
+
+
+def _opponent_health_before_pct(opponent: CombatOpponent) -> float:
+    """Pre-hit health fraction for an opponent (#2643 execute basis). 0.0 when maxless."""
+    if opponent.max_health <= 0:
+        return 0.0
+    return max(0.0, opponent.health / opponent.max_health)
+
+
+def _apply_execute_multiplier(
+    damage_amount: int, multiplier: Decimal, health_before_pct: float
+) -> int:
+    """Scale damage up as the target's PRE-hit health runs low (#2643 execute).
+
+    ``factor = 1 + multiplier * missing_health_fraction`` where
+    ``missing_health_fraction = 1 - health_before_pct``. A zero (the default on every
+    damage profile) or falsy ``multiplier`` is a byte-identical no-op — every existing
+    damage test is unaffected. Basis is always PRE-hit health (captured by the caller
+    before this hit's own subtraction), so a second hit in the same exchange correctly
+    prices off the health the FIRST hit left behind — never a recursive
+    self-referential fraction, no matter how many hits land in sequence.
+    """
+    if not multiplier:
+        return damage_amount
+    missing_health_fraction = 1.0 - health_before_pct
+    factor = 1 + float(multiplier) * missing_health_fraction
+    return max(0, int(damage_amount * factor))
 
 
 def apply_damage_to_opponent(  # noqa: PLR0913
@@ -4169,6 +4210,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     damage_type: DamageType | None = None,
     source_sheet: CharacterSheet | None = None,
     skip_guardian_shield: bool = False,
+    execute_missing_health_multiplier: Decimal = Decimal(0),
 ) -> OpponentDamageResult:
     """Apply damage to an NPC opponent, accounting for soak, probing,
     and damage-type resistance.
@@ -4183,6 +4225,13 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     ``skip_guardian_shield=True`` skips ONLY the guardian-shields-a-summon
     (#2207) hook — the opponent's own DAMAGE_PRE_APPLY trigger band still
     runs. See :func:`_resolve_opponent_pre_apply`.
+
+    ``execute_missing_health_multiplier`` (#2643): the resolving technique damage
+    profile's ``execute_missing_health_multiplier`` (default 0 = no-op, matching every
+    existing caller byte-for-byte). Scales damage up as the opponent's PRE-hit health
+    runs low — see :func:`_apply_execute_multiplier`. The caller (a technique's damage
+    resolution — ``CombatTechniqueResolver._apply_profiles_to_target``) is the one place
+    the damage profile is in hand; everywhere else defaults to inert.
     """
     # Swarm: no HP, no soak, no probing -- a landing attack clears bodies.
     if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
@@ -4210,6 +4259,19 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     resistance = _effective_resistance_for_opponent(opponent, damage_type)
 
     damage_through = max(0, raw_damage - effective_soak - resistance)
+
+    # Execute (#2643): smooth ramp off the opponent's PRE-hit health, captured here
+    # before this hit's own subtraction below — a second profile/hit in the same cast
+    # (AoE, multi-profile techniques) correctly compounds off each opponent's own
+    # already-reduced health, never a recursive fraction. Placed right before the
+    # condition-damage-interaction multiply per design (both are final-stage percent
+    # scalers on net damage; order between them doesn't change per-technique intent
+    # since only one technique's profile ever supplies a nonzero multiplier per hit).
+    damage_through = _apply_execute_multiplier(
+        damage_through,
+        execute_missing_health_multiplier,
+        _opponent_health_before_pct(opponent),
+    )
 
     # Condition-damage interactions (#2018). Final percentage multiplier on
     # net damage, after soak + resistance. May consume/transform conditions.
@@ -4547,6 +4609,7 @@ def apply_damage_to_participant(  # noqa: PLR0913
     on_hit_pool: ConsequencePool | None = None,
     delivery: str = StrikeDelivery.MELEE,
     is_area: bool = False,
+    execute_missing_health_multiplier: Decimal = Decimal(0),
 ) -> ParticipantDamageResult:
     """Apply damage to a PC via their CharacterVitals.
 
@@ -4562,6 +4625,17 @@ def apply_damage_to_participant(  # noqa: PLR0913
     callers default to MELEE/False. Rampart interception (see
     ``apply_rampart_interception``) runs first, before any other reduction,
     UNLESS ``bypass_pre_apply=True`` (the reflect/retaliation loop guard).
+
+    ``execute_missing_health_multiplier`` (#2643): symmetric sibling of
+    :func:`apply_damage_to_opponent`'s same-named kwarg — default 0 (no-op, every
+    existing caller unaffected). No live caller passes a nonzero value yet: combat
+    technique damage in this codebase only ever resolves against ``CombatOpponent``
+    targets (``CombatTechniqueResolver._apply_damage``), never a PC
+    ``CombatParticipant`` — this parameter exists so the capability is symmetric and
+    directly testable, ready for the day PC-vs-PC technique damage is wired. Uses the
+    existing ``health_before_pct`` (captured once, before the condition-damage-
+    interaction multiply, and reused for both the execute scaling AND the
+    knockout/death classification below it — see :func:`_apply_execute_multiplier`).
 
     Emits reactive events:
     - DAMAGE_PRE_APPLY (cancellable, mutable amount)
@@ -4653,6 +4727,16 @@ def apply_damage_to_participant(  # noqa: PLR0913
     # Attack-cover from PositionShelter (applies_to_attacks=True rows, #2011).
     effective_damage = apply_position_cover(character, effective_damage, damage_type)
 
+    # health_before(_pct) captured HERE, before this hit's own reductions/subtraction
+    # below — the PRE-hit basis both the execute multiplier (#2643) and the
+    # knockout/death classification further down share. vitals.health is untouched
+    # by anything above this line, so this is safe to read early.
+    health_before = vitals.health
+    if vitals.max_health > 0:
+        health_before_pct = max(0.0, health_before / vitals.max_health)
+    else:
+        health_before_pct = 0.0
+
     # Condition-damage interactions (#2018). Final percentage multiplier on
     # net damage, after resistance + armor soak. May consume/transform conditions.
     interaction_result = None
@@ -4661,16 +4745,18 @@ def apply_damage_to_participant(  # noqa: PLR0913
             character, damage_type, effective_damage
         )
 
-    health_before = vitals.health
+    # Execute (#2643): see apply_damage_to_opponent's twin block + docstring.
+    effective_damage = _apply_execute_multiplier(
+        effective_damage, execute_missing_health_multiplier, health_before_pct
+    )
+
     vitals.health -= effective_damage
     health_after = vitals.health
 
     if vitals.max_health > 0:
         health_pct = max(0.0, health_after / vitals.max_health)
-        health_before_pct = max(0.0, health_before / vitals.max_health)
     else:
         health_pct = 0.0
-        health_before_pct = 0.0
 
     knockout_eligible = (
         health_pct <= KNOCKOUT_HEALTH_THRESHOLD and health_after > DEATH_HEALTH_THRESHOLD

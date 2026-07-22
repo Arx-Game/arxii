@@ -809,6 +809,19 @@ class AbstractDamageProfile(SharedMemoryModel):
             "to this profile's budget and its damage_type fills in when null."
         ),
     )
+    execute_missing_health_multiplier = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal(0),
+        help_text=(
+            "Smooth execute ramp (#2643): the resolving hit's damage is scaled by "
+            "1 + this * missing_health_fraction, computed off the target's PRE-hit "
+            "health (never recursive). Default 0 is a no-op — most techniques don't "
+            "execute; Strike-family techniques opt in via authored data. Applied at "
+            "both damage seams (world.combat.services.apply_damage_to_opponent / "
+            "apply_damage_to_participant)."
+        ),
+    )
 
     def compute_damage_budget(
         self,

@@ -50,6 +50,7 @@ from world.predicates.predicates import CharacterPredicateContext, evaluate
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
+    from world.npc_services.models import RecordedProfile
     from world.scenes.models import Persona
 
 logger = logging.getLogger(__name__)
@@ -885,3 +886,43 @@ def serialize_npc_session_state(
             "last_result_message": last_result_message,
         }
     ).data
+
+
+class RecordedProfileError(Exception):
+    """A recorded-profile operation was invalid; ``user_message`` is safe to show."""
+
+    def __init__(self, msg: str) -> None:
+        super().__init__(msg)
+        self.user_message = msg
+
+
+def complete_recorded_profile(profile: RecordedProfile, text: str) -> RecordedProfile:
+    """Finalize a COMMISSIONED sitting: the write-up arrives (#2632).
+
+    Sets the character's physical description through the canonical
+    ``set_physical_description`` seam, stamps IC datetime + active Era
+    (mirroring ProfileTextVersion), and archives the text forever — recorded
+    profiles are never edited or deleted afterwards.
+    """
+    from world.character_sheets.services import set_physical_description  # noqa: PLC0415
+    from world.game_clock.models import GameClock  # noqa: PLC0415
+    from world.npc_services.constants import RecordedProfileStatus  # noqa: PLC0415
+    from world.stories.models import Era  # noqa: PLC0415
+
+    if profile.status != RecordedProfileStatus.COMMISSIONED:
+        msg = "This profile has already been recorded."
+        raise RecordedProfileError(msg)
+    if not text.strip():
+        msg = "The profile text can't be empty."
+        raise RecordedProfileError(msg)
+
+    clock = GameClock.get_active()
+    with transaction.atomic():
+        profile.text = text
+        profile.status = RecordedProfileStatus.RECORDED
+        profile.recorded_at = timezone.now()
+        profile.ic_date = clock.get_ic_now() if clock else None
+        profile.era = Era.objects.get_active()
+        profile.save(update_fields=["text", "status", "recorded_at", "ic_date", "era"])
+        set_physical_description(profile.persona.character_sheet, text)
+    return profile

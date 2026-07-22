@@ -173,6 +173,7 @@ def _seed_npc_services() -> None:
         ensure_academy_registrar_role,
         ensure_great_archive_librarian_role,
     )
+    from world.seeds.styling import seed_styling_content  # noqa: PLC0415
 
     ensure_great_archive_librarian_role()
     # #2428 whole-branch fix: the Registrar (settle the entrance debt) and an
@@ -181,6 +182,10 @@ def _seed_npc_services() -> None:
     # achievement-gated Great Archive self-study seed above.
     ensure_academy_registrar_role()
     ensure_academy_generalist_trainer_role()
+    # #2632 — stylist + Archive profile scribe roles, cosmetic item templates.
+    # Depends on the character_creation appearance traits (skips gracefully
+    # when absent).
+    seed_styling_content()
 
 
 def _seed_justice() -> None:

@@ -22627,6 +22627,107 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/npc-services/recorded-profiles/:
+    get:
+      operationId: npc_services_recorded_profiles_list
+      description: |-
+        A player's Archive profile sittings (#2632).
+
+        Lists the caller's own personas' recorded profiles (COMMISSIONED sittings
+        + the permanent RECORDED archive). ``complete`` finalizes a COMMISSIONED
+        sitting with the write-up text — it becomes the character's current
+        description and archives forever. Public in-world Archive browsing is a
+        future surface; this endpoint is owner-scoped.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: persona
+        schema:
+          type: number
+      - in: query
+        name: status
+        schema:
+          type: string
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRecordedProfileList'
+          description: ''
+  /api/npc-services/recorded-profiles/{id}/:
+    get:
+      operationId: npc_services_recorded_profiles_retrieve
+      description: |-
+        A player's Archive profile sittings (#2632).
+
+        Lists the caller's own personas' recorded profiles (COMMISSIONED sittings
+        + the permanent RECORDED archive). ``complete`` finalizes a COMMISSIONED
+        sitting with the write-up text — it becomes the character's current
+        description and archives forever. Public in-world Archive browsing is a
+        future surface; this endpoint is owner-scoped.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Recorded Profile.
+        required: true
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordedProfile'
+          description: ''
+  /api/npc-services/recorded-profiles/{id}/complete/:
+    post:
+      operationId: npc_services_recorded_profiles_complete_create
+      description: Finalize a commissioned sitting with the player-written profile
+        text.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Recorded Profile.
+        required: true
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordedProfileCompleteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordedProfile'
+          description: ''
   /api/npc-services/roles/:
     get:
       operationId: npc_services_roles_list
@@ -37827,6 +37928,16 @@ components:
           nullable: true
           description: Get the name of the source technique.
           readOnly: true
+        source_vow_name:
+          type: string
+          nullable: true
+          description: |-
+            Get the name of the applier's engaged vow (covenant role) at apply time (#2643).
+
+            Lets a player see an armed team-damage-percent buff's vow provenance on an
+            ally BEFORE casting — the "which vow is this coming from" visibility the UI
+            requirement calls for.
+          readOnly: true
         source_description:
           type: string
           readOnly: true
@@ -37852,6 +37963,7 @@ components:
       - source_character_name
       - source_description
       - source_technique_name
+      - source_vow_name
       - stacks
       - stage_name
       - stage_order
@@ -48236,6 +48348,8 @@ components:
             * `asset_task_collect` - Asset Task: Collect
             * `train` - Train
             * `settle_obligation` - Settle Obligation
+            * `styling` - Styling
+            * `profile_recording` - Profile Recording
         label:
           type: string
           description: UI display text for the menu option.
@@ -48314,6 +48428,8 @@ components:
       - asset_task_collect
       - train
       - settle_obligation
+      - styling
+      - profile_recording
       type: string
       description: |-
         * `permit` - Permit
@@ -48332,6 +48448,8 @@ components:
         * `asset_task_collect` - Asset Task: Collect
         * `train` - Train
         * `settle_obligation` - Settle Obligation
+        * `styling` - Styling
+        * `profile_recording` - Profile Recording
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -48359,6 +48477,8 @@ components:
             * `asset_task_collect` - Asset Task: Collect
             * `train` - Train
             * `settle_obligation` - Settle Obligation
+            * `styling` - Styling
+            * `profile_recording` - Profile Recording
         label:
           type: string
           minLength: 1
@@ -52470,6 +52590,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ReactionEmoji'
+    PaginatedRecordedProfileList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordedProfile'
     PaginatedRelationshipCapstoneList:
       type: object
       required:
@@ -55214,6 +55357,8 @@ components:
             * `asset_task_collect` - Asset Task: Collect
             * `train` - Train
             * `settle_obligation` - Settle Obligation
+            * `styling` - Styling
+            * `profile_recording` - Profile Recording
         label:
           type: string
           minLength: 1
@@ -58895,6 +59040,84 @@ components:
           minimum: 0
       required:
       - emoji
+    RecordedProfile:
+      type: object
+      description: A character's Archive profile sittings + recorded history (#2632).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        persona:
+          type: integer
+          readOnly: true
+          description: The persona whose profile was recorded.
+        persona_name:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/RecordedProfileStatusEnum'
+          readOnly: true
+        text:
+          type: string
+          readOnly: true
+          description: The recorded profile prose (player-written, diegetically NPC-authored).
+        recorded_by_label:
+          type: string
+          readOnly: true
+          description: Display name of the recording scholar/institution.
+        price_paid:
+          type: integer
+          readOnly: true
+          description: Coppers paid for the sitting.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        recorded_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        ic_date:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: IC datetime when the write-up was finalized.
+        era_season_number:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - created_at
+      - era_season_number
+      - ic_date
+      - id
+      - persona
+      - persona_name
+      - price_paid
+      - recorded_at
+      - recorded_by_label
+      - status
+      - text
+    RecordedProfileCompleteRequest:
+      type: object
+      description: The write-up text for a COMMISSIONED sitting (#2632).
+      properties:
+        text:
+          type: string
+          minLength: 1
+      required:
+      - text
+    RecordedProfileStatusEnum:
+      enum:
+      - commissioned
+      - recorded
+      type: string
+      description: |-
+        * `commissioned` - Commissioned
+        * `recorded` - Recorded
     RedistributeWrite:
       type: object
       description: Serializer for redistributing relationship points between tracks.
