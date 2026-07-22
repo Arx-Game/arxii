@@ -649,7 +649,15 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   `ConditionStage`, `ConditionInstance` (`absorb_remaining` int nullable — Aegis Field
   absorption buffer seeded by `init_absorb_buffer`), `ConditionCapabilityEffect`,
   `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageOverTime`,
-  `ConditionDamageInteraction`, `ConditionConditionInteraction`
+  `ConditionDamageInteraction`, `ConditionConditionInteraction`, `TreatmentTemplate`
+  (`mend_on_crit`/`mend_on_success`/`mend_on_partial` PositiveSmallInt, default 0 — HP mend
+  amounts routed through `world.vitals.services.mend_wound()`, #2644; `once_per_wound_per_helper`
+  bool, default False — duplicate-attempt gate keys on the wound instance instead of the scene
+  when set), `TreatmentAttempt` (`health_mended` int, default 0 — the actual amount
+  `mend_wound()` returned, may be less than the template's `mend_on_*` value; `once_per_wound_guard`
+  bool, denormalized from `once_per_wound_per_helper` at insert time, mirrors
+  `once_per_scene_guard`'s pattern — partial `UniqueConstraint` on
+  `(helper, target_condition_instance)` where true, #2644)
 - **Lookup Tables:** `CapabilityType`, `CheckType`, `DamageType`
 - **Handlers:** `obj.conditions` (`ConditionHandler` / `CharacterConditionHandler` in
   `world/conditions/handlers.py`, installed as `@cached_property` on `ObjectParent`).
@@ -658,7 +666,8 @@ Persistent states that modify capabilities, checks, and resistances with stage p
 - **Key Functions:** `apply_condition()`, `remove_condition()`, `get_capability_status()`,
   `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`,
   `process_round_end()`, `process_damage_interactions()` (wired into combat #2018), `get_treatment_candidates()`,
-  `perform_treatment()`
+  `perform_treatment()` (routes `mend_on_*` through `world.vitals.services.mend_wound()`
+  alongside its existing severity-decay path, #2644)
 - **Perception gate (#1225):** `can_perceive(actor, target)` composes co-location with
   per-observer concealment detection (`is_concealed()`, `active_concealments()`,
   `ConditionInstance.detected_by`). Consulted by `OnUseTargetPrerequisite` (item-use targeting),
@@ -5229,12 +5238,27 @@ combat, poison, spells, exhaustion, and any damage source.
   the final puppet lock), `VitalsConsequenceConfig` (singleton pk=1; tunable difficulty scaling +
   pool FKs: `knockout_pool`, `default_wound_pool`, `default_death_pool`; #2287: wake-arc knobs
   `wake_base_difficulty`/`wake_scaling_per_percent`/`wake_ease_per_round`/`wake_guaranteed_rounds`,
-  `auto_retire_days`, admin-editable `death_condolence_body`)
+  `auto_retire_days`, admin-editable `death_condolence_body`), `WoundDetails` (#2644; OneToOne →
+  `conditions.ConditionInstance`, CASCADE, `related_name="wound_details"` — FK direction
+  specific→general per ADR-0010; `damage_taken` PositiveInt — the debit that caused the wound,
+  the mend-cap basis; `health_mended_total` PositiveInt, default 0 — running sum every
+  `mend_wound()` call has ever mended on this wound, across every healer; stamped by
+  `_record_wound_details` the moment the wound tier applies a wound condition)
 - **Key Services (`world/vitals/services.py`):**
   - `is_dead(sheet)`, `is_alive(sheet)`, `can_act(sheet)` — mortality/agency gates.
   - `derive_character_status(sheet) -> str` — compute dead/dying/incapacitated/alive at read time.
   - `process_damage_consequences(character_sheet, damage, ...)` — full survivability pipeline:
     knockout check → death check → permanent wound check; each tier rolls the configured pool.
+    The wound tier now actually applies conditions (#2644 — closed the audit's central gap) and
+    stamps `WoundDetails` on each applied instance via `_record_wound_details`.
+  - `mend_wound(healer_sheet, target_sheet, wound_instance, amount) -> int` (#2644) — double-
+    bounded HP mend, the attrition invariant (ADR-0155): caps at
+    `NEVER_TO_FULL_FRACTION x wound_details.damage_taken - health_mended_total`, clamps to
+    `max_health`, returns the amount actually mended (0 is legal, not an error). Raises
+    `world.vitals.exceptions.NotAWoundError` when the instance has no `WoundDetails`. Never
+    callable outside the treatment flow (`conditions.services.perform_treatment` is the sole
+    caller) — the once-per-healer-per-wound bound lives one layer up, on
+    `conditions.TreatmentAttempt`'s partial `UniqueConstraint`.
   - `advance_bleed_out(sheet) -> bool` — per-round progression; terminal stage routes to
     `_resolve_terminal_bleed_out` (guarded pool, not unconditional death; ADR-0049).
   - `_resolve_peril_via_pool(sheet, instance, pool, *, death_permitted) -> bool` — shared
@@ -5278,15 +5302,34 @@ combat, poison, spells, exhaustion, and any damage source.
     death→retire; offscreen = staff-only. Surfaces: `GiveDeathKudosAction`/`kudos death <name>`.
   - `seed_survivability_content()` (`seeds.py`, cluster `survivability`) — the production seeding
     that makes every tier fire: foundational CapabilityTypes, Unconscious effects, Bleeding Out
-    stages, knockout/default-death/default-wound pools, dream room, death KudosSourceCategory.
+    stages, knockout/default-death/default-wound pools, dream room, death KudosSourceCategory,
+    the three wound conditions + their TreatmentTemplates (#2644, see below).
+  - `ensure_wound_conditions()` (#2644) — seeds three mechanical wound `ConditionTemplate`s
+    (vocabulary, not lore content, mirroring `ensure_bleeding_out_condition`): **Lingering Ache**
+    (`ConditionCheckModifier` on the vitals-owned Endurance CheckType, -5), **Crippling Wound**
+    (`ConditionCapabilityEffect` on `limb_use`, -15), **Bleeding Wound** (`ConditionDamageOverTime`,
+    severity-scaled, authored but not wired into the default pool — see `ensure_default_wound_pool`'s
+    docstring for the documented single-default choice). `ensure_default_wound_pool` wires the
+    partial/failure outcomes to Lingering Ache / Crippling Wound via APPLY_CONDITION effects
+    (`update_or_create` on the pool row so a stale pre-#2644 description self-corrects on re-run).
+  - `ensure_wound_treatment_content()` (#2644) — one `TreatmentTemplate` per wound condition
+    (`treat_lingering_ache`/`treat_crippling_wound`/`treat_bleeding_wound`), `target_kind=PRIMARY`,
+    reuses the vitals-owned Endurance CheckType (documented fallback — no Medicine/first-aid
+    CheckType exists in seeded content), modest `anima_cost`, `once_per_wound_per_helper=True` +
+    `once_per_scene_per_helper=False`.
 - **Pool constants (`world/vitals/constants.py`):** `POOL_BLEED_OUT_TERMINAL`,
   `POOL_ABANDONMENT_ENEMY`, `POOL_ABANDONMENT_PVP`, `POOL_ABANDONMENT_ENVIRONMENTAL` (seeded via
   `world.vitals.factories`; `abandonment_enemy` includes a `captured_alive` CAPTURE outcome);
   #2287: `POOL_KNOCKOUT`, `POOL_DEFAULT_DEATH`, `POOL_DEFAULT_WOUND`, `BLEED_OUT_STAGE_SPECS`,
-  `DREAM_ROOM_KEY`/`DREAM_ROOM_TAG`.
+  `DREAM_ROOM_KEY`/`DREAM_ROOM_TAG`. #2644: `WOUND_LINGERING_ACHE_NAME`, `WOUND_CRIPPLING_NAME`,
+  `WOUND_BLEEDING_NAME`, `NEVER_TO_FULL_FRACTION` (Decimal, default 0.75 — the attrition
+  invariant's tunable fraction; a plain constant, not an admin-config field, mirroring
+  `PERMANENT_WOUND_THRESHOLD`'s precedent).
 - **Design invariants:** ADR-0049 (guarded pool, no unconditional death); ADR-0023 extended to the
   death layer (PC source can never produce death); ADR-0004 extended to dying state (grace window
-  counts round_number beats, not wall-clock); plummet exempt from hold/abandonment.
+  counts round_number beats, not wall-clock); plummet exempt from hold/abandonment; ADR-0155
+  (double-bounded mend — once-per-healer-per-wound + never-to-full fraction — heals are real but
+  the party is always net-weaker for having fought; never time-based or passive).
 - **Source:** `src/world/vitals/`
 - **Details:** `src/world/vitals/CLAUDE.md` · `docs/roadmap/combat.md` (§Phase 8, Phase 9)
 

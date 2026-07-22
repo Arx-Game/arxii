@@ -12,8 +12,12 @@ Seeded content:
   ``can_act`` degrades to always-True without the awareness row.
 - The ``Unconscious`` condition + capability-zeroing effects.
 - The ``Bleeding Out`` staged condition (template + 3 stages).
+- The three mechanical wound conditions (Lingering Ache / Crippling Wound /
+  Bleeding Wound, #2644) + one TreatmentTemplate each for the bounded HP mend.
 - The knockout / default-death / default-wound consequence pools, wired onto
-  the ``VitalsConsequenceConfig`` singleton (only when currently null).
+  the ``VitalsConsequenceConfig`` singleton (only when currently null). The
+  wound pool's partial/failure outcomes apply Lingering Ache / Crippling
+  Wound (#2644 — closes the prior effect-free gap).
 - The bleed-out terminal / abandonment / surrounded pools (reuses the
   ensure-style creators in ``world.vitals.factories``).
 - The ``death`` KudosSourceCategory (death-kudos earning channel).
@@ -35,6 +39,9 @@ from world.vitals.constants import (
     POOL_DEFAULT_WOUND,
     POOL_KNOCKOUT,
     SLEEPING_CONDITION_NAME,
+    WOUND_BLEEDING_NAME,
+    WOUND_CRIPPLING_NAME,
+    WOUND_LINGERING_ACHE_NAME,
 )
 from world.vitals.factories import (
     _ensure_peril_category,
@@ -50,7 +57,7 @@ if TYPE_CHECKING:
 
     from actions.models.consequence_pools import ConsequencePool
     from world.checks.models import Consequence
-    from world.conditions.models import ConditionTemplate
+    from world.conditions.models import ConditionCategory, ConditionTemplate
 
 _OUTCOME_FAILURE = "Failure"
 _OUTCOME_PARTIAL = "Partial Success"
@@ -245,6 +252,126 @@ def ensure_bleeding_out_condition() -> ConditionTemplate:
     return template
 
 
+def _ensure_wound_category() -> ConditionCategory:
+    """Return the ConditionCategory grouping the three mechanical wound conditions."""
+    from world.conditions.models import ConditionCategory  # noqa: PLC0415
+
+    obj, _ = ConditionCategory.objects.get_or_create(
+        name="Wound",
+        defaults={
+            "description": (
+                "Permanent-wound conditions from grievous damage — cleansable "
+                "(severity decay/dispel) and treatable (bounded HP mend), #2644."
+            ),
+            "is_negative": True,
+        },
+    )
+    return obj
+
+
+def ensure_wound_conditions() -> tuple[ConditionTemplate, ConditionTemplate, ConditionTemplate]:
+    """Ensure the three mechanical wound ConditionTemplates (#2644).
+
+    Mechanics vocabulary, not lore content (mirrors ensure_bleeding_out_condition) —
+    severity is stamped by the wound-pool outcome tier that applies each one.
+    Returns (lingering_ache, crippling_wound, bleeding_wound).
+
+    - Lingering Ache (partial-tier default): modest Endurance check penalty.
+    - Crippling Wound (failure-tier default): modest limb_use capability penalty.
+    - Bleeding Wound (authored, available for future per-DamageType wound-pool
+      routing via DamageType.wound_pool — not wired into the default pool; see
+      ensure_default_wound_pool's docstring for the documented single-default
+      choice, ADR-0155): modest severity-scaled physical DoT.
+
+    All three: is_stackable=False (severity refreshes/raises on re-wounding via
+    _handle_refresh, matching how _record_wound_details accumulates damage_taken
+    onto the same WoundDetails row), can_be_dispelled=True (default — cleansing
+    stays unrestricted), UNTIL_CURED duration (a wound doesn't time out).
+    """
+    from world.conditions.constants import (  # noqa: PLC0415
+        DamageTickTiming,
+        DurationType,
+        FoundationalCapability,
+    )
+    from world.conditions.models import (  # noqa: PLC0415
+        CapabilityType,
+        ConditionCapabilityEffect,
+        ConditionCheckModifier,
+        ConditionDamageOverTime,
+        ConditionTemplate,
+        DamageType,
+    )
+    from world.vitals.services import _ensure_endurance_check_type  # noqa: PLC0415
+
+    ensure_foundational_capabilities()
+    category = _ensure_wound_category()
+    common_defaults = {
+        "category": category,
+        "default_duration_type": DurationType.UNTIL_CURED,
+        "default_duration_value": 0,
+        "is_visible_to_others": True,
+    }
+
+    lingering_ache, _ = ConditionTemplate.objects.get_or_create(
+        name=WOUND_LINGERING_ACHE_NAME,
+        defaults={
+            **common_defaults,
+            "description": "A wound that never fully healed; it aches with exertion.",
+            "player_description": "An old wound aches, sapping your stamina.",
+            "observer_description": "moves with a faint, guarded stiffness.",
+        },
+    )
+    endurance_check = _ensure_endurance_check_type()
+    ConditionCheckModifier.objects.get_or_create(
+        condition=lingering_ache,
+        stage=None,
+        check_type=endurance_check,
+        defaults={"modifier_value": -5, "scales_with_severity": False},
+    )
+
+    crippling_wound, _ = ConditionTemplate.objects.get_or_create(
+        name=WOUND_CRIPPLING_NAME,
+        defaults={
+            **common_defaults,
+            "description": "A grievous wound that never set right; the limb answers poorly.",
+            "player_description": "The wound left you crippled — the limb won't fully answer.",
+            "observer_description": "favors a limb that no longer moves quite right.",
+        },
+    )
+    limb_use = CapabilityType.objects.get(name=FoundationalCapability.LIMB_USE)
+    ConditionCapabilityEffect.objects.get_or_create(
+        condition=crippling_wound,
+        stage=None,
+        capability=limb_use,
+        defaults={"value": -15},
+    )
+
+    bleeding_wound, _ = ConditionTemplate.objects.get_or_create(
+        name=WOUND_BLEEDING_NAME,
+        defaults={
+            **common_defaults,
+            "description": "An open wound that won't stop bleeding without care.",
+            "player_description": "Your wound won't stop bleeding.",
+            "observer_description": "is bleeding steadily from an open wound.",
+        },
+    )
+    physical_damage, _ = DamageType.objects.get_or_create(name="Physical")
+    ConditionDamageOverTime.objects.get_or_create(
+        condition=bleeding_wound,
+        stage=None,
+        damage_type=physical_damage,
+        defaults={
+            "base_damage": 1,
+            "scales_with_severity": True,
+            "scales_with_stacks": False,
+            "tick_timing": DamageTickTiming.END_OF_ROUND,
+            "is_long_term": False,
+        },
+    )
+
+    return lingering_ache, crippling_wound, bleeding_wound
+
+
 def _ensure_apply_condition_effect(
     consequence: Consequence,
     template: ConditionTemplate,
@@ -336,20 +463,42 @@ def ensure_default_death_pool() -> ConsequencePool:
 
 
 def ensure_default_wound_pool() -> ConsequencePool:
-    """Ensure the default permanent-wound pool.
+    """Ensure the default permanent-wound pool (#2644 — closes the audit's central gap).
 
-    No wound ConditionTemplates are authored yet, so every outcome is
-    effect-free narrative labeling for now — the tier rolls and records but
-    applies nothing. Wound condition content is a later authoring pass.
+    Three-outcome graded shape unchanged; outcomes now carry real APPLY_CONDITION
+    effects: best (shaken_off) stays effect-free by design (a wound you shook off
+    IS effect-free); partial (lasting_ache) applies Lingering Ache; worst
+    (lasting_scar) applies Crippling Wound.
+
+    Bleeding Wound is authored (ensure_wound_conditions) but deliberately NOT
+    wired into this pool's worst tier — documented judgment call: the pool
+    machinery has no simple per-damage-type branch at the single-pool level
+    (that lives one layer up, via DamageType.wound_pool routing to a DIFFERENT
+    pool entirely), and authoring a second worst-tier ConsequencePoolEntry would
+    need weighted alternation, not a real pick. Crippling Wound was chosen as
+    the single authored default because it's the more universally-applicable
+    mechanical flavor (any damage type can cripple; not every damage type
+    plausibly bleeds, e.g. blunt/force). A future DamageType-specific wound
+    pool (e.g. for slashing/piercing types) can route to Bleeding Wound with no
+    schema change — the condition already exists. See ADR-0155.
+
+    update_or_create on the pool row (not get_or_create) so a stale
+    pre-#2644 description on an already-seeded database is corrected on
+    re-run; the ConsequenceEffect rows below use get_or_create as their own
+    idempotent upsert — a prior run's effect-free consequence rows simply
+    gain the effect they were missing, no delete-and-recreate.
     """
     from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.checks.models import Consequence  # noqa: PLC0415
 
-    pool, _ = ConsequencePool.objects.get_or_create(
+    lingering_ache, crippling_wound, _bleeding_wound = ensure_wound_conditions()
+
+    pool, _ = ConsequencePool.objects.update_or_create(
         name=POOL_DEFAULT_WOUND,
         defaults={
             "description": (
-                "Default permanent-wound pool (PLACEHOLDER: no wound conditions "
-                "authored yet, outcomes are effect-free)."
+                "Default permanent-wound pool: success (shaken_off) is effect-free, "
+                "partial applies Lingering Ache, failure applies Crippling Wound (#2644)."
             )
         },
     )
@@ -365,7 +514,71 @@ def ensure_default_wound_pool() -> ConsequencePool:
             (failure, "lasting_scar", 2, False),
         ],
     )
+    consequence = Consequence.objects.get(label="lasting_ache")
+    _ensure_apply_condition_effect(consequence, lingering_ache, severity=1)
+    consequence = Consequence.objects.get(label="lasting_scar")
+    _ensure_apply_condition_effect(consequence, crippling_wound, severity=2)
     return pool
+
+
+def ensure_wound_treatment_content() -> None:
+    """Seed one TreatmentTemplate per wound condition (#2644 — bounded HP mend).
+
+    **Check type — documented judgment call.** No Medicine/first-aid CheckType
+    exists anywhere in the codebase's seeded content (checked every production
+    seed file); authoring a new stat+skill composition (a Medicine Skill/Trait
+    plus its CheckType) is a bigger content-authoring lift than this mechanics-
+    vocabulary pass calls for. Reuses the vitals-owned ``Endurance`` CheckType
+    (Stamina resist check, already seeded by ``_ensure_endurance_check_type``)
+    per the spec's fallback clause ("reuse an existing broadly-applicable [check
+    type] and document") — a proper Medicine composition is a future authoring
+    pass; ``TreatmentTemplate.check_type`` just gets repointed, no schema change.
+
+    Modest ``anima_cost`` (no bond thread requirement — unlike the Soulfray/
+    Mage-Scar aftermath treatments, tending a physical wound doesn't require an
+    established magical bond). ``once_per_wound_per_helper=True`` +
+    ``once_per_scene_per_helper=False``: the double-bounded-mend gate is
+    scene-independent — each healer gets exactly one tending per wound, ever,
+    not one per scene (#2644 spec).
+    """
+    from world.conditions.constants import TreatmentTargetKind  # noqa: PLC0415
+    from world.conditions.models import TreatmentTemplate  # noqa: PLC0415
+    from world.vitals.services import _ensure_endurance_check_type  # noqa: PLC0415
+
+    lingering_ache, crippling_wound, bleeding_wound = ensure_wound_conditions()
+    check_type = _ensure_endurance_check_type()
+
+    specs = [
+        ("treat_lingering_ache", "Tend Lingering Ache", lingering_ache),
+        ("treat_crippling_wound", "Tend Crippling Wound", crippling_wound),
+        ("treat_bleeding_wound", "Tend Bleeding Wound", bleeding_wound),
+    ]
+    for key, name, wound_template in specs:
+        TreatmentTemplate.objects.get_or_create(
+            key=key,
+            defaults={
+                "name": name,
+                "description": f"Tend a {wound_template.name.lower()} — real relief, bounded mend.",
+                "target_condition": wound_template,
+                "target_kind": TreatmentTargetKind.PRIMARY,
+                "check_type": check_type,
+                "target_difficulty": 15,
+                "requires_bond": False,
+                "resonance_cost": 0,
+                "anima_cost": 5,
+                "once_per_scene_per_helper": False,
+                "once_per_wound_per_helper": True,
+                "scene_required": True,
+                "backlash_severity_on_failure": 0,
+                "reduction_on_crit": 2,
+                "reduction_on_success": 1,
+                "reduction_on_partial": 1,
+                "reduction_on_failure": 0,
+                "mend_on_crit": 8,
+                "mend_on_success": 5,
+                "mend_on_partial": 2,
+            },
+        )
 
 
 def ensure_death_kudos_category() -> None:
@@ -445,9 +658,11 @@ def seed_survivability_content() -> None:
     ensure_unconscious_condition()
     ensure_sleeping_condition()
     ensure_bleeding_out_condition()
+    ensure_wound_conditions()
     create_bleed_out_terminal_pool()
     create_abandonment_pools()
     ensure_surrounded_content()
     _wire_consequence_config()
     ensure_death_kudos_category()
     ensure_dream_room()
+    ensure_wound_treatment_content()
