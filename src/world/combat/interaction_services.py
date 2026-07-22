@@ -315,7 +315,7 @@ def render_combo_finisher_narration(
         "Kira and Garruk unleash Firestorm Fusion on the Pyromancer for 85 damage."
         "Kira, Garruk and Vex unleash Storm Call on the Ogre for 120 damage — their signature move."
     """
-    actors = _join_labels(contributor_labels)
+    actors = join_labels(contributor_labels)
     if target_label is None:
         base = f"{actors} unleash {combo_name}"
     else:
@@ -397,8 +397,12 @@ _ENCOUNTER_OUTCOME_HEADLINES: dict[str, str] = {
 }
 
 
-def _join_labels(labels: list[str]) -> str:
-    """Format labels as a natural-language series: "A", "A and B", "A, B and C"."""
+def join_labels(labels: list[str]) -> str:
+    """Format labels as a natural-language series: "A", "A and B", "A, B and C".
+
+    Public (not module-private) since #2642's break-celebration narration
+    reuses this from services.py — the shared contributor-naming primitive.
+    """
     if len(labels) <= 1:
         return labels[0] if labels else ""
     return ", ".join(labels[:-1]) + " and " + labels[-1]
@@ -416,13 +420,13 @@ def render_encounter_outcome_narration(
     clauses: list[str] = [_ENCOUNTER_OUTCOME_HEADLINES[outcome]]
     if outcome == EncounterOutcome.VICTORY:
         if defeated_opponent_labels:
-            clauses.append(f"{_join_labels(defeated_opponent_labels)} will trouble no one further.")
+            clauses.append(f"{join_labels(defeated_opponent_labels)} will trouble no one further.")
         if active_labels:
-            clauses.append(f"{_join_labels(active_labels)} stand victorious.")
+            clauses.append(f"{join_labels(active_labels)} stand victorious.")
     elif outcome == EncounterOutcome.DEFEAT and active_labels:
-        clauses.append(f"{_join_labels(active_labels)} can fight no longer.")
+        clauses.append(f"{join_labels(active_labels)} can fight no longer.")
     if fled_labels:
-        clauses.append(f"{_join_labels(fled_labels)} fled the field.")
+        clauses.append(f"{join_labels(fled_labels)} fled the field.")
     return " ".join(clauses)
 
 

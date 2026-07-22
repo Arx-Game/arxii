@@ -6,6 +6,7 @@ from world.combat.constants import COMBO_MIN_SLOTS
 from world.combat.models import (
     BossPhase,
     BreakBarConfig,
+    BreakBarContribution,
     Clash,
     ClashConfig,
     ClashContribution,
@@ -77,9 +78,19 @@ class BossPhaseInline(admin.TabularInline):
     ]
 
 
+class BreakBarContributionInline(admin.TabularInline):
+    model = BreakBarContribution
+    fk_name = "opponent"
+    extra = 0
+    fields = ["round_number", "kind", "participant", "effect_type", "amount", "created_at"]
+    readonly_fields = ["created_at"]
+    raw_id_fields = ["participant", "effect_type"]
+
+
 @admin.register(CombatOpponent)
 class CombatOpponentAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["objectdb", "persona", "summoned_by"]
+    autocomplete_fields = ["objectdb", "persona", "summoned_by", "reinforces"]
+    search_fields = ["name"]
     list_display = [
         "name",
         "persona",
@@ -89,9 +100,10 @@ class CombatOpponentAdmin(admin.ModelAdmin):
         "max_health",
         "status",
         "affinity",
+        "reinforces",
     ]
     list_filter = ["tier", "status", "affinity"]
-    inlines = [BossPhaseInline]
+    inlines = [BossPhaseInline, BreakBarContributionInline]
 
 
 @admin.register(CombatParticipant)
@@ -335,6 +347,13 @@ class ClashRoundAdmin(admin.ModelAdmin):
     list_filter = ["clash__flavor"]
     raw_id_fields = ["clash"]
     inlines = [ClashContributionInline]
+
+
+@admin.register(BreakBarContribution)
+class BreakBarContributionAdmin(admin.ModelAdmin):
+    list_display = ["id", "opponent", "round_number", "kind", "participant", "amount"]
+    list_filter = ["kind"]
+    raw_id_fields = ["opponent", "participant", "effect_type"]
 
 
 @admin.register(StrainConfig)

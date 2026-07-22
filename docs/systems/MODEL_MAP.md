@@ -1580,6 +1580,7 @@
   - active_alternate_self <- forms.ActiveAlternateSelf
   - distinctions <- distinctions.CharacterDistinction
   - distinction_other_entries <- distinctions.CharacterDistinctionOther
+  - sheet_update_requests <- distinctions.SheetUpdateRequest
   - org_obligations <- societies.OrganizationObligation
   - purse <- currency.CharacterPurse
   - employments <- currency.CharacterEmployment
@@ -1814,6 +1815,7 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
   - allowed_styles <- magic.TechniqueStyle
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - gift_unlocks <- magic.GiftUnlock
@@ -1947,6 +1949,7 @@
   - prerequisites -> codex.CodexEntry [M2M]
 **Pointed to by:**
   - species <- species.Species
+  - codex_knowledge_requirements <- progression.CodexKnowledgeRequirement
   - resonances <- magic.Resonance
   - gifts <- magic.Gift
   - techniques <- magic.Technique
@@ -2058,12 +2061,15 @@
   - barrier_break_pool -> actions.ConsequencePool [FK] (nullable)
   - aftermath_pool -> actions.ConsequencePool [FK] (nullable)
   - wall_breaker_combo -> combat.ComboDefinition [FK] (nullable)
+  - reinforces -> combat.CombatOpponent [FK] (nullable)
 **Pointed to by:**
+  - reinforced_by <- combat.CombatOpponent
   - phases <- combat.BossPhase
   - action_targets <- combat.CombatRoundActionTarget
   - round_actions <- combat.CombatOpponentAction
   - incoming_opponent_attacks <- combat.CombatOpponentAction
   - clashes <- combat.Clash
+  - break_contributions <- combat.BreakBarContribution
   - threat_records <- combat.ThreatRecord
   - engagement_locks <- combat.EngagementLock
 
@@ -2111,6 +2117,7 @@
   - incoming_attacks <- combat.CombatOpponentAction
   - combat_pulls <- combat.CombatPull
   - challenge_declarations <- combat.RoundChallengeDeclaration
+  - break_contributions <- combat.BreakBarContribution
   - clash_declarations <- combat.ClashContributionDeclaration
   - dramatic_surges <- combat.DramaticSurgeRecord
   - threat_records <- combat.ThreatRecord
@@ -2263,6 +2270,12 @@
   - check_outcome -> traits.CheckOutcome [FK]
   - interaction -> scenes.Interaction [FK] (nullable)
 
+### BreakBarContribution
+**Foreign Keys:**
+  - opponent -> combat.CombatOpponent [FK]
+  - participant -> combat.CombatParticipant [FK] (nullable)
+  - effect_type -> magic.EffectType [FK] (nullable)
+
 ### ClashContributionDeclaration
 **Foreign Keys:**
   - fury_commitment -> magic.FuryTier [FK] (nullable)
@@ -2322,7 +2335,7 @@
 - `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' — Map a graded interpose resolution onto *pre_payload*.`
 - `apply_position_cover(character: 'Character', damage: 'int', damage_type: 'DamageType | None') -> 'int' — Subtract attack-cover from damage.`
 - `apply_rampart_interception(character_or_opponent: 'Character', damage: 'int', damage_type: 'DamageType | None', *, attacker_ref: 'object | None', delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'int' — Intercept a strike against a rampart-covered position (#2209).`
-- `assess_break_bar(encounter: 'CombatEncounter', action_outcomes: 'list[ActionOutcome]') -> 'None' — Assess break-bar damage for all boss opponents with a break bar.`
+- `assess_break_bar(encounter: 'CombatEncounter', action_outcomes: 'list[ActionOutcome]') -> 'None' — Assess break-bar depletion for all boss opponents with a break bar (#2642).`
 - `begin_declaration_phase(encounter: 'CombatEncounter') -> 'None' — Advance round_number by 1 and set status to DECLARING.`
 - `check_and_advance_boss_phase(opponent: 'CombatOpponent') -> 'BossPhase | None' — Check whether a boss should advance to the next phase and apply it.`
 - `classify_source(source: object | None) -> flows.events.payloads.DamageSource — Return a ``DamageSource`` describing *source*'s origin.`
@@ -2368,6 +2381,7 @@
 - `leave_encounter(participant: 'CombatParticipant') -> 'None' — Allow a participant to voluntarily leave an Open Encounter between rounds.`
 - `maybe_pause_encounter_for_disconnect(character_sheet: 'CharacterSheet') -> 'None' — Pause the character's live CombatEncounter, if any, on disconnect (#1899).`
 - `maybe_resolve_on_ready(encounter: 'CombatEncounter') -> 'RoundResolutionResult | None' — Resolve the round early when every ACTIVE participant is ready (#2120).`
+- `minimum_break_bar_threshold() -> 'int' — Pacing floor for a boss's break-bar threshold (#2642, batch-3 F-7a).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `remove_participant(participant: 'CombatParticipant') -> 'None' — Remove a participant: status write + combat engagement teardown (#872).`
 - `resolve_cast_position_params(participant: 'CombatParticipant', technique: 'Technique', position_params: 'dict[str, int]') -> 'dict[str, Position | None]' — Validate declared cast positions against the encounter's room + technique reach.`
@@ -3195,6 +3209,7 @@
   - character_grants <- distinctions.CharacterDistinction
   - other_entries <- distinctions.CharacterDistinctionOther
   - mapped_from_other <- distinctions.CharacterDistinctionOther
+  - add_sheet_update_requests <- distinctions.SheetUpdateRequest
   - purse_drain <- currency.DistinctionPurseDrain
   - codex_grants <- codex.DistinctionCodexGrant
   - asset_grants <- assets.DistinctionAssetGrant
@@ -3221,6 +3236,7 @@
   - from_glimpse -> magic.CharacterAura [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+  - remove_sheet_update_requests <- distinctions.SheetUpdateRequest
   - modifier_sources <- mechanics.ModifierSource
 
 ### CharacterDistinctionOther
@@ -3229,10 +3245,25 @@
   - parent_distinction -> distinctions.Distinction [FK]
   - staff_mapped_distinction -> distinctions.Distinction [FK] (nullable)
 
+### SheetUpdateRequest
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - target_distinction -> distinctions.Distinction [FK] (nullable)
+  - target_character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
+  - reviewed_by -> accounts.AccountDB [FK] (nullable)
+  - submitted_by -> accounts.AccountDB [FK] (nullable)
+
 ### Service Functions
+- `approve_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' — Approve a PENDING SheetUpdateRequest: XP debit + change firing.`
+- `cancel_sheet_update_request(request: 'SheetUpdateRequest', account: 'object') -> 'None' — Player-initiated cancellation of their own pending request.`
 - `clear_distinction_secret(character_distinction: 'CharacterDistinction') -> 'None' — Make a relocated distinction public again by deleting its Secret (#1334).`
+- `compute_distinction_change_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' — Compute the XP cost for a sheet-update request.`
+- `compute_sheet_update_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' — Compute the XP cost for a sheet-update request.`
+- `create_sheet_update_request(character_sheet: 'CharacterSheet', request_type: 'str', *, justification: 'str', target_distinction: 'Distinction | None' = None, target_character_distinction: 'CharacterDistinction | None' = None, submitted_by: 'object | None' = None, origin: 'str' = DistinctionOrigin.UNLOCK_PURCHASE) -> 'SheetUpdateRequest' — Create a PENDING SheetUpdateRequest.`
+- `deny_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' — Deny a PENDING SheetUpdateRequest. No XP debit, no change.`
 - `grant_distinction(character: 'CharacterSheet', distinction: 'Distinction', *, origin: 'str', rank: 'int | None' = None, source_description: 'str' = '') -> 'CharacterDistinction' — Grant a Distinction, or rank one up, through the single acquisition seam (#2037).`
 - `mint_distinction_secret(character_distinction: 'CharacterDistinction', *, level: 'int | None' = None, provenance: 'str' = SecretProvenance.GM_AUTHORED, author_persona: 'Persona | None' = None, content: 'str' = '') -> 'Secret' — Relocate a distinction into a Secret, returning it (#1334).`
+- `remove_distinction(character_distinction: 'CharacterDistinction', *, sheet_update_request: 'SheetUpdateRequest') -> 'None' — Remove a CharacterDistinction, reconciling all dependent systems.`
 
 
 ## world.dreams
@@ -4764,6 +4795,7 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
 
 ### DramaticMomentType
 **Foreign Keys:**
@@ -6351,6 +6383,7 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
 
 ### TraitRatingUnlock
 **Foreign Keys:**
@@ -6430,6 +6463,13 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+
+### CodexKnowledgeRequirement
+**Foreign Keys:**
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
+  - codex_entry -> codex.CodexEntry [FK]
 
 ### CharacterUnlock
 **Foreign Keys:**
@@ -6834,6 +6874,7 @@
 - `can_modify_room_features(persona: 'Persona', room: 'DefaultObject') -> 'bool' — Standing required to install or upgrade a feature in this room.`
 - `complete_defense_installation(project: 'Project', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — Handle resolution of a ROOM_DEFENSE_INSTALLATION project (#2177).`
 - `complete_room_feature_progression(project: 'Project', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — Handle resolution of a ROOM_FEATURE_PROGRESSION project.`
+- `handle_bank_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — BANK strategy (#2540 Layer 4): row-only install.`
 - `handle_captains_quarters_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — CAPTAINS_QUARTERS strategy (#675): row-only install.`
 - `handle_command_center_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — COMMAND_CENTER strategy (#930): install or level the feature instance.`
 - `handle_library_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — LIBRARY strategy (#675): row-only install/level.`

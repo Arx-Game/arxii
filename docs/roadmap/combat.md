@@ -160,6 +160,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   for why that's now PROVEN, not the reverse "onto the boss" direction). Scenario
   composed by `BossFightScenarioFactory` (`world/combat/factories.py`); journey test:
   `src/integration_tests/test_boss_fight_journey.py`.
+- **Boss-fight structure: diversity-weighted break accrual, lieutenant gate, pacing floor,
+  break celebration (#2642, ADR-0155).** Extends #2016/#2095's break-bar anatomy so a boss
+  fight reads as suppress-the-court → break-the-wall → the earned one-shot without anyone
+  authoring acts. `BreakBarContribution` persists one row per qualifying feed (DAMAGE / COMBO
+  / HOLD — a PC-side LOCK-clash win / DEBUFF — a new behavior-altering condition on the boss /
+  SUPPRESSION — a reinforcing lieutenant newly suppressed), replacing the retired flat
+  per-actor chip; `CombatOpponent.reinforces` (self-FK) marks a lieutenant, whose active
+  presence proportionally slows depletion (never a hard block); `minimum_break_bar_threshold()`
+  clamps a boss's authored threshold to the Soulfray staging depth so the anima → Soulfray →
+  audere arc has room to play out; BOSS-tier opponents resist a decisive Parley calm by one
+  success-level step; the break broadcasts a celebration naming every distinct contributor.
 - **Combat offense standalone-cast flavor catalog (#1995).** A PHYSICAL technique's
   standalone cast (not a combat round) can pick a curated consequence-pool flavor
   ("Brutal"/"Precise") off the "Melee Attack" `ActionTemplate`, mirroring magic's
