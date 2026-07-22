@@ -74,6 +74,23 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   next round, a third answer on one payload declines). In-PR investigation found
   `select_npc_actions` had zero production callers — `resolve_round` now auto-selects
   as a conservative fallback when a round has no NPC selection yet (see ADR-0161).
+- **Sent Flying — consequence events in flight (#2638, ADR-0162), SQLite tier
+  (except the marker-application/plummet-handoff paths, tagged postgres for the same
+  `apply_condition` DISTINCT ON reason the plummet suite already carries), journey-proven.**
+  A `ThreatPoolEntry.sends_flying` entry that lands damage > 0 applies the seeded "Sent
+  Flying" marker condition — a produced, reactable moment (dual-dispatch broadcast),
+  immediately answerable by an armed guardian INTERPOSE (budget-gated, no roll — a mid-air
+  catch is a binary rescue). Left unanswered, it resolves explicitly at the end of
+  `resolve_round`: a plummet if the victim's room has a CHASM Position (handed off entirely
+  to the existing #1228 descent + Catch the Faller machinery), else a hard-landing Physical
+  impact at `SENT_FLYING_IMPACT_FRACTION` (0.5) of the triggering hit, unremarked
+  (`world/combat/tests/test_sent_flying.py`: trigger + catch + unanswered impact + plummet
+  chain + sends_flying=False never-triggers). `Situation.ALLY_SENT_FLYING` is a live
+  evaluator. Clones the plummet pattern (marker + reactable window + explicit resolution)
+  as the reusable template for future consequence events — the first of its family.
+  Folded in: a pre-existing `_try_interpose` bug where a guard-anyone
+  (`focused_ally_target=None`) declaration could never actually fire (Django drops a `None`
+  member of `field__in=[...]`) is fixed alongside the new catch seam's identical query shape.
 - Escalation → Audere offer → accept → real power change.
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).

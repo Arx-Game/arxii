@@ -5002,6 +5002,48 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     when the round has no NPC selection of EITHER shape yet — no `CombatOpponentAction` AND
     no `PendingOpponentAttack` declared this round — a conservative, idempotent fallback;
     any explicit prior selection (staff, simulation, tests) is left alone.
+- **Sent Flying — consequence events in flight (#2638; ADR-0162 — clones #1228's plummet
+  pattern: marker + reactable window + explicit resolution):**
+  - `ThreatPoolEntry.sends_flying` (bool, default False) — authored data on existing threat
+    pools; pairs naturally with `windup_rounds`. `CombatParticipant.sent_flying_damage`
+    (PositiveIntegerField, default 0) is the v1 damage carrier (the marker is
+    non-stackable, so a single field is sufficient — cleared to 0 on catch or landing).
+    `CombatOpponentAction.matured_from_called_out_windup` (bool, default False) survives
+    the `PendingOpponentAttack` row's deletion at maturation so the celebration broadcast
+    can still credit the wind-up's caller.
+  - **Content** (`world.combat.sent_flying_content.ensure_sent_flying_content`, wired into
+    the `"combat"` seed cluster — see that module's docstring for why not yet the
+    `"reactive_challenges"` cluster #2636 introduced): the "Sent Flying"
+    `ConditionTemplate` (no stages, no DoT, `PERMANENT` duration — NOT a literal
+    `ROUNDS`/1, despite the design doc's "1-round marker" shorthand; see ADR-0162) reusing
+    Plummeting's own `Falling` `ConditionCategory`, plus a dedicated "Physical"
+    `DamageType` for the hard-landing impact.
+  - **Trigger:** `_trigger_sent_flying` (`world/combat/services.py`), called from
+    `_resolve_npc_action_on_target` whenever `threat_entry.sends_flying` and the landed
+    `dmg_result.damage_dealt > 0` — applies the marker, stamps the damage carrier,
+    dual-dispatches the produced-moment narration, then immediately consults the catch seam.
+  - **The catch seam:** `_try_catch_sent_flying` reuses `_try_interpose`'s query shape (an
+    armed INTERPOSE this round, named or guard-anyone) but never calls `dispatch_interpose`
+    — a mid-air catch is a binary rescue, not gradeable damage mitigation, so it never rolls;
+    "fires" means clearing `REACTIONS_PER_ROUND` (mirrors `_dispatch_interpose_action`'s own
+    "fire = attempt, not success" vocabulary). `ABSORPTION_CAP_PER_MOMENT` is not consulted
+    — only the first eligible guardian is ever queried (documented v1 scope).
+  - **Explicit resolution:** `_resolve_sent_flying_markers`, called at the end of
+    `resolve_round` (after `tick_round_for_targets`, before boss/completion transitions —
+    deliberately after the generic duration tick, since a literal ROUNDS/1 duration would
+    race it). A marked participant either gets launched into a CHASM Position and handed to
+    the existing `maybe_emit_fall` → `begin_plummet` machinery (zero new descent code), or
+    takes `floor(sent_flying_damage * SENT_FLYING_IMPACT_FRACTION)` (0.5) Physical damage
+    through the standard `apply_damage_to_participant` + `process_damage_consequences` path
+    with NO extra narration — the celebrate/silence boundary (rescues are loud, absences are
+    unremarked).
+  - **Situation:** `Situation.ALLY_SENT_FLYING` (`world.covenants.perks`) — true while a
+    covenant-mate co-present in the subject's encounter currently carries the marker; mate
+    scoping mirrors `ALLY_LOW_HEALTH`/`ALLY_INTERCEPTED_FOR_ME` exactly. No params.
+  - **Bug fix folded in:** `_try_interpose`'s (and the new catch seam's)
+    `focused_ally_target__in=[participant, None]` never actually matched a guard-anyone
+    declaration — Django drops a `None` `__in` member instead of adding `OR IS NULL`. Both
+    now use `Q(focused_ally_target=participant) | Q(focused_ally_target__isnull=True)`.
 - **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE / SUCCOR / ENGAGE / DISENGAGE / RALLY / DEMORALIZE / TAUNT / PARLEY / USE_ITEM), `OpponentMoraleState` (STEADY / FALTER / BREAK — derived, `world.combat.morale`), `RoundStatus` (shared with
   `world.scenes.constants`; combat uses the same enum — DECLARING / RESOLVING / BETWEEN_ROUNDS /
   COMPLETED), `OpponentTier`, `ClashFlavor`, `EncounterOutcome`

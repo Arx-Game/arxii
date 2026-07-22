@@ -1057,3 +1057,72 @@ class EnemyWindupEvaluatorTests(TestCase):
         )
         self.assertFalse(evaluators.enemy_windup_underway(ctx, NO_PARAMS))
         self.assertFalse(evaluators.enemy_windup_called_out(ctx, NO_PARAMS))
+
+
+class AllySentFlyingEvaluatorTests(TestCase):
+    """ALLY_SENT_FLYING (#2638): true only while a covenant-mate, co-present in
+    the subject's encounter, currently carries the seeded Sent Flying marker.
+
+    Mate scoping mirrors ``ally_intercepted_for_me``'s pattern exactly (build
+    the marker directly via ``ConditionInstanceFactory`` rather than the
+    reaction/trigger pipeline — this is a pure evaluator-registry test).
+    """
+
+    def setUp(self) -> None:
+        from world.combat.sent_flying_content import SENT_FLYING_CONDITION_NAME
+        from world.conditions.factories import ConditionTemplateFactory
+
+        self.marker_template = ConditionTemplateFactory(name=SENT_FLYING_CONDITION_NAME)
+
+        self.covenant = CovenantFactory()
+        self.role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
+        self.holder_sheet = CharacterSheetFactory()
+        self.mate_sheet = CharacterSheetFactory()
+        self.stranger_sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=self.holder_sheet, covenant=self.covenant, covenant_role=self.role
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=self.mate_sheet, covenant=self.covenant, covenant_role=self.role
+        )
+        self.encounter = CombatEncounterFactory(round_number=1)
+        self.holder_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.holder_sheet
+        )
+        self.mate_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.mate_sheet
+        )
+        self.stranger_participant = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.stranger_sheet
+        )
+        self.resolution = CombatRoundContext(self.holder_participant)
+
+    def _ctx(self, resolution: object | None) -> SituationContext:
+        return SituationContext(
+            holder=self.holder_sheet, subject=self.holder_sheet, target=None, resolution=resolution
+        )
+
+    def _mark_sent_flying(self, character_sheet) -> None:
+        ConditionInstanceFactory(
+            target=character_sheet.character,
+            condition=self.marker_template,
+        )
+
+    def test_true_when_mate_marked(self) -> None:
+        self._mark_sent_flying(self.mate_sheet)
+        self.assertTrue(evaluators.ally_sent_flying(self._ctx(self.resolution), NO_PARAMS))
+
+    def test_false_when_nobody_marked(self) -> None:
+        self.assertFalse(evaluators.ally_sent_flying(self._ctx(self.resolution), NO_PARAMS))
+
+    def test_false_when_only_a_stranger_marked(self) -> None:
+        self._mark_sent_flying(self.stranger_sheet)
+        self.assertFalse(evaluators.ally_sent_flying(self._ctx(self.resolution), NO_PARAMS))
+
+    def test_false_when_only_the_holder_marked(self) -> None:
+        self._mark_sent_flying(self.holder_sheet)
+        self.assertFalse(evaluators.ally_sent_flying(self._ctx(self.resolution), NO_PARAMS))
+
+    def test_false_outside_combat(self) -> None:
+        self._mark_sent_flying(self.mate_sheet)
+        self.assertFalse(evaluators.ally_sent_flying(self._ctx(None), NO_PARAMS))
