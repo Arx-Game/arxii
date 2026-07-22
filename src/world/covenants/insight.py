@@ -101,7 +101,7 @@ def _draw_entry() -> InsightTableEntry | None:
         return None
     weights = [entry.weight for entry in entries]
     # Curated table, not a cryptographic use of random.
-    return random.choices(entries, weights=weights, k=1)[0]  # noqa: S311
+    return random.choices(entries, weights=weights, k=1)[0]  # noqa: S311 # NOSONAR game RNG
 
 
 def _resolve_targets(
