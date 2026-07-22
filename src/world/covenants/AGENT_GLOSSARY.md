@@ -260,6 +260,27 @@ queries when nothing is disengaged. (#2536 slice 3, Task 7, ADR-0153.)
 _Avoid_: fired perk, live firing (the opposite concept — a Dormant Perk Firing is exactly the
 firing that did NOT happen).
 
+**Sphinx of Black Quartz**:
+The diegetic Shroudwatch Academy vow-suitability oracle (#2640, ADR-0157), invoked
+*"Sphinx of Black Quartz, judge my vow: [vow]."* A read-only report
+(`world.covenants.sphinx.judge_vow`) that re-runs the kit∩role-demand join
+`covenant_role_specialty_power_term` already uses, but as a **three-tier verdict**
+instead of a resolution-time bonus — never pass/fail, and never a gate (soft-gate
+ruling: a character may swear a vow the Sphinx warned about; Dormant Vow messaging
+carries the informed-mismatch follow-through). The three tiers (`SphinxTier`):
+- **TAKES** — "the vow will take": every authored demand is covered by the kit (or the
+  vow is unauthored and makes no demands at all — an unauthored vow cannot reject).
+- **DORMANT** — "the vow would lie dormant in places": at least one demand is covered,
+  at least one is not.
+- **NOT_YET** — "the vow will not take — yet": zero demands covered, paired with a
+  shopping list of learnable techniques that would change the answer.
+Surfaced three ways from one seam: the staff coverage audit (`audit_vow_coverage`,
+built FIRST per the spec — every active anchor role × every active Tradition), the
+player REST endpoint (self-character only), and the `sphinx <vow name>` telnet
+command.
+_Avoid_: qualification gate, prerequisite check (the Sphinx informs, it never blocks —
+do not build a hard gate at role assignment on top of it).
+
 **Covenant Rank**:
 The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals / request-gm. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).
 _Avoid_: role, level.
