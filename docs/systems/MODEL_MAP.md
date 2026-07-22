@@ -1495,8 +1495,17 @@
   - family -> roster.Family [FK] (nullable)
   - tarot_card -> tarot.TarotCard [FK] (nullable)
 **Pointed to by:**
+  - text_versions <- character_sheets.ProfileTextVersion
   - owning_sheet <- character_sheets.CharacterSheet
   - personas <- scenes.Persona
+
+### ProfileTextVersion
+**Foreign Keys:**
+  - profile -> character_sheets.Profile [FK]
+  - era -> stories.Era [FK] (nullable)
+  - edited_by -> accounts.AccountDB [FK] (nullable)
+**Pointed to by:**
+  - applied_by_request_details <- gm.ProfileTextRequestDetails
 
 ### CharacterSheet
 **Foreign Keys:**
@@ -1675,6 +1684,7 @@
 - `count_active_ocs(account: 'AbstractBaseUser') -> 'int' — Count OCs an account currently holds against its cap.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' — Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `enforce_oc_cap(account: 'AbstractBaseUser', *, cap: 'int' = 3) -> 'None' — Raise OCCapError if creating another OC would exceed ``cap``.`
+- `update_profile_text(profile: 'Profile', field: 'str', text: 'str', *, edited_by: 'Any | None' = None, previous_text: 'str | None' = None) -> 'ProfileTextVersion' — Write a versioned Profile prose field — the ONLY sanctioned write path (#2631).`
 
 
 ## world.checks
@@ -3206,6 +3216,7 @@
   - asset_grants <- assets.DistinctionAssetGrant
   - consequence_effects <- checks.ConsequenceEffect
   - reward_definitions <- achievements.RewardDefinition
+  - table_update_request_details <- gm.DistinctionChangeRequestDetails
   - npc_regard_seeds <- npc_services.DistinctionRegardSeed
 
 ### DistinctionPrerequisite
@@ -3229,6 +3240,7 @@
   - resonance_grants <- magic.ResonanceGrant
   - remove_sheet_update_requests <- distinctions.SheetUpdateRequest
   - modifier_sources <- mechanics.ModifierSource
+  - table_update_request_details <- gm.DistinctionChangeRequestDetails
 
 ### CharacterDistinctionOther
 **Foreign Keys:**
@@ -3243,6 +3255,8 @@
   - target_character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
   - reviewed_by -> accounts.AccountDB [FK] (nullable)
   - submitted_by -> accounts.AccountDB [FK] (nullable)
+**Pointed to by:**
+  - table_update_request_details <- gm.DistinctionChangeRequestDetails
 
 ### Service Functions
 - `approve_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' — Approve a PENDING SheetUpdateRequest: XP debit + change firing.`
@@ -3607,6 +3621,7 @@
   - story_areas <- gm.StoryArea
   - story_grants_issued <- gm.StoryRoomGrant
   - weekly_reward_tracker <- gm.GMWeeklyRewardTracker
+  - resolved_update_requests <- gm.TableUpdateRequest
   - summonses_created <- npc_services.OfferSummons
 
 ### GMApplication
@@ -3632,6 +3647,8 @@
 **Foreign Keys:**
   - table -> gm.GMTable [FK]
   - persona -> scenes.Persona [FK]
+**Pointed to by:**
+  - update_requests <- gm.TableUpdateRequest
 
 ### GMRosterInvite
 **Foreign Keys:**
@@ -3692,6 +3709,26 @@
   - gm_profile -> gm.GMProfile [OneToOne]
   - game_week -> game_clock.GameWeek [FK] (nullable)
 
+### TableUpdateRequest
+**Foreign Keys:**
+  - membership -> gm.GMTableMembership [FK]
+  - resolved_by -> gm.GMProfile [FK] (nullable)
+**Pointed to by:**
+  - profile_text_details <- gm.ProfileTextRequestDetails
+  - distinction_details <- gm.DistinctionChangeRequestDetails
+
+### ProfileTextRequestDetails
+**Foreign Keys:**
+  - request -> gm.TableUpdateRequest [OneToOne]
+  - applied_version -> character_sheets.ProfileTextVersion [FK] (nullable)
+
+### DistinctionChangeRequestDetails
+**Foreign Keys:**
+  - request -> gm.TableUpdateRequest [OneToOne]
+  - distinction -> distinctions.Distinction [FK] (nullable)
+  - character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
+  - sheet_update_request -> distinctions.SheetUpdateRequest [FK] (nullable)
+
 ### Service Functions
 - `approve_application_as_gm(gm: 'GMProfile', application: 'RosterApplication') -> 'None' — Approve a roster application on behalf of the overseeing GM.`
 - `archive_table(table: 'GMTable') -> 'None' — Mark a table archived. Sets archived_at timestamp.`
@@ -3703,17 +3740,22 @@
 - `get_notification_target_for_gm(gm_profile: 'GMProfile') -> 'CharacterSheet | None' — Resolve the CharacterSheet to use as the notification recipient for a GM.`
 - `gm_application_queue(gm: 'GMProfile') -> 'QuerySet[RosterApplication]' — Pending applications for characters at tables this GM owns.`
 - `gm_evidence_summary(profile: 'GMProfile') -> 'GMEvidenceSummary' — Aggregate a GM's track record for staff reviewing a level change.`
+- `gm_may_review_for_persona(gm_profile: 'GMProfile', persona: 'Persona') -> 'bool' — The review-pool rule (#2631 ruling): staff, or a GM with table access.`
 - `idle_tables(threshold_days: 'int' = 14) -> 'QuerySet[GMTable]' — ACTIVE tables whose GM's ``last_active_at`` is older than the threshold (#2004).`
 - `join_table(table: 'GMTable', persona: 'Persona') -> 'GMTableMembership' — Add a persona to a table. Idempotent — returns existing active`
 - `leave_table(membership: 'GMTableMembership') -> 'None' — Soft-leave a membership. No-op if already left.`
 - `promote_gm(profile: 'GMProfile', new_level: 'str', *, changed_by: 'AccountDB', reason: 'str') -> 'GMLevelChange' — Set profile.level (promotion OR demotion), writing the audit row.`
 - `revoke_invite(invite: 'GMRosterInvite') -> 'None' — Revoke an invite by setting expires_at to now.`
 - `set_looking_for_table(player_data: 'PlayerData', looking: 'bool') -> 'None' — Set or clear the looking-for-table flag on a player's profile (#2431).`
+- `signoff_table_update_request(request: 'TableUpdateRequest', gm_profile: 'GMProfile', *, approve: 'bool', notes: 'str' = '') -> 'TableUpdateRequest' — Approve or reject a PENDING request — the GM's yes/no judgment call (#2631).`
 - `soft_leave_memberships_for_retired_persona(persona: 'Persona') -> 'int' — Future integration hook: called when a persona is retired.`
 - `submit_catalog_suggestion(account: 'AccountDB', *, proposal_kind: 'str', proposal_text: 'str', situation_kind: 'SituationKind | None' = None) -> 'CatalogSuggestion' — Create a ``CatalogSuggestion`` row, routed to the staff inbox (#2127).`
+- `submit_distinction_change_request(membership: 'GMTableMembership', *, action: 'str', reasoning: 'str', distinction: 'Distinction | None' = None, character_distinction: 'CharacterDistinction | None' = None) -> 'TableUpdateRequest' — Submit a distinction add/rank-up/remove for table-GM sign-off (#2631).`
+- `submit_profile_text_request(membership: 'GMTableMembership', *, field: 'str', proposed_text: 'str', reasoning: 'str') -> 'TableUpdateRequest' — Submit a profile prose rewrite for the table GM's sign-off (#2631).`
 - `surrender_character_story(gm: 'GMProfile', story: 'Story') -> 'None' — GM surrenders oversight of a story.`
 - `touch_gm_activity(gm_profile: 'GMProfile') -> 'None' — Stamp ``GMProfile.last_active_at`` to now (#2004).`
 - `transfer_ownership(table: 'GMTable', new_gm: 'GMProfile') -> 'None' — Reassign a table to a different GM. Staff-only action.`
+- `withdraw_table_update_request(request: 'TableUpdateRequest') -> 'None' — Withdraw a PENDING request (player-initiated).`
 
 
 ## world.goals
@@ -8299,6 +8341,7 @@
 
 ### Era
 **Pointed to by:**
+  - profile_text_versions <- character_sheets.ProfileTextVersion
   - stories_created_in_era <- stories.Story
   - aggregate_contributions <- stories.AggregateBeatContribution
   - beat_completions <- stories.BeatCompletion

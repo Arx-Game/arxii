@@ -623,6 +623,11 @@ class SheetUpdateRequest(models.Model):  # noqa: SHARED_MEMORY
         choices=SheetUpdateRequestType.choices,
         help_text="What kind of sheet update this request represents.",
     )
+    rank = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Target rank for ADD (absolute, not a delta — a rank-up authorization "
+        "for an existing holder sets this above the current rank). Ignored for REMOVE.",
+    )
     target_distinction = models.ForeignKey(
         "distinctions.Distinction",
         on_delete=models.PROTECT,

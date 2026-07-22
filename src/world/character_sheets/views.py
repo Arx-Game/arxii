@@ -6,6 +6,7 @@ from http import HTTPMethod
 
 from django.db.models import QuerySet
 from django.http import Http404
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.mixins import RetrieveModelMixin
@@ -23,6 +24,8 @@ from world.character_sheets.serializers import (
     CharacterSheetSerializer,
     OriginSlotClearSerializer,
     OriginSlotInputSerializer,
+    ProfileTextVersionSerializer,
+    _viewer_is_privileged,
     get_character_sheet_queryset,
 )
 from world.character_sheets.services import can_edit_character_sheet
@@ -100,3 +103,37 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
             return Response({"detail": "Slot not found."}, status=status.HTTP_404_NOT_FOUND)
         clear_origin_slot(sheet, slot)
         return Response(status=status.HTTP_200_OK)
+
+    @extend_schema(responses={200: ProfileTextVersionSerializer(many=True)})
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="profile-text-versions")
+    def profile_text_versions(self, request: Request, pk: int | None = None) -> Response:
+        """The sheet's prose-history timeline (#2631) — all versioned fields at once.
+
+        Owner and staff only (per the #2631 ruling): past versions are the
+        character's private history by default, stricter than the current
+        text's own visibility. Everyone else gets an empty list,
+        indistinguishable from "no history yet". (A player-controlled
+        openness tier could relax this later via the SheetVisibility
+        machinery — deliberately not built now.)
+        """
+        from world.gm.models import ProfileTextRequestDetails  # noqa: PLC0415
+
+        sheet = self.get_object()
+        if not _viewer_is_privileged(sheet, request.user):
+            return Response([])
+
+        versions = list(
+            sheet.true_profile.text_versions.select_related("era").order_by("field", "-created_at")
+        )
+        reasoning_by_version = {
+            row.applied_version_id: row.request.player_reasoning
+            for row in ProfileTextRequestDetails.objects.filter(
+                applied_version__in=versions
+            ).select_related("request")
+        }
+        serializer = ProfileTextVersionSerializer(
+            versions,
+            many=True,
+            context={"reasoning_by_version": reasoning_by_version},
+        )
+        return Response(serializer.data)

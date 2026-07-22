@@ -281,7 +281,7 @@ def ensure_wound_conditions() -> tuple[ConditionTemplate, ConditionTemplate, Con
     - Bleeding Wound (authored, available for future per-DamageType wound-pool
       routing via DamageType.wound_pool — not wired into the default pool; see
       ensure_default_wound_pool's docstring for the documented single-default
-      choice, ADR-0155): modest severity-scaled physical DoT.
+      choice, ADR-0156): modest severity-scaled physical DoT.
 
     All three: is_stackable=False (severity refreshes/raises on re-wounding via
     _handle_refresh, matching how _record_wound_details accumulates damage_taken
@@ -480,7 +480,7 @@ def ensure_default_wound_pool() -> ConsequencePool:
     mechanical flavor (any damage type can cripple; not every damage type
     plausibly bleeds, e.g. blunt/force). A future DamageType-specific wound
     pool (e.g. for slashing/piercing types) can route to Bleeding Wound with no
-    schema change — the condition already exists. See ADR-0155.
+    schema change — the condition already exists. See ADR-0156.
 
     update_or_create on the pool row (not get_or_create) so a stale
     pre-#2644 description on an already-seeded database is corrected on

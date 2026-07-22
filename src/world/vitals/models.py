@@ -248,7 +248,7 @@ class WoundDetails(SharedMemoryModel):
     ``health_mended_total`` is the running sum every ``mend_wound()`` call has
     ever restored on this wound, across every healer; it can never exceed
     ``NEVER_TO_FULL_FRACTION * damage_taken`` (the attrition invariant,
-    ADR-0155) — the per-healer "one tending each" bound lives one layer up, on
+    ADR-0156) — the per-healer "one tending each" bound lives one layer up, on
     ``TreatmentAttempt``'s partial UniqueConstraint.
     """
 

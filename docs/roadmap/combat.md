@@ -190,7 +190,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   and capped death-kudos. Unit/service-tier proven (vitals/actions suites); no combat journey
   test yet — a KO-to-wake / death-to-retire journey is fair game for the journeys list.
 
-- **Healing rework: wound conditions wired + double-bounded HP mends (#2644, ADR-0155).**
+- **Healing rework: wound conditions wired + double-bounded HP mends (#2644, ADR-0156).**
   Closed the wound-tier's central audit gap: the permanent-wound pool now actually applies
   mechanical conditions (Lingering Ache / Crippling Wound / Bleeding Wound) instead of
   effect-free narrative labels. `WoundDetails` stamps mend-cap provenance

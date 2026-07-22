@@ -158,7 +158,7 @@ DREAM_ROOM_TAG_CATEGORY: str = "system"
 
 # ---------------------------------------------------------------------------
 # Wound conditions + double-bounded mend (#2644 — the attrition invariant;
-# see ADR-0155 and lore repo design/covenant-vows-consolidated.md §3.1)
+# see ADR-0156 and lore repo design/covenant-vows-consolidated.md §3.1)
 # ---------------------------------------------------------------------------
 
 # Names of the three mechanical wound ConditionTemplates authored by
@@ -173,5 +173,5 @@ WOUND_BLEEDING_NAME: str = "Bleeding Wound"
 # always net-weaker for having fought). Tunable; not wired to an admin config
 # field (mirrors PERMANENT_WOUND_THRESHOLD's plain-constant precedent above —
 # a game-balance dial, not a per-deploy setting). See mend_wound() in
-# world/vitals/services.py and ADR-0155.
+# world/vitals/services.py and ADR-0156.
 NEVER_TO_FULL_FRACTION: Decimal = Decimal("0.75")

@@ -512,7 +512,7 @@ def mend_wound(
     seam; it plays no role in either bound described below.
 
     Two independent bounds compose to guarantee the party is always net-weaker
-    for having fought (ADR-0155):
+    for having fought (ADR-0156):
 
     - **Bound 1 (here): the never-to-full fraction.** The total ever mended on
       *this* wound, across every healer who has ever tended it, cannot exceed

@@ -2,7 +2,7 @@
 
 Covers the audit's central gap (the wound pool now actually applies
 conditions, not just narrative labels) and the mend_wound() service's
-attrition invariant (ADR-0155): the never-to-full fraction cap.
+attrition invariant (ADR-0156): the never-to-full fraction cap.
 """
 
 from __future__ import annotations

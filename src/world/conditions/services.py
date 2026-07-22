@@ -3252,7 +3252,7 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     # Bounded HP mend (#2644) — independent of severity reduction above;
     # routes through vitals.mend_wound() so the never-to-full fraction cap
     # and the max_health clamp both apply (the attrition invariant,
-    # ADR-0155). No mend_on_failure column exists (heals never reward
+    # ADR-0156). No mend_on_failure column exists (heals never reward
     # incompetence); a PENDING_ALTERATION target has no WoundDetails seam.
     # ------------------------------------------------------------------
     health_mended = 0
