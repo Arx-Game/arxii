@@ -95,7 +95,6 @@ def _seed_stylist_role() -> None:
                 label=label,
                 defaults={
                     "kind": OfferKind.STYLING,
-                    "description": "PLACEHOLDER styling service.",
                     "is_final": True,
                 },
             )
@@ -134,7 +133,6 @@ def _seed_profile_scribe_role() -> None:
         label="Commission a recorded profile",
         defaults={
             "kind": OfferKind.PROFILE_RECORDING,
-            "description": "PLACEHOLDER — sit for an Archive profile.",
             "is_final": True,
         },
     )
