@@ -12,6 +12,7 @@ from world.progression.models import (
     ClassLevelRequirement,
     ClassLevelUnlock,
     ClassXPCost,
+    CodexKnowledgeRequirement,
     ItemRequirement,
     LevelRequirement,
     MajorGiftTechniqueRequirement,
@@ -275,6 +276,31 @@ class MajorGiftTechniqueRequirementAdmin(admin.ModelAdmin):
     list_display = ["minimum_techniques", "class_level_unlock", "is_active"]
     list_filter = ["is_active", "class_level_unlock__character_class"]
     search_fields = ["description", "class_level_unlock__character_class__name"]
+
+
+@admin.register(CodexKnowledgeRequirement)
+class CodexKnowledgeRequirementAdmin(admin.ModelAdmin):
+    """Admin interface for CodexKnowledgeRequirement (#2603)."""
+
+    list_display = [
+        "codex_entry",
+        "path",
+        "class_level_unlock",
+        "thread_crossing_threshold",
+        "is_active",
+    ]
+    list_filter = [
+        "is_active",
+        "path",
+        "class_level_unlock__character_class",
+    ]
+    search_fields = [
+        "codex_entry__name",
+        "description",
+        "path__name",
+        "class_level_unlock__character_class__name",
+    ]
+    autocomplete_fields = ["codex_entry", "path"]
 
 
 # Character Unlocks

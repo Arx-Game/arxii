@@ -841,6 +841,50 @@ class MajorGiftTechniqueRequirement(AbstractClassLevelRequirement):
         return f"Major Gift Techniques: >= {self.minimum_techniques}"
 
 
+class CodexKnowledgeRequirement(AbstractUnlockRequirement):
+    """Requirement that a character knows a specific codex entry.
+
+    Gates Path selection (and class-level unlocks / thread crossings) behind
+    codex knowledge. A character who has learned the entry (via any route —
+    CG grant, teaching offer, clue resolution, research project) passes the
+    gate. Fail-open: a Path/unlock with no CodexKnowledgeRequirement authored
+    → gate passes (same as every other requirement type).
+    """
+
+    codex_entry = models.ForeignKey(
+        "codex.CodexEntry",
+        on_delete=models.CASCADE,
+        related_name="codex_knowledge_requirements",
+        help_text="The codex entry the character must know (KNOWN status).",
+    )
+
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
+        """Check if character has learned this codex entry (KNOWN status).
+
+        Resolves character → sheet_data → roster_entry → CharacterCodexKnowledge.
+        Mirrors AchievementRequirement's resolution pattern (unlocks.py:504).
+        """
+        from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
+        from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+
+        try:
+            roster_entry = character.sheet_data.roster_entry
+        except (AttributeError, ObjectDoesNotExist):
+            return False, f"Need to know: {self.codex_entry.name}"
+
+        known = CharacterCodexKnowledge.objects.filter(
+            roster_entry=roster_entry,
+            entry=self.codex_entry,
+            status=CodexKnowledgeStatus.KNOWN,
+        ).exists()
+        if known:
+            return True, f"Knows: {self.codex_entry.name}"
+        return False, f"Need to know: {self.codex_entry.name}"
+
+    def __str__(self) -> str:
+        return f"Codex Knowledge: {self.codex_entry.name}"
+
+
 # Character Unlocks
 
 

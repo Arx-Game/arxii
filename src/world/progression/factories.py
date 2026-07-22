@@ -13,6 +13,7 @@ from world.progression.models import (
     CharacterUnlock,
     CharacterXP,
     CharacterXPTransaction,
+    CodexKnowledgeRequirement,
     DevelopmentPoints,
     DevelopmentTransaction,
     DuranceTrainingSite,
@@ -306,3 +307,13 @@ def seed_kudos_difficulty_weights() -> None:
             difficulty_choice=band,
             defaults={"multiplier": weight},
         )
+
+
+class CodexKnowledgeRequirementFactory(factory_django.DjangoModelFactory):
+    """Factory for CodexKnowledgeRequirement (#2603)."""
+
+    class Meta:
+        model = CodexKnowledgeRequirement
+
+    codex_entry = factory.SubFactory("world.codex.factories.CodexEntryFactory")
+    path = factory.SubFactory("world.classes.factories.PathFactory")
