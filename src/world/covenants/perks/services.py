@@ -93,6 +93,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.utils import timezone
 
 from world.covenants.perks.constants import PerkBeneficiary
 from world.covenants.perks.context import SituationContext, SituationParams
@@ -103,6 +104,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.covenants.models import CharacterCovenantRole, VowSituationalPerk
+    from world.magic.models import Technique
     from world.missions.models import MissionInstance
 
 #: Beneficiaries that fire on the perk-owning holder's OWN action.
@@ -835,3 +837,81 @@ def announce_fired_perks(
         # rather than `message_location` (which would resolve the broadcast
         # room from an unrelated caller's own location — see docstring).
         location.msg_contents(text)
+
+
+def record_ground_preparation_from_cast(
+    character_sheet: CharacterSheet,
+    technique: Technique,
+    room: ObjectDB | None,  # noqa: OBJECTDB_PARAM
+) -> bool:
+    """Record (or refresh) a ``PreparedGround`` off an out-of-combat PERCEPTION cast.
+
+    The riding rule (#2646): "the vow never hands you a new verb." This is not a
+    new player action — it is a side effect that answers to an EXISTING one (an
+    out-of-combat standalone cast of a PERCEPTION-tagged technique), called from
+    ``world.scenes.cast_services._resolve_and_pose_cast`` after the cast request
+    resolves. Returns True iff a ``PreparedGround`` row was created or moved; a
+    pure no-op (no writes) on any unmet condition below.
+
+    ALL of the following must hold:
+
+    - ``technique`` carries a ``TechniqueFunctionTag`` with
+      ``function=TechniqueFunction.PERCEPTION`` (``world.magic.constants`` /
+      ``world.magic.models.techniques.TechniqueFunctionTag``).
+    - ``character_sheet`` holds an active engaged ``CharacterCovenantRole``
+      (``engaged=True``, ``left_at__isnull=True``) whose
+      ``covenant_role.prepares_ground`` is True — a data-authored flag, not
+      every role prepares ground.
+    - ``character_sheet`` is NOT currently a participant in an active
+      ``CombatEncounter`` (``world.combat.round_context.
+      resolve_combat_round_context`` returns ``None``) — ground preparation is
+      an out-of-combat act only; a cast mid-fight never rides this.
+    - ``room`` resolves to a ``RoomProfile`` (``evennia_extensions.RoomProfile``)
+      — ``None`` (no location) or a room with no game-world extension row cannot
+      be prepared.
+
+    On success: ``PreparedGround.objects.update_or_create(prepared_by=
+    character_sheet, defaults={"room_profile": profile, "prepared_at":
+    timezone.now()})`` — the model's ``prepared_by`` OneToOne means a second call
+    in a DIFFERENT room MOVES the character's one active prepared ground rather
+    than stacking a second row (re-preparing elsewhere abandons the old spot).
+    Query budget: one tag-exists check, one role-exists check, the (cached)
+    round-context resolution, then the update_or_create itself — never more than
+    a small fixed number of queries, no query in a loop.
+    """
+    if room is None:
+        return False
+
+    from world.magic.constants import TechniqueFunction  # noqa: PLC0415
+
+    if not technique.function_tags.filter(function=TechniqueFunction.PERCEPTION).exists():
+        return False
+
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    has_flagged_engaged_role = CharacterCovenantRole.objects.filter(
+        character_sheet=character_sheet,
+        engaged=True,
+        left_at__isnull=True,
+        covenant_role__prepares_ground=True,
+    ).exists()
+    if not has_flagged_engaged_role:
+        return False
+
+    from world.combat.round_context import resolve_combat_round_context  # noqa: PLC0415
+
+    if resolve_combat_round_context(character_sheet) is not None:
+        return False
+
+    try:
+        profile = room.room_profile
+    except ObjectDoesNotExist:
+        return False
+
+    from world.room_features.models import PreparedGround  # noqa: PLC0415
+
+    PreparedGround.objects.update_or_create(
+        prepared_by=character_sheet,
+        defaults={"room_profile": profile, "prepared_at": timezone.now()},
+    )
+    return True

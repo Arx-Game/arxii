@@ -347,7 +347,13 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   a per-situation `SITUATION_PARAM_SPECS` allowed/required contract, `ATTACKER_AFFINITY`
   authorable against any `AffinityType` axis (was Abyssal-only), and
   `CombatEncounter.initiated_by_pc_side` recording who sprang a fight for `origin_side`-gated
-  ambush/parley perks. When the vow dims (#2051), the engaged flag drops and every
+  ambush/parley perks. #2646 follow-up adds a 15th situation, `ON_CHOSEN_GROUND` — "the fight
+  was won yesterday": `CombatEncounter.on_chosen_ground` is stamped at CREATE time in the three
+  PC-vs-NPC encounter-creation seams whenever the encounter's room holds a
+  `room_features.PreparedGround` (one active per character) whose preparer is physically
+  present; a ground gets prepared as a RIDER — no new player verb — on an out-of-combat
+  standalone cast of a PERCEPTION-tagged technique by a character holding an engaged covenant
+  role flagged `prepares_ground`. When the vow dims (#2051), the engaged flag drops and every
   layer's contribution returns to 0 — which is why soloing legend content is lethal.
 - Magic is predominant; relationship bonuses matter; **difficulty scales on party size + average level
   only** (ADR-0037); combat merits Legend, never XP (ADR-0036).

@@ -3294,6 +3294,20 @@ registering a service strategy + per-kind details model.
   check/consequence-pool path — see `trap_services.py`'s `check_room_traps_on_entry` /
   `check_traps_at_position`. Not a `RoomFeatureInstance` kind; a plain FK to `RoomProfile`
   since a room may hold several.
+- **`PreparedGround`** (`world.room_features.models`, #2646): a room a character has
+  prepared as their battleground ahead of time — "the fight was won yesterday." Plain FK
+  to `RoomProfile` (a room may hold several characters' prepared grounds) but `prepared_by`
+  is a OneToOne to `character_sheets.CharacterSheet` — one active prepared ground per
+  character; re-preparing elsewhere MOVES the row rather than stacking a second one.
+  Recorded/refreshed by `world.covenants.perks.services.record_ground_preparation_from_cast`
+  — a rider on an out-of-combat standalone cast of a PERCEPTION-tagged (`magic.
+  TechniqueFunction.PERCEPTION`) technique by a character holding an active engaged
+  `CharacterCovenantRole` whose `covenant_role.prepares_ground` flag is set (data-authored;
+  not every role prepares ground), called from `world.scenes.cast_services.
+  _resolve_and_pose_cast` after the cast resolves — not a new player verb, an existing one's
+  side effect. Consumed by `world.combat.chosen_ground.compute_on_chosen_ground`, which
+  stamps `CombatEncounter.on_chosen_ground` (Combat section, "Situational-perk seams") at
+  encounter-CREATE time. Not a `RoomFeatureInstance` kind.
 - **Installable exit/room defenses — bars/ward/alarm** (`world.room_features.models`,
   #2177): three independent details models, siblings of `RoomFeatureInstance` (like
   `Trap` above) — **NOT** `RoomFeatureKind` instances. A room can hold a
@@ -4088,10 +4102,11 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     situation reads/requires which params is `SITUATION_PARAM_SPECS`
     (`world.covenants.perks.constants`); the mixin's `clean()` enforces both directions. All
     lore-repo content. Situations are drawn from `world.covenants.perks.constants.Situation`, a
-    code-defined library (still 14 values as of #2623: slice 1's 9 plus `CHAMPION_DUEL`,
+    code-defined library (15 values as of #2646: slice 1's 9 plus `CHAMPION_DUEL`,
     `COMBAT_OPENED_FROM_PARLEY`, `AMBUSH_UNDERWAY`, `ALLY_INTERCEPTED_FOR_ME`, and
     `ATTACKER_AFFINITY` — the Abyssal-only attacker-typing situation renamed and parameterized to
-    all three `AffinityType` axes by #2623) with a registered evaluator per value
+    all three `AffinityType` axes by #2623 — plus `ON_CHOSEN_GROUND` (#2646)) with a registered
+    evaluator per value
     (`world.covenants.perks.evaluators.SITUATION_EVALUATORS`) — attaching a situation to a perk
     (and tuning its params) is content; adding a new situation to the library is code.
     `world.covenants.perks.services
@@ -4422,6 +4437,16 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     entirely (today's side-blind behavior).
   - `CombatEncounter.is_champion_duel` (bool, default False) — see `docs/systems/battles.md`'s
     "Command Hierarchy & the Champion" section; read by `Situation.CHAMPION_DUEL`.
+  - `CombatEncounter.on_chosen_ground` (bool, default False, #2646) — "the fight was won
+    yesterday": stamped at CREATE time (never mutated after) in the three PC-vs-NPC
+    encounter-creation seams (`world.combat.cast_seed.seed_or_feed_encounter_from_cast`,
+    `world.combat.duels.create_lethal_duel`, `world.battles.services.open_place_encounter`) by
+    `world.combat.chosen_ground.compute_on_chosen_ground(room)` — True iff the encounter's room
+    holds a `room_features.PreparedGround` whose preparer is physically present in that room.
+    `world.combat.duels.create_pvp_duel` never stamps it (PvP is never lethal). See
+    `PreparedGround` (Room Features section below) for how a ground gets prepared. Read by
+    `Situation.ON_CHOSEN_GROUND`, which mirrors `Situation.CHAMPION_DUEL`'s shape exactly (one
+    cached FK read off the resolution's participant, False outside combat).
   - `CombatOpponent.affinity` (`AffinityType` CharField, blank default) — authored magical
     affinity typing for non-persona/generic NPCs that carry no `CharacterAura` row to infer
     from. Read by `Situation.ATTACKER_AFFINITY`'s evaluator FIRST against the row's required

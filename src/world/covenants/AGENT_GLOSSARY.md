@@ -181,6 +181,32 @@ Abyssal); target abyssal/target affinity (Situation's `target` field is the acti
 OWN action target — an unrelated concept on offense; `attacker` is the incoming threat on
 defense).
 
+**Chosen Ground (situation)**:
+`Situation.ON_CHOSEN_GROUND` — holds when the SUBJECT is a participant in a `CombatEncounter`
+whose `on_chosen_ground` flag is True — "the fight was won yesterday." Mirrors Champion Duel's
+shape exactly: one cached FK read off the resolution's participant, False outside combat.
+Stamped exclusively at encounter-CREATE time by `world.combat.chosen_ground
+.compute_on_chosen_ground`, called from the three PC-vs-NPC encounter-creation seams
+(`seed_or_feed_encounter_from_cast`, `create_lethal_duel`, `open_place_encounter`) — never by
+`create_pvp_duel` (PvP is never lethal). True iff the encounter's room holds a `Prepared
+Ground` whose preparer is physically present there. (#2646.)
+_Avoid_: home field, terrain advantage (this codebase's term is Chosen Ground / Prepared
+Ground, not a generic RPG "home turf" bonus).
+
+**Prepared Ground**:
+`world.room_features.models.PreparedGround` — a room a character has readied as their
+battleground ahead of time. Plain FK to `RoomProfile` (a room may hold several characters'
+prepared grounds) but `prepared_by` is a OneToOne to `CharacterSheet` — one active prepared
+ground per character; re-preparing elsewhere MOVES the row (`update_or_create`), never stacks
+a second one. Recorded by `world.covenants.perks.services
+.record_ground_preparation_from_cast` — a RIDER on an out-of-combat standalone cast of a
+PERCEPTION-tagged technique by a character holding an active engaged `CharacterCovenantRole`
+whose `covenant_role.prepares_ground` flag is set (data-authored — not every role prepares
+ground). "The vow never hands you a new verb": this is not a new player action, it answers to
+an existing one (the cast). Consumed by Chosen Ground's evaluator via `CombatEncounter
+.on_chosen_ground`. (#2646.)
+_Avoid_: scouted location, home base (this codebase's term is Prepared Ground).
+
 **Defense-Side Seam**:
 The evaluation point making situational perks reachable on a defender's OWN roll, not only the
 attacker's: `SituationContext.attacker` (populated only here, `None` on every offense-side

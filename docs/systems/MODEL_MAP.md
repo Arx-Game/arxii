@@ -429,6 +429,7 @@
   - feature_instance <- room_features.RoomFeatureInstance
   - feature_progression_projects <- room_features.RoomFeatureProgressionDetails
   - traps <- room_features.Trap
+  - prepared_grounds <- room_features.PreparedGround
   - ward_details <- room_features.RoomWardDetails
   - alarm_details <- room_features.RoomAlarmDetails
   - defense_progression_projects <- room_features.DefenseProgressionDetails
@@ -1580,6 +1581,7 @@
   - active_alternate_self <- forms.ActiveAlternateSelf
   - distinctions <- distinctions.CharacterDistinction
   - distinction_other_entries <- distinctions.CharacterDistinctionOther
+  - sheet_update_requests <- distinctions.SheetUpdateRequest
   - org_obligations <- societies.OrganizationObligation
   - purse <- currency.CharacterPurse
   - employments <- currency.CharacterEmployment
@@ -1657,6 +1659,7 @@
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
   - conjured_hazards <- room_features.Trap
   - detected_traps <- room_features.Trap
+  - prepared_ground <- room_features.PreparedGround
 
 ### Gender
 **Pointed to by:**
@@ -1814,6 +1817,7 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
   - allowed_styles <- magic.TechniqueStyle
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - gift_unlocks <- magic.GiftUnlock
@@ -1947,6 +1951,7 @@
   - prerequisites -> codex.CodexEntry [M2M]
 **Pointed to by:**
   - species <- species.Species
+  - codex_knowledge_requirements <- progression.CodexKnowledgeRequirement
   - resonances <- magic.Resonance
   - gifts <- magic.Gift
   - techniques <- magic.Technique
@@ -3195,6 +3200,7 @@
   - character_grants <- distinctions.CharacterDistinction
   - other_entries <- distinctions.CharacterDistinctionOther
   - mapped_from_other <- distinctions.CharacterDistinctionOther
+  - add_sheet_update_requests <- distinctions.SheetUpdateRequest
   - purse_drain <- currency.DistinctionPurseDrain
   - codex_grants <- codex.DistinctionCodexGrant
   - asset_grants <- assets.DistinctionAssetGrant
@@ -3221,6 +3227,7 @@
   - from_glimpse -> magic.CharacterAura [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+  - remove_sheet_update_requests <- distinctions.SheetUpdateRequest
   - modifier_sources <- mechanics.ModifierSource
 
 ### CharacterDistinctionOther
@@ -3229,10 +3236,25 @@
   - parent_distinction -> distinctions.Distinction [FK]
   - staff_mapped_distinction -> distinctions.Distinction [FK] (nullable)
 
+### SheetUpdateRequest
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - target_distinction -> distinctions.Distinction [FK] (nullable)
+  - target_character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
+  - reviewed_by -> accounts.AccountDB [FK] (nullable)
+  - submitted_by -> accounts.AccountDB [FK] (nullable)
+
 ### Service Functions
+- `approve_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' — Approve a PENDING SheetUpdateRequest: XP debit + change firing.`
+- `cancel_sheet_update_request(request: 'SheetUpdateRequest', account: 'object') -> 'None' — Player-initiated cancellation of their own pending request.`
 - `clear_distinction_secret(character_distinction: 'CharacterDistinction') -> 'None' — Make a relocated distinction public again by deleting its Secret (#1334).`
+- `compute_distinction_change_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' — Compute the XP cost for a sheet-update request.`
+- `compute_sheet_update_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' — Compute the XP cost for a sheet-update request.`
+- `create_sheet_update_request(character_sheet: 'CharacterSheet', request_type: 'str', *, justification: 'str', target_distinction: 'Distinction | None' = None, target_character_distinction: 'CharacterDistinction | None' = None, submitted_by: 'object | None' = None, origin: 'str' = DistinctionOrigin.UNLOCK_PURCHASE) -> 'SheetUpdateRequest' — Create a PENDING SheetUpdateRequest.`
+- `deny_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' — Deny a PENDING SheetUpdateRequest. No XP debit, no change.`
 - `grant_distinction(character: 'CharacterSheet', distinction: 'Distinction', *, origin: 'str', rank: 'int | None' = None, source_description: 'str' = '') -> 'CharacterDistinction' — Grant a Distinction, or rank one up, through the single acquisition seam (#2037).`
 - `mint_distinction_secret(character_distinction: 'CharacterDistinction', *, level: 'int | None' = None, provenance: 'str' = SecretProvenance.GM_AUTHORED, author_persona: 'Persona | None' = None, content: 'str' = '') -> 'Secret' — Relocate a distinction into a Secret, returning it (#1334).`
+- `remove_distinction(character_distinction: 'CharacterDistinction', *, sheet_update_request: 'SheetUpdateRequest') -> 'None' — Remove a CharacterDistinction, reconciling all dependent systems.`
 
 
 ## world.dreams
@@ -4764,6 +4786,7 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
 
 ### DramaticMomentType
 **Foreign Keys:**
@@ -6351,6 +6374,7 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
 
 ### TraitRatingUnlock
 **Foreign Keys:**
@@ -6430,6 +6454,13 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+
+### CodexKnowledgeRequirement
+**Foreign Keys:**
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
+  - codex_entry -> codex.CodexEntry [FK]
 
 ### CharacterUnlock
 **Foreign Keys:**
@@ -6784,6 +6815,11 @@
   - created_by_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - detected_by -> character_sheets.CharacterSheet [M2M]
 
+### PreparedGround
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - prepared_by -> character_sheets.CharacterSheet [OneToOne]
+
 ### VaultDetails
 **Foreign Keys:**
   - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
@@ -6834,6 +6870,7 @@
 - `can_modify_room_features(persona: 'Persona', room: 'DefaultObject') -> 'bool' — Standing required to install or upgrade a feature in this room.`
 - `complete_defense_installation(project: 'Project', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — Handle resolution of a ROOM_DEFENSE_INSTALLATION project (#2177).`
 - `complete_room_feature_progression(project: 'Project', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — Handle resolution of a ROOM_FEATURE_PROGRESSION project.`
+- `handle_bank_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — BANK strategy (#2540 Layer 4): row-only install.`
 - `handle_captains_quarters_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — CAPTAINS_QUARTERS strategy (#675): row-only install.`
 - `handle_command_center_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — COMMAND_CENTER strategy (#930): install or level the feature instance.`
 - `handle_library_progression(project: 'Project', target_level: 'int', outcome_tier: 'CheckOutcome | None' = None) -> 'None' — LIBRARY strategy (#675): row-only install/level.`
