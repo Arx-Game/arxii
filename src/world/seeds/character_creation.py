@@ -45,8 +45,21 @@ from world.forms.models import (
 )
 from world.magic.constants import ParticipationRule, RitualExecutionKind
 from world.magic.models import Ritual
-from world.missions.constants import ArcScope, MissionVisibility, RewardGroupRule
-from world.missions.models import MissionCategory, MissionTemplate
+from world.missions.constants import (
+    ArcScope,
+    ConflictMode,
+    MissionVisibility,
+    OptionKind,
+    OptionSource,
+    RewardGroupRule,
+)
+from world.missions.models import (
+    MissionCategory,
+    MissionNode,
+    MissionOption,
+    MissionOptionRoute,
+    MissionTemplate,
+)
 from world.realms.models import Realm
 from world.roster.models import Roster
 from world.roster.models.families import Family
@@ -586,12 +599,14 @@ def ensure_orientation_mission():
     """Get or create the orientation mission that funnels to the registration rite (#2479).
 
     Full authored prose is lore-repo content; this is a structural get-or-create.
+    A minimal entry node graph is created so ``staff_assign_mission`` can enter the
+    run immediately; future authoring will replace this with the real narrative graph.
     """
     category, _ = MissionCategory.objects.get_or_create(
         name="Orientation",
         defaults={"description": "New player experience orientation missions."},
     )
-    template, _ = MissionTemplate.objects.get_or_create(
+    template, created = MissionTemplate.objects.get_or_create(
         name="Orientation at Shroudwatch Academy",
         defaults={
             "summary": "Learn what the Durance is and speak your name before the Academy.",
@@ -609,6 +624,33 @@ def ensure_orientation_mission():
         },
     )
     template.categories.add(category)
+
+    if created or not template.nodes.exists():
+        entry, _ = MissionNode.objects.get_or_create(
+            template=template,
+            key="entry",
+            defaults={
+                "is_entry": True,
+                "conflict_mode": ConflictMode.GROUP_VOTE,
+                "flavor_text": "You stand at the threshold of the Academy.",
+            },
+        )
+        option, _ = MissionOption.objects.get_or_create(
+            node=entry,
+            key="begin",
+            defaults={
+                "order": 1,
+                "option_kind": OptionKind.BRANCH,
+                "source_kind": OptionSource.AUTHORED,
+                "authored_ic_framing": "Begin the orientation.",
+            },
+        )
+        MissionOptionRoute.objects.get_or_create(
+            option=option,
+            outcome_tier=None,
+            defaults={"target_node": None, "outcome_text": "Orientation begun."},
+        )
+
     return template
 
 
