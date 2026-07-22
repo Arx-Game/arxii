@@ -4478,7 +4478,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `ComboDefinition`, `ComboSlot`, `ComboLearning` (use_count tracks repeat
   use; written by `fire_combo_discovery` on first combat trigger, #2017),
   `ComboSignature` (covenant+combo narrative flourish, #2017), `Clash`,
-  `ClashRound`, `ClashContribution`
+  `ClashRound`, `ClashContribution`, `BreakBarContribution` (#2642, see "Boss-fight structure"
+  below), `CombatOpponent.reinforces` (self-FK, lieutenant->boss edge, #2642)
 - **Technique-entrance combat integration (#2183):** `CombatRoundAction.from_entrance`
   (bool, default False) — stamped when a hostile Technique Entrance (see magic.md
   "Technique Entrance") seeds/feeds an encounter (`world.combat.cast_seed
@@ -4591,6 +4592,34 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   (`world/combat/clash.py`) mirrors each round's progress delta onto `rampart.integrity`
   through the same `damage_rampart` seam, so interception (paused while that clash is
   ACTIVE) and clash-progress never drift apart.
+- **Boss-fight structure — diversity-weighted break accrual, lieutenant gate, pacing floor
+  (#2642, ADR-0160):** `assess_break_bar` (`world/combat/services.py`) persists a
+  `BreakBarContribution` row (mirrors `ClashContribution`'s per-round audit shape; `opponent`,
+  `participant` nullable, `round_number`, `kind` — `BreakContributionKind`: DAMAGE / COMBO /
+  HOLD / DEBUFF / SUPPRESSION, `effect_type` nullable, `amount`) for each qualifying feed. Round
+  depletion sums 1 unit per distinct (actor, kind) pair, doubled (`BREAK_NOVELTY_MULTIPLIER=2`)
+  for a (kind, effect_type) pair's first-ever occurrence in the encounter, plus a landed combo's
+  flat `bonus_damage` — replacing the pre-#2642 flat ">=2 distinct PCs x >=2 distinct
+  effect_types = 1 chip" gate (dead by ruling; no per-actor cap survives). New non-damage feeds:
+  HOLD (a PC-side LOCK-flavor `Clash` win against the boss resolved this round — read via
+  `Clash.resolved_round`/`resolution`, contributors from that round's `ClashContribution` rows),
+  DEBUFF (a new behavior-altering `ConditionInstance` landed on the boss's `objectdb`, detected by
+  `applied_at >= encounter.round_started_at`), SUPPRESSION (a reinforcing lieutenant newly
+  suppressed via the same condition signal or a freshly-started `EngagementLock`).
+  `CombatOpponent.reinforces` (self-FK, null=not a lieutenant) marks a lieutenant's boss; the
+  **lieutenant gate** divides each round's raw depletion by `1 + active_unsuppressed_reinforcers`
+  (`_active_reinforcer_count` — ACTIVE status, morale not BREAK, no behavior-altering condition,
+  not pinned in an ACTIVE `EngagementLock`, acted this round; a parked/idle lieutenant never
+  gates), floored at 1 unit whenever depletion occurred — proportional, never a hard block. The
+  **pacing floor** (`minimum_break_bar_threshold()`) clamps a stamped `break_bar_threshold` to
+  `>= (soulfray_stage_count + 2) * BAR_UNITS_PER_ROUND` at both stamping sites
+  (`_stamp_phase_break_bar_config`, `_stamp_break_bar`) — 0 (no clamp) when Soulfray has no
+  authored `ConditionStage` rows. `assess_break_bar` now runs AFTER `resolve_round`'s clash
+  post-pass (was before) so the HOLD feed can see a LOCK-clash win resolved the same round. BOSS
+  tier opponents resist a decisive Parley calm by one success-level step
+  (`BOSS_PARLEY_RESISTANCE_STEP`, `_resolve_parley`). The break broadcasts a celebration naming
+  every distinct contributor recorded on the boss's `BreakBarContribution` rows this encounter
+  (`join_labels`, promoted from `interaction_services._join_labels` to a shared public helper).
 - **Wind-as-mechanic (#1555, ADR-0129):** the combat consumer of the WIND exposure axis
   (`world.locations.services.felt_exposure`, `StatKey.WIND`; provider is #1522).
   `wind_penalty(felt: int) -> int` (`world/combat/constants.py`) bands felt WIND into a check

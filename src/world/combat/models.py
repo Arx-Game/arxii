@@ -28,6 +28,7 @@ from world.combat.constants import (
     SCALING_CONFIG_PER_AVG_LEVEL_PCT,
     SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
     ActionCategory,
+    BreakContributionKind,
     ClashActionSlot,
     ClashFlavor,
     ClashResolution,
@@ -650,6 +651,22 @@ class CombatOpponent(SharedMemoryModel):
     vulnerability_intensity_bonus = models.PositiveIntegerField(
         default=0,
         help_text="Intensity bonus during vulnerability window; from BreakBarConfig.",
+    )
+
+    # === Boss-fight structure: lieutenant gate (#2642) ===
+    reinforces = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reinforced_by",
+        help_text=(
+            "Lieutenant->boss edge (#2642): set on a lieutenant opponent to the "
+            "BOSS-tier opponent it reinforces. Read by assess_break_bar's "
+            "lieutenant gate — an active, unsuppressed lieutenant slows the "
+            "boss's break-bar depletion proportionally. Null for non-lieutenant "
+            "opponents (including the boss itself)."
+        ),
     )
 
     # === Affinity field (#2536 slice 3 Task 6) ===
@@ -2688,6 +2705,79 @@ class ClashContribution(SharedMemoryModel):
         return (
             f"ClashContribution(round={self.clash_round_id} "
             f"character={self.character_id} slot={self.action_slot})"
+        )
+
+
+# =============================================================================
+# BreakBarContribution model (#2642) — per-round audit record of a boss
+# break-bar feed. Mirrors ClashContribution's shape: one row per qualifying
+# feed event, persisted where assess_break_bar previously discarded its
+# ephemeral participant/effect_type sets.
+# =============================================================================
+
+
+class BreakBarContribution(SharedMemoryModel):
+    """Per-round audit record of a single feed that chipped a boss's break bar.
+
+    One row per qualifying feed event assessed by ``assess_break_bar`` each
+    round: a damaging hit (DAMAGE), a landed combo (COMBO), a PC-side LOCK-clash
+    win against the boss (HOLD), a new behavior-altering condition landed on the
+    boss (DEBUFF), or a reinforcing lieutenant becoming suppressed (SUPPRESSION).
+    Feeds the diversity-weighted depletion formula (distinct actor x kind pairs
+    this round, novelty-doubled on each pair's first appearance in the
+    encounter) and the break celebration's contributor naming.
+    """
+
+    opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        related_name="break_contributions",
+        help_text="The BOSS-tier opponent whose break bar this contribution chipped.",
+    )
+    participant = models.ForeignKey(
+        COMBAT_PARTICIPANT_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="break_contributions",
+        help_text=(
+            "The PC credited with this contribution. Null for SUPPRESSION/DEBUFF "
+            "rows whose triggering event has no single attributable actor — "
+            "prefer non-null whenever the feed can be traced to one PC."
+        ),
+    )
+    round_number = models.PositiveIntegerField(
+        help_text="The encounter round this contribution was assessed in.",
+    )
+    kind = models.CharField(
+        max_length=15,
+        choices=BreakContributionKind.choices,
+        help_text="Which feed produced this contribution.",
+    )
+    effect_type = models.ForeignKey(
+        "magic.EffectType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The technique's effect type, when the feed carries one (DAMAGE/COMBO).",
+    )
+    amount = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="This row's unit weight toward the round's depletion total.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["round_number", "created_at"]
+        indexes = [
+            models.Index(fields=["opponent", "round_number"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"BreakBarContribution(opponent={self.opponent_id} "
+            f"round={self.round_number} kind={self.kind})"
         )
 
 

@@ -17,6 +17,8 @@ from django.db.models import F, Prefetch, Q, Sum
 from django.utils import timezone
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
@@ -65,6 +67,9 @@ from world.checks.constants import ModifierSourceKind
 from world.checks.services import collect_check_modifiers, perform_check
 from world.checks.types import ModifierContribution
 from world.combat.constants import (
+    BAR_UNITS_PER_ROUND,
+    BOSS_PARLEY_RESISTANCE_STEP,
+    BREAK_NOVELTY_MULTIPLIER,
     CHARGE_CHECK_BONUS,
     CHARGE_DAMAGE_BONUS,
     CHARGE_MAX_HOPS,
@@ -84,8 +89,12 @@ from world.combat.constants import (
     LANCE_UNMOUNTED_PENALTY,
     NO_ROLE_SPEED_RANK,
     NPC_SPEED_RANK,
+    PACING_FLOOR_ROUND_PADDING,
     PENETRATION_CHECK_TYPE_NAME,
     ActionCategory,
+    BreakContributionKind,
+    ClashFlavor,
+    ClashResolution,
     CombatAllegiance,
     CombatManeuver,
     EncounterOutcome,
@@ -103,7 +112,9 @@ from world.combat.constants import (
 from world.combat.damage_source import classify_source
 from world.combat.models import (
     BossPhase,
+    BreakBarContribution,
     Clash,
+    ClashContribution,
     ClashContributionDeclaration,
     CombatEncounter,
     CombatOpponent,
@@ -2633,6 +2644,24 @@ def _clone_authored_phases(
             _stamp_phase_break_bar_config(phase, pt.break_bar, party_mult, opp, pt.phase_number)
 
 
+def minimum_break_bar_threshold() -> int:
+    """Pacing floor for a boss's break-bar threshold (#2642, batch-3 F-7a).
+
+    ``(soulfray_stage_count + PACING_FLOOR_ROUND_PADDING) * BAR_UNITS_PER_ROUND`` —
+    ensures the anima -> Soulfray -> audere arc has room to play out before the
+    wall breaks (median 6-8 rounds, tail ~10). Returns 0 (no clamp) when Soulfray
+    has not been authored yet (stage_count == 0) — a bare/test DB should not be
+    forced onto a floor derived from unauthored content.
+    """
+    from world.conditions.models import ConditionStage  # noqa: PLC0415
+    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
+
+    stage_count = ConditionStage.objects.filter(condition__name=SOULFRAY_CONDITION_NAME).count()
+    if stage_count == 0:
+        return 0
+    return (stage_count + PACING_FLOOR_ROUND_PADDING) * BAR_UNITS_PER_ROUND
+
+
 def _stamp_phase_break_bar_config(
     phase: BossPhase,
     config: object,
@@ -2641,7 +2670,8 @@ def _stamp_phase_break_bar_config(
     phase_number: int,
 ) -> None:
     """Stamp BreakBarConfig values onto a BossPhase (and onto the opponent for phase 1)."""
-    threshold = round(Decimal(config.max_threshold) * party_mult)
+    authored_threshold = round(Decimal(config.max_threshold) * party_mult)
+    threshold = max(authored_threshold, minimum_break_bar_threshold())
     phase.break_bar_threshold = threshold
     phase.vulnerability_rounds = config.vulnerability_rounds
     phase.vulnerability_intensity_bonus = config.intensity_bonus
@@ -5599,10 +5629,17 @@ def _stamp_enrage(opponent: CombatOpponent, phase: BossPhase) -> None:
 
 
 def _stamp_break_bar(opponent: CombatOpponent, phase: BossPhase) -> None:
-    """Reset the break bar from the new phase's break-bar config."""
+    """Reset the break bar from the new phase's break-bar config.
+
+    Re-applies the pacing floor (#2642) on top of the phase's authored
+    threshold — ``_stamp_phase_break_bar_config`` already clamps it at clone
+    time, but this keeps the invariant self-evident at the site that actually
+    writes the opponent's live ``break_bar_threshold`` on a phase transition.
+    """
     if phase.break_bar_threshold > 0:
-        opponent.break_bar_threshold = phase.break_bar_threshold
-        opponent.break_bar_current = phase.break_bar_threshold
+        threshold = max(phase.break_bar_threshold, minimum_break_bar_threshold())
+        opponent.break_bar_threshold = threshold
+        opponent.break_bar_current = threshold
         opponent.vulnerability_rounds = phase.vulnerability_rounds
         opponent.vulnerability_intensity_bonus = phase.vulnerability_intensity_bonus
         opponent.vulnerability_rounds_remaining = 0
@@ -5921,7 +5958,13 @@ def _resolve_parley(
         apply_social_disposition_delta(actor, target_persona_id, _ParleyResult(success_level))
 
     # Decisive success: calm the opponent (Calm condition -> NEUTRAL allegiance).
-    if success_level >= PARLEY_DECISIVE_SUCCESS_LEVEL and target.objectdb is not None:
+    # Boss sway resistance (#2642): a BOSS-tier opponent resists — it requires
+    # one success-level step above the normal decisive threshold. Court-tier
+    # NPCs (the majority) calm at the unmodified threshold.
+    required_decisive_level = PARLEY_DECISIVE_SUCCESS_LEVEL
+    if target.tier == OpponentTier.BOSS:
+        required_decisive_level += BOSS_PARLEY_RESISTANCE_STEP
+    if success_level >= required_decisive_level and target.objectdb is not None:
         calm = ConditionTemplate.objects.filter(name=CALM_CONDITION_NAME).first()
         if calm is not None:
             apply_condition(
@@ -8659,18 +8702,23 @@ def assess_break_bar(
     encounter: CombatEncounter,
     action_outcomes: list[ActionOutcome],
 ) -> None:
-    """Assess break-bar damage for all boss opponents with a break bar.
+    """Assess break-bar depletion for all boss opponents with a break bar (#2642).
 
-    Called from resolve_round after all actions resolve, before phase
-    transitions. Two damage paths:
+    Diversity-weighted, not per-hit: five feeds (DAMAGE / COMBO / HOLD / DEBUFF /
+    SUPPRESSION — ``BreakContributionKind``) are each persisted as a
+    ``BreakBarContribution`` row. Depletion sums 1 unit per distinct (actor, kind)
+    pair this round, doubled for a pair's first-ever (kind, effect_type)
+    occurrence in the encounter, plus the landed combo's flat ``bonus_damage``.
+    The result is divided by ``1 + active_unsuppressed_reinforcers`` (the
+    lieutenant gate) — floored at 1 unit whenever any depletion occurred, never
+    a hard block. When the bar reaches 0, the vulnerability window opens and a
+    break celebration broadcasts, naming every distinct contributor.
 
-    1. Combo path: a landed combo deals break-bar damage equal to
-       ``combo.bonus_damage``. One combo per round counts.
-    2. Distinct-PC distinct-effect-type path: if >=2 distinct PCs dealt
-       damage with >=2 distinct effect_types, deal a flat chip of 1.
-
-    When the bar reaches 0, the vulnerability window opens.
+    Called from resolve_round's post-pass, AFTER the clash post-pass resolves
+    this round's clashes (so the HOLD feed can see a LOCK-clash win that
+    resolved this same round).
     """
+    round_number = encounter.round_number
     bosses = list(
         CombatOpponent.objects.filter(
             encounter=encounter,
@@ -8683,42 +8731,8 @@ def assess_break_bar(
     if not bosses:
         return
 
-    # Minimum distinct PCs and distinct effect types required to chip the bar.
-    _MIN_DISTINCT_FOR_CHIP = 2
-
     for boss in bosses:
-        bar_damage = 0
-
-        # Combo path: first landed combo this round.
-        for outcome in action_outcomes:
-            if outcome.combo_used is not None and _outcome_damaged_boss(outcome, boss.pk):
-                bar_damage += outcome.combo_used.bonus_damage
-                break
-
-        # Distinct-PC distinct-effect-type path.
-        participant_ids: set[int] = set()
-        effect_type_ids: set[int] = set()
-        for outcome in action_outcomes:
-            if (
-                outcome.entity_type == ENTITY_TYPE_PC
-                and outcome.participant_id is not None
-                and outcome.effect_type_id is not None
-                and _outcome_damaged_boss(outcome, boss.pk)
-            ):
-                participant_ids.add(outcome.participant_id)
-                effect_type_ids.add(outcome.effect_type_id)
-
-        if (
-            len(participant_ids) >= _MIN_DISTINCT_FOR_CHIP
-            and len(effect_type_ids) >= _MIN_DISTINCT_FOR_CHIP
-        ):
-            bar_damage += 1
-
-        if bar_damage > 0:
-            boss.break_bar_current = max(0, boss.break_bar_current - bar_damage)
-            if boss.break_bar_current == 0:
-                boss.vulnerability_rounds_remaining = boss.vulnerability_rounds
-            boss.save(update_fields=["break_bar_current", "vulnerability_rounds_remaining"])
+        _assess_boss_break_bar(encounter, boss, round_number, action_outcomes)
 
 
 def _outcome_damaged_boss(outcome: ActionOutcome, boss_pk: int) -> bool:
@@ -8726,6 +8740,346 @@ def _outcome_damaged_boss(outcome: ActionOutcome, boss_pk: int) -> bool:
     return any(
         hasattr(r, "opponent_id") and r.opponent_id == boss_pk for r in outcome.damage_results
     )
+
+
+def _assess_boss_break_bar(
+    encounter: CombatEncounter,
+    boss: CombatOpponent,
+    round_number: int,
+    action_outcomes: list[ActionOutcome],
+) -> None:
+    """Assess and apply one boss's break-bar depletion for this round (#2642)."""
+    events, combo_bonus = _break_bar_events_this_round(
+        encounter, boss, round_number, action_outcomes
+    )
+    if not events and combo_bonus <= 0:
+        return
+
+    raw_depletion = _persist_break_bar_events(boss, round_number, events) + combo_bonus
+    if raw_depletion <= 0:
+        return
+
+    active_reinforcers = _active_reinforcer_count(boss, round_number)
+    # Proportional gate — floor at 1 unit whenever depletion occurred; never a
+    # hard block (#2642).
+    bar_damage = max(raw_depletion // (1 + active_reinforcers), 1)
+
+    boss.break_bar_current = max(0, boss.break_bar_current - bar_damage)
+    broke_this_round = boss.break_bar_current == 0
+    if broke_this_round:
+        boss.vulnerability_rounds_remaining = boss.vulnerability_rounds
+    boss.save(update_fields=["break_bar_current", "vulnerability_rounds_remaining"])
+    if broke_this_round:
+        _broadcast_break_celebration(encounter, boss)
+
+
+def _break_bar_events_this_round(
+    encounter: CombatEncounter,
+    boss: CombatOpponent,
+    round_number: int,
+    action_outcomes: list[ActionOutcome],
+) -> tuple[list[tuple[str, int | None, int | None]], int]:
+    """Gather this round's break-bar feed events for *boss*.
+
+    Returns ``(events, combo_bonus)`` where each event is
+    ``(kind, participant_id, effect_type_id)`` — one per qualifying feed,
+    persisted 1:1 as a ``BreakBarContribution`` row by the caller. Combo's flat
+    ``bonus_damage`` depletion is returned separately (additive, not part of
+    the diversity-unit pool).
+    """
+    events: list[tuple[str, int | None, int | None]] = []
+    combo_bonus = 0
+
+    # Combo path: first landed combo this round (unchanged bonus_damage depletion,
+    # plus its own COMBO diversity-unit contribution).
+    for outcome in action_outcomes:
+        if outcome.combo_used is not None and _outcome_damaged_boss(outcome, boss.pk):
+            combo_bonus = outcome.combo_used.bonus_damage
+            events.append(
+                (BreakContributionKind.COMBO, outcome.participant_id, outcome.effect_type_id)
+            )
+            break
+
+    # DAMAGE feed: every qualifying PC damage outcome this round.
+    events.extend(
+        (BreakContributionKind.DAMAGE, outcome.participant_id, outcome.effect_type_id)
+        for outcome in action_outcomes
+        if (
+            outcome.entity_type == ENTITY_TYPE_PC
+            and outcome.participant_id is not None
+            and outcome.effect_type_id is not None
+            and _outcome_damaged_boss(outcome, boss.pk)
+        )
+    )
+
+    # HOLD feed: PC-side LOCK-clash win against this boss, resolved this round.
+    events.extend(
+        (BreakContributionKind.HOLD, participant_id, None)
+        for participant_id in _pc_lock_hold_contributors(encounter, boss, round_number)
+    )
+
+    round_started_at = encounter.round_started_at
+
+    # DEBUFF feed: new behavior-altering condition landed on the boss this round.
+    events.extend(
+        (BreakContributionKind.DEBUFF, participant_id, None)
+        for participant_id in _boss_new_debuff_events(boss, encounter, round_started_at)
+    )
+
+    # SUPPRESSION feed: a reinforcing lieutenant became suppressed this round.
+    events.extend(
+        (BreakContributionKind.SUPPRESSION, participant_id, None)
+        for _lieutenant, participant_id in _newly_suppressed_lieutenants(
+            encounter, boss, round_number, round_started_at
+        )
+    )
+
+    return events, combo_bonus
+
+
+def _persist_break_bar_events(
+    boss: CombatOpponent,
+    round_number: int,
+    events: list[tuple[str, int | None, int | None]],
+) -> int:
+    """Persist one ``BreakBarContribution`` row per event; return the diversity-unit total.
+
+    1 unit per distinct (actor, kind) pair this round, doubled to
+    ``BREAK_NOVELTY_MULTIPLIER`` for a (kind, effect_type) pair's first-ever
+    appearance across the whole encounter (checked against rows persisted in
+    prior rounds — never rows created within this same call).
+    """
+    existing_pairs = set(
+        BreakBarContribution.objects.filter(opponent=boss).values_list("kind", "effect_type_id")
+    )
+    novel_pairs_seen: set[tuple[str, int | None]] = set()
+    actor_kind_pairs: set[tuple[int | None, str]] = set()
+
+    for kind, participant_id, effect_type_id in events:
+        BreakBarContribution.objects.create(
+            opponent=boss,
+            participant_id=participant_id,
+            round_number=round_number,
+            kind=kind,
+            effect_type_id=effect_type_id,
+        )
+        actor_kind_pairs.add((participant_id, kind))
+        pair = (kind, effect_type_id)
+        if pair not in existing_pairs:
+            novel_pairs_seen.add(pair)
+
+    base_units = len(actor_kind_pairs)
+    bonus_units = len(novel_pairs_seen) * (BREAK_NOVELTY_MULTIPLIER - 1)
+    return base_units + bonus_units
+
+
+def _pc_lock_hold_contributors(
+    encounter: CombatEncounter,
+    boss: CombatOpponent,
+    round_number: int,
+) -> list[int | None]:
+    """Participant PKs (or a lone ``None``) crediting a HOLD event per LOCK win this round.
+
+    A LOCK-flavor Clash against *boss* that resolved PC_DECISIVE/PC_MARGINAL this
+    round is a PC-side win. Contributors are the PCs with a ``ClashContribution``
+    on that clash's resolving-round ``ClashRound`` — falling back to a single
+    unattributed (``None``) entry when the clash resolved with no PC contribution
+    row (e.g. a pure-abandonment-adjacent edge case).
+    """
+    won_locks = Clash.objects.filter(
+        encounter=encounter,
+        npc_opponent=boss,
+        flavor=ClashFlavor.LOCK,
+        resolved_round=round_number,
+        resolution__in=(ClashResolution.PC_DECISIVE, ClashResolution.PC_MARGINAL),
+    )
+    contributor_ids: list[int | None] = []
+    for clash in won_locks:
+        character_ids = ClashContribution.objects.filter(
+            clash_round__clash=clash,
+            clash_round__round_number=round_number,
+        ).values_list("character_id", flat=True)
+        participant_ids = list(
+            CombatParticipant.objects.filter(
+                encounter=encounter,
+                character_sheet_id__in=character_ids,
+            ).values_list("pk", flat=True)
+        )
+        if participant_ids:
+            contributor_ids.extend(participant_ids)
+        else:
+            contributor_ids.append(None)
+    return contributor_ids
+
+
+def _boss_new_debuff_events(
+    boss: CombatOpponent,
+    encounter: CombatEncounter,
+    round_started_at: datetime | None,
+) -> list[int | None]:
+    """Participant PKs (or ``None``) crediting a DEBUFF event for *boss* this round."""
+    if boss.objectdb_id is None or round_started_at is None:
+        return []
+    return [
+        _participant_id_for_objectdb(encounter, inst.source_character_id)
+        for inst in _new_behavior_altering_conditions(boss.objectdb_id, round_started_at)
+    ]
+
+
+def _newly_suppressed_lieutenants(
+    encounter: CombatEncounter,
+    boss: CombatOpponent,
+    round_number: int,
+    round_started_at: datetime | None,
+) -> list[tuple[CombatOpponent, int | None]]:
+    """Lieutenants reinforcing *boss* that became suppressed this round (#2642).
+
+    Round-scoped to the two events with a clean "this round" signal: a new
+    behavior-altering condition landing on the lieutenant's ObjectDB
+    (``applied_at`` within this round's window), or a new ACTIVE
+    ``EngagementLock`` pinning the lieutenant (``started_round == round_number``).
+    Status/morale-driven suppression has no per-round timestamp in the schema
+    and is not used as a SUPPRESSION trigger — a documented approximation
+    (#2642); it still counts toward the lieutenant gate via ``_active_reinforcer_count``.
+    """
+    lieutenants = list(CombatOpponent.objects.filter(reinforces=boss))
+    if not lieutenants:
+        return []
+
+    events: list[tuple[CombatOpponent, int | None]] = []
+    for lieutenant in lieutenants:
+        if lieutenant.objectdb_id is not None and round_started_at is not None:
+            for inst in _new_behavior_altering_conditions(lieutenant.objectdb_id, round_started_at):
+                participant_id = _participant_id_for_objectdb(encounter, inst.source_character_id)
+                events.append((lieutenant, participant_id))
+        new_lock = EngagementLock.objects.filter(
+            opponent=lieutenant,
+            status=EngagementLockStatus.ACTIVE,
+            started_round=round_number,
+        ).first()
+        if new_lock is not None:
+            events.append((lieutenant, new_lock.participant_id))
+    return events
+
+
+def _new_behavior_altering_conditions(objectdb_id: int, since: datetime) -> list[ConditionInstance]:
+    """Behavior-altering ``ConditionInstance`` rows applied to *objectdb_id* since *since*."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    return list(
+        ConditionInstance.objects.filter(
+            target_id=objectdb_id,
+            condition__category__alters_behavior=True,
+            applied_at__gte=since,
+        ).select_related("condition")
+    )
+
+
+def _has_active_behavior_altering_condition(objectdb_id: int) -> bool:
+    """True if *objectdb_id* currently carries an active behavior-altering condition.
+
+    Mirrors ``CharacterSheet.in_control``'s canonical active-condition read
+    (ADR-0024): not suppressed, or suppression has expired.
+    """
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    not_suppressed = Q(is_suppressed=False)
+    suppression_expired = Q(suppressed_until__isnull=False, suppressed_until__lt=timezone.now())
+    return ConditionInstance.objects.filter(
+        not_suppressed | suppression_expired,
+        target_id=objectdb_id,
+        condition__category__alters_behavior=True,
+    ).exists()
+
+
+def _participant_id_for_objectdb(encounter: CombatEncounter, objectdb_id: int | None) -> int | None:
+    """Resolve an ObjectDB id to the ``CombatParticipant`` pk fielding it in *encounter*."""
+    if objectdb_id is None:
+        return None
+    return (
+        CombatParticipant.objects.filter(
+            encounter=encounter, character_sheet__character_id=objectdb_id
+        )
+        .values_list("pk", flat=True)
+        .first()
+    )
+
+
+def _active_reinforcer_count(boss: CombatOpponent, round_number: int) -> int:
+    """Count *boss*'s active, unsuppressed, acting lieutenants this round (the gate divisor, #2642).
+
+    Active = ``OpponentStatus.ACTIVE``, morale not BREAK, no behavior-altering
+    condition on the lieutenant's ObjectDB, not pinned in an ACTIVE
+    ``EngagementLock``, and it acted this round (has a ``CombatOpponentAction``
+    row). A parked/idle lieutenant does not gate.
+    """
+    from world.combat.morale import OpponentMoraleState, morale_state_for  # noqa: PLC0415
+
+    lieutenants = list(CombatOpponent.objects.filter(reinforces=boss, status=OpponentStatus.ACTIVE))
+    if not lieutenants:
+        return 0
+
+    acted_ids = set(
+        CombatOpponentAction.objects.filter(
+            opponent__in=lieutenants,
+            round_number=round_number,
+        ).values_list("opponent_id", flat=True)
+    )
+
+    count = 0
+    for lieutenant in lieutenants:
+        if lieutenant.pk not in acted_ids:
+            continue
+        if morale_state_for(lieutenant) == OpponentMoraleState.BREAK:
+            continue
+        if lieutenant.objectdb_id is not None and _has_active_behavior_altering_condition(
+            lieutenant.objectdb_id
+        ):
+            continue
+        if EngagementLock.objects.filter(
+            opponent=lieutenant, status=EngagementLockStatus.ACTIVE
+        ).exists():
+            continue
+        count += 1
+    return count
+
+
+def _broadcast_break_celebration(encounter: CombatEncounter, boss: CombatOpponent) -> None:
+    """Broadcast the break moment naming every distinct contributor this encounter (#2642).
+
+    Mirrors ``render_combo_finisher_narration``'s contributor-naming style.
+    Broadcasts on both channels — the persisted-interaction/WS payload (web)
+    and ``room.msg_contents`` (telnet parity) — since a boss wall breaking is
+    exactly the kind of PLAY moment that needs telnet parity.
+    """
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        broadcast_action_outcome,
+        join_labels,
+    )
+
+    contributor_labels = _break_bar_contributor_labels(boss)
+    if not contributor_labels:
+        return
+
+    names = join_labels(contributor_labels)
+    narration = f"{boss.name}'s wall breaks — {names} broke through!"
+    broadcast_action_outcome(encounter=encounter, narration=narration)
+    room = encounter.room
+    if room is not None:
+        room.msg_contents(narration)
+
+
+def _break_bar_contributor_labels(boss: CombatOpponent) -> list[str]:
+    """Distinct PC labels credited on any ``BreakBarContribution`` row for *boss* this encounter."""
+    participant_ids = (
+        BreakBarContribution.objects.filter(opponent=boss, participant__isnull=False)
+        .values_list("participant_id", flat=True)
+        .distinct()
+    )
+    participants = CombatParticipant.objects.filter(pk__in=participant_ids).select_related(
+        "character_sheet"
+    )
+    return [str(p) for p in participants]
 
 
 @transaction.atomic
@@ -8888,9 +9242,6 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         round_number,
     )
 
-    # --- Break-bar assessment (#2016) ---
-    assess_break_bar(encounter, result.action_outcomes)
-
     # --- Post-pass: deferred challenge declarations (in initiative order) ---
     result.challenge_outcomes = _resolve_declared_challenges(
         encounter,
@@ -8904,6 +9255,11 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         round_number,
         resolution_order,
     )
+
+    # --- Break-bar assessment (#2016, diversity-weighted feeds #2642) ---
+    # Runs AFTER the clash post-pass (not before, as pre-#2642) so the HOLD
+    # feed can see this round's just-resolved LOCK-clash wins against the boss.
+    assess_break_bar(encounter, result.action_outcomes)
 
     # --- Round-tick: decrement rounds_remaining, tick DoT, fire expiry events,
     # and advance bleed-out for every active participant / opponent.

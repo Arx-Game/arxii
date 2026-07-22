@@ -14,6 +14,7 @@ from world.combat.constants import (
     SCALING_CONFIG_PER_AVG_LEVEL_PCT,
     SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
     ActionCategory,
+    BreakContributionKind,
     ClashActionSlot,
     ClashFlavor,
     ComboLearningMethod,
@@ -34,6 +35,7 @@ from world.combat.constants import (
 from world.combat.models import (
     BossPhase,
     BreakBarConfig,
+    BreakBarContribution,
     Clash,
     ClashConfig,
     ClashContribution,
@@ -224,6 +226,19 @@ class CombatParticipantFactory(factory_django.DjangoModelFactory):
     encounter = factory.SubFactory(CombatEncounterFactory)
     character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     status = ParticipantStatus.ACTIVE
+
+
+class BreakBarContributionFactory(factory_django.DjangoModelFactory):
+    """Factory for BreakBarContribution (#2642)."""
+
+    class Meta:
+        model = BreakBarContribution
+
+    opponent = factory.SubFactory(BossOpponentFactory)
+    participant = factory.SubFactory(CombatParticipantFactory)
+    round_number = 1
+    kind = BreakContributionKind.DAMAGE
+    amount = 1
 
 
 class ComboDefinitionFactory(factory_django.DjangoModelFactory):
@@ -866,8 +881,8 @@ class BossFightScenarioFactory:
             soak_value=15,
             threat_pool=threat_pool,
             current_phase=1,
-            break_bar_threshold=6,
-            break_bar_current=6,
+            break_bar_threshold=10,
+            break_bar_current=10,
             vulnerability_rounds=2,
             vulnerability_intensity_bonus=2,
         )
@@ -883,7 +898,7 @@ class BossFightScenarioFactory:
             phase_number=1,
             threat_pool=threat_pool,
             soak_value=15,
-            break_bar_threshold=6,
+            break_bar_threshold=10,
             vulnerability_rounds=2,
             vulnerability_intensity_bonus=2,
             damage_multiplier=Decimal("1.0"),

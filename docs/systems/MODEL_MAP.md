@@ -2076,12 +2076,15 @@
   - barrier_break_pool -> actions.ConsequencePool [FK] (nullable)
   - aftermath_pool -> actions.ConsequencePool [FK] (nullable)
   - wall_breaker_combo -> combat.ComboDefinition [FK] (nullable)
+  - reinforces -> combat.CombatOpponent [FK] (nullable)
 **Pointed to by:**
+  - reinforced_by <- combat.CombatOpponent
   - phases <- combat.BossPhase
   - action_targets <- combat.CombatRoundActionTarget
   - round_actions <- combat.CombatOpponentAction
   - incoming_opponent_attacks <- combat.CombatOpponentAction
   - clashes <- combat.Clash
+  - break_contributions <- combat.BreakBarContribution
   - threat_records <- combat.ThreatRecord
   - engagement_locks <- combat.EngagementLock
 
@@ -2129,6 +2132,7 @@
   - incoming_attacks <- combat.CombatOpponentAction
   - combat_pulls <- combat.CombatPull
   - challenge_declarations <- combat.RoundChallengeDeclaration
+  - break_contributions <- combat.BreakBarContribution
   - clash_declarations <- combat.ClashContributionDeclaration
   - dramatic_surges <- combat.DramaticSurgeRecord
   - threat_records <- combat.ThreatRecord
@@ -2281,6 +2285,12 @@
   - check_outcome -> traits.CheckOutcome [FK]
   - interaction -> scenes.Interaction [FK] (nullable)
 
+### BreakBarContribution
+**Foreign Keys:**
+  - opponent -> combat.CombatOpponent [FK]
+  - participant -> combat.CombatParticipant [FK] (nullable)
+  - effect_type -> magic.EffectType [FK] (nullable)
+
 ### ClashContributionDeclaration
 **Foreign Keys:**
   - fury_commitment -> magic.FuryTier [FK] (nullable)
@@ -2340,7 +2350,7 @@
 - `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' — Map a graded interpose resolution onto *pre_payload*.`
 - `apply_position_cover(character: 'Character', damage: 'int', damage_type: 'DamageType | None') -> 'int' — Subtract attack-cover from damage.`
 - `apply_rampart_interception(character_or_opponent: 'Character', damage: 'int', damage_type: 'DamageType | None', *, attacker_ref: 'object | None', delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'int' — Intercept a strike against a rampart-covered position (#2209).`
-- `assess_break_bar(encounter: 'CombatEncounter', action_outcomes: 'list[ActionOutcome]') -> 'None' — Assess break-bar damage for all boss opponents with a break bar.`
+- `assess_break_bar(encounter: 'CombatEncounter', action_outcomes: 'list[ActionOutcome]') -> 'None' — Assess break-bar depletion for all boss opponents with a break bar (#2642).`
 - `begin_declaration_phase(encounter: 'CombatEncounter') -> 'None' — Advance round_number by 1 and set status to DECLARING.`
 - `check_and_advance_boss_phase(opponent: 'CombatOpponent') -> 'BossPhase | None' — Check whether a boss should advance to the next phase and apply it.`
 - `classify_source(source: object | None) -> flows.events.payloads.DamageSource — Return a ``DamageSource`` describing *source*'s origin.`
@@ -2386,6 +2396,7 @@
 - `leave_encounter(participant: 'CombatParticipant') -> 'None' — Allow a participant to voluntarily leave an Open Encounter between rounds.`
 - `maybe_pause_encounter_for_disconnect(character_sheet: 'CharacterSheet') -> 'None' — Pause the character's live CombatEncounter, if any, on disconnect (#1899).`
 - `maybe_resolve_on_ready(encounter: 'CombatEncounter') -> 'RoundResolutionResult | None' — Resolve the round early when every ACTIVE participant is ready (#2120).`
+- `minimum_break_bar_threshold() -> 'int' — Pacing floor for a boss's break-bar threshold (#2642, batch-3 F-7a).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `remove_participant(participant: 'CombatParticipant') -> 'None' — Remove a participant: status write + combat engagement teardown (#872).`
 - `resolve_cast_position_params(participant: 'CombatParticipant', technique: 'Technique', position_params: 'dict[str, int]') -> 'dict[str, Position | None]' — Validate declared cast positions against the encounter's room + technique reach.`
