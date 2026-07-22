@@ -9,6 +9,7 @@ from world.npc_services.models import (
     NPCStanding,
     OfferCooldown,
     PermitOfferDetails,
+    RecordedProfile,
 )
 
 
@@ -69,4 +70,13 @@ class PermitOfferDetailsFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = PermitOfferDetails
+        fields: list[str] = []
+
+
+class RecordedProfileFilterSet(django_filters.FilterSet):
+    persona = django_filters.NumberFilter(field_name="persona_id")
+    status = django_filters.CharFilter()
+
+    class Meta:
+        model = RecordedProfile
         fields: list[str] = []

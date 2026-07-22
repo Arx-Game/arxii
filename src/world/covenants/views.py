@@ -59,6 +59,7 @@ from world.covenants.serializers import (
     CovenantSerializer,
     GearArchetypeCompatibilitySerializer,
     ReorderRanksRequestSerializer,
+    SphinxVerdictSerializer,
     TransferTopRequestSerializer,
 )
 from world.covenants.services import (
@@ -75,6 +76,7 @@ from world.covenants.services import (
     stand_down_battle_covenant,
     transfer_top,
 )
+from world.covenants.sphinx import judge_vow
 
 
 class CovenantsPagination(PageNumberPagination):
@@ -223,6 +225,24 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(self.get_serializer(target).data)
 
 
+def _caller_character_sheet(request: Request) -> CharacterSheet | None:
+    """The requesting account's active character sheet, or None (#2640).
+
+    Mirrors ``CovenantRankViewSet._get_actor``'s ``user_sheets`` construction
+    (the tenure-chain scoping every covenants view uses) resolved to a single
+    row — the Sphinx judges "the" active character, not every character the
+    account has ever played.
+    """
+    return (
+        CharacterSheet.objects.filter(
+            roster_entry__tenures__end_date__isnull=True,
+            roster_entry__tenures__player_data__account=request.user,
+        )
+        .distinct()
+        .first()
+    )
+
+
 class CovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only ViewSet for CovenantRole lookup data.
 
@@ -237,6 +257,27 @@ class CovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = CovenantRoleFilter
     queryset = CovenantRole.objects.all().order_by("covenant_type", "name")
+
+    @action(detail=False, methods=["GET"], url_path="sphinx", pagination_class=None)
+    def sphinx(self, request: Request) -> Response:
+        """GET /api/covenants/roles/sphinx/?role=<id-or-slug>
+
+        The Sphinx of Black Quartz's verdict (#2640) on the requesting
+        account's own active character taking up ``role``'s vow.
+        Self-character only, read-only — the Sphinx never gates, it informs.
+        """
+        # A FilterSet narrows a listable queryset; this action resolves ONE role by
+        # id/slug for a single verdict lookup, not a filtered list — not a FilterSet fit.
+        role_param = request.query_params.get("role")  # noqa: USE_FILTERSET
+        if not role_param:
+            return Response({"detail": "role is required."}, status=status.HTTP_400_BAD_REQUEST)
+        role_lookup = {"pk": int(role_param)} if role_param.isdigit() else {"slug": role_param}
+        role = get_object_or_404(CovenantRole, **role_lookup)
+        sheet = _caller_character_sheet(request)
+        if sheet is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+        verdict = judge_vow(sheet, role)
+        return Response(SphinxVerdictSerializer(verdict).data)
 
 
 class GearArchetypeCompatibilityViewSet(viewsets.ReadOnlyModelViewSet):

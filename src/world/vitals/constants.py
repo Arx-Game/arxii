@@ -4,6 +4,8 @@ Character life states, health thresholds, and wound descriptions that are
 shared across combat, poison, spells, exhaustion, and other systems.
 """
 
+from decimal import Decimal
+
 from django.db import models
 
 # ---------------------------------------------------------------------------
@@ -153,3 +155,23 @@ SLEEPING_CONDITION_NAME: str = "Sleeping"
 # Dream Peril consequence pool natural key
 POOL_DREAM_PERIL: str = "dream_peril"
 DREAM_ROOM_TAG_CATEGORY: str = "system"
+
+# ---------------------------------------------------------------------------
+# Wound conditions + double-bounded mend (#2644 — the attrition invariant;
+# see ADR-0156 and lore repo design/covenant-vows-consolidated.md §3.1)
+# ---------------------------------------------------------------------------
+
+# Names of the three mechanical wound ConditionTemplates authored by
+# ensure_wound_conditions(). Vocabulary, not content — see world/vitals/seeds.py.
+WOUND_LINGERING_ACHE_NAME: str = "Lingering Ache"
+WOUND_CRIPPLING_NAME: str = "Crippling Wound"
+WOUND_BLEEDING_NAME: str = "Bleeding Wound"
+
+# The fraction of a wound's causing damage (WoundDetails.damage_taken) that can
+# EVER be mended back across every healer who ever tends it — the remainder is
+# permanent attrition by design (heals are real but bounded; the party is
+# always net-weaker for having fought). Tunable; not wired to an admin config
+# field (mirrors PERMANENT_WOUND_THRESHOLD's plain-constant precedent above —
+# a game-balance dial, not a per-deploy setting). See mend_wound() in
+# world/vitals/services.py and ADR-0156.
+NEVER_TO_FULL_FRACTION: Decimal = Decimal("0.75")

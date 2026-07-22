@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("covenants", "0041_alter_vowsituationalperkrung_count_threshold_and_more"),
+        ("covenants", "0044_covenantrole_grants_insight_insighttableentry"),
     ]
 
     operations = [

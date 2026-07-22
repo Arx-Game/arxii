@@ -83,7 +83,7 @@ _Avoid_: reflect target, bounce destination, deflection target
 The maneuver by which a PC shelters a specific ally from a round-ticked environmental hazard (sunlight, poison gas) this round — the environmental-DoT sibling of Interpose (which blocks an incoming attack, not a lingering hazard). Always names a specific ally; there is no "any ally" path like Interpose has, since environmental shelter is "I'm sheltering THIS person," not "I'll block whichever hazard lands on someone." Resolves through the same graded capability-check spine as Interpose.
 _Avoid_: shelter (as the maneuver name), cover, shield, protect
 
-**Wind-up** (#2637, ADR-0156):
+**Wind-up** (#2637, ADR-0161):
 A telegraphed NPC attack: `ThreatPoolEntry.windup_rounds > 0` commits to a `PendingOpponentAttack`
 at declaration instead of a same-round `CombatOpponentAction`, telegraphs on both clients, then
 matures `windup_rounds` rounds later through the ordinary NPC-attack pipeline. Pre-armed, not a
@@ -92,7 +92,7 @@ NPC side. See `world/covenants/AGENT_GLOSSARY.md`'s Wind-up / Interception (wind
 (wind-up) entries for the interception rider and the auto-callout role flag.
 _Avoid_: charge-up, cast time (a caster's own resolution delay, not an authored multi-round threat).
 
-**Reaction Economy** (#2639, ADR-0156):
+**Reaction Economy** (#2639, ADR-0161):
 The two budgets gating the shared interpose fire seam (`_dispatch_interpose_action`):
 `CombatParticipant.reactions_used` vs `REACTIONS_PER_ROUND` (1, per-participant, reset each
 `begin_declaration_phase`) and `DamagePreApplyPayload.answers_consumed` vs
@@ -127,6 +127,26 @@ _Avoid_: stage, form, tier (tier is the opponent's power class)
 
 **OpponentTier**:
 The power class of an NPC opponent (`OpponentTier`: SWARM, MOOK, ELITE, BOSS, HERO_KILLER), seeding its baseline stat budget. SWARM uses count/body-toughness mechanics; HERO_KILLER is the unbeatable presence.
+
+**Lieutenant** (#2642):
+An NPC opponent whose `reinforces` self-FK points at a BOSS-tier opponent. While active
+(ACTIVE status, morale not BREAK, no behavior-altering condition, not pinned in an ACTIVE
+`EngagementLock`, acted this round), each lieutenant slows the boss's break-bar depletion —
+the **lieutenant gate** divides a round's depletion by `1 + active_unsuppressed_reinforcers`.
+A parked/idle lieutenant (didn't act this round) never gates. This is the "suppress the court"
+half of the boss-fight's emergent three-act shape (ADR-0160).
+_Avoid_: minion, add (that's the reinforcement-spawn mechanism, a different thing — a lieutenant
+is authored on the opponent row, not spawned by a phase transition), sub-boss
+
+**Break-bar contribution** (`BreakBarContribution`, #2642):
+A per-round audit row (mirrors `ClashContribution`'s shape) recording one feed that chipped a
+boss's break bar — `BreakContributionKind`: DAMAGE, COMBO, HOLD (a PC-side LOCK-clash win
+against the boss), DEBUFF (a new behavior-altering condition landed on the boss), SUPPRESSION
+(a reinforcing lieutenant newly suppressed). Depletion is diversity-weighted: 1 unit per
+distinct (actor, kind) pair this round, doubled for a (kind, effect_type) pair's first-ever
+occurrence in the encounter — replacing the retired flat per-actor chip (ADR-0160).
+_Avoid_: break-bar chip/tick (the old flat mechanism's name — don't reuse for the new per-row
+audit record)
 _Avoid_: rank, level, difficulty (for the NPC's class)
 
 **Party Profile**:

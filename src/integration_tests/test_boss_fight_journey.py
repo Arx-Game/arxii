@@ -8,20 +8,30 @@ finishing the boss off while still inside the reopened vulnerability window.
 
 Round-by-round numeric derivation (all authored, not tuned by trial and
 error — see ``BossFightScenarioFactory`` in ``world/combat/factories.py``
-for the underlying config):
+for the underlying config). Break-bar depletion uses the #2642
+diversity-weighted formula (``assess_break_bar``): 1 unit per distinct
+(actor, kind) pair this round, doubled to 2 for a (kind, effect_type) pair's
+first-ever occurrence in the encounter, plus a landed combo's flat
+``bonus_damage``, undivided here (no lieutenants — ``reinforces`` is unset —
+so the #2642 gate divisor is always 1):
 
-- Phase 1: ``soak_value=15``, ``break_bar_threshold=6``. Each PC's technique
-  deals ``base_damage=10`` (``EffectType.base_power=10``, no intensity/SL
-  scaling, ``DamageSuccessLevelMultiplier`` seeded at ``min_success_level=1``
-  -> ``1.00``). ``apply_damage_to_opponent``'s
+- Phase 1: ``soak_value=15``, ``break_bar_threshold=10`` (raised from the
+  pre-#2642 6 so round 1's now-larger novelty-loaded depletion doesn't
+  prematurely open the vulnerability window — see round 1 below). Each PC's
+  technique deals ``base_damage=10`` (``EffectType.base_power=10``, no
+  intensity/SL scaling, ``DamageSuccessLevelMultiplier`` seeded at
+  ``min_success_level=1`` -> ``1.00``). ``apply_damage_to_opponent``'s
   ``damage_through = max(0, raw - soak - resistance)`` -> ``10 - 15 = 0`` for
   a solo hit: fully soaked while the guard is unbroken.
 - Round 1: 3 PCs solo-attack (no combo) -> 0 damage through each -> boss
-  health unchanged (100). ``assess_break_bar``'s distinct-PC/distinct-effect
-  chip path still fires (3 distinct PCs, 3 distinct effect types all
-  "damaged" the boss per ``_outcome_damaged_boss``, which only checks that a
-  result references the boss, not that damage_through > 0) -> break bar
-  6 -> 5. Also two NPC attacks are resolved directly via
+  health unchanged (100). Each PC's outcome still "damaged" the boss per
+  ``_outcome_damaged_boss`` (which only checks that a result references the
+  boss, not that damage_through > 0), persisting 3 DAMAGE
+  ``BreakBarContribution`` rows — 3 distinct (actor, DAMAGE) pairs (3 base
+  units), each pair's effect_type the encounter's first occurrence (+3
+  novelty bonus) -> 6 raw depletion -> break bar 10 -> 4 (not asserted;
+  crucially still > 0, so the vulnerability window stays closed and round 2's
+  damage math is unaffected). Also two NPC attacks are resolved directly via
   ``_resolve_npc_action`` (proven pattern — see
   ``test_defense_sourcing.DefenseCheckSourcingTests``) against a fixed
   ``defense_check_fn`` (``success_level=0`` -> ``DEFENSE_FULL_MULTIPLIER``
@@ -33,10 +43,11 @@ for the underlying config):
 - Round 2: PC1+PC2 upgrade to the learned combo (``bonus_damage=10``,
   ``bypass_soak=True``); PC3 solo. Combo riders bypass soak entirely
   (``2 x 10 = 20`` damage through); each PC's own technique is still soaked
-  to 0. Health 100 -> 80. ``assess_break_bar``'s combo path adds
-  ``combo.bonus_damage`` (10) and the distinct-chip path adds 1 more (still
-  3 distinct PCs/effect types) -> ``bar_damage=11`` against
-  ``break_bar_current=5`` -> clamped to 0 -> ``vulnerability_rounds_remaining
+  to 0. Health 100 -> 80. All 3 PCs still register a DAMAGE row (as round 1);
+  the combo also persists its own COMBO row (1 more base unit), and (COMBO,
+  effect_type) is a first-ever pair this encounter (+1 novelty bonus) -> 4
+  base + 1 novelty + 10 ``bonus_damage`` = 15 raw depletion against
+  ``break_bar_current=4`` -> clamped to 0 -> ``vulnerability_rounds_remaining
   = vulnerability_rounds = 2``. No phase transition yet (80% > phase 2's 70%
   trigger), so this vulnerability write survives past round 2 untouched —
   the DoD's "vulnerability window opens" beat is asserted right here.
@@ -56,9 +67,15 @@ for the underlying config):
   vs phase 2's ``soak_value=20`` -> 0). Health 50 -> 30 (30%), crossing phase
   3's ``health_trigger_percentage=0.30`` -> transition 2 -> 3: enrage
   (``damage_multiplier=2.50``) is stamped, and the break bar resets again
-  (phase 3's own ``threshold=1``).
-- Round 5: no combo — the distinct-chip path alone (3 PCs, 3 effect types)
-  chips phase 3's tiny bar from 1 -> 0 -> ``vulnerability_rounds_remaining =
+  (phase 3's own ``threshold=1``). ``assess_break_bar`` also runs earlier in
+  this same round (phase 2's bar is unvulnerable entering round 4, since
+  round 3's phase transition reset ``vulnerability_rounds_remaining`` to 0)
+  and would break phase 2's 1-unit bar on its own — but that write is
+  immediately overwritten by the phase-3 transition's ``_stamp_break_bar``
+  call later the same round, so it's not separately observable.
+- Round 5: no combo — the DAMAGE feed alone (3 actors, none novel — all 3
+  effect_types were already established in round 1) chips phase 3's tiny bar
+  from 1 -> 0 (3 raw units, clamped) -> ``vulnerability_rounds_remaining =
   2`` (a *second* window, opened in the final phase — nothing will transition
   again to reset it, since phase 3 is the last authored phase). A second
   direct ``_resolve_npc_action`` call with the same flat entry now applies

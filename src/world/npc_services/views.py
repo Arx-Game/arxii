@@ -32,6 +32,7 @@ from world.npc_services.filters import (
     NPCStandingFilterSet,
     OfferCooldownFilterSet,
     PermitOfferDetailsFilterSet,
+    RecordedProfileFilterSet,
 )
 from world.npc_services.models import (
     MissionOfferDetails,
@@ -41,6 +42,7 @@ from world.npc_services.models import (
     OfferCooldown,
     OfferSummons,
     PermitOfferDetails,
+    RecordedProfile,
 )
 from world.npc_services.serializers import (
     InteractionResolveRequestSerializer,
@@ -54,10 +56,14 @@ from world.npc_services.serializers import (
     OfferSummonsCreateSerializer,
     OfferSummonsSerializer,
     PermitOfferDetailsSerializer,
+    RecordedProfileCompleteSerializer,
+    RecordedProfileSerializer,
     SummonsRespondSerializer,
 )
 from world.npc_services.services import (
     InteractionSession,
+    RecordedProfileError,
+    complete_recorded_profile,
     serialize_npc_session_state,
 )
 from world.scenes.models import Persona
@@ -450,3 +456,44 @@ class OfferSummonsViewSet(viewsets.ModelViewSet):
         if result.instance_pk is not None:
             data["instance_pk"] = result.instance_pk
         return Response(data)
+
+
+class RecordedProfileViewSet(viewsets.ReadOnlyModelViewSet):
+    """A player's Archive profile sittings (#2632).
+
+    Lists the caller's own personas' recorded profiles (COMMISSIONED sittings
+    + the permanent RECORDED archive). ``complete`` finalizes a COMMISSIONED
+    sitting with the write-up text — it becomes the character's current
+    description and archives forever. Public in-world Archive browsing is a
+    future surface; this endpoint is owner-scoped.
+    """
+
+    queryset = RecordedProfile.objects.select_related("persona", "era").order_by("-created_at")
+    serializer_class = RecordedProfileSerializer
+    filterset_class = RecordedProfileFilterSet
+    filter_backends = [DjangoFilterBackend]
+    pagination_class = NPCServicesPagination
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        return qs.filter(persona__character_sheet__character__db_account=user)
+
+    @extend_schema(
+        request=RecordedProfileCompleteSerializer,
+        responses={200: RecordedProfileSerializer},
+    )
+    @action(detail=True, methods=["post"])
+    def complete(self, request: Request, pk: str | None = None) -> Response:
+        """Finalize a commissioned sitting with the player-written profile text."""
+        profile = self.get_object()
+        input_serializer = RecordedProfileCompleteSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        try:
+            profile = complete_recorded_profile(profile, input_serializer.validated_data["text"])
+        except RecordedProfileError as exc:
+            raise ValidationError(exc.user_message) from exc
+        return Response(RecordedProfileSerializer(profile).data)

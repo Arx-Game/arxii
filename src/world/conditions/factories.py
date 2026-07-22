@@ -298,6 +298,7 @@ class ConditionInstanceFactory(DjangoModelFactory):
     stage_rounds_remaining = None
     source_character = None
     source_technique = None
+    source_vow = None
     source_description = ""
     is_suppressed = False
 
@@ -326,6 +327,10 @@ class TreatmentTemplateFactory(DjangoModelFactory):
     reduction_on_success = 3
     reduction_on_partial = 1
     reduction_on_failure = 0
+    mend_on_crit = 0
+    mend_on_success = 0
+    mend_on_partial = 0
+    once_per_wound_per_helper = False
 
 
 class _ReactiveConditionFactory:

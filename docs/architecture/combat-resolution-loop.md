@@ -539,6 +539,38 @@ for contribution in round_result.contributions:
 clash side (`progress_delta`, `anima_committed`, `was_audere`,
 `soulfray_severity_accrued`) — the panel reads those existing fields.
 
+#### Break-bar assessment ordering (#2642, ADR-0160)
+
+`resolve_round`'s post-pass order changed: `assess_break_bar` now runs
+**after** the clash post-pass (`_resolve_clashes`), not before, though still
+ahead of the round-tick / boss-phase-transition steps that follow it:
+
+```
+_resolve_actions
+_process_combo_outcomes
+_resolve_declared_challenges       # deferred challenge post-pass
+_resolve_clashes                   # clash opportunity detection + per-round drivers
+assess_break_bar                   # <-- moved here (was before _resolve_declared_challenges)
+tick_round_for_targets(timing="end")
+_check_boss_transitions
+```
+
+The reorder exists so the break bar's HOLD feed — a PC-side LOCK-flavor
+`Clash` win against the boss — can see this same round's resolution.
+`run_clash_round` (inside `_resolve_clashes`) is what stamps
+`Clash.resolved_round`/`resolution`; assessing break-bar depletion before
+that post-pass ran meant the HOLD feed could only ever see a *prior* round's
+LOCK win, never the current one.
+
+`assess_break_bar` persists one `BreakBarContribution` row per qualifying
+feed (`BreakContributionKind`: DAMAGE / COMBO / HOLD / DEBUFF / SUPPRESSION)
+instead of discarding ephemeral participant/effect_type sets — mirroring
+`ClashContribution`'s per-round audit shape. See `docs/systems/INDEX.md`'s
+"Boss-fight structure" bullet for the full feed/gate/pacing-floor design and
+ADR-0160 for the ratified rationale (diversity-weighted accrual replacing
+the flat per-actor chip, the proportional lieutenant gate, the
+Soulfray-derived pacing floor).
+
 #### `ActionOutcomeDetailsView._build_outcome_detail` — derive from existing data
 
 ```python
@@ -1302,7 +1334,7 @@ A clean INTERPOSE after DEFEND zeroes the remaining half.
 
 ## Implementation addendum — telegraphed wind-ups + reaction economy (#2637, #2639)
 
-**Status: BUILT** (ADR-0156 — extends the pre-armed-declaration shape ADR-0118
+**Status: BUILT** (ADR-0161 — extends the pre-armed-declaration shape ADR-0118
 established for guardian reactions to a symmetric NPC-side commitment)
 
 ### `resolve_round` ordering change

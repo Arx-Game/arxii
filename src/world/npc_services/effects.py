@@ -765,3 +765,111 @@ def run_settle_obligation_offer(offer: NPCServiceOffer, persona: Persona) -> Eff
 
 
 OFFER_EFFECT_HANDLERS[OfferKind.SETTLE_OBLIGATION.value] = run_settle_obligation_offer
+
+
+def run_styling_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    """STYLING effect handler (#2632): an NPC stylist restyles one trait.
+
+    Charges the PC's purse (sink — class-1 stylists front no treasury;
+    PLACEHOLDER economics), then applies the offer's (trait, option) through
+    the same ``change_appearance`` seam PC stylists and dyes use, with the
+    note crediting the stylist. Insufficient funds is a business-rule
+    refusal, not an exception — the offer stays available.
+    """
+    from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
+
+    from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
+    from world.forms.services import NonCosmeticTraitError, change_appearance  # noqa: PLC0415
+
+    details = offer.styling_offer_details
+    sheet = persona.character_sheet
+    stylist_label = offer.role.name
+
+    try:
+        transfer(
+            amount=details.price_coppers,
+            reason=f"Styling: {offer.label}",
+            from_purse=get_or_create_purse(sheet),
+        )
+    except DjangoValidationError:
+        return EffectResult(
+            kind=OfferKind.STYLING.value,
+            message=f"You can't afford it — {details.price_coppers} coppers.",
+            payload={"offer_pk": offer.pk},
+        )
+
+    try:
+        change_appearance(
+            sheet.character,
+            details.trait,
+            details.target_option,
+            persona=persona,
+            actor_persona=persona,
+            note=f"{stylist_label}: {offer.label}",
+        )
+    except NonCosmeticTraitError:
+        return EffectResult(
+            kind=OfferKind.STYLING.value,
+            message="That trait can't be restyled. (Authoring error.)",
+            payload={"offer_pk": offer.pk},
+        )
+
+    return EffectResult(
+        kind=OfferKind.STYLING.value,
+        object_label=offer.label,
+        message=(
+            f"{stylist_label} works their craft — "
+            f"{details.trait.display_name} is now {details.target_option.display_name}."
+        ),
+        payload={"trait_pk": details.trait_id, "option_pk": details.target_option_id},
+    )
+
+
+def run_profile_recording_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    """PROFILE_RECORDING effect handler (#2632): pay for an Archive sitting.
+
+    Charges the purse and mints a COMMISSIONED ``RecordedProfile``; the
+    player completes the write-up via
+    ``world.npc_services.services.complete_recorded_profile``, which sets
+    the character's description and archives the text forever.
+    """
+    from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
+
+    from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
+    from world.npc_services.models import RecordedProfile  # noqa: PLC0415
+
+    details = offer.profile_recording_offer_details
+    sheet = persona.character_sheet
+
+    try:
+        transfer(
+            amount=details.price_coppers,
+            reason=f"Profile recording: {offer.label}",
+            from_purse=get_or_create_purse(sheet),
+        )
+    except DjangoValidationError:
+        return EffectResult(
+            kind=OfferKind.PROFILE_RECORDING.value,
+            message=f"You can't afford it — {details.price_coppers} coppers.",
+            payload={"offer_pk": offer.pk},
+        )
+
+    profile = RecordedProfile.objects.create(
+        persona=persona,
+        recorded_by_label=offer.role.name,
+        price_paid=details.price_coppers,
+    )
+    return EffectResult(
+        kind=OfferKind.PROFILE_RECORDING.value,
+        object_pk=profile.pk,
+        object_label=f"Profile sitting with {offer.role.name}",
+        message=(
+            f"{offer.role.name} takes down your particulars. "
+            "The finished profile awaits your review."
+        ),
+        payload={"recorded_profile_pk": profile.pk},
+    )
+
+
+OFFER_EFFECT_HANDLERS[OfferKind.STYLING.value] = run_styling_offer
+OFFER_EFFECT_HANDLERS[OfferKind.PROFILE_RECORDING.value] = run_profile_recording_offer

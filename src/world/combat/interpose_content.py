@@ -19,7 +19,8 @@ Idempotently seeds the content the interpose feature needs:
 
 ``ensure_interpose_content`` mirrors
 ``world.areas.positioning.plummet_content.ensure_catch_content`` and is safe to call
-repeatedly: every write goes through ``get_or_create``. It
+repeatedly: every write goes through ``get_or_create``. It runs in production via
+the ``reactive_challenges`` cluster in ``world.seeds.clusters`` (#2636) and
 doubles as integration-test setup and staff seed data.
 """
 

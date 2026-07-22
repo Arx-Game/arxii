@@ -265,4 +265,30 @@ modulation). True when `x_sheet == y_sheet` (direct) or `x_sheet` holds an activ
 mutually-consented, net-negative `CharacterRelationship` toward `y_sheet`
 (indirect — "threatening"). (#1849.)
 
+**Bounded Percent Lane** (#2643, ADR-0158):
+A percent-buff/debuff mechanic whose SUMMED contribution is clamped to a flat cap
+before it multiplies damage — the EQ2 lane guard against percent sources
+compounding into an unbounded spike. Two live lanes: the `team_damage_percent`
+lane (Uplift, ally-side, `TEAM_BUFF_LANE_CAP_PERCENT`) and the
+`ConditionDamageInteraction.damage_modifier_percent` lane (Undermine, enemy-side,
+`ENEMY_LANE_CAP_PERCENT`). Any future percent lane reuses one of these two rather
+than adding a third.
+_Avoid_: "damage multiplier stack" (ambiguous with the unbounded legacy
+`power_multiplier` target, which this deliberately does NOT fold into).
+
+**Vow-Keyed Stacking** (#2643, ADR-0158):
+Diminishing returns applied WITHIN one vow's contributions to the bounded
+team-damage-percent lane (100/50/25/25%... descending), while distinct vows stack
+FULLY against each other — `world.magic.services.techniques
+.vow_keyed_diminished_total`, grouped by `conditions.ConditionInstance.source_vow`.
+Mechanically rewards multi-vow engagement over single-vow spam, echoing the
+four-layer vow-power model's own incentive (ADR-0149).
+
+**Execute** (#2643):
+A damage-profile authored ramp (`AbstractDamageProfile
+.execute_missing_health_multiplier`) that scales a landing hit's damage up as the
+TARGET's PRE-hit health runs low — `1 + multiplier * missing_health_fraction`,
+never computed off post-hit health (which would be self-referential). Strike-family
+techniques opt in; default 0 elsewhere.
+
 _Avoid_: invisible (use "intangible" when referring to the game-mechanical untargetable state)

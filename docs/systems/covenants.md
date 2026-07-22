@@ -13,7 +13,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 
 - **`CharacterCovenantRole`** — per-character membership row; `left_at IS NULL` =
   currently active. Fields include `covenant` FK, `covenant_role` FK, `engaged`
-  boolean, `rank` FK → `CovenantRank`.
+  boolean, `rank` FK → `CovenantRank`, `is_secondary` boolean (#2641 — see "Secondary
+  vows" below).
 - **`GearArchetypeCompatibility`** — existence-only join: which `CovenantRole`s are
   compatible with which `GearArchetype` values (read-only authored content).
   Lore-repo content as of #2533 (`NaturalKeyMixin` NK `["covenant_role",
@@ -166,12 +167,13 @@ modules import combat/checks contexts at function level, never the reverse):
 
 - **`constants.py`** — `Situation`/`PerkEffectKind`/`PerkBeneficiary`/`SituationOriginSide`
   `TextChoices`, plus the `SituationParamSpec`/`SITUATION_PARAM_SPECS` contract (#2623,
-  ADR-0154). `Situation` still ships 14 values as of slice 3 (#2536, ADR-0153): slice 1's 9 plus
+  ADR-0154). `Situation` ships 15 values as of #2646: slice 1's 9 plus
   `CHAMPION_DUEL` (Battle wiring, Task 3), `COMBAT_OPENED_FROM_PARLEY`/`AMBUSH_UNDERWAY`
   (origin-marker addition, Task 4), `ALLY_INTERCEPTED_FOR_ME` (declared-guard, Task 5), and
   `ATTACKER_AFFINITY` (defense-side seam, Task 6; originally Abyssal-only, renamed and
-  parameterized to all three `AffinityType` axes by #2623, ADR-0154) — see each value's own docstring entry for its
-  evaluator's data source, its Situation Parameters, and any v1 approximation.
+  parameterized to all three `AffinityType` axes by #2623, ADR-0154) from #2536 slice 3, plus
+  `ON_CHOSEN_GROUND` (#2646 — see "Chosen Ground" below) — see each value's own docstring entry
+  for its evaluator's data source, its Situation Parameters, and any v1 approximation.
   `SITUATION_PARAM_SPECS` (#2623) names, per situation, which of the four `SituationRequirementMixin`
   columns are ALLOWED and which are REQUIRED — `ATTACKER_AFFINITY` requires `affinity`;
   `ALLY_LOW_HEALTH`/`SURROUNDED`/`TARGET_FAVORABLY_DISPOSED` allow (but don't require) their
@@ -187,7 +189,7 @@ modules import combat/checks contexts at function level, never the reverse):
   for the full field contract and the missing-field-returns-False convention.
 - **`evaluators.py`** — `SITUATION_EVALUATORS` registry (`register(situation)` decorator,
   mirrors `magic.services.power_terms`'s `_PROVIDERS` registry pattern) + one evaluator per
-  `Situation` value (14 as of slice 3). Every evaluator is a pure read (one query or a
+  `Situation` value (15 as of #2646). Every evaluator is a pure read (one query or a
   cached-handler read, never a write, never a query per situation-per-perk).
 - **`services.py`** — `applicable_perks(subject, *, effect_kind, resolution, target, attacker=None)
   -> list[FiredPerk]`, the beneficiary evaluation point every delivery seam calls (see the
@@ -340,16 +342,76 @@ discipline" section for the no-double-announce proof.
   - `dissolved_at` DateTimeField (null = still active; set on dissolution)
   - Custom manager method: `.active()` → filters `dissolved_at__isnull=True`.
 
+### Secondary vows (#2641, ADR-0159)
+
+A character may hold a SECONDARY vow — `CharacterCovenantRole.is_secondary=True` —
+alongside their PRIMARY (`is_secondary=False`) vow, at most one engaged of each per
+(character_sheet, covenant type). Fills a group gap or enables a hybrid fantasy;
+never a replacement for a real specialist (the specialist-supremacy invariant).
+
+- **Exclusivity** — `_another_same_type_engaged_exists` and the
+  `set_engaged_membership` un-engage loop are both scoped by `is_secondary`, so
+  engaging a new PRIMARY never un-engages an already-engaged SECONDARY of the same
+  type, and vice versa. The covenant-scoped SUPREME/Champion guards are NOT scoped
+  by `is_secondary` — a secondary engaged Champion row still trips them.
+- **Engage-time validation** (`validate_secondary_engage_rules`, called from both
+  `CharacterCovenantRole.clean()` and `set_engaged_membership`) — a secondary
+  requires an engaged primary of the SAME covenant type
+  (`SecondaryVowRequiresEngagedPrimaryError` otherwise), must not share its ANCHOR
+  role with that primary (`SecondaryVowSameAnchorError` — "no same-vow secondary":
+  doubling down on one vow is allocation, not a second vow), and its COVENANT_ROLE
+  thread level is capped at the primary's (`SecondaryVowThreadExceedsPrimaryError`
+  — a missing thread on either side counts as level 0). `set_engaged_membership`
+  gains a keyword-only `as_secondary: bool = False` that stamps the flag before
+  validation.
+- **Layer split** — chassis layers (Layer 1 combat-identity blend, Layer 3
+  defense/gear/stat scaling) read ONLY `currently_engaged_primary_roles()`; a
+  secondary membership never contributes to them (zero chassis leak). Layer 2
+  (technique specialty) and Layer 4 (situational perks) read
+  `currently_engaged_roles_with_flags()` / the perk candidate gatherers'
+  `is_secondary`-tagged `FiredPerk`s, and scale a secondary-sourced contribution by
+  `SecondaryVowConfig.potency_tenths / 10` (via the shared
+  `sum_potency_scaled_magnitudes` / the Layer 2 partition-and-scale helpers) —
+  situational, never raw. `covenant_level_bonus` (mechanics app) is a conservative
+  extra flip: not one of the four layers proper, but chassis-shaped, so it stays
+  primary-only too.
+- **Depth stays primary-only** — a secondary membership resolves at its ANCHOR
+  role only (`currently_engaged_roles_with_flags`, `currently_engaged_roles`, and
+  the Layer 4 candidate gatherers `_self_candidates`/`_ally_candidates`/
+  `_ally_sub_role_candidates`) — no sub-role graduation, no deep rungs, no
+  signature, no unique name. Outcome guarantees from a secondary-sourced
+  `TIER_FLOOR` firing bind one tier weaker (`floor_success_level - 1`);
+  `BOTCH_IMMUNITY` is deliberately left unweakened (no numeric field to soften).
+- **`SecondaryVowConfig`** (pk=1 singleton, `potency_tenths` default 6 = ×0.6, the
+  ratified batch-2 F-2 seed) — lazy-created via `secondary_vow_config()`
+  (`world.covenants.services`, `cached_singleton()` + `get_or_create` fallback —
+  unlike `MentorBondConfig`'s fail-loud seeded pattern, this dial ships with a
+  sane default so no pre-launch seeding step is required). Staff-tunable in admin.
+- **Typed exceptions** (`world.covenants.exceptions`) —
+  `SecondaryVowRequiresEngagedPrimaryError`, `SecondaryVowSameAnchorError`,
+  `SecondaryVowThreadExceedsPrimaryError`.
+
 ## Handlers
 
 - `character.covenant_roles` (`CharacterCovenantRoleHandler`):
   - `has_ever_held(role)` — True if the character has ever held this role (active or ended).
   - `currently_held_role_in(covenant)` — active role in the specified covenant, or None.
   - `currently_engaged_roles()` — list of **resolved (effective) roles** for every
-    active+engaged membership. Calls `resolve_effective_role` per row: if the character's
-    COVENANT_ROLE thread qualifies for a resonance sub-role, the sub-role is returned instead
-    of the parent. Consumers that must key on the stored anchor identity should use
-    `anchor_role_in()` instead.
+    active+engaged membership (PRIMARY and SECONDARY). Calls `resolve_effective_role` per
+    PRIMARY row: if the character's COVENANT_ROLE thread qualifies for a resonance sub-role,
+    the sub-role is returned instead of the parent. A SECONDARY row resolves at its stored
+    ANCHOR role only (#2641 — no sub-role graduation). Non-layer callers (eligibility gates,
+    precedence fallbacks) use this; chassis (Layer 1/3) callers use
+    `currently_engaged_primary_roles()` instead, and Layer 2/4 callers use
+    `currently_engaged_roles_with_flags()`. Consumers that must key on the stored anchor
+    identity should use `anchor_role_in()` instead.
+  - `currently_engaged_primary_roles()` (#2641) — resolved roles for engaged PRIMARY
+    (`is_secondary=False`) memberships only; sub-role graduation is unrestricted (primary
+    depth has no cap). Read by every chassis (Layer 1/3) consumer.
+  - `currently_engaged_roles_with_flags()` (#2641) — `(role, is_secondary)` pairs for every
+    active+engaged membership. PRIMARY rows resolve like `currently_engaged_primary_roles()`;
+    SECONDARY rows resolve at the anchor only. Read by Layer 2's
+    `covenant_role_specialty_power_term`.
   - `anchor_role_in(covenant)` — returns the **stored parent (anchor) role** for the active
     membership in `covenant`, ignoring sub-role resolution. Use this when the consumer must
     key on the thread's `target_covenant_role_id` or the raw membership row.
@@ -440,6 +502,42 @@ discipline" section for the no-double-announce proof.
   participant is mentor vs. sidekick based on band position, and calls
   `establish_mentor_bond`.
 
+### The Sphinx of Black Quartz — vow-suitability oracle (#2640, ADR-0157)
+
+`src/world/covenants/sphinx.py` — a read-only report re-running the same kit∩demand join
+`covenant_role_specialty_power_term` uses, but as a verdict instead of a resolution-time
+bonus. No writes anywhere; never gates anything (soft-gate ruling — a player may swear a
+vow the Sphinx warned about).
+
+- **`judge_vow(sheet, role) -> SphinxVerdict`** — one character × one role.
+  - Demand = `role`'s (+ `role.parent_role`'s, when judging a sub-role) `CovenantRoleTechniqueSpecialty`
+    functions, UNION the creator-functions demanded by `situation`s attached to `role`'s
+    (+ parent's) **SELF**-beneficiary `VowSituationalPerk` rows (base `situations` + rung
+    `extra_situation`s) that appear in `SITUATION_CREATOR_FUNCTIONS`.
+  - Supply = the sheet's known-technique function tags (`CharacterTechnique` →
+    `Technique.cached_function_tags`, one prefetch, no N+1).
+  - **`SphinxTier`** (`world.covenants.constants`) — `TAKES` (every demand covered, or the
+    role is unauthored and makes no demands — an unauthored vow cannot reject), `DORMANT`
+    (≥1 covered, ≥1 not — "the vow would lie dormant in places"), `NOT_YET` (0 covered —
+    paired with a shopping list).
+  - `SphinxVerdict.shopping_list` — up to 3 learnable `Technique` rows per uncovered
+    function (`can_learn_technique` passes, or the technique is in the sheet's active
+    tradition's `TraditionGiftGrant.signature_techniques` pool), excluding techniques
+    already known.
+- **`SITUATION_CREATOR_FUNCTIONS: dict[str, frozenset[str]]`** (`world.covenants.perks.constants`)
+  — code-defined: which `TechniqueFunction` casts can CREATE each DB-state `Situation` (the
+  `TARGET_DISTRACTED`/`TARGET_SWAYED_BY_ALLY` provenance mapping run in reverse). v1 rows:
+  `TARGET_SWAYED_BY_ALLY`/`TARGET_DISTRACTED` → `{CHARM, DISTRACTION}`,
+  `TARGET_FAVORABLY_DISPOSED` → `{CHARM}`. A situation absent here demands nothing (positional/
+  encounter states). Extending it is a deliberate one-line change.
+- **`audit_vow_coverage() -> list[SphinxCoverageRow]`** — the staff instrument (build-order
+  FIRST per the spec): every active anchor `CovenantRole` (`parent_role IS NULL`) × every
+  active `Tradition`, comparing the role's specialty-function demand set (situation demands
+  excluded — they read live per-character DB state, not a catalog's technique pool) against
+  the union of function tags over the tradition's `TraditionGiftGrant.signature_techniques`.
+  `coverage` is `"full"`/`"partial"`/`"none"`. Rendered at `_sphinx/` (`admin_sphinx_audit`,
+  staff-only, linked from the Game Setup hub) via `templates/admin/sphinx_audit.html`.
+
 ## Telnet Surface
 
 ### CmdCovenant (`covenant`, #1346)
@@ -483,6 +581,14 @@ adapter-dispatched token parsing (`src/commands/ritual_adapters.py`):
 2. Members: `ritual join <id>` — simply accept (no role kwargs needed).
 3. Initiator: `ritual fire <id>` — calls `rise_battle_covenant_via_session`, which flips the
    covenant risen and auto-engages all accepted participants.
+
+### CmdSphinx (`sphinx`, #2640)
+
+`src/commands/sphinx.py` — `sphinx <vow name>` renders the same three-tier verdict as the
+REST endpoint (both call `judge_vow` directly; no parallel logic). v1: invocable anywhere
+(Academy-room anchoring is presentation/content, not mechanics). Output prose: "The vow
+will take." / "The vow would lie dormant in places: ..." / "The vow will not take — yet.
+Seek: ...".
 
 ### Selectors (`world.covenants.selectors`)
 
@@ -716,11 +822,12 @@ shrinks; an elevated sidekick's bonus grows.
 
 `gear_additive_fraction(character)` (`world.covenants.services`) returns the MAX
 `gear_additive_tenths` fraction (as `Decimal`, e.g. `Decimal("0.3")`) across the
-character's engaged roles' resolved `CovenantRoleDefenseProfile` rows. Per engaged
-role, the profile resolves to the role's own row when present, else its anchor's;
-no engaged role has a profile at all → `Decimal(1)` (legacy fully-additive
-behavior, byte-identical to pre-#2533). One batched query over the role + parent
-pks — no per-role query loop.
+character's engaged PRIMARY roles' resolved `CovenantRoleDefenseProfile` rows
+(#2641 — a secondary vow's defense profile never substitutes for gear). Per
+engaged role, the profile resolves to the role's own row when present, else its
+anchor's; no engaged role has a profile at all → `Decimal(1)` (legacy
+fully-additive behavior, byte-identical to pre-#2533). One batched query over the
+role + parent pks — no per-role query loop.
 
 `apply_equipped_armor_soak` (`world.combat.services`, #1174) applies the fraction
 to the COMPATIBLE armor bucket only, once, right after the role-compatibility
@@ -734,6 +841,48 @@ physical and counts once; a character holding multiple engaged vows gets the mos
 gear-friendly one's fraction, not a stack of fractions. Durability still wears on
 every compatible piece whose (now-scaled) soak contributes to the result,
 unchanged from #1174.
+
+### The Insight rider (#2645)
+
+The Know need's (scout/loremaster vows) once-per-fight ace. `InsightTableEntry`
+(NK `["name"]`, `covenants.insighttableentry` in `CONTENT_MODELS` — lore-repo
+content, never seeded in arxii) is a curated table of large, narrowly-scoped,
+ONE-ROUND effects: `prose` (announced reading, `{caster}`/`{target}`
+placeholders), `condition` FK → `conditions.ConditionTemplate` (PROTECT —
+author a one-round `default_duration_value` on the condition itself),
+`target_kind` (`InsightTargetKind`: SELF/ALLY/TEAM), `weight`
+(weighted-random draw), `is_active`. **Never instant-win** — enforced
+editorially by curation of the `condition` rows, not an engine check.
+
+`CovenantRole.grants_insight` (BooleanField) is the rider flag — an engaged
+role grants it, and a sub-role without its own grant rides an engaged
+parent's (mirrors every other role-scoped flag in this table).
+`CombatParticipant.insight_used` (`world.combat.models`) is the once-per-
+encounter stamp — a per-encounter row needs no reset machinery.
+
+`world.covenants.insight.maybe_produce_insight(caster_sheet, technique,
+resolution_participant) -> bool` is the rider service, hooked into
+`world.combat.services._resolve_pc_action` right after a focused technique
+cast resolves (`_maybe_produce_insight_for_cast`, best-effort/failure-
+isolated like the sibling `_maybe_suggest_entrance_dramatic_moment`). Fires
+when: the resolved technique carries the PERCEPTION `magic.TechniqueFunctionTag`;
+the caster has an active engaged `CharacterCovenantRole` whose role (or that
+role's parent) has `grants_insight=True`; and the participant hasn't used
+their Insight this encounter. On success: draws a weighted-random active
+entry, resolves targets by `target_kind` (ALLY → the cast's declared
+`CombatRoundAction.focused_ally_target`, falling back to the caster; TEAM →
+every ACTIVE `CombatParticipant` in the encounter; SELF → the caster),
+applies the entry's condition via `conditions.services.apply_condition`
+(`source_character=caster`), announces the entry's prose on BOTH channels
+(`combat.interaction_services.broadcast_action_outcome` for the WS payload +
+a direct `encounter.room.msg_contents` call for telnet parity — mirrors
+`world.combat.escalation`'s room-wide surge narration), and stamps
+`insight_used=True`.
+
+Distinct in weight from the light "Look out!" callout (#2637): the callout
+is frequent/small/names-no-counter; the Insight is rare/large/specific. Not
+a `VowSituationalPerk` — the Insight is a single random draw gated by a
+boolean role flag, not the deterministic Layer 4 perk machinery above.
 
 ### Encounter scaling (#1165)
 
@@ -777,6 +926,9 @@ Graduation: when the adjusted party's real primary level re-enters the band,
 - `POST /api/covenants/ranks/reorder/` — bulk tier reorder
 - `POST /api/covenants/ranks/{pk}/assign-member/` — assign member to rank
 - `POST /api/covenants/ranks/{pk}/transfer-top/` — move top rank to member
+- `GET /api/covenants/roles/sphinx/?role=<id-or-slug>` (#2640) — the Sphinx of Black
+  Quartz's verdict (`SphinxVerdictSerializer`) for the requesting account's own active
+  character against `role`. Self-character only; read-only; never gates.
 
 ## Follow-ups
 
@@ -823,7 +975,19 @@ Graduation: when the adjusted party's real primary level re-enters the band,
   parameterized situations read (stamped `True` at CREATE by every PC-cast encounter path;
   `False` is admin/GM-stampable in v1, honestly `NULL`-heavy until an NPC-initiated-encounter
   service exists). All 14 pre-#2623 situation rows behave byte-identically (parameterless =
-  the parameterless default of each parameterized family).
+  the parameterless default of each parameterized family). **#2646** followed up with a 15th
+  situation, `ON_CHOSEN_GROUND` — "the fight was won yesterday": a new `room_features
+  .PreparedGround` model (OneToOne `prepared_by` — one active prepared ground per character;
+  re-preparing elsewhere MOVES it, never stacks a second row) recorded by `world.covenants
+  .perks.services.record_ground_preparation_from_cast`, a RIDER (no new player verb) on an
+  out-of-combat standalone cast of a PERCEPTION-tagged technique, gated on a new
+  `CovenantRole.prepares_ground` data-authored flag on an active engaged role and on the caster
+  NOT currently being an active `CombatParticipant` anywhere. `world.combat.chosen_ground
+  .compute_on_chosen_ground` stamps the new `CombatEncounter.on_chosen_ground` at CREATE time
+  (mirroring `is_champion_duel`'s shape exactly) in the three PC-vs-NPC encounter-creation seams
+  — `seed_or_feed_encounter_from_cast`, `create_lethal_duel`, `open_place_encounter` —
+  whenever the encounter's room holds a `PreparedGround` whose preparer is physically present;
+  `create_pvp_duel` deliberately never stamps it (PvP is never lethal).
 
 ## Integrates With
 

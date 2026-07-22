@@ -113,6 +113,24 @@ CG finalization and Django admin — no in-play caller re-implements the create/
   CG-time distinctions remain point-costed (`Distinction.calculate_total_cost`); that
   budget economy does not extend past character creation.
 
+## Table routing on top of the request framework (#2631, on the #2628 engine)
+
+`gm.TableUpdateRequest` (kind `DISTINCTION_CHANGE`, payload on
+`gm.DistinctionChangeRequestDetails`) is the table-routed, web-first face of the #2628
+`SheetUpdateRequest` framework above:
+
+- A player at a GM table submits a concrete add/rank-up/remove with a `Reason:`
+  (`world.gm.services.submit_distinction_change_request`).
+- **Review pool (#2631 ruling):** staff, or any GM whose table the requesting persona
+  actively sits at (`gm_may_review_for_persona`) — shopping among GMs who know you is
+  allowed; a GM the player has never sat with never sees their sheet. The same rule
+  gates the #2628 `review_sheet_update` action.
+- Approval (`signoff_table_update_request`) creates AND approves a `SheetUpdateRequest`
+  through `create_sheet_update_request` + `approve_sheet_update_request` — XP auto-debits
+  atomically on the sign-based model, the change fires, and the table request goes
+  straight to COMPLETED. Insufficient XP fails loud and leaves it PENDING. There is no
+  separate player accept step.
+
 ### Exclusion checks
 
 `_check_exclusions` (private to `services.py`) is a service-layer port of
