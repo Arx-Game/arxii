@@ -5637,6 +5637,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/covenants/roles/sphinx/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/covenants/roles/sphinx/?role=<id-or-slug>
+     *
+     *     The Sphinx of Black Quartz's verdict (#2640) on the requesting
+     *     account's own active character taking up ``role``'s vow.
+     *     Self-character only, read-only — the Sphinx never gates, it informs.
+     */
+    get: operations['covenants_roles_sphinx_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/crossover-invites/': {
     parameters: {
       query?: never;
@@ -45000,6 +45023,25 @@ export interface operations {
         /** @description A unique integer value identifying this covenant role. */
         id: number;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRole'];
+        };
+      };
+    };
+  };
+  covenants_roles_sphinx_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;

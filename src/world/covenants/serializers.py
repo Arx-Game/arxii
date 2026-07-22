@@ -389,6 +389,39 @@ class CovenantRolePassivePowerSerializer(serializers.Serializer):
     engaged = serializers.BooleanField(read_only=True)
 
 
+class SphinxDemandSerializer(serializers.Serializer):
+    """Read-only shape for one ``SphinxDemand`` row (#2640).
+
+    ``function`` doubles as the demand's display label — see
+    ``world.covenants.sphinx.SphinxDemand`` for the specialty-vs-situation
+    distinction.
+    """
+
+    function = serializers.CharField(read_only=True)
+    source = serializers.CharField(read_only=True)
+    covered = serializers.BooleanField(read_only=True)
+    qualifying_technique_names = serializers.ListField(
+        child=serializers.CharField(), read_only=True
+    )
+
+
+class SphinxShoppingItemSerializer(serializers.Serializer):
+    """Read-only shape for one ``SphinxShoppingItem`` row (#2640)."""
+
+    technique_name = serializers.CharField(read_only=True)
+    gift_name = serializers.CharField(read_only=True)
+    function = serializers.CharField(read_only=True)
+
+
+class SphinxVerdictSerializer(serializers.Serializer):
+    """Read-only shape for the Sphinx of Black Quartz's full verdict (#2640)."""
+
+    tier = serializers.CharField(read_only=True)
+    role_name = serializers.CharField(read_only=True)
+    demands = SphinxDemandSerializer(many=True, read_only=True)
+    shopping_list = SphinxShoppingItemSerializer(many=True, read_only=True)
+
+
 class GearArchetypeCompatibilitySerializer(serializers.ModelSerializer):
     """Read-only serializer for GearArchetypeCompatibility join rows."""
 
