@@ -936,6 +936,11 @@ _APPEARANCE_TRAITS: tuple[tuple[str, str, str, bool, tuple[tuple[str, str], ...]
             ("auburn", "Auburn"),
             ("white", "White"),
             ("gray", "Gray"),
+            # #2632 umbrella value: honest one-word form for multi-colored hair
+            # (streaks, ornate dye work) — the descriptor carries the specifics;
+            # under descriptor concealment a viewer still sees the true,
+            # memorable fact ("multihued") without the detail.
+            ("multihued", "Multihued"),
         ),
     ),
     (
@@ -966,6 +971,9 @@ _APPEARANCE_TRAITS: tuple[tuple[str, str, str, bool, tuple[tuple[str, str], ...]
             ("green", "Green"),
             ("gray", "Gray"),
             ("hazel", "Hazel"),
+            # #2632 umbrella value: heterochromia — the descriptor names the
+            # pair ("one blue, one amber"); the one-word form stays honest.
+            ("mismatched", "Mismatched"),
         ),
     ),
     (
