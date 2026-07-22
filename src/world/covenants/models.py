@@ -24,6 +24,7 @@ from world.covenants.constants import (
     MENTOR_BOND_ADJACENCY_OFFSET,
     MENTOR_BOND_BAND_WIDTH,
     MENTOR_BOND_MAX_SIDEKICKS,
+    SECONDARY_VOW_POTENCY_TENTHS_DEFAULT,
     BattleBinding,
     CommandTier,
     CovenantType,
@@ -650,15 +651,31 @@ class CharacterCovenantRole(SharedMemoryModel):
 
     The ``engaged`` flag marks runtime context — the covenant whose role
     bonuses are currently active and which is eligible for COVENANT_ROLE
-    Thread pulls. At most one engaged active row per (character_sheet,
-    covenant.covenant_type) is enforced by clean() and the service layer
-    (a partial-index WHERE on a joined column is not expressible in Postgres).
+    Thread pulls. At most one engaged PRIMARY (``is_secondary=False``) and
+    one engaged SECONDARY (``is_secondary=True``) active row per
+    (character_sheet, covenant.covenant_type) is enforced by clean() and the
+    service layer (a partial-index WHERE on a joined column is not
+    expressible in Postgres).
 
     Covenant-scoped exclusivity (BATTLE only): at most one engaged active row
     per covenant may hold a SUPREME-tier ``covenant_role.command_tier``, and
     at most one may hold ``covenant_role.is_champion_role=True``. Also
     enforced by clean() and the service layer (set_engaged_membership) for
-    the same reason.
+    the same reason. These guards are NOT scoped by ``is_secondary`` — an
+    engaged secondary Supreme/Champion row still trips them (#2641).
+
+    Secondary vows (#2641): ``is_secondary=True`` marks an engaged membership
+    as a SECONDARY vow rather than the character's primary. A secondary vow
+    requires an engaged primary of the same covenant type, must not share its
+    anchor role with that primary, and its COVENANT_ROLE thread level is
+    capped at the primary's — see ``services.validate_secondary_engage_rules``.
+    Chassis layers (Layer 1 combat-identity blend, Layer 3 defense/gear/stat
+    scaling) never read secondary memberships — only Layer 2 (technique
+    specialty) and Layer 4 (situational perks) do, scaled down by
+    ``SecondaryVowConfig.potency_tenths``. This ``is_secondary`` sense is
+    distinct from the anchor-vs-sub-role "primary role" sense used elsewhere
+    (``CovenantRole.parent_role`` — see the covenants glossary's "Secondary
+    Vow" entry).
     """
 
     character_sheet = models.ForeignKey(
@@ -684,6 +701,17 @@ class CharacterCovenantRole(SharedMemoryModel):
             "covenant.covenant_type) — service-enforced + clean()-enforced. "
             "Drives role bonuses (modifier pipeline) and COVENANT_ROLE Thread pull "
             "eligibility. See spec 2026-05-09 §3.6."
+        ),
+    )
+    is_secondary = models.BooleanField(
+        default=False,
+        help_text=(
+            "Marks an engaged SECONDARY vow membership (#2641). Chassis layers "
+            "(combat-identity blend, defense/gear/stat scaling) never read "
+            "secondary memberships — only technique specialty and situational "
+            "perks do, scaled by SecondaryVowConfig.potency_tenths. Distinct "
+            "from the anchor-vs-sub-role 'primary role' sense (see the covenants "
+            "glossary's 'Secondary Vow' entry)."
         ),
     )
     rank = models.ForeignKey(
@@ -713,19 +741,22 @@ class CharacterCovenantRole(SharedMemoryModel):
             raise ValidationError({"engaged": "Engaged row cannot have left_at set."})
         if self.engaged:
             self._validate_engaged_exclusivity()
+            if self.is_secondary:
+                self._validate_secondary_engage_rules()
 
     def _validate_engaged_exclusivity(self) -> None:
         """At most one engaged active role per covenant type + per special role.
 
         Guards against a second engaged active membership of the same covenant
-        type, a second engaged Supreme Commander, and a second engaged Champion.
+        type AND ``is_secondary`` value, a second engaged Supreme Commander, and
+        a second engaged Champion.
         """
         if self._another_same_type_engaged_exists():
             raise ValidationError(
                 {
                     "engaged": (
                         "Another engaged active membership of the same covenant type "
-                        "exists for this character."
+                        "(and primary/secondary standing) exists for this character."
                     ),
                 }
             )
@@ -747,17 +778,35 @@ class CharacterCovenantRole(SharedMemoryModel):
                 )
 
     def _another_same_type_engaged_exists(self) -> bool:
-        """True if another active engaged membership of the same covenant type exists."""
+        """True if another active engaged membership of the same covenant type AND
+        the same ``is_secondary`` value exists (#2641 — scoping by flag lets one
+        engaged PRIMARY and one engaged SECONDARY coexist per covenant type)."""
         return (
             CharacterCovenantRole.objects.filter(
                 character_sheet=self.character_sheet,
                 covenant__covenant_type=self.covenant.covenant_type,
                 engaged=True,
+                is_secondary=self.is_secondary,
                 left_at__isnull=True,
             )
             .exclude(pk=self.pk)
             .exists()
         )
+
+    def _validate_secondary_engage_rules(self) -> None:
+        """Secondary-vow engage-time validation (#2641).
+
+        Requires an engaged primary of the same covenant type, forbids the
+        secondary sharing its anchor role with that primary, and caps the
+        secondary's COVENANT_ROLE thread level at the primary's. Delegates to
+        the shared services helper so clean() and set_engaged_membership
+        enforce identically — one rule, one place. Function-local import:
+        services.py imports this module at module scope, so an import here
+        must be deferred to avoid a circular import.
+        """
+        from world.covenants.services import validate_secondary_engage_rules  # noqa: PLC0415
+
+        validate_secondary_engage_rules(self)
 
     def _another_engaged_supreme_exists(self) -> bool:
         """True if another engaged Supreme Commander exists for this covenant."""
@@ -1376,6 +1425,57 @@ class MentorBondConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"MentorBondConfig(pk={self.pk})"
+
+
+# =============================================================================
+# SecondaryVowConfig — singleton config for the secondary-vow potency dial (#2641)
+# =============================================================================
+
+
+class SecondaryVowConfig(SharedMemoryModel):
+    """Singleton (pk=1): global potency dial for secondary covenant vows (#2641).
+
+    A character's SECONDARY vow (``CharacterCovenantRole.is_secondary=True``)
+    grants Layer 2 (technique specialty) and Layer 4 (situational perks)
+    scaled by ``potency_tenths / 10`` — never raw, and never Layer 1/3 (the
+    chassis: combat-identity blend, defense/gear/stat scaling), which stay
+    strictly primary-only. Lazy-created (get_or_create) via
+    ``services.secondary_vow_config()`` — unlike ``MentorBondConfig``'s
+    fail-loud seeded pattern, this dial ships with a sane authored default so
+    no pre-launch seeding step is required for secondary vows to function.
+    Updated via Django admin.
+
+    ``potency_tenths`` default 6 (= 0.6, 60%) is the ratified batch-2 F-2
+    seed value (design/covenant-vows-consolidated.md §4, rounds 13-14) — a
+    secondary holder is always meaningfully weaker than a primary specialist
+    in that specialist's shining moment (the specialist-supremacy invariant).
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    potency_tenths = models.PositiveIntegerField(
+        default=SECONDARY_VOW_POTENCY_TENTHS_DEFAULT,
+        help_text=(
+            "Secondary-vow potency in integer-tenths (6 = ×0.6, the ratified "
+            "batch-2 F-2 seed). Scales Layer 2/4 contributions sourced from an "
+            "engaged SECONDARY membership; Layer 1/3 never read secondary "
+            "memberships at all, dial or no dial. (#2641)"
+        ),
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="secondary_vow_config_updates",
+    )
+
+    class Meta:
+        ordering = ["pk"]
+
+    def __str__(self) -> str:
+        return f"SecondaryVowConfig(pk={self.pk}, potency_tenths={self.potency_tenths})"
 
 
 # =============================================================================

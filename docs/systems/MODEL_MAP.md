@@ -2964,6 +2964,10 @@
 **Foreign Keys:**
   - updated_by -> accounts.AccountDB [FK] (nullable)
 
+### SecondaryVowConfig
+**Foreign Keys:**
+  - updated_by -> accounts.AccountDB [FK] (nullable)
+
 ### CourtGrantConfig
 **Foreign Keys:**
   - summons_refusal_escalation_pool -> actions.ConsequencePool [FK] (nullable)
@@ -3022,7 +3026,7 @@
 - `establish_mentor_bond_via_session(*, session: 'RitualSession') -> 'MentorBond' — Dispatched on Mentor's Vow BILATERAL fire. Wraps establish_mentor_bond.`
 - `evaluate_scene_engagement(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — Auto-engage a Durance covenant if co-presence prerequisites met, then`
 - `fold_arrival_into_active_rites(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — When an engaged member arrives in a room with an active CovenantRiteInstance,`
-- `gear_additive_fraction(character: 'object') -> 'Decimal' — MAX gear-additive fraction across engaged roles' defense profiles (#2533).`
+- `gear_additive_fraction(character: 'object') -> 'Decimal' — MAX gear-additive fraction across engaged PRIMARY roles' defense profiles (#2533).`
 - `get_court_grant_config() -> 'CourtGrantConfig' — Get-or-create the Court grant negotiation config singleton (pk=1).`
 - `get_mentor_bond_config() -> 'MentorBondConfig' — Return the seeded MentorBondConfig singleton (#1165).`
 - `induct_member_via_session(*, session: 'RitualSession') -> 'CharacterCovenantRole' — Dispatched on INDUCTION fire. Unpacks the session into add_member args.`
@@ -3038,11 +3042,13 @@
 - `resolve_effective_role(*, character: 'Character', role: 'CovenantRole') -> 'CovenantRole' — Return the resonance-specialized sub-role for ``role`` (one-line shim over`
 - `revalidate_engagements(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — Re-check co-presence for all engaged covenant roles; dim vows that no longer hold.`
 - `rise_battle_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on a 'call the banners' rise ritual fire.`
-- `set_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Engage this membership; un-engage other same-type rows for the same character.`
+- `secondary_vow_config() -> 'SecondaryVowConfig' — Lazy-create and return the SecondaryVowConfig singleton (pk=1, #2641).`
+- `set_engaged_membership(*, membership: 'CharacterCovenantRole', as_secondary: 'bool' = False) -> 'None' — Engage this membership; un-engage other same-type-and-standing rows (#2641).`
 - `set_rank_capabilities(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', can_invite: 'bool | None' = None, can_kick: 'bool | None' = None, can_manage_ranks: 'bool | None' = None, can_lead_rituals: 'bool | None' = None) -> 'CovenantRank' — Update capability flags on a rank. Requires can_manage_ranks.`
 - `stand_down_battle_covenant(*, covenant: 'Covenant') -> 'None' — Stand a STANDING battle covenant down to dormant; clear engagement.`
 - `swear_court_pact(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet', granted_pull_cap: 'int') -> 'CourtPact' — Create an active CourtPact binding servant_sheet to covenant.`
 - `transfer_top(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', new_top_membership: 'CharacterCovenantRole') -> 'None' — Transfer the top rank (tier=1) from the actor to ``new_top_membership``.`
+- `validate_secondary_engage_rules(membership: 'CharacterCovenantRole') -> 'None' — Secondary-vow engage-time validation (#2641).`
 
 
 ## world.currency
@@ -5745,8 +5751,8 @@
 - `begin_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'CharacterEngagement' — Ensure the character has an engagement; create one if none exists.`
 - `chart_has_success_outcomes(rank_difference: int) -> bool — Check if the ResultChart for this rank difference has any success outcomes.`
 - `coherence_cache_scope() — Context manager that memoizes ``motif_coherence_bonus`` per (sheet, resonance).`
-- `covenant_level_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the authored covenant-level passive bonus across engaged memberships (#762).`
-- `covenant_role_base_total(sheet: 'object', target: 'ModifierTarget') -> 'int' — Raw engaged-covenant-role bonus for ``target`` — no per-gear marginal blend (#1174).`
+- `covenant_level_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the authored covenant-level passive bonus across engaged PRIMARY`
+- `covenant_role_base_total(sheet: 'object', target: 'ModifierTarget') -> 'int' — Raw engaged-PRIMARY-covenant-role bonus for ``target`` — no per-gear marginal`
 - `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' — Sum covenant-role contributions across equipped items, gated on engagement.`
 - `create_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'list[CharacterModifier]' — Create ModifierSource + CharacterModifier records for all effects of a distinction.`
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' — Delete all modifier records for a distinction.`
@@ -5775,7 +5781,7 @@
 - `stage_property(target: 'ObjectDB', property_: 'Property', value: 'int' = 1) -> 'ObjectProperty' — GM improv: attach or refresh a Property on ``target`` (#2503).`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
 - `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' — Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`
-- `vow_stat_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven stat scaling across engaged roles (#2022).`
+- `vow_stat_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven stat scaling across engaged PRIMARY roles (#2022).`
 - `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' — Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`
 
 
@@ -8792,7 +8798,7 @@
 - `can_act(character_sheet: 'CharacterSheet | None') -> 'bool' — Coarse 'can engage at all' gate: not dead AND has awareness.`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None) -> world.checks.types.ModifierBreakdown — Aggregate all modifier contributions for a check into a ModifierBreakdown.`
 - `conscious_bystander_present(room: 'ObjectDB | None', *, subject_id: 'int', exclude_ids: 'frozenset[int]' = frozenset()) -> 'bool' — True if anyone but ``subject_id`` present in ``room`` is conscious (can_act).`
-- `covenant_role_health(character: 'object', level: 'int') -> 'int' — Level-scaled covenant-role 'armor': sum of level * bonus_per_level over engaged roles'`
+- `covenant_role_health(character: 'object', level: 'int') -> 'int' — Level-scaled covenant-role 'armor': sum of level * bonus_per_level over engaged`
 - `derive_base_max_health(character_sheet: 'CharacterSheet') -> 'int' — Derive base_max_health = class stage-rate sum + stamina term + covenant-role armor.`
 - `derive_character_status(character_sheet: 'CharacterSheet | None') -> 'str' — Derive a coarse, read-only life-status string for the wire/API.`
 - `get_dream_room() -> 'ObjectDB | None' — Return the liminal dream room (seeded by the survivability cluster).`

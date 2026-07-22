@@ -67,6 +67,10 @@ MENTOR_BOND_BAND_WIDTH = 2
 MENTOR_BOND_ADJACENCY_OFFSET = 1
 MENTOR_BOND_MAX_SIDEKICKS: int | None = None
 
+# Secondary covenant vow potency dial (#2641) — ratified batch-2 F-2 seed:
+# a secondary vow's Layer 2/4 contributions scale by potency_tenths / 10.
+SECONDARY_VOW_POTENCY_TENTHS_DEFAULT = 6
+
 
 class DefenseStyle(models.TextChoices):
     """How a covenant vow defends (#2533, Layer 3).

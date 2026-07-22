@@ -187,6 +187,7 @@ treat those names as hints to confirm, not gospel.
 - [0156 — Wound HP mends are double-bounded — once per healer per wound, and never to full](0156-double-bounded-wound-mend-the-attrition-invariant.md) (#2644; related ADR-0010, ADR-0007, ADR-0013)
 - [0157 — The Sphinx of Black Quartz: a three-tier, code-defined, soft-gate vow-suitability oracle](0157-sphinx-of-black-quartz-vow-suitability-oracle.md) (#2640; related ADR-0149, ADR-0151, ADR-0153)
 - [0158 — The percentage-bounding model is the only buff-multiplier lane, forever; vow-keyed stacking weights; execute prices off pre-hit health](0158-bounded-percent-lane-vow-keyed-stacking-pre-hit-execute.md) (#2643; related ADR-0149, ADR-0151, ADR-0152, ADR-0153, ADR-0154, ADR-0007, ADR-0010)
+- [0159 — Secondary vows scale Layers 2/4 by a potency dial; Layers 1/3 stay strictly primary-only](0159-secondary-vow-layer-split-and-potency-dial.md) (#2641; related ADR-0149, ADR-0151, ADR-0152, ADR-0153)
 - [0160 — Boss fights get their three-act shape from diversity-weighted break accrual, a proportional lieutenant gate, and a Soulfray-derived pacing floor](0160-boss-fight-structure-diversity-weighted-accrual.md) (#2642; related ADR-0007)
 
 ### Gift & resonance economy

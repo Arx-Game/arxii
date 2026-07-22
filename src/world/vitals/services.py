@@ -1452,12 +1452,14 @@ def recompute_max_health(
 
 
 def covenant_role_health(character: object, level: int) -> int:  # noqa: OBJECTDB_PARAM
-    """Level-scaled covenant-role 'armor': sum of level * bonus_per_level over engaged roles'
-    MAX_HEALTH CovenantRoleBonus rows.
+    """Level-scaled covenant-role 'armor': sum of level * bonus_per_level over engaged
+    PRIMARY roles' MAX_HEALTH CovenantRoleBonus rows.
 
-    For each covenant role the character is currently ENGAGED in (engaged=True, left_at IS NULL),
-    sums ``level * CovenantRoleBonus.bonus_per_level`` where the bonus targets the MAX_HEALTH
-    ModifierTarget. One DB query for the bonuses; no query-in-loop.
+    For each covenant role the character is currently engaged in as a PRIMARY vow
+    (engaged=True, is_secondary=False, left_at IS NULL), sums
+    ``level * CovenantRoleBonus.bonus_per_level`` where the bonus targets the MAX_HEALTH
+    ModifierTarget. One DB query for the bonuses; no query-in-loop. PRIMARY-only (#2641,
+    Layer 3 — chassis): a secondary vow never contributes covenant-role health armor.
 
     Args:
         character: The Character typeclass instance (has .covenant_roles handler).
@@ -1469,7 +1471,7 @@ def covenant_role_health(character: object, level: int) -> int:  # noqa: OBJECTD
     from world.covenants.models import CovenantRoleBonus  # noqa: PLC0415
     from world.vitals.constants import MAX_HEALTH_MODIFIER_TARGET  # noqa: PLC0415
 
-    engaged = character.covenant_roles.currently_engaged_roles()
+    engaged = character.covenant_roles.currently_engaged_primary_roles()
     role_ids = [role.pk for role in engaged]
     if not role_ids:
         return 0
