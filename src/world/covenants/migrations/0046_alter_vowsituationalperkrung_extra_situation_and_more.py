@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("covenants", "0045_covenantrole_calls_out_windups_and_more"),
     ]
