@@ -1589,7 +1589,7 @@
   - active_alternate_self <- forms.ActiveAlternateSelf
   - distinctions <- distinctions.CharacterDistinction
   - distinction_other_entries <- distinctions.CharacterDistinctionOther
-  - distinction_change_authorizations <- distinctions.DistinctionChangeAuthorization
+  - sheet_update_requests <- distinctions.SheetUpdateRequest
   - org_obligations <- societies.OrganizationObligation
   - purse <- currency.CharacterPurse
   - employments <- currency.CharacterEmployment
@@ -1825,6 +1825,7 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
   - allowed_styles <- magic.TechniqueStyle
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - gift_unlocks <- magic.GiftUnlock
@@ -1958,6 +1959,7 @@
   - prerequisites -> codex.CodexEntry [M2M]
 **Pointed to by:**
   - species <- species.Species
+  - codex_knowledge_requirements <- progression.CodexKnowledgeRequirement
   - resonances <- magic.Resonance
   - gifts <- magic.Gift
   - techniques <- magic.Technique
@@ -3206,7 +3208,7 @@
   - character_grants <- distinctions.CharacterDistinction
   - other_entries <- distinctions.CharacterDistinctionOther
   - mapped_from_other <- distinctions.CharacterDistinctionOther
-  - add_authorizations <- distinctions.DistinctionChangeAuthorization
+  - add_sheet_update_requests <- distinctions.SheetUpdateRequest
   - purse_drain <- currency.DistinctionPurseDrain
   - codex_grants <- codex.DistinctionCodexGrant
   - asset_grants <- assets.DistinctionAssetGrant
@@ -3234,7 +3236,7 @@
   - from_glimpse -> magic.CharacterAura [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
-  - remove_authorizations <- distinctions.DistinctionChangeAuthorization
+  - remove_sheet_update_requests <- distinctions.SheetUpdateRequest
   - modifier_sources <- mechanics.ModifierSource
   - table_update_request_details <- gm.DistinctionChangeRequestDetails
 
@@ -3244,23 +3246,27 @@
   - parent_distinction -> distinctions.Distinction [FK]
   - staff_mapped_distinction -> distinctions.Distinction [FK] (nullable)
 
-### DistinctionChangeAuthorization
+### SheetUpdateRequest
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - target_distinction -> distinctions.Distinction [FK] (nullable)
   - target_character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
-  - authorized_by -> accounts.AccountDB [FK] (nullable)
+  - reviewed_by -> accounts.AccountDB [FK] (nullable)
+  - submitted_by -> accounts.AccountDB [FK] (nullable)
 **Pointed to by:**
   - table_update_request_details <- gm.DistinctionChangeRequestDetails
 
 ### Service Functions
+- `approve_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' — Approve a PENDING SheetUpdateRequest: XP debit + change firing.`
+- `cancel_sheet_update_request(request: 'SheetUpdateRequest', account: 'object') -> 'None' — Player-initiated cancellation of their own pending request.`
 - `clear_distinction_secret(character_distinction: 'CharacterDistinction') -> 'None' — Make a relocated distinction public again by deleting its Secret (#1334).`
-- `compute_distinction_change_xp_cost(distinction: 'Distinction', rank: 'int', action: 'str', *, current_rank: 'int' = 0) -> 'int' — Compute the XP cost for a distinction change — benefit direction only (#2631).`
-- `create_distinction_change_authorization(character_sheet: 'CharacterSheet', *, action: 'str', authorized_by: 'AccountDB | None', reason: 'str', distinction: 'Distinction | None' = None, character_distinction: 'CharacterDistinction | None' = None, rank: 'int' = 1, xp_cost: 'int | None' = None) -> 'DistinctionChangeAuthorization' — Create a change authorization and notify the player (#2631).`
+- `compute_distinction_change_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' — Compute the XP cost for a sheet-update request.`
+- `compute_sheet_update_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' — Compute the XP cost for a sheet-update request.`
+- `create_sheet_update_request(character_sheet: 'CharacterSheet', request_type: 'str', *, justification: 'str', target_distinction: 'Distinction | None' = None, target_character_distinction: 'CharacterDistinction | None' = None, submitted_by: 'object | None' = None, origin: 'str' = DistinctionOrigin.UNLOCK_PURCHASE) -> 'SheetUpdateRequest' — Create a PENDING SheetUpdateRequest.`
+- `deny_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' — Deny a PENDING SheetUpdateRequest. No XP debit, no change.`
 - `grant_distinction(character: 'CharacterSheet', distinction: 'Distinction', *, origin: 'str', rank: 'int | None' = None, source_description: 'str' = '') -> 'CharacterDistinction' — Grant a Distinction, or rank one up, through the single acquisition seam (#2037).`
 - `mint_distinction_secret(character_distinction: 'CharacterDistinction', *, level: 'int | None' = None, provenance: 'str' = SecretProvenance.GM_AUTHORED, author_persona: 'Persona | None' = None, content: 'str' = '') -> 'Secret' — Relocate a distinction into a Secret, returning it (#1334).`
-- `remove_distinction(character_distinction: 'CharacterDistinction', *, authorization: 'DistinctionChangeAuthorization') -> 'None' — Remove a CharacterDistinction, reconciling all dependent systems.`
-- `spend_xp_on_distinction_unlock(character_sheet: 'CharacterSheet', authorization: 'DistinctionChangeAuthorization') -> 'None' — Spend XP to complete a distinction change (add or remove).`
+- `remove_distinction(character_distinction: 'CharacterDistinction', *, sheet_update_request: 'SheetUpdateRequest') -> 'None' — Remove a CharacterDistinction, reconciling all dependent systems.`
 
 
 ## world.dreams
@@ -3719,7 +3725,7 @@
   - request -> gm.TableUpdateRequest [OneToOne]
   - distinction -> distinctions.Distinction [FK] (nullable)
   - character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
-  - authorization -> distinctions.DistinctionChangeAuthorization [FK] (nullable)
+  - sheet_update_request -> distinctions.SheetUpdateRequest [FK] (nullable)
 
 ### Service Functions
 - `approve_application_as_gm(gm: 'GMProfile', application: 'RosterApplication') -> 'None' — Approve a roster application on behalf of the overseeing GM.`
@@ -3732,17 +3738,17 @@
 - `get_notification_target_for_gm(gm_profile: 'GMProfile') -> 'CharacterSheet | None' — Resolve the CharacterSheet to use as the notification recipient for a GM.`
 - `gm_application_queue(gm: 'GMProfile') -> 'QuerySet[RosterApplication]' — Pending applications for characters at tables this GM owns.`
 - `gm_evidence_summary(profile: 'GMProfile') -> 'GMEvidenceSummary' — Aggregate a GM's track record for staff reviewing a level change.`
+- `gm_may_review_for_persona(gm_profile: 'GMProfile', persona: 'Persona') -> 'bool' — The review-pool rule (#2631 ruling): staff, or a GM with table access.`
 - `idle_tables(threshold_days: 'int' = 14) -> 'QuerySet[GMTable]' — ACTIVE tables whose GM's ``last_active_at`` is older than the threshold (#2004).`
 - `join_table(table: 'GMTable', persona: 'Persona') -> 'GMTableMembership' — Add a persona to a table. Idempotent — returns existing active`
 - `leave_table(membership: 'GMTableMembership') -> 'None' — Soft-leave a membership. No-op if already left.`
-- `mark_requests_completed_for_authorization(authorization: 'object') -> 'int' — Flip APPROVED requests linked to a consumed authorization to COMPLETED.`
 - `promote_gm(profile: 'GMProfile', new_level: 'str', *, changed_by: 'AccountDB', reason: 'str') -> 'GMLevelChange' — Set profile.level (promotion OR demotion), writing the audit row.`
 - `revoke_invite(invite: 'GMRosterInvite') -> 'None' — Revoke an invite by setting expires_at to now.`
 - `set_looking_for_table(player_data: 'PlayerData', looking: 'bool') -> 'None' — Set or clear the looking-for-table flag on a player's profile (#2431).`
 - `signoff_table_update_request(request: 'TableUpdateRequest', gm_profile: 'GMProfile', *, approve: 'bool', notes: 'str' = '') -> 'TableUpdateRequest' — Approve or reject a PENDING request — the GM's yes/no judgment call (#2631).`
 - `soft_leave_memberships_for_retired_persona(persona: 'Persona') -> 'int' — Future integration hook: called when a persona is retired.`
 - `submit_catalog_suggestion(account: 'AccountDB', *, proposal_kind: 'str', proposal_text: 'str', situation_kind: 'SituationKind | None' = None) -> 'CatalogSuggestion' — Create a ``CatalogSuggestion`` row, routed to the staff inbox (#2127).`
-- `submit_distinction_change_request(membership: 'GMTableMembership', *, action: 'str', reasoning: 'str', distinction: 'Distinction | None' = None, character_distinction: 'CharacterDistinction | None' = None, rank: 'int' = 1) -> 'TableUpdateRequest' — Submit a distinction add/rank-up/remove for the table GM's sign-off (#2631).`
+- `submit_distinction_change_request(membership: 'GMTableMembership', *, action: 'str', reasoning: 'str', distinction: 'Distinction | None' = None, character_distinction: 'CharacterDistinction | None' = None) -> 'TableUpdateRequest' — Submit a distinction add/rank-up/remove for table-GM sign-off (#2631).`
 - `submit_profile_text_request(membership: 'GMTableMembership', *, field: 'str', proposed_text: 'str', reasoning: 'str') -> 'TableUpdateRequest' — Submit a profile prose rewrite for the table GM's sign-off (#2631).`
 - `surrender_character_story(gm: 'GMProfile', story: 'Story') -> 'None' — GM surrenders oversight of a story.`
 - `touch_gm_activity(gm_profile: 'GMProfile') -> 'None' — Stamp ``GMProfile.last_active_at`` to now (#2004).`
@@ -4820,6 +4826,7 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
 
 ### DramaticMomentType
 **Foreign Keys:**
@@ -6407,6 +6414,7 @@
   - tierrequirement_requirements <- progression.TierRequirement
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
+  - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
 
 ### TraitRatingUnlock
 **Foreign Keys:**
@@ -6486,6 +6494,13 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+
+### CodexKnowledgeRequirement
+**Foreign Keys:**
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - path -> classes.Path [FK] (nullable)
+  - codex_entry -> codex.CodexEntry [FK]
 
 ### CharacterUnlock
 **Foreign Keys:**

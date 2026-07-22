@@ -92,6 +92,7 @@ All requirements inherit from `AbstractClassLevelRequirement` which provides `de
 | `ItemRequirement` | Possesses a physical touchstone/trophy item (#1859) | `item_template` XOR `min_touchstone_tier` (FK `magic.ResonanceTier`), `quantity`, `min_quality_tier` — possession-only, not consumed |
 | `LegendRequirement` | Minimum total legend value | `minimum_legend` |
 | `MajorGiftTechniqueRequirement` | Knows >= N techniques of the character's MAJOR gift (#2440 ruling 4) — a COUNT gate, not completeness; minor-gift techniques never count. Seeded onto the level-2 `ClassLevelUnlock` via `world.progression.seeds.seed_major_gift_technique_level_requirement` | `minimum_techniques` (default 3) |
+| `CodexKnowledgeRequirement` | Gates Path selection (and class-level unlocks / thread crossings) behind codex knowledge. A character must have learned the specified `CodexEntry` (at `KNOWN` status in `CharacterCodexKnowledge`) before they can select that Path at a crossing. Fail-open: a Path with no `CodexKnowledgeRequirement` authored → gate passes. Composes with the existing `check_requirements_for_path` → `cross_into_path` gate — zero new gate wiring. Any discovery route that lands a KNOWN codex entry (CG grants, teaching offers, clue resolution, research projects) satisfies the gate (#2603) | `codex_entry` (FK `codex.CodexEntry`) |
 
 ### Class-Level Advancement Receipts (#1352)
 
@@ -268,8 +269,8 @@ result = get_available_unlocks_for_character(character)
 
 `AbstractUnlockRequirement` supports a third polymorphic target FK — `path` —
 alongside `class_level_unlock` and `thread_crossing_threshold` (ADR-0090 pattern).
-`TraitRequirement` rows authored against a `Path` gate both hybrid path entry
-and cross-path technique learning.
+`TraitRequirement` and `CodexKnowledgeRequirement` rows authored against a `Path`
+gate both hybrid path entry and cross-path technique learning.
 
 ```python
 from world.progression.services.spends import check_requirements_for_path

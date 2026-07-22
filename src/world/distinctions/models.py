@@ -12,6 +12,7 @@ defining characteristics (merits/flaws equivalent):
   exclusive distinction pairs (not a separate model)
 - CharacterDistinction: A character's taken distinctions
 - CharacterDistinctionOther: Freeform "Other" entries pending staff mapping
+- SheetUpdateRequest: Player-initiated requests to add/remove distinctions
 """
 
 from django.db import models
@@ -20,9 +21,10 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.distinctions.types import (
-    DistinctionChangeAction,
     DistinctionOrigin,
     OtherStatus,
+    SheetUpdateRequestStatus,
+    SheetUpdateRequestType,
 )
 from world.secrets.constants import SecretLevel
 
@@ -599,29 +601,27 @@ class CharacterDistinctionOther(SharedMemoryModel):
         return f"'{self.freeform_text}' for {self.parent_distinction.name}"
 
 
-class DistinctionChangeAuthorization(models.Model):  # noqa: SHARED_MEMORY
-    """A GM-authorized permission for a character to add or remove a distinction.
+class SheetUpdateRequest(models.Model):  # noqa: SHARED_MEMORY
+    """A player-submitted request to alter a character sheet (#2628).
 
-    Created by a GM (or automated beat) based on narrative justification.
-    The player then spends XP via ``spend_xp_on_distinction_unlock`` to
-    complete the change. One authorization = one change. ``is_consumed``
-    prevents double-use.
+    For DISTINCTION_ADD: ``target_distinction`` is set, ``target_character_distinction`` is null.
+    For DISTINCTION_REMOVE: ``target_character_distinction`` is set (SET_NULL after
+    the CharacterDistinction row is deleted — the request row survives as a receipt).
 
-    For ADD: ``target_distinction`` is set, ``target_character_distinction`` is null.
-    For REMOVE: ``target_character_distinction`` is set (until consumed, then
-    SET_NULL when the CharacterDistinction row is deleted).
+    The ``status`` field tracks the lifecycle: PENDING → APPROVED or DENIED.
+    The ``origin`` field stores first-acquisition provenance for ``grant_distinction``.
     """
 
     character_sheet = models.ForeignKey(
         "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
-        related_name="distinction_change_authorizations",
-        help_text="The character who may use this authorization.",
+        related_name="sheet_update_requests",
+        help_text="The character requesting the change.",
     )
-    action = models.CharField(
-        max_length=10,
-        choices=DistinctionChangeAction.choices,
-        help_text="Whether this authorizes adding or removing a distinction.",
+    request_type = models.CharField(
+        max_length=20,
+        choices=SheetUpdateRequestType.choices,
+        help_text="What kind of sheet update this request represents.",
     )
     rank = models.PositiveSmallIntegerField(
         default=1,
@@ -633,61 +633,79 @@ class DistinctionChangeAuthorization(models.Model):  # noqa: SHARED_MEMORY
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name="add_authorizations",
-        help_text="The distinction to add (set for ADD action only).",
+        related_name="add_sheet_update_requests",
+        help_text="The distinction to add (set for DISTINCTION_ADD only).",
     )
     target_character_distinction = models.ForeignKey(
         "distinctions.CharacterDistinction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="remove_authorizations",
-        help_text="The CharacterDistinction to remove (set for REMOVE action only). "
-        "Null after the distinction is deleted — the auth row survives as a receipt.",
+        related_name="remove_sheet_update_requests",
+        help_text="The CharacterDistinction to remove (set for DISTINCTION_REMOVE only). "
+        "Null after the distinction is deleted — the request row survives as a receipt.",
     )
-    authorized_by = models.ForeignKey(
+    justification = models.TextField(
+        help_text="Player's narrative justification for this change.",
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=SheetUpdateRequestStatus.choices,
+        default=SheetUpdateRequestStatus.PENDING,
+        help_text="Lifecycle state of this request.",
+    )
+    reviewed_by = models.ForeignKey(
         "accounts.AccountDB",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="authorized_distinction_changes",
-        help_text="The GM or staff member who authorized this change.",
+        related_name="reviewed_sheet_update_requests",
+        help_text="The GM who approved or denied this request.",
     )
-    reason = models.TextField(
-        help_text="Narrative justification for this change (staff-only field).",
+    submitted_by = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="submitted_sheet_update_requests",
+        help_text="The account that submitted this request. "
+        "The player's own account for player-initiated; the GM's account for GM-direct.",
     )
     xp_cost = models.PositiveIntegerField(
-        help_text="XP cost the player must spend to complete this change.",
+        help_text="XP cost computed at submission time. 0 for free transactions.",
     )
-    is_consumed = models.BooleanField(
-        default=False,
-        help_text="True once the player has spent XP and the change has fired.",
+    origin = models.CharField(
+        max_length=30,
+        choices=DistinctionOrigin.choices,
+        default=DistinctionOrigin.UNLOCK_PURCHASE,
+        help_text="First-acquisition provenance passed to grant_distinction at approval.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    consumed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        verbose_name = "Distinction Change Authorization"
-        verbose_name_plural = "Distinction Change Authorizations"
+        verbose_name = "Sheet Update Request"
+        verbose_name_plural = "Sheet Update Requests"
 
     def __str__(self) -> str:
-        return f"{self.action.capitalize()} auth for {self.character_sheet} ({self.xp_cost} XP)"
+        type_label = self.get_request_type_display()
+        return f"{type_label} for {self.character_sheet} ({self.xp_cost} XP)"
 
     def clean(self) -> None:
-        """Validate exactly one target is set based on action."""
+        """Validate exactly one target is set based on request_type."""
         from django.core.exceptions import ValidationError  # noqa: PLC0415
 
-        if self.action == DistinctionChangeAction.ADD:
+        if self.request_type == SheetUpdateRequestType.DISTINCTION_ADD:
             if not self.target_distinction_id:
-                msg = "ADD action requires target_distinction."
+                msg = "DISTINCTION_ADD requires target_distinction."
                 raise ValidationError(msg)
             if self.target_character_distinction_id:
-                msg = "ADD action must not set target_character_distinction."
+                msg = "DISTINCTION_ADD must not set target_character_distinction."
                 raise ValidationError(msg)
-        elif self.action == DistinctionChangeAction.REMOVE:
+        elif self.request_type == SheetUpdateRequestType.DISTINCTION_REMOVE:
             if not self.target_character_distinction_id:
-                msg = "REMOVE action requires target_character_distinction."
+                msg = "DISTINCTION_REMOVE requires target_character_distinction."
                 raise ValidationError(msg)
             if self.target_distinction_id:
-                msg = "REMOVE action must not set target_distinction."
+                msg = "DISTINCTION_REMOVE must not set target_distinction."
                 raise ValidationError(msg)

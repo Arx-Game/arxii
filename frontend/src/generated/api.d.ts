@@ -23164,22 +23164,19 @@ export interface components {
       /** @description Order in which to display this category (lower = first). */
       readonly display_order: number;
     };
-    /** @description Read payload for DISTINCTION_CHANGE requests (#2631). */
+    /** @description Read payload for DISTINCTION_CHANGE requests (#2631, on the #2628 engine). */
     DistinctionChangeRequestDetails: {
-      /** @description A distinctions.DistinctionChangeAction value (add/remove). */
+      /** @description A distinctions.SheetUpdateRequestType value (distinction_add/distinction_remove). */
       readonly action: string;
-      /** @description The distinction to add/rank up (ADD only). */
+      /** @description The distinction to add/rank up (DISTINCTION_ADD only). */
       readonly distinction: number | null;
       readonly distinction_name: string | null;
-      /** @description The held distinction to remove (REMOVE only; nulls after deletion). */
+      /** @description The held distinction to remove (DISTINCTION_REMOVE only; nulls after deletion). */
       readonly character_distinction: number | null;
       readonly held_distinction_name: string | null;
-      /** @description Target rank for ADD (absolute). Ignored for REMOVE. */
-      readonly rank: number;
-      /** @description The authorization created at approval. */
-      readonly authorization: number | null;
-      readonly authorization_xp_cost: number | null;
-      readonly authorization_consumed: boolean | null;
+      /** @description The #2628 request created-and-approved at table sign-off. */
+      readonly sheet_update_request: number | null;
+      readonly xp_cost: number | null;
     };
     /** @description Full serializer for Distinction detail views. */
     DistinctionDetail: {
@@ -36375,8 +36372,6 @@ export interface components {
       action?: string;
       distinction?: number | null;
       character_distinction?: number | null;
-      /** @default 1 */
-      rank: number;
     };
     /** @description Signoff input: the GM's yes/no + notes (#2631). */
     TableUpdateRequestSignoffRequest: {

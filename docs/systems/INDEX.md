@@ -1445,6 +1445,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
     rows (tier >= `minimum_tier`, optionally narrowed to `required_track_kind`) against
     `minimum_count` (#2116)
   - `ItemRequirement` — possession-only check of a physical touchstone/trophy item, template or touchstone mode (#1859)
+  - `CodexKnowledgeRequirement` — checks `CharacterCodexKnowledge` at `KNOWN` status for a specific `CodexEntry`; gates Path selection behind codex knowledge (#2603)
 - **Key Functions:**
   - `check_requirements_for_unlock(character, unlock) -> tuple[bool, list[str]]`
   - `get_available_unlocks_for_character(character) -> AvailableUnlocks`
@@ -1665,12 +1666,14 @@ GM at a given level may author (#2000, ADR-0097).
   `player_reasoning`, `status`, `gm_notes`, `resolved_by`, timestamps) with 1:1 payload
   models `ProfileTextRequestDetails` (`field`, `proposed_text`, `applied_version` →
   `character_sheets.ProfileTextVersion`) and `DistinctionChangeRequestDetails`
-  (`action`, `distinction`/`character_distinction`, `rank`, `authorization` →
-  `distinctions.DistinctionChangeAuthorization`). Services:
+  (`action`, `distinction`/`character_distinction`, `sheet_update_request` →
+  `distinctions.SheetUpdateRequest`). Services:
   `submit_profile_text_request`/`submit_distinction_change_request`,
-  `signoff_table_update_request` (prose applies immediately → COMPLETED; distinction
-  creates the authorization → APPROVED), `withdraw_table_update_request`,
-  `mark_requests_completed_for_authorization` (called from the accept action).
+  `signoff_table_update_request` (prose applies immediately; distinction
+  creates-and-approves a #2628 `SheetUpdateRequest` — XP auto-debits — both →
+  COMPLETED), `withdraw_table_update_request`, `gm_may_review_for_persona` (the
+  #2631 review-pool rule: staff or any GM whose table the persona actively sits at;
+  also gates the #2628 `review_sheet_update` action).
   API: `TableUpdateRequestViewSet` (`/api/gm/table-update-requests/`, actions
   `signoff`/`withdraw`, FilterSet `status`/`kind`/`role`)
 - **Types (`types.py`):** `GMEvidenceSummary` (dataclass: `profile_id`, `level`,

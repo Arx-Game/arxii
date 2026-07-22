@@ -6,7 +6,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import {
-  acceptDistinctionChange,
   createUpdateRequest,
   fetchProfileTextVersions,
   listUpdateRequests,
@@ -68,23 +67,6 @@ export function useWithdrawMutation() {
     onSuccess: () => {
       toast.success('Request withdrawn.');
       void queryClient.invalidateQueries({ queryKey: sheetUpdateRequestKeys.all });
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-}
-
-export function useAcceptDistinctionChangeMutation(characterId: number) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (authorizationId: number) => acceptDistinctionChange(characterId, authorizationId),
-    onSuccess: (result) => {
-      if (result.success === false) {
-        toast.error(result.message ?? 'The change could not be accepted.');
-        return;
-      }
-      toast.success(result.message ?? 'Change accepted.');
-      void queryClient.invalidateQueries({ queryKey: sheetUpdateRequestKeys.all });
-      void queryClient.invalidateQueries({ queryKey: ['character-sheets', characterId] });
     },
     onError: (error: Error) => toast.error(error.message),
   });

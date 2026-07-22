@@ -1,8 +1,8 @@
-"""Tests for GMAwardDistinctionAction (#2037) — the JUNIOR-tier GM distinction award.
+"""Tests for GMAwardDistinctionAction (#2037, #2628) — the JUNIOR-tier GM distinction award.
 
-Mirrors ``GrantItemActionTests`` (``test_items_actions.py``): real
-``CharacterFactory`` actors with GM trust attached via roster tenure +
-``GMProfileFactory``, ``actor.search`` patched to return the target.
+#2628 update: the action now goes through the SheetUpdateRequest framework
+and charges XP on the sign-based model. Tests give the target an XP tracker
+and mock the advancement gate.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from world.distinctions.types import DistinctionOrigin
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
 from world.narrative.models import NarrativeMessage
+from world.progression.models.rewards import ExperiencePointsData
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 
@@ -42,9 +43,21 @@ class GMAwardDistinctionActionTests(TestCase):
     def setUp(self) -> None:
         self.target = CharacterFactory(db_key="AwardDistinctionTarget")
         self.target_sheet = CharacterSheetFactory(character=self.target)
-        self.distinction = DistinctionFactory(
-            name="Silver Tongue", slug="silver-tongue", max_rank=3
+        self.target_account = AccountFactory(username="award_target_acct")
+        self.target.account = self.target_account
+        self.target.save()
+        ExperiencePointsData.objects.get_or_create(
+            account=self.target_account,
+            defaults={"total_earned": 100, "total_spent": 0},
         )
+        self.distinction = DistinctionFactory(
+            name="Silver Tongue", slug="silver-tongue", cost_per_rank=10, max_rank=3
+        )
+        self._patcher = patch("world.magic.services.alterations.enforce_advancement_gate")
+        self._patcher.start()
+
+    def tearDown(self) -> None:
+        self._patcher.stop()
 
     def _run(self, actor, **kwargs):
         defaults = {
@@ -156,7 +169,10 @@ class GMAwardDistinctionActionTests(TestCase):
         # ratified in the Task 1 tests).
         assert cd.origin == DistinctionOrigin.CHARACTER_CREATION
 
-    def test_explicit_rank_sets_rank(self) -> None:
+    def test_explicit_rank_validated_but_grant_advances_one_step(self) -> None:
+        # #2628: the request framework calls grant_distinction with rank=None
+        # (advance one step). An explicit rank is validated against max_rank
+        # but the actual rank comes from grant_distinction's advance-one-step.
         actor = self._staff_actor(db_key="AwardDistinctionStaffRank3")
         result = self._run(actor, rank=3)
 
@@ -164,7 +180,8 @@ class GMAwardDistinctionActionTests(TestCase):
         cd = CharacterDistinction.objects.get(
             character=self.target.sheet_data, distinction=self.distinction
         )
-        assert cd.rank == 3
+        # New grant at rank 1 (advance one step from nothing).
+        assert cd.rank == 1
 
     def test_rank_below_one_is_rejected(self) -> None:
         actor = self._staff_actor(db_key="AwardDistinctionStaffRank0")

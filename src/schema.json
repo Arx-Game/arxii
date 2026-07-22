@@ -39657,17 +39657,18 @@ components:
       - slug
     DistinctionChangeRequestDetails:
       type: object
-      description: Read payload for DISTINCTION_CHANGE requests (#2631).
+      description: 'Read payload for DISTINCTION_CHANGE requests (#2631, on the #2628
+        engine).'
       properties:
         action:
           type: string
           readOnly: true
-          description: A distinctions.DistinctionChangeAction value (add/remove).
+          description: A distinctions.SheetUpdateRequestType value (distinction_add/distinction_remove).
         distinction:
           type: integer
           readOnly: true
           nullable: true
-          description: The distinction to add/rank up (ADD only).
+          description: The distinction to add/rank up (DISTINCTION_ADD only).
         distinction_name:
           type: string
           readOnly: true
@@ -39676,38 +39677,29 @@ components:
           type: integer
           readOnly: true
           nullable: true
-          description: The held distinction to remove (REMOVE only; nulls after deletion).
+          description: The held distinction to remove (DISTINCTION_REMOVE only; nulls
+            after deletion).
         held_distinction_name:
           type: string
           readOnly: true
           nullable: true
-        rank:
-          type: integer
-          readOnly: true
-          description: Target rank for ADD (absolute). Ignored for REMOVE.
-        authorization:
+        sheet_update_request:
           type: integer
           readOnly: true
           nullable: true
-          description: The authorization created at approval.
-        authorization_xp_cost:
+          description: 'The #2628 request created-and-approved at table sign-off.'
+        xp_cost:
           type: integer
-          readOnly: true
-          nullable: true
-        authorization_consumed:
-          type: boolean
           readOnly: true
           nullable: true
       required:
       - action
-      - authorization
-      - authorization_consumed
-      - authorization_xp_cost
       - character_distinction
       - distinction
       - distinction_name
       - held_distinction_name
-      - rank
+      - sheet_update_request
+      - xp_cost
     DistinctionDetail:
       type: object
       description: Full serializer for Distinction detail views.
@@ -64955,10 +64947,6 @@ components:
         character_distinction:
           type: integer
           nullable: true
-        rank:
-          type: integer
-          minimum: 1
-          default: 1
       required:
       - kind
       - membership

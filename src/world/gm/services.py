@@ -717,25 +717,24 @@ def submit_profile_text_request(
     return request
 
 
-def submit_distinction_change_request(  # noqa: PLR0913
+def submit_distinction_change_request(
     membership: GMTableMembership,
     *,
     action: str,
     reasoning: str,
     distinction: Distinction | None = None,
     character_distinction: CharacterDistinction | None = None,
-    rank: int = 1,
 ) -> TableUpdateRequest:
-    """Submit a distinction add/rank-up/remove for the table GM's sign-off (#2631).
+    """Submit a distinction add/rank-up/remove for table-GM sign-off (#2631).
 
     Args:
         membership: The player's active table membership.
-        action: A ``DistinctionChangeAction`` value.
+        action: A ``SheetUpdateRequestType`` value.
         reasoning: The player's Reason: text.
-        distinction: For ADD — the catalog distinction.
-        character_distinction: For REMOVE — the held row (must belong to the
-            membership's character).
-        rank: Target rank for ADD (absolute).
+        distinction: For DISTINCTION_ADD — the catalog distinction (an
+            already-held one is a one-step rank-up, per #2628).
+        character_distinction: For DISTINCTION_REMOVE — the held row (must
+            belong to the membership's character).
 
     Returns:
         The PENDING request.
@@ -765,7 +764,6 @@ def submit_distinction_change_request(  # noqa: PLR0913
             action=action,
             distinction=distinction,
             character_distinction=character_distinction,
-            rank=rank,
         )
         details.full_clean()
         details.save()
@@ -782,6 +780,23 @@ def withdraw_table_update_request(request: TableUpdateRequest) -> None:
     request.save(update_fields=["status", "resolved_at"])
 
 
+def gm_may_review_for_persona(gm_profile: GMProfile, persona: Persona) -> bool:
+    """The review-pool rule (#2631 ruling): staff, or a GM with table access.
+
+    A GM may review a player's requests iff the requesting persona holds an
+    ACTIVE membership at any of that GM's tables. Shopping a request among
+    GMs who already know you is allowed; a GM the player has never sat with
+    never sees their sheet.
+    """
+    if gm_profile.account.is_staff:
+        return True
+    return GMTableMembership.objects.filter(
+        persona=persona,
+        left_at__isnull=True,
+        table__gm=gm_profile,
+    ).exists()
+
+
 def signoff_table_update_request(
     request: TableUpdateRequest,
     gm_profile: GMProfile,
@@ -791,25 +806,31 @@ def signoff_table_update_request(
 ) -> TableUpdateRequest:
     """Approve or reject a PENDING request — the GM's yes/no judgment call (#2631).
 
-    Only the table's GM (or staff via their own GMProfile) may sign off.
-    Rejection notifies the player with the notes. Approval branches by kind:
+    Reviewable by staff or any GM whose table the requesting persona actively
+    sits at (``gm_may_review_for_persona``). Rejection notifies the player
+    with the notes. Approval branches by kind:
 
     - PROFILE_TEXT: applies the rewrite immediately through
-      ``update_profile_text`` (zero cost — nothing to accept) → COMPLETED.
-    - DISTINCTION_CHANGE: creates a ``DistinctionChangeAuthorization`` (which
-      notifies the player) → APPROVED; the player accepts to spend and apply.
+      ``update_profile_text`` (zero cost) → COMPLETED.
+    - DISTINCTION_CHANGE: creates AND approves a ``SheetUpdateRequest``
+      through the #2628 framework — XP auto-debits atomically → COMPLETED.
+      Insufficient XP fails loud; this request stays PENDING.
 
     Returns:
         The updated request.
     """
     from world.character_sheets.services import update_profile_text  # noqa: PLC0415
+    from world.distinctions.exceptions import (  # noqa: PLC0415
+        DistinctionExclusionError,
+        SheetUpdateRequestError,
+    )
     from world.distinctions.services import (  # noqa: PLC0415
-        create_distinction_change_authorization,
+        approve_sheet_update_request,
+        create_sheet_update_request,
     )
 
-    is_table_gm = request.membership.table.gm_id == gm_profile.pk
-    if not is_table_gm and not gm_profile.account.is_staff:
-        msg = "Only the table's GM may sign off on this request."
+    if not gm_may_review_for_persona(gm_profile, request.membership.persona):
+        msg = "Only a GM whose table this character sits at may sign off on this request."
         raise TableRequestError(msg)
     if request.status != TableRequestStatus.PENDING:
         msg = "This request has already been resolved."
@@ -842,22 +863,23 @@ def signoff_table_update_request(
             )
             details.applied_version = version
             details.save(update_fields=["applied_version"])
-            request.status = TableRequestStatus.COMPLETED
-            request.completed_at = now
         else:
             details = request.distinction_details
-            auth = create_distinction_change_authorization(
-                sheet,
-                action=details.action,
-                distinction=details.distinction,
-                character_distinction=details.character_distinction,
-                authorized_by=gm_profile.account,
-                reason=request.player_reasoning,
-                rank=details.rank,
-            )
-            details.authorization = auth
-            details.save(update_fields=["authorization"])
-            request.status = TableRequestStatus.APPROVED
+            try:
+                sheet_request = create_sheet_update_request(
+                    sheet,
+                    details.action,
+                    justification=request.player_reasoning,
+                    target_distinction=details.distinction,
+                    target_character_distinction=details.character_distinction,
+                )
+                approve_sheet_update_request(sheet_request, gm_profile.account)
+            except (SheetUpdateRequestError, DistinctionExclusionError) as exc:
+                raise TableRequestError(exc.user_message) from exc
+            details.sheet_update_request = sheet_request
+            details.save(update_fields=["sheet_update_request"])
+        request.status = TableRequestStatus.COMPLETED
+        request.completed_at = now
         request.gm_notes = notes
         request.resolved_by = gm_profile
         request.resolved_at = now
@@ -872,30 +894,3 @@ def signoff_table_update_request(
             sender=gm_profile.account,
         )
     return request
-
-
-def mark_requests_completed_for_authorization(authorization: object) -> int:
-    """Flip APPROVED requests linked to a consumed authorization to COMPLETED.
-
-    Called by the accept action after ``spend_xp_on_distinction_unlock``
-    succeeds — the explicit, no-signals completion sync (ADR-0009).
-
-    Returns:
-        The number of requests completed.
-    """
-    from world.gm.models import TableUpdateRequest  # noqa: PLC0415
-
-    now = timezone.now()
-    requests = TableUpdateRequest.objects.filter(
-        status=TableRequestStatus.APPROVED,
-        distinction_details__authorization=authorization,
-    )
-    count = 0
-    for request in requests:
-        # Instance saves, not queryset.update() — bulk update would leave the
-        # SharedMemoryModel identity-map instances stale.
-        request.status = TableRequestStatus.COMPLETED
-        request.completed_at = now
-        request.save(update_fields=["status", "completed_at"])
-        count += 1
-    return count

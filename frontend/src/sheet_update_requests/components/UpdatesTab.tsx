@@ -6,8 +6,9 @@
  * re-implements privacy client-side; it only hides the empty section for
  * non-owners so strangers don't see a pointless header). The owner
  * additionally gets the update-request form (profile prose rewrite or
- * distinction change, routed to their table GM), their request list with
- * withdraw, and Accept buttons for approved distinction changes.
+ * distinction change, routed to their table GM) and their request list with
+ * withdraw. Distinction approvals auto-debit XP at GM sign-off (#2628) —
+ * there is no accept step.
  */
 
 import { useMemo, useState } from 'react';
@@ -24,13 +25,13 @@ import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import { getTableMemberships } from '@/tables/api';
 
 import {
-  useAcceptDistinctionChangeMutation,
   useCreateUpdateRequestMutation,
   useProfileTextVersionsQuery,
   useUpdateRequestsQuery,
   useWithdrawMutation,
 } from '../queries';
 import {
+  DISTINCTION_ACTIONS,
   PROFILE_TEXT_FIELDS,
   REQUEST_KINDS,
   REQUEST_STATUSES,
@@ -135,21 +136,10 @@ function VersionTimeline({
   );
 }
 
-function RequestRow({
-  request,
-  characterId,
-}: {
-  request: TableUpdateRequest;
-  characterId: number;
-}) {
+function RequestRow({ request }: { request: TableUpdateRequest }) {
   const withdraw = useWithdrawMutation();
-  const accept = useAcceptDistinctionChangeMutation(characterId);
 
   const details = request.distinction_details;
-  const canAccept =
-    request.status === REQUEST_STATUSES.APPROVED &&
-    details?.authorization != null &&
-    details.authorization_consumed !== true;
 
   return (
     <Card data-testid="update-request-row">
@@ -160,7 +150,9 @@ function RequestRow({
               ? `Profile: ${request.profile_text_details?.field ?? ''}`
               : `Distinction: ${
                   details?.distinction_name ?? details?.held_distinction_name ?? ''
-                } (${details?.action ?? ''})`}
+                } (${details?.action === DISTINCTION_ACTIONS.REMOVE ? 'shed' : 'gain'}${
+                  details?.xp_cost ? `, ${details.xp_cost} XP` : ''
+                })`}
           </span>
           <Badge variant={STATUS_VARIANTS[request.status ?? ''] ?? 'outline'}>
             {request.status}
@@ -172,28 +164,16 @@ function RequestRow({
             <span className="font-medium">GM notes:</span> {request.gm_notes}
           </p>
         )}
-        <div className="flex gap-2">
-          {request.status === REQUEST_STATUSES.PENDING && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={withdraw.isPending}
-              onClick={() => withdraw.mutate(request.id)}
-            >
-              Withdraw
-            </Button>
-          )}
-          {canAccept && (
-            <Button
-              size="sm"
-              disabled={accept.isPending}
-              onClick={() => accept.mutate(details.authorization as number)}
-            >
-              Accept
-              {details.authorization_xp_cost ? ` (${details.authorization_xp_cost} XP)` : ' (free)'}
-            </Button>
-          )}
-        </div>
+        {request.status === REQUEST_STATUSES.PENDING && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={withdraw.isPending}
+            onClick={() => withdraw.mutate(request.id)}
+          >
+            Withdraw
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
@@ -223,10 +203,9 @@ function SubmitRequestForm({ characterId }: { characterId: number }) {
   const [kind, setKind] = useState<string>(REQUEST_KINDS.PROFILE_TEXT);
   const [field, setField] = useState<string>(PROFILE_TEXT_FIELDS[0].value);
   const [proposedText, setProposedText] = useState('');
-  const [action, setAction] = useState<'add' | 'remove'>('add');
+  const [action, setAction] = useState<string>(DISTINCTION_ACTIONS.ADD);
   const [distinctionId, setDistinctionId] = useState<number | ''>('');
   const [heldId, setHeldId] = useState<number | ''>('');
-  const [rank, setRank] = useState(1);
   const [reasoning, setReasoning] = useState('');
 
   const selectedMembership = membershipId || myMemberships[0]?.id || '';
@@ -260,9 +239,10 @@ function SubmitRequestForm({ characterId }: { characterId: number }) {
         kind,
         reasoning,
         action,
-        distinction: action === 'add' && distinctionId !== '' ? distinctionId : undefined,
-        character_distinction: action === 'remove' && heldId !== '' ? heldId : undefined,
-        rank,
+        distinction:
+          action === DISTINCTION_ACTIONS.ADD && distinctionId !== '' ? distinctionId : undefined,
+        character_distinction:
+          action === DISTINCTION_ACTIONS.REMOVE && heldId !== '' ? heldId : undefined,
       });
     }
     setProposedText('');
@@ -340,40 +320,28 @@ function SubmitRequestForm({ characterId }: { characterId: number }) {
             <select
               className={selectClass}
               value={action}
-              onChange={(e) => setAction(e.target.value as 'add' | 'remove')}
+              onChange={(e) => setAction(e.target.value)}
             >
-              <option value="add">Gain / rank up</option>
-              <option value="remove">Lose / shed</option>
+              <option value={DISTINCTION_ACTIONS.ADD}>Gain / rank up</option>
+              <option value={DISTINCTION_ACTIONS.REMOVE}>Lose / shed</option>
             </select>
           </label>
-          {action === 'add' ? (
-            <>
-              <label className="block text-sm">
-                Distinction
-                <select
-                  className={selectClass}
-                  value={distinctionId}
-                  onChange={(e) => setDistinctionId(Number(e.target.value))}
-                >
-                  <option value="">Choose…</option>
-                  {(catalog ?? []).map((distinction) => (
-                    <option key={distinction.id} value={distinction.id}>
-                      {distinction.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm">
-                Target rank
-                <input
-                  type="number"
-                  min={1}
-                  className={selectClass}
-                  value={rank}
-                  onChange={(e) => setRank(Number(e.target.value))}
-                />
-              </label>
-            </>
+          {action === DISTINCTION_ACTIONS.ADD ? (
+            <label className="block text-sm">
+              Distinction (one already held ranks it up a step)
+              <select
+                className={selectClass}
+                value={distinctionId}
+                onChange={(e) => setDistinctionId(Number(e.target.value))}
+              >
+                <option value="">Choose…</option>
+                {(catalog ?? []).map((distinction) => (
+                  <option key={distinction.id} value={distinction.id}>
+                    {distinction.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           ) : (
             <label className="block text-sm">
               Held distinction
@@ -410,7 +378,8 @@ function SubmitRequestForm({ characterId }: { characterId: number }) {
           !reasoning.trim() ||
           (kind === REQUEST_KINDS.PROFILE_TEXT && !proposedText.trim()) ||
           (kind === REQUEST_KINDS.DISTINCTION_CHANGE &&
-            ((action === 'add' && distinctionId === '') || (action === 'remove' && heldId === '')))
+            ((action === DISTINCTION_ACTIONS.ADD && distinctionId === '') ||
+              (action === DISTINCTION_ACTIONS.REMOVE && heldId === '')))
         }
         onClick={submit}
       >
@@ -444,7 +413,7 @@ export function UpdatesTab({ characterId, isMyCharacter }: Props) {
         <section className="space-y-2">
           <h3 className="text-xl font-semibold">My requests</h3>
           {requestsForSheet.map((request) => (
-            <RequestRow key={request.id} request={request} characterId={characterId} />
+            <RequestRow key={request.id} request={request} />
           ))}
         </section>
       )}

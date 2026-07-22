@@ -12,10 +12,15 @@ generated is a story hook, not a request); it routes to the **table GM** via `GM
 deliberately: a tableless sheet has no story event to reflect); GMs approve story-consistency
 but cannot ratify new world facts through prose approval (lore stays with staff, per the GM
 leash); cost follows **benefit direction only** (gaining a benefit or shedding a flaw costs XP;
-detriments and story-reason losses are free); and every write to a versioned profile field
-snapshots into `character_sheets.ProfileTextVersion` (era + IC-date stamped) — Arx 1
-permanently lost original backgrounds and descriptions to overwrites, so no write path may
-skip `update_profile_text`. Rejected alternatives: a global staff request queue (recreates the
-Arx 1 failure), applying distinction changes at GM approval (the player must control when XP is
-spent — approval creates a `DistinctionChangeAuthorization` instead), and diff-based version
+detriments and story-reason losses are free — #2628's sign-based model, shared with GM-direct
+grants so there is no free bypass, XP auto-debited atomically at approval); and every write to
+a versioned profile field snapshots into `character_sheets.ProfileTextVersion` (era + IC-date
+stamped) — Arx 1 permanently lost original backgrounds and descriptions to overwrites, so no
+write path may skip `update_profile_text`. **Review pool (amended after #2628/#2634 landed):**
+staff, or any GM whose table the requesting character actively sits at — shopping a request
+among GMs who already know you is fine (a bad judgment call is a GM-management problem), but a
+GM the player has never sat with must not see their sheet; and past sheet versions are
+owner/staff-only by default. Rejected alternatives: a global staff request queue (recreates the
+Arx 1 failure), an any-GM open review pool (strangers reading sheets), a separate player
+accept step after approval (superseded by #2628's auto-debit ruling), and diff-based version
 storage (full text per version is trivially cheap at these volumes and never corrupts).

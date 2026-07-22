@@ -9,7 +9,7 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import ProfileTextField
 from world.distinctions.factories import DistinctionFactory
-from world.distinctions.types import DistinctionChangeAction
+from world.distinctions.types import SheetUpdateRequestType
 from world.gm.constants import TableRequestKind, TableRequestStatus
 from world.gm.factories import GMTableFactory, GMTableMembershipFactory
 from world.gm.services import submit_profile_text_request
@@ -105,7 +105,7 @@ class TableUpdateRequestCreateTests(TestCase):
             {
                 "membership": self.membership.pk,
                 "kind": TableRequestKind.DISTINCTION_CHANGE,
-                "action": DistinctionChangeAction.ADD,
+                "action": SheetUpdateRequestType.DISTINCTION_ADD,
                 "distinction": distinction.pk,
                 "reasoning": "Earned in play.",
             },

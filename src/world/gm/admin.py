@@ -229,7 +229,7 @@ class DistinctionChangeRequestDetailsInline(admin.StackedInline):
 
     model = DistinctionChangeRequestDetails
     extra = 0
-    raw_id_fields = ["distinction", "character_distinction", "authorization"]
+    raw_id_fields = ["distinction", "character_distinction", "sheet_update_request"]
 
 
 @admin.register(TableUpdateRequest)

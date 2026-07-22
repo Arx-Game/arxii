@@ -735,9 +735,16 @@ class TableUpdateRequestViewSet(
         user = self.request.user
         if user.is_staff:
             return qs
+        # Review pool (#2631 ruling): a GM sees requests from any persona with
+        # an ACTIVE membership at one of their tables — not just requests
+        # submitted via their own table. Shopping among known GMs is fine;
+        # strangers never see the sheet.
         return qs.filter(
             Q(membership__persona__character_sheet__character__db_account=user)
-            | Q(membership__table__gm__account=user)
+            | Q(
+                membership__persona__gm_table_memberships__left_at__isnull=True,
+                membership__persona__gm_table_memberships__table__gm__account=user,
+            )
         ).distinct()
 
     @extend_schema(
@@ -780,7 +787,6 @@ class TableUpdateRequestViewSet(
                     action=data["action"],
                     distinction=distinction,
                     character_distinction=character_distinction,
-                    rank=data.get("rank", 1),
                     reasoning=data["reasoning"],
                 )
         except TableRequestError as exc:

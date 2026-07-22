@@ -13,18 +13,20 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.distinctions.exceptions import DistinctionExclusionError
+from world.distinctions.exceptions import (
+    DistinctionExclusionError,
+    SheetUpdateRequestError,
+)
+from world.distinctions.types import DistinctionOrigin
 from world.secrets.constants import SecretProvenance
 from world.secrets.models import Secret
 
 if TYPE_CHECKING:
-    from evennia.accounts.models import AccountDB
-
     from world.character_sheets.models import CharacterSheet
     from world.distinctions.models import (
         CharacterDistinction,
         Distinction,
-        DistinctionChangeAuthorization,
+        SheetUpdateRequest,
     )
     from world.scenes.models import Persona
 
@@ -197,132 +199,45 @@ def grant_distinction(
     return char_distinction
 
 
-DISTINCTION_REMOVAL_FRICTION_MULTIPLIER = 1.5
-
-
-def compute_distinction_change_xp_cost(
+def compute_sheet_update_xp_cost(
+    request_type: str,
     distinction: Distinction,
     rank: int,
-    action: str,
-    *,
-    current_rank: int = 0,
 ) -> int:
-    """Compute the XP cost for a distinction change — benefit direction only (#2631).
+    """Compute the XP cost for a sheet-update request.
 
-    Only the two benefit-direction quadrants charge: gaining a positive-cost
-    distinction, and shedding a negative-cost one (removing a flaw, with a
-    friction multiplier). Taking on a detriment or losing a benefit for story
-    reasons is free — the GM sign-off is the only gate.
+    Sign-based model: pay XP when net-gaining mechanical advantage, free when
+    net-losing it. The sign of ``cost_per_rank`` encodes beneficial (positive)
+    vs detrimental (negative).
+
+    - ADD a positive distinction (beneficial): costs XP.
+    - ADD a negative distinction (detrimental): free.
+    - REMOVE a positive distinction (beneficial): free.
+    - REMOVE a negative distinction (detrimental): costs XP.
+
+    No friction multiplier, no 2x factor — the points-pump loophole is closed
+    because adding a negative (free) and later removing it (costs XP) is never
+    profitable.
 
     Args:
+        request_type: ``SheetUpdateRequestType.DISTINCTION_ADD`` or ``DISTINCTION_REMOVE``.
         distinction: The distinction being added or removed.
-        rank: For ADD, the target rank (absolute). For REMOVE, the
-            CharacterDistinction's current rank.
-        action: ``DistinctionChangeAction.ADD`` or ``DistinctionChangeAction.REMOVE``.
-        current_rank: For ADD on an existing holder (rank-up), the held rank —
-            only the delta above it is charged.
+        rank: For ADD, the target rank. For REMOVE, the CharacterDistinction's current rank.
 
     Returns:
-        The XP cost (0 for the free quadrants).
+        The XP cost (always non-negative; 0 for free transactions).
     """
-    from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
+    from world.distinctions.types import SheetUpdateRequestType  # noqa: PLC0415
 
-    if action == DistinctionChangeAction.ADD and distinction.cost_per_rank > 0:
-        return 2 * distinction.cost_per_rank * max(rank - current_rank, 0)
-    if action == DistinctionChangeAction.REMOVE and distinction.cost_per_rank < 0:
-        base = 2 * abs(distinction.cost_per_rank) * rank
-        return int(base * DISTINCTION_REMOVAL_FRICTION_MULTIPLIER)
+    if request_type == SheetUpdateRequestType.DISTINCTION_ADD:
+        return abs(distinction.cost_per_rank) * rank if distinction.cost_per_rank > 0 else 0
+    if request_type == SheetUpdateRequestType.DISTINCTION_REMOVE:
+        return abs(distinction.cost_per_rank) * rank if distinction.cost_per_rank < 0 else 0
     return 0
 
 
-def create_distinction_change_authorization(  # noqa: PLR0913
-    character_sheet: CharacterSheet,
-    *,
-    action: str,
-    authorized_by: AccountDB | None,
-    reason: str,
-    distinction: Distinction | None = None,
-    character_distinction: CharacterDistinction | None = None,
-    rank: int = 1,
-    xp_cost: int | None = None,
-) -> DistinctionChangeAuthorization:
-    """Create a change authorization and notify the player (#2631).
-
-    The single creation seam for ``DistinctionChangeAuthorization`` — the GM
-    action and the table-request sign-off flow both call this. Computes the
-    benefit-direction XP cost when ``xp_cost`` is None (0 is a legitimate
-    explicit override: story-reason changes are free), then tells the player a
-    change is waiting for them, which the bare action-layer create never did.
-
-    Args:
-        character_sheet: The character the change targets.
-        action: ``DistinctionChangeAction.ADD`` or ``REMOVE``.
-        authorized_by: The authorizing GM/staff account (None for automation).
-        reason: Narrative justification (staff-facing).
-        distinction: Required for ADD.
-        character_distinction: Required for REMOVE.
-        rank: Target rank for ADD (absolute; above current rank for a rank-up).
-        xp_cost: Explicit cost override; None computes the standard cost.
-
-    Returns:
-        The created authorization.
-    """
-    from world.distinctions.models import (  # noqa: PLC0415
-        CharacterDistinction,
-        DistinctionChangeAuthorization,
-    )
-    from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
-    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
-    from world.narrative.services import send_narrative_message  # noqa: PLC0415
-
-    if action == DistinctionChangeAction.ADD:
-        current = (
-            CharacterDistinction.objects.filter(
-                character=character_sheet, distinction=distinction
-            ).first()
-            if distinction
-            else None
-        )
-        current_rank = current.rank if current else 0
-        cost_target = distinction
-        cost_rank = rank
-    else:
-        current_rank = 0
-        cost_target = character_distinction.distinction if character_distinction else None
-        cost_rank = character_distinction.rank if character_distinction else 1
-
-    if xp_cost is None:
-        if cost_target is None:
-            msg = "Cannot compute a cost without a target distinction."
-            raise ValueError(msg)
-        xp_cost = compute_distinction_change_xp_cost(
-            cost_target, cost_rank, action, current_rank=current_rank
-        )
-
-    auth = DistinctionChangeAuthorization.objects.create(
-        character_sheet=character_sheet,
-        action=action,
-        rank=rank,
-        target_distinction=distinction,
-        target_character_distinction=character_distinction,
-        authorized_by=authorized_by,
-        reason=reason,
-        xp_cost=xp_cost,
-    )
-
-    name = cost_target.name if cost_target else "a distinction"
-    verb = "gain" if action == DistinctionChangeAction.ADD else "shed"
-    cost_note = f" for {xp_cost} XP" if xp_cost else " at no cost"
-    send_narrative_message(
-        recipients=[character_sheet],
-        body=(
-            f"A change to your sheet has been authorized: you may {verb} "
-            f"{name}{cost_note}. Accept it when you are ready."
-        ),
-        category=NarrativeCategory.ABILITY,
-        sender_account=authorized_by,
-    )
-    return auth
+# Backwards-compat alias — old imports still work during migration.
+compute_distinction_change_xp_cost = compute_sheet_update_xp_cost
 
 
 def _check_removal_prerequisites(character_distinction: CharacterDistinction) -> None:
@@ -336,20 +251,20 @@ def _check_removal_prerequisites(character_distinction: CharacterDistinction) ->
 def remove_distinction(
     character_distinction: CharacterDistinction,
     *,
-    authorization: DistinctionChangeAuthorization,
+    sheet_update_request: SheetUpdateRequest,
 ) -> None:
     """Remove a CharacterDistinction, reconciling all dependent systems.
 
-    The inverse of ``grant_distinction``. Requires a valid (non-consumed)
-    ``DistinctionChangeAuthorization`` with ``action=REMOVE`` targeting this row.
+    The inverse of ``grant_distinction``. Requires a valid (APPROVED)
+    ``SheetUpdateRequest`` with ``request_type=DISTINCTION_REMOVE`` targeting this row.
 
     Teardown order:
     1. ``delete_distinction_modifiers`` — removes CharacterModifier + ModifierSource rows.
     2. ``clear_distinction_secret`` — deletes the Secret if present (idempotent).
     3. ``CharacterDistinction.delete()`` — CASCADE handles remaining FKs.
 
-    The authorization's ``is_consumed`` / ``consumed_at`` are marked by the
-    CALLER (``spend_xp_on_distinction_unlock``), NOT by this function.
+    The request's ``status`` / ``reviewed_at`` are marked by the CALLER
+    (``approve_sheet_update_request``), NOT by this function.
 
     NOT torn down (by design):
     - ``CharacterResonance`` currency (monotonic, no clawback — #2037).
@@ -359,29 +274,30 @@ def remove_distinction(
 
     Args:
         character_distinction: The CharacterDistinction to remove.
-        authorization: The DistinctionChangeAuthorization authorizing this removal.
+        sheet_update_request: The approved SheetUpdateRequest authorizing this removal.
 
     Raises:
-        DistinctionAuthorizationError: If the authorization is already consumed
-            or doesn't target this CharacterDistinction.
+        SheetUpdateRequestError: If the request is not APPROVED or doesn't target
+            this CharacterDistinction.
     """
-    from world.distinctions.exceptions import (  # noqa: PLC0415
-        DistinctionAuthorizationError,
+    from world.distinctions.exceptions import SheetUpdateRequestError  # noqa: PLC0415
+    from world.distinctions.types import (  # noqa: PLC0415
+        SheetUpdateRequestStatus,
+        SheetUpdateRequestType,
     )
-    from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
     from world.mechanics.services import delete_distinction_modifiers  # noqa: PLC0415
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
-    if authorization.is_consumed:
-        msg = "This distinction change authorization has already been used."
-        raise DistinctionAuthorizationError(msg)
+    if sheet_update_request.status != SheetUpdateRequestStatus.APPROVED:
+        msg = "This sheet update request has not been approved."
+        raise SheetUpdateRequestError(msg)
     if (
-        authorization.action != DistinctionChangeAction.REMOVE
-        or authorization.target_character_distinction_id != character_distinction.pk
+        sheet_update_request.request_type != SheetUpdateRequestType.DISTINCTION_REMOVE
+        or sheet_update_request.target_character_distinction_id != character_distinction.pk
     ):
-        msg = "This authorization does not target this distinction."
-        raise DistinctionAuthorizationError(msg)
+        msg = "This request does not target this distinction."
+        raise SheetUpdateRequestError(msg)
 
     _check_removal_prerequisites(character_distinction)
 
@@ -390,7 +306,7 @@ def remove_distinction(
         clear_distinction_secret(character_distinction)
 
         distinction_name = character_distinction.distinction.name
-        character_sheet = authorization.character_sheet
+        character_sheet = sheet_update_request.character_sheet
         character_distinction.delete()
 
     send_narrative_message(
@@ -401,98 +317,190 @@ def remove_distinction(
     )
 
 
-def spend_xp_on_distinction_unlock(
+def create_sheet_update_request(  # noqa: PLR0913
     character_sheet: CharacterSheet,
-    authorization: DistinctionChangeAuthorization,
+    request_type: str,
+    *,
+    justification: str,
+    target_distinction: Distinction | None = None,
+    target_character_distinction: CharacterDistinction | None = None,
+    submitted_by: object | None = None,
+    origin: str = DistinctionOrigin.UNLOCK_PURCHASE,
+) -> SheetUpdateRequest:
+    """Create a PENDING SheetUpdateRequest.
+
+    Computes ``xp_cost`` at creation time (stamped, not recomputed at
+    approval). For DISTINCTION_ADD, a distinction the character already holds
+    is allowed — it's a rank-up request. Runs exclusion checks at submission.
+    """
+    from world.distinctions.models import SheetUpdateRequest  # noqa: PLC0415
+    from world.distinctions.types import (  # noqa: PLC0415
+        SheetUpdateRequestStatus,
+        SheetUpdateRequestType,
+    )
+
+    if request_type == SheetUpdateRequestType.DISTINCTION_ADD:
+        if target_distinction is None:
+            msg = "DISTINCTION_ADD requires target_distinction."
+            raise SheetUpdateRequestError(msg)
+        _check_exclusions(character_sheet, target_distinction)
+        rank = 1
+        xp_cost = compute_sheet_update_xp_cost(request_type, target_distinction, rank)
+    elif request_type == SheetUpdateRequestType.DISTINCTION_REMOVE:
+        if target_character_distinction is None:
+            msg = "DISTINCTION_REMOVE requires target_character_distinction."
+            raise SheetUpdateRequestError(msg)
+        xp_cost = compute_sheet_update_xp_cost(
+            request_type,
+            target_character_distinction.distinction,
+            target_character_distinction.rank,
+        )
+    else:
+        msg = f"Unknown request type: {request_type}"
+        raise SheetUpdateRequestError(msg)
+
+    return SheetUpdateRequest.objects.create(
+        character_sheet=character_sheet,
+        request_type=request_type,
+        target_distinction=(
+            target_distinction if request_type == SheetUpdateRequestType.DISTINCTION_ADD else None
+        ),
+        target_character_distinction=(
+            target_character_distinction
+            if request_type == SheetUpdateRequestType.DISTINCTION_REMOVE
+            else None
+        ),
+        justification=justification,
+        status=SheetUpdateRequestStatus.PENDING,
+        xp_cost=xp_cost,
+        origin=origin,
+        submitted_by=submitted_by,
+    )
+
+
+def approve_sheet_update_request(
+    request: SheetUpdateRequest,
+    gm_account: object,
 ) -> None:
-    """Spend XP to complete a distinction change (add or remove).
+    """Approve a PENDING SheetUpdateRequest: XP debit + change firing.
 
-    Validates: authorization not consumed, authorization targets this character.
-    Locks the authorization row with ``select_for_update`` to prevent
-    double-accept. Debits XPTracker, writes XPTransaction, fires
-    ``grant_distinction`` (ADD) or ``remove_distinction`` (REMOVE), then marks
-    the authorization consumed.
-
-    This service is the SOLE writer of ``is_consumed`` / ``consumed_at``.
-
-    Args:
-        character_sheet: The character spending XP.
-        authorization: The DistinctionChangeAuthorization to complete.
-
-    Raises:
-        DistinctionAuthorizationError: If the authorization is already
-            consumed, doesn't target this character, or the character has
-            insufficient XP.
+    Atomic. Preserves advancement gate + account resolution guards.
+    Fails loud if insufficient XP — request stays PENDING.
     """
     from django.utils import timezone  # noqa: PLC0415
 
-    from world.distinctions.exceptions import DistinctionAuthorizationError  # noqa: PLC0415
-    from world.distinctions.models import DistinctionChangeAuthorization  # noqa: PLC0415
+    from world.distinctions.exceptions import SheetUpdateRequestError  # noqa: PLC0415
+    from world.distinctions.models import SheetUpdateRequest  # noqa: PLC0415
     from world.distinctions.types import (  # noqa: PLC0415
-        DistinctionChangeAction,
-        DistinctionOrigin,
+        SheetUpdateRequestStatus,
+        SheetUpdateRequestType,
     )
     from world.magic.services.alterations import enforce_advancement_gate  # noqa: PLC0415
     from world.progression.models.rewards import XPTransaction  # noqa: PLC0415
     from world.progression.services.awards import get_or_create_xp_tracker  # noqa: PLC0415
     from world.progression.types import ProgressionReason  # noqa: PLC0415
 
-    if authorization.character_sheet_id != character_sheet.pk:
-        msg = "This authorization does not target this character."
-        raise DistinctionAuthorizationError(msg)
+    character_sheet = request.character_sheet
 
     enforce_advancement_gate(character_sheet)
 
     account = character_sheet.character.account
     if account is None:
         msg = "This character has no linked account."
-        raise DistinctionAuthorizationError(msg)
+        raise SheetUpdateRequestError(msg)
 
     xp_tracker = get_or_create_xp_tracker(account)
 
     with transaction.atomic():
-        locked_auth = (
-            DistinctionChangeAuthorization.objects.select_for_update()
-            .filter(pk=authorization.pk)
-            .first()
-        )
-        if locked_auth is None or locked_auth.is_consumed:
-            msg = "This distinction change authorization has already been used."
-            raise DistinctionAuthorizationError(msg)
+        locked_req = SheetUpdateRequest.objects.select_for_update().filter(pk=request.pk).first()
+        if locked_req is None or locked_req.status != SheetUpdateRequestStatus.PENDING:
+            msg = "This sheet update request has already been processed."
+            raise SheetUpdateRequestError(msg)
 
-        if locked_auth.xp_cost:
-            if not xp_tracker.can_spend(locked_auth.xp_cost):
-                msg = f"Need {locked_auth.xp_cost} XP, have {xp_tracker.current_available}."
-                raise DistinctionAuthorizationError(msg)
-
-            xp_tracker.spend_xp(locked_auth.xp_cost)
+        if locked_req.xp_cost > 0:
+            if not xp_tracker.can_spend(locked_req.xp_cost):
+                msg = f"Need {locked_req.xp_cost} XP, have {xp_tracker.current_available}."
+                raise SheetUpdateRequestError(msg)
+            xp_tracker.spend_xp(locked_req.xp_cost)
 
             XPTransaction.objects.create(
                 account=account,
-                amount=-locked_auth.xp_cost,
+                amount=-locked_req.xp_cost,
                 reason=ProgressionReason.XP_PURCHASE,
-                description=f"Distinction change: {locked_auth.action}",
+                description=f"Distinction change: {locked_req.get_request_type_display()}",
                 character=character_sheet.character,
-                gm=locked_auth.authorized_by,
+                gm=gm_account,
             )
 
-        if locked_auth.action == DistinctionChangeAction.ADD:
+        # Mark APPROVED before firing the change — remove_distinction checks
+        # that the request is APPROVED before deleting the CharacterDistinction.
+        locked_req.status = SheetUpdateRequestStatus.APPROVED
+        locked_req.reviewed_by = gm_account
+        locked_req.reviewed_at = timezone.now()
+        locked_req.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+
+        if locked_req.request_type == SheetUpdateRequestType.DISTINCTION_ADD:
             grant_distinction(
                 character_sheet,
-                locked_auth.target_distinction,
-                origin=DistinctionOrigin.UNLOCK_PURCHASE,
-                rank=locked_auth.rank,
-                source_description=locked_auth.reason,
+                locked_req.target_distinction,
+                origin=locked_req.origin,
+                source_description=locked_req.justification,
             )
         else:
             remove_distinction(
-                locked_auth.target_character_distinction,
-                authorization=locked_auth,
+                locked_req.target_character_distinction,
+                sheet_update_request=locked_req,
             )
-            # Refresh from DB — remove_distinction deleted the
-            # target_character_distinction, and SET_NULL nulled the FK.
-            locked_auth.refresh_from_db()
+            locked_req.refresh_from_db()
 
-        locked_auth.is_consumed = True
-        locked_auth.consumed_at = timezone.now()
-        locked_auth.save(update_fields=["is_consumed", "consumed_at"])
+
+def deny_sheet_update_request(
+    request: SheetUpdateRequest,
+    gm_account: object,
+) -> None:
+    """Deny a PENDING SheetUpdateRequest. No XP debit, no change."""
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.distinctions.exceptions import SheetUpdateRequestError  # noqa: PLC0415
+    from world.distinctions.types import SheetUpdateRequestStatus  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    if request.status != SheetUpdateRequestStatus.PENDING:
+        msg = "This sheet update request has already been processed."
+        raise SheetUpdateRequestError(msg)
+
+    request.status = SheetUpdateRequestStatus.DENIED
+    request.reviewed_by = gm_account
+    request.reviewed_at = timezone.now()
+    request.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+
+    send_narrative_message(
+        recipients=[request.character_sheet],
+        body=f"Your sheet update request was denied: {request.get_request_type_display()}.",
+        category=NarrativeCategory.ABILITY,
+        sender_account=gm_account,
+    )
+
+
+def cancel_sheet_update_request(
+    request: SheetUpdateRequest,
+    account: object,
+) -> None:
+    """Player-initiated cancellation of their own pending request.
+
+    Hard-deletes the row — a PENDING request has had no mechanical effect.
+    """
+    from world.distinctions.exceptions import SheetUpdateRequestError  # noqa: PLC0415
+    from world.distinctions.types import SheetUpdateRequestStatus  # noqa: PLC0415
+
+    if request.status != SheetUpdateRequestStatus.PENDING:
+        msg = "Cannot cancel a request that has already been processed."
+        raise SheetUpdateRequestError(msg)
+
+    char_account = request.character_sheet.character.account
+    if char_account is None or char_account.pk != account.pk:
+        msg = "You can only cancel your own requests."
+        raise SheetUpdateRequestError(msg)
+
+    request.delete()

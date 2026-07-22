@@ -885,10 +885,11 @@ class ProfileTextRequestDetails(SharedMemoryModel):
 class DistinctionChangeRequestDetails(SharedMemoryModel):
     """DISTINCTION_CHANGE payload: a proposed add/rank-up/remove (#2631).
 
-    Approval creates a ``DistinctionChangeAuthorization`` (the merged #2624
-    accept/XP machinery — the player still controls when XP is spent);
-    ``authorization`` links it so accepting marks this request COMPLETED via
-    ``services.mark_requests_completed_for_authorization``.
+    Table-GM approval creates AND approves a ``distinctions.SheetUpdateRequest``
+    through the #2628 framework — XP auto-debits atomically at approval (no
+    separate player accept step), and this table request goes straight to
+    COMPLETED. An ADD for a distinction the character already holds is a
+    one-step rank-up (the #2628 framework's semantics).
     """
 
     request = models.OneToOneField(
@@ -897,8 +898,9 @@ class DistinctionChangeRequestDetails(SharedMemoryModel):
         related_name="distinction_details",
     )
     action = models.CharField(
-        max_length=10,
-        help_text="A distinctions.DistinctionChangeAction value (add/remove).",
+        max_length=20,
+        help_text="A distinctions.SheetUpdateRequestType value "
+        "(distinction_add/distinction_remove).",
     )
     distinction = models.ForeignKey(
         "distinctions.Distinction",
@@ -906,7 +908,7 @@ class DistinctionChangeRequestDetails(SharedMemoryModel):
         blank=True,
         on_delete=models.PROTECT,
         related_name="table_update_request_details",
-        help_text="The distinction to add/rank up (ADD only).",
+        help_text="The distinction to add/rank up (DISTINCTION_ADD only).",
     )
     character_distinction = models.ForeignKey(
         "distinctions.CharacterDistinction",
@@ -914,19 +916,15 @@ class DistinctionChangeRequestDetails(SharedMemoryModel):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="table_update_request_details",
-        help_text="The held distinction to remove (REMOVE only; nulls after deletion).",
+        help_text="The held distinction to remove (DISTINCTION_REMOVE only; nulls after deletion).",
     )
-    rank = models.PositiveSmallIntegerField(
-        default=1,
-        help_text="Target rank for ADD (absolute). Ignored for REMOVE.",
-    )
-    authorization = models.ForeignKey(
-        "distinctions.DistinctionChangeAuthorization",
+    sheet_update_request = models.ForeignKey(
+        "distinctions.SheetUpdateRequest",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="table_update_request_details",
-        help_text="The authorization created at approval.",
+        help_text="The #2628 request created-and-approved at table sign-off.",
     )
 
     class Meta:
@@ -937,20 +935,23 @@ class DistinctionChangeRequestDetails(SharedMemoryModel):
         return f"DistinctionChangeRequestDetails({self.action}, request #{self.request_id})"
 
     def clean(self) -> None:
-        """Exactly one target, matching the action (mirrors the auth model)."""
-        from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
+        """Exactly one target, matching the action (mirrors the #2628 model)."""
+        from world.distinctions.types import SheetUpdateRequestType  # noqa: PLC0415
 
-        if self.action == DistinctionChangeAction.ADD:
+        if self.action == SheetUpdateRequestType.DISTINCTION_ADD:
             if not self.distinction_id:
-                msg = "ADD requires distinction."
+                msg = "DISTINCTION_ADD requires distinction."
                 raise ValidationError(msg)
             if self.character_distinction_id:
-                msg = "ADD must not set character_distinction."
+                msg = "DISTINCTION_ADD must not set character_distinction."
                 raise ValidationError(msg)
-        elif self.action == DistinctionChangeAction.REMOVE:
+        elif self.action == SheetUpdateRequestType.DISTINCTION_REMOVE:
             if not self.character_distinction_id:
-                msg = "REMOVE requires character_distinction."
+                msg = "DISTINCTION_REMOVE requires character_distinction."
                 raise ValidationError(msg)
             if self.distinction_id:
-                msg = "REMOVE must not set distinction."
+                msg = "DISTINCTION_REMOVE must not set distinction."
                 raise ValidationError(msg)
+        else:
+            msg = f"Unknown action: {self.action}"
+            raise ValidationError(msg)

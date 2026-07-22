@@ -83,8 +83,24 @@ class OtherStatus(models.TextChoices):
     MAPPED = "mapped", "Mapped to Distinction"
 
 
-class DistinctionChangeAction(models.TextChoices):
-    """Which direction a distinction change authorization goes."""
+class SheetUpdateRequestType(models.TextChoices):
+    """Which kind of sheet-update this request represents.
 
-    ADD = "add", "Add"
-    REMOVE = "remove", "Remove"
+    Only DISTINCTION_ADD / DISTINCTION_REMOVE are wired in #2628;
+    future kinds (BACKGROUND_EDIT, etc.) will extend this enum.
+    """
+
+    DISTINCTION_ADD = "distinction_add", "Add Distinction"
+    DISTINCTION_REMOVE = "distinction_remove", "Remove Distinction"
+
+
+class SheetUpdateRequestStatus(models.TextChoices):
+    """Lifecycle state of a SheetUpdateRequest."""
+
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    DENIED = "denied", "Denied"
+
+
+# Backwards-compat alias — old imports still work during migration.
+DistinctionChangeAction = SheetUpdateRequestType

@@ -46,28 +46,27 @@ gain), and — as of #2441 Task 8 — `GAMEPLAY` (`world.magic.services.traditio
 leave_tradition` re-applying the Unbound drawback; previously vestigial/unassigned). Full
 per-source detail: `docs/systems/distinctions.md` "Post-CG acquisition" section.
 
-**The removal counterpart is `remove_distinction` (#2624/#2631).** It requires a valid
-non-consumed `DistinctionChangeAuthorization` and tears down modifiers
-(`delete_distinction_modifiers`) and the relocated Secret (`clear_distinction_secret`) before
-deleting the row. Deliberately NOT torn down: resonance currency seeded via
-`DistinctionResonanceGrant` (permanent, monotonic ledger — no clawback), `NPCAsset` rows, and
-codex grants. Legacy ad hoc deleters (e.g. `world.magic.services.tradition_membership.
-_shed_traditionless_drawbacks`) predate the seam; new removal callers go through
-`remove_distinction`.
+**The removal counterpart is `remove_distinction` (#2628/#2631).** It requires an APPROVED
+`SheetUpdateRequest` and tears down modifiers (`delete_distinction_modifiers`) and the
+relocated Secret (`clear_distinction_secret`) before deleting the row. Deliberately NOT torn
+down: resonance currency seeded via `DistinctionResonanceGrant` (permanent, monotonic ledger —
+no clawback), `NPCAsset` rows, and codex grants. Legacy ad hoc deleters (e.g.
+`world.magic.services.tradition_membership._shed_traditionless_drawbacks`) predate the seam;
+new removal callers go through `remove_distinction`.
 
-## Post-CG change authorization (#2624, repaired #2631)
+## Post-CG change requests — the `SheetUpdateRequest` framework (#2628, table-routed #2631)
 
-`create_distinction_change_authorization` is the single creation seam for
-`DistinctionChangeAuthorization` (GM action + table-request sign-off both call it; it notifies
-the player). `spend_xp_on_distinction_unlock` is the accept step — debits XP (skipping the
-tracker entirely at zero cost), then fires `grant_distinction` (with the authorization's stored
-`rank`) or `remove_distinction`, and is the sole writer of `is_consumed`. **Pricing is
-benefit-direction only** (`compute_distinction_change_xp_cost`): gaining a positive-cost
-distinction or shedding a negative-cost one charges (`2 × |cost_per_rank| × ranks`, removal
-×1.5 friction; rank-ups charge only the delta above the held rank); taking a detriment or
-losing a benefit for story reasons is FREE (cost 0), and a GM may explicitly override to 0.
-This cost gate lives on the authorization flow, not on `grant_distinction` itself — the
-grant seam's "No XP path" invariant (above) still holds.
+`create_sheet_update_request` (PENDING, XP cost stamped at creation on the sign-based model:
+add-beneficial and remove-detrimental charge `|cost_per_rank| × rank`; the other two quadrants
+are free) → `approve_sheet_update_request` (atomic XP auto-debit + `grant_distinction` /
+`remove_distinction`; no separate player accept step) or `deny_sheet_update_request`. An ADD
+for an already-held distinction is a one-step rank-up. GM-direct grants
+(`gm_award_distinction`) go through the same framework as auto-approved requests — no free
+bypass. **Review pool (#2631 ruling):** staff, or a GM whose table the target character
+actively sits at — enforced in both the `review_sheet_update` action and
+`world.gm.services.signoff_table_update_request` (the table-routed web flow, which
+creates-and-approves in one step). The cost gate lives on this framework, not on
+`grant_distinction` itself — the grant seam's "No XP path" invariant (above) still holds.
 
 ## Profile Visibility — Secrets, not a boolean (#1109 → #1334)
 

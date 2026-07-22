@@ -728,7 +728,7 @@ class ProfileTextRequestDetailsSerializer(serializers.ModelSerializer):
 
 
 class DistinctionChangeRequestDetailsSerializer(serializers.ModelSerializer):
-    """Read payload for DISTINCTION_CHANGE requests (#2631)."""
+    """Read payload for DISTINCTION_CHANGE requests (#2631, on the #2628 engine)."""
 
     distinction_name = serializers.CharField(
         source="distinction.name", read_only=True, allow_null=True
@@ -736,11 +736,8 @@ class DistinctionChangeRequestDetailsSerializer(serializers.ModelSerializer):
     held_distinction_name = serializers.CharField(
         source="character_distinction.distinction.name", read_only=True, allow_null=True
     )
-    authorization_xp_cost = serializers.IntegerField(
-        source="authorization.xp_cost", read_only=True, allow_null=True
-    )
-    authorization_consumed = serializers.BooleanField(
-        source="authorization.is_consumed", read_only=True, allow_null=True
+    xp_cost = serializers.IntegerField(
+        source="sheet_update_request.xp_cost", read_only=True, allow_null=True
     )
 
     class Meta:
@@ -751,10 +748,8 @@ class DistinctionChangeRequestDetailsSerializer(serializers.ModelSerializer):
             "distinction_name",
             "character_distinction",
             "held_distinction_name",
-            "rank",
-            "authorization",
-            "authorization_xp_cost",
-            "authorization_consumed",
+            "sheet_update_request",
+            "xp_cost",
         ]
         read_only_fields = fields
 
@@ -803,11 +798,10 @@ class TableUpdateRequestCreateSerializer(serializers.Serializer):
     # PROFILE_TEXT payload
     field = serializers.CharField(required=False, allow_blank=True)
     proposed_text = serializers.CharField(required=False, allow_blank=True)
-    # DISTINCTION_CHANGE payload
+    # DISTINCTION_CHANGE payload (action = a SheetUpdateRequestType value)
     action = serializers.CharField(required=False, allow_blank=True)
     distinction = serializers.IntegerField(required=False, allow_null=True)
     character_distinction = serializers.IntegerField(required=False, allow_null=True)
-    rank = serializers.IntegerField(required=False, min_value=1, default=1)
 
     def validate(self, attrs: dict) -> dict:
         kind = attrs["kind"]

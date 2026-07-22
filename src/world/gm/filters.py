@@ -111,5 +111,8 @@ class TableUpdateRequestFilter(django_filters.FilterSet):
         if value == TableRequestRole.MINE:
             return queryset.filter(membership__persona__character_sheet__character__db_account=user)
         if value == TableRequestRole.GM:
-            return queryset.filter(membership__table__gm__account=user)
+            return queryset.filter(
+                membership__persona__gm_table_memberships__left_at__isnull=True,
+                membership__persona__gm_table_memberships__table__gm__account=user,
+            ).distinct()
         return queryset

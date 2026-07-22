@@ -71,10 +71,10 @@ The player-proposed / GM-vetoed sheet-change loop (ADR-0155): `gm.TableUpdateReq
 rides `GMTableMembership` (no table → no requests), with profile-prose rewrites
 (background/personality — applied at approval, snapshotted forever into
 `character_sheets.ProfileTextVersion` with era + IC-date stamps) and distinction
-add/rank-up/remove (approval creates a `DistinctionChangeAuthorization`; the player
-accepts to spend benefit-direction XP). REST API + web UI (sheet Updates tab, GM
-queue, version timeline). Repaired the #2624 cycle on the way (rank stored/granted,
-free non-benefit changes, player notification).
+add/rank-up/remove (table-GM approval creates-and-approves a
+`distinctions.SheetUpdateRequest` on the #2628 engine — XP auto-debits at approval, no
+player accept step). Review pool: staff or any GM whose table the persona sits at.
+REST API + web UI (sheet Updates tab, GM queue, owner/staff-only version timeline).
 
 ### Pre-Phase-1 Foundation
 - **Trust system:** TrustCategory, PlayerTrust, PlayerTrustLevel, StoryTrustRequirement — fully built, orthogonal to the episode engine

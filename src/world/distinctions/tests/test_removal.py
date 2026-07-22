@@ -9,124 +9,167 @@ from world.distinctions.factories import (
     CharacterDistinctionFactory,
     DistinctionFactory,
 )
-from world.distinctions.types import DistinctionChangeAction
+from world.distinctions.types import (
+    DistinctionOrigin,
+    SheetUpdateRequestStatus,
+    SheetUpdateRequestType,
+)
 
 
 class ComputeXPCostTests(TestCase):
     def test_add_positive_distinction(self):
-        from world.distinctions.services import compute_distinction_change_xp_cost
+        from world.distinctions.services import compute_sheet_update_xp_cost
 
         distinction = DistinctionFactory(cost_per_rank=10, max_rank=1)
-        cost = compute_distinction_change_xp_cost(
-            distinction, rank=1, action=DistinctionChangeAction.ADD
+        cost = compute_sheet_update_xp_cost(
+            SheetUpdateRequestType.DISTINCTION_ADD, distinction, rank=1
         )
-        assert cost == 20  # 2 × 10 × 1
+        assert cost == 10  # abs(10) * 1
 
     def test_add_ranked_distinction(self):
-        from world.distinctions.services import compute_distinction_change_xp_cost
+        from world.distinctions.services import compute_sheet_update_xp_cost
 
         distinction = DistinctionFactory(cost_per_rank=5, max_rank=3)
-        cost = compute_distinction_change_xp_cost(
-            distinction, rank=3, action=DistinctionChangeAction.ADD
+        cost = compute_sheet_update_xp_cost(
+            SheetUpdateRequestType.DISTINCTION_ADD, distinction, rank=3
         )
-        assert cost == 30  # 2 × 5 × 3
-
-    def test_remove_positive_distinction_is_free(self):
-        from world.distinctions.services import compute_distinction_change_xp_cost
-
-        distinction = DistinctionFactory(cost_per_rank=10, max_rank=1)
-        cost = compute_distinction_change_xp_cost(
-            distinction, rank=1, action=DistinctionChangeAction.REMOVE
-        )
-        assert cost == 0  # losing a benefit for story reasons is free (#2631)
+        assert cost == 15  # abs(5) * 3
 
     def test_add_negative_distinction_is_free(self):
-        from world.distinctions.services import compute_distinction_change_xp_cost
+        from world.distinctions.services import compute_sheet_update_xp_cost
 
         distinction = DistinctionFactory(cost_per_rank=-50, max_rank=1)
-        cost = compute_distinction_change_xp_cost(
-            distinction, rank=1, action=DistinctionChangeAction.ADD
+        cost = compute_sheet_update_xp_cost(
+            SheetUpdateRequestType.DISTINCTION_ADD, distinction, rank=1
         )
-        assert cost == 0  # taking on a detriment is free (#2631)
+        assert cost == 0  # negative distinction: free to add
 
-    def test_add_rank_up_charges_delta_only(self):
-        from world.distinctions.services import compute_distinction_change_xp_cost
+    def test_remove_positive_distinction_is_free(self):
+        from world.distinctions.services import compute_sheet_update_xp_cost
 
-        distinction = DistinctionFactory(cost_per_rank=5, max_rank=3)
-        cost = compute_distinction_change_xp_cost(
-            distinction, rank=3, action=DistinctionChangeAction.ADD, current_rank=2
+        distinction = DistinctionFactory(cost_per_rank=10, max_rank=1)
+        cost = compute_sheet_update_xp_cost(
+            SheetUpdateRequestType.DISTINCTION_REMOVE, distinction, rank=1
         )
-        assert cost == 10  # 2 × 5 × (3 − 2)
+        assert cost == 0  # positive distinction: free to remove
 
-    def test_remove_negative_distinction_has_friction(self):
-        from world.distinctions.services import compute_distinction_change_xp_cost
+    def test_remove_negative_distinction_costs_xp(self):
+        from world.distinctions.services import compute_sheet_update_xp_cost
 
         distinction = DistinctionFactory(cost_per_rank=-50, max_rank=1)
-        cost = compute_distinction_change_xp_cost(
-            distinction, rank=1, action=DistinctionChangeAction.REMOVE
+        cost = compute_sheet_update_xp_cost(
+            SheetUpdateRequestType.DISTINCTION_REMOVE, distinction, rank=1
         )
-        assert cost == 150  # 2 × abs(-50) × 1 × 1.5
+        assert cost == 50  # abs(-50) * 1 — no friction multiplier
 
 
 class RemoveDistinctionTests(TestCase):
     def test_remove_distinction_deletes_row(self):
         from world.distinctions.models import (
             CharacterDistinction,
-            DistinctionChangeAuthorization,
+            SheetUpdateRequest,
         )
         from world.distinctions.services import remove_distinction
 
         sheet = CharacterSheetFactory()
         char_distinction = CharacterDistinctionFactory(character=sheet)
-        auth = DistinctionChangeAuthorization.objects.create(
+        req = SheetUpdateRequest.objects.create(
             character_sheet=sheet,
-            action=DistinctionChangeAction.REMOVE,
+            request_type=SheetUpdateRequestType.DISTINCTION_REMOVE,
             target_character_distinction=char_distinction,
-            reason="Test removal",
-            xp_cost=20,
+            justification="Test removal",
+            xp_cost=0,
+            status=SheetUpdateRequestStatus.APPROVED,
+            origin=DistinctionOrigin.UNLOCK_PURCHASE,
         )
-        remove_distinction(char_distinction, authorization=auth)
+        remove_distinction(char_distinction, sheet_update_request=req)
         assert not CharacterDistinction.objects.filter(pk=char_distinction.pk).exists()
 
-    def test_remove_raises_on_consumed_authorization(self):
-        from world.distinctions.exceptions import DistinctionAuthorizationError
-        from world.distinctions.models import DistinctionChangeAuthorization
+    def test_remove_raises_on_non_approved_request(self):
+        from world.distinctions.exceptions import SheetUpdateRequestError
+        from world.distinctions.models import SheetUpdateRequest
         from world.distinctions.services import remove_distinction
 
         sheet = CharacterSheetFactory()
         char_distinction = CharacterDistinctionFactory(character=sheet)
-        auth = DistinctionChangeAuthorization.objects.create(
+        req = SheetUpdateRequest.objects.create(
             character_sheet=sheet,
-            action=DistinctionChangeAction.REMOVE,
+            request_type=SheetUpdateRequestType.DISTINCTION_REMOVE,
             target_character_distinction=char_distinction,
-            reason="Test",
-            xp_cost=20,
-            is_consumed=True,
+            justification="Test",
+            xp_cost=0,
+            status=SheetUpdateRequestStatus.DENIED,
+            origin=DistinctionOrigin.UNLOCK_PURCHASE,
         )
-        with self.assertRaises(DistinctionAuthorizationError):
-            remove_distinction(char_distinction, authorization=auth)
+        with self.assertRaises(SheetUpdateRequestError):
+            remove_distinction(char_distinction, sheet_update_request=req)
 
     def test_remove_raises_on_mismatched_target(self):
-        from world.distinctions.exceptions import DistinctionAuthorizationError
-        from world.distinctions.models import DistinctionChangeAuthorization
+        from world.distinctions.exceptions import SheetUpdateRequestError
+        from world.distinctions.models import SheetUpdateRequest
         from world.distinctions.services import remove_distinction
 
         sheet = CharacterSheetFactory()
         other_sheet = CharacterSheetFactory()
         char_distinction = CharacterDistinctionFactory(character=sheet)
         other_distinction = CharacterDistinctionFactory(character=other_sheet)
-        auth = DistinctionChangeAuthorization.objects.create(
+        req = SheetUpdateRequest.objects.create(
             character_sheet=other_sheet,
-            action=DistinctionChangeAction.REMOVE,
+            request_type=SheetUpdateRequestType.DISTINCTION_REMOVE,
             target_character_distinction=other_distinction,
-            reason="Test",
-            xp_cost=20,
+            justification="Test",
+            xp_cost=0,
+            status=SheetUpdateRequestStatus.APPROVED,
+            origin=DistinctionOrigin.UNLOCK_PURCHASE,
         )
-        with self.assertRaises(DistinctionAuthorizationError):
-            remove_distinction(char_distinction, authorization=auth)
+        with self.assertRaises(SheetUpdateRequestError):
+            remove_distinction(char_distinction, sheet_update_request=req)
 
 
-class SpendXPOnDistinctionUnlockTests(TestCase):
+class CreateSheetUpdateRequestTests(TestCase):
+    def test_create_add_request_stamps_xp_cost(self):
+        from world.distinctions.services import create_sheet_update_request
+
+        sheet = CharacterSheetFactory()
+        dist = DistinctionFactory(cost_per_rank=10, max_rank=1)
+        req = create_sheet_update_request(
+            sheet,
+            SheetUpdateRequestType.DISTINCTION_ADD,
+            justification="Story reason",
+            target_distinction=dist,
+        )
+        assert req.xp_cost == 10
+        assert req.status == SheetUpdateRequestStatus.PENDING
+
+    def test_create_add_negative_distinction_is_free(self):
+        from world.distinctions.services import create_sheet_update_request
+
+        sheet = CharacterSheetFactory()
+        dist = DistinctionFactory(cost_per_rank=-50, max_rank=1)
+        req = create_sheet_update_request(
+            sheet,
+            SheetUpdateRequestType.DISTINCTION_ADD,
+            justification="Story reason",
+            target_distinction=dist,
+        )
+        assert req.xp_cost == 0
+
+    def test_create_remove_request_stamps_xp_cost(self):
+        from world.distinctions.services import create_sheet_update_request
+
+        sheet = CharacterSheetFactory()
+        dist = DistinctionFactory(cost_per_rank=-50, max_rank=1)
+        cd = CharacterDistinctionFactory(character=sheet, distinction=dist, rank=1)
+        req = create_sheet_update_request(
+            sheet,
+            SheetUpdateRequestType.DISTINCTION_REMOVE,
+            justification="Story reason",
+            target_character_distinction=cd,
+        )
+        assert req.xp_cost == 50  # abs(-50) * 1
+
+
+class ApproveSheetUpdateRequestTests(TestCase):
     def setUp(self):
         from unittest.mock import patch
 
@@ -137,6 +180,7 @@ class SpendXPOnDistinctionUnlockTests(TestCase):
         self.account = AccountFactory()
         self.sheet.character.account = self.account
         self.sheet.character.save()
+        self.gm_account = AccountFactory()
         self.xp_tracker, _ = ExperiencePointsData.objects.get_or_create(
             account=self.account,
             defaults={"total_earned": 100, "total_spent": 0},
@@ -147,63 +191,198 @@ class SpendXPOnDistinctionUnlockTests(TestCase):
     def tearDown(self):
         self._patcher.stop()
 
-    def test_spend_xp_for_removal(self):
-        from world.distinctions.models import DistinctionChangeAuthorization
-        from world.distinctions.services import spend_xp_on_distinction_unlock
+    def test_approve_add_grants_distinction_and_debits_xp(self):
+        from world.distinctions.models import CharacterDistinction, SheetUpdateRequest
+        from world.distinctions.services import approve_sheet_update_request
         from world.progression.models.rewards import XPTransaction
 
-        char_distinction = CharacterDistinctionFactory(character=self.sheet)
-        auth = DistinctionChangeAuthorization.objects.create(
+        dist = DistinctionFactory(cost_per_rank=10, max_rank=1)
+        req = SheetUpdateRequest.objects.create(
             character_sheet=self.sheet,
-            action=DistinctionChangeAction.REMOVE,
-            target_character_distinction=char_distinction,
-            reason="Test",
-            xp_cost=20,
+            request_type=SheetUpdateRequestType.DISTINCTION_ADD,
+            target_distinction=dist,
+            justification="Test",
+            xp_cost=10,
+            origin=DistinctionOrigin.UNLOCK_PURCHASE,
         )
-        spend_xp_on_distinction_unlock(self.sheet, auth)
+        approve_sheet_update_request(req, self.gm_account)
 
-        auth.refresh_from_db()
-        assert auth.is_consumed
-        assert auth.consumed_at is not None
+        req.refresh_from_db()
+        assert req.status == SheetUpdateRequestStatus.APPROVED
+        assert req.reviewed_by == self.gm_account
+        assert req.reviewed_at is not None
+
+        cd = CharacterDistinction.objects.get(character=self.sheet, distinction=dist)
+        assert cd.origin == DistinctionOrigin.UNLOCK_PURCHASE
 
         self.xp_tracker.refresh_from_db()
-        assert self.xp_tracker.total_spent == 20
+        assert self.xp_tracker.total_spent == 10
 
-        txn = XPTransaction.objects.get(account=self.account, amount=-20)
-        assert "Distinction change" in txn.description
+        txn = XPTransaction.objects.get(account=self.account, amount=-10)
+        assert "Distinction" in txn.description
 
-    def test_spend_xp_raises_on_insufficient_xp(self):
-        from world.distinctions.exceptions import DistinctionAuthorizationError
-        from world.distinctions.models import DistinctionChangeAuthorization
-        from world.distinctions.services import spend_xp_on_distinction_unlock
+    def test_approve_remove_deletes_distinction_and_debits_xp(self):
+        from world.distinctions.models import (
+            CharacterDistinction,
+            SheetUpdateRequest,
+        )
+        from world.distinctions.services import approve_sheet_update_request
 
-        self.xp_tracker.total_earned = 10
+        dist = DistinctionFactory(cost_per_rank=-50, max_rank=1)
+        cd = CharacterDistinctionFactory(character=self.sheet, distinction=dist, rank=1)
+        req = SheetUpdateRequest.objects.create(
+            character_sheet=self.sheet,
+            request_type=SheetUpdateRequestType.DISTINCTION_REMOVE,
+            target_character_distinction=cd,
+            justification="Test",
+            xp_cost=50,
+            origin=DistinctionOrigin.UNLOCK_PURCHASE,
+        )
+        approve_sheet_update_request(req, self.gm_account)
+
+        req.refresh_from_db()
+        assert req.status == SheetUpdateRequestStatus.APPROVED
+        assert not CharacterDistinction.objects.filter(pk=cd.pk).exists()
+
+        self.xp_tracker.refresh_from_db()
+        assert self.xp_tracker.total_spent == 50
+
+    def test_approve_free_transaction_does_not_debit_xp(self):
+        from world.distinctions.models import CharacterDistinction, SheetUpdateRequest
+        from world.distinctions.services import approve_sheet_update_request
+
+        dist = DistinctionFactory(cost_per_rank=-10, max_rank=1)  # free to add
+        req = SheetUpdateRequest.objects.create(
+            character_sheet=self.sheet,
+            request_type=SheetUpdateRequestType.DISTINCTION_ADD,
+            target_distinction=dist,
+            justification="Test",
+            xp_cost=0,
+            origin=DistinctionOrigin.UNLOCK_PURCHASE,
+        )
+        approve_sheet_update_request(req, self.gm_account)
+
+        self.xp_tracker.refresh_from_db()
+        assert self.xp_tracker.total_spent == 0
+        assert CharacterDistinction.objects.filter(character=self.sheet, distinction=dist).exists()
+
+    def test_approve_fails_on_insufficient_xp(self):
+        from world.distinctions.exceptions import SheetUpdateRequestError
+        from world.distinctions.models import SheetUpdateRequest
+        from world.distinctions.services import approve_sheet_update_request
+
+        self.xp_tracker.total_earned = 5
         self.xp_tracker.save()
 
-        char_distinction = CharacterDistinctionFactory(character=self.sheet)
-        auth = DistinctionChangeAuthorization.objects.create(
+        dist = DistinctionFactory(cost_per_rank=10, max_rank=1)
+        req = SheetUpdateRequest.objects.create(
             character_sheet=self.sheet,
-            action=DistinctionChangeAction.REMOVE,
-            target_character_distinction=char_distinction,
-            reason="Test",
-            xp_cost=20,
+            request_type=SheetUpdateRequestType.DISTINCTION_ADD,
+            target_distinction=dist,
+            justification="Test",
+            xp_cost=10,
+            origin=DistinctionOrigin.UNLOCK_PURCHASE,
         )
-        with self.assertRaises(DistinctionAuthorizationError):
-            spend_xp_on_distinction_unlock(self.sheet, auth)
+        with self.assertRaises(SheetUpdateRequestError):
+            approve_sheet_update_request(req, self.gm_account)
 
-    def test_spend_xp_raises_on_consumed_auth(self):
-        from world.distinctions.exceptions import DistinctionAuthorizationError
-        from world.distinctions.models import DistinctionChangeAuthorization
-        from world.distinctions.services import spend_xp_on_distinction_unlock
+        req.refresh_from_db()
+        assert req.status == SheetUpdateRequestStatus.PENDING  # unchanged
 
-        char_distinction = CharacterDistinctionFactory(character=self.sheet)
-        auth = DistinctionChangeAuthorization.objects.create(
+    def test_approve_fails_on_already_processed(self):
+        from world.distinctions.exceptions import SheetUpdateRequestError
+        from world.distinctions.models import SheetUpdateRequest
+        from world.distinctions.services import approve_sheet_update_request
+
+        dist = DistinctionFactory(cost_per_rank=10, max_rank=1)
+        req = SheetUpdateRequest.objects.create(
             character_sheet=self.sheet,
-            action=DistinctionChangeAction.REMOVE,
-            target_character_distinction=char_distinction,
-            reason="Test",
-            xp_cost=20,
-            is_consumed=True,
+            request_type=SheetUpdateRequestType.DISTINCTION_ADD,
+            target_distinction=dist,
+            justification="Test",
+            xp_cost=10,
+            status=SheetUpdateRequestStatus.APPROVED,
+            origin=DistinctionOrigin.UNLOCK_PURCHASE,
         )
-        with self.assertRaises(DistinctionAuthorizationError):
-            spend_xp_on_distinction_unlock(self.sheet, auth)
+        with self.assertRaises(SheetUpdateRequestError):
+            approve_sheet_update_request(req, self.gm_account)
+
+
+class DenySheetUpdateRequestTests(TestCase):
+    def test_deny_sets_status_and_no_change(self):
+        from world.distinctions.models import (
+            CharacterDistinction,
+            SheetUpdateRequest,
+        )
+        from world.distinctions.services import deny_sheet_update_request
+
+        sheet = CharacterSheetFactory()
+        dist = DistinctionFactory(cost_per_rank=10, max_rank=1)
+        req = SheetUpdateRequest.objects.create(
+            character_sheet=sheet,
+            request_type=SheetUpdateRequestType.DISTINCTION_ADD,
+            target_distinction=dist,
+            justification="Test",
+            xp_cost=10,
+            origin=DistinctionOrigin.UNLOCK_PURCHASE,
+        )
+        from evennia_extensions.factories import AccountFactory
+
+        gm_account = AccountFactory()
+
+        deny_sheet_update_request(req, gm_account)
+
+        req.refresh_from_db()
+        assert req.status == SheetUpdateRequestStatus.DENIED
+        assert req.reviewed_by == gm_account
+        assert not CharacterDistinction.objects.filter(character=sheet, distinction=dist).exists()
+
+
+class CancelSheetUpdateRequestTests(TestCase):
+    def test_cancel_deletes_pending_request(self):
+        from world.distinctions.models import SheetUpdateRequest
+        from world.distinctions.services import cancel_sheet_update_request
+
+        sheet = CharacterSheetFactory()
+        from evennia_extensions.factories import AccountFactory
+
+        account = AccountFactory()
+        sheet.character.account = account
+        sheet.character.save()
+        dist = DistinctionFactory(cost_per_rank=10, max_rank=1)
+        req = SheetUpdateRequest.objects.create(
+            character_sheet=sheet,
+            request_type=SheetUpdateRequestType.DISTINCTION_ADD,
+            target_distinction=dist,
+            justification="Test",
+            xp_cost=10,
+            submitted_by=account,
+            origin=DistinctionOrigin.UNLOCK_PURCHASE,
+        )
+        cancel_sheet_update_request(req, account)
+        assert not SheetUpdateRequest.objects.filter(pk=req.pk).exists()
+
+    def test_cancel_rejects_non_pending(self):
+        from world.distinctions.exceptions import SheetUpdateRequestError
+        from world.distinctions.models import SheetUpdateRequest
+        from world.distinctions.services import cancel_sheet_update_request
+
+        sheet = CharacterSheetFactory()
+        from evennia_extensions.factories import AccountFactory
+
+        account = AccountFactory()
+        sheet.character.account = account
+        sheet.character.save()
+        dist = DistinctionFactory(cost_per_rank=10, max_rank=1)
+        req = SheetUpdateRequest.objects.create(
+            character_sheet=sheet,
+            request_type=SheetUpdateRequestType.DISTINCTION_ADD,
+            target_distinction=dist,
+            justification="Test",
+            xp_cost=10,
+            status=SheetUpdateRequestStatus.APPROVED,
+            submitted_by=account,
+            origin=DistinctionOrigin.UNLOCK_PURCHASE,
+        )
+        with self.assertRaises(SheetUpdateRequestError):
+            cancel_sheet_update_request(req, account)

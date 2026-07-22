@@ -30,6 +30,11 @@ export const PROFILE_TEXT_FIELDS = [
   { value: 'personality', label: 'Personality' },
 ] as const;
 
+export const DISTINCTION_ACTIONS = {
+  ADD: 'distinction_add',
+  REMOVE: 'distinction_remove',
+} as const;
+
 export interface CreateUpdateRequestBody {
   membership: number;
   kind: string;
@@ -39,7 +44,6 @@ export interface CreateUpdateRequestBody {
   action?: string;
   distinction?: number;
   character_distinction?: number;
-  rank?: number;
 }
 
 export interface SignoffBody {

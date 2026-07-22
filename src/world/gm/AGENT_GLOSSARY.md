@@ -111,6 +111,8 @@ concrete change (a profile-prose rewrite or a distinction add/rank-up/remove) wi
 player `Reason:`, never a prompt for the GM to write content. Routed through
 `GMTableMembership` (no table → no requests, by design). Kind payloads live on 1:1
 details models (`ProfileTextRequestDetails`, `DistinctionChangeRequestDetails`); prose
-applies at approval, distinction approval creates a `DistinctionChangeAuthorization`
-the player accepts on their own schedule.
+applies at approval; distinction approval creates-and-approves a
+`distinctions.SheetUpdateRequest` on the #2628 engine (XP auto-debits atomically — no
+separate accept step). Reviewable by staff or any GM whose table the requesting persona
+actively sits at (#2631 ruling), never by a GM the player has no table with.
 _Avoid_: job, +request, ticket, petition (that's `player_submissions`' staff inbox).

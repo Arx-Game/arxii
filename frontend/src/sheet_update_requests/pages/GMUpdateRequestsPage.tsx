@@ -14,7 +14,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 
 import { useSignoffMutation, useUpdateRequestsQuery } from '../queries';
-import { REQUEST_KINDS, REQUEST_STATUSES, type TableUpdateRequest } from '../types';
+import {
+  DISTINCTION_ACTIONS,
+  REQUEST_KINDS,
+  REQUEST_STATUSES,
+  type TableUpdateRequest,
+} from '../types';
 
 const STATUS_OPTIONS: { label: string; value: string | undefined }[] = [
   { label: 'Pending', value: REQUEST_STATUSES.PENDING },
@@ -42,9 +47,7 @@ function RequestCard({ request }: { request: TableUpdateRequest }) {
               ? `Profile: ${prose?.field ?? ''}`
               : `Distinction: ${
                   distinction?.distinction_name ?? distinction?.held_distinction_name ?? ''
-                } (${distinction?.action ?? ''}${
-                  distinction?.action === 'add' ? ` → rank ${distinction?.rank}` : ''
-                })`}
+                } (${distinction?.action === DISTINCTION_ACTIONS.REMOVE ? 'shed' : 'gain'})`}
           </span>
           <Badge variant="outline">{request.status}</Badge>
         </CardTitle>
@@ -117,7 +120,8 @@ export function GMUpdateRequestsPage() {
       <h1 className="mb-2 text-2xl font-bold">Sheet Update Requests</h1>
       <p className="mb-6 text-sm text-muted-foreground">
         Players at your tables proposing sheet changes. Your call is story-fit, yes or no — the
-        player wrote the content, and prose approvals apply immediately.
+        player wrote the content. Approvals apply immediately (distinction changes debit any XP cost
+        at approval).
       </p>
 
       <div className="mb-6 flex flex-wrap gap-2">

@@ -1,30 +1,48 @@
-"""Tests for the TableUpdateRequest framework (#2631)."""
+"""Tests for the TableUpdateRequest framework (#2631, on the #2628 engine)."""
 
 from __future__ import annotations
+
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
 
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.models import ProfileTextVersion
 from world.character_sheets.types import ProfileTextField
 from world.distinctions.factories import (
     CharacterDistinctionFactory,
     DistinctionFactory,
 )
-from world.distinctions.types import DistinctionChangeAction
+from world.distinctions.types import SheetUpdateRequestStatus, SheetUpdateRequestType
 from world.gm.constants import TableRequestKind, TableRequestStatus
 from world.gm.factories import (
     GMProfileFactory,
+    GMTableFactory,
     GMTableMembershipFactory,
 )
 from world.gm.services import (
     TableRequestError,
-    mark_requests_completed_for_authorization,
+    gm_may_review_for_persona,
     signoff_table_update_request,
     submit_distinction_change_request,
     submit_profile_text_request,
     withdraw_table_update_request,
 )
+
+
+def _fund_sheet(sheet, total_earned=100):
+    """Attach an account with XP to the sheet's character."""
+    from world.progression.models.rewards import ExperiencePointsData
+
+    account = AccountFactory()
+    sheet.character.db_account = account
+    sheet.character.save()
+    ExperiencePointsData.objects.get_or_create(
+        account=account,
+        defaults={"total_earned": total_earned, "total_spent": 0},
+    )
+    return account
 
 
 class SubmitRequestTests(TestCase):
@@ -67,7 +85,7 @@ class SubmitRequestTests(TestCase):
         distinction = DistinctionFactory(cost_per_rank=5, max_rank=1)
         request = submit_distinction_change_request(
             self.membership,
-            action=DistinctionChangeAction.ADD,
+            action=SheetUpdateRequestType.DISTINCTION_ADD,
             distinction=distinction,
             reasoning="Earned it in the story.",
         )
@@ -79,10 +97,40 @@ class SubmitRequestTests(TestCase):
         with self.assertRaises(TableRequestError):
             submit_distinction_change_request(
                 self.membership,
-                action=DistinctionChangeAction.REMOVE,
+                action=SheetUpdateRequestType.DISTINCTION_REMOVE,
                 character_distinction=other,
                 reasoning="reason",
             )
+
+
+class ReviewPoolTests(TestCase):
+    """The #2631 ruling: staff or any GM whose table the persona sits at."""
+
+    def setUp(self):
+        self.membership = GMTableMembershipFactory()
+        self.persona = self.membership.persona
+
+    def test_own_table_gm_may_review(self):
+        assert gm_may_review_for_persona(self.membership.table.gm, self.persona)
+
+    def test_other_table_gm_of_same_persona_may_review(self):
+        other_table = GMTableFactory()
+        GMTableMembershipFactory(table=other_table, persona=self.persona)
+        assert gm_may_review_for_persona(other_table.gm, self.persona)
+
+    def test_stranger_gm_may_not_review(self):
+        stranger = GMProfileFactory()
+        assert not gm_may_review_for_persona(stranger, self.persona)
+
+    def test_stranger_gm_signoff_raises(self):
+        request = submit_profile_text_request(
+            self.membership,
+            field=ProfileTextField.BACKGROUND,
+            proposed_text="text",
+            reasoning="reason",
+        )
+        with self.assertRaises(TableRequestError):
+            signoff_table_update_request(request, GMProfileFactory(), approve=True)
 
 
 class SignoffTests(TestCase):
@@ -90,17 +138,11 @@ class SignoffTests(TestCase):
         self.membership = GMTableMembershipFactory()
         self.gm = self.membership.table.gm
         self.sheet = self.membership.persona.character_sheet
+        self._patcher = patch("world.magic.services.alterations.enforce_advancement_gate")
+        self._patcher.start()
 
-    def test_wrong_gm_cannot_signoff(self):
-        request = submit_profile_text_request(
-            self.membership,
-            field=ProfileTextField.BACKGROUND,
-            proposed_text="text",
-            reasoning="reason",
-        )
-        stranger = GMProfileFactory()
-        with self.assertRaises(TableRequestError):
-            signoff_table_update_request(request, stranger, approve=True)
+    def tearDown(self):
+        self._patcher.stop()
 
     def test_approve_profile_text_applies_and_completes(self):
         profile = self.sheet.true_profile
@@ -126,24 +168,46 @@ class SignoffTests(TestCase):
         assert [v.text for v in versions] == ["The old story.", "The new story."]
         assert request.profile_text_details.applied_version == versions.last()
 
-    def test_approve_distinction_creates_authorization(self):
+    def test_approve_distinction_debits_xp_and_grants(self):
+        from world.distinctions.models import CharacterDistinction
+        from world.progression.models.rewards import ExperiencePointsData
+
+        account = _fund_sheet(self.sheet, total_earned=100)
         distinction = DistinctionFactory(cost_per_rank=5, max_rank=2)
         request = submit_distinction_change_request(
             self.membership,
-            action=DistinctionChangeAction.ADD,
+            action=SheetUpdateRequestType.DISTINCTION_ADD,
             distinction=distinction,
-            rank=2,
             reasoning="Earned it.",
         )
         signoff_table_update_request(request, self.gm, approve=True)
 
         request.refresh_from_db()
-        assert request.status == TableRequestStatus.APPROVED
-        auth = request.distinction_details.authorization
-        assert auth is not None
-        assert auth.rank == 2
-        assert auth.xp_cost == 20  # 2 × 5 × 2
-        assert auth.character_sheet == self.sheet
+        assert request.status == TableRequestStatus.COMPLETED
+        sheet_request = request.distinction_details.sheet_update_request
+        assert sheet_request is not None
+        sheet_request.refresh_from_db()
+        assert sheet_request.status == SheetUpdateRequestStatus.APPROVED
+        assert sheet_request.xp_cost == 5  # |cost_per_rank| × 1, sign-based (#2628)
+        row = CharacterDistinction.objects.get(character=self.sheet, distinction=distinction)
+        assert row.rank == 1
+        tracker = ExperiencePointsData.objects.get(account=account)
+        assert tracker.total_spent == 5
+
+    def test_approve_distinction_insufficient_xp_stays_pending(self):
+        _fund_sheet(self.sheet, total_earned=1)
+        distinction = DistinctionFactory(cost_per_rank=50, max_rank=1)
+        request = submit_distinction_change_request(
+            self.membership,
+            action=SheetUpdateRequestType.DISTINCTION_ADD,
+            distinction=distinction,
+            reasoning="Earned it.",
+        )
+        with self.assertRaises(TableRequestError):
+            signoff_table_update_request(request, self.gm, approve=True)
+
+        request.refresh_from_db()
+        assert request.status == TableRequestStatus.PENDING
 
     def test_reject_notifies_and_terminates(self):
         from world.narrative.models import NarrativeMessage
@@ -174,7 +238,7 @@ class SignoffTests(TestCase):
             signoff_table_update_request(request, self.gm, approve=False)
 
 
-class WithdrawAndCompletionTests(TestCase):
+class WithdrawTests(TestCase):
     def setUp(self):
         self.membership = GMTableMembershipFactory()
         self.gm = self.membership.table.gm
@@ -200,20 +264,3 @@ class WithdrawAndCompletionTests(TestCase):
         signoff_table_update_request(request, self.gm, approve=False)
         with self.assertRaises(TableRequestError):
             withdraw_table_update_request(request)
-
-    def test_mark_completed_for_authorization(self):
-        distinction = DistinctionFactory(cost_per_rank=5, max_rank=1)
-        request = submit_distinction_change_request(
-            self.membership,
-            action=DistinctionChangeAction.ADD,
-            distinction=distinction,
-            reasoning="Earned it.",
-        )
-        signoff_table_update_request(request, self.gm, approve=True)
-        request.refresh_from_db()
-        auth = request.distinction_details.authorization
-
-        count = mark_requests_completed_for_authorization(auth)
-        assert count == 1
-        request.refresh_from_db()
-        assert request.status == TableRequestStatus.COMPLETED

@@ -9,12 +9,15 @@ from world.classes.factories import (
     PathFactory,
 )
 from world.classes.models import PathStage
+from world.codex.constants import CodexKnowledgeStatus
+from world.codex.factories import CharacterCodexKnowledgeFactory, CodexEntryFactory
 from world.progression.exceptions import PathRequirementsNotMet
 from world.progression.factories import CharacterPathHistoryFactory
-from world.progression.models import TraitRequirement
+from world.progression.models import CodexKnowledgeRequirement, TraitRequirement
 from world.progression.selectors import eligible_advanced_paths_for
 from world.progression.services.advancement import cross_into_path
 from world.progression.services.spends import check_requirements_for_path
+from world.roster.factories import RosterEntryFactory, RosterFactory
 from world.traits.factories import CharacterTraitValueFactory, SkillTraitFactory
 
 
@@ -254,3 +257,146 @@ class HybridFromEitherParentTests(TestCase):
             CharacterTraitValueFactory(character=sheet.character, trait=trait, value=40)
             eligible = eligible_advanced_paths_for(sheet)
             self.assertIn(hybrid, eligible, f"Hybrid not eligible from {parent.name}")
+
+
+class CodexKnowledgeRequirementTests(TestCase):
+    """Tests for CodexKnowledgeRequirement gating (#2603)."""
+
+    def _make_sheet_with_roster_entry(self):
+        """Create a CharacterSheet with a linked RosterEntry for codex knowledge."""
+        sheet = CharacterSheetFactory()
+        roster = RosterFactory()
+        RosterEntryFactory(character_sheet=sheet, roster=roster)
+        return sheet
+
+    def test_gate_passes_when_codex_entry_is_known(self):
+        """A character with KNOWN codex knowledge passes the gate."""
+        path = PathFactory()
+        entry = CodexEntryFactory()
+        sheet = self._make_sheet_with_roster_entry()
+        CharacterCodexKnowledgeFactory(
+            roster_entry=sheet.roster_entry,
+            entry=entry,
+            status=CodexKnowledgeStatus.KNOWN,
+        )
+        CodexKnowledgeRequirement.objects.create(path=path, codex_entry=entry, is_active=True)
+        met, failed = check_requirements_for_path(sheet.character, path)
+        self.assertTrue(met)
+        self.assertEqual(failed, [])
+
+    def test_gate_fails_when_codex_entry_is_uncovered(self):
+        """A character with UNCOVERED (not yet learned) codex knowledge fails."""
+        path = PathFactory()
+        entry = CodexEntryFactory()
+        sheet = self._make_sheet_with_roster_entry()
+        CharacterCodexKnowledgeFactory(
+            roster_entry=sheet.roster_entry,
+            entry=entry,
+            status=CodexKnowledgeStatus.UNCOVERED,
+        )
+        CodexKnowledgeRequirement.objects.create(path=path, codex_entry=entry, is_active=True)
+        met, failed = check_requirements_for_path(sheet.character, path)
+        self.assertFalse(met)
+        self.assertEqual(len(failed), 1)
+        self.assertIn(entry.name, failed[0])
+
+    def test_gate_fails_when_codex_entry_is_absent(self):
+        """A character with no CharacterCodexKnowledge row for the entry fails."""
+        path = PathFactory()
+        entry = CodexEntryFactory()
+        sheet = self._make_sheet_with_roster_entry()
+        CodexKnowledgeRequirement.objects.create(path=path, codex_entry=entry, is_active=True)
+        met, failed = check_requirements_for_path(sheet.character, path)
+        self.assertFalse(met)
+        self.assertEqual(len(failed), 1)
+
+    def test_fail_open_when_no_requirement_authored(self):
+        """A path with no CodexKnowledgeRequirement passes (fail-open)."""
+        path = PathFactory()
+        sheet = self._make_sheet_with_roster_entry()
+        met, failed = check_requirements_for_path(sheet.character, path)
+        self.assertTrue(met)
+        self.assertEqual(failed, [])
+
+    def test_inactive_requirement_is_ignored(self):
+        """An is_active=False CodexKnowledgeRequirement does not gate."""
+        path = PathFactory()
+        entry = CodexEntryFactory()
+        sheet = self._make_sheet_with_roster_entry()
+        CodexKnowledgeRequirement.objects.create(path=path, codex_entry=entry, is_active=False)
+        met, _failed = check_requirements_for_path(sheet.character, path)
+        self.assertTrue(met)
+
+    def test_is_met_degrades_gracefully_without_sheet(self):
+        """is_met_by_character returns False (not crash) when no CharacterSheet."""
+        from evennia_extensions.factories import CharacterFactory
+
+        path = PathFactory()
+        entry = CodexEntryFactory()
+        req = CodexKnowledgeRequirement.objects.create(path=path, codex_entry=entry, is_active=True)
+        bare_obj = CharacterFactory()
+        met, msg = req.is_met_by_character(bare_obj)
+        self.assertFalse(met)
+        self.assertIn(entry.name, msg)
+
+
+class CodexKnowledgeSelectorTests(TestCase):
+    """Tests for CodexKnowledgeRequirement filtering in eligible_advanced_paths_for."""
+
+    def _setup_character_at_level_2(self, sheet):
+        """Set up a character at level 2 (next level 3 = POTENTIAL semi-crossing)."""
+        char_class = CharacterClassFactory()
+        CharacterClassLevelFactory(
+            character=sheet.character,
+            character_class=char_class,
+            level=2,
+            is_primary=True,
+        )
+        sheet.invalidate_class_level_cache()
+
+    def _make_sheet_with_roster_entry(self):
+        """Create a CharacterSheet with a linked RosterEntry for codex knowledge."""
+        sheet = CharacterSheetFactory()
+        roster = RosterFactory()
+        RosterEntryFactory(character_sheet=sheet, roster=roster)
+        return sheet
+
+    def test_filters_out_paths_with_unmet_codex_requirement(self):
+        """Paths with unmet CodexKnowledgeRequirement are not in the eligible list."""
+        parent = PathFactory(stage=PathStage.PROSPECT)
+        eligible_child = PathFactory(stage=PathStage.POTENTIAL, is_active=True)
+        gated_child = PathFactory(stage=PathStage.POTENTIAL, is_active=True)
+        eligible_child.parent_paths.add(parent)
+        gated_child.parent_paths.add(parent)
+        entry = CodexEntryFactory()
+        sheet = self._make_sheet_with_roster_entry()
+        self._setup_character_at_level_2(sheet)
+        CharacterPathHistoryFactory(character=sheet.character, path=parent)
+        CodexKnowledgeRequirement.objects.create(
+            path=gated_child, codex_entry=entry, is_active=True
+        )
+        eligible = eligible_advanced_paths_for(sheet)
+        eligible_ids = [p.pk for p in eligible]
+        self.assertIn(eligible_child.pk, eligible_ids)
+        self.assertNotIn(gated_child.pk, eligible_ids)
+
+    def test_includes_paths_with_met_codex_requirement(self):
+        """Paths with met CodexKnowledgeRequirement are in the eligible list."""
+        parent = PathFactory(stage=PathStage.PROSPECT)
+        gated_child = PathFactory(stage=PathStage.POTENTIAL, is_active=True)
+        gated_child.parent_paths.add(parent)
+        entry = CodexEntryFactory()
+        sheet = self._make_sheet_with_roster_entry()
+        self._setup_character_at_level_2(sheet)
+        CharacterPathHistoryFactory(character=sheet.character, path=parent)
+        CharacterCodexKnowledgeFactory(
+            roster_entry=sheet.roster_entry,
+            entry=entry,
+            status=CodexKnowledgeStatus.KNOWN,
+        )
+        CodexKnowledgeRequirement.objects.create(
+            path=gated_child, codex_entry=entry, is_active=True
+        )
+        eligible = eligible_advanced_paths_for(sheet)
+        eligible_ids = [p.pk for p in eligible]
+        self.assertIn(gated_child.pk, eligible_ids)

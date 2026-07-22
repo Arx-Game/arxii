@@ -7,8 +7,8 @@
  *   POST /api/gm/table-update-requests/{id}/withdraw/
  * Timeline:
  *   GET /api/character-sheets/{id}/profile-text-versions/
- * Accepting an approved distinction change dispatches the registry action
- * `accept_distinction_change` through the unified dispatch endpoint.
+ * Distinction approvals auto-debit XP at GM sign-off (#2628 engine) — there
+ * is no player accept step.
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
@@ -82,21 +82,4 @@ export async function fetchProfileTextVersions(sheetId: number): Promise<Profile
   const res = await apiFetch(`/api/character-sheets/${sheetId}/profile-text-versions/`);
   if (!res.ok) await throwApiError(res, 'Failed to load profile history');
   return res.json() as Promise<ProfileTextVersion[]>;
-}
-
-/** Accept an approved distinction change: spend the XP via the dispatch seam. */
-export async function acceptDistinctionChange(
-  characterId: number,
-  authorizationId: number
-): Promise<{ success?: boolean | null; message?: string | null }> {
-  const res = await apiFetch(`/api/actions/characters/${characterId}/dispatch/`, {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify({
-      ref: { backend: 'registry', registry_key: 'accept_distinction_change' },
-      kwargs: { authorization_id: authorizationId },
-    }),
-  });
-  if (!res.ok) await throwApiError(res, 'Failed to accept the change');
-  return res.json() as Promise<{ success?: boolean | null; message?: string | null }>;
 }

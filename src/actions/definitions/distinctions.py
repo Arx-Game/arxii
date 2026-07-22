@@ -1,4 +1,4 @@
-"""Distinction-specific actions: GM award / rank-up (#2037)."""
+"""Distinction-specific actions: GM award + sheet-update requests (#2037, #2628)."""
 
 from __future__ import annotations
 
@@ -27,46 +27,46 @@ def _coerce_positive_int(value: Any) -> int | None:
     return coerced if coerced > 0 else None
 
 
-def _coerce_nonneg_int(value: Any) -> int | None:
-    """Return ``value`` as a non-negative int, or ``None`` if it isn't one.
+def _reviewer_has_table_access(reviewer_account: Any, req: Any) -> bool:
+    """The #2631 review-pool rule: staff, or a GM with table access.
 
-    Zero is legitimate for ``xp_cost`` — story-reason changes are free (#2631) —
-    so the xp_cost override uses this instead of ``_coerce_positive_int``.
+    A GM may review a request iff the requesting character has an ACTIVE
+    membership at one of that GM's tables. Shopping among known GMs is fine;
+    a GM the player has never sat with must not see their sheet.
     """
-    try:
-        coerced = int(value)
-    except (TypeError, ValueError):
-        return None
-    return coerced if coerced >= 0 else None
+    if reviewer_account is None or reviewer_account.is_staff:
+        return True
+
+    from world.gm.models import GMTableMembership  # noqa: PLC0415
+
+    return GMTableMembership.objects.filter(
+        persona__character_sheet=req.character_sheet,
+        left_at__isnull=True,
+        table__gm__account=reviewer_account,
+    ).exists()
 
 
 @dataclass
 class GMAwardDistinctionAction(Action):
-    """JUNIOR-tier GM action: award or rank up a catalog Distinction (#2037 Decision 4).
+    """JUNIOR-tier GM action: add or remove a distinction via the request framework (#2628).
 
-    Ad-hoc narrative distinction grant -- for story-earned moments (or a staff
-    manual-audit correction, folded into this same action per the spec's
-    Decision 1b) where a GM hand-awards or ranks up a Distinction. Mirrors
-    ``GrantItemAction`` (``actions/definitions/items.py``) field-for-field: same
-    JUNIOR-tier gate, same target-search convention, same catalog-only lookup
-    (never freehand). Wraps ``world.distinctions.services.grant_distinction`` --
-    the single shared acquisition seam every in-play Distinction source calls.
+    Creates an auto-approved ``SheetUpdateRequest`` and immediately processes it.
+    XP is charged on the sign-based model: beneficial distinctions cost XP to
+    add (free to remove); detrimental distinctions are free to add (cost XP to
+    remove). This ensures XP consistency — the same cost whether the player
+    requested it or the GM set it directly.
+
+    Wraps ``create_sheet_update_request`` + ``approve_sheet_update_request``.
 
     Dispatch convention
     -------------------
-    REGISTRY ActionRef: ``registry_key="gm_award_distinction"``, ``target_name=<str>``,
-    ``distinction_slug=<str>``, optional ``rank=<int>``. Resolution (target search +
-    catalog lookup) happens in ``execute()``.
+    REGISTRY ActionRef: ``registry_key="gm_award_distinction"``,
+    ``target_name=<str>``, ``distinction_slug=<str>``,
+    optional ``action="remove"`` (default is add),
+    optional ``rank=<int>`` (for add).
 
     Gated on ``MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`` (staff bypass
-    preserved). No per-scene cap -- a Distinction grant is a rarer, heavier
-    action already gated on GM trust level, not a per-scene currency tap.
-
-    Rank validation (#2037 Task 2 review fold-in): an explicit ``rank`` below 1
-    or above the resolved distinction's ``max_rank`` is rejected outright (never
-    silently clamped), naming ``max_rank`` in the failure message -- the same
-    "fail loud rather than silently clamp" bar ``GMApplyConditionAction`` already
-    holds for severity/duration overrides.
+    preserved).
     """
 
     key: str = "gm_award_distinction"
@@ -79,35 +79,43 @@ class GMAwardDistinctionAction(Action):
     def get_prerequisites(self) -> list[Prerequisite]:
         return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
-    def execute(  # noqa: PLR0911
+    def execute(  # noqa: PLR0911, PLR0912, C901
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.distinctions.exceptions import DistinctionExclusionError  # noqa: PLC0415
-        from world.distinctions.models import Distinction  # noqa: PLC0415
-        from world.distinctions.services import grant_distinction  # noqa: PLC0415
-        from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+        from world.distinctions.exceptions import (  # noqa: PLC0415
+            DistinctionExclusionError,
+            SheetUpdateRequestError,
+        )
+        from world.distinctions.models import CharacterDistinction, Distinction  # noqa: PLC0415
+        from world.distinctions.services import (  # noqa: PLC0415
+            approve_sheet_update_request,
+            create_sheet_update_request,
+        )
+        from world.distinctions.types import (  # noqa: PLC0415
+            DistinctionOrigin,
+            SheetUpdateRequestType,
+        )
 
         target_name = (kwargs.get("target_name") or "").strip()
         distinction_slug = (kwargs.get("distinction_slug") or "").strip()
+        action_str = (kwargs.get("action") or "add").strip().lower()
+
         if not target_name or not distinction_slug:
+            if action_str == "remove":  # noqa: STRING_LITERAL
+                return ActionResult(
+                    success=False,
+                    message="Usage: grant_distinction/remove <character>=<distinction slug>",
+                )
             return ActionResult(
                 success=False,
-                message="Usage: gm_award_distinction <character>=<distinction slug>[,rank]",
+                message="Usage: grant_distinction <character>=<distinction slug>[,rank]",
             )
-
-        rank: int | None = None
-        rank_raw = kwargs.get("rank")
-        if rank_raw is not None:
-            rank = _coerce_positive_int(rank_raw)
-            if rank is None:
-                return ActionResult(success=False, message="rank must be a positive whole number.")
 
         target = actor.search(target_name, global_search=True)
         if target is None:
-            # search() already messaged the actor with a not-found/ambiguous notice.
             return ActionResult(success=False)
 
         sheet = target.character_sheet
@@ -123,6 +131,45 @@ class GMAwardDistinctionAction(Action):
                 message=f"No active distinction found with slug '{distinction_slug}'.",
             )
 
+        gm_account = actor.account
+
+        if action_str == "remove":  # noqa: STRING_LITERAL
+            char_distinction = CharacterDistinction.objects.filter(
+                character=sheet, distinction=distinction
+            ).first()
+            if char_distinction is None:
+                return ActionResult(
+                    success=False,
+                    message=f"{target.key} does not have {distinction.name}.",
+                )
+            try:
+                req = create_sheet_update_request(
+                    sheet,
+                    SheetUpdateRequestType.DISTINCTION_REMOVE,
+                    justification=f"GM-direct removal by {actor.key}.",
+                    target_character_distinction=char_distinction,
+                    submitted_by=gm_account,
+                    origin=DistinctionOrigin.GM_AWARD,
+                )
+                approve_sheet_update_request(req, gm_account)
+            except SheetUpdateRequestError as exc:
+                return ActionResult(success=False, message=exc.user_message)
+            except DistinctionExclusionError as exc:
+                return ActionResult(success=False, message=exc.user_message)
+
+            return ActionResult(
+                success=True,
+                message=f"Removed {distinction.name} from {target.key}.",
+            )
+
+        # ADD (default)
+        rank: int | None = None
+        rank_raw = kwargs.get("rank")
+        if rank_raw is not None:
+            rank = _coerce_positive_int(rank_raw)
+            if rank is None:
+                return ActionResult(success=False, message="rank must be a positive whole number.")
+
         if rank is not None and rank > distinction.max_rank:
             return ActionResult(
                 success=False,
@@ -130,52 +177,51 @@ class GMAwardDistinctionAction(Action):
             )
 
         try:
-            char_distinction = grant_distinction(
+            req = create_sheet_update_request(
                 sheet,
-                distinction,
+                SheetUpdateRequestType.DISTINCTION_ADD,
+                justification=f"GM-direct grant by {actor.key}.",
+                target_distinction=distinction,
+                submitted_by=gm_account,
                 origin=DistinctionOrigin.GM_AWARD,
-                rank=rank,
-                source_description=f"Awarded by {actor.key}.",
             )
+            approve_sheet_update_request(req, gm_account)
+        except SheetUpdateRequestError as exc:
+            return ActionResult(success=False, message=exc.user_message)
         except DistinctionExclusionError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
+        cd = CharacterDistinction.objects.filter(character=sheet, distinction=distinction).first()
+        actual_rank = cd.rank if cd else 1
         return ActionResult(
             success=True,
-            message=(
-                f"Awarded '{distinction.name}' (rank {char_distinction.rank}) to {target.key}."
-            ),
+            message=f"Awarded '{distinction.name}' (rank {actual_rank}) to {target.key}.",
         )
 
 
 @dataclass
-class AuthorizeDistinctionChangeAction(Action):
-    """GM action: authorize a distinction add or removal for a character.
+class SubmitSheetUpdateRequestAction(Action):
+    """Player action: submit a request to add or remove a distinction.
 
-    Creates a ``DistinctionChangeAuthorization`` row. The player then spends
-    XP via ``AcceptDistinctionChangeAction`` to complete the change.
-
-    Gated on ``MinimumGMLevelPrerequisite(GMLevel.JUNIOR)``.
+    Creates a PENDING ``SheetUpdateRequest``. The XP cost is computed and
+    stamped at submission time. The player sees the cost in the result message.
 
     Dispatch convention
     -------------------
-    REGISTRY ActionRef: ``registry_key="authorize_distinction_change"``,
-    ``target_name=<str>``, ``action=<"add"|"remove">``,
+    REGISTRY ActionRef: ``registry_key="submit_sheet_update"``,
+    ``request_type=<"distinction_add"|"distinction_remove">``,
     ``distinction_slug=<str>`` (for add) or
     ``character_distinction_id=<int>`` (for remove),
-    optional ``xp_cost=<int>`` (defaults to computed cost),
-    ``reason=<str>``.
+    optional ``rank=<int>`` (for add),
+    ``justification=<str>``.
     """
 
-    key: str = "authorize_distinction_change"
-    name: str = "Authorize Distinction Change"
+    key: str = "submit_sheet_update"
+    name: str = "Submit Sheet Update Request"
     icon: str = "scroll"
-    category: str = "gm"
+    category: str = "distinctions"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SELF
-
-    def get_prerequisites(self) -> list[Prerequisite]:
-        return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
     def execute(  # noqa: PLR0911, PLR0912, C901
         self,
@@ -183,43 +229,50 @@ class AuthorizeDistinctionChangeAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.distinctions.models import (  # noqa: PLC0415
-            CharacterDistinction,
-            Distinction,
+        from world.distinctions.exceptions import (  # noqa: PLC0415
+            DistinctionExclusionError,
+            SheetUpdateRequestError,
         )
-        from world.distinctions.services import (  # noqa: PLC0415
-            create_distinction_change_authorization,
+        from world.distinctions.models import CharacterDistinction, Distinction  # noqa: PLC0415
+        from world.distinctions.services import create_sheet_update_request  # noqa: PLC0415
+        from world.distinctions.types import (  # noqa: PLC0415
+            DistinctionOrigin,
+            SheetUpdateRequestType,
         )
-        from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
 
-        target_name = (kwargs.get("target_name") or "").strip()
-        action_str = (kwargs.get("action") or "").strip().lower()
-        reason = (kwargs.get("reason") or "").strip()
-
-        if not target_name or not action_str or not reason:
-            usage = (
-                "Usage: authorize_distinction_change <character>,action=<add|remove>,reason=<text>"
-            )
-            return ActionResult(success=False, message=usage)
-
-        if action_str not in (DistinctionChangeAction.ADD, DistinctionChangeAction.REMOVE):
-            return ActionResult(success=False, message="action must be 'add' or 'remove'.")
-
-        target = actor.search(target_name, global_search=True)
-        if target is None:
-            return ActionResult(success=False)
-
-        sheet = target.character_sheet
+        sheet = actor.character_sheet
         if sheet is None:
-            return ActionResult(success=False, message="That is not a character.")
+            return ActionResult(success=False, message="You have no character sheet.")
 
-        if action_str == DistinctionChangeAction.ADD:
+        request_type_str = (kwargs.get("request_type") or "").strip().lower()
+        justification = (kwargs.get("justification") or "").strip()
+
+        if not request_type_str or not justification:
+            return ActionResult(
+                success=False,
+                message=(
+                    "Usage: submit_sheet_update "
+                    "request_type=<distinction_add|distinction_remove>,justification=<text>"
+                ),
+            )
+
+        type_map = {
+            "distinction_add": SheetUpdateRequestType.DISTINCTION_ADD,
+            "distinction_remove": SheetUpdateRequestType.DISTINCTION_REMOVE,
+        }
+        request_type = type_map.get(request_type_str)
+        if request_type is None:
+            return ActionResult(
+                success=False,
+                message="request_type must be 'distinction_add' or 'distinction_remove'.",
+            )
+
+        account = actor.account
+
+        if request_type == SheetUpdateRequestType.DISTINCTION_ADD:
             distinction_slug = (kwargs.get("distinction_slug") or "").strip()
             if not distinction_slug:
-                return ActionResult(
-                    success=False, message="distinction_slug required for add action."
-                )
-
+                return ActionResult(success=False, message="distinction_slug required for add.")
             distinction = Distinction.objects.filter(
                 slug__iexact=distinction_slug, is_active=True
             ).first()
@@ -228,123 +281,85 @@ class AuthorizeDistinctionChangeAction(Action):
                     success=False,
                     message=f"No active distinction found with slug '{distinction_slug}'.",
                 )
-
-            existing = CharacterDistinction.objects.filter(
-                character=sheet, distinction=distinction
+            try:
+                req = create_sheet_update_request(
+                    sheet,
+                    request_type,
+                    justification=justification,
+                    target_distinction=distinction,
+                    submitted_by=account,
+                    origin=DistinctionOrigin.UNLOCK_PURCHASE,
+                )
+            except DistinctionExclusionError as exc:
+                return ActionResult(success=False, message=exc.user_message)
+            except SheetUpdateRequestError as exc:
+                return ActionResult(success=False, message=exc.user_message)
+        else:
+            cd_id = kwargs.get("character_distinction_id")
+            if cd_id is None:
+                return ActionResult(
+                    success=False,
+                    message="character_distinction_id required for remove.",
+                )
+            try:
+                cd_id_int = int(cd_id)
+            except (TypeError, ValueError):
+                return ActionResult(
+                    success=False, message="character_distinction_id must be a number."
+                )
+            char_distinction = CharacterDistinction.objects.filter(
+                pk=cd_id_int, character=sheet
             ).first()
-            current_rank = existing.rank if existing else 0
-
-            rank = kwargs.get("rank")
-            rank_int = _coerce_positive_int(rank) if rank else current_rank + 1
-            if rank_int is None:
-                return ActionResult(success=False, message="rank must be a positive whole number.")
-
-            if rank_int > distinction.max_rank:
+            if char_distinction is None:
                 return ActionResult(
                     success=False,
-                    message=f"{distinction.name} has a maximum rank of {distinction.max_rank}.",
+                    message=f"CharacterDistinction #{cd_id_int} not found for your character.",
                 )
-            if existing and rank_int <= current_rank:
-                return ActionResult(
-                    success=False,
-                    message=(
-                        f"{target.key} already has {distinction.name} at rank "
-                        f"{current_rank}; a rank-up needs a higher target rank."
-                    ),
+            try:
+                req = create_sheet_update_request(
+                    sheet,
+                    request_type,
+                    justification=justification,
+                    target_character_distinction=char_distinction,
+                    submitted_by=account,
+                    origin=DistinctionOrigin.UNLOCK_PURCHASE,
                 )
+            except SheetUpdateRequestError as exc:
+                return ActionResult(success=False, message=exc.user_message)
 
-            xp_cost = kwargs.get("xp_cost")
-            xp_cost_int: int | None = None
-            if xp_cost is not None:
-                xp_cost_int = _coerce_nonneg_int(xp_cost)
-                if xp_cost_int is None:
-                    return ActionResult(
-                        success=False, message="xp_cost must be a non-negative whole number."
-                    )
-
-            auth = create_distinction_change_authorization(
-                sheet,
-                action=DistinctionChangeAction.ADD,
-                distinction=distinction,
-                authorized_by=actor.account,
-                reason=reason,
-                rank=rank_int,
-                xp_cost=xp_cost_int,
-            )
-            verb = "ranking up" if existing else "adding"
-            return ActionResult(
-                success=True,
-                message=(
-                    f"Authorized {verb} {distinction.name} (rank {rank_int}) for "
-                    f"{target.key} at {auth.xp_cost} XP (auth #{auth.pk})."
-                ),
-            )
-
-        # REMOVE
-        cd_id = kwargs.get("character_distinction_id")
-        if cd_id is None:
-            return ActionResult(
-                success=False, message="character_distinction_id required for remove action."
-            )
-
-        try:
-            cd_id_int = int(cd_id)
-        except (TypeError, ValueError):
-            return ActionResult(success=False, message="character_distinction_id must be a number.")
-
-        char_distinction = CharacterDistinction.objects.filter(
-            pk=cd_id_int, character=sheet
-        ).first()
-        if char_distinction is None:
-            return ActionResult(
-                success=False,
-                message=f"CharacterDistinction #{cd_id_int} not found for {target.key}.",
-            )
-
-        xp_cost = kwargs.get("xp_cost")
-        xp_cost_int: int | None = None
-        if xp_cost is not None:
-            xp_cost_int = _coerce_nonneg_int(xp_cost)
-            if xp_cost_int is None:
-                return ActionResult(
-                    success=False, message="xp_cost must be a non-negative whole number."
-                )
-
-        auth = create_distinction_change_authorization(
-            sheet,
-            action=DistinctionChangeAction.REMOVE,
-            character_distinction=char_distinction,
-            authorized_by=actor.account,
-            reason=reason,
-            xp_cost=xp_cost_int,
-        )
         return ActionResult(
             success=True,
             message=(
-                f"Authorized removing {char_distinction.distinction.name}"
-                f" from {target.key} for {auth.xp_cost} XP (auth #{auth.pk})."
+                f"Request #{req.pk} submitted ({req.get_request_type_display()}). "
+                f"XP cost: {req.xp_cost}."
             ),
         )
 
 
 @dataclass
-class AcceptDistinctionChangeAction(Action):
-    """Player action: accept a distinction change by spending XP.
+class ReviewSheetUpdateRequestAction(Action):
+    """GM action: approve or deny a pending SheetUpdateRequest.
 
-    Calls ``spend_xp_on_distinction_unlock`` to debit XP and fire the change.
+    On approval: XP is auto-debited and the change fires immediately
+    (atomic). On denial: request closes, no change.
+
+    Gated on ``MinimumGMLevelPrerequisite(GMLevel.JUNIOR)``.
 
     Dispatch convention
     -------------------
-    REGISTRY ActionRef: ``registry_key="accept_distinction_change"``,
-    ``authorization_id=<int>``.
+    REGISTRY ActionRef: ``registry_key="review_sheet_update"``,
+    ``request_id=<int>``, ``decision=<"approve"|"deny">``.
     """
 
-    key: str = "accept_distinction_change"
-    name: str = "Accept Distinction Change"
+    key: str = "review_sheet_update"
+    name: str = "Review Sheet Update Request"
     icon: str = "check"
-    category: str = "distinctions"
+    category: str = "gm"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
     def execute(  # noqa: PLR0911
         self,
@@ -352,53 +367,63 @@ class AcceptDistinctionChangeAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.distinctions.exceptions import (  # noqa: PLC0415
-            DistinctionAuthorizationError,
-            DistinctionExclusionError,
+        from world.distinctions.exceptions import SheetUpdateRequestError  # noqa: PLC0415
+        from world.distinctions.models import SheetUpdateRequest  # noqa: PLC0415
+        from world.distinctions.services import (  # noqa: PLC0415
+            approve_sheet_update_request,
+            deny_sheet_update_request,
         )
-        from world.distinctions.models import DistinctionChangeAuthorization  # noqa: PLC0415
-        from world.distinctions.services import spend_xp_on_distinction_unlock  # noqa: PLC0415
-        from world.distinctions.types import DistinctionChangeAction  # noqa: PLC0415
+        from world.distinctions.types import SheetUpdateRequestStatus  # noqa: PLC0415
 
-        sheet = actor.character_sheet
-        if sheet is None:
-            return ActionResult(success=False, message="You have no character sheet.")
+        request_id = kwargs.get("request_id")
+        decision = (kwargs.get("decision") or "").strip().lower()
 
-        auth_id = kwargs.get("authorization_id")
-        if auth_id is None:
-            return ActionResult(
-                success=False, message="Usage: accept_distinction_change <authorization_id>"
-            )
-
-        try:
-            auth_id_int = int(auth_id)
-        except (TypeError, ValueError):
-            return ActionResult(success=False, message="authorization_id must be a number.")
-
-        auth = DistinctionChangeAuthorization.objects.filter(
-            pk=auth_id_int, character_sheet=sheet
-        ).first()
-        if auth is None:
+        if request_id is None or not decision:
             return ActionResult(
                 success=False,
-                message=f"Authorization #{auth_id_int} not found for your character.",
+                message="Usage: review_sheet_update request_id=<int>,decision=<approve|deny>",
             )
 
         try:
-            spend_xp_on_distinction_unlock(sheet, auth)
-        except DistinctionAuthorizationError as exc:
+            request_id_int = int(request_id)
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="request_id must be a number.")
+
+        if decision not in ("approve", "deny"):
+            return ActionResult(success=False, message="decision must be 'approve' or 'deny'.")
+
+        req = SheetUpdateRequest.objects.filter(pk=request_id_int).first()
+        if req is None:
+            return ActionResult(success=False, message=f"Request #{request_id_int} not found.")
+
+        if not _reviewer_has_table_access(actor.account, req):
+            return ActionResult(
+                success=False,
+                message="You may only review requests from characters at your own tables.",
+            )
+
+        if req.status != SheetUpdateRequestStatus.PENDING:
+            return ActionResult(
+                success=False,
+                message=f"Request #{request_id_int} has already been processed.",
+            )
+
+        gm_account = actor.account
+
+        if decision == "approve":  # noqa: STRING_LITERAL
+            try:
+                approve_sheet_update_request(req, gm_account)
+            except SheetUpdateRequestError as exc:
+                return ActionResult(success=False, message=exc.user_message)
+            return ActionResult(
+                success=True,
+                message=f"Approved request #{request_id_int}. Change applied.",
+            )
+        try:
+            deny_sheet_update_request(req, gm_account)
+        except SheetUpdateRequestError as exc:
             return ActionResult(success=False, message=exc.user_message)
-        except DistinctionExclusionError as exc:
-            return ActionResult(success=False, message=exc.user_message)
-
-        from world.gm.services import (  # noqa: PLC0415
-            mark_requests_completed_for_authorization,
-        )
-
-        mark_requests_completed_for_authorization(auth)
-
-        action_word = "added" if auth.action == DistinctionChangeAction.ADD else "removed"
         return ActionResult(
             success=True,
-            message=f"Distinction change complete: {action_word} for {auth.xp_cost} XP.",
+            message=f"Denied request #{request_id_int}.",
         )
