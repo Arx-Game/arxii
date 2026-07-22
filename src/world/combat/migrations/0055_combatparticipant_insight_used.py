@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("combat", "0052_combatencounter_initiated_by_pc_side_and_more"),
+        ("combat", "0054_combatopponent_reinforces_breakbarcontribution"),
     ]
 
     operations = [

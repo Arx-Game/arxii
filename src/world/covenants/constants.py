@@ -67,6 +67,10 @@ MENTOR_BOND_BAND_WIDTH = 2
 MENTOR_BOND_ADJACENCY_OFFSET = 1
 MENTOR_BOND_MAX_SIDEKICKS: int | None = None
 
+# Secondary covenant vow potency dial (#2641) — ratified batch-2 F-2 seed:
+# a secondary vow's Layer 2/4 contributions scale by potency_tenths / 10.
+SECONDARY_VOW_POTENCY_TENTHS_DEFAULT = 6
+
 
 class InsightTargetKind(models.TextChoices):
     """Who an ``InsightTableEntry``'s condition lands on (#2645).
@@ -92,3 +96,24 @@ class DefenseStyle(models.TextChoices):
     GEAR_SOAK = "gear_soak", "Gear Soak"  # armor is the defense
     EVASION = "evasion", "Evasion"  # not being there is the defense
     BARRIER = "barrier", "Barrier"  # force/warding is the defense
+
+
+class SphinxTier(models.TextChoices):
+    """The Sphinx of Black Quartz's three-tier vow-suitability verdict (#2640).
+
+    Never pass/fail — the Sphinx informs, it never gates (soft gate ratified;
+    a character may swear a vow it warned about). Computed by
+    ``world.covenants.sphinx.judge_vow`` from the kit∩role-demand join:
+
+    - ``TAKES`` — every authored demand is covered by the kit (or the role has
+      no authored demands at all — an unauthored vow cannot reject).
+    - ``DORMANT`` — at least one demand is covered, at least one is not: "the
+      vow would lie dormant in places."
+    - ``NOT_YET`` — zero demands covered: "the vow will not take — yet,"
+      paired with a shopping list of learnable techniques that would change
+      the answer.
+    """
+
+    TAKES = "takes", "The vow will take"
+    DORMANT = "dormant", "The vow would lie dormant in places"
+    NOT_YET = "not_yet", "The vow will not take — yet"

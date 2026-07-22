@@ -192,6 +192,29 @@ class OpponentTier(models.TextChoices):
     HERO_KILLER = "hero_killer", "Hero Killer"
 
 
+# #2643 — enemy-side bound on the summed condition-driven damage_modifier_percent
+# (Undermine's lane, ``_apply_condition_damage_interactions``). Mirrors
+# ``TEAM_BUFF_LANE_CAP_PERCENT`` (world.magic.constants) — the EQ2 lane guard: a
+# percentage lane must be bounded or a single-round unbounded stack trivializes the
+# damage identity. Staff-tunable-in-code, not DB-authored (a hard engine rail, not
+# game content).
+ENEMY_LANE_CAP_PERCENT: int = 50
+
+# #2643 — flagged seed pseudo-level table for opponents, who carry a tier instead of a
+# CharacterSheet.current_level. Consumed by ``world.conditions.services
+# .priced_percent_severity`` to price a percent-lane buff/debuff landing on an NPC
+# target the same way it prices one landing on a PC (current_level). Values are a
+# judgment call (roughly "how many PC levels is this tier worth"), not measured
+# content — revisit once real level/tier balance data exists.
+OPPONENT_TIER_LEVEL: dict[str, int] = {
+    OpponentTier.SWARM: 1,
+    OpponentTier.MOOK: 2,
+    OpponentTier.ELITE: 4,
+    OpponentTier.BOSS: 6,
+    OpponentTier.HERO_KILLER: 8,
+}
+
+
 class OpponentStatus(models.TextChoices):
     """Current status of an opponent in an encounter."""
 
@@ -576,3 +599,55 @@ def wind_penalty(felt: int) -> int:
     if felt >= WIND_BAND_BREEZY_THRESHOLD:
         return WIND_PENALTY_BREEZY
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Boss-fight structure (#2642) — diversity-weighted break-bar accrual, the
+# lieutenant gate, and the pacing floor. Numbers are the batch-3 transcript
+# rulings (design/2026-07-22-vow-transcripts-batch-3.md F-6a/b, F-7a) — every
+# value here is a tunable, not a hardcoded magic number scattered in services.py.
+# ---------------------------------------------------------------------------
+
+
+class BreakContributionKind(models.TextChoices):
+    """What kind of feed chipped a boss's break bar this round (#2642).
+
+    Persisted per-row on ``BreakBarContribution`` (mirrors ``ClashContribution``'s
+    audit shape). DAMAGE/COMBO are the pre-#2642 feeds; HOLD/DEBUFF/SUPPRESSION
+    are new non-damage feeds that let a "suppress the court" round matter even
+    when no PC lands damage on the boss itself.
+    """
+
+    DAMAGE = "damage", "Damage"
+    COMBO = "combo", "Combo"
+    HOLD = "hold", "Hold"  # PC-side LOCK-clash win against the boss this round.
+    DEBUFF = "debuff", "Debuff"  # New behavior-altering condition landed on the boss.
+    SUPPRESSION = "suppression", "Suppression"  # A lieutenant became suppressed.
+
+
+# Pacing-floor scaling factor (used only by minimum_break_bar_threshold): the
+# assumed average break-bar units a round depletes, so the pacing floor can be
+# sized in "rounds of runway" terms rather than a bare unit count. NOT a
+# per-contribution multiplier — a qualifying (actor, kind) pair chips a flat 1
+# unit/round; see BREAK_NOVELTY_MULTIPLIER for the only per-pair scaling.
+# Replaces the old flat "≥2 distinct PCs x ≥2 distinct effect types = 1 chip"
+# gate (ruled dead — see ADR-0160).
+BAR_UNITS_PER_ROUND: int = 2
+
+# The first time a (kind, effect_type) pair appears anywhere in the encounter,
+# its unit contribution is doubled (1 -> 2) — a one-time "novelty" bonus that
+# rewards bringing a new kind of pressure to the fight, not repeating the same
+# one. Repeats of an already-seen pair contribute the base 1 unit.
+BREAK_NOVELTY_MULTIPLIER: int = 2
+
+# Pacing floor: a boss's break_bar_threshold is clamped to at least
+# (soulfray_stage_count + 2) x BAR_UNITS_PER_ROUND so the anima -> Soulfray ->
+# audere arc has room to play out before the wall breaks (median 6-8 rounds,
+# tail ~10, per batch-3 F-7a). The "+2" pads for the suppress-the-court and
+# earned-one-shot acts on either side of the Soulfray climb.
+PACING_FLOOR_ROUND_PADDING: int = 2
+
+# Boss sway resistance (#2642): a BOSS-tier opponent resists a decisive Parley
+# calm by requiring one success-level step above the normal decisive threshold
+# (court-tier NPCs calm at the normal threshold; the boss does not).
+BOSS_PARLEY_RESISTANCE_STEP: int = 1

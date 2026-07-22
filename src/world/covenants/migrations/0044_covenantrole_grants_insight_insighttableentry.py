@@ -9,7 +9,7 @@ import core.natural_keys
 class Migration(migrations.Migration):
     dependencies = [
         ("conditions", "0021_durationtype_ingame_time"),
-        ("covenants", "0041_alter_vowsituationalperkrung_count_threshold_and_more"),
+        ("covenants", "0043_charactercovenantrole_is_secondary_and_more"),
     ]
 
     operations = [

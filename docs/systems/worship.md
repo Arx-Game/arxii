@@ -74,7 +74,10 @@ Majora crossings.
   payload child rows inheriting `Abstract*` bases from `magic/models/techniques.py`.
   Capability-grant rows are **inert** until a future read-path issue is built (mirrors
   `SignatureMotifBonusCapabilityGrant` inertness). `MiracleAppliedCondition` rows are
-  the MVP mechanical effect surface.
+  the MVP mechanical effect surface. `MiracleDamageProfile` inherits
+  `execute_missing_health_multiplier` from `AbstractDamageProfile` (#2643, see
+  `docs/systems/magic.md`'s "The Damage Identity" section) — default 0, no wiring
+  change needed here since it rides the shared column.
 - `MiraclePerformance` — immutable audit row (miracle, being, target_character,
   scene, resonance_spent, trigger_event, created_at).
 - `DivineInterventionConfig` — singleton (pk=1): `favor_threshold` (default 50),

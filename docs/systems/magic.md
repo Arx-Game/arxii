@@ -505,6 +505,89 @@ whose entire vow is disengaged has no engaged role at all, which is exactly the 
 pass exists to catch; it reads the same cached `covenant_roles` handler list that guard does, so
 running it first costs no extra query either way.
 
+### The Damage Identity — Bounded Team-% Lane, Vow-Keyed Stacking, Smooth Execute (#2643, ADR-0158) [BUILT & WIRED]
+
+The ratified composition (lore repo `design/covenant-vows-consolidated.md` §5): team
+damage = Strike's bases (execute-scaled) × Uplift's team-wide % × Undermine's
+enemy-side %. This slice builds the two percent lanes' bound + pricing + stacking and
+the execute ramp; Strike's own base-damage/intensity-coefficient authoring is unchanged.
+
+**The bounded team-damage-percent lane — the ONLY buff-multiplier lane, forever
+(ADR-0158, the EQ2 lane guard).** A dedicated `mechanics.ModifierTarget` row named
+`team_damage_percent` (same `"power"` category as the legacy `power_multiplier`
+target, so `_get_power_targets()` picks it up for free; seeded idempotently via
+`world.mechanics.factories.ensure_team_damage_percent_target()`, called from
+`seed_magic_dev()`) is read as its own SEPARATE lane inside
+`_apply_power_multiplier_stage` (`world/magic/services/techniques.py`). The lane's
+summed delta runs through vow-keyed diminishing returns (below), clamps to
+`±magic.constants.TEAM_BUFF_LANE_CAP_PERCENT` (default 50), and is folded into the
+SAME single `builder.multiply` call as the legacy `power_multiplier` aggregate —
+`total_delta = lane_delta_clamped + legacy_delta` — never a second multiplicative
+stage. Pre-existing `power_multiplier` sources (Audere/Audere Majora, #636) are
+intentionally left OUTSIDE the band for this issue's scope; folding them into the
+bounded lane is flagged future within-lane tuning, not a #2643 requirement.
+
+**Power buys the percentage, priced against the buffed/debuffed target's level.**
+A lane condition is authored `ConditionModifierEffect(modifier_target=
+team_damage_percent, value=1, scales_with_severity=True)`. At apply time (both cast
+paths, via the shared `world.magic.services.condition_application
+.apply_technique_conditions` seam) `world.conditions.services.priced_percent_severity`
+computes `severity = clamp(round(eff_intensity * PCT_PER_POWER_TENTHS / 10 /
+max(1, target_level)), 1, TEAM_BUFF_LANE_CAP_PERCENT)` and that becomes the
+`ConditionInstance.severity` — overriding the row's own authored severity formula for
+that one row. `target_level` resolves generically for whoever the condition lands on
+(the lane works for an ally BUFF as easily as an enemy DEBUFF — Undermine can author
+a `value=-1` row targeting ENEMY): a PC target reads `CharacterSheet.current_level`;
+a `CombatOpponent` target reads its pseudo-level from `combat.constants
+.OPPONENT_TIER_LEVEL` (SWARM 1 / MOOK 2 / ELITE 4 / BOSS 6 / HERO_KILLER 8 —
+flagged judgment-call seeds, not measured content); an unresolvable target defaults
+to level 1.
+
+**Vow-keyed stacking (diminishing returns within a vow, full stacking across vows).**
+`conditions.ConditionInstance.source_vow` (nullable FK → `covenants.CovenantRole`,
+`SET_NULL`) is stamped once per apply-time batch from the applier's engaged-vow
+anchor: the FIRST of `character.covenant_roles.currently_engaged_roles()`, resolved
+to its ANCHOR (`parent_role` when the engaged role resolved to a sub-role, else the
+role itself — never the resolved sub-role). Resolution helper:
+`world.conditions.services._resolve_source_vow_anchor`; wired into both
+`apply_condition` and `bulk_apply_conditions`. The lane's read
+(`world.magic.services.techniques._team_lane_delta`, backed by
+`conditions.services.get_condition_modifier_vow_contributions`) groups per-instance
+contributions by `source_vow_id` (a `None` group — no engaged role at apply time — is
+its own group like any named vow) and runs them through the pure function
+`world.magic.services.techniques.vow_keyed_diminished_total`: within one vow,
+contributions sort descending and weight 100% / 50% / 25% / 25%...(4th+ all ×0.25,
+no further decay); distinct vow groups stack FULLY against each other — the
+mechanical reward for multi-vow synergy over one-vow spam. `ConditionInstance
+.source_vow` is surfaced to the UI as `source_vow_name` on `ConditionInstanceSerializer`
+(`world/conditions/serializers.py`) — an armed team-damage-percent buff's vow
+provenance is visible on an ally before casting.
+
+**Enemy-side bound (Undermine's other expression).** The pre-existing
+condition-driven `ConditionDamageInteraction.damage_modifier_percent` lane —
+summed across every matching row in `process_damage_interactions` and applied as a
+final percentage multiplier in `world.combat.services
+._apply_condition_damage_interactions` — is clamped to
+`±combat.constants.ENEMY_LANE_CAP_PERCENT` (default 50) before it multiplies net
+damage. The clamp bounds only the live damage APPLICATION; an individual authored row
+may itself exceed the band, and the unclamped sum still reports on the raw
+`DamageInteractionResult`.
+
+**Smooth execute.** `AbstractDamageProfile.execute_missing_health_multiplier`
+(Decimal, default 0 — a no-op on every technique unless authored otherwise) scales a
+landing hit's damage by `1 + multiplier * missing_health_fraction`, computed off the
+TARGET's PRE-hit health (never the post-hit value — no recursion, and a second hit in
+the same exchange correctly compounds off whatever the first hit left behind). Applied
+at both `world.combat.services.apply_damage_to_opponent` and
+`apply_damage_to_participant` via the shared `_apply_execute_multiplier` helper — the
+opponent seam is threaded from a live caller (`CombatTechniqueResolver
+._apply_profiles_to_target`, where the resolving damage profile is already in hand,
+mirroring how `damage_intensity_multiplier` reaches `compute_damage_budget`); the
+participant seam accepts the same kwarg and is unit-tested directly, since combat
+technique damage in this codebase currently only ever resolves against
+`CombatOpponent` targets, not PC `CombatParticipant`s — ready for PC-vs-PC technique
+damage whenever that's wired.
+
 ### Targeting Model (#1321) [BUILT & WIRED]
 
 Standalone casts now validate targets, resolve AoE expansion, apply conditions, and route

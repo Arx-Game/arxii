@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from decimal import Decimal
+
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import (
         AuraPowerConfig,
@@ -290,7 +292,8 @@ def covenant_role_blend_power_term(ctx: PowerTermContext) -> int:
     × multiplier``. Situational perks (Layer 4, #2536) layer on top; this
     term is the floor that keeps every engaged vow relevant, not the fantasy.
     Kept as its own provider so the contribution stays attributable
-    (#2536's presentation contract).
+    (#2536's presentation contract). PRIMARY-only (#2641): a secondary vow
+    never contributes to the combat-identity blend — this is the chassis.
     """
     from decimal import Decimal  # noqa: PLC0415
 
@@ -303,7 +306,7 @@ def covenant_role_blend_power_term(ctx: PowerTermContext) -> int:
     character = ctx.sheet.character
     if not hasattr(character, "covenant_roles"):
         return 0
-    engaged_roles = character.covenant_roles.currently_engaged_roles()
+    engaged_roles = character.covenant_roles.currently_engaged_primary_roles()
     if not engaged_roles:
         return 0
     total_threads = total_thread_level_across_all_kinds(ctx.sheet)
@@ -320,6 +323,38 @@ def covenant_role_blend_power_term(ctx: PowerTermContext) -> int:
     return int(total)
 
 
+def _partition_role_ids_by_secondary(
+    engaged_pairs: Sequence[tuple[object, bool]],
+) -> tuple[set[int], set[int]]:
+    """Split ``(role, is_secondary)`` pairs into (primary_role_ids, secondary_role_ids)
+    (#2641), each role's own pk + its anchor's pk going to that flag's side. Shared by
+    every Layer 2/4 seam that needs to bucket engaged roles by membership standing.
+    """
+    primary_role_ids: set[int] = set()
+    secondary_role_ids: set[int] = set()
+    for role, is_secondary in engaged_pairs:
+        bucket = secondary_role_ids if is_secondary else primary_role_ids
+        bucket.add(role.pk)
+        if role.parent_role_id is not None:
+            bucket.add(role.parent_role_id)
+    return primary_role_ids, secondary_role_ids
+
+
+def _scale_secondary_contribution(secondary_total: Decimal) -> Decimal:
+    """Scale a secondary-sourced Decimal total by ``SecondaryVowConfig
+    .potency_tenths / 10`` (#2641) — a no-op (zero query) when the total is zero, so
+    the common all-primary case costs nothing extra.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    if not secondary_total:
+        return secondary_total
+    from world.covenants.services import secondary_vow_config  # noqa: PLC0415
+
+    potency_tenths = secondary_vow_config().potency_tenths
+    return secondary_total * Decimal(potency_tenths) / 10
+
+
 def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
     """Per-vow technique-specialty boost (#2443, Layer 2).
 
@@ -331,6 +366,15 @@ def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
     the resolved sub-role's own rows when it differs — sub-roles build upward
     (add), never replace (#2443 spec §3; contrast the anchor-only rule in
     covenant_role_action_scaling_bonus).
+
+    **Secondary-vow potency scaling (#2641):** role ids are partitioned by
+    their membership's ``is_secondary`` flag (``_partition_role_ids_by_secondary``
+    — a secondary role never contributes a resolved-sub-role id, since
+    ``currently_engaged_roles_with_flags`` resolves secondaries at the anchor
+    only). The secondary-side specialty sum is scaled by
+    ``SecondaryVowConfig.potency_tenths / 10`` (``_scale_secondary_contribution``)
+    BEFORE being added to the primary-side sum and int-truncated — a secondary
+    vow's specialty reward is real but always situational, never raw.
     """
     from decimal import Decimal  # noqa: PLC0415
 
@@ -344,8 +388,8 @@ def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
     character = ctx.sheet.character
     if not hasattr(character, "covenant_roles"):
         return 0
-    engaged_roles = character.covenant_roles.currently_engaged_roles()
-    if not engaged_roles:
+    engaged_pairs = character.covenant_roles.currently_engaged_roles_with_flags()
+    if not engaged_pairs:
         return 0
     functions = {tag.function for tag in ctx.technique.cached_function_tags}
     if not functions:
@@ -354,20 +398,21 @@ def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
     if total_threads == 0:
         return 0
 
-    role_ids: set[int] = set()
-    for role in engaged_roles:
-        role_ids.add(role.pk)
-        if role.parent_role_id is not None:
-            role_ids.add(role.parent_role_id)
-
+    primary_role_ids, secondary_role_ids = _partition_role_ids_by_secondary(engaged_pairs)
     rows = CovenantRoleTechniqueSpecialty.objects.filter(
-        covenant_role_id__in=role_ids,
+        covenant_role_id__in=(primary_role_ids | secondary_role_ids),
         function__in=functions,
     )
-    total = Decimal(0)
+    primary_total = Decimal(0)
+    secondary_total = Decimal(0)
     for row in rows:
-        total += Decimal(total_threads) * row.multiplier_tenths / 10
-    return int(total)
+        contribution = Decimal(total_threads) * row.multiplier_tenths / 10
+        if row.covenant_role_id in secondary_role_ids:
+            secondary_total += contribution
+        else:
+            primary_total += contribution
+
+    return int(primary_total + _scale_secondary_contribution(secondary_total))
 
 
 def vow_situational_power_term(ctx: PowerTermContext) -> int:
@@ -444,9 +489,16 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     ``announce_dormant_perks`` — BEFORE the "subject has an engaged role"
     early-exit below, since a subject whose entire vow is disengaged has no
     engaged role at all and is exactly the case this pass exists to catch.
-    """
-    from decimal import Decimal  # noqa: PLC0415
 
+    **Secondary-vow potency scaling (#2641):** each ``FiredPerk.is_secondary``
+    firing's contribution (after the usual thread-level scaling) is further
+    multiplied by ``SecondaryVowConfig.potency_tenths / 10`` before summing —
+    a secondary vow's situational perks are real but always weaker than a
+    primary's. See ``sum_potency_scaled_magnitudes``
+    (``world.covenants.perks.services``) for the exact scaling arithmetic — the
+    config is fetched lazily there (only when a secondary firing is actually
+    present) so the common all-primary case costs no extra query.
+    """
     from world.covenants.perks.constants import PerkEffectKind  # noqa: PLC0415
     from world.covenants.perks.context import SituationContext  # noqa: PLC0415
     from world.covenants.perks.services import (  # noqa: PLC0415
@@ -545,10 +597,9 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     if total_threads == 0:
         return 0
 
-    total = Decimal(0)
-    for firing in fired:
-        total += Decimal(total_threads) * firing.magnitude_tenths / 10
-    return int(total)
+    from world.covenants.perks.services import sum_potency_scaled_magnitudes  # noqa: PLC0415
+
+    return sum_potency_scaled_magnitudes(fired, total_threads)
 
 
 _PROVIDERS: list[PowerTermProvider] = [

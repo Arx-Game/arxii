@@ -362,6 +362,44 @@ class MentorBondError(CovenantError):
     )
 
 
+class SecondaryVowRequiresEngagedPrimaryError(CovenantError):
+    """Raised when engaging a secondary vow with no engaged primary of the same
+    covenant type (#2641) — a secondary is never available without an active
+    primary of that type to sit alongside."""
+
+    user_message = "You must have an engaged primary vow of this type before a secondary vow."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "You must have an engaged primary vow of this type before a secondary vow.",
+        }
+    )
+
+
+class SecondaryVowSameAnchorError(CovenantError):
+    """Raised when a secondary vow shares its anchor role with the engaged primary
+    vow of the same covenant type (#2641) — "no same-vow secondary": doubling down
+    on one vow is allocation (thread investment), not a second vow."""
+
+    user_message = "Your secondary vow cannot be the same vow as your primary."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Your secondary vow cannot be the same vow as your primary.",
+        }
+    )
+
+
+class SecondaryVowThreadExceedsPrimaryError(CovenantError):
+    """Raised when a secondary vow's COVENANT_ROLE thread level exceeds the
+    engaged primary's (#2641) — a secondary is never the deeper of the two."""
+
+    user_message = "Your secondary vow cannot be deeper than your primary vow."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Your secondary vow cannot be deeper than your primary vow.",
+        }
+    )
+
+
 class CourtPactExistsError(CovenantError):
     """Raised when swearing a Court pact that already exists (active pact for the same pair)."""
 

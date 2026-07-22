@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, TypedDict
 from django.db import transaction
 
 from world.combat.beat_wiring import activate_stakes_for_scene
+from world.combat.chosen_ground import compute_on_chosen_ground
 from world.combat.constants import (
     RISK_LEVELS_REQUIRING_ACKNOWLEDGEMENT,
     CombatAllegiance,
@@ -272,6 +273,8 @@ def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance
         turned hostile." Feeding an existing encounter never touches the flag. A
         CREATE also always stamps ``CombatEncounter.initiated_by_pc_side = True``
         (#2623) — this call site is always a PC's hostile cast opening the fight.
+        CREATE also stamps ``CombatEncounter.on_chosen_ground`` (#2646) via
+        ``world.combat.chosen_ground.compute_on_chosen_ground(room)``.
 
     Returns:
         The seeded or fed CombatEncounter, in DECLARING status with the caster's
@@ -287,6 +290,7 @@ def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance
             encounter_type=EncounterType.PARTY_COMBAT,
             opened_from_parley=_scene_is_active_non_battle(scene),
             initiated_by_pc_side=True,
+            on_chosen_ground=compute_on_chosen_ground(room),
         )
         from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
 

@@ -4631,6 +4631,37 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-sheets/{id}/profile-text-versions/:
+    get:
+      operationId: character_sheets_profile_text_versions_list
+      description: |-
+        The sheet's prose-history timeline (#2631) — all versioned fields at once.
+
+        Owner and staff only (per the #2631 ruling): past versions are the
+        character's private history by default, stricter than the current
+        text's own visibility. Everyone else gets an empty list,
+        indistinguishable from "no history yet". (A player-controlled
+        openness tier could relax this later via the SheetVisibility
+        machinery — deliberately not built now.)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProfileTextVersion'
+          description: ''
   /api/character-sheets/{id}/set-origin-slot/:
     post:
       operationId: character_sheets_set_origin_slot_create
@@ -8261,6 +8292,26 @@ paths:
           type: integer
         description: A unique integer value identifying this covenant role.
         required: true
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRole'
+          description: ''
+  /api/covenants/roles/sphinx/:
+    get:
+      operationId: covenants_roles_sphinx_retrieve
+      description: |-
+        GET /api/covenants/roles/sphinx/?role=<id-or-slug>
+
+        The Sphinx of Black Quartz's verdict (#2640) on the requesting
+        account's own active character taking up ``role``'s vow.
+        Self-character only, read-only — the Sphinx never gates, it informs.
       tags:
       - covenants
       security:
@@ -12592,6 +12643,150 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/gm/table-update-requests/:
+    get:
+      operationId: gm_table_update_requests_list
+      description: |-
+        Player-submitted sheet-update requests (#2631).
+
+        Players see their own requests; table GMs additionally see requests on
+        their tables; staff sees all. Creation validates the membership belongs to
+        the caller. ``signoff`` (GM) and ``withdraw`` (player) drive the state
+        machine through the service layer.
+      parameters:
+      - in: query
+        name: kind
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTableUpdateRequestList'
+          description: ''
+    post:
+      operationId: gm_table_update_requests_create
+      description: Submit a request on one of the caller's own active memberships.
+      tags:
+      - gm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TableUpdateRequestCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableUpdateRequest'
+          description: ''
+  /api/gm/table-update-requests/{id}/:
+    get:
+      operationId: gm_table_update_requests_retrieve
+      description: |-
+        Player-submitted sheet-update requests (#2631).
+
+        Players see their own requests; table GMs additionally see requests on
+        their tables; staff sees all. Creation validates the membership belongs to
+        the caller. ``signoff`` (GM) and ``withdraw`` (player) drive the state
+        machine through the service layer.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Table Update Request.
+        required: true
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableUpdateRequest'
+          description: ''
+  /api/gm/table-update-requests/{id}/signoff/:
+    post:
+      operationId: gm_table_update_requests_signoff_create
+      description: Approve or reject a pending request (table GM or staff).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Table Update Request.
+        required: true
+      tags:
+      - gm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TableUpdateRequestSignoffRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableUpdateRequest'
+          description: ''
+  /api/gm/table-update-requests/{id}/withdraw/:
+    post:
+      operationId: gm_table_update_requests_withdraw_create
+      description: Withdraw the caller's own pending request.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Table Update Request.
+        required: true
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableUpdateRequest'
+          description: ''
   /api/gm/tables/:
     get:
       operationId: gm_tables_list
@@ -22432,6 +22627,107 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/npc-services/recorded-profiles/:
+    get:
+      operationId: npc_services_recorded_profiles_list
+      description: |-
+        A player's Archive profile sittings (#2632).
+
+        Lists the caller's own personas' recorded profiles (COMMISSIONED sittings
+        + the permanent RECORDED archive). ``complete`` finalizes a COMMISSIONED
+        sitting with the write-up text — it becomes the character's current
+        description and archives forever. Public in-world Archive browsing is a
+        future surface; this endpoint is owner-scoped.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: persona
+        schema:
+          type: number
+      - in: query
+        name: status
+        schema:
+          type: string
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRecordedProfileList'
+          description: ''
+  /api/npc-services/recorded-profiles/{id}/:
+    get:
+      operationId: npc_services_recorded_profiles_retrieve
+      description: |-
+        A player's Archive profile sittings (#2632).
+
+        Lists the caller's own personas' recorded profiles (COMMISSIONED sittings
+        + the permanent RECORDED archive). ``complete`` finalizes a COMMISSIONED
+        sitting with the write-up text — it becomes the character's current
+        description and archives forever. Public in-world Archive browsing is a
+        future surface; this endpoint is owner-scoped.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Recorded Profile.
+        required: true
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordedProfile'
+          description: ''
+  /api/npc-services/recorded-profiles/{id}/complete/:
+    post:
+      operationId: npc_services_recorded_profiles_complete_create
+      description: Finalize a commissioned sitting with the player-written profile
+        text.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Recorded Profile.
+        required: true
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordedProfileCompleteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordedProfile'
+          description: ''
   /api/npc-services/roles/:
     get:
       operationId: npc_services_roles_list
@@ -37632,6 +37928,16 @@ components:
           nullable: true
           description: Get the name of the source technique.
           readOnly: true
+        source_vow_name:
+          type: string
+          nullable: true
+          description: |-
+            Get the name of the applier's engaged vow (covenant role) at apply time (#2643).
+
+            Lets a player see an armed team-damage-percent buff's vow provenance on an
+            ally BEFORE casting — the "which vow is this coming from" visibility the UI
+            requirement calls for.
+          readOnly: true
         source_description:
           type: string
           readOnly: true
@@ -37657,6 +37963,7 @@ components:
       - source_character_name
       - source_description
       - source_technique_name
+      - source_vow_name
       - stacks
       - stage_name
       - stage_order
@@ -39480,6 +39787,51 @@ components:
       - id
       - name
       - slug
+    DistinctionChangeRequestDetails:
+      type: object
+      description: 'Read payload for DISTINCTION_CHANGE requests (#2631, on the #2628
+        engine).'
+      properties:
+        action:
+          type: string
+          readOnly: true
+          description: A distinctions.SheetUpdateRequestType value (distinction_add/distinction_remove).
+        distinction:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The distinction to add/rank up (DISTINCTION_ADD only).
+        distinction_name:
+          type: string
+          readOnly: true
+          nullable: true
+        character_distinction:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The held distinction to remove (DISTINCTION_REMOVE only; nulls
+            after deletion).
+        held_distinction_name:
+          type: string
+          readOnly: true
+          nullable: true
+        sheet_update_request:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: 'The #2628 request created-and-approved at table sign-off.'
+        xp_cost:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - action
+      - character_distinction
+      - distinction
+      - distinction_name
+      - held_distinction_name
+      - sheet_update_request
+      - xp_cost
     DistinctionDetail:
       type: object
       description: Full serializer for Distinction detail views.
@@ -41990,6 +42342,14 @@ components:
       - current
       - percentage
       - zone
+    FieldEnum:
+      enum:
+      - background
+      - personality
+      type: string
+      description: |-
+        * `background` - Background
+        * `personality` - Personality
     FirstImpressionWrite:
       type: object
       description: Serializer for creating a first impression.
@@ -42727,11 +43087,19 @@ components:
           readOnly: true
         table:
           type: integer
+        table_name:
+          type: string
+          readOnly: true
         persona:
           type: integer
         persona_name:
           type: string
           readOnly: true
+        character_sheet:
+          type: integer
+          readOnly: true
+          description: The persona's CharacterSheet pk (#2631 — lets the sheet page
+            find the viewer's memberships for the update-request form).
         joined_at:
           type: string
           format: date-time
@@ -42742,12 +43110,14 @@ components:
           readOnly: true
           nullable: true
       required:
+      - character_sheet
       - id
       - joined_at
       - left_at
       - persona
       - persona_name
       - table
+      - table_name
     GMTableMembershipRequest:
       type: object
       description: Serializer for persona memberships at GM tables.
@@ -45504,6 +45874,14 @@ components:
         * `gate` - Gate
         * `battlement` - Battlement
         * `hull` - Hull
+    KindF82Enum:
+      enum:
+      - profile_text
+      - distinction_change
+      type: string
+      description: |-
+        * `profile_text` - Profile Text
+        * `distinction_change` - Distinction Change
     KnownSecret:
       type: object
       description: One known secret, from the viewer's side, with locked layers shown
@@ -47970,6 +48348,8 @@ components:
             * `asset_task_collect` - Asset Task: Collect
             * `train` - Train
             * `settle_obligation` - Settle Obligation
+            * `styling` - Styling
+            * `profile_recording` - Profile Recording
         label:
           type: string
           description: UI display text for the menu option.
@@ -48048,6 +48428,8 @@ components:
       - asset_task_collect
       - train
       - settle_obligation
+      - styling
+      - profile_recording
       type: string
       description: |-
         * `permit` - Permit
@@ -48066,6 +48448,8 @@ components:
         * `asset_task_collect` - Asset Task: Collect
         * `train` - Train
         * `settle_obligation` - Settle Obligation
+        * `styling` - Styling
+        * `profile_recording` - Profile Recording
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -48093,6 +48477,8 @@ components:
             * `asset_task_collect` - Asset Task: Collect
             * `train` - Train
             * `settle_obligation` - Settle Obligation
+            * `styling` - Styling
+            * `profile_recording` - Profile Recording
         label:
           type: string
           minLength: 1
@@ -52204,6 +52590,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ReactionEmoji'
+    PaginatedRecordedProfileList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordedProfile'
     PaginatedRelationshipCapstoneList:
       type: object
       required:
@@ -53216,6 +53625,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TableBulletinReply'
+    PaginatedTableUpdateRequestList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TableUpdateRequest'
     PaginatedTechniqueList:
       type: object
       required:
@@ -54925,6 +55357,8 @@ components:
             * `asset_task_collect` - Asset Task: Collect
             * `train` - Train
             * `settle_obligation` - Settle Obligation
+            * `styling` - Styling
+            * `profile_recording` - Profile Recording
         label:
           type: string
           minLength: 1
@@ -57989,6 +58423,97 @@ components:
         * `public` - Public
         * `private` - Private
         * `ephemeral` - Ephemeral
+    ProfileTextRequestDetails:
+      type: object
+      description: Read payload for PROFILE_TEXT requests (#2631).
+      properties:
+        field:
+          type: string
+          readOnly: true
+          description: A character_sheets.ProfileTextField value.
+        proposed_text:
+          type: string
+          readOnly: true
+          description: The full replacement text (player-written).
+        current_text:
+          type: string
+          description: The field's live text — the GM's side-by-side left pane.
+          readOnly: true
+        applied_version:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The version row this request's approval created.
+      required:
+      - applied_version
+      - current_text
+      - field
+      - proposed_text
+    ProfileTextVersion:
+      type: object
+      description: |-
+        One entry of a sheet's prose-history timeline (#2631).
+
+        ``reasoning`` is the player's Reason: from the table update request that
+        applied this version — the timeline's narrative caption. Era renders as
+        the player-facing "Season N".
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        field:
+          allOf:
+          - $ref: '#/components/schemas/FieldEnum'
+          readOnly: true
+          description: |-
+            Which Profile prose field this version belongs to.
+
+            * `background` - Background
+            * `personality` - Personality
+        text:
+          type: string
+          readOnly: true
+          description: The full field text as of this version.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        ic_date:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: IC datetime at write time (null if the game clock was unset).
+        era_season_number:
+          type: integer
+          readOnly: true
+          nullable: true
+        era_display_name:
+          type: string
+          readOnly: true
+          nullable: true
+        reasoning:
+          type: string
+          description: |-
+            The applying request's player reasoning, via serializer context.
+
+            The view builds ``reasoning_by_version`` in one query — never a
+            prefetch onto the SharedMemoryModel instances (identity-map instances
+            outlive the request; a stale prefetch cache would leak across views).
+          readOnly: true
+        staff_edited:
+          type: boolean
+          readOnly: true
+      required:
+      - created_at
+      - era_display_name
+      - era_season_number
+      - field
+      - ic_date
+      - id
+      - reasoning
+      - staff_edited
+      - text
     ProgressionMilestone:
       type: object
       description: One milestone entry in a progression stage.
@@ -58515,6 +59040,84 @@ components:
           minimum: 0
       required:
       - emoji
+    RecordedProfile:
+      type: object
+      description: A character's Archive profile sittings + recorded history (#2632).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        persona:
+          type: integer
+          readOnly: true
+          description: The persona whose profile was recorded.
+        persona_name:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/RecordedProfileStatusEnum'
+          readOnly: true
+        text:
+          type: string
+          readOnly: true
+          description: The recorded profile prose (player-written, diegetically NPC-authored).
+        recorded_by_label:
+          type: string
+          readOnly: true
+          description: Display name of the recording scholar/institution.
+        price_paid:
+          type: integer
+          readOnly: true
+          description: Coppers paid for the sitting.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        recorded_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        ic_date:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: IC datetime when the write-up was finalized.
+        era_season_number:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - created_at
+      - era_season_number
+      - ic_date
+      - id
+      - persona
+      - persona_name
+      - price_paid
+      - recorded_at
+      - recorded_by_label
+      - status
+      - text
+    RecordedProfileCompleteRequest:
+      type: object
+      description: The write-up text for a COMMISSIONED sitting (#2632).
+      properties:
+        text:
+          type: string
+          minLength: 1
+      required:
+      - text
+    RecordedProfileStatusEnum:
+      enum:
+      - commissioned
+      - recorded
+      type: string
+      description: |-
+        * `commissioned` - Commissioned
+        * `recorded` - Recorded
     RedistributeWrite:
       type: object
       description: Serializer for redistributing relationship points between tracks.
@@ -64489,6 +65092,133 @@ components:
       - created_at
       - id
       - post
+    TableUpdateRequest:
+      type: object
+      description: Read serializer for table update requests (#2631).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/KindF82Enum'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/TableUpdateStatusEnum'
+          readOnly: true
+        player_reasoning:
+          type: string
+          readOnly: true
+          description: 'The player''s Reason: — why the story supports this change.'
+        gm_notes:
+          type: string
+          readOnly: true
+          description: The GM's sign-off/rejection notes.
+        table:
+          type: integer
+          readOnly: true
+        table_name:
+          type: string
+          readOnly: true
+        persona_name:
+          type: string
+          readOnly: true
+        character_sheet:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        profile_text_details:
+          allOf:
+          - $ref: '#/components/schemas/ProfileTextRequestDetails'
+          readOnly: true
+          nullable: true
+        distinction_details:
+          allOf:
+          - $ref: '#/components/schemas/DistinctionChangeRequestDetails'
+          readOnly: true
+          nullable: true
+      required:
+      - character_sheet
+      - completed_at
+      - created_at
+      - distinction_details
+      - gm_notes
+      - id
+      - kind
+      - persona_name
+      - player_reasoning
+      - profile_text_details
+      - resolved_at
+      - status
+      - table
+      - table_name
+    TableUpdateRequestCreateRequest:
+      type: object
+      description: Create input for a table update request — kind-branched validation
+        (#2631).
+      properties:
+        membership:
+          type: integer
+        kind:
+          $ref: '#/components/schemas/KindF82Enum'
+        reasoning:
+          type: string
+          minLength: 1
+        field:
+          type: string
+        proposed_text:
+          type: string
+        action:
+          type: string
+        distinction:
+          type: integer
+          nullable: true
+        character_distinction:
+          type: integer
+          nullable: true
+      required:
+      - kind
+      - membership
+      - reasoning
+    TableUpdateRequestSignoffRequest:
+      type: object
+      description: 'Signoff input: the GM''s yes/no + notes (#2631).'
+      properties:
+        approve:
+          type: boolean
+        notes:
+          type: string
+          default: ''
+      required:
+      - approve
+    TableUpdateStatusEnum:
+      enum:
+      - pending
+      - approved
+      - rejected
+      - withdrawn
+      - completed
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `approved` - Approved
+        * `rejected` - Rejected
+        * `withdrawn` - Withdrawn
+        * `completed` - Completed
     TaleRequestRequest:
       type: object
       description: POST body for the tale endpoint (#2047).
