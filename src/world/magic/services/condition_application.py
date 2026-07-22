@@ -46,9 +46,14 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
     ``ObjectDB`` in ``targets_by_kind.get(row.target_kind, [])``.
 
     Severity and duration are computed via the row's formula methods using
-    *eff_intensity* and *success_level*.  The full batch is handed to
-    ``bulk_apply_conditions`` in a single call and the results are mapped to
-    ``AppliedConditionResult`` instances.
+    *eff_intensity* and *success_level* — EXCEPT for a row whose condition carries a
+    team_damage_percent ``ConditionModifierEffect(scales_with_severity=True)``
+    (#2643): that row's severity is instead computed per-target by
+    ``world.conditions.services.priced_percent_severity``, priced against the
+    landing target's level (works for either an ally-buff or an enemy-debuff — both
+    ride the same bounded lane, see ``_apply_power_multiplier_stage``). The full
+    batch is handed to ``bulk_apply_conditions`` in a single call and the results
+    are mapped to ``AppliedConditionResult`` instances.
 
     Args:
         technique: The ``Technique`` being cast. Provenance — forwarded to
@@ -94,16 +99,31 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
     pos_a_id = (position_params or {}).get("position_a_id")
     pos_b_id = (position_params or {}).get("position_b_id")
 
+    from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
+    from world.conditions.services import priced_percent_severity  # noqa: PLC0415
+    from world.mechanics.constants import TEAM_DAMAGE_PERCENT_TARGET_NAME  # noqa: PLC0415
+
     bulk_applications: list[BulkConditionApplication] = []
     for row in rows:
         if success_level < row.minimum_success_level:
             continue
+        # #2643: the bounded team-damage-percent lane prices its severity from
+        # eff_intensity + the buffed/debuffed target's level, instead of the row's
+        # own authored severity formula — checked once per row (not per target).
+        is_team_lane_row = ConditionModifierEffect.objects.filter(
+            condition=row.condition,
+            modifier_target__name=TEAM_DAMAGE_PERCENT_TARGET_NAME,
+            scales_with_severity=True,
+        ).exists()
         targets = targets_by_kind.get(row.target_kind, [])
         for target in targets:
-            severity = row.compute_severity(
-                effective_power=eff_intensity,
-                success_level=success_level,
-            )
+            if is_team_lane_row:
+                severity = priced_percent_severity(eff_intensity=eff_intensity, target=target)
+            else:
+                severity = row.compute_severity(
+                    effective_power=eff_intensity,
+                    success_level=success_level,
+                )
             duration = row.compute_duration_rounds(
                 effective_power=eff_intensity,
                 success_level=success_level,

@@ -37928,6 +37928,16 @@ components:
           nullable: true
           description: Get the name of the source technique.
           readOnly: true
+        source_vow_name:
+          type: string
+          nullable: true
+          description: |-
+            Get the name of the applier's engaged vow (covenant role) at apply time (#2643).
+
+            Lets a player see an armed team-damage-percent buff's vow provenance on an
+            ally BEFORE casting — the "which vow is this coming from" visibility the UI
+            requirement calls for.
+          readOnly: true
         source_description:
           type: string
           readOnly: true
@@ -37953,6 +37963,7 @@ components:
       - source_character_name
       - source_description
       - source_technique_name
+      - source_vow_name
       - stacks
       - stage_name
       - stage_order

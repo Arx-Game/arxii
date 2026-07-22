@@ -4540,6 +4540,20 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `_PerkResolver` gained the matching `attacker` parameter/field to propagate it into each
     candidate holder's `SituationContext`. See ADR-0153/ADR-0154 and `docs/systems/covenants.md`'s
     "Court/Battle scoping + defense-side seam" for the full design.
+- **The Damage Identity — bounded percent lanes, vow-keyed stacking, execute (#2643,
+  ADR-0158):** `combat.constants.ENEMY_LANE_CAP_PERCENT` (default 50) clamps the summed
+  `ConditionDamageInteraction.damage_modifier_percent` in
+  `_apply_condition_damage_interactions` (Undermine's enemy-side lane) before it multiplies
+  net damage. `AbstractDamageProfile.execute_missing_health_multiplier` (Decimal, default
+  0) scales a landing hit's damage by `1 + multiplier * missing_health_fraction`, computed
+  off the target's PRE-hit health; applied at both `apply_damage_to_opponent` (live caller:
+  `CombatTechniqueResolver._apply_profiles_to_target`, threading the resolving damage
+  profile's own value) and `apply_damage_to_participant` (kwarg accepted + tested; no live
+  caller yet — combat technique damage in this codebase only ever resolves against
+  `CombatOpponent` targets). The sibling bounded ally-buff lane (`team_damage_percent`,
+  vow-keyed diminishing returns via `ConditionInstance.source_vow`) lives in the magic app
+  — see `docs/systems/magic.md`'s "The Damage Identity" section and ADR-0158 for the full
+  composition.
 - **Effect-palette / summon / allegiance additions (#1584):**
   - `CombatOpponent.allegiance` (`CombatAllegiance`: ENEMY default / ALLY) — mutable
     side-field; ALLY opponents fight *for* the party (summons, and future charm/

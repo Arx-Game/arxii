@@ -186,6 +186,7 @@ treat those names as hints to confirm, not gospel.
 - [0155 — Sheet updates are player-proposed, GM-vetoed, never content-prompting — and history is never lost](0155-sheet-updates-propose-veto-never-prompt.md) (#2631; related ADR-0007, ADR-0009)
 - [0156 — Wound HP mends are double-bounded — once per healer per wound, and never to full](0156-double-bounded-wound-mend-the-attrition-invariant.md) (#2644; related ADR-0010, ADR-0007, ADR-0013)
 - [0157 — The Sphinx of Black Quartz: a three-tier, code-defined, soft-gate vow-suitability oracle](0157-sphinx-of-black-quartz-vow-suitability-oracle.md) (#2640; related ADR-0149, ADR-0151, ADR-0153)
+- [0158 — The percentage-bounding model is the only buff-multiplier lane, forever; vow-keyed stacking weights; execute prices off pre-hit health](0158-bounded-percent-lane-vow-keyed-stacking-pre-hit-execute.md) (#2643; related ADR-0149, ADR-0151, ADR-0152, ADR-0153, ADR-0154, ADR-0007, ADR-0010)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
