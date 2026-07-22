@@ -1497,8 +1497,17 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 ### Character Sheets
 Character identity, appearance, demographics, and guise system.
 
-- **Models:** `CharacterSheet`, `Heritage`, `Characteristic`, `CharacteristicValue`, `Guise`
-- **Integrates with:** roster (character management), character_creation (sheet setup)
+- **Models:** `CharacterSheet`, `Profile` (bio + lineage, #1270), `ProfileTextVersion`
+  (#2631 — snapshot-on-write history for `ProfileTextField` prose (background,
+  personality): full text per version, stamped with IC datetime + active `stories.Era`;
+  written ONLY through `services.update_profile_text`, which also captures the CG
+  original on the first post-CG write; admin edits route through it via
+  `ProfileAdmin.save_model`), `Heritage`, `Gender`, `Pronouns`
+- **API:** `GET /api/character-sheets/{pk}/profile-text-versions/` — the prose-history
+  timeline; gated on `reveal_identity` so a presented cover never leaks true-profile
+  history; entries carry era/IC-date stamps + the applying request's reasoning caption
+- **Integrates with:** roster (character management), character_creation (sheet setup),
+  gm (table update requests apply prose rewrites), stories (`Era` stamps)
 - **Source:** `src/world/character_sheets/`
 - **Details:** [character_sheets.md](character_sheets.md)
 ### Character Creation
@@ -1648,7 +1657,22 @@ GM at a given level may author (#2000, ADR-0097).
   `GM_LEVEL_ORDER` + `gm_level_index(level)` (position on the ladder, 0–4),
   `GMApplicationStatus`, `GMTableStatus`, `CatalogSuggestionProposalKind`
   (NEW_SITUATION/CHECK_FIT/DIFFICULTY_GUIDE/POOL_GUIDE/OTHER) + `PROPOSAL_KIND_MIN_LEVEL`
-  (dict: the minimum `GMLevel` required to submit each kind — Decision 9)
+  (dict: the minimum `GMLevel` required to submit each kind — Decision 9),
+  `TableRequestKind` (PROFILE_TEXT/DISTINCTION_CHANGE), `TableRequestStatus`
+  (PENDING/APPROVED/REJECTED/WITHDRAWN/COMPLETED), `TableRequestRole` (MINE/GM)
+- **Table update requests (#2631, ADR-0155):** `TableUpdateRequest` (FK
+  `GMTableMembership` — table-routed by design: no table → no requests; `kind`,
+  `player_reasoning`, `status`, `gm_notes`, `resolved_by`, timestamps) with 1:1 payload
+  models `ProfileTextRequestDetails` (`field`, `proposed_text`, `applied_version` →
+  `character_sheets.ProfileTextVersion`) and `DistinctionChangeRequestDetails`
+  (`action`, `distinction`/`character_distinction`, `rank`, `authorization` →
+  `distinctions.DistinctionChangeAuthorization`). Services:
+  `submit_profile_text_request`/`submit_distinction_change_request`,
+  `signoff_table_update_request` (prose applies immediately → COMPLETED; distinction
+  creates the authorization → APPROVED), `withdraw_table_update_request`,
+  `mark_requests_completed_for_authorization` (called from the accept action).
+  API: `TableUpdateRequestViewSet` (`/api/gm/table-update-requests/`, actions
+  `signoff`/`withdraw`, FilterSet `status`/`kind`/`role`)
 - **Types (`types.py`):** `GMEvidenceSummary` (dataclass: `profile_id`, `level`,
   `approved_at`, `last_active_at`, `stories_running`, `beats_completed_by_risk`,
   `feedback_by_category`, `level_changes`), `CategoryFeedback` (`category_name`,

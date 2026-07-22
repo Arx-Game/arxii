@@ -65,6 +65,17 @@ the code — it is the substrate this redesign reshapes.
 
 ## What Exists
 
+### Table sheet-update requests (#2631, 2026-07 — built)
+
+The player-proposed / GM-vetoed sheet-change loop (ADR-0155): `gm.TableUpdateRequest`
+rides `GMTableMembership` (no table → no requests), with profile-prose rewrites
+(background/personality — applied at approval, snapshotted forever into
+`character_sheets.ProfileTextVersion` with era + IC-date stamps) and distinction
+add/rank-up/remove (approval creates a `DistinctionChangeAuthorization`; the player
+accepts to spend benefit-direction XP). REST API + web UI (sheet Updates tab, GM
+queue, version timeline). Repaired the #2624 cycle on the way (rank stored/granted,
+free non-benefit changes, player notification).
+
 ### Pre-Phase-1 Foundation
 - **Trust system:** TrustCategory, PlayerTrust, PlayerTrustLevel, StoryTrustRequirement — fully built, orthogonal to the episode engine
 - **Feedback models:** StoryFeedback, TrustCategoryFeedbackRating — fully built

@@ -104,3 +104,13 @@ rating on GM performance. Scaled by players served (never a flat amount) and cap
 per event and per `GameWeek` (`GMWeeklyRewardTracker`); every award value lives on the
 `GMRewardConfig` singleton, never a module constant (#2123).
 _Avoid_: GM payout, GM stipend, session pay.
+
+**Table Update Request** (`TableUpdateRequest`, #2631, ADR-0155):
+A player's proposed sheet change awaiting their table GM's yes/no sign-off — always a
+concrete change (a profile-prose rewrite or a distinction add/rank-up/remove) with a
+player `Reason:`, never a prompt for the GM to write content. Routed through
+`GMTableMembership` (no table → no requests, by design). Kind payloads live on 1:1
+details models (`ProfileTextRequestDetails`, `DistinctionChangeRequestDetails`); prose
+applies at approval, distinction approval creates a `DistinctionChangeAuthorization`
+the player accepts on their own schedule.
+_Avoid_: job, +request, ticket, petition (that's `player_submissions`' staff inbox).
