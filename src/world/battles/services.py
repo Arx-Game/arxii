@@ -1281,6 +1281,7 @@ def open_place_encounter(*, battle_place: BattlePlace) -> CombatEncounter:
     from world.battles.place_encounter_wiring import (  # noqa: PLC0415
         install_place_encounter_trigger,
     )
+    from world.combat.chosen_ground import compute_on_chosen_ground  # noqa: PLC0415
     from world.combat.constants import EncounterType  # noqa: PLC0415
     from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
     from world.combat.models import CombatEncounter  # noqa: PLC0415
@@ -1288,12 +1289,14 @@ def open_place_encounter(*, battle_place: BattlePlace) -> CombatEncounter:
     if battle_place.combat_encounter_id is not None:
         raise PlaceAlreadyDuelingError
 
+    room = battle_place.battle.scene.location
     enc = CombatEncounter.objects.create(
-        room=battle_place.battle.scene.location,
+        room=room,
         scene=battle_place.battle.scene,
         encounter_type=EncounterType.PARTY_COMBAT,
         risk_level=RiskLevel.LETHAL,
         status=RoundStatus.DECLARING,
+        on_chosen_ground=compute_on_chosen_ground(room),
     )
     assign_default_escalation_curve(enc)
 

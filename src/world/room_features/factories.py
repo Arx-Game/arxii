@@ -9,6 +9,7 @@ from world.room_features.constants import (
     RoomFeatureServiceStrategy,
 )
 from world.room_features.models import (
+    PreparedGround,
     RoomFeatureInstance,
     RoomFeatureKind,
     RoomFeatureKindInstallRitual,
@@ -68,6 +69,14 @@ class RoomFeatureProgressionDetailsFactory(DjangoModelFactory):
     target_room_profile = factory.SubFactory(ROOM_PROFILE_FACTORY)
     target_feature_kind = factory.SubFactory(RoomFeatureKindFactory)
     target_level = 1
+
+
+class PreparedGroundFactory(DjangoModelFactory):
+    class Meta:
+        model = PreparedGround
+
+    room_profile = factory.SubFactory(ROOM_PROFILE_FACTORY)
+    prepared_by = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
 
 
 class TrapFactory(DjangoModelFactory):

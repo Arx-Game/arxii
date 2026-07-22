@@ -19,6 +19,7 @@ from django.utils import timezone
 
 from world.combat.beat_wiring import activate_stakes_for_scene
 from world.combat.cast_seed import _opponent_kwargs_from_sheet
+from world.combat.chosen_ground import compute_on_chosen_ground
 from world.combat.constants import (
     DuelChallengeStatus,
     EncounterOutcome,
@@ -123,6 +124,10 @@ def create_pvp_duel(
         msg = "PC-vs-PC duels can never be lethal."
         raise ValueError(msg)
 
+    # #2646: PvP is never lethal, so "chosen ground" deliberately does not apply
+    # here — on_chosen_ground stays at its model default (False). Only the
+    # PC-vs-NPC seams (create_lethal_duel, seed_or_feed_encounter_from_cast,
+    # open_place_encounter) stamp it.
     enc = CombatEncounter.objects.create(
         encounter_type=EncounterType.DUEL,
         room=room,
@@ -203,6 +208,7 @@ def create_lethal_duel(
         scene=_scene_for_duel(room),
         risk_level=RiskLevel.LETHAL,
         status=RoundStatus.DECLARING,
+        on_chosen_ground=compute_on_chosen_ground(room),
     )
     from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
 

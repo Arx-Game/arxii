@@ -407,6 +407,50 @@ class Trap(SharedMemoryModel):
         return f"Trap '{self.name}' ({state}) @ room {self.room_profile_id}"
 
 
+class PreparedGround(SharedMemoryModel):
+    """A room a character has prepared as their battleground ahead of time (#2646).
+
+    Design intent: "the fight was won yesterday" — a character who scouted, warded,
+    or otherwise readied a room before combat ever breaks out there gets to have
+    fought smart, not just hard. Recorded off an out-of-combat PERCEPTION-tagged
+    technique cast (see ``world.covenants.perks.services.
+    record_ground_preparation_from_cast``) by a character whose engaged covenant
+    role carries ``CovenantRole.prepares_ground=True``.
+
+    One active prepared ground per character (``prepared_by`` is a OneToOne) — the
+    domain rule is deliberately last-writes-wins: re-preparing a different room
+    MOVES the character's prepared ground there rather than stacking a second row.
+    Consumed by ``world.combat.chosen_ground.compute_on_chosen_ground``, which
+    stamps ``CombatEncounter.on_chosen_ground`` at encounter-creation time whenever
+    the encounter's room holds a ``PreparedGround`` whose preparer is physically
+    present.
+    """
+
+    room_profile = models.ForeignKey(
+        ROOM_PROFILE_MODEL,
+        on_delete=models.CASCADE,
+        related_name="prepared_grounds",
+        help_text="The room this ground was prepared in.",
+    )
+    prepared_by = models.OneToOneField(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="prepared_ground",
+        help_text=(
+            "The character who prepared this ground. One active prepared ground "
+            "per character — re-preparing elsewhere moves this row rather than "
+            "creating a second one."
+        ),
+    )
+    prepared_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-prepared_at"]
+
+    def __str__(self) -> str:
+        return f"{self.prepared_by} prepared room {self.room_profile_id}"
+
+
 class VaultDetails(SharedMemoryModel):
     """Per-(VAULT RoomFeatureInstance) details payload (#2179).
 

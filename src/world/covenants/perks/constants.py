@@ -24,7 +24,8 @@ class Situation(models.TextChoices):
     ``ALLY_INTERCEPTED_FOR_ME`` is slice 3's declared-guard addition (#2536
     Task 5); ``ATTACKER_AFFINITY`` (renamed from its original Abyssal-only
     v1 spelling, #2623) is slice 3's defense-side seam addition (#2536 Task
-    6) — the enum ships no other inert entries; every value here has a
+    6); ``ON_CHOSEN_GROUND`` is #2646's whole-encounter chosen-ground
+    addition — the enum ships no other inert entries; every value here has a
     registered evaluator with signature ``(ctx: SituationContext, params:
     SituationParams) -> bool`` (params parameterization landed #2623 Task 3 —
     see ``SITUATION_PARAM_SPECS`` below for which situations read which
@@ -132,6 +133,17 @@ class Situation(models.TextChoices):
       resolve_npc_attack`` is the only defense-check site that threads
       ``attacker`` in v1. Task 3 wires the evaluator itself to the params
       contract; the enum rename lands here (#2623).
+    - ``ON_CHOSEN_GROUND`` — the SUBJECT's combat encounter was created on ground
+      the caster's side prepared ahead of time (#2646) — "the fight was won
+      yesterday." The flag is stamped exclusively at encounter-CREATE time by
+      ``world.combat.chosen_ground.compute_on_chosen_ground``, called from the
+      three PC-vs-NPC encounter-creation seams (``world.combat.cast_seed.
+      seed_or_feed_encounter_from_cast``, ``world.combat.duels.
+      create_lethal_duel``, ``world.battles.services.open_place_encounter``);
+      ``world.combat.duels.create_pvp_duel`` never stamps it (PvP is never
+      lethal). False outside combat, mirroring ``CHAMPION_DUEL``'s shape — a
+      whole-encounter stamp that holds every round once set, never re-derived
+      mid-fight. Reads ``resolution``.
     """
 
     AT_RANGE = "at_range", "At Range"
@@ -148,6 +160,7 @@ class Situation(models.TextChoices):
     AMBUSH_UNDERWAY = "ambush_underway", "Ambush Underway"
     ALLY_INTERCEPTED_FOR_ME = "ally_intercepted_for_me", "Ally Intercepted for Me"
     ATTACKER_AFFINITY = "attacker_affinity", "Attacker Affinity"
+    ON_CHOSEN_GROUND = "on_chosen_ground", "On Chosen Ground"
 
 
 class PerkEffectKind(models.TextChoices):

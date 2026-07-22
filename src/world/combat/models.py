@@ -164,6 +164,22 @@ class CombatEncounter(AbstractRound):
             "per-vow situational perk scoping."
         ),
     )
+    on_chosen_ground = models.BooleanField(
+        default=False,
+        help_text=(
+            "True iff, at CREATE time, this encounter's room held a "
+            "world.room_features.models.PreparedGround whose preparer was physically "
+            "present (#2646) — see world.combat.chosen_ground.compute_on_chosen_ground. "
+            "Stamped exclusively at creation in the PC-vs-NPC seams "
+            "(world.combat.cast_seed.seed_or_feed_encounter_from_cast, "
+            "world.combat.duels.create_lethal_duel, "
+            "world.battles.services.open_place_encounter); never mutated afterward. "
+            "world.combat.duels.create_pvp_duel deliberately leaves this False (PvP is "
+            "never lethal, so 'chosen ground' does not apply). Read by the "
+            "Situation.ON_CHOSEN_GROUND evaluator (world.covenants.perks.evaluators) for "
+            "per-vow situational perk scoping."
+        ),
+    )
     initiated_by_pc_side = models.BooleanField(
         null=True,
         blank=True,

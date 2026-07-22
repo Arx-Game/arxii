@@ -61,7 +61,8 @@ class SituationEvaluatorRegistryTests(TestCase):
     """The registry carries exactly every live ``Situation`` value (9 from slice 1,
     ``CHAMPION_DUEL`` from slice 3 Task 3, ``COMBAT_OPENED_FROM_PARLEY`` and
     ``AMBUSH_UNDERWAY`` from slice 3 Task 4, ``ALLY_INTERCEPTED_FOR_ME`` from
-    slice 3 Task 5, plus ``ATTACKER_AFFINITY`` from slice 3 Task 6, #2536)."""
+    slice 3 Task 5, ``ATTACKER_AFFINITY`` from slice 3 Task 6 (#2536), plus
+    ``ON_CHOSEN_GROUND`` (#2646))."""
 
     def test_registry_covers_every_surviving_situation(self) -> None:
         self.assertEqual(set(SITUATION_EVALUATORS), set(Situation.values))
@@ -525,6 +526,36 @@ class ChampionDuelEvaluatorTests(TestCase):
 
     def test_false_outside_combat(self) -> None:
         self.assertFalse(evaluators.champion_duel(self._ctx(None), NO_PARAMS))
+
+
+class OnChosenGroundEvaluatorTests(TestCase):
+    """ON_CHOSEN_GROUND reads the subject's resolution participant's encounter
+    flag (#2646) — mirrors ChampionDuelEvaluatorTests exactly."""
+
+    def setUp(self) -> None:
+        self.room = create_object("typeclasses.rooms.Room", key="ChosenGroundRoom", nohome=True)
+        self.scene = SceneFactory(location=self.room)
+        self.sheet = CharacterSheetFactory()
+
+    def _ctx(self, resolution) -> SituationContext:
+        return SituationContext(
+            holder=self.sheet, subject=self.sheet, target=None, resolution=resolution
+        )
+
+    def test_true_when_encounter_on_chosen_ground(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room, on_chosen_ground=True)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        resolution = CombatRoundContext(participant)
+        self.assertTrue(evaluators.on_chosen_ground(self._ctx(resolution), NO_PARAMS))
+
+    def test_false_in_ordinary_encounter(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        resolution = CombatRoundContext(participant)
+        self.assertFalse(evaluators.on_chosen_ground(self._ctx(resolution), NO_PARAMS))
+
+    def test_false_outside_combat(self) -> None:
+        self.assertFalse(evaluators.on_chosen_ground(self._ctx(None), NO_PARAMS))
 
 
 class CombatOpenedFromParleyEvaluatorTests(TestCase):

@@ -430,6 +430,7 @@
   - feature_instance <- room_features.RoomFeatureInstance
   - feature_progression_projects <- room_features.RoomFeatureProgressionDetails
   - traps <- room_features.Trap
+  - prepared_grounds <- room_features.PreparedGround
   - ward_details <- room_features.RoomWardDetails
   - alarm_details <- room_features.RoomAlarmDetails
   - defense_progression_projects <- room_features.DefenseProgressionDetails
@@ -1668,6 +1669,7 @@
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
   - conjured_hazards <- room_features.Trap
   - detected_traps <- room_features.Trap
+  - prepared_ground <- room_features.PreparedGround
 
 ### Gender
 **Pointed to by:**
@@ -6856,6 +6858,11 @@
   - disarm_check_type -> checks.CheckType [FK]
   - created_by_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - detected_by -> character_sheets.CharacterSheet [M2M]
+
+### PreparedGround
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - prepared_by -> character_sheets.CharacterSheet [OneToOne]
 
 ### VaultDetails
 **Foreign Keys:**

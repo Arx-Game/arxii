@@ -166,12 +166,13 @@ modules import combat/checks contexts at function level, never the reverse):
 
 - **`constants.py`** — `Situation`/`PerkEffectKind`/`PerkBeneficiary`/`SituationOriginSide`
   `TextChoices`, plus the `SituationParamSpec`/`SITUATION_PARAM_SPECS` contract (#2623,
-  ADR-0154). `Situation` still ships 14 values as of slice 3 (#2536, ADR-0153): slice 1's 9 plus
+  ADR-0154). `Situation` ships 15 values as of #2646: slice 1's 9 plus
   `CHAMPION_DUEL` (Battle wiring, Task 3), `COMBAT_OPENED_FROM_PARLEY`/`AMBUSH_UNDERWAY`
   (origin-marker addition, Task 4), `ALLY_INTERCEPTED_FOR_ME` (declared-guard, Task 5), and
   `ATTACKER_AFFINITY` (defense-side seam, Task 6; originally Abyssal-only, renamed and
-  parameterized to all three `AffinityType` axes by #2623, ADR-0154) — see each value's own docstring entry for its
-  evaluator's data source, its Situation Parameters, and any v1 approximation.
+  parameterized to all three `AffinityType` axes by #2623, ADR-0154) from #2536 slice 3, plus
+  `ON_CHOSEN_GROUND` (#2646 — see "Chosen Ground" below) — see each value's own docstring entry
+  for its evaluator's data source, its Situation Parameters, and any v1 approximation.
   `SITUATION_PARAM_SPECS` (#2623) names, per situation, which of the four `SituationRequirementMixin`
   columns are ALLOWED and which are REQUIRED — `ATTACKER_AFFINITY` requires `affinity`;
   `ALLY_LOW_HEALTH`/`SURROUNDED`/`TARGET_FAVORABLY_DISPOSED` allow (but don't require) their
@@ -187,7 +188,7 @@ modules import combat/checks contexts at function level, never the reverse):
   for the full field contract and the missing-field-returns-False convention.
 - **`evaluators.py`** — `SITUATION_EVALUATORS` registry (`register(situation)` decorator,
   mirrors `magic.services.power_terms`'s `_PROVIDERS` registry pattern) + one evaluator per
-  `Situation` value (14 as of slice 3). Every evaluator is a pure read (one query or a
+  `Situation` value (15 as of #2646). Every evaluator is a pure read (one query or a
   cached-handler read, never a write, never a query per situation-per-perk).
 - **`services.py`** — `applicable_perks(subject, *, effect_kind, resolution, target, attacker=None)
   -> list[FiredPerk]`, the beneficiary evaluation point every delivery seam calls (see the
@@ -870,7 +871,19 @@ Graduation: when the adjusted party's real primary level re-enters the band,
   parameterized situations read (stamped `True` at CREATE by every PC-cast encounter path;
   `False` is admin/GM-stampable in v1, honestly `NULL`-heavy until an NPC-initiated-encounter
   service exists). All 14 pre-#2623 situation rows behave byte-identically (parameterless =
-  the parameterless default of each parameterized family).
+  the parameterless default of each parameterized family). **#2646** followed up with a 15th
+  situation, `ON_CHOSEN_GROUND` — "the fight was won yesterday": a new `room_features
+  .PreparedGround` model (OneToOne `prepared_by` — one active prepared ground per character;
+  re-preparing elsewhere MOVES it, never stacks a second row) recorded by `world.covenants
+  .perks.services.record_ground_preparation_from_cast`, a RIDER (no new player verb) on an
+  out-of-combat standalone cast of a PERCEPTION-tagged technique, gated on a new
+  `CovenantRole.prepares_ground` data-authored flag on an active engaged role and on the caster
+  NOT currently being an active `CombatParticipant` anywhere. `world.combat.chosen_ground
+  .compute_on_chosen_ground` stamps the new `CombatEncounter.on_chosen_ground` at CREATE time
+  (mirroring `is_champion_duel`'s shape exactly) in the three PC-vs-NPC encounter-creation seams
+  — `seed_or_feed_encounter_from_cast`, `create_lethal_duel`, `open_place_encounter` —
+  whenever the encounter's room holds a `PreparedGround` whose preparer is physically present;
+  `create_pvp_duel` deliberately never stamps it (PvP is never lethal).
 
 ## Integrates With
 
