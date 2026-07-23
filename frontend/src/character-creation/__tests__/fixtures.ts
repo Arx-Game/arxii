@@ -564,6 +564,8 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
     name: `Codex Entry ${id}`,
     summary: 'A lore entry.',
     is_public: true,
+    is_featured: false,
+    featured_order: null,
     subject: 1,
     subject_name: 'Test Subject',
     subject_path: [],

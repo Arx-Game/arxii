@@ -52,6 +52,8 @@ function makeEntry(
     lore_links: links,
     mechanics_links: [],
     is_public: true,
+    is_featured: false,
+    featured_order: null,
     subject: 1,
     subject_name: 'Test Subject',
     subject_path: [
