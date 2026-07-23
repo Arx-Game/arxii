@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("combat", "0057_combatopponentaction_matured_from_called_out_windup_and_more"),
+        ("combat", "0058_combatmark"),
         ("contenttypes", "0002_remove_content_type_name"),
     ]
 

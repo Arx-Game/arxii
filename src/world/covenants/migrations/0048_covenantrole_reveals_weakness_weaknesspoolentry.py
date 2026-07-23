@@ -8,7 +8,7 @@ import core.natural_keys
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("combat", "0058_combatopponent_creature_template_and_more"),
+        ("combat", "0059_combatopponent_creature_template_and_more"),
         ("conditions", "0023_conditioninstance_source_vow"),
         ("covenants", "0047_alter_vowsituationalperkrung_extra_situation_and_more"),
     ]
