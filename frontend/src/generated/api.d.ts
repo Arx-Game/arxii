@@ -22288,6 +22288,10 @@ export interface components {
       }[];
       /** @description If True, visible to everyone including logged-out visitors. If False, only visible to characters who have learned it. */
       is_public?: boolean;
+      /** @description If True, included in the curated onboarding lore shown on the front page and linked from CG stages. Requires is_public=True. */
+      is_featured?: boolean;
+      /** @description Display order for featured entries (1, 2, 3...). NULL for non-featured. */
+      featured_order?: number | null;
       subject: number;
       readonly subject_name: string;
       /** @description Return the subject path with IDs for clickable breadcrumb navigation. */
@@ -22315,6 +22319,10 @@ export interface components {
       summary?: string;
       /** @description If True, visible to everyone including logged-out visitors. If False, only visible to characters who have learned it. */
       is_public?: boolean;
+      /** @description If True, included in the curated onboarding lore shown on the front page and linked from CG stages. Requires is_public=True. */
+      is_featured?: boolean;
+      /** @description Display order for featured entries (1, 2, 3...). NULL for non-featured. */
+      featured_order?: number | null;
       subject: number;
       readonly subject_name: string;
       /** @description Return the subject path with IDs for clickable breadcrumb navigation. */
@@ -42639,6 +42647,7 @@ export interface operations {
     parameters: {
       query?: {
         category?: number;
+        featured?: boolean;
         search?: string;
         subject?: number;
       };

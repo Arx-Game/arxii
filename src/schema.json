@@ -5153,6 +5153,10 @@ paths:
         schema:
           type: number
       - in: query
+        name: featured
+        schema:
+          type: boolean
+      - in: query
         name: search
         schema:
           type: string
@@ -37746,6 +37750,16 @@ components:
           type: boolean
           description: If True, visible to everyone including logged-out visitors.
             If False, only visible to characters who have learned it.
+        is_featured:
+          type: boolean
+          description: If True, included in the curated onboarding lore shown on the
+            front page and linked from CG stages. Requires is_public=True.
+        featured_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: Display order for featured entries (1, 2, 3...). NULL for non-featured.
         subject:
           type: integer
         subject_name:
@@ -37815,6 +37829,16 @@ components:
           type: boolean
           description: If True, visible to everyone including logged-out visitors.
             If False, only visible to characters who have learned it.
+        is_featured:
+          type: boolean
+          description: If True, included in the curated onboarding lore shown on the
+            front page and linked from CG stages. Requires is_public=True.
+        featured_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: Display order for featured entries (1, 2, 3...). NULL for non-featured.
         subject:
           type: integer
         subject_name:

@@ -111,6 +111,8 @@ describe('Codex Query Hooks', () => {
           name: 'Bene',
           summary: 'Resonance of giving',
           is_public: true,
+          is_featured: false,
+          featured_order: null,
           subject: 1,
           subject_name: 'Celestial',
           subject_path: [
@@ -127,6 +129,8 @@ describe('Codex Query Hooks', () => {
           name: 'Male',
           summary: 'Resonance of taking',
           is_public: true,
+          is_featured: false,
+          featured_order: null,
           subject: 1,
           subject_name: 'Celestial',
           subject_path: [
@@ -160,6 +164,8 @@ describe('Codex Query Hooks', () => {
           name: 'Bene',
           summary: 'Resonance of giving',
           is_public: true,
+          is_featured: false,
+          featured_order: null,
           subject: 5,
           subject_name: 'Celestial',
           subject_path: [
@@ -228,6 +234,8 @@ describe('Codex Query Hooks', () => {
         lore_links: [],
         mechanics_links: [],
         is_public: true,
+        is_featured: false,
+        featured_order: null,
         subject: 1,
         subject_name: 'Celestial',
         subject_path: [
@@ -282,6 +290,8 @@ describe('Codex Query Hooks', () => {
           name: 'Bene',
           summary: 'Test',
           is_public: true,
+          is_featured: false,
+          featured_order: null,
           subject: 1,
           subject_name: 'Celestial',
           subject_path: [{ type: 'category' as const, id: 1, name: 'Magic' }],
