@@ -99,7 +99,7 @@ class JournalGoalJourneyE2ETests(TestCase):
         ).func()
         self.assertTrue(
             GoalJournal.objects.filter(
-                character=self.writer, domain=domain, title="A step forward"
+                character=self.writer.sheet_data, domain=domain, title="A step forward"
             ).exists()
         )
 
@@ -193,7 +193,7 @@ class GoalCommandErrorTests(TestCase):
             self.caller,
             f"set domain={domain_a.pk}:points=10,domain={domain_b.pk}:points=5",
         ).func()
-        self.assertEqual(CharacterGoal.objects.filter(character=self.caller).count(), 2)
+        self.assertEqual(CharacterGoal.objects.filter(character=self.caller.sheet_data).count(), 2)
 
         # Second `goal set` within the revision window -> REVISION_TOO_SOON.
         _make_goal_cmd(
@@ -202,7 +202,7 @@ class GoalCommandErrorTests(TestCase):
         ).func()
         self.assertIn("cannot revise", _capture(self.caller).lower())
         # Original allocations unchanged (the second set was rejected).
-        self.assertEqual(CharacterGoal.objects.filter(character=self.caller).count(), 2)
+        self.assertEqual(CharacterGoal.objects.filter(character=self.caller.sheet_data).count(), 2)
 
 
 _JOURNAL_MULTIWORD_KEYS = frozenset({"title", "body"})

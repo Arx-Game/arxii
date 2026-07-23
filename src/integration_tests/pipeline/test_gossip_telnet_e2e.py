@@ -85,7 +85,7 @@ class GossipTelnetE2EJourneyTest(TestCase):
             name="Gossip", parent_skill__trait__name="Persuasion"
         )
         CharacterSpecializationValueFactory(
-            character=cls.gossiper, specialization=cls.gossip_spec, value=10
+            character=cls.gossiper_sheet, specialization=cls.gossip_spec, value=10
         )
 
         # A self-secret (the gossiper may always spread gossip about themselves).

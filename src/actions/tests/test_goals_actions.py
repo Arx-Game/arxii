@@ -46,5 +46,5 @@ class LogGoalProgressActionTests(TestCase):
             actor=self.actor, title="A step", content="Did a thing", is_public=False
         )
         assert result.success
-        journal = GoalJournal.objects.get(character=self.actor, title="A step")
+        journal = GoalJournal.objects.get(character=self.actor.sheet_data, title="A step")
         assert journal.xp_awarded == 1
