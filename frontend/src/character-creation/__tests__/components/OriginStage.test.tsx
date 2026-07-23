@@ -206,6 +206,18 @@ describe('OriginStage', () => {
         screen.getByText(/select the city or region where your character.*s story begins/i)
       ).toBeInTheDocument();
     });
+
+    it('renders origin_lore_intro lore copy', async () => {
+      const queryClient = createTestQueryClient();
+      seedQueryData(queryClient, characterCreationKeys.startingAreas(), mockStartingAreas);
+      seedQueryData(queryClient, characterCreationKeys.explanations(), mockCGExplanations);
+
+      renderWithCharacterCreationProviders(<OriginStage draft={mockEmptyDraft} />, {
+        queryClient,
+      });
+
+      expect(screen.getByText('You are one of the Gifted.')).toBeInTheDocument();
+    });
   });
 
   describe('Staff vs Player Visibility', () => {

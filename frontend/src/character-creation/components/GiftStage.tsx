@@ -140,6 +140,9 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
         <p className="mt-2 text-muted-foreground">
           {copy?.magic_intro ?? 'Choose your magical tradition, gift, and how your magic works.'}
         </p>
+        {copy?.gift_lore_intro && (
+          <p className="mt-2 text-sm text-muted-foreground">{copy.gift_lore_intro}</p>
+        )}
       </div>
 
       <Accordion

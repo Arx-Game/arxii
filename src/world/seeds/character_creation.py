@@ -200,6 +200,39 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "review_record_heading": "The Record",
     "review_banner_submitted": "Your testament has been submitted for review.",
     "review_approved_enter_world": "Enter the World",
+    "origin_lore_intro": (
+        "You are one of the Gifted — those who carry magic in their blood "
+        "and stand bound to the Durance, the arc of trials that shapes every "
+        "Gifted life. The world you enter is one of the Shroud's making: a "
+        "thinning veil between what is and what should not be. The words you "
+        "choose for your character now are the beginning of their testament — "
+        "the oration they will one day speak at their Durance."
+    ),
+    "heritage_lore_intro": (
+        "What your character is born as shapes how the world reads them. "
+        "The Gifted are not one people — they are human, Sleeper, Misbegotten, "
+        "and more, each heritage carrying its own relationship to the Shroud "
+        "and the magic that runs through them."
+    ),
+    "path_lore_durance": (
+        "Your path is the road your character walks through their Durance — "
+        "the life-arc that defines who they become among the Gifted. Each "
+        "path shapes the skills, techniques, and story beats available as "
+        "they grow through their trials."
+    ),
+    "gift_lore_intro": (
+        "The Gift is the magic your character carries — a power drawn from "
+        "the Shroud and shaped by the tradition that taught them. Your "
+        "tradition is the school or lineage that trained them; your gift is "
+        "the specific power they wield. Choose the resonance that sings "
+        "truest to who they are."
+    ),
+    "roster_lore_intro": (
+        "Every character on this roster is one of the Gifted — a person who "
+        "carries magic and stands bound to the Durance. Taking one on means "
+        "stepping into their life, their trials, and their place in the "
+        "world's thinning veil."
+    ),
 }
 
 
@@ -944,6 +977,7 @@ def seed_character_creation_dev() -> None:
         },
     )
     _seed_cg_explanations()
+    seed_onboarding_codex()
     ensure_tradition_training_distinction()
     seed_beginning_traditions()
     ensure_shroudwatch_academy()
@@ -1014,6 +1048,86 @@ def _seed_cg_explanations() -> None:
 
     for key, text in CG_EXPLANATION_COPY.items():
         CGExplanation.objects.update_or_create(key=key, defaults={"text": text})
+
+
+def seed_onboarding_codex() -> None:
+    """Seed placeholder codex entries for lore onboarding (#2430).
+
+    Creates a "The World" category with subjects and 3 featured public
+    entries so the front-page FeaturedLore component and CG CodexTerm links
+    have data in dev. Real authored prose ships from arx2-lore via
+    CONTENT_MODELS; these are content-overridable placeholders.
+    """
+    from world.codex.models import (  # noqa: PLC0415
+        CodexCategory,
+        CodexEntry,
+        CodexSubject,
+    )
+
+    category, _ = CodexCategory.objects.get_or_create(
+        name="The World",
+        defaults={
+            "description": "Core lore about the Gifted, the Durance, and the Shroud.",
+        },
+    )
+
+    subject, _ = CodexSubject.objects.get_or_create(
+        category=category,
+        parent=None,
+        name="The Gifted",
+        defaults={"description": "Who the Gifted are and what their world means."},
+    )
+
+    entries_data = [
+        {
+            "name": "The Gifted",
+            "summary": "Those who carry magic in their blood and stand bound to the Durance.",
+            "lore_content": (
+                "The Gifted are the magic-bearing souls of this world. "
+                "They are not a people or a nation but a condition — born "
+                "with the power to touch the Shroud and shape what lies "
+                "beyond it. Every Gifted life is measured by the Durance, "
+                "the arc of trials that tests and shapes them."
+            ),
+            "featured_order": 1,
+        },
+        {
+            "name": "The Durance",
+            "summary": "The life-arc of trials that defines every Gifted.",
+            "lore_content": (
+                "The Durance is the arc of a Gifted life — the trials, "
+                "rituals, and ordeals that shape who they become. It "
+                "begins with the testament, the words spoken at the rite "
+                "of entry: 'One stands before us in Durance. Speak thy "
+                "name and testament.'"
+            ),
+            "featured_order": 2,
+        },
+        {
+            "name": "The Shroud",
+            "summary": "The thinning veil between what is and what should not be.",
+            "lore_content": (
+                "The Shroud is the veil between the world as it is and "
+                "the world as it should not be. It thins where the Gifted "
+                "gather, and through its tears come the powers and perils "
+                "that define their lives."
+            ),
+            "featured_order": 3,
+        },
+    ]
+
+    for data in entries_data:
+        CodexEntry.objects.update_or_create(
+            subject=subject,
+            name=data["name"],
+            defaults={
+                "summary": data["summary"],
+                "lore_content": data["lore_content"],
+                "is_public": True,
+                "is_featured": True,
+                "featured_order": data["featured_order"],
+            },
+        )
 
 
 # ---------------------------------------------------------------------------

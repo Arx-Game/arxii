@@ -19,6 +19,14 @@ vi.mock('../queries', () => ({
   }),
 }));
 
+vi.mock('@/character-creation/queries', () => ({
+  useCGExplanations: () => ({
+    data: {
+      roster_lore_intro: 'Every character on this roster is one of the Gifted.',
+    },
+  }),
+}));
+
 describe('RosterListPage', () => {
   it('should render gender filter select without throwing errors', () => {
     // This test verifies that the component renders without the Select.Item empty value error
@@ -34,5 +42,12 @@ describe('RosterListPage', () => {
     expect(() => {
       renderWithProviders(<RosterListPage />);
     }).not.toThrow();
+  });
+
+  it('renders the lore intro banner', () => {
+    renderWithProviders(<RosterListPage />);
+    expect(
+      screen.getByText('Every character on this roster is one of the Gifted.')
+    ).toBeInTheDocument();
   });
 });

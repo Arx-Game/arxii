@@ -5,7 +5,7 @@ import { WelcomePanel } from '@/components/WelcomePanel';
 import { SITE_NAME } from '@/config';
 import { StatusBlock } from './StatusBlock';
 import { NewPlayerSection } from './NewPlayerSection';
-import { LoreTabs } from './LoreTabs';
+import { FeaturedLore } from './FeaturedLore';
 import { QuickActions } from '@/components/QuickActions';
 import { ScenesSpotlight } from '@/components/ScenesSpotlight';
 import { StatsCard } from './StatsCard';
@@ -60,7 +60,7 @@ export function HomePage() {
       <ScenesSpotlight />
       <QuickActions />
       <NewPlayerSection />
-      <LoreTabs />
+      <FeaturedLore />
     </div>
   );
 }

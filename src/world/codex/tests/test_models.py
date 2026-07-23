@@ -266,6 +266,42 @@ class CodexEntryModelTests(TestCase):
         )
         entry.clean()  # Should not raise
 
+    def test_featured_entry_requires_public(self):
+        """A featured entry must also be public."""
+        entry = CodexEntry(
+            subject=self.subject,
+            name="Featured But Secret",
+            lore_content="Content",
+            is_featured=True,
+            is_public=False,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            entry.clean()
+        assert "is_featured" in str(ctx.exception)
+
+    def test_featured_public_entry_passes_clean(self):
+        """A featured + public entry passes clean()."""
+        entry = CodexEntry(
+            subject=self.subject,
+            name="Featured Public",
+            lore_content="Content",
+            is_public=True,
+            is_featured=True,
+            featured_order=1,
+        )
+        entry.clean()  # Should not raise
+
+    def test_non_featured_entry_passes_clean(self):
+        """A non-featured entry passes clean regardless of is_public."""
+        entry = CodexEntry(
+            subject=self.subject,
+            name="Restricted",
+            lore_content="Content",
+            is_public=False,
+            is_featured=False,
+        )
+        entry.clean()  # Should not raise
+
 
 class CharacterCodexKnowledgeModelTests(TestCase):
     """Tests for CharacterCodexKnowledge model."""

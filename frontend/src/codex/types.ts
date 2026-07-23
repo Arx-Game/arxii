@@ -42,6 +42,8 @@ export interface CodexEntryListItem {
   name: string;
   summary: string;
   is_public: boolean;
+  is_featured: boolean;
+  featured_order: number | null;
   subject: number;
   subject_name: string;
   subject_path: BreadcrumbSegment[];

@@ -26,11 +26,13 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { Link } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
 import { usePageBackgrounds, pageBackgroundStyle } from '@/hooks/usePageBackgrounds';
+import { useCGExplanations } from '@/character-creation/queries';
 
 export function RosterListPage() {
   const { data: backgrounds } = usePageBackgrounds();
   const { data: rosters, isLoading: rostersLoading } = useRostersQuery();
   const account = useAccount();
+  const { data: copy } = useCGExplanations();
   const [activeRoster, setActiveRoster] = useState<string>('');
   const [page, setPage] = useState(1);
   const [name, setName] = useState('');
@@ -75,6 +77,9 @@ export function RosterListPage() {
           </Button>
         )}
       </div>
+      {copy?.roster_lore_intro && (
+        <p className="text-sm text-muted-foreground">{copy.roster_lore_intro}</p>
+      )}
       <Tabs
         value={activeRoster}
         onValueChange={(v: string) => {
