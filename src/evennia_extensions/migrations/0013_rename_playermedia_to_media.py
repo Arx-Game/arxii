@@ -4,6 +4,19 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("evennia_extensions", "0012_playerdata_looking_for_table"),
+        # The rename must apply AFTER every migration that references the old
+        # "playermedia" name: on a fresh database the graph otherwise permits
+        # this rename first, and those AddField/CreateModel operations then
+        # fail with "Related model 'evennia_extensions.playermedia' cannot be
+        # resolved" (fresh-DB migrate broke under server settings; the test
+        # settings happened to order the plan the other way, so CI never saw
+        # it).
+        ("combat", "0012_combatopponent_portrait"),
+        ("conditions", "0018_thumbnail_fields"),
+        ("forms", "0009_alternateself_thumbnail"),
+        ("items", "0002_initial"),
+        ("roster", "0001_initial"),
+        ("scenes", "0001_initial"),
     ]
 
     operations = [
