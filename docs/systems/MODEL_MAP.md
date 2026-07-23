@@ -2349,7 +2349,17 @@
   - clash -> combat.Clash [FK] (nullable)
   - break_in_consequence_pool -> actions.ConsequencePool [FK] (nullable)
 
+### CombatMark
+**Fields:** encounter, participant, opponent, round_number, source_technique (nullable)
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - participant -> combat.CombatParticipant [FK]
+  - opponent -> combat.CombatOpponent [FK]
+  - source_technique -> magic.Technique [FK] (nullable, provenance)
+**Constraints:** unique per (participant, round_number)
+
 ### Service Functions
+- `declare_mark(participant: 'CombatParticipant', opponent: 'CombatOpponent', *, technique: 'Technique | None' = None) -> 'CombatMark' — Declare a directed, round-scoped combatant reference (the Fulmination mark, #2664). Validates encounter DECLARING status, participant ACTIVE, opponent ACTIVE and same-encounter. Idempotent per round.`
 - `accumulate_threat(encounter: 'CombatEncounter', opponent: 'CombatOpponent', participant: 'CombatParticipant', amount: 'int') -> 'None' — Increment the threat value for an (opponent, participant) pairing (#2020).`
 - `acknowledge_encounter_risk(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet') -> 'EncounterRiskAcknowledgement' — Idempotently record that a character acknowledged the encounter's risk (#777).`
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None) -> 'CombatOpponent' — Create a CombatOpponent. Three sources for the ObjectDB:`

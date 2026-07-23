@@ -1044,7 +1044,8 @@ class CovenantRoleTechniqueSpecialty(NaturalKeyMixin, SharedMemoryModel):
     #2443, Layer 2 of the vow-power model. Keyed by ``(covenant_role, function)``.
     ``multiplier_tenths`` (integer-tenths, default 10 = ×1.0) scales the specialty's
     effect for that function label when the role is engaged; the consumer that reads
-    this table is future wiring.
+    this table is ``covenant_role_specialty_power_term``
+    (``world.magic.services.power_terms``), which has consumed it since #2443.
 
     Rows are valid on BOTH primary roles and sub-roles — unlike the SWORD/SHIELD/CROWN
     blend weights (which sub-roles must leave at zero), a sub-role may carry its own

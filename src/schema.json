@@ -42852,6 +42852,7 @@ components:
       - weaken
       - perception
       - concealment
+      - hold
       type: string
       description: |-
         * `damage_buff_self` - Self Damage Buff
@@ -42866,6 +42867,7 @@ components:
         * `weaken` - Weaken
         * `perception` - Perception
         * `concealment` - Concealment
+        * `hold` - Hold / Lock
     FundWardResult:
       type: object
       properties:

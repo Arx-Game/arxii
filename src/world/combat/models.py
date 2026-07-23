@@ -3414,3 +3414,53 @@ class EngagementLock(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"EngagementLock(opp={self.opponent_id}→pc={self.participant_id} [{self.status}])"
+
+
+class CombatMark(SharedMemoryModel):
+    """A directed, round-scoped combatant reference — the Fulmination mark (#2664).
+
+    Created by ``declare_mark`` during the DECLARING phase. Persists for the
+    round; old marks are ignored (query-scoped by ``round_number``). The mark
+    is a generic combat primitive: a participant declares a target for
+    covenant-mates to focus. Vow content (perks, rungs) is lore-repo data that
+    reads the mark via the ``TARGET_IS_MARKED_BY_ALLY`` situation evaluator.
+
+    Open seam: a general combatant-relationship model that could subsume
+    EngagementLock, Clash, and the mark is a ``needs-design`` follow-up.
+    """
+
+    encounter = models.ForeignKey(
+        CombatEncounter,
+        on_delete=models.CASCADE,
+        related_name="marks",
+    )
+    participant = models.ForeignKey(
+        CombatParticipant,
+        on_delete=models.CASCADE,
+        related_name="marks",
+    )
+    opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        related_name="marks",
+    )
+    round_number = models.PositiveIntegerField()
+    source_technique = models.ForeignKey(
+        "magic.Technique",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Technique that created the mark (provenance).",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["participant", "round_number"],
+                name="combat_mark_unique_per_participant_round",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"CombatMark({self.participant} → {self.opponent}, round {self.round_number})"

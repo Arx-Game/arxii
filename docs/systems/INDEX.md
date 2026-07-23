@@ -20,7 +20,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `TechniqueCapabilityGrant`,
     `TechniqueFunctionTag` (#2443, NK `(technique, function)`, lore-repo content —
     which fine-grained `TechniqueFunction` labels a technique carries; see
-    `constants.TechniqueFunction`, a 12-value code-defined vocabulary shared by
+    `constants.TechniqueFunction`, a 13-value code-defined vocabulary shared by
     Layer 2 per-vow specialties (`covenants.CovenantRoleTechniqueSpecialty`),
     Layer 4 situational perks (#2536), and the #2645 Insight rider (PERCEPTION
     gates `covenants.insight.maybe_produce_insight`)),
