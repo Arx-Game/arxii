@@ -221,6 +221,16 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
         help_text="If True, visible to everyone including logged-out visitors. "
         "If False, only visible to characters who have learned it.",
     )
+    is_featured = models.BooleanField(
+        default=False,
+        help_text="If True, included in the curated onboarding lore shown on "
+        "the front page and linked from CG stages. Requires is_public=True.",
+    )
+    featured_order = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Display order for featured entries (1, 2, 3...). NULL for non-featured.",
+    )
     modifier_target = models.OneToOneField(
         "mechanics.ModifierTarget",
         on_delete=models.SET_NULL,
@@ -254,11 +264,14 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
     def clean(self) -> None:
-        """Validate that at least one content field is provided."""
+        """Validate content fields and featured/public consistency."""
         super().clean()
         if not self.lore_content and not self.mechanics_content:
             msg = "At least one of lore_content or mechanics_content must be provided."
             raise ValidationError(msg)
+        if self.is_featured and not self.is_public:
+            msg = "A featured entry must also be public (is_public=True)."
+            raise ValidationError({"is_featured": msg})
 
 
 class CharacterCodexKnowledge(SharedMemoryModel):
