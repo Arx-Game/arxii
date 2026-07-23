@@ -143,3 +143,4 @@ class ReactionMetric(models.TextChoices):
     """
 
     ALLURE = "allure", "Allure"
+    MENACE = "menace", "Menace"

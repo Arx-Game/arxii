@@ -23,25 +23,34 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.npc_services.models import Functionary, NPCRole
 
-#: The 'allure' ModifierTarget name — the social-hotness axis
-#: (seeded by world.seeds.social_relationships; Attractive ranks feed it).
+#: Canonical ModifierTarget names (see mechanics AGENT_GLOSSARY,
+#: "Common ModifierTargets"): allure = social hotness (Attractive ranks feed
+#: it); menace = the fear-facing sibling (feeds Intimidation checks via its
+#: check-scoped target; ApostateCD named it 2026-07-23).
 ALLURE_TARGET_NAME = "allure"
+MENACE_TARGET_NAME = "menace"
 
 NAME_TOKEN = "<name>"  # noqa: S105 — template interpolation token, not a secret
 
 
-def _resolve_allure(sheet: CharacterSheet) -> int:
-    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
-    from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+def _target_total_resolver(target_name: str) -> Callable[[CharacterSheet], int]:
+    """A resolver reading the total of one named ModifierTarget (0 if unseeded)."""
 
-    target = ModifierTarget.objects.filter(name=ALLURE_TARGET_NAME).first()
-    if target is None:
-        return 0
-    return get_modifier_total(sheet, target)
+    def _resolve(sheet: CharacterSheet) -> int:
+        from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+        from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+        target = ModifierTarget.objects.filter(name=target_name).first()
+        if target is None:
+            return 0
+        return get_modifier_total(sheet, target)
+
+    return _resolve
 
 
 METRIC_RESOLVERS: dict[str, Callable[[CharacterSheet], int]] = {
-    ReactionMetric.ALLURE.value: _resolve_allure,
+    ReactionMetric.ALLURE.value: _target_total_resolver(ALLURE_TARGET_NAME),
+    ReactionMetric.MENACE.value: _target_total_resolver(MENACE_TARGET_NAME),
 }
 
 

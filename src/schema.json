@@ -46592,8 +46592,11 @@ components:
     MetricEnum:
       enum:
       - allure
+      - menace
       type: string
-      description: '* `allure` - Allure'
+      description: |-
+        * `allure` - Allure
+        * `menace` - Menace
     MinRiskEnum:
       enum:
       - none
@@ -48453,6 +48456,7 @@ components:
             Which number of the served character the band reads.
 
             * `allure` - Allure
+            * `menace` - Menace
         band_floor:
           type: integer
           maximum: 2147483647
@@ -48488,6 +48492,7 @@ components:
             Which number of the served character the band reads.
 
             * `allure` - Allure
+            * `menace` - Menace
         band_floor:
           type: integer
           maximum: 2147483647
@@ -55598,6 +55603,7 @@ components:
             Which number of the served character the band reads.
 
             * `allure` - Allure
+            * `menace` - Menace
         band_floor:
           type: integer
           maximum: 2147483647
