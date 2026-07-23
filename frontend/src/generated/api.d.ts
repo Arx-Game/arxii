@@ -14190,6 +14190,74 @@ export interface paths {
     patch: operations['npc_services_permit_details_partial_update'];
     trace?: never;
   };
+  '/api/npc-services/reaction-lines/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff CRUD over banded NPC reaction lines (#2632).
+     *
+     *     The builder-facing authoring surface: place a functionary, add rows —
+     *     per-role defaults (functionary null) or a placement's personal set.
+     */
+    get: operations['npc_services_reaction_lines_list'];
+    put?: never;
+    /**
+     * @description Staff CRUD over banded NPC reaction lines (#2632).
+     *
+     *     The builder-facing authoring surface: place a functionary, add rows —
+     *     per-role defaults (functionary null) or a placement's personal set.
+     */
+    post: operations['npc_services_reaction_lines_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/reaction-lines/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff CRUD over banded NPC reaction lines (#2632).
+     *
+     *     The builder-facing authoring surface: place a functionary, add rows —
+     *     per-role defaults (functionary null) or a placement's personal set.
+     */
+    get: operations['npc_services_reaction_lines_retrieve'];
+    /**
+     * @description Staff CRUD over banded NPC reaction lines (#2632).
+     *
+     *     The builder-facing authoring surface: place a functionary, add rows —
+     *     per-role defaults (functionary null) or a placement's personal set.
+     */
+    put: operations['npc_services_reaction_lines_update'];
+    post?: never;
+    /**
+     * @description Staff CRUD over banded NPC reaction lines (#2632).
+     *
+     *     The builder-facing authoring surface: place a functionary, add rows —
+     *     per-role defaults (functionary null) or a placement's personal set.
+     */
+    delete: operations['npc_services_reaction_lines_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description Staff CRUD over banded NPC reaction lines (#2632).
+     *
+     *     The builder-facing authoring surface: place a functionary, add rows —
+     *     per-role defaults (functionary null) or a placement's personal set.
+     */
+    patch: operations['npc_services_reaction_lines_partial_update'];
+    trace?: never;
+  };
   '/api/npc-services/recorded-profiles/': {
     parameters: {
       query?: never;
@@ -26350,6 +26418,11 @@ export interface components {
      */
     MethodEnum: 'machine' | 'gm_pick';
     /**
+     * @description * `allure` - Allure
+     * @enum {string}
+     */
+    MetricEnum: 'allure';
+    /**
      * @description * `none` - None
      *     * `low` - Low
      *     * `moderate` - Moderate
@@ -27329,6 +27402,41 @@ export interface components {
      * @enum {string}
      */
     NPCAssetStatusEnum: 'active' | 'compromised' | 'lost' | 'dismissed';
+    /** @description Staff CRUD for banded NPC reaction lines (#2632). */
+    NPCReactionLine: {
+      readonly id: number;
+      /** @description The role these lines belong to. */
+      role: number;
+      /** @description Set for a specific placement's personal lines (e.g. Alphonso's); null = the role's shared defaults. */
+      functionary?: number | null;
+      /**
+       * @description Which number of the served character the band reads.
+       *
+       *     * `allure` - Allure
+       */
+      metric: components['schemas']['MetricEnum'];
+      /** @description Line applies from this value up (highest floor <= value wins). May be negative for a 'bottom' band. */
+      band_floor: number;
+      /** @description The reaction text; <name> is replaced with the served character's presented name. */
+      template: string;
+    };
+    /** @description Staff CRUD for banded NPC reaction lines (#2632). */
+    NPCReactionLineRequest: {
+      /** @description The role these lines belong to. */
+      role: number;
+      /** @description Set for a specific placement's personal lines (e.g. Alphonso's); null = the role's shared defaults. */
+      functionary?: number | null;
+      /**
+       * @description Which number of the served character the band reads.
+       *
+       *     * `allure` - Allure
+       */
+      metric: components['schemas']['MetricEnum'];
+      /** @description Line applies from this value up (highest floor <= value wins). May be negative for a 'bottom' band. */
+      band_floor: number;
+      /** @description The reaction text; <name> is replaced with the served character's presented name. */
+      template: string;
+    };
     NPCRole: {
       readonly id: number;
       /** @description Display name; e.g., 'Builders Guild Clerk', 'Town Guard'. */
@@ -29389,6 +29497,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['NPCAsset'][];
+    };
+    PaginatedNPCReactionLineList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['NPCReactionLine'][];
     };
     PaginatedNPCRoleList: {
       /** @example 123 */
@@ -31566,6 +31689,23 @@ export interface components {
       categories?: number[];
       /** @description Phase 0 predicate tree gating front-door availability for this template. */
       availability_rule?: unknown;
+    };
+    /** @description Staff CRUD for banded NPC reaction lines (#2632). */
+    PatchedNPCReactionLineRequest: {
+      /** @description The role these lines belong to. */
+      role?: number;
+      /** @description Set for a specific placement's personal lines (e.g. Alphonso's); null = the role's shared defaults. */
+      functionary?: number | null;
+      /**
+       * @description Which number of the served character the band reads.
+       *
+       *     * `allure` - Allure
+       */
+      metric?: components['schemas']['MetricEnum'];
+      /** @description Line applies from this value up (highest floor <= value wins). May be negative for a 'bottom' band. */
+      band_floor?: number;
+      /** @description The reaction text; <name> is replaced with the served character's presented name. */
+      template?: string;
     };
     PatchedNPCRoleRequest: {
       /** @description Display name; e.g., 'Builders Guild Clerk', 'Town Guard'. */
@@ -57392,6 +57532,151 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PermitOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_reaction_lines_list: {
+    parameters: {
+      query?: {
+        functionary?: number;
+        metric?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        role?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedNPCReactionLineList'];
+        };
+      };
+    };
+  };
+  npc_services_reaction_lines_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NPCReactionLineRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCReactionLine'];
+        };
+      };
+    };
+  };
+  npc_services_reaction_lines_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this NPC Reaction Line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCReactionLine'];
+        };
+      };
+    };
+  };
+  npc_services_reaction_lines_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this NPC Reaction Line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NPCReactionLineRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCReactionLine'];
+        };
+      };
+    };
+  };
+  npc_services_reaction_lines_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this NPC Reaction Line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_reaction_lines_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this NPC Reaction Line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedNPCReactionLineRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCReactionLine'];
         };
       };
     };

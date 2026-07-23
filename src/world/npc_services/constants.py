@@ -131,3 +131,15 @@ class RecordedProfileStatus(models.TextChoices):
 
     COMMISSIONED = "commissioned", "Commissioned"
     RECORDED = "recorded", "Recorded"
+
+
+class ReactionMetric(models.TextChoices):
+    """What a banded NPC reaction line keys off (#2632 reaction lines).
+
+    Each metric resolves through ``reactions.METRIC_RESOLVERS`` — adding a
+    metric is one enum member + one resolver function, never per-NPC code.
+    ALLURE reads the character's total 'allure' modifier (the social-hotness
+    axis); a fear-facing sibling joins when its name is ruled.
+    """
+
+    ALLURE = "allure", "Allure"

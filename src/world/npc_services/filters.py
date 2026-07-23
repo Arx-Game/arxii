@@ -4,6 +4,7 @@ import django_filters
 
 from world.npc_services.models import (
     MissionOfferDetails,
+    NPCReactionLine,
     NPCRole,
     NPCServiceOffer,
     NPCStanding,
@@ -79,4 +80,14 @@ class RecordedProfileFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = RecordedProfile
+        fields: list[str] = []
+
+
+class NPCReactionLineFilterSet(django_filters.FilterSet):
+    role = django_filters.NumberFilter(field_name="role_id")
+    functionary = django_filters.NumberFilter(field_name="functionary_id")
+    metric = django_filters.CharFilter()
+
+    class Meta:
+        model = NPCReactionLine
         fields: list[str] = []
