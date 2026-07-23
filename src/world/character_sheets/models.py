@@ -264,6 +264,9 @@ class CharacterSheet(SharedMemoryModel):
     with proper Django model fields for better data integrity and querying.
     """
 
+    # ObjectDB by design (#2608): THE canonical character↔ObjectDB anchor. PK-sharing
+    # means sheet.pk == character ObjectDB pk; every character-scoped model FKs this
+    # sheet, never ObjectDB directly.
     character = models.OneToOneField(
         ObjectDB,
         on_delete=models.CASCADE,

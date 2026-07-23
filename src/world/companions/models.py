@@ -207,6 +207,8 @@ class Companion(SharedMemoryModel):
         help_text="Which Gift's Thread capacity pool this companion is charged against.",
     )
     name = models.CharField(max_length=100)
+    # ObjectDB by design (#2608): a CompanionObject typeclass instance — a creature
+    # with no CharacterSheet by design (companion mechanics live on this model).
     objectdb = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.SET_NULL,
