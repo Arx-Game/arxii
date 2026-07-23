@@ -1289,13 +1289,11 @@ class TestActiveResistanceRaisesDifficultyAndChargesFatigue(TestCase):
         )
 
         # Give both defenders a willpower value so compute_resist_increment > 0.
-        primary_character = cls.primary_target.character_sheet.character
-        additional_character = cls.additional_target.character_sheet.character
         CharacterTraitValue.objects.create(
-            character=primary_character, trait=willpower_trait, value=20
+            character=cls.primary_target.character_sheet, trait=willpower_trait, value=20
         )
         CharacterTraitValue.objects.create(
-            character=additional_character, trait=willpower_trait, value=20
+            character=cls.additional_target.character_sheet, trait=willpower_trait, value=20
         )
 
     def setUp(self) -> None:
