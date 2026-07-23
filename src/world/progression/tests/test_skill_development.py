@@ -2,7 +2,7 @@
 
 from django.test import TestCase
 
-from evennia_extensions.factories import ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
 from world.classes.factories import CharacterClassFactory
@@ -93,7 +93,8 @@ class DevelopmentPointsAwardTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDBFactory(db_key="DevTestChar")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.trait = TraitFactory(name="swords_dev_test")
 
@@ -171,7 +172,8 @@ class AwardCheckDevelopmentTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDBFactory(db_key="CheckDevChar")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.trait1 = TraitFactory(name="stealth_check_dev")
         cls.trait2 = TraitFactory(name="agility_check_dev")
@@ -348,7 +350,8 @@ class AwardCheckDevelopmentSkillIndependenceTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDBFactory(db_key="SkillIndependenceChar")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.skill = SkillFactory()
         cls.category = CheckCategory.objects.create(name="test_skill_independence_category")
@@ -400,7 +403,8 @@ class RustDebtPayoffTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDBFactory(db_key="RustDebtChar")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.trait = TraitFactory(name="rust_debt_test")
 
@@ -470,7 +474,8 @@ class ApplySkillRustTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDBFactory(db_key="RustChar")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.trait = TraitFactory(name="rust_apply_test")
 
@@ -536,7 +541,8 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDBFactory(db_key="WeeklyProcessChar")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.trait_used = TraitFactory(name="weekly_used_trait")
         cls.trait_unused = TraitFactory(name="weekly_unused_trait")
@@ -761,7 +767,8 @@ class RustPayoffLevelThresholdTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDBFactory(db_key="RustPayoffThresholdChar")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.trait = TraitFactory(name="rust_threshold_test")
 

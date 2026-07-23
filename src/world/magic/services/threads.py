@@ -115,14 +115,12 @@ def _typeclass_path_in_registry(path: str, registry: tuple[str, ...]) -> bool:
 def _current_path_stage(character_sheet: CharacterSheet) -> int:
     """Return the stage of the most-recently-selected Path; 1 if none.
 
-    Navigates CharacterSheet → ObjectDB (character) → path_history (reverse FK
-    on CharacterPathHistory), ordered by -selected_at then -pk for deterministic
+    Reads the sheet's ``path_history`` reverse FK (CharacterPathHistory),
+    ordered by -selected_at then -pk for deterministic
     tie-breaking. Returns path.stage as int.
     """
     history = (
-        character_sheet.character.path_history.select_related("path")
-        .order_by("-selected_at", "-pk")
-        .first()
+        character_sheet.path_history.select_related("path").order_by("-selected_at", "-pk").first()
     )
     if history is None:
         return 1
@@ -872,7 +870,7 @@ def compute_thread_weaving_xp_cost(
     if not unlock_paths:
         return unlock.xp_cost  # Path-neutral
 
-    learner_paths = {h.path for h in learner.character.path_history.select_related("path")}
+    learner_paths = {h.path for h in learner.path_history.select_related("path")}
     if learner_paths & unlock_paths:
         return unlock.xp_cost  # in-Path
 
@@ -929,7 +927,7 @@ def accept_thread_weaving_unlock(
         amount=-xp_cost,
         reason=ProgressionReason.XP_PURCHASE,
         description=f"ThreadWeaving unlock: {unlock}",
-        character=learner.character,
+        character=learner,
         gm=None,
     )
 

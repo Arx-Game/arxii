@@ -581,7 +581,8 @@ def _calculate_aspect_bonus(
     5. Return total
     """
     latest_history = (
-        CharacterPathHistory.objects.filter(character=character)
+        # pk filter: callers pass the ObjectDB; the FK targets CharacterSheet (PK-shared).
+        CharacterPathHistory.objects.filter(character_id=character.pk)
         .select_related("path")
         .order_by("-selected_at")
         .first()

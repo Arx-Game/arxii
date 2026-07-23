@@ -16,8 +16,6 @@ from world.mechanics.constants import (
 from world.mechanics.models import CharacterModifier, ModifierTarget
 
 if TYPE_CHECKING:
-    from evennia.objects.models import ObjectDB
-
     from world.character_sheets.models import CharacterSheet
     from world.goals.models import GoalJournal
     from world.goals.types import GoalInputData
@@ -53,7 +51,7 @@ def get_goal_bonus(
     # Get base goal points for this domain
     try:
         goal = CharacterGoal.objects.get(
-            character=character.character,
+            character=character,
             domain=domain,
         )
         base_points = goal.points
@@ -139,7 +137,7 @@ def get_total_goal_points(character: "CharacterSheet") -> int:
 
 def set_character_goals(
     *,
-    character: "ObjectDB",
+    character: "CharacterSheet",
     goals: list["GoalInputData"],
 ) -> list[CharacterGoal]:
     """Replace a character's goal allocations, enforcing the weekly revision limit.
@@ -150,7 +148,7 @@ def set_character_goals(
     on revision-too-soon / over-cap / duplicate-domain.
 
     Args:
-        character: The character (ObjectDB) whose goals are being set.
+        character: The character sheet whose goals are being set.
         goals: Validated goal allocations — each a ``GoalInputData`` dict
             with ``domain`` (ModifierTarget pk or instance), ``points``, ``notes``.
 
@@ -205,7 +203,7 @@ def set_character_goals(
 
 def log_goal_progress(
     *,
-    character: "ObjectDB",
+    character: "CharacterSheet",
     domain: "ModifierTarget | None",
     title: str,
     content: str,
@@ -251,7 +249,7 @@ def get_goal_bonuses_breakdown(
 
     # Prefetch all character goals in one query
     character_goals = CharacterGoal.objects.filter(
-        character=character.character,
+        character=character,
         domain__category__name=GOAL_CATEGORY_NAME,
     ).select_related("domain")
     goals_by_domain = {goal.domain.name: goal.points for goal in character_goals}
@@ -302,7 +300,7 @@ def apply_goal(goal: CharacterGoal, *, context: str = "") -> int:
 
     from world.goals.models import GoalApplication  # noqa: PLC0415
 
-    sheet = goal.character.sheet_data
+    sheet = goal.character
     used_today = GoalApplication.objects.filter(
         goal__character=goal.character,
         created_at__date=timezone.now().date(),

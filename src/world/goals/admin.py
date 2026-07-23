@@ -14,7 +14,7 @@ class CharacterGoalAdmin(admin.ModelAdmin):
 
     list_display = ["character", "domain", "points", "updated_at"]
     list_filter = ["domain"]
-    search_fields = ["character__db_key", "notes"]
+    search_fields = ["character__character__db_key", "notes"]
     list_select_related = ["character", "domain"]
     raw_id_fields = ["character"]
 
@@ -25,7 +25,7 @@ class GoalJournalAdmin(admin.ModelAdmin):
 
     list_display = ["character", "title", "domain", "is_public", "xp_awarded", "created_at"]
     list_filter = ["is_public", "domain", "created_at"]
-    search_fields = ["character__db_key", "title", "content"]
+    search_fields = ["character__character__db_key", "title", "content"]
     list_select_related = ["character", "domain"]
     raw_id_fields = ["character"]
     date_hierarchy = "created_at"
@@ -36,7 +36,7 @@ class GoalRevisionAdmin(admin.ModelAdmin):
     """Admin for GoalRevision tracking."""
 
     list_display = ["character", "last_revised_at", "can_revise_display"]
-    search_fields = ["character__db_key"]
+    search_fields = ["character__character__db_key"]
     list_select_related = ["character"]
     raw_id_fields = ["character"]
 

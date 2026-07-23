@@ -23,13 +23,13 @@ def award_cg_conversion_xp(
     xp_amount = remaining_cg_points * conversion_rate
 
     CharacterXP.objects.create(
-        character=character,
+        character=character.sheet_data,
         total_earned=xp_amount,
         transferable=False,
     )
 
     CharacterXPTransaction.objects.create(
-        character=character,
+        character=character.sheet_data,
         amount=xp_amount,
         reason=ProgressionReason.CG_CONVERSION,
         description=f"{remaining_cg_points} unspent CG points converted at {conversion_rate}:1",

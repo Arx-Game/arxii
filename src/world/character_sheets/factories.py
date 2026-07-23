@@ -151,7 +151,7 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
         from world.progression.models.paths import CharacterPathHistory
 
         path = PathFactory(stage=stage)
-        CharacterPathHistory.objects.create(character=self.character, path=path)
+        CharacterPathHistory.objects.create(character=self, path=path)
 
 
 class ObjectDisplayDataFactory(factory_django.DjangoModelFactory):

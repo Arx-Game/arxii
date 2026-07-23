@@ -113,7 +113,7 @@ def _id_name_or_null(obj: Model | None, name_field: str = "name") -> IdNameRef |
 # --- Shared prefetch constants (used by multiple builders) ---
 
 _SHARED_PATH_HISTORY_PREFETCH = Prefetch(
-    "character__path_history",
+    "path_history",
     queryset=CharacterPathHistory.objects.select_related("path").order_by("-selected_at"),
     to_attr="cached_path_history",
 )
@@ -193,7 +193,7 @@ def _build_identity(
         # Compose the real fullname: "FirstName FamilyName" or just the db_key.
         fullname = f"{character.db_key} {family.name}" if family is not None else character.db_key
         # Latest path from prefetched path_history (ordered by -selected_at).
-        path_history: list = character.cached_path_history
+        path_history: list = sheet.cached_path_history
         path_value = _id_name(path_history[0].path) if path_history else None
 
     # Public worship only (#2355) — the secret side never leaves owner surfaces.
@@ -533,8 +533,7 @@ def _build_path_detail(sheet: CharacterSheet) -> PathDetailSection | None:
     ``path_history`` queryset is expected to be prefetched and ordered by
     ``-selected_at`` (newest first) so that index 0 is the current path.
     """
-    character = sheet.character
-    path_history: list = character.cached_path_history
+    path_history: list = sheet.cached_path_history
     if not path_history:
         return None
 
@@ -878,7 +877,7 @@ def _build_story(*, sheet: CharacterSheet, bio_profile: Profile | None = None) -
 _GOALS_SELECT_RELATED: tuple[str, ...] = ()
 _GOALS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
-        "character__goals",
+        "goals",
         queryset=CharacterGoal.objects.select_related("domain"),
         to_attr="cached_goals",
     ),
@@ -887,14 +886,13 @@ _GOALS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 
 def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
     """Build the goals section from prefetched CharacterGoal data."""
-    character = sheet.character
     return [
         GoalEntry(
             domain=goal.domain.name,
             points=goal.points,
             notes=goal.notes,
         )
-        for goal in character.cached_goals
+        for goal in sheet.cached_goals
     ]
 
 

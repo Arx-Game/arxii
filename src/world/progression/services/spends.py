@@ -54,15 +54,16 @@ def spend_xp_on_unlock(
         sheet = character.sheet_data
     except (CharacterSheet.DoesNotExist, AttributeError):
         sheet = None
-    if sheet is not None:
-        enforce_advancement_gate(sheet)
+    if sheet is None:
+        return False, "This character has no sheet and cannot purchase unlocks", None
+    enforce_advancement_gate(sheet)
 
     account = character.account
 
     # Check if already unlocked (only works for ClassLevelUnlock now)
     if isinstance(unlock_target, ClassLevelUnlock):
         if CharacterUnlock.objects.filter(
-            character=character,
+            character=sheet,
             character_class=unlock_target.character_class,
             target_level=unlock_target.target_level,
         ).exists():
@@ -105,14 +106,14 @@ def spend_xp_on_unlock(
                 amount=-xp_cost,
                 reason=ProgressionReason.XP_PURCHASE,
                 description=f"Unlocked {unlock_target}",
-                character=character,
+                character=sheet,
                 gm=gm,
             )
 
         # Create unlock record (only for ClassLevelUnlock now)
         if isinstance(unlock_target, ClassLevelUnlock):
             unlock = CharacterUnlock.objects.create(
-                character=character,
+                character=sheet,
                 character_class=unlock_target.character_class,
                 target_level=unlock_target.target_level,
                 xp_spent=xp_cost,
@@ -262,7 +263,7 @@ def get_available_unlocks_for_character(
     """
     # Get character's current class level unlocks
     unlocked_class_levels = set()
-    for unlock in CharacterUnlock.objects.filter(character=character):
+    for unlock in CharacterUnlock.objects.filter(character_id=character.pk):
         unlocked_class_levels.add((unlock.character_class.id, unlock.target_level))
 
     available: list[DetailedUnlockEntry] = []

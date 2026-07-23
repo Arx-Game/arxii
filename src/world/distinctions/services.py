@@ -428,7 +428,7 @@ def approve_sheet_update_request(
                 amount=-locked_req.xp_cost,
                 reason=ProgressionReason.XP_PURCHASE,
                 description=f"Distinction change: {locked_req.get_request_type_display()}",
-                character=character_sheet.character,
+                character=character_sheet,
                 gm=gm_account,
             )
 

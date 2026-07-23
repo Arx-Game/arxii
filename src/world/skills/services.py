@@ -511,7 +511,7 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
                 amount=-xp_cost,
                 reason=ProgressionReason.XP_PURCHASE,
                 description=f"Breakthrough: {skill.name} to {target_rating / 10:.1f}",
-                character=character,
+                character=character.sheet_data,
             )
 
         skill_value.value = target_rating

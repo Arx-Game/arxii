@@ -138,13 +138,13 @@ def _wire_path(sheet, path) -> None:
     """Record ``path`` as the character's current path via CharacterPathHistory."""
     from world.progression.models import CharacterPathHistory
 
-    CharacterPathHistory.objects.create(character=sheet.character, path=path)
+    CharacterPathHistory.objects.create(character=sheet, path=path)
 
 
 def _purchase_unlock(sheet, unlock) -> None:
     """Record the XP-unlock purchase gate as satisfied for ``sheet`` (#2116)."""
     CharacterUnlock.objects.create(
-        character=sheet.character,
+        character=sheet,
         character_class=unlock.character_class,
         target_level=unlock.target_level,
     )

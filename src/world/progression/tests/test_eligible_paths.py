@@ -21,7 +21,7 @@ class EligiblePathTests(TestCase):
             level=2,
             is_primary=True,
         )
-        CharacterPathHistory.objects.create(character=self.sheet.character, path=self.prospect)
+        CharacterPathHistory.objects.create(character=self.sheet, path=self.prospect)
 
     def test_eligible_lists_potential_child(self) -> None:
         self.assertIn(self.potential, eligible_advanced_paths_for(self.sheet))

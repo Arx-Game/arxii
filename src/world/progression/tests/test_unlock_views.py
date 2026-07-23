@@ -169,7 +169,7 @@ class UnlockShopViewTests(TestCase):
         self.assertEqual(response.data["unlock_type"], "class_level")
         self.assertTrue(
             CharacterUnlock.objects.filter(
-                character=self.character,
+                character=self.sheet,
                 character_class=class_unlock.character_class,
                 target_level=4,
             ).exists()
@@ -192,7 +192,7 @@ class UnlockShopViewTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(
             CharacterUnlock.objects.filter(
-                character=self.character,
+                character=self.sheet,
                 character_class=class_unlock.character_class,
                 target_level=4,
             ).exists()

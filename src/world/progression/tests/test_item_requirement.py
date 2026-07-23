@@ -68,7 +68,8 @@ class ItemRequirementTemplateModePossessionTests(TestCase):
         cls.template = ItemTemplateFactory()
 
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character)
 
     def test_missing_item_fails(self) -> None:
@@ -136,7 +137,8 @@ class ItemRequirementTouchstoneModePossessionTests(TestCase):
         cls.tier2 = ResonanceTierFactory(name="Resonant_1859", tier_level=2)
 
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character)
 
     def _touchstone(self, *, resonance, tier, attuned_to=None, holder=None):
@@ -208,7 +210,8 @@ class ItemRequirementWiringTests(TestCase):
         )
 
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character)
         CharacterClassLevelFactory(
             character=self.character,

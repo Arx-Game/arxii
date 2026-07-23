@@ -41,11 +41,10 @@ def reconcile_ritual_knowledge(roster_entry: "RosterEntry") -> None:
         roster_entry: The RosterEntry to reconcile knowledge for.
     """
     char_sheet = roster_entry.character_sheet
-    character = char_sheet.character
     ritual_ids: set[int] = set()
 
     # 1. Walk PathRitualGrant — collect rituals for all paths in character's history
-    path_ids = character.path_history.values_list("path_id", flat=True)
+    path_ids = char_sheet.path_history.values_list("path_id", flat=True)
     if path_ids:
         ritual_ids.update(
             PathRitualGrant.objects.filter(path_id__in=path_ids).values_list("ritual_id", flat=True)

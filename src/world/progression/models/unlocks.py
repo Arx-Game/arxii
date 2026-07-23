@@ -892,7 +892,7 @@ class CharacterUnlock(SharedMemoryModel):
     """Records what class levels a character has unlocked."""
 
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="unlocks",
     )

@@ -776,7 +776,7 @@ def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
     # Build and create instances
     goals_to_create = [
         CharacterGoal(
-            character=character,
+            character=character.sheet_data,
             domain=domains_by_id[g["domain_id"]],
             points=g["points"],
             notes=g.get("notes", ""),

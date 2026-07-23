@@ -107,7 +107,7 @@ class FirstDuranceWithNoLiveOfficiantTests(TestCase):
             level=1,
             is_primary=True,
         )
-        CharacterPathHistory.objects.create(character=self.inductee_sheet.character, path=self.path)
+        CharacterPathHistory.objects.create(character=self.inductee_sheet, path=self.path)
         self.inductee_sheet.character.location = self.room
         self.inductee_sheet.character.save()
 
@@ -115,7 +115,7 @@ class FirstDuranceWithNoLiveOfficiantTests(TestCase):
             character_class=self.inductee_class, target_level=2
         )
         CharacterUnlock.objects.create(
-            character=self.inductee_sheet.character,
+            character=self.inductee_sheet,
             character_class=self.unlock.character_class,
             target_level=self.unlock.target_level,
         )

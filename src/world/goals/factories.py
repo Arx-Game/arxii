@@ -26,7 +26,7 @@ class CharacterGoalFactory(DjangoModelFactory):
     class Meta:
         model = CharacterGoal
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     domain = factory.SubFactory(GoalDomainFactory)
     points = 10
     notes = factory.Faker("sentence")
@@ -38,7 +38,7 @@ class GoalJournalFactory(DjangoModelFactory):
     class Meta:
         model = GoalJournal
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     domain = factory.SubFactory(GoalDomainFactory)
     title = factory.Faker("sentence", nb_words=4)
     content = factory.Faker("paragraph")
@@ -52,4 +52,4 @@ class GoalRevisionFactory(DjangoModelFactory):
     class Meta:
         model = GoalRevision
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")

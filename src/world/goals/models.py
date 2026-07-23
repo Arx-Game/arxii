@@ -40,7 +40,7 @@ class CharacterGoal(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="goals",
     )
@@ -86,7 +86,7 @@ class GoalJournal(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="goal_journals",
     )
@@ -124,7 +124,7 @@ class GoalRevision(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="goal_revision",
     )

@@ -1468,7 +1468,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         from world.progression.models.paths import CharacterPathHistory
 
         path = PathFactory(stage=stage)
-        CharacterPathHistory.objects.create(character=self.owner.character, path=path)
+        CharacterPathHistory.objects.create(character=self.owner, path=path)
 
     @factory.post_generation  # type: ignore[misc]
     def as_covenant_role_thread(

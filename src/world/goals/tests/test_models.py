@@ -6,7 +6,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.goals.constants import GoalStatus
 from world.goals.factories import (
     CharacterGoalFactory,
@@ -22,7 +22,7 @@ class TestCharacterGoalStatus(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory()
         cls.domain = GoalDomainFactory()
 
     def test_default_status_is_active(self):
@@ -50,7 +50,7 @@ class CharacterGoalModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory()
         cls.domain = GoalDomainFactory(name="Wealth")
 
     def test_str_representation(self):
@@ -93,7 +93,7 @@ class GoalJournalModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory()
         cls.domain = GoalDomainFactory()
 
     def test_str_representation(self):
@@ -137,7 +137,7 @@ class GoalRevisionModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory()
 
     def test_str_representation(self):
         """GoalRevision string shows character and last revised date."""
@@ -204,7 +204,7 @@ class TestGoalInstance(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory()
         cls.domain = GoalDomainFactory()
         cls.goal = CharacterGoal.objects.create(
             character=cls.character,

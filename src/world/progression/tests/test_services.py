@@ -7,6 +7,7 @@ from evennia.accounts.models import AccountDB
 import pytest
 
 from evennia_extensions.factories import ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.classes.factories import CharacterClassLevelFactory
 from world.progression.factories import ExperiencePointsDataFactory
@@ -86,7 +87,8 @@ class UnlockServiceTest(TestCase):
             username="testplayer",
             email="test@test.com",
         )
-        cls.character = ObjectDBFactory(db_key="TestChar")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.character.db_account = cls.account
         cls.character.save()
 
@@ -154,14 +156,14 @@ class UnlockServiceTest(TestCase):
 
         # Check unlock was recorded
         assert CharacterUnlock.objects.filter(
-            character=self.character,
+            character=self.sheet,
             character_class=self.class_unlock.character_class,
             target_level=self.class_unlock.target_level,
         ).exists()
 
         # Check transaction was recorded
         assert XPTransaction.objects.filter(
-            account=self.account, amount=-100, character=self.character
+            account=self.account, amount=-100, character=self.sheet
         ).exists()
 
     def test_spend_xp_insufficient_funds(self):
@@ -179,7 +181,7 @@ class UnlockServiceTest(TestCase):
         """Test XP spending on already purchased unlock."""
         # Create existing unlock
         CharacterUnlock.objects.create(
-            character=self.character,
+            character=self.sheet,
             character_class=self.class_unlock.character_class,
             target_level=self.class_unlock.target_level,
             xp_spent=100,
@@ -209,7 +211,8 @@ class DevelopmentServiceTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDBFactory(db_key="TestChar")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
 
     def test_award_development_points(self):
@@ -251,7 +254,8 @@ class DevelopmentRateModifierTest(TestCase):
         from world.traits.factories import TraitFactory
         from world.traits.models import TraitCategory, TraitType
 
-        cls.character = ObjectDBFactory(db_key="TestChar")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
 
         cls.physical_trait = TraitFactory(
@@ -343,7 +347,8 @@ class LevelUpRequirementsTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDBFactory(db_key="TestChar")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.class_level = CharacterClassLevelFactory(
             character=cls.character,

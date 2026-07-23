@@ -21,7 +21,8 @@ class PathIntentModelTests(TestCase):
     """Unit tests for PathIntent model invariants."""
 
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character, primary_persona=False)
         self.path = PathFactory()
 
@@ -81,7 +82,8 @@ class PathIntentAPIBaseTests(TestCase):
     def setUp(self) -> None:
         # NOTE: Never create Evennia characters in setUpTestData.
         self.account = AccountFactory()
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character, primary_persona=False)
         self.path = PathFactory(is_active=True)
 
