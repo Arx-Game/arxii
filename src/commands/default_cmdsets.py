@@ -124,6 +124,7 @@ from commands.ritual import CmdRitual
 from commands.sanctum import CmdSanctum
 from commands.scene import CmdScene
 from commands.seance import CmdSeance
+from commands.select import CmdSelect
 from commands.setsituation import CmdSetSituation
 from commands.setstage import CmdSetStage
 from commands.sheet_request import CmdSheetRequest  # #2628 — sheet-update requests.
@@ -311,6 +312,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdHide,
             # #1491 — telnet face of RestAction; spend AP to become Well-Rested.
             CmdRest,
+            CmdSelect,
             # #2287 — telnet face of WakeAction; attempt to wake from unconsciousness.
             CmdWake,
             # #2290 — telnet face of SleepAction; voluntarily sleep to enter the dream realm.
