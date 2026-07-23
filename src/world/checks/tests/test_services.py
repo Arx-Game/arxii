@@ -45,7 +45,7 @@ class CalculateAspectBonusTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.path = PathFactory(name="TestSpyPath", stage=PathStage.PROSPECT, minimum_level=1)
         cls.intrigue = Aspect.objects.create(name="test_svc_intrigue")
         cls.subterfuge = Aspect.objects.create(name="test_svc_subterfuge")
@@ -207,7 +207,7 @@ class PerformCheckTests(TestCase):
                 rank=rank_val,
                 defaults={"min_points": min_pts, "name": name},
             )
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.strength, _ = Trait.objects.get_or_create(
             name="check_test_strength",
             defaults={
@@ -284,7 +284,7 @@ class PerformCheckEffortFatigueTests(TestCase):
                 rank=rank_val,
                 defaults={"min_points": min_pts, "name": name},
             )
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.strength, _ = Trait.objects.get_or_create(
             name="effort_test_strength",
             defaults={
@@ -421,7 +421,7 @@ class PreviewCheckDifficultyTests(TestCase):
                 rank=rank_val,
                 defaults={"min_points": min_pts, "name": name},
             )
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.strength, _ = Trait.objects.get_or_create(
             name="preview_strength",
             defaults={
@@ -516,7 +516,7 @@ class ComputeResistIncrementTests(TestCase):
         )
         # Seed the Composure CheckType + willpower trait weight via the factory helper.
         create_resistance_check_types()
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         # Resolve the willpower trait seeded by create_resistance_check_types().
         cls.willpower_trait, _ = Trait.objects.get_or_create(
             name="willpower",

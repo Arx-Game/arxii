@@ -177,10 +177,14 @@ class InterposeBestOfCheckRealPathTest(TestCase):
         wits_trait = Trait.objects.get(name="wits")
         agility_trait = Trait.objects.get(name="agility")
         melee_trait = Trait.objects.get(name="Melee Combat")
-        CharacterTraitValue.objects.create(character=guardian, trait=wits_trait, value=wits)
-        CharacterTraitValue.objects.create(character=guardian, trait=agility_trait, value=agility)
         CharacterTraitValue.objects.create(
-            character=guardian, trait=melee_trait, value=melee_combat
+            character=guardian.sheet_data, trait=wits_trait, value=wits
+        )
+        CharacterTraitValue.objects.create(
+            character=guardian.sheet_data, trait=agility_trait, value=agility
+        )
+        CharacterTraitValue.objects.create(
+            character=guardian.sheet_data, trait=melee_trait, value=melee_combat
         )
 
         ally_vitals = _make_vitals(ally_participant, health=100, max_health=100)

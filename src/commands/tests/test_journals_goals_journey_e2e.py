@@ -89,7 +89,9 @@ class JournalGoalJourneyE2ETests(TestCase):
         domain = GoalDomainFactory(name="Standing")
         _make_goal_cmd(self.writer, f"add domain={domain.pk} points=10 notes=Gain standing").func()
         self.assertTrue(
-            CharacterGoal.objects.filter(character=self.writer, domain=domain, points=10).exists()
+            CharacterGoal.objects.filter(
+                character=self.writer.sheet_data, domain=domain, points=10
+            ).exists()
         )
 
         _make_goal_cmd(
@@ -107,7 +109,7 @@ class JournalCommandErrorTests(TestCase):
         from evennia.utils.idmapper.models import flush_cache
 
         flush_cache()
-        self.caller = CharacterFactory()
+        self.caller = CharacterSheetFactory().character
         self.caller.db_account = AccountFactory()
         self.caller.save()
         self.caller_sheet = CharacterSheetFactory(character=self.caller)
@@ -165,7 +167,7 @@ class GoalCommandErrorTests(TestCase):
         from evennia.utils.idmapper.models import flush_cache
 
         flush_cache()
-        self.caller = CharacterFactory()
+        self.caller = CharacterSheetFactory().character
         self.caller.db_account = AccountFactory()
         self.caller.save()
         self.caller.msg = MagicMock()

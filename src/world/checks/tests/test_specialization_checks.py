@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import (
     CheckCategoryFactory,
     CheckTypeFactory,
@@ -51,7 +51,7 @@ class SpecializationInCheckTests(TestCase):
             CheckRank.objects.get_or_create(
                 rank=rank_val, defaults={"min_points": min_pts, "name": name}
             )
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.charm, _ = Trait.objects.get_or_create(
             name="spec_test_charm",
             defaults={"trait_type": TraitType.STAT, "category": TraitCategory.SOCIAL},

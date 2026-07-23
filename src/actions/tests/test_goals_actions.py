@@ -7,14 +7,14 @@ from django.test import TestCase
 from actions.definitions.goals import LogGoalProgressAction, SetCharacterGoalsAction
 from actions.registry import get_action
 from actions.types import ActionResult
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.goals.factories import GoalDomainFactory
 from world.goals.models import CharacterGoal, GoalJournal
 
 
 class SetCharacterGoalsActionTests(TestCase):
     def setUp(self) -> None:
-        self.actor = CharacterFactory()
+        self.actor = CharacterSheetFactory().character
         self.domain = GoalDomainFactory()
 
     def test_registry_key_present(self) -> None:
@@ -26,7 +26,7 @@ class SetCharacterGoalsActionTests(TestCase):
             goals=[{"domain": self.domain.pk, "points": 10, "notes": "x"}],
         )
         assert result.success
-        assert CharacterGoal.objects.filter(character=self.actor, points=10).exists()
+        assert CharacterGoal.objects.filter(character=self.actor.sheet_data, points=10).exists()
 
     def test_over_cap_fails(self) -> None:
         result = SetCharacterGoalsAction().execute(
@@ -39,7 +39,7 @@ class SetCharacterGoalsActionTests(TestCase):
 
 class LogGoalProgressActionTests(TestCase):
     def setUp(self) -> None:
-        self.actor = CharacterFactory()
+        self.actor = CharacterSheetFactory().character
 
     def test_logs_progress(self) -> None:
         result = LogGoalProgressAction().execute(

@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import SECURITY_CHECK_TYPE_NAMES, SecurityCheckKind
 from world.checks.security_services import resolve_security_check
 from world.checks.test_helpers import force_check_outcome
@@ -46,7 +46,7 @@ class ResolveSecurityCheckTests(TestCase):
         seed_check_resolution_tables()
         seed_stealth_check_content()
         seed_security_check_content()
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
 
     def setUp(self):
         Trait.flush_instance_cache()
