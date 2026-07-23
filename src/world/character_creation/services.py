@@ -583,7 +583,9 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
 
         # Create trait values in bulk
         trait_values = [
-            CharacterTraitValue(character=character, trait=traits_by_name[name], value=value)
+            CharacterTraitValue(
+                character=character.sheet_data, trait=traits_by_name[name], value=value
+            )
             for name, value in stats.items()
             if name in traits_by_name
         ]
@@ -998,7 +1000,7 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
             try:
                 skill = Skill.objects.get(pk=int(skill_id))
                 CharacterSkillValue.objects.create(
-                    character=character,
+                    character=character.sheet_data,
                     skill=skill,
                     value=value,
                     development_points=0,
@@ -1017,7 +1019,7 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
             try:
                 spec = Specialization.objects.get(pk=int(spec_id))
                 CharacterSpecializationValue.objects.create(
-                    character=character,
+                    character=character.sheet_data,
                     specialization=spec,
                     value=value,
                     development_points=0,

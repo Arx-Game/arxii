@@ -1501,7 +1501,7 @@ def derive_base_max_health(character_sheet: CharacterSheet) -> int:
     level = effective_combat_level(character_sheet)
 
     primary = (
-        CharacterClassLevel.objects.filter(character=character, is_primary=True)
+        CharacterClassLevel.objects.filter(character=character_sheet, is_primary=True)
         .select_related("character_class")
         .first()
     )

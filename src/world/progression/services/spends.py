@@ -335,7 +335,10 @@ def calculate_level_up_requirements(
     """
     # Get current level in this class
     try:
-        current_class_level = character.character_class_levels.get(
+        from world.classes.models import CharacterClassLevel
+
+        current_class_level = CharacterClassLevel.objects.get(
+            character_id=character.pk,
             character_class=character_class,
         )
         current_level = current_class_level.level

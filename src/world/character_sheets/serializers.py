@@ -461,7 +461,7 @@ def _build_appearance(
 _STATS_SELECT_RELATED: tuple[str, ...] = ()
 _STATS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
-        "character__trait_values",
+        "trait_values",
         queryset=CharacterTraitValue.objects.filter(
             trait__trait_type=TraitType.STAT
         ).select_related("trait"),
@@ -475,19 +475,18 @@ def _build_stats(sheet: CharacterSheet) -> dict[str, int]:
 
     The queryset is pre-filtered to stat-type traits via Prefetch in the viewset.
     """
-    character = sheet.character
-    return {tv.trait.name: tv.value for tv in character.cached_trait_values}
+    return {tv.trait.name: tv.value for tv in sheet.cached_trait_values}
 
 
 _SKILLS_SELECT_RELATED: tuple[str, ...] = ()
 _SKILLS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
-        "character__skill_values",
+        "skill_values",
         queryset=CharacterSkillValue.objects.select_related("skill__trait"),
         to_attr="cached_skill_values",
     ),
     Prefetch(
-        "character__specialization_values",
+        "specialization_values",
         queryset=CharacterSpecializationValue.objects.select_related("specialization"),
         to_attr="cached_specialization_values",
     ),
@@ -496,11 +495,9 @@ _SKILLS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 
 def _build_skills(sheet: CharacterSheet) -> list[SkillEntry]:
     """Build the skills section: a list of skill entries with nested specializations."""
-    character = sheet.character
-
     # Build a lookup of specialization values keyed by parent_skill_id
     spec_by_skill: dict[int, list[SpecializationEntry]] = {}
-    for sv in character.cached_specialization_values:
+    for sv in sheet.cached_specialization_values:
         skill_id = sv.specialization.parent_skill_id
         spec_by_skill.setdefault(skill_id, []).append(
             SpecializationEntry(
@@ -509,7 +506,7 @@ def _build_skills(sheet: CharacterSheet) -> list[SkillEntry]:
         )
 
     result: list[SkillEntry] = []
-    for csv in character.cached_skill_values:
+    for csv in sheet.cached_skill_values:
         skill = csv.skill
         result.append(
             SkillEntry(

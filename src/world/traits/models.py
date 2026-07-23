@@ -19,7 +19,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 if TYPE_CHECKING:
-    from evennia.objects.models import ObjectDB
+    pass
 
 
 class TraitType(models.TextChoices):
@@ -237,7 +237,7 @@ class CharacterTraitValue(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="trait_values",
     )
@@ -257,8 +257,7 @@ class CharacterTraitValue(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        character = cast("ObjectDB", self.character)
-        return f"{character.key}: {self.trait.name} = {self.display_value}"
+        return f"{self.character}: {self.trait.name} = {self.display_value}"
 
     @property
     def display_value(self) -> float:

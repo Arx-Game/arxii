@@ -340,7 +340,7 @@ class TraitRequirement(AbstractClassLevelRequirement):
         """Check if character has the required trait value."""
         try:
             trait_value = CharacterTraitValue.objects.get(
-                character=character,
+                character_id=character.pk,
                 trait=self.trait,
             )
             if trait_value.value >= cast(int, self.minimum_value):
@@ -376,7 +376,9 @@ class LevelRequirement(AbstractClassLevelRequirement):
 
     def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if character meets the level requirement."""
-        character_levels = character.character_class_levels.all()
+        from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+
+        character_levels = CharacterClassLevel.objects.filter(character_id=character.pk)
         if not character_levels.exists():
             return False, "Character has no class levels"
 
@@ -405,8 +407,11 @@ class ClassLevelRequirement(AbstractClassLevelRequirement):
 
     def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if character has the required level in the specific class."""
+        from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+
         try:
-            class_level = character.character_class_levels.get(
+            class_level = CharacterClassLevel.objects.get(
+                character_id=character.pk,
                 character_class=self.character_class,
             )
             if class_level.level >= self.minimum_level:
@@ -445,8 +450,11 @@ class MultiClassRequirement(AbstractClassLevelRequirement):
 
     def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if character meets the multi-class requirements."""
+        from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+
         character_levels = {
-            ccl.character_class: ccl.level for ccl in character.character_class_levels.all()
+            ccl.character_class: ccl.level
+            for ccl in CharacterClassLevel.objects.filter(character_id=character.pk)
         }
 
         met_requirements = 0
@@ -652,7 +660,9 @@ class TierRequirement(AbstractClassLevelRequirement):
 
     def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if character has reached the required tier in any class."""
-        character_levels = character.character_class_levels.all()
+        from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+
+        character_levels = CharacterClassLevel.objects.filter(character_id=character.pk)
         if not character_levels.exists():
             return False, "Character has no class levels"
 

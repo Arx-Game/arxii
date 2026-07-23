@@ -8,8 +8,8 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from evennia_extensions.factories import CharacterFactory
 from world.action_points.models import ActionPointConfig
+from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.factories import PersonaFactory
 from world.skills.factories import SkillFactory, SpecializationFactory
 from world.skills.models import TrainingAllocation
@@ -21,7 +21,8 @@ class TrainingAllocationViewSetTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.skill = SkillFactory()
         cls.specialization = SpecializationFactory()
         cls.mentor = PersonaFactory()
@@ -79,7 +80,7 @@ class TrainingAllocationViewSetTests(TestCase):
 
     def test_list_includes_allocations_and_remaining_budget(self):
         TrainingAllocation.objects.create(
-            character=self.character,
+            character=self.sheet,
             skill=self.skill,
             ap_amount=15,
         )
@@ -100,7 +101,7 @@ class TrainingAllocationViewSetTests(TestCase):
         self.assertEqual(response.data["skill"]["id"], self.skill.id)
         self.assertTrue(
             TrainingAllocation.objects.filter(
-                character=self.character, skill=self.skill, ap_amount=20
+                character=self.sheet, skill=self.skill, ap_amount=20
             ).exists()
         )
 
@@ -147,7 +148,7 @@ class TrainingAllocationViewSetTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_rejects_exceeding_budget(self):
-        TrainingAllocation.objects.create(character=self.character, skill=self.skill, ap_amount=60)
+        TrainingAllocation.objects.create(character=self.sheet, skill=self.skill, ap_amount=60)
         other_skill = SkillFactory()
         response = self._request(
             "post",
@@ -166,7 +167,7 @@ class TrainingAllocationViewSetTests(TestCase):
 
     def test_update_ap_amount(self):
         allocation = TrainingAllocation.objects.create(
-            character=self.character, skill=self.skill, ap_amount=10
+            character=self.sheet, skill=self.skill, ap_amount=10
         )
         response = self._request(
             "patch",
@@ -180,7 +181,7 @@ class TrainingAllocationViewSetTests(TestCase):
 
     def test_update_mentor_and_clear_mentor(self):
         allocation = TrainingAllocation.objects.create(
-            character=self.character,
+            character=self.sheet,
             skill=self.skill,
             ap_amount=10,
             mentor=self.mentor,
@@ -208,7 +209,7 @@ class TrainingAllocationViewSetTests(TestCase):
 
     def test_update_rejects_non_positive_ap(self):
         allocation = TrainingAllocation.objects.create(
-            character=self.character, skill=self.skill, ap_amount=10
+            character=self.sheet, skill=self.skill, ap_amount=10
         )
         response = self._request(
             "patch",
@@ -219,7 +220,7 @@ class TrainingAllocationViewSetTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_update_rejects_foreign_allocation(self):
-        other_character = CharacterFactory()
+        other_character = CharacterSheetFactory()
         foreign = TrainingAllocation.objects.create(
             character=other_character, skill=self.skill, ap_amount=10
         )
@@ -233,7 +234,7 @@ class TrainingAllocationViewSetTests(TestCase):
 
     def test_destroy_allocation(self):
         allocation = TrainingAllocation.objects.create(
-            character=self.character, skill=self.skill, ap_amount=10
+            character=self.sheet, skill=self.skill, ap_amount=10
         )
         response = self._request(
             "delete",
@@ -244,7 +245,7 @@ class TrainingAllocationViewSetTests(TestCase):
         self.assertFalse(TrainingAllocation.objects.filter(pk=allocation.id).exists())
 
     def test_destroy_rejects_foreign_allocation(self):
-        other_character = CharacterFactory()
+        other_character = CharacterSheetFactory()
         foreign = TrainingAllocation.objects.create(
             character=other_character, skill=self.skill, ap_amount=10
         )

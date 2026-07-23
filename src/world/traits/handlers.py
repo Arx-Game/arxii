@@ -104,7 +104,9 @@ class TraitHandler:
                 trait_type_cache.clear()
 
         # Load all trait values for this character and populate cache
-        trait_values = self.character.trait_values.select_related("trait").all()
+        trait_values = CharacterTraitValue.objects.filter(
+            character_id=self.character.pk
+        ).select_related("trait")
         for trait_value in trait_values:
             self.add_trait_value_to_cache(trait_value)
 
@@ -247,7 +249,7 @@ class TraitHandler:
 
         # Create or update the trait value
         trait_value, created = CharacterTraitValue.objects.get_or_create(
-            character=self.character,
+            character=self.character.sheet_data,
             trait=trait,
             defaults={"value": value},
         )

@@ -41,10 +41,8 @@ class TraitModelTests(TestCase):
             },
         )
 
-        self.character = ObjectDBFactory(
-            db_key="testchar",
-            db_typeclass_path="typeclasses.characters.Character",
-        )
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
 
     def test_trait_creation(self):
         """Test creating and accessing traits."""
@@ -61,7 +59,7 @@ class TraitModelTests(TestCase):
     def test_character_trait_value(self):
         """Test character trait values."""
         trait_value = CharacterTraitValue.objects.create(
-            character=self.character,
+            character=self.sheet,
             trait=self.trait,
             value=25,
         )
@@ -205,10 +203,8 @@ class TraitHandlerTests(TestCase):
     def setUp(self):
         """Set up test data."""
 
-        self.character = ObjectDBFactory(
-            db_key="testchar",
-            db_typeclass_path="typeclasses.characters.Character",
-        )
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
 
         self.trait = Trait.objects.create(
             name="swords",
@@ -240,7 +236,7 @@ class TraitHandlerTests(TestCase):
 
         # Set a value and test retrieval
         CharacterTraitValue.objects.create(
-            character=self.character,
+            character=self.sheet,
             trait=self.trait,
             value=25,
         )
@@ -308,7 +304,7 @@ class TraitHandlerTests(TestCase):
 
         # Update through direct model save - cache should auto-update
         trait_value = CharacterTraitValue.objects.get(
-            character=self.character,
+            character=self.sheet,
             trait=self.trait,
         )
         trait_value.value = 40
@@ -341,7 +337,7 @@ class TraitHandlerTests(TestCase):
         # Set values for both traits
         self.handler.set_trait_value("swords", 30)
         CharacterTraitValue.objects.create(
-            character=self.character,
+            character=self.sheet,
             trait=private_trait,
             value=40,
         )
@@ -363,10 +359,8 @@ class StatHandlerTests(TestCase):
     def setUp(self):
         """Set up test data for stats."""
 
-        self.character = ObjectDBFactory(
-            db_key="testchar",
-            db_typeclass_path="typeclasses.characters.Character",
-        )
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
 
         # Get or create all 12 primary stats (may already exist from migration)
         self.stats = {}
@@ -447,7 +441,7 @@ class StatHandlerTests(TestCase):
         """Test that display values round down correctly."""
         # Internal value 25 should display as 2 (not 2.5 or 3)
         CharacterTraitValue.objects.create(
-            character=self.character,
+            character=self.sheet,
             trait=self.stats["strength"],
             value=25,
         )
@@ -460,7 +454,7 @@ class StatHandlerTests(TestCase):
 
         # Internal value 56 should display as 5 (not 5.6 or 6)
         CharacterTraitValue.objects.create(
-            character=self.character,
+            character=self.sheet,
             trait=self.stats["agility"],
             value=56,
         )
@@ -643,8 +637,8 @@ class TraitHandlerStatModifierTests(TestCase):
     def setUpTestData(cls):
         """Set up test data including character with sheet and strength trait."""
 
-        cls.character = ObjectDBFactory(db_key="TestChar")
-        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
         # Create the strength trait as a stat
         cls.strength_trait = TraitFactory(
@@ -707,7 +701,7 @@ class TraitHandlerStatModifierTests(TestCase):
     def test_base_trait_value_returns_unmodified(self):
         """get_base_trait_value returns raw value without modifiers."""
         CharacterTraitValueFactory(
-            character=self.character,
+            character=self.sheet,
             trait=self.strength_trait,
             value=30,  # 3.0 display
         )
@@ -722,7 +716,7 @@ class TraitHandlerStatModifierTests(TestCase):
     def test_trait_value_includes_stat_modifier(self):
         """get_trait_value includes stat modifiers for stats."""
         CharacterTraitValueFactory(
-            character=self.character,
+            character=self.sheet,
             trait=self.strength_trait,
             value=30,  # 3.0 display
         )
@@ -737,7 +731,7 @@ class TraitHandlerStatModifierTests(TestCase):
     def test_trait_value_without_distinction_unmodified(self):
         """get_trait_value returns base value when no modifiers apply."""
         CharacterTraitValueFactory(
-            character=self.character,
+            character=self.sheet,
             trait=self.strength_trait,
             value=30,
         )
@@ -751,7 +745,7 @@ class TraitHandlerStatModifierTests(TestCase):
     def test_skill_trait_not_affected_by_stat_modifier(self):
         """Non-stat traits are not affected by stat modifiers."""
         CharacterTraitValueFactory(
-            character=self.character,
+            character=self.sheet,
             trait=self.swords_trait,
             value=25,
         )
@@ -766,7 +760,7 @@ class TraitHandlerStatModifierTests(TestCase):
     def test_trait_display_value_includes_modifier(self):
         """get_trait_display_value includes modifiers in display format."""
         CharacterTraitValueFactory(
-            character=self.character,
+            character=self.sheet,
             trait=self.strength_trait,
             value=30,  # 3.0 display
         )
@@ -781,7 +775,7 @@ class TraitHandlerStatModifierTests(TestCase):
     def test_trait_value_case_insensitive(self):
         """Stat modifiers work with case-insensitive trait lookup."""
         CharacterTraitValueFactory(
-            character=self.character,
+            character=self.sheet,
             trait=self.strength_trait,
             value=30,
         )
@@ -797,17 +791,14 @@ class TraitHandlerStatModifierTests(TestCase):
         """Characters without sheet get unmodified trait values."""
 
         character_no_sheet = ObjectDBFactory(db_key="NoSheetChar")
-        CharacterTraitValueFactory(
-            character=character_no_sheet,
-            trait=self.strength_trait,
-            value=30,
-        )
+        # The sheet-FK schema makes trait rows impossible for sheet-less objects;
+        # the handler must simply degrade to the unset default.
         handler = TraitHandler(character_no_sheet)
 
         value = handler.get_trait_value("strength")
 
-        # No sheet means no modifiers, so base value
-        assert value == 30
+        # No sheet means no trait rows and no modifiers — the unset default.
+        assert value == 0
 
     def test_missing_trait_returns_modifier_only(self):
         """Missing traits return modifier value when modifiers apply."""
@@ -828,8 +819,8 @@ class GiantsBloodModifierCreationTests(TestCase):
     def setUpTestData(cls):
         """Set up test data."""
 
-        cls.character = ObjectDBFactory(db_key="TestChar")
-        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
         # Create the Giant's Blood distinction with its effects
         physical = DistinctionCategoryFactory(slug="physical", name="Physical")

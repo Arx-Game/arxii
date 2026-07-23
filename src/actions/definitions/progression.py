@@ -157,7 +157,7 @@ class ManageTrainingAction(Action):
     ) -> ActionResult:
         """Update an existing training allocation owned by the actor."""
         allocation = training_allocation_cls.objects.get(pk=kwargs.get(_KWARG_ALLOCATION_ID))
-        if allocation.character != actor:
+        if allocation.character_id != actor.pk:
             return ActionResult(
                 success=False,
                 message="You can only update your own training allocations.",
@@ -195,7 +195,7 @@ class ManageTrainingAction(Action):
         """Remove an existing training allocation owned by the actor."""
         allocation_id = kwargs.get(_KWARG_ALLOCATION_ID)
         allocation = training_allocation_cls.objects.get(pk=allocation_id)
-        if allocation.character != actor:
+        if allocation.character_id != actor.pk:
             return ActionResult(
                 success=False,
                 message="You can only remove your own training allocations.",

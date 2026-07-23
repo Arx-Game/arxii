@@ -132,7 +132,7 @@ class CharacterSkillValue(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="skill_values",
         help_text="The character this skill value belongs to",
@@ -181,7 +181,7 @@ class CharacterSpecializationValue(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="specialization_values",
         help_text="The character this specialization value belongs to",
@@ -329,7 +329,7 @@ class TrainingAllocation(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="training_allocations",
         help_text="The character this training allocation belongs to",
@@ -386,4 +386,4 @@ class TrainingAllocation(SharedMemoryModel):
 
     def __str__(self) -> str:
         target = self.skill.trait.name if self.skill else self.specialization.name
-        return f"{self.character.db_key}: {target} ({self.ap_amount} AP)"
+        return f"{self.character}: {target} ({self.ap_amount} AP)"

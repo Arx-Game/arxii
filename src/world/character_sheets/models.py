@@ -804,7 +804,7 @@ class CharacterSheet(SharedMemoryModel):
         Serves as the ``to_attr`` target for::
 
             Prefetch(
-                "character__character_class_levels",
+                "character_class_levels",
                 queryset=CharacterClassLevel.objects.select_related("character_class"),
                 to_attr="cached_character_class_levels",
             )
@@ -815,16 +815,11 @@ class CharacterSheet(SharedMemoryModel):
         To invalidate after mutating levels::
 
             sheet.invalidate_class_level_cache()
-
-        Note: ``CharacterClassLevel.character`` FKs to ObjectDB (shared-pk with
-        CharacterSheet), so we walk ``self.character.character_class_levels``.
         """
         from world.classes.models import CharacterClassLevel  # noqa: PLC0415
 
         return list(
-            CharacterClassLevel.objects.filter(character=self.character).select_related(
-                "character_class"
-            )
+            CharacterClassLevel.objects.filter(character=self).select_related("character_class")
         )
 
     @cached_property
@@ -854,7 +849,7 @@ class CharacterSheet(SharedMemoryModel):
 
         Example::
 
-            CharacterClassLevel.objects.create(character=sheet.character, ...)
+            CharacterClassLevel.objects.create(character=sheet, ...)
             sheet.invalidate_class_level_cache()
         """
         self.__dict__.pop("cached_character_class_levels", None)
