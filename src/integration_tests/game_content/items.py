@@ -6,21 +6,17 @@ working unchanged. New code should import from ``world.seeds.game_content.items`
 """
 
 from world.seeds.game_content.items import (
-    GearArchetypeCompatibilityResult,
     ItemsDevSeedResult,
     ItemTemplateStarterCatalogResult,
     _build_template_specs,
-    seed_gear_archetype_compatibility,
     seed_item_template_starter_catalog,
     seed_items_dev,
 )
 
 __all__ = [
-    "GearArchetypeCompatibilityResult",
     "ItemTemplateStarterCatalogResult",
     "ItemsDevSeedResult",
     "_build_template_specs",
-    "seed_gear_archetype_compatibility",
     "seed_item_template_starter_catalog",
     "seed_items_dev",
 ]
