@@ -167,4 +167,4 @@ class WeaknessPoolEntryAdmin(admin.ModelAdmin):
     list_display = ("name", "creature_template", "is_active")
     list_filter = ("is_active",)
     search_fields = ("name", "creature_template__name")
-    autocomplete_fields = ("creature_template", "condition")
+    raw_id_fields = ("creature_template", "condition")
