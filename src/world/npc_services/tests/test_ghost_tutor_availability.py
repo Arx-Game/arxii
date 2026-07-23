@@ -40,7 +40,7 @@ class GhostTutorAvailabilityTests(TestCase):
 
         # Set a path on the character so get_technique_options doesn't bail
         cls.path = PathFactory()
-        CharacterPathHistoryFactory(character=cls.sheet.character, path=cls.path)
+        CharacterPathHistoryFactory(character=cls.sheet, path=cls.path)
 
     def test_no_tutelage_signature_unavailable(self):
         """Without GhostTutelage, signature is unavailable via generalist trainer."""

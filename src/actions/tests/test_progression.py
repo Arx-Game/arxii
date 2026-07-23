@@ -76,7 +76,7 @@ class ManageTrainingActionTests(TestCase):
     def test_update_allocation(self) -> None:
         """Can update AP amount and mentor on an owned allocation."""
         allocation = TrainingAllocationFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             skill=self.skill,
             ap_amount=10,
         )
@@ -96,7 +96,7 @@ class ManageTrainingActionTests(TestCase):
     def test_update_removes_mentor_when_none(self) -> None:
         """Passing mentor_persona_id=None clears the mentor."""
         allocation = TrainingAllocationFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             skill=self.skill,
             ap_amount=10,
             mentor=self.mentor,
@@ -114,7 +114,7 @@ class ManageTrainingActionTests(TestCase):
     def test_remove_allocation(self) -> None:
         """Can remove an owned training allocation."""
         allocation = TrainingAllocationFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             skill=self.skill,
             ap_amount=10,
         )
@@ -170,7 +170,7 @@ class ManageTrainingActionTests(TestCase):
         """Update fails when new total would exceed weekly budget."""
         budget = self.config.weekly_regen
         allocation = TrainingAllocationFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             skill=self.skill,
             ap_amount=budget,
         )

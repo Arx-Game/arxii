@@ -131,7 +131,7 @@ class TeamDamagePercentPricingIntegrationTests(TestCase):
 
         caster = CharacterFactory()
         target_sheet = CharacterSheetFactory()
-        CharacterClassLevelFactory(character=target_sheet.character, level=4)
+        CharacterClassLevelFactory(character=target_sheet, level=4)
         target_sheet.invalidate_class_level_cache()
 
         technique = TechniqueFactory()

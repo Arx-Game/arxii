@@ -16,7 +16,7 @@ def _set_primary_level(sheet, level: int) -> None:
     from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 
     CharacterClassLevelFactory(
-        character=sheet.character,
+        character=sheet,
         character_class=CharacterClassFactory(),
         level=level,
         is_primary=True,

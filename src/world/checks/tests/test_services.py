@@ -51,7 +51,7 @@ class CalculateAspectBonusTests(TestCase):
         cls.subterfuge = Aspect.objects.create(name="test_svc_subterfuge")
         PathAspect.objects.create(character_path=cls.path, aspect=cls.intrigue, weight=2)
         PathAspect.objects.create(character_path=cls.path, aspect=cls.subterfuge, weight=1)
-        CharacterPathHistory.objects.create(character=cls.character, path=cls.path)
+        CharacterPathHistory.objects.create(character=cls.character.sheet_data, path=cls.path)
         cls.check_type = CheckTypeFactory(name="TestSpyCheck")
 
     def test_aspect_bonus_with_matching_path(self):
@@ -231,7 +231,9 @@ class PerformCheckTests(TestCase):
     def test_perform_check_returns_check_result(self):
         from world.checks.types import CheckResult
 
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=30
+        )
         result = perform_check(self.character, self.check_type, target_difficulty=0)
         assert isinstance(result, CheckResult)
         assert result.check_type == self.check_type
@@ -239,13 +241,17 @@ class PerformCheckTests(TestCase):
 
     @patch("world.checks.services.random.randint", return_value=50)
     def test_perform_check_with_fixed_roll(self, mock_randint):
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=30
+        )
         result = perform_check(self.character, self.check_type, target_difficulty=0)
         assert result.outcome is not None
         mock_randint.assert_called_once_with(1, 100)
 
     def test_perform_check_with_extra_modifiers(self):
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=30
+        )
         result_base = perform_check(self.character, self.check_type, target_difficulty=0)
         result_boosted = perform_check(
             self.character,
@@ -301,7 +307,9 @@ class PerformCheckEffortFatigueTests(TestCase):
 
     def test_very_low_applies_minus_three(self):
         """Very low effort applies -3 modifier to total points."""
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=30
+        )
         result_base = perform_check(self.character, self.check_type, target_difficulty=0)
         result_very_low = perform_check(
             self.character, self.check_type, target_difficulty=0, effort_level="very_low"
@@ -310,7 +318,9 @@ class PerformCheckEffortFatigueTests(TestCase):
 
     def test_low_applies_minus_one(self):
         """Low effort applies -1 modifier to total points."""
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=30
+        )
         result_base = perform_check(self.character, self.check_type, target_difficulty=0)
         result_low = perform_check(
             self.character, self.check_type, target_difficulty=0, effort_level="low"
@@ -319,7 +329,9 @@ class PerformCheckEffortFatigueTests(TestCase):
 
     def test_medium_effort_no_modifier(self):
         """Medium effort applies 0 modifier to total points."""
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=30
+        )
         result_base = perform_check(self.character, self.check_type, target_difficulty=0)
         result_medium = perform_check(
             self.character, self.check_type, target_difficulty=0, effort_level="medium"
@@ -328,7 +340,9 @@ class PerformCheckEffortFatigueTests(TestCase):
 
     def test_high_applies_plus_two(self):
         """High effort applies +2 modifier to total points."""
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=30
+        )
         result_base = perform_check(self.character, self.check_type, target_difficulty=0)
         result_high = perform_check(
             self.character, self.check_type, target_difficulty=0, effort_level="high"
@@ -337,7 +351,9 @@ class PerformCheckEffortFatigueTests(TestCase):
 
     def test_extreme_applies_plus_four(self):
         """Extreme effort applies +4 modifier to total points."""
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=30
+        )
         result_base = perform_check(self.character, self.check_type, target_difficulty=0)
         result_extreme = perform_check(
             self.character, self.check_type, target_difficulty=0, effort_level="extreme"
@@ -346,7 +362,9 @@ class PerformCheckEffortFatigueTests(TestCase):
 
     def test_fatigue_penalty_applied(self):
         """Fatigue penalty is subtracted from total points."""
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=30
+        )
         result_base = perform_check(self.character, self.check_type, target_difficulty=0)
         result_fatigued = perform_check(
             self.character, self.check_type, target_difficulty=0, fatigue_penalty=-3
@@ -355,7 +373,9 @@ class PerformCheckEffortFatigueTests(TestCase):
 
     def test_effort_and_fatigue_combined(self):
         """Both effort modifier and fatigue penalty apply together."""
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=30
+        )
         result_base = perform_check(self.character, self.check_type, target_difficulty=0)
         result_combined = perform_check(
             self.character,
@@ -369,7 +389,9 @@ class PerformCheckEffortFatigueTests(TestCase):
 
     def test_no_effort_level_preserves_behavior(self):
         """Omitting effort_level preserves existing behavior (no modifier)."""
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=30
+        )
         result_default = perform_check(self.character, self.check_type, target_difficulty=0)
         result_none = perform_check(
             self.character, self.check_type, target_difficulty=0, effort_level=None
@@ -421,7 +443,9 @@ class PreviewCheckDifficultyTests(TestCase):
 
     def test_preview_returns_positive_when_strong(self):
         """Character with high trait points gets positive rank difference."""
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=60)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=60
+        )
         rank_diff = preview_check_difficulty(self.character, self.check_type, target_difficulty=0)
         assert rank_diff > 0
 
@@ -432,13 +456,17 @@ class PreviewCheckDifficultyTests(TestCase):
 
     def test_preview_returns_negative_when_weak(self):
         """Character with low traits vs high difficulty gives negative rank diff."""
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=5)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=5
+        )
         rank_diff = preview_check_difficulty(self.character, self.check_type, target_difficulty=50)
         assert rank_diff < 0
 
     def test_extra_modifiers_increase_rank_diff(self):
         """Extra modifiers boost the character's side of the calculation."""
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=5)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.strength, value=5
+        )
         base = preview_check_difficulty(self.character, self.check_type, target_difficulty=0)
         boosted = preview_check_difficulty(
             self.character, self.check_type, target_difficulty=0, extra_modifiers=100
@@ -505,7 +533,7 @@ class ComputeResistIncrementTests(TestCase):
     def test_high_effort_greater_than_low_effort(self):
         """A defender with willpower gets more resist increment at high effort than low."""
         CharacterTraitValue.objects.create(
-            character=self.character, trait=self.willpower_trait, value=20
+            character=self.character.sheet_data, trait=self.willpower_trait, value=20
         )
         increment_high = compute_resist_increment(self.character, resist_effort_level="high")
         increment_low = compute_resist_increment(self.character, resist_effort_level="low")

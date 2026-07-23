@@ -52,7 +52,7 @@ class UnlockShopViewTests(TestCase):
 
     def _create_class_level_unlock(self, *, xp_cost: int):
         """Create a class-level unlock with an XP cost chart."""
-        class_level = CharacterClassLevelFactory(character=self.character, level=3)
+        class_level = CharacterClassLevelFactory(character=self.character.sheet_data, level=3)
         class_unlock = ClassLevelUnlock.objects.create(
             character_class=class_level.character_class,
             target_level=4,
@@ -87,7 +87,7 @@ class UnlockShopViewTests(TestCase):
     def _create_gated_skill(self, *, xp_cost: int | None = None):
         """Create a skill parked at an XP boundary (#2115), optionally with an authored cost."""
         skill = SkillFactory()
-        CharacterSkillValueFactory(character=self.character, skill=skill, value=19)
+        CharacterSkillValueFactory(character=self.character.sheet_data, skill=skill, value=19)
         if xp_cost is not None:
             chart = XPCostChart.objects.create(name=f"Breakthrough Chart {skill.pk}")
             XPCostEntry.objects.create(chart=chart, level=20, xp_cost=xp_cost)

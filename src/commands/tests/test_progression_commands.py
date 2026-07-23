@@ -66,13 +66,13 @@ class CmdTrainingListTests(TestCase):
 
     def test_list_shows_allocations_and_remaining_budget(self):
         TrainingAllocation.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             skill=self.skill,
             ap_amount=20,
             mentor=self.mentor,
         )
         TrainingAllocation.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             specialization=self.specialization,
             ap_amount=15,
         )

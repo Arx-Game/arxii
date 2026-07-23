@@ -102,7 +102,7 @@ class FirstDuranceWithNoLiveOfficiantTests(TestCase):
         from world.classes.factories import CharacterClassLevelFactory
 
         CharacterClassLevelFactory(
-            character=self.inductee_sheet.character,
+            character=self.inductee_sheet,
             character_class=self.inductee_class,
             level=1,
             is_primary=True,

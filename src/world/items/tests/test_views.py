@@ -221,7 +221,7 @@ class ItemFacetViewTests(ItemViewTestCase):
         )
         # Give the owner's character an Enchanting trait so the check can run.
         CharacterTraitValueFactory(
-            character=self.owner_char,
+            character=self.owner_sheet,
             trait=Trait.objects.get(name="Enchanting"),
             value=50,
         )

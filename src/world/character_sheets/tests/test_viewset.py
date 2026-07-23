@@ -246,7 +246,7 @@ class TestIdentitySection(TestCase):
         # Create a path history entry
         cls.path = PathFactory(name="Path of Steel")
         cls.path_history = CharacterPathHistoryFactory(
-            character=cls.character.sheet_data,
+            character=cls.character.sheet_data.sheet_data,
             path=cls.path,
         )
 
@@ -587,10 +587,10 @@ class TestStatsSection(TestCase):
         cls.strength_trait = StatTraitFactory(name="strength", category=TraitCategory.PHYSICAL)
         cls.agility_trait = StatTraitFactory(name="agility", category=TraitCategory.PHYSICAL)
         CharacterTraitValueFactory(
-            character=cls.character.sheet_data, trait=cls.strength_trait, value=30
+            character=cls.character.sheet_data.sheet_data, trait=cls.strength_trait, value=30
         )
         CharacterTraitValueFactory(
-            character=cls.character.sheet_data, trait=cls.agility_trait, value=40
+            character=cls.character.sheet_data.sheet_data, trait=cls.agility_trait, value=40
         )
 
     def setUp(self) -> None:
@@ -663,10 +663,10 @@ class TestSkillsSection(TestCase):
         cls.melee_skill = SkillFactory(trait__name="Melee", trait__category=TraitCategory.COMBAT)
         cls.swords_spec = SpecializationFactory(name="Swords", parent_skill=cls.melee_skill)
         CharacterSkillValueFactory(
-            character=cls.character.sheet_data, skill=cls.melee_skill, value=30
+            character=cls.character.sheet_data.sheet_data, skill=cls.melee_skill, value=30
         )
         CharacterSpecializationValueFactory(
-            character=cls.character.sheet_data, specialization=cls.swords_spec, value=10
+            character=cls.character.sheet_data.sheet_data, specialization=cls.swords_spec, value=10
         )
 
     def setUp(self) -> None:
@@ -704,7 +704,9 @@ class TestSkillsSection(TestCase):
     def test_skill_entry_at_boundary_true_when_gated(self) -> None:
         """A skill parked at an XP boundary (19/29/39/49) reports at_boundary=True (#2115)."""
         gated_skill = SkillFactory(trait__name="Gated Skill", trait__category=TraitCategory.COMBAT)
-        CharacterSkillValueFactory(character=self.character.sheet_data, skill=gated_skill, value=29)
+        CharacterSkillValueFactory(
+            character=self.character.sheet_data.sheet_data, skill=gated_skill, value=29
+        )
 
         skills = self._get_skills()
         entry = next(e for e in skills if e["skill"]["id"] == gated_skill.pk)
@@ -777,11 +779,11 @@ class TestPathDetailSection(TestCase):
 
         # Create history entries (potential is later/higher stage)
         cls.history_1 = CharacterPathHistoryFactory(
-            character=cls.character.sheet_data,
+            character=cls.character.sheet_data.sheet_data,
             path=cls.prospect_path,
         )
         cls.history_2 = CharacterPathHistoryFactory(
-            character=cls.character.sheet_data,
+            character=cls.character.sheet_data.sheet_data,
             path=cls.potential_path,
         )
 
@@ -1587,13 +1589,13 @@ class TestGoalsSection(TestCase):
         )
 
         cls.goal_mastery = CharacterGoalFactory(
-            character=cls.character.sheet_data,
+            character=cls.character.sheet_data.sheet_data,
             domain=GoalDomainFactory(name="Mastery"),
             points=10,
             notes="Become the best swordsman.",
         )
         cls.goal_standing = CharacterGoalFactory(
-            character=cls.character.sheet_data,
+            character=cls.character.sheet_data.sheet_data,
             domain=GoalDomainFactory(name="Standing"),
             points=20,
             notes="",
@@ -1973,7 +1975,7 @@ class TestCharacterSheetQueryCount(TestCase):
 
         # --- Path ---
         cls.path = PathFactory(name="Path of Stars")
-        CharacterPathHistoryFactory(character=cls.character.sheet_data, path=cls.path)
+        CharacterPathHistoryFactory(character=cls.character.sheet_data.sheet_data, path=cls.path)
 
         # --- TRUE form with traits ---
         true_form = CharacterFormFactory(character=cls.character, form_type=FormType.TRUE)
@@ -1985,14 +1987,18 @@ class TestCharacterSheetQueryCount(TestCase):
 
         # --- Stats ---
         str_trait = StatTraitFactory(name="Strength")
-        CharacterTraitValueFactory(character=cls.character.sheet_data, trait=str_trait, value=30)
+        CharacterTraitValueFactory(
+            character=cls.character.sheet_data.sheet_data, trait=str_trait, value=30
+        )
 
         # --- Skills ---
         melee_skill = SkillFactory(trait__name="QCMelee", trait__category=TraitCategory.COMBAT)
         swords_spec = SpecializationFactory(name="QCSwords", parent_skill=melee_skill)
-        CharacterSkillValueFactory(character=cls.character.sheet_data, skill=melee_skill, value=20)
+        CharacterSkillValueFactory(
+            character=cls.character.sheet_data.sheet_data, skill=melee_skill, value=20
+        )
         CharacterSpecializationValueFactory(
-            character=cls.character.sheet_data, specialization=swords_spec, value=5
+            character=cls.character.sheet_data.sheet_data, specialization=swords_spec, value=5
         )
 
         # --- Distinctions ---
@@ -2042,7 +2048,7 @@ class TestCharacterSheetQueryCount(TestCase):
 
         # --- Goals ---
         CharacterGoalFactory(
-            character=cls.character.sheet_data,
+            character=cls.character.sheet_data.sheet_data,
             domain=GoalDomainFactory(name="QCMastery"),
             points=15,
             notes="Be the best.",
@@ -2189,7 +2195,7 @@ class TestPrefetchCompleteness(TestCase):
 
         # Path
         cls.path = PathFactory(name="PF Path")
-        CharacterPathHistoryFactory(character=cls.character.sheet_data, path=cls.path)
+        CharacterPathHistoryFactory(character=cls.character.sheet_data.sheet_data, path=cls.path)
 
         # TRUE form with traits
         true_form = CharacterFormFactory(character=cls.character, form_type=FormType.TRUE)
@@ -2201,14 +2207,18 @@ class TestPrefetchCompleteness(TestCase):
 
         # Stats
         str_trait = StatTraitFactory(name="PFStrength")
-        CharacterTraitValueFactory(character=cls.character.sheet_data, trait=str_trait, value=25)
+        CharacterTraitValueFactory(
+            character=cls.character.sheet_data.sheet_data, trait=str_trait, value=25
+        )
 
         # Skills + specializations
         melee_skill = SkillFactory(trait__name="PFMelee", trait__category=TraitCategory.COMBAT)
         swords_spec = SpecializationFactory(name="PFSwords", parent_skill=melee_skill)
-        CharacterSkillValueFactory(character=cls.character.sheet_data, skill=melee_skill, value=15)
+        CharacterSkillValueFactory(
+            character=cls.character.sheet_data.sheet_data, skill=melee_skill, value=15
+        )
         CharacterSpecializationValueFactory(
-            character=cls.character.sheet_data, specialization=swords_spec, value=5
+            character=cls.character.sheet_data.sheet_data, specialization=swords_spec, value=5
         )
 
         # Distinctions
@@ -2256,7 +2266,7 @@ class TestPrefetchCompleteness(TestCase):
 
         # Goals
         CharacterGoalFactory(
-            character=cls.character.sheet_data,
+            character=cls.character.sheet_data.sheet_data,
             domain=GoalDomainFactory(name="PFMastery"),
             points=10,
         )

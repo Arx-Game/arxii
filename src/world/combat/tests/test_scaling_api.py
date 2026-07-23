@@ -69,7 +69,7 @@ class OpponentDefaultsTestBase(TestCase):
         )
         # Give the participant a primary class level of 10 (above any sane gate)
         CharacterClassLevelFactory(
-            character=cls.player_sheet.character,
+            character=cls.player_sheet,
             level=10,
             is_primary=True,
         )
@@ -304,7 +304,7 @@ class AddOpponentStakesValidationTestBase(TestCase):
             status=ParticipantStatus.ACTIVE,
         )
         CharacterClassLevelFactory(
-            character=cls.player_sheet.character,
+            character=cls.player_sheet,
             level=10,
             is_primary=True,
         )
@@ -381,7 +381,7 @@ class AddOpponentStakesQualifyingTest(AddOpponentStakesValidationTestBase):
             status=ParticipantStatus.ACTIVE,
         )
         CharacterClassLevelFactory(
-            character=player_sheet.character,
+            character=player_sheet,
             level=10,
             is_primary=True,
         )
@@ -414,7 +414,7 @@ class AddOpponentStakesQualifyingTest(AddOpponentStakesValidationTestBase):
             status=ParticipantStatus.ACTIVE,
         )
         CharacterClassLevelFactory(
-            character=player_sheet.character,
+            character=player_sheet,
             level=10,
             is_primary=True,
         )

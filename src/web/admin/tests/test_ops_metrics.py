@@ -55,11 +55,11 @@ class ProgressionSeriesTests(TestCase):
         # transaction_date is auto_now_add; backdate via .update() after
         # create (standard pattern in this repo, e.g.
         # world/progression/tests/test_random_scene_services.py).
-        earn = CharacterXPTransactionFactory(character=cls.sheet.character, amount=100)
+        earn = CharacterXPTransactionFactory(character=cls.sheet, amount=100)
         CharacterXPTransaction.objects.filter(pk=earn.pk).update(transaction_date=timezone.now())
 
         # A negative (spend) transaction this week must NOT count as "earned".
-        spend = CharacterXPTransactionFactory(character=cls.sheet.character, amount=-40)
+        spend = CharacterXPTransactionFactory(character=cls.sheet, amount=-40)
         CharacterXPTransaction.objects.filter(pk=spend.pk).update(transaction_date=timezone.now())
 
     def test_zero_fill_for_week_with_no_rows(self) -> None:
@@ -114,10 +114,10 @@ class WeeklyWindowBoundaryTests(TestCase):
             tzinfo=datetime.UTC,
         )
 
-        cls.inside = CharacterXPTransactionFactory(character=cls.sheet.character, amount=10)
+        cls.inside = CharacterXPTransactionFactory(character=cls.sheet, amount=10)
         CharacterXPTransaction.objects.filter(pk=cls.inside.pk).update(transaction_date=inside_dt)
 
-        cls.outside = CharacterXPTransactionFactory(character=cls.sheet.character, amount=20)
+        cls.outside = CharacterXPTransactionFactory(character=cls.sheet, amount=20)
         CharacterXPTransaction.objects.filter(pk=cls.outside.pk).update(transaction_date=outside_dt)
 
     def test_weekly_window_boundary_inclusion_and_exclusion(self) -> None:

@@ -50,7 +50,7 @@ class ClassLevelAdvancementModelTests(TestCase):
         sheet = CharacterSheetFactory()
         char_class = CharacterClassFactory()
         CharacterClassLevelFactory(
-            character=sheet.character,
+            character=sheet,
             character_class=char_class,
             level=2,
             is_primary=True,
@@ -72,7 +72,7 @@ class ApplyClassLevelAdvanceTests(TestCase):
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
         self.ccl = CharacterClassLevelFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             level=2,
             is_primary=True,
         )
@@ -91,7 +91,7 @@ class ApplyClassLevelAdvanceTests(TestCase):
         from world.classes.models import CharacterClassLevel
 
         sheet = CharacterSheetFactory()
-        assert not CharacterClassLevel.objects.filter(character=sheet.character).exists()
+        assert not CharacterClassLevel.objects.filter(character=sheet).exists()
         # Must not raise.
         apply_class_level_advance(sheet, level_after=3)
 
@@ -109,18 +109,14 @@ class PrimaryClassLevelTests(TestCase):
         self.sheet = CharacterSheetFactory()
 
     def test_returns_primary_row_when_present(self) -> None:
-        CharacterClassLevelFactory(character=self.sheet.character, level=10, is_primary=False)
-        ccl_primary = CharacterClassLevelFactory(
-            character=self.sheet.character, level=1, is_primary=True
-        )
+        CharacterClassLevelFactory(character=self.sheet, level=10, is_primary=False)
+        ccl_primary = CharacterClassLevelFactory(character=self.sheet, level=1, is_primary=True)
         result = primary_class_level(self.sheet.character)
         assert result == ccl_primary
 
     def test_falls_back_to_highest_level_when_no_primary(self) -> None:
-        CharacterClassLevelFactory(character=self.sheet.character, level=3, is_primary=False)
-        ccl_high = CharacterClassLevelFactory(
-            character=self.sheet.character, level=7, is_primary=False
-        )
+        CharacterClassLevelFactory(character=self.sheet, level=3, is_primary=False)
+        ccl_high = CharacterClassLevelFactory(character=self.sheet, level=7, is_primary=False)
         result = primary_class_level(self.sheet.character)
         assert result == ccl_high
 
@@ -173,13 +169,13 @@ def _build_durance_session(  # noqa: PLR0913
     officiant = CharacterSheetFactory()
     inductee = CharacterSheetFactory()
     CharacterClassLevelFactory(
-        character=officiant.character,
+        character=officiant,
         character_class=CharacterClassFactory(),
         level=officiant_level,
         is_primary=True,
     )
     CharacterClassLevelFactory(
-        character=inductee.character,
+        character=inductee,
         character_class=character_class,
         level=inductee_level,
         is_primary=True,
@@ -221,8 +217,8 @@ class AssertCanOfficiateTests(TestCase):
         self.path = PathFactory(stage=PathStage.PROSPECT)
         self.officiant = CharacterSheetFactory()
         self.inductee = CharacterSheetFactory()
-        CharacterClassLevelFactory(character=self.officiant.character, level=10, is_primary=True)
-        CharacterClassLevelFactory(character=self.inductee.character, level=2, is_primary=True)
+        CharacterClassLevelFactory(character=self.officiant, level=10, is_primary=True)
+        CharacterClassLevelFactory(character=self.inductee, level=2, is_primary=True)
         _wire_path(self.officiant, self.path)
         _wire_path(self.inductee, self.path)
 
@@ -236,7 +232,7 @@ class AssertCanOfficiateTests(TestCase):
 
     def test_raises_when_officiant_level_not_above_target(self) -> None:
         low = CharacterSheetFactory()
-        CharacterClassLevelFactory(character=low.character, level=3, is_primary=True)
+        CharacterClassLevelFactory(character=low, level=3, is_primary=True)
         _wire_path(low, self.path)
         with self.assertRaises(OfficiantIneligibleError):
             assert_can_officiate(
@@ -247,7 +243,7 @@ class AssertCanOfficiateTests(TestCase):
 
     def test_raises_when_unrelated_path(self) -> None:
         other = CharacterSheetFactory()
-        CharacterClassLevelFactory(character=other.character, level=10, is_primary=True)
+        CharacterClassLevelFactory(character=other, level=10, is_primary=True)
         _wire_path(other, PathFactory(stage=PathStage.PROSPECT))
         with self.assertRaises(OfficiantIneligibleError):
             assert_can_officiate(
@@ -261,7 +257,7 @@ class AssertCanOfficiateTests(TestCase):
         advanced = PathFactory(stage=PathStage.PUISSANT)
         advanced.parent_paths.add(self.path)
         senior = CharacterSheetFactory()
-        CharacterClassLevelFactory(character=senior.character, level=10, is_primary=True)
+        CharacterClassLevelFactory(character=senior, level=10, is_primary=True)
         _wire_path(senior, advanced)
         # Must not raise.
         assert_can_officiate(
@@ -346,7 +342,7 @@ class AdvanceViaSessionTests(TestCase):
             officiant_level=10, inductee_level=2
         )
         # Delete the CharacterClassLevel that _build_durance_session created for the inductee.
-        CharacterClassLevel.objects.filter(character=inductee_no_cl.character).delete()
+        CharacterClassLevel.objects.filter(character=inductee_no_cl).delete()
         CharacterClassLevel.flush_instance_cache()
         with mock.patch(_CHECK_PATH, return_value=(True, [])):
             with self.assertRaises(AdvancementRequirementsNotMet):
@@ -456,7 +452,7 @@ class AdvanceViaSessionMultiInducteeTests(TestCase):
         self.character_class = CharacterClassFactory()
         self.path = PathFactory(stage=PathStage.PROSPECT)
         self.officiant = CharacterSheetFactory()
-        CharacterClassLevelFactory(character=self.officiant.character, level=10, is_primary=True)
+        CharacterClassLevelFactory(character=self.officiant, level=10, is_primary=True)
         _wire_path(self.officiant, self.path)
 
         self.inductees = []
@@ -474,7 +470,7 @@ class AdvanceViaSessionMultiInducteeTests(TestCase):
         for _ in range(2):
             inductee = CharacterSheetFactory()
             CharacterClassLevelFactory(
-                character=inductee.character,
+                character=inductee,
                 character_class=self.character_class,
                 level=2,
                 is_primary=True,

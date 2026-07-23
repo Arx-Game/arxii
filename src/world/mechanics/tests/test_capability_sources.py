@@ -98,7 +98,7 @@ class TraitSourceTests(TestCase):
             trait_multiplier=Decimal("1.00"),
         )
         CharacterTraitValue.objects.create(
-            character=cls.character,
+            character=cls.character.sheet_data,
             trait=cls.trait,
             value=20,
         )
@@ -168,7 +168,7 @@ class MultipleSameCapabilityTests(TestCase):
             trait_multiplier=Decimal("1.00"),
         )
         CharacterTraitValue.objects.create(
-            character=cls.character,
+            character=cls.character.sheet_data,
             trait=cls.trait,
             value=10,
         )

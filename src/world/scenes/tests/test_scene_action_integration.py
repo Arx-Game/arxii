@@ -82,7 +82,7 @@ class TestSceneActionIntegration(_BaseActionIntegrationTest):
         # Give the initiator character some presence so checks aren't all zero
         presence_trait = Trait.objects.get(name="presence")
         CharacterTraitValue.objects.create(
-            character=cls.initiator.character_sheet.character,
+            character=cls.initiator.character_sheet,
             trait=presence_trait,
             value=30,
         )
@@ -331,7 +331,7 @@ class TestMundaneActionConsequences(_BaseActionIntegrationTest):
 
         presence_trait = Trait.objects.get(name="presence")
         CharacterTraitValue.objects.create(
-            character=cls.initiator.character_sheet.character,
+            character=cls.initiator.character_sheet,
             trait=presence_trait,
             value=30,
         )
@@ -411,7 +411,7 @@ class TestEnhancedActionResolution(_BaseActionIntegrationTest):
 
         presence_trait = Trait.objects.get(name="presence")
         CharacterTraitValue.objects.create(
-            character=cls.initiator.character_sheet.character,
+            character=cls.initiator.character_sheet,
             trait=presence_trait,
             value=30,
         )

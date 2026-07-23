@@ -93,7 +93,7 @@ class UnlockServiceTest(TestCase):
         cls.character.save()
 
         # Give character a class level
-        cls.class_level = CharacterClassLevelFactory(character=cls.character, level=3)
+        cls.class_level = CharacterClassLevelFactory(character=cls.character.sheet_data, level=3)
 
         # Create level unlock with XP cost
         from world.progression.models import (
@@ -295,7 +295,7 @@ class DevelopmentRateModifierTest(TestCase):
         from world.traits.factories import CharacterTraitValueFactory
 
         trait_value = CharacterTraitValueFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             trait=trait,
             value=10,
         )
@@ -324,7 +324,7 @@ class DevelopmentRateModifierTest(TestCase):
         from world.traits.factories import CharacterTraitValueFactory
 
         trait_value = CharacterTraitValueFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             trait=trait,
             value=10,
         )
@@ -351,7 +351,7 @@ class LevelUpRequirementsTest(TestCase):
         cls.character = cls.sheet.character
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.class_level = CharacterClassLevelFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             level=2,
             is_primary=True,
         )
@@ -384,12 +384,12 @@ class LevelUpRequirementsTest(TestCase):
         """Test calculating level up requirements."""
         # Add some trait values
         CharacterTraitValueFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             trait=self.core_trait1,
             value=25,  # 2.5
         )
         CharacterTraitValueFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             trait=self.core_trait2,
             value=35,  # 3.5
         )

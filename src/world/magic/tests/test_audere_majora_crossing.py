@@ -90,7 +90,7 @@ class CrossingAcceptHappyPathTests(TestCase):
 
     def test_primary_class_level_row_updated(self) -> None:
         _accept(self.offer, self.puissant_path)
-        ccl = CharacterClassLevel.objects.get(character=self.character)
+        ccl = CharacterClassLevel.objects.get(character=self.character.sheet_data)
         assert ccl.level == 6
 
     def test_second_accept_of_same_offer_raises_not_found(self) -> None:
@@ -107,7 +107,7 @@ class CrossingAcceptHappyPathTests(TestCase):
     def test_path_history_row_created(self) -> None:
         _accept(self.offer, self.puissant_path)
         assert CharacterPathHistory.objects.filter(
-            character=self.character, path=self.puissant_path
+            character=self.character.sheet_data, path=self.puissant_path
         ).exists()
 
     def test_crossing_receipt_fields_correct(self) -> None:
@@ -241,7 +241,7 @@ class CrossingIneligiblePathTests(TestCase):
     def test_level_unchanged(self) -> None:
         with contextlib.suppress(AudereMajoraPathError):
             _accept(self.offer, self.unrelated_path)
-        ccl = CharacterClassLevel.objects.get(character=self.character)
+        ccl = CharacterClassLevel.objects.get(character=self.character.sheet_data)
         assert ccl.level == 8
 
     def test_no_receipt_written(self) -> None:
@@ -289,7 +289,7 @@ class CrossingDeclineTests(TestCase):
 
     def test_level_unchanged_on_decline(self) -> None:
         resolve_audere_majora_offer(self.offer.pk, accept=False)
-        ccl = CharacterClassLevel.objects.get(character=self.character)
+        ccl = CharacterClassLevel.objects.get(character=self.character.sheet_data)
         assert ccl.level == 9
 
     def test_gate_can_refire_after_decline(self) -> None:
@@ -416,7 +416,7 @@ class CrossingReceiptGateTests(TestCase):
     def test_crossed_gate_closed(self) -> None:
         _accept(self.offer, self.puissant_path)
         # Force level back to 12 to isolate the receipt gate (not the level mismatch).
-        ccl = CharacterClassLevel.objects.get(character=self.character)
+        ccl = CharacterClassLevel.objects.get(character=self.character.sheet_data)
         ccl.level = 12
         ccl.save(update_fields=["level"])
         self.sheet.invalidate_class_level_cache()

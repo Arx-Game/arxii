@@ -65,7 +65,7 @@ class GossipActionTests(TestCase):
             name="Gossip", parent_skill__trait__name="Persuasion"
         )
         CharacterSpecializationValueFactory(
-            character=cls.character, specialization=cls.gossip_spec, value=10
+            character=cls.character.sheet_data, specialization=cls.gossip_spec, value=10
         )
         # A self-secret (you may always spread gossip about yourself).
         cls.secret = SecretFactory(subject_sheet=cls.sheet, level=SecretLevel.UNCOMMON_KNOWLEDGE)

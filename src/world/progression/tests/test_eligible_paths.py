@@ -16,7 +16,7 @@ class EligiblePathTests(TestCase):
         self.potential.parent_paths.add(self.prospect)
         self.sheet = CharacterSheetFactory()
         CharacterClassLevelFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             character_class=CharacterClassFactory(),
             level=2,
             is_primary=True,

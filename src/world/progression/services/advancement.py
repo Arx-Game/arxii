@@ -48,10 +48,12 @@ def primary_class_level(character: ObjectDB) -> CharacterClassLevel | None:  # n
     """
     from world.classes.models import CharacterClassLevel as _CharacterClassLevel
 
-    primary = _CharacterClassLevel.objects.filter(character=character, is_primary=True).first()
+    primary = _CharacterClassLevel.objects.filter(
+        character_id=character.pk, is_primary=True
+    ).first()
     if primary is not None:
         return primary
-    return _CharacterClassLevel.objects.filter(character=character).order_by("-level").first()
+    return _CharacterClassLevel.objects.filter(character_id=character.pk).order_by("-level").first()
 
 
 def apply_class_level_advance(sheet: CharacterSheet, *, level_after: int) -> None:

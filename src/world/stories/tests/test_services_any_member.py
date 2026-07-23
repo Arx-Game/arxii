@@ -147,7 +147,7 @@ class GroupScopeLevelTests(EvenniaTestCase):
 
         char_class = CharacterClassFactory()
         CharacterClassLevelFactory(
-            character=member_sheet.character,
+            character=member_sheet,
             character_class=char_class,
             level=5,
         )

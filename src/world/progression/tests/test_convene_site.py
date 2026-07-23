@@ -44,7 +44,7 @@ def _wire_path(sheet, path) -> None:
 def _set_primary_level(sheet, *, character_class, level: int) -> None:
     """Give sheet.character a primary CharacterClassLevel at *level*."""
     CharacterClassLevelFactory(
-        character=sheet.character,
+        character=sheet,
         character_class=character_class,
         level=level,
         is_primary=True,

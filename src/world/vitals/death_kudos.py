@@ -58,7 +58,7 @@ class DeathKudosResult:
 def _lifetime_xp_spent(dead_character: ObjectDB) -> int:  # noqa: OBJECTDB_PARAM
     from world.progression.models import CharacterXP  # noqa: PLC0415
 
-    total = CharacterXP.objects.filter(character=dead_character).aggregate(
+    total = CharacterXP.objects.filter(character_id=dead_character.pk).aggregate(
         total=Sum("total_spent")
     )["total"]
     return total or 0

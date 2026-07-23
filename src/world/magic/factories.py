@@ -1330,7 +1330,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         from world.traits.models import CharacterTraitValue
 
         CharacterTraitValue.objects.update_or_create(
-            character=self.owner.character,
+            character=self.owner,
             trait=self.target_trait,
             defaults={"value": int(extracted)},  # type: ignore[arg-type]
         )

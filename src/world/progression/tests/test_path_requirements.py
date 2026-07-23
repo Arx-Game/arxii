@@ -37,7 +37,7 @@ class CheckRequirementsForPathTests(TestCase):
         path = PathFactory()
         trait = SkillTraitFactory()
         sheet = CharacterSheetFactory()
-        CharacterTraitValueFactory(character=sheet.character, trait=trait, value=40)
+        CharacterTraitValueFactory(character=sheet, trait=trait, value=40)
         TraitRequirement.objects.create(path=path, trait=trait, minimum_value=30, is_active=True)
         met, failed = check_requirements_for_path(sheet.character, path)
         self.assertTrue(met)
@@ -48,7 +48,7 @@ class CheckRequirementsForPathTests(TestCase):
         path = PathFactory()
         trait = SkillTraitFactory(name="persuasion")
         sheet = CharacterSheetFactory()
-        CharacterTraitValueFactory(character=sheet.character, trait=trait, value=20)
+        CharacterTraitValueFactory(character=sheet, trait=trait, value=20)
         TraitRequirement.objects.create(path=path, trait=trait, minimum_value=30, is_active=True)
         met, failed = check_requirements_for_path(sheet.character, path)
         self.assertFalse(met)
@@ -108,7 +108,7 @@ class CrossIntoPathGateTests(TestCase):
         trait = SkillTraitFactory()
         sheet = CharacterSheetFactory()
         CharacterPathHistoryFactory(character=sheet, path=parent)
-        CharacterTraitValueFactory(character=sheet.character, trait=trait, value=40)
+        CharacterTraitValueFactory(character=sheet, trait=trait, value=40)
         TraitRequirement.objects.create(path=hybrid, trait=trait, minimum_value=30, is_active=True)
         result = cross_into_path(sheet, hybrid)
         self.assertIsNotNone(result)
@@ -135,7 +135,7 @@ class EligibleAdvancedPathsForTests(TestCase):
         """Set up a character at level 2 (next level 3 = POTENTIAL semi-crossing)."""
         char_class = CharacterClassFactory()
         CharacterClassLevelFactory(
-            character=sheet.character,
+            character=sheet,
             character_class=char_class,
             level=2,
             is_primary=True,
@@ -171,7 +171,7 @@ class EligibleAdvancedPathsForTests(TestCase):
         sheet = CharacterSheetFactory()
         self._setup_character_at_level_2(sheet)
         CharacterPathHistoryFactory(character=sheet, path=parent)
-        CharacterTraitValueFactory(character=sheet.character, trait=trait, value=40)
+        CharacterTraitValueFactory(character=sheet, trait=trait, value=40)
         TraitRequirement.objects.create(
             path=gated_child, trait=trait, minimum_value=30, is_active=True
         )
@@ -208,28 +208,28 @@ class HybridFromEitherParentTests(TestCase):
         sheet_a = CharacterSheetFactory()
         char_class = CharacterClassFactory()
         CharacterClassLevelFactory(
-            character=sheet_a.character,
+            character=sheet_a,
             character_class=char_class,
             level=2,
             is_primary=True,
         )
         sheet_a.invalidate_class_level_cache()
         CharacterPathHistoryFactory(character=sheet_a, path=parent_a)
-        CharacterTraitValueFactory(character=sheet_a.character, trait=trait, value=40)
+        CharacterTraitValueFactory(character=sheet_a, trait=trait, value=40)
         eligible_a = eligible_advanced_paths_for(sheet_a)
         self.assertIn(hybrid, eligible_a)
 
         # Character on parent_b, with the trait
         sheet_b = CharacterSheetFactory()
         CharacterClassLevelFactory(
-            character=sheet_b.character,
+            character=sheet_b,
             character_class=char_class,
             level=2,
             is_primary=True,
         )
         sheet_b.invalidate_class_level_cache()
         CharacterPathHistoryFactory(character=sheet_b, path=parent_b)
-        CharacterTraitValueFactory(character=sheet_b.character, trait=trait, value=40)
+        CharacterTraitValueFactory(character=sheet_b, trait=trait, value=40)
         eligible_b = eligible_advanced_paths_for(sheet_b)
         self.assertIn(hybrid, eligible_b)
 
@@ -245,14 +245,14 @@ class HybridFromEitherParentTests(TestCase):
         for parent in parents:
             sheet = CharacterSheetFactory()
             CharacterClassLevelFactory(
-                character=sheet.character,
+                character=sheet,
                 character_class=char_class,
                 level=2,
                 is_primary=True,
             )
             sheet.invalidate_class_level_cache()
             CharacterPathHistoryFactory(character=sheet, path=parent)
-            CharacterTraitValueFactory(character=sheet.character, trait=trait, value=40)
+            CharacterTraitValueFactory(character=sheet, trait=trait, value=40)
             eligible = eligible_advanced_paths_for(sheet)
             self.assertIn(hybrid, eligible, f"Hybrid not eligible from {parent.name}")
 
@@ -345,7 +345,7 @@ class CodexKnowledgeSelectorTests(TestCase):
         """Set up a character at level 2 (next level 3 = POTENTIAL semi-crossing)."""
         char_class = CharacterClassFactory()
         CharacterClassLevelFactory(
-            character=sheet.character,
+            character=sheet,
             character_class=char_class,
             level=2,
             is_primary=True,

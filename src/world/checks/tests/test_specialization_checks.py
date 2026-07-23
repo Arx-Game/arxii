@@ -87,16 +87,18 @@ class SpecializationInCheckTests(TestCase):
 
     def test_owned_specialization_adds_points(self):
         CharacterSpecializationValueFactory(
-            character=self.character, specialization=self.seduction, value=30
+            character=self.character.sheet_data, specialization=self.seduction, value=30
         )
         assert _calculate_specialization_points(self.character, self.check_type) > 0
 
     def test_specialization_raises_total_points_through_perform_check(self):
-        CharacterTraitValue.objects.create(character=self.character, trait=self.charm, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.charm, value=30
+        )
         base = perform_check(self.character, self.check_type, target_difficulty=0)
         assert base.specialization_points == 0
         CharacterSpecializationValueFactory(
-            character=self.character, specialization=self.seduction, value=30
+            character=self.character.sheet_data, specialization=self.seduction, value=30
         )
         with_spec = perform_check(self.character, self.check_type, target_difficulty=0)
         assert with_spec.specialization_points > 0
@@ -107,7 +109,7 @@ class SpecializationInCheckTests(TestCase):
         bare = CheckTypeFactory(name="spec_test_bare", category=self.category)
         CheckTypeTraitFactory(check_type=bare, trait=self.charm, weight=Decimal("1.0"))
         CharacterSpecializationValueFactory(
-            character=self.character, specialization=self.seduction, value=30
+            character=self.character.sheet_data, specialization=self.seduction, value=30
         )
         assert _calculate_specialization_points(self.character, bare) == 0
         assert (
@@ -120,7 +122,7 @@ class SpecializationInCheckTests(TestCase):
     def test_has_specialization_gate(self):
         assert has_specialization(self.character, self.seduction) is False
         CharacterSpecializationValueFactory(
-            character=self.character, specialization=self.seduction, value=10
+            character=self.character.sheet_data, specialization=self.seduction, value=10
         )
         assert has_specialization(self.character, self.seduction) is True  # rank 1 = value 10
         assert has_specialization(self.character, self.seduction, minimum_rank=2) is False
@@ -128,6 +130,6 @@ class SpecializationInCheckTests(TestCase):
     def test_get_specialization_value(self):
         assert get_specialization_value(self.character, self.seduction) == 0
         CharacterSpecializationValueFactory(
-            character=self.character, specialization=self.seduction, value=20
+            character=self.character.sheet_data, specialization=self.seduction, value=20
         )
         assert get_specialization_value(self.character, self.seduction) == 20

@@ -30,7 +30,7 @@ class DuranceWitnessTests(TestCase):
         self.path = PathFactory(stage=PathStage.PROSPECT)
         self.officiant = CharacterSheetFactory()
         CharacterClassLevelFactory(
-            character=self.officiant.character,
+            character=self.officiant,
             character_class=CharacterClassFactory(),
             level=10,
             is_primary=True,
@@ -39,7 +39,7 @@ class DuranceWitnessTests(TestCase):
         self.cls = CharacterClassFactory()
         self.inductee = CharacterSheetFactory()
         CharacterClassLevelFactory(
-            character=self.inductee.character,
+            character=self.inductee,
             character_class=self.cls,
             level=2,
             is_primary=True,

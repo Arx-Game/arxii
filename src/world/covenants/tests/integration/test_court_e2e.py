@@ -101,7 +101,7 @@ from world.traits.factories import CheckSystemSetupFactory
 def _set_primary_level(sheet: object, level: int) -> None:
     """Give sheet.character a primary CharacterClassLevel at the given level."""
     CharacterClassLevelFactory(
-        character=sheet.character,
+        character=sheet,
         character_class=CharacterClassFactory(),
         level=level,
         is_primary=True,

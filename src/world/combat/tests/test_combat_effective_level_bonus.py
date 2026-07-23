@@ -60,7 +60,7 @@ def _make_character_with_level(key: str, level: int):
     sheet = CharacterSheetFactory(character=char, primary_persona=False)
     char_class = CharacterClassFactory()
     CharacterClassLevelFactory(
-        character=char, character_class=char_class, level=level, is_primary=True
+        character=sheet, character_class=char_class, level=level, is_primary=True
     )
     sheet.invalidate_class_level_cache()
     assert sheet.current_level == level, f"Expected level {level}, got {sheet.current_level}"

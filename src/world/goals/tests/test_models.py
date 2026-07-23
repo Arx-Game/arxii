@@ -28,7 +28,7 @@ class TestCharacterGoalStatus(TestCase):
     def test_default_status_is_active(self):
         """New goals default to active status."""
         goal = CharacterGoal.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             domain=self.domain,
             points=10,
         )
@@ -37,7 +37,7 @@ class TestCharacterGoalStatus(TestCase):
     def test_completed_at_null_by_default(self):
         """completed_at is null for new goals."""
         goal = CharacterGoal.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             domain=self.domain,
             points=10,
         )
@@ -56,7 +56,7 @@ class CharacterGoalModelTests(TestCase):
     def test_str_representation(self):
         """CharacterGoal string shows character, domain, and points."""
         goal = CharacterGoalFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             domain=self.domain,
             points=15,
         )
@@ -65,14 +65,14 @@ class CharacterGoalModelTests(TestCase):
 
     def test_unique_character_domain(self):
         """Character can only have one goal per domain."""
-        CharacterGoalFactory(character=self.character, domain=self.domain)
+        CharacterGoalFactory(character=self.character.sheet_data, domain=self.domain)
         with self.assertRaises(IntegrityError):
-            CharacterGoalFactory(character=self.character, domain=self.domain)
+            CharacterGoalFactory(character=self.character.sheet_data, domain=self.domain)
 
     def test_default_points_zero(self):
         """CharacterGoal defaults to zero points."""
         goal = CharacterGoal.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             domain=self.domain,
         )
         assert goal.points == 0
@@ -80,7 +80,7 @@ class CharacterGoalModelTests(TestCase):
     def test_notes_can_be_blank(self):
         """CharacterGoal notes are optional."""
         goal = CharacterGoalFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             domain=self.domain,
             notes="",
         )
@@ -99,7 +99,7 @@ class GoalJournalModelTests(TestCase):
     def test_str_representation(self):
         """GoalJournal string shows character and title."""
         journal = GoalJournalFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             title="My Journey",
         )
         assert "My Journey" in str(journal)
@@ -107,7 +107,7 @@ class GoalJournalModelTests(TestCase):
     def test_domain_optional(self):
         """GoalJournal domain is optional."""
         journal = GoalJournalFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             domain=None,
         )
         assert journal.domain is None
@@ -115,7 +115,7 @@ class GoalJournalModelTests(TestCase):
     def test_xp_awarded_default_zero(self):
         """GoalJournal xp_awarded defaults to zero."""
         journal = GoalJournal.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             title="Test",
             content="Test content",
         )
@@ -124,7 +124,7 @@ class GoalJournalModelTests(TestCase):
     def test_is_public_default_false(self):
         """GoalJournal is_public defaults to False."""
         journal = GoalJournal.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             title="Test",
             content="Test content",
         )
@@ -141,12 +141,12 @@ class GoalRevisionModelTests(TestCase):
 
     def test_str_representation(self):
         """GoalRevision string shows character and last revised date."""
-        revision = GoalRevisionFactory(character=self.character)
+        revision = GoalRevisionFactory(character=self.character.sheet_data)
         assert "Last revised" in str(revision)
 
     def test_can_revise_returns_true_after_week(self):
         """can_revise returns True when more than a week has passed."""
-        revision = GoalRevisionFactory(character=self.character)
+        revision = GoalRevisionFactory(character=self.character.sheet_data)
         revision.last_revised_at = timezone.now() - timedelta(weeks=1, seconds=1)
         revision.save()
 
@@ -154,7 +154,7 @@ class GoalRevisionModelTests(TestCase):
 
     def test_can_revise_returns_false_within_week(self):
         """can_revise returns False when less than a week has passed."""
-        revision = GoalRevisionFactory(character=self.character)
+        revision = GoalRevisionFactory(character=self.character.sheet_data)
         revision.last_revised_at = timezone.now() - timedelta(days=6)
         revision.save()
 
@@ -162,7 +162,7 @@ class GoalRevisionModelTests(TestCase):
 
     def test_can_revise_exactly_one_week(self):
         """can_revise returns True at exactly one week."""
-        revision = GoalRevisionFactory(character=self.character)
+        revision = GoalRevisionFactory(character=self.character.sheet_data)
         revision.last_revised_at = timezone.now() - timedelta(weeks=1)
         revision.save()
 
@@ -170,7 +170,7 @@ class GoalRevisionModelTests(TestCase):
 
     def test_mark_revised_updates_timestamp(self):
         """mark_revised updates last_revised_at to now."""
-        revision = GoalRevisionFactory(character=self.character)
+        revision = GoalRevisionFactory(character=self.character.sheet_data)
         old_time = revision.last_revised_at
         revision.last_revised_at = timezone.now() - timedelta(weeks=2)
         revision.save()
@@ -185,14 +185,14 @@ class GoalRevisionModelTests(TestCase):
 
     def test_one_revision_per_character(self):
         """Each character can only have one GoalRevision."""
-        GoalRevisionFactory(character=self.character)
+        GoalRevisionFactory(character=self.character.sheet_data)
         with self.assertRaises(IntegrityError):
-            GoalRevisionFactory(character=self.character)
+            GoalRevisionFactory(character=self.character.sheet_data)
 
     def test_default_last_revised_at_now(self):
         """GoalRevision defaults last_revised_at to now."""
         before = timezone.now()
-        revision = GoalRevision.objects.create(character=self.character)
+        revision = GoalRevision.objects.create(character=self.character.sheet_data)
         after = timezone.now()
 
         assert revision.last_revised_at >= before
@@ -207,7 +207,7 @@ class TestGoalInstance(TestCase):
         cls.character = CharacterSheetFactory()
         cls.domain = GoalDomainFactory()
         cls.goal = CharacterGoal.objects.create(
-            character=cls.character,
+            character=cls.character.sheet_data,
             domain=cls.domain,
             points=15,
             notes="Become a knight",

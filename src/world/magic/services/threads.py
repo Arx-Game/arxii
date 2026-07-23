@@ -195,7 +195,7 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911, C901
     match thread.target_kind:
         case TargetKind.TRAIT:
             value = (
-                thread.target_trait.character_values.filter(character=thread.owner.character)
+                thread.target_trait.character_values.filter(character=thread.owner)
                 .values_list("value", flat=True)
                 .first()
             )

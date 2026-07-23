@@ -201,9 +201,8 @@ class DevelopmentPoints(SharedMemoryModel):
         self.total_earned += amount
         self.save()
 
-        # CharacterTraitValue uses ObjectDB FK; CharacterSheet PK == ObjectDB PK
         trait_value, _created = CharacterTraitValue.objects.get_or_create(
-            character=self.character_sheet.character,
+            character=self.character_sheet,
             trait=self.trait,
             defaults={"value": 10},
         )

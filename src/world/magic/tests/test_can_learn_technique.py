@@ -31,7 +31,7 @@ class CanLearnTechniqueTest(TestCase):
     def test_matching_path_allows(self):
         """Character whose current path is in allowed_paths can learn."""
         path = PathFactory()
-        CharacterPathHistoryFactory(character=self.sheet.character, path=path)
+        CharacterPathHistoryFactory(character=self.sheet, path=path)
         style = TechniqueStyleFactory(allowed_paths=[path])
         technique = TechniqueFactory(gift=self.gift, style=style)
         self.assertTrue(can_learn_technique(self.sheet, technique))
@@ -40,7 +40,7 @@ class CanLearnTechniqueTest(TestCase):
         """Character whose current path is NOT in allowed_paths cannot learn."""
         allowed_path = PathFactory()
         other_path = PathFactory()
-        CharacterPathHistoryFactory(character=self.sheet.character, path=other_path)
+        CharacterPathHistoryFactory(character=self.sheet, path=other_path)
         style = TechniqueStyleFactory(allowed_paths=[allowed_path])
         technique = TechniqueFactory(gift=self.gift, style=style)
         self.assertFalse(can_learn_technique(self.sheet, technique))

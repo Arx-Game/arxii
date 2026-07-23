@@ -61,7 +61,7 @@ class CharacterGoalSerializerTests(TestCase):
     def test_serializes_goal_with_domain_info(self):
         """Serializer includes domain name."""
         goal = CharacterGoalFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             domain=self.domain,
             points=15,
             notes="Get rich",
@@ -200,7 +200,7 @@ class GoalJournalSerializerTests(TestCase):
     def test_serializes_journal_with_domain_info(self):
         """Serializer includes domain name."""
         journal = GoalJournalFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             domain=self.domain,
             title="Family Ties",
             xp_awarded=1,
@@ -215,7 +215,7 @@ class GoalJournalSerializerTests(TestCase):
     def test_serializes_journal_without_domain(self):
         """Serializer handles journals without a domain."""
         journal = GoalJournalFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             domain=None,
             title="General Musings",
         )
@@ -299,7 +299,7 @@ class GoalRevisionSerializerTests(TestCase):
 
     def test_serializes_revision_with_can_revise(self):
         """Serializer includes computed can_revise field."""
-        revision = GoalRevisionFactory(character=self.character)
+        revision = GoalRevisionFactory(character=self.character.sheet_data)
         serializer = GoalRevisionSerializer(revision)
         data = serializer.data
 

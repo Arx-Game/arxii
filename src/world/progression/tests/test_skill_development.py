@@ -111,7 +111,7 @@ class DevelopmentPointsAwardTest(TestCase):
         assert level_ups == []
         assert dev.total_earned == 50
         # Trait value should stay at 10
-        tv = CharacterTraitValue.objects.get(character=self.character, trait=self.trait)
+        tv = CharacterTraitValue.objects.get(character=self.character.sheet_data, trait=self.trait)
         assert tv.value == 10
 
     def test_award_single_level_up(self) -> None:
@@ -121,7 +121,7 @@ class DevelopmentPointsAwardTest(TestCase):
         )
         level_ups = dev.award_points(100)
         assert level_ups == [(10, 11)]
-        tv = CharacterTraitValue.objects.get(character=self.character, trait=self.trait)
+        tv = CharacterTraitValue.objects.get(character=self.character.sheet_data, trait=self.trait)
         assert tv.value == 11
 
     def test_award_multiple_level_ups(self) -> None:
@@ -131,7 +131,7 @@ class DevelopmentPointsAwardTest(TestCase):
         )
         level_ups = dev.award_points(300)
         assert level_ups == [(10, 11), (11, 12)]
-        tv = CharacterTraitValue.objects.get(character=self.character, trait=self.trait)
+        tv = CharacterTraitValue.objects.get(character=self.character.sheet_data, trait=self.trait)
         assert tv.value == 12
 
     def test_cumulative_award_across_calls(self) -> None:
@@ -147,12 +147,14 @@ class DevelopmentPointsAwardTest(TestCase):
         dev.refresh_from_db()
         level_ups = dev.award_points(40)
         assert level_ups == [(10, 11)]
-        tv = CharacterTraitValue.objects.get(character=self.character, trait=self.trait)
+        tv = CharacterTraitValue.objects.get(character=self.character.sheet_data, trait=self.trait)
         assert tv.value == 11
 
     def test_existing_trait_value_respected(self) -> None:
         """If trait is already at level 12, need cumulative dp >= 600 for level 13."""
-        CharacterTraitValue.objects.create(character=self.character, trait=self.trait, value=12)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.trait, value=12
+        )
         dev = DevelopmentPoints.objects.create(
             character_sheet=self.sheet, trait=self.trait, total_earned=300
         )
@@ -192,7 +194,7 @@ class AwardCheckDevelopmentTest(TestCase):
         # Clean up per-test data
         DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
         WeeklySkillUsage.objects.filter(character_sheet=self.sheet).delete()
-        CharacterTraitValue.objects.filter(character=self.character).delete()
+        CharacterTraitValue.objects.filter(character=self.character.sheet_data).delete()
 
     def test_none_effort_returns_empty(self) -> None:
         result = award_check_development(
@@ -367,11 +369,11 @@ class AwardCheckDevelopmentSkillIndependenceTest(TestCase):
         CharacterTraitValue.flush_instance_cache()
         DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
         WeeklySkillUsage.objects.filter(character_sheet=self.sheet).delete()
-        CharacterTraitValue.objects.filter(character=self.character).delete()
-        CharacterSkillValue.objects.filter(character=self.character).delete()
+        CharacterTraitValue.objects.filter(character=self.character.sheet_data).delete()
+        CharacterSkillValue.objects.filter(character=self.character.sheet_data).delete()
         # Parked at an XP boundary — proves award_check_development ignores it.
         self.skill_value = CharacterSkillValueFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             skill=self.skill,
             value=19,
             development_points=0,
@@ -412,7 +414,7 @@ class RustDebtPayoffTest(TestCase):
         DevelopmentPoints.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
         DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
-        CharacterTraitValue.objects.filter(character=self.character).delete()
+        CharacterTraitValue.objects.filter(character=self.character.sheet_data).delete()
 
     def test_full_payoff_remainder_counts(self) -> None:
         """If rust_debt=30 and we award 50, 30 pays debt and 20 goes to total_earned."""
@@ -556,7 +558,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         DevelopmentTransaction.flush_instance_cache()
         DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
         WeeklySkillUsage.objects.filter(character_sheet=self.sheet).delete()
-        CharacterTraitValue.objects.filter(character=self.character).delete()
+        CharacterTraitValue.objects.filter(character=self.character.sheet_data).delete()
         DevelopmentTransaction.objects.filter(character_sheet=self.sheet).delete()
 
     def _set_class_level(self, level: int) -> None:
@@ -564,7 +566,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         from world.classes.models import CharacterClassLevel
 
         CharacterClassLevel.objects.update_or_create(
-            character=self.character,
+            character=self.character.sheet_data,
             character_class=self.char_class,
             defaults={"level": level, "is_primary": True},
         )
@@ -622,7 +624,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
             character_sheet=self.sheet, trait=self.trait_unused, total_earned=300
         )
         CharacterTraitValue.objects.create(
-            character=self.character, trait=self.trait_unused, value=12
+            character=self.character.sheet_data, trait=self.trait_unused, value=12
         )
 
         process_weekly_skill_development(self.game_week)
@@ -643,7 +645,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
             character_sheet=self.sheet, trait=self.trait_unused, total_earned=300
         )
         CharacterTraitValue.objects.create(
-            character=self.character, trait=self.trait_unused, value=12
+            character=self.character.sheet_data, trait=self.trait_unused, value=12
         )
 
         process_weekly_skill_development(self.game_week)
@@ -666,7 +668,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
             character_sheet=self.sheet, trait=self.trait_used, total_earned=300
         )
         CharacterTraitValue.objects.create(
-            character=self.character, trait=self.trait_used, value=12
+            character=self.character.sheet_data, trait=self.trait_used, value=12
         )
         WeeklySkillUsage.objects.create(
             character_sheet=self.sheet,
@@ -693,7 +695,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
             character_sheet=self.sheet, trait=self.trait_unused, total_earned=50
         )
         CharacterTraitValue.objects.create(
-            character=self.character, trait=self.trait_unused, value=10
+            character=self.character.sheet_data, trait=self.trait_unused, value=10
         )
 
         process_weekly_skill_development(self.game_week)
@@ -730,7 +732,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
             character_sheet=self.sheet, trait=self.trait_unused, total_earned=300
         )
         CharacterTraitValue.objects.create(
-            character=self.character, trait=self.trait_unused, value=12
+            character=self.character.sheet_data, trait=self.trait_unused, value=12
         )
 
         process_weekly_skill_development(self.game_week)
@@ -776,7 +778,7 @@ class RustPayoffLevelThresholdTest(TestCase):
         DevelopmentPoints.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
         DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
-        CharacterTraitValue.objects.filter(character=self.character).delete()
+        CharacterTraitValue.objects.filter(character=self.character.sheet_data).delete()
 
     def test_rust_payoff_crossing_level_threshold(self) -> None:
         """rust_debt=150, award 250 -> 150 pays debt, 100 remains -> level 10->11."""
@@ -790,5 +792,5 @@ class RustPayoffLevelThresholdTest(TestCase):
         assert dev.total_earned == 100
         # 100 dp is the threshold for level 11
         assert level_ups == [(10, 11)]
-        tv = CharacterTraitValue.objects.get(character=self.character, trait=self.trait)
+        tv = CharacterTraitValue.objects.get(character=self.character.sheet_data, trait=self.trait)
         assert tv.value == 11

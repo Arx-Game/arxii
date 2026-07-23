@@ -214,7 +214,7 @@ class ItemRequirementWiringTests(TestCase):
         self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character)
         CharacterClassLevelFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             character_class=self.character_class,
             level=3,
             is_primary=True,
