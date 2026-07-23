@@ -84,6 +84,9 @@ export function OriginStage({ draft }: OriginStageProps) {
       <div className="mb-6">
         <h2 className="theme-heading text-2xl font-bold">{copy?.origin_heading ?? ''}</h2>
         <p className="mt-2 text-muted-foreground">{copy?.origin_intro ?? ''}</p>
+        {copy?.origin_lore_intro && (
+          <p className="mt-2 text-sm text-muted-foreground">{copy.origin_lore_intro}</p>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
