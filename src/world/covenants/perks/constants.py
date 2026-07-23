@@ -185,6 +185,10 @@ class Situation(models.TextChoices):
     ENEMY_WINDUP_UNDERWAY = "enemy_windup_underway", "Enemy Wind-Up Underway"
     ENEMY_WINDUP_CALLED_OUT = "enemy_windup_called_out", "Enemy Wind-Up Called Out"
     ALLY_SENT_FLYING = "ally_sent_flying", "Ally Sent Flying"
+    ENEMY_HELD_BY_ALLY = "enemy_held_by_ally", "Enemy Held by Ally"
+    BARRIER_CONTESTED = "barrier_contested", "Barrier Contested"
+    SHIELDED_BY_ALLY = "shielded_by_ally", "Shielded by Ally"
+    TARGET_IS_MARKED_BY_ALLY = "target_is_marked_by_ally", "Target Is Marked by Ally"
 
 
 class PerkEffectKind(models.TextChoices):
@@ -287,4 +291,5 @@ SITUATION_CREATOR_FUNCTIONS: dict[str, frozenset[str]] = {
         {TechniqueFunction.CHARM, TechniqueFunction.DISTRACTION}
     ),
     Situation.TARGET_FAVORABLY_DISPOSED: frozenset({TechniqueFunction.CHARM}),
+    Situation.SHIELDED_BY_ALLY: frozenset({TechniqueFunction.DEFENSE_BUFF}),
 }
