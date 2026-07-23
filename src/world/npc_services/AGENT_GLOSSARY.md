@@ -120,3 +120,13 @@ A menu-driven NPC restyle: one offer per (cosmetic trait, option) because the in
 machinery has no free-input channel. Charges the purse, then applies through the same
 `change_appearance` seam dyes and PC stylists use.
 _Avoid_: makeover request, salon job.
+
+**Reaction Line** (`NPCReactionLine`, #2632):
+A banded, data-authored NPC reaction ("Alphonso sees to <name>, admiring them as if they
+were a work of art") — per-ROLE defaults with optional per-FUNCTIONARY override sets
+(any functionary lines for a metric replace the role's wholesale). Bands select by
+highest `band_floor` <= the served character's `ReactionMetric` value (ALLURE first;
+metrics resolve via `reactions.METRIC_RESOLVERS` — one function per metric, never
+per-NPC code). `<name>` interpolates the presented name. Builders author rows via
+`/api/npc-services/reaction-lines/`.
+_Avoid_: custom NPC scripts, per-NPC handlers.

@@ -1521,6 +1521,7 @@
   - true_profile -> character_sheets.Profile [OneToOne] (nullable)
   - active_persona -> scenes.Persona [FK] (nullable)
   - created_by -> accounts.AccountDB [FK] (nullable)
+  - durance_cohort -> progression.DuranceCohort [FK] (nullable)
 **Pointed to by:**
   - kinsperson <- roster.Kinsperson
   - deferred_kin <- roster.Kinsperson
@@ -3965,7 +3966,7 @@
 **Foreign Keys:**
   - item_template -> items.ItemTemplate [FK]
   - trait -> forms.FormTrait [FK]
-  - target_option -> forms.FormTraitOption [FK]
+  - target_option -> forms.FormTraitOption [FK] (nullable)
 
 ### DisguiseKitEffect
 **Foreign Keys:**
@@ -4279,7 +4280,7 @@
 - `record_mantle_clearances(sheet: 'CharacterSheet', mantle: 'Mantle') -> 'list[MantleLevelClearance]' — Idempotently record codex-gated mantle clearances for ``sheet``.`
 - `remove_facet_from_item(*, item_facet: 'ItemFacet') -> 'None' — Remove a facet attachment and invalidate wearers' handler caches.`
 - `unequip_item(*, equipped_item: 'EquippedItem') -> 'None' — Remove an EquippedItem and invalidate the character's handler cache.`
-- `use_item(*, item_instance: 'ItemInstance', user: 'ObjectDB', target: 'ObjectDB | None' = None, descriptor: 'str | None' = None) -> 'UseItemResult' — Use an item with an on-use pool: apply its effects (deterministic when the`
+- `use_item(*, item_instance: 'ItemInstance', user: 'ObjectDB', target: 'ObjectDB | None' = None, descriptor: 'str | None' = None, option_id: 'int | None' = None) -> 'UseItemResult' — Use an item with an on-use pool: apply its effects (deterministic when the`
 - `visible_worn_items_for(character: 'ObjectDB', observer: 'object | None' = None) -> 'list[VisibleWornItem]' — Return ``character``'s worn items visible to ``observer``.`
 
 
@@ -6144,6 +6145,7 @@
   - functionaries <- npc_services.Functionary
   - offers <- npc_services.NPCServiceOffer
   - role_cooldowns <- npc_services.NPCRoleCooldown
+  - reaction_lines <- npc_services.NPCReactionLine
   - permits_issued <- buildings.BuildingPermitDetails
 
 ### Functionary
@@ -6154,6 +6156,7 @@
   - kinspeople <- roster.Kinsperson
   - promotions <- assets.NPCAsset
   - assignments <- npc_services.NPCAssignment
+  - reaction_lines <- npc_services.NPCReactionLine
 
 ### NPCServiceOffer
 **Foreign Keys:**
@@ -6263,6 +6266,11 @@
   - persona -> scenes.Persona [FK]
   - era -> stories.Era [FK] (nullable)
 
+### NPCReactionLine
+**Foreign Keys:**
+  - role -> npc_services.NPCRole [FK]
+  - functionary -> npc_services.Functionary [FK] (nullable)
+
 ### Service Functions
 - `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' — Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
 - `available_offers(session: 'InteractionSession', *, pool_count: 'int | None' = None) -> 'list[NPCServiceOffer]' — Return offers the PC can currently see/select, in stable order.`
@@ -6356,6 +6364,20 @@
 ### CharacterXPTransaction
 **Foreign Keys:**
   - character -> objects.ObjectDB [FK]
+
+### DuranceCohort
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - enrollment_scene -> scenes.Scene [FK] (nullable)
+**Pointed to by:**
+  - members <- character_sheets.CharacterSheet
+  - enrollments <- progression.CohortEnrollment
+
+### CohortEnrollment
+**Foreign Keys:**
+  - cohort -> progression.DuranceCohort [FK]
+  - persona -> scenes.Persona [FK]
+  - enrollment_scene -> scenes.Scene [FK] (nullable)
 
 ### WeeklySocialEngagement
 **Foreign Keys:**
@@ -7182,6 +7204,8 @@
   - participants -> accounts.AccountDB [M2M]
 **Pointed to by:**
   - petitions <- player_submissions.Petition
+  - durance_cohorts_opened_here <- progression.DuranceCohort
+  - cohort_enrollments_here <- progression.CohortEnrollment
   - developmenttransaction_set <- progression.DevelopmentTransaction
   - entry_flourish_offers <- magic.PendingEntryFlourishOffer
   - triggered_alterations <- magic.PendingAlteration
@@ -7250,6 +7274,7 @@
   - reports_submitted <- player_submissions.PlayerReport
   - reports_against <- player_submissions.PlayerReport
   - witnessed_advancements <- progression.ClassLevelAdvancement
+  - cohort_enrollments <- progression.CohortEnrollment
   - targeted_for_random_scene <- progression.RandomSceneTarget
   - random_scene_completed_by <- progression.RandomSceneCompletion
   - poseendorsement_set <- magic.PoseEndorsement
@@ -7853,6 +7878,7 @@
   - society -> societies.Society [FK] (nullable)
   - org_type -> societies.OrganizationType [FK]
 **Pointed to by:**
+  - durance_cohorts <- progression.DuranceCohort
   - ritualsessionreference_set <- magic.RitualSessionReference
   - anchored_threads <- magic.Thread
   - ranks <- societies.OrganizationRank

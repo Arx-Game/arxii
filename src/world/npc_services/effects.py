@@ -780,10 +780,20 @@ def run_styling_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
 
     from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
     from world.forms.services import NonCosmeticTraitError, change_appearance  # noqa: PLC0415
+    from world.npc_services.functionaries import functionaries_in_location  # noqa: PLC0415
 
     details = offer.styling_offer_details
     sheet = persona.character_sheet
-    stylist_label = offer.role.name
+
+    # The placement actually serving the client: the co-located functionary of
+    # this role, when one exists ("Alphonso the Stylist"); a global/roleless
+    # interaction falls back to the role's name. Also anchors per-functionary
+    # reaction lines (#2632).
+    functionary = None
+    character = sheet.character if sheet is not None else None
+    if character is not None and character.location is not None:
+        functionary = functionaries_in_location(character.location).filter(role=offer.role).first()
+    stylist_label = functionary.display_name if functionary is not None else offer.role.name
 
     try:
         transfer(
@@ -817,13 +827,27 @@ def run_styling_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
             payload={"offer_pk": offer.pk},
         )
 
+    # Banded reaction line (#2632): an authored, allure-keyed reaction from
+    # this placement (or the role's defaults) leads the message; the generic
+    # craft line is the unauthored fallback.
+    from world.npc_services.constants import ReactionMetric  # noqa: PLC0415
+    from world.npc_services.reactions import reaction_line_for  # noqa: PLC0415
+
+    reaction = reaction_line_for(
+        role=offer.role,
+        functionary=functionary,
+        metric=ReactionMetric.ALLURE.value,
+        sheet=sheet,
+        name=persona.name,
+    )
+    outcome = f"{details.trait.display_name} is now {details.target_option.display_name}."
+    message = (
+        f"{reaction} {outcome}" if reaction else (f"{stylist_label} works their craft — {outcome}")
+    )
     return EffectResult(
         kind=OfferKind.STYLING.value,
         object_label=offer.label,
-        message=(
-            f"{stylist_label} works their craft — "
-            f"{details.trait.display_name} is now {details.target_option.display_name}."
-        ),
+        message=message,
         payload={"trait_pk": details.trait_id, "option_pk": details.target_option_id},
     )
 

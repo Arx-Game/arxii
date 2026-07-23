@@ -2393,6 +2393,14 @@ register as additional kinds.
   `hire <name>` prefers a co-located Functionary, falling back to a global role lookup; staff place
   them with the `functionary place/remove` command (`commands/functionary.py`); they surface on
   `look` (`Room.return_appearance`).
+- **Reaction lines (#2632):** `NPCReactionLine` — banded, data-authored NPC reactions
+  ("Alphonso sees to <name>…"): per-role defaults + per-functionary override sets;
+  `metric` (`ReactionMetric`, ALLURE first — resolves via `reactions.METRIC_RESOLVERS`,
+  one function per metric, never per-NPC code), `band_floor` (highest floor <= value
+  wins), `<name>` interpolation. Leads the STYLING resolution message when authored;
+  the serving placement resolves via `functionaries_in_location` (co-located
+  functionary of the offer's role → its `display_name` + personal lines). Staff CRUD:
+  `/api/npc-services/reaction-lines/`.
 - **Styling & Archive profiles (#2632):** `StylingOfferDetails` (kind=STYLING — one offer
   per (cosmetic `FormTrait`, `FormTraitOption`), coppers price; `run_styling_offer`
   charges the purse then applies via the shared `change_appearance` seam),
