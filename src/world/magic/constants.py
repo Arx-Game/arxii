@@ -38,6 +38,7 @@ class TechniqueFunction(models.TextChoices):
     WEAKEN = "weaken", "Weaken"
     PERCEPTION = "perception", "Perception"
     CONCEALMENT = "concealment", "Concealment"
+    HOLD = "hold", "Hold / Lock"
 
 
 class StandingCapMode(models.TextChoices):
