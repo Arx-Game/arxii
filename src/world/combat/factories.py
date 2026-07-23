@@ -28,6 +28,7 @@ from world.combat.constants import (
     PaceMode,
     ParticipantStatus,
     RiskLevel,
+    SelectionType,
     StakesLevel,
     TargetingMode,
     TargetSelection,
@@ -59,6 +60,7 @@ from world.combat.models import (
     EscalationCurve,
     OpponentTierTemplate,
     PendingOpponentAttack,
+    PendingSelection,
     RiskScalingModifier,
     StakesLevelRequirement,
     StrainConfig,
@@ -1702,3 +1704,20 @@ class EngagementLockFactory(factory_django.DjangoModelFactory):
     status = EngagementLockStatus.ACTIVE
     initiated_by = LockInitiator.THREAT
     started_round = 1
+
+
+class PendingSelectionFactory(factory_django.DjangoModelFactory):
+    """Factory for PendingSelection (#2665)."""
+
+    class Meta:
+        model = PendingSelection
+
+    participant = factory.SubFactory(CombatParticipantFactory)
+    encounter = factory.LazyAttribute(lambda obj: obj.participant.encounter)
+    selection_type = SelectionType.WEAKNESS
+    options_json = [
+        {"id": "Test Weakness", "label": "Test Weakness", "description": "A test weakness."}
+    ]
+    target_opponent = factory.SubFactory(
+        CombatOpponentFactory, encounter=factory.SelfAttribute("..encounter")
+    )

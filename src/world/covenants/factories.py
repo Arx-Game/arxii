@@ -36,6 +36,7 @@ from world.covenants.models import (
     VowSituationalPerk,
     VowSituationalPerkRung,
     VowSituationalPerkSituation,
+    WeaknessPoolEntry,
 )
 from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
 from world.items.constants import GearArchetype
@@ -200,6 +201,20 @@ class InsightTableEntryFactory(factory_django.DjangoModelFactory):
     condition = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
     target_kind = InsightTargetKind.ALLY
     weight = 1
+    is_active = True
+
+
+class WeaknessPoolEntryFactory(factory_django.DjangoModelFactory):
+    """Factory for WeaknessPoolEntry (#2665). Test-only — real entries are lore-repo content."""
+
+    class Meta:
+        model = WeaknessPoolEntry
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Weakness {n}")
+    creature_template = factory.SubFactory("world.combat.factories.CreatureTemplateFactory")
+    prose = "{caster} reveals {target}'s weakness — it is vulnerable!"
+    condition = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
     is_active = True
 
 

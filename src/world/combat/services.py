@@ -2666,6 +2666,8 @@ def spawn_from_creature_template(
         position=position,
         acting_account=acting_account,
     )
+    opp.creature_template = template
+    opp.save(update_fields=["creature_template"])
 
     if has_authored_phases:
         _clone_authored_phases(encounter, opp, template)
@@ -7204,6 +7206,37 @@ def _maybe_produce_insight_for_cast(
         )
 
 
+def _maybe_create_weakness_selection_for_cast(
+    participant: CombatParticipant,
+    combat_result: CombatTechniqueResult,
+    technique: Technique,
+    target_opponent: CombatOpponent | None,
+) -> None:
+    """Fire the #2665 weakness-reading rider after a successful combat cast.
+
+    Mirrors ``_maybe_produce_insight_for_cast``'s isolation: a weakness-
+    reading failure must never break round resolution.
+    """
+    if not isinstance(combat_result, CombatTechniqueResult):
+        return
+    if not combat_result.technique_use_result.confirmed:
+        return
+    try:
+        from world.covenants.weakness import maybe_create_weakness_selection  # noqa: PLC0415
+
+        maybe_create_weakness_selection(
+            caster_sheet=participant.character_sheet,
+            technique=technique,
+            resolution_participant=participant,
+            target_opponent=target_opponent,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to create a weakness selection for a combat cast (participant_id=%s)",
+            participant.pk,
+        )
+
+
 def _run_combat_technique_pipeline(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -7398,6 +7431,7 @@ def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912
         if action.from_entrance:
             _maybe_suggest_entrance_dramatic_moment(participant, combat_result)
         _maybe_produce_insight_for_cast(participant, combat_result, technique)
+        _maybe_create_weakness_selection_for_cast(participant, combat_result, technique, target)
 
     # Combo rider: appended in addition to the pipeline result when the
     # action is combo-upgraded and the target is alive.

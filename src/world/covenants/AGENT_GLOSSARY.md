@@ -385,6 +385,33 @@ _Avoid_: situational perk, dormant vow (a different mechanism entirely — the I
 dormant/disengaged variant, it simply doesn't fire off a disengaged role); "Look out!" callout
 (the light, frequent sibling — see #2637, not this ace).
 
+**Weakness Reading (the)**:
+The Sage vow's boss-reading rider (#2665). A character with an engaged
+`CovenantRole.reveals_weakness` role, casting a PERCEPTION-tagged technique against a BOSS-tier
+opponent, reads the boss and creates a `PendingSelection` from the boss's authored
+`WeaknessPoolEntry` pool. The player chooses which weakness to actualize via the `select`
+command; the chosen entry's `ConditionTemplate` is applied to the boss as a standing
+enemy-side state for the rest of the encounter. Once per encounter
+(`CombatParticipant.weakness_reading_used`); rides the existing cast per the riding rule (no
+new button for the trigger). Distinct from the Insight (#2645): the Insight is a random draw
+from a global table, while the Weakness Reading is a player choice from a per-boss pool, and
+the condition persists (not one-round). "Anathema erodes; the Sage reveals what was always
+true" — the actualized weakness is a standing enemy-side state, not an Anathema-style
+authored delta.
+_Avoid_: Insight (the random-draw sibling — see #2645); mage-scar weakness (a damage-type
+vulnerability modifier on alteration templates, a completely different concept).
+
+**Pending Selection**:
+`world.combat.models.PendingSelection` — a generic deferred player choice created during
+combat resolution (#2665). The combat round is synchronous and cannot pause for a player
+prompt; instead, a rider creates a `PendingSelection` and the player resolves it out-of-band
+via the `select` command (telnet) or web endpoint. `selection_type` discriminates which
+resolver handles it (currently `WEAKNESS`; future: `TAROT_DRAW`, etc.). The first consumer is
+the Sage's weakness reading; the mechanism is intentionally generic so future menu-driven
+archetypes can plug in without retrofit.
+_Avoid_: CrossingOption (a thread-crossing-specific player choice — see `world/magic/models/
+crossing.py`, domain-specific not generic combat-scoped).
+
 **Covenant Rank**:
 The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals / request-gm. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).
 _Avoid_: role, level.

@@ -192,6 +192,17 @@ class OpponentTier(models.TextChoices):
     HERO_KILLER = "hero_killer", "Hero Killer"
 
 
+class SelectionType(models.TextChoices):
+    """Type of deferred player selection (#2665).
+
+    Discriminates which resolver handles a PendingSelection.
+    The first consumer is the Sage's weakness reading; future
+    consumers (tarot mage, etc.) add their own values.
+    """
+
+    WEAKNESS = "weakness", "Weakness Reading"
+
+
 # #2643 — enemy-side bound on the summed condition-driven damage_modifier_percent
 # (Undermine's lane, ``_apply_condition_damage_interactions``). Mirrors
 # ``TEAM_BUFF_LANE_CAP_PERCENT`` (world.magic.constants) — the EQ2 lane guard: a
