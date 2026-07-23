@@ -220,6 +220,7 @@ from world.magic.models.techniques import (
     TechniqueRemovedCondition,
     TechniqueStyle,
     TechniqueStyleManager,
+    TechniqueTreatment,
 )
 from world.magic.models.threads import (
     Thread,
@@ -433,6 +434,7 @@ __all__ = [
     "TechniqueStyleManager",
     "TechniqueTeachingOffer",
     "TechniqueTierBudget",
+    "TechniqueTreatment",
     # gift-technique specialization variants (#1578)
     "TechniqueVariant",
     "TechniqueVariantAppliedCondition",
