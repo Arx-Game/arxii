@@ -19,11 +19,11 @@ class PricedPercentSeverityPcTargetTests(TestCase):
 
     def test_same_power_higher_level_yields_smaller_severity(self):
         low_sheet = CharacterSheetFactory()
-        CharacterClassLevelFactory(character=low_sheet.character, level=2)
+        CharacterClassLevelFactory(character=low_sheet, level=2)
         low_sheet.invalidate_class_level_cache()
 
         high_sheet = CharacterSheetFactory()
-        CharacterClassLevelFactory(character=high_sheet.character, level=10)
+        CharacterClassLevelFactory(character=high_sheet, level=10)
         high_sheet.invalidate_class_level_cache()
 
         low_severity = priced_percent_severity(eff_intensity=40, target=low_sheet.character)
@@ -36,7 +36,7 @@ class PricedPercentSeverityPcTargetTests(TestCase):
 
     def test_floors_at_one(self):
         sheet = CharacterSheetFactory()
-        CharacterClassLevelFactory(character=sheet.character, level=50)
+        CharacterClassLevelFactory(character=sheet, level=50)
         sheet.invalidate_class_level_cache()
 
         severity = priced_percent_severity(eff_intensity=1, target=sheet.character)
@@ -45,7 +45,7 @@ class PricedPercentSeverityPcTargetTests(TestCase):
 
     def test_clamps_to_lane_cap(self):
         sheet = CharacterSheetFactory()
-        CharacterClassLevelFactory(character=sheet.character, level=1)
+        CharacterClassLevelFactory(character=sheet, level=1)
         sheet.invalidate_class_level_cache()
 
         severity = priced_percent_severity(eff_intensity=1000, target=sheet.character)

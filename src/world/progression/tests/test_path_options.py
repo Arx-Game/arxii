@@ -6,7 +6,8 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
 from world.progression.factories import CharacterPathHistoryFactory
@@ -17,7 +18,8 @@ URL = "/api/progression/path-options/"
 class PathOptionsTests(TestCase):
     def setUp(self) -> None:
         self.account = AccountFactory()
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.prospect = PathFactory(name="Steel Prospect", stage=PathStage.PROSPECT)
         self.child_a = PathFactory(name="Potential A", stage=PathStage.POTENTIAL)
         self.child_b = PathFactory(name="Potential B", stage=PathStage.POTENTIAL)
@@ -29,7 +31,7 @@ class PathOptionsTests(TestCase):
     @patch("world.progression.views.PathOptionsView._get_character")
     def test_returns_current_path_and_options(self, mock_char: object) -> None:
         mock_char.return_value = self.character
-        CharacterPathHistoryFactory(character=self.character, path=self.prospect)
+        CharacterPathHistoryFactory(character=self.sheet, path=self.prospect)
         response = self.client.get(URL)
         assert response.status_code == status.HTTP_200_OK
         assert response.data["current_path"]["name"] == "Steel Prospect"
@@ -39,7 +41,7 @@ class PathOptionsTests(TestCase):
     @patch("world.progression.views.PathOptionsView._get_character")
     def test_terminal_path_returns_empty_options(self, mock_char: object) -> None:
         mock_char.return_value = self.character
-        CharacterPathHistoryFactory(character=self.character, path=self.child_a)
+        CharacterPathHistoryFactory(character=self.sheet, path=self.child_a)
         response = self.client.get(URL)
         assert response.status_code == status.HTTP_200_OK
         assert response.data["current_path"]["name"] == "Potential A"

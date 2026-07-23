@@ -30,24 +30,24 @@ class DuranceWitnessTests(TestCase):
         self.path = PathFactory(stage=PathStage.PROSPECT)
         self.officiant = CharacterSheetFactory()
         CharacterClassLevelFactory(
-            character=self.officiant.character,
+            character=self.officiant,
             character_class=CharacterClassFactory(),
             level=10,
             is_primary=True,
         )
-        CharacterPathHistory.objects.create(character=self.officiant.character, path=self.path)
+        CharacterPathHistory.objects.create(character=self.officiant, path=self.path)
         self.cls = CharacterClassFactory()
         self.inductee = CharacterSheetFactory()
         CharacterClassLevelFactory(
-            character=self.inductee.character,
+            character=self.inductee,
             character_class=self.cls,
             level=2,
             is_primary=True,
         )
-        CharacterPathHistory.objects.create(character=self.inductee.character, path=self.path)
+        CharacterPathHistory.objects.create(character=self.inductee, path=self.path)
         ClassLevelUnlock.objects.create(character_class=self.cls, target_level=3)
         CharacterUnlock.objects.create(
-            character=self.inductee.character,
+            character=self.inductee,
             character_class=self.cls,
             target_level=3,
         )

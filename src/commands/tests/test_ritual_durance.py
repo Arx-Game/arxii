@@ -61,23 +61,23 @@ def _setup_durance_participants(path):
     officiant_sheet = CharacterSheetFactory(character=officiant_char)
     officiant_class = CharacterClassFactory()
     CharacterClassLevelFactory(
-        character=officiant_char,
+        character=officiant_sheet,
         character_class=officiant_class,
         level=10,
         is_primary=True,
     )
-    CharacterPathHistory.objects.create(character=officiant_char, path=path)
+    CharacterPathHistory.objects.create(character=officiant_sheet, path=path)
 
     inductee_char = CharacterFactory(db_key="DuranceInductee")
     inductee_sheet = CharacterSheetFactory(character=inductee_char)
     inductee_class = CharacterClassFactory()
     CharacterClassLevelFactory(
-        character=inductee_char,
+        character=inductee_sheet,
         character_class=inductee_class,
         level=2,
         is_primary=True,
     )
-    CharacterPathHistory.objects.create(character=inductee_char, path=path)
+    CharacterPathHistory.objects.create(character=inductee_sheet, path=path)
 
     return officiant_char, officiant_sheet, inductee_char, inductee_sheet, inductee_class
 
@@ -107,7 +107,7 @@ class DuranceAutoFireOnJoinTests(TestCase):
             target_level=3,
         )
         CharacterUnlock.objects.create(
-            character=self.inductee_char,
+            character=self.inductee_char.sheet_data,
             character_class=self.inductee_class,
             target_level=3,
         )

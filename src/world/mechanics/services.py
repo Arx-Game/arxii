@@ -1248,7 +1248,7 @@ def _get_trait_sources(character: ObjectDB) -> list[CapabilitySource]:
     trait_ids = [d.trait_id for d in derivations]
     trait_values = dict(
         CharacterTraitValue.objects.filter(
-            character=character,
+            character_id=character.pk,
             trait_id__in=trait_ids,
         ).values_list("trait_id", "value")
     )

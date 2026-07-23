@@ -56,7 +56,7 @@ class ConditionModifierInTraitValueTest(TestCase):
             trait_type=TraitType.STAT,
             category=TraitCategory.PHYSICAL,
         )
-        CharacterTraitValue.objects.create(character=character, trait=strength, value=base)
+        CharacterTraitValue.objects.create(character=sheet, trait=strength, value=base)
 
         # ModifierTarget LINKED to the Trait (target_trait set), as A1 wires it.
         target = ModifierTargetFactory(name="a2_strength_target", target_trait=strength)
@@ -122,7 +122,7 @@ class ConditionModifierInCheckTest(TestCase):
         base = 30
         bonus = 40
         CharacterTraitValue.objects.create(
-            character=self.character, trait=self.strength, value=base
+            character=self.character.sheet_data, trait=self.strength, value=base
         )
 
         result_base = perform_check(self.character, self.check_type, target_difficulty=0)

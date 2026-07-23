@@ -270,9 +270,7 @@ class ActivationTests(EvenniaTestCase):
         for level in levels:
             sheet = CharacterSheetFactory()
             char_class = CharacterClassFactory()
-            CharacterClassLevelFactory(
-                character=sheet.character, character_class=char_class, level=level
-            )
+            CharacterClassLevelFactory(character=sheet, character_class=char_class, level=level)
             sheets.append(sheet)
         return sheets
 
@@ -441,9 +439,7 @@ class LegendPaysEffectiveRiskTests(EvenniaTestCase):
         for level in levels:
             sheet = CharacterSheetFactory()
             char_class = CharacterClassFactory()
-            CharacterClassLevelFactory(
-                character=sheet.character, character_class=char_class, level=level
-            )
+            CharacterClassLevelFactory(character=sheet, character_class=char_class, level=level)
             sheets.append(sheet)
         return sheets
 

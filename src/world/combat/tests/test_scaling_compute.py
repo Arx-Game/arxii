@@ -45,7 +45,7 @@ def _add_participants(encounter, count: int, level: int):
             status=ParticipantStatus.ACTIVE,
         )
         CharacterClassLevelFactory(
-            character=participant.character_sheet.character,
+            character=participant.character_sheet,
             level=level,
             is_primary=True,
         )
@@ -235,7 +235,7 @@ class InvariantThreadsIrrelevantTest(TestCase):
                 covenant_role=role,
             )
             CharacterClassLevelFactory(
-                character=participant.character_sheet.character,
+                character=participant.character_sheet,
                 level=4,
                 is_primary=True,
             )

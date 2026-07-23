@@ -30,7 +30,7 @@ class AudereMajoraItemGateTests(TestCase):
         return character, sheet, threshold, soulfray_stage, prospect_path, puissant_path
 
     def _character_class(self):
-        return CharacterClassLevel.objects.get(character=self.character).character_class
+        return CharacterClassLevel.objects.get(character=self.character.sheet_data).character_class
 
     def test_fail_open_with_no_authored_unlock(self) -> None:
         """No ClassLevelUnlock for boundary_level+1 -> gate does not block."""

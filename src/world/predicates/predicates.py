@@ -220,7 +220,7 @@ def _resolve_min_trait(ctx: ResolverContext, *, trait: str, value: int) -> bool:
     if trait_obj is None:
         return False
     ctv = CharacterTraitValue.objects.filter(
-        character=ctx.character,
+        character_id=ctx.character.pk,
         trait=trait_obj,
     ).first()
     return ctv is not None and ctv.value >= value
@@ -234,7 +234,7 @@ def _resolve_has_skill(ctx: ResolverContext, *, skill: str) -> bool:
     if trait_obj is None or trait_obj.trait_type != TraitType.SKILL:
         return False
     ctv = CharacterTraitValue.objects.filter(
-        character=ctx.character,
+        character_id=ctx.character.pk,
         trait=trait_obj,
     ).first()
     return ctv is not None and ctv.value > 0

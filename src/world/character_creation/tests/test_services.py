@@ -223,22 +223,22 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         assert character.db_key == "Test Fatui"
 
         # Verify trait values were created (12 stats)
-        trait_values = CharacterTraitValue.objects.filter(character=character)
+        trait_values = CharacterTraitValue.objects.filter(character_id=character.pk)
         assert trait_values.count() == 12
 
         # Verify specific values directly from database (1-5 scale)
         strength_value = CharacterTraitValue.objects.get(
-            character=character, trait=self.stats["strength"]
+            character_id=character.pk, trait=self.stats["strength"]
         )
         assert strength_value.value == 2
 
         agility_value = CharacterTraitValue.objects.get(
-            character=character, trait=self.stats["agility"]
+            character_id=character.pk, trait=self.stats["agility"]
         )
         assert agility_value.value == 2
 
         willpower_value = CharacterTraitValue.objects.get(
-            character=character, trait=self.stats["willpower"]
+            character_id=character.pk, trait=self.stats["willpower"]
         )
         assert willpower_value.value == 2
 
@@ -332,12 +332,12 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
 
         # Verify stats were created with correct values (1-5 scale)
         strength_value = CharacterTraitValue.objects.get(
-            character=character, trait=self.stats["strength"]
+            character_id=character.pk, trait=self.stats["strength"]
         )
         assert strength_value.value == 2
 
         willpower_value = CharacterTraitValue.objects.get(
-            character=character, trait=self.stats["willpower"]
+            character_id=character.pk, trait=self.stats["willpower"]
         )
         assert willpower_value.value == 2
 
@@ -397,13 +397,13 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
 
         # Remaining = 100 - 10 = 90, XP = 90 * 2 = 180
         xp = CharacterXP.objects.get(
-            character=character,
+            character_id=character.pk,
             transferable=False,
         )
         assert xp.total_earned == 180
         assert xp.current_available == 180
 
-        txn = CharacterXPTransaction.objects.get(character=character)
+        txn = CharacterXPTransaction.objects.get(character_id=character.pk)
         assert txn.amount == 180
         assert txn.reason == "cg_conversion"
         assert txn.transferable is False
@@ -424,7 +424,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
 
         assert not CharacterXP.objects.filter(
-            character=character,
+            character_id=character.pk,
         ).exists()
 
     def test_finalize_populates_physical_stats(self):
@@ -669,7 +669,7 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
 
         skill_value = CharacterSkillValue.objects.get(
-            character=character,
+            character_id=character.pk,
             skill=self.melee_skill,
         )
         assert skill_value.value == 30
@@ -688,7 +688,7 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
 
         spec_value = CharacterSpecializationValue.objects.get(
-            character=character,
+            character_id=character.pk,
             specialization=self.swords_spec,
         )
         assert spec_value.value == 20
@@ -705,7 +705,7 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
 
         assert not CharacterSkillValue.objects.filter(
-            character=character,
+            character_id=character.pk,
             skill=self.melee_skill,
         ).exists()
 
@@ -734,7 +734,7 @@ class FinalizeCharacterPathHistoryTests(FinalizationTestMixin, TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        history = CharacterPathHistory.objects.filter(character=character).first()
+        history = CharacterPathHistory.objects.filter(character_id=character.pk).first()
         self.assertIsNotNone(history)
         self.assertEqual(history.path, self.path)
 
@@ -775,7 +775,7 @@ class FinalizeCharacterGoalsTests(FinalizationTestMixin, TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        goals = CharacterGoal.objects.filter(character=character)
+        goals = CharacterGoal.objects.filter(character_id=character.pk)
         assert goals.count() == 2
 
         standing_goal = goals.get(domain=self.standing)
@@ -796,7 +796,7 @@ class FinalizeCharacterGoalsTests(FinalizationTestMixin, TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        goals = CharacterGoal.objects.filter(character=character)
+        goals = CharacterGoal.objects.filter(character_id=character.pk)
         assert goals.count() == 0
 
     def test_skips_invalid_goal_domain_ids(self):
@@ -814,7 +814,7 @@ class FinalizeCharacterGoalsTests(FinalizationTestMixin, TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        goals = CharacterGoal.objects.filter(character=character)
+        goals = CharacterGoal.objects.filter(character_id=character.pk)
         # Only the valid goal should be created
         assert goals.count() == 1
         assert goals.first().domain == self.standing
@@ -833,7 +833,7 @@ class FinalizeCharacterGoalsTests(FinalizationTestMixin, TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        goals = CharacterGoal.objects.filter(character=character)
+        goals = CharacterGoal.objects.filter(character_id=character.pk)
         assert goals.count() == 1
         assert goals.first().domain == self.standing
 

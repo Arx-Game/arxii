@@ -101,7 +101,7 @@ class CharacterUnlockFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = CharacterUnlock
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     character_class = factory.SubFactory(
         "world.classes.factories.CharacterClassFactory",
     )
@@ -115,7 +115,7 @@ class CharacterPathHistoryFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = CharacterPathHistory
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     path = factory.SubFactory("world.classes.factories.PathFactory")
 
 
@@ -179,7 +179,7 @@ class CharacterXPFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = CharacterXP
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     total_earned = factory.Faker("random_int", min=0, max=500)
     total_spent = factory.LazyAttribute(
         lambda obj: random.randint(0, obj.total_earned),  # noqa: S311
@@ -193,7 +193,7 @@ class CharacterXPTransactionFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = CharacterXPTransaction
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     amount = factory.Faker("random_int", min=1, max=100)
     reason = ProgressionReason.SYSTEM_AWARD
     description = factory.Faker("sentence")

@@ -84,6 +84,8 @@ class Trigger(SharedMemoryModel):
         on_delete=models.CASCADE,
         help_text="The trigger template this is based on.",
     )
+    # ObjectDB by design (#2608): triggers install on rooms (combat/duel wiring) and
+    # reactive items (condition installs), not just characters.
     obj = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.CASCADE,

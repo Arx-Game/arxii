@@ -244,7 +244,7 @@ def seed_durance_officiants() -> list:
             character.location = room
             character.save()
             set_primary_class_level(character, officiant_class, _DURANCE_OFFICIANT_LEVEL)
-            CharacterPathHistory.objects.create(character=character, path=path)
+            CharacterPathHistory.objects.create(character=character.sheet_data, path=path)
 
         sheet = character.sheet_data
         site, _ = DuranceTrainingSite.objects.get_or_create(

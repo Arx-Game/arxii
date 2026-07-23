@@ -30,7 +30,7 @@ def _make_character(level: int = 1) -> "object":
     sheet = CharacterSheetFactory(character=character)
     if level > 0:
         CharacterClassLevelFactory(
-            character=character,
+            character=sheet,
             character_class=CharacterClassFactory(),
             level=level,
         )

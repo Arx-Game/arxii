@@ -7,8 +7,7 @@ from django.test import TestCase, tag
 from evennia.accounts.models import AccountDB
 import pytest
 
-from evennia_extensions.factories import ObjectDBFactory
-from world.character_sheets.models import CharacterSheet
+from world.character_sheets.factories import CharacterSheetFactory
 from world.progression.factories import (
     DevelopmentPointsFactory,
     ExperiencePointsDataFactory,
@@ -101,8 +100,8 @@ class DevelopmentPointsModelTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDBFactory(db_key="TestChar")
-        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
     def test_development_points_creation(self):
         """Test creating development point tracker."""
@@ -163,8 +162,8 @@ class CharacterUnlockModelTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDBFactory(db_key="TestChar")
-        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         # Create a class unlock for testing instead
         from world.classes.factories import CharacterClassFactory
         from world.progression.models import ClassLevelUnlock
@@ -178,12 +177,12 @@ class CharacterUnlockModelTest(TestCase):
     def test_character_unlock_creation(self):
         """Test creating character unlocks."""
         unlock = CharacterUnlock.objects.create(
-            character=self.character,
+            character=self.sheet,
             character_class=self.class_unlock.character_class,
             target_level=self.class_unlock.target_level,
             xp_spent=100,
         )
-        assert unlock.character == self.character
+        assert unlock.character == self.sheet
         assert unlock.character_class == self.class_unlock.character_class
         assert unlock.target_level == self.class_unlock.target_level
         assert unlock.xp_spent == 100
@@ -191,7 +190,7 @@ class CharacterUnlockModelTest(TestCase):
     def test_unique_constraint(self):
         """Test unique constraint on character unlocks."""
         CharacterUnlock.objects.create(
-            character=self.character,
+            character=self.sheet,
             character_class=self.class_unlock.character_class,
             target_level=self.class_unlock.target_level,
             xp_spent=100,
@@ -201,7 +200,7 @@ class CharacterUnlockModelTest(TestCase):
 
         with pytest.raises(IntegrityError):
             CharacterUnlock.objects.create(
-                character=self.character,
+                character=self.sheet,
                 character_class=self.class_unlock.character_class,
                 target_level=self.class_unlock.target_level,
                 xp_spent=100,

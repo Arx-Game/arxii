@@ -19,7 +19,7 @@ class CharacterPathHistory(models.Model):  # noqa: SHARED_MEMORY
     """
 
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="path_history",
         help_text="The character this path history belongs to",

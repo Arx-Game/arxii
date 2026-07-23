@@ -56,11 +56,11 @@ class AudereMajoraEligibilityGateTests(TestCase):
 
     def test_wrong_level_14_returns_none(self) -> None:
         # Delete + recreate to evict the SharedMemoryModel identity-map cache.
-        ccl = CharacterClassLevel.objects.get(character=self.character)
+        ccl = CharacterClassLevel.objects.get(character=self.character.sheet_data)
         ccl.flush_from_cache()
-        CharacterClassLevel.objects.filter(character=self.character).delete()
+        CharacterClassLevel.objects.filter(character=self.character.sheet_data).delete()
         CharacterClassLevel.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             character_class=ccl.character_class,
             level=14,
             is_primary=True,
@@ -70,11 +70,11 @@ class AudereMajoraEligibilityGateTests(TestCase):
 
     def test_wrong_level_16_returns_none(self) -> None:
         # Delete + recreate to evict the SharedMemoryModel identity-map cache.
-        ccl = CharacterClassLevel.objects.get(character=self.character)
+        ccl = CharacterClassLevel.objects.get(character=self.character.sheet_data)
         ccl.flush_from_cache()
-        CharacterClassLevel.objects.filter(character=self.character).delete()
+        CharacterClassLevel.objects.filter(character=self.character.sheet_data).delete()
         CharacterClassLevel.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             character_class=ccl.character_class,
             level=16,
             is_primary=True,

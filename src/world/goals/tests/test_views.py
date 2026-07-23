@@ -9,6 +9,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.goals.factories import (
     CharacterGoalFactory,
     GoalDomainFactory,
@@ -27,7 +28,8 @@ class CharacterContextMixinTests(TestCase):
     def setUpTestData(cls):
         """Set up test data."""
         cls.user = AccountFactory()
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.other_character = CharacterFactory()
 
     def setUp(self):
@@ -129,7 +131,8 @@ class CharacterGoalViewSetTests(TestCase):
     def setUpTestData(cls):
         """Set up test data."""
         cls.user = AccountFactory()
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.standing = GoalDomainFactory(name="Standing")
         cls.wealth = GoalDomainFactory(name="Wealth")
         cls.knowledge = GoalDomainFactory(name="Knowledge")
@@ -144,7 +147,7 @@ class CharacterGoalViewSetTests(TestCase):
         """Can list character's goals."""
         mock_get_char.return_value = self.character
         CharacterGoalFactory(
-            character=self.character,
+            character=self.sheet,
             domain=self.standing,
             points=15,
         )
@@ -170,7 +173,7 @@ class CharacterGoalViewSetTests(TestCase):
         from world.goals.models import GoalRevision
 
         mock_get_char.return_value = self.character
-        assert not GoalRevision.objects.filter(character=self.character).exists()
+        assert not GoalRevision.objects.filter(character=self.sheet).exists()
 
         response = self.client.get("/api/goals/my-goals/")
 
@@ -178,7 +181,7 @@ class CharacterGoalViewSetTests(TestCase):
         assert response.data["revision"]["can_revise"] is True
         assert response.data["revision"]["last_revised_at"] is None
         # The GET must not have written a revision row.
-        assert not GoalRevision.objects.filter(character=self.character).exists()
+        assert not GoalRevision.objects.filter(character=self.sheet).exists()
 
     @patch("world.goals.views.CharacterGoalViewSet._get_character")
     def test_list_goals_no_character(self, mock_get_char):
@@ -212,7 +215,7 @@ class CharacterGoalViewSetTests(TestCase):
         assert response.data["points_remaining"] == 5
 
         # Verify goals were created
-        goals = CharacterGoal.objects.filter(character=self.character)
+        goals = CharacterGoal.objects.filter(character=self.sheet)
         assert goals.count() == 2
 
     @patch("world.goals.views.CharacterGoalViewSet._get_character")
@@ -221,12 +224,12 @@ class CharacterGoalViewSetTests(TestCase):
         mock_get_char.return_value = self.character
         # Create existing goal
         CharacterGoalFactory(
-            character=self.character,
+            character=self.sheet,
             domain=self.standing,
             points=20,
         )
         # Create revision allowing changes
-        revision = GoalRevisionFactory(character=self.character)
+        revision = GoalRevisionFactory(character=self.sheet)
         revision.last_revised_at = timezone.now() - timedelta(weeks=2)
         revision.save()
 
@@ -242,7 +245,7 @@ class CharacterGoalViewSetTests(TestCase):
         )
 
         assert response.status_code == status.HTTP_200_OK
-        goals = CharacterGoal.objects.filter(character=self.character)
+        goals = CharacterGoal.objects.filter(character=self.sheet)
         assert goals.count() == 1
         assert goals.first().domain.name == "Wealth"
 
@@ -251,9 +254,9 @@ class CharacterGoalViewSetTests(TestCase):
         """update_all enforces weekly revision limit."""
         mock_get_char.return_value = self.character
         # Create existing goal
-        CharacterGoalFactory(character=self.character, domain=self.standing, points=10)
+        CharacterGoalFactory(character=self.sheet, domain=self.standing, points=10)
         # Create recent revision
-        GoalRevisionFactory(character=self.character)
+        GoalRevisionFactory(character=self.sheet)
 
         data = {
             "goals": [
@@ -323,8 +326,10 @@ class GoalJournalViewSetTests(TestCase):
         """Set up test data."""
         cls.user = AccountFactory()
         cls.other_user = AccountFactory()
-        cls.character = CharacterFactory()
-        cls.other_character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
+        cls.other_sheet = CharacterSheetFactory()
+        cls.other_character = cls.other_sheet.character
         cls.domain = GoalDomainFactory(name="JournalDomain")
 
     def setUp(self):
@@ -336,8 +341,8 @@ class GoalJournalViewSetTests(TestCase):
     def test_list_journals(self, mock_get_char):
         """Can list character's journal entries."""
         mock_get_char.return_value = self.character
-        GoalJournalFactory(character=self.character, title="My Journal")
-        GoalJournalFactory(character=self.other_character, title="Other Journal")
+        GoalJournalFactory(character=self.sheet, title="My Journal")
+        GoalJournalFactory(character=self.other_sheet, title="Other Journal")
 
         response = self.client.get("/api/goals/journals/")
 
@@ -384,9 +389,9 @@ class GoalJournalViewSetTests(TestCase):
 
     def test_public_journals_endpoint(self):
         """Public endpoint returns only public journals."""
-        GoalJournalFactory(character=self.character, is_public=True, title="Public")
-        GoalJournalFactory(character=self.character, is_public=False, title="Private")
-        GoalJournalFactory(character=self.other_character, is_public=True, title="Other Public")
+        GoalJournalFactory(character=self.sheet, is_public=True, title="Public")
+        GoalJournalFactory(character=self.sheet, is_public=False, title="Private")
+        GoalJournalFactory(character=self.other_sheet, is_public=True, title="Other Public")
 
         response = self.client.get("/api/goals/journals/public/")
 
@@ -400,8 +405,8 @@ class GoalJournalViewSetTests(TestCase):
 
     def test_public_journals_filter_by_character(self):
         """Public endpoint can filter by character_id."""
-        GoalJournalFactory(character=self.character, is_public=True, title="Mine")
-        GoalJournalFactory(character=self.other_character, is_public=True, title="Theirs")
+        GoalJournalFactory(character=self.sheet, is_public=True, title="Mine")
+        GoalJournalFactory(character=self.other_sheet, is_public=True, title="Theirs")
 
         response = self.client.get(f"/api/goals/journals/public/?character_id={self.character.id}")
 

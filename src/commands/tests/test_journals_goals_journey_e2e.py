@@ -89,7 +89,9 @@ class JournalGoalJourneyE2ETests(TestCase):
         domain = GoalDomainFactory(name="Standing")
         _make_goal_cmd(self.writer, f"add domain={domain.pk} points=10 notes=Gain standing").func()
         self.assertTrue(
-            CharacterGoal.objects.filter(character=self.writer, domain=domain, points=10).exists()
+            CharacterGoal.objects.filter(
+                character=self.writer.sheet_data, domain=domain, points=10
+            ).exists()
         )
 
         _make_goal_cmd(
@@ -97,7 +99,7 @@ class JournalGoalJourneyE2ETests(TestCase):
         ).func()
         self.assertTrue(
             GoalJournal.objects.filter(
-                character=self.writer, domain=domain, title="A step forward"
+                character=self.writer.sheet_data, domain=domain, title="A step forward"
             ).exists()
         )
 
@@ -107,7 +109,7 @@ class JournalCommandErrorTests(TestCase):
         from evennia.utils.idmapper.models import flush_cache
 
         flush_cache()
-        self.caller = CharacterFactory()
+        self.caller = CharacterSheetFactory().character
         self.caller.db_account = AccountFactory()
         self.caller.save()
         self.caller_sheet = CharacterSheetFactory(character=self.caller)
@@ -165,7 +167,7 @@ class GoalCommandErrorTests(TestCase):
         from evennia.utils.idmapper.models import flush_cache
 
         flush_cache()
-        self.caller = CharacterFactory()
+        self.caller = CharacterSheetFactory().character
         self.caller.db_account = AccountFactory()
         self.caller.save()
         self.caller.msg = MagicMock()
@@ -191,7 +193,7 @@ class GoalCommandErrorTests(TestCase):
             self.caller,
             f"set domain={domain_a.pk}:points=10,domain={domain_b.pk}:points=5",
         ).func()
-        self.assertEqual(CharacterGoal.objects.filter(character=self.caller).count(), 2)
+        self.assertEqual(CharacterGoal.objects.filter(character=self.caller.sheet_data).count(), 2)
 
         # Second `goal set` within the revision window -> REVISION_TOO_SOON.
         _make_goal_cmd(
@@ -200,7 +202,7 @@ class GoalCommandErrorTests(TestCase):
         ).func()
         self.assertIn("cannot revise", _capture(self.caller).lower())
         # Original allocations unchanged (the second set was rejected).
-        self.assertEqual(CharacterGoal.objects.filter(character=self.caller).count(), 2)
+        self.assertEqual(CharacterGoal.objects.filter(character=self.caller.sheet_data).count(), 2)
 
 
 _JOURNAL_MULTIWORD_KEYS = frozenset({"title", "body"})

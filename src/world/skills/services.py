@@ -53,7 +53,7 @@ def _get_path_level(character: ObjectDB) -> int:
     Returns:
         The highest class level, or 1 if none exist.
     """
-    levels = character.character_class_levels.all()
+    levels = CharacterClassLevel.objects.filter(character_id=character.pk)
     if not levels:
         return 1
     return max(entry.level for entry in levels)
@@ -88,7 +88,7 @@ def _get_skill_value(character: ObjectDB, skill: Skill) -> int:
         The raw skill value, or 0 if the character has no value for this skill.
     """
     try:
-        return CharacterSkillValue.objects.get(character=character, skill=skill).value
+        return CharacterSkillValue.objects.get(character_id=character.pk, skill=skill).value
     except CharacterSkillValue.DoesNotExist:
         return 0
 
@@ -105,7 +105,7 @@ def _get_spec_value(character: ObjectDB, specialization: Specialization) -> int:
     """
     try:
         return CharacterSpecializationValue.objects.get(
-            character=character, specialization=specialization
+            character_id=character.pk, specialization=specialization
         ).value
     except CharacterSpecializationValue.DoesNotExist:
         return 0
@@ -204,7 +204,7 @@ def calculate_training_development(
     if not allocation.mentor:
         return int(base_gain)
 
-    mentor_character = allocation.mentor.character_sheet.character
+    mentor_character = allocation.mentor.character_sheet
     teaching = _get_teaching_value(mentor_character, teaching_skill=_teaching_skill)
 
     if allocation.specialization:
@@ -248,7 +248,7 @@ def _get_total_allocated_ap(character: ObjectDB, exclude_pk: int | None = None) 
     Returns:
         Total AP allocated, or 0 if none.
     """
-    qs = TrainingAllocation.objects.filter(character=character)
+    qs = TrainingAllocation.objects.filter(character_id=character.pk)
     if exclude_pk is not None:
         qs = qs.exclude(pk=exclude_pk)
     return qs.aggregate(total=Sum("ap_amount"))["total"] or 0
@@ -292,7 +292,7 @@ def create_training_allocation(
         raise ValueError(msg)
 
     return TrainingAllocation.objects.create(
-        character=character,
+        character=character.sheet_data,
         skill=skill,
         specialization=specialization,
         mentor=mentor,
@@ -479,7 +479,7 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
     from world.progression.services.awards import get_or_create_xp_tracker  # noqa: PLC0415
 
     try:
-        skill_value = CharacterSkillValue.objects.get(character=character, skill=skill)
+        skill_value = CharacterSkillValue.objects.get(character_id=character.pk, skill=skill)
     except CharacterSkillValue.DoesNotExist:
         return False, f"{skill.name} has no recorded value for this character."
 
@@ -511,7 +511,7 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
                 amount=-xp_cost,
                 reason=ProgressionReason.XP_PURCHASE,
                 description=f"Breakthrough: {skill.name} to {target_rating / 10:.1f}",
-                character=character,
+                character=character.sheet_data,
             )
 
         skill_value.value = target_rating
@@ -553,7 +553,7 @@ def skills_at_boundary(character: ObjectDB) -> list[SkillBreakthroughProspect]:
 
     gated = [
         sv
-        for sv in CharacterSkillValue.objects.filter(character=character).select_related(
+        for sv in CharacterSkillValue.objects.filter(character_id=character.pk).select_related(
             "skill__trait"
         )
         if _is_at_xp_boundary(sv.value)
@@ -677,10 +677,8 @@ def process_weekly_training() -> dict[int, set[int]]:
         else:
             continue  # pragma: no cover — XOR constraint prevents this
 
-        # Record audit trail. DevelopmentTransaction uses CharacterSheet FK.
-        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-
-        sheet, _ = CharacterSheet.objects.get_or_create(character=character)
+        # Record audit trail. allocation.character IS the sheet now.
+        sheet = character
         description = f"Weekly training: {allocation}"
         if plateau_message:
             description = f"{description} — {plateau_message}"
@@ -697,18 +695,18 @@ def process_weekly_training() -> dict[int, set[int]]:
         # insufficient AP — allocations represent reserved budget, and the
         # weekly AP regen is assumed to have run before training processing.
         try:
-            pool = ActionPointPool.objects.get(character=character)
+            pool = ActionPointPool.objects.get(character_id=character.pk)
             if not pool.spend(allocation.ap_amount):
                 logger.warning(
                     "Insufficient AP for %s: wanted %d, pool has %d",
-                    character.db_key,
+                    str(character),
                     allocation.ap_amount,
                     pool.current,
                 )
         except ActionPointPool.DoesNotExist:
             logger.warning(
                 "No AP pool for %s during training processing",
-                character.db_key,
+                str(character),
             )
 
     return dict(trained_skills)

@@ -55,7 +55,7 @@ class TrainOfferHappyPathTests(TestCase):
         self.gift.resonances.add(ResonanceFactory())
         self.technique = TechniqueFactory(gift=self.gift)
         self.path = PathFactory()
-        CharacterPathHistoryFactory(character=self.character, path=self.path)
+        CharacterPathHistoryFactory(character=self.character.sheet_data, path=self.path)
         grant = PathGiftGrantFactory(path=self.path, gift=self.gift)
         grant.starter_techniques.add(self.technique)
 
@@ -165,7 +165,7 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
         self.gift.resonances.add(ResonanceFactory())
         self.signature_technique = TechniqueFactory(gift=self.gift)
         self.path = PathFactory()
-        CharacterPathHistoryFactory(character=self.character, path=self.path)
+        CharacterPathHistoryFactory(character=self.character.sheet_data, path=self.path)
 
         self.tradition = TraditionFactory()
         sig_grant = TraditionGiftGrantFactory(tradition=self.tradition, gift=self.gift)
@@ -257,7 +257,7 @@ class TrainOfferAtomicChargeSequenceTests(TestCase):
         self.gift.resonances.add(ResonanceFactory())
         self.technique = TechniqueFactory(gift=self.gift)
         self.path = PathFactory()
-        CharacterPathHistoryFactory(character=self.character, path=self.path)
+        CharacterPathHistoryFactory(character=self.character.sheet_data, path=self.path)
         grant = PathGiftGrantFactory(path=self.path, gift=self.gift)
         grant.starter_techniques.add(self.technique)
 
@@ -425,7 +425,7 @@ class TrainOfferUnboundSurchargeTests(TestCase):
         self.gift.resonances.add(ResonanceFactory())
         self.technique = TechniqueFactory(gift=self.gift)
         self.path = PathFactory()
-        CharacterPathHistoryFactory(character=self.character, path=self.path)
+        CharacterPathHistoryFactory(character=self.character.sheet_data, path=self.path)
         grant = PathGiftGrantFactory(path=self.path, gift=self.gift)
         grant.starter_techniques.add(self.technique)
 

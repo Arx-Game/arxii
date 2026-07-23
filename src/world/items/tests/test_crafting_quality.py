@@ -65,7 +65,7 @@ class CapClampTests(_QualityResolutionBase):
     def test_high_score_low_skill_clamped_to_cap_tier(self) -> None:
         """A crit-level score (Masterwork range) is clamped to Common when skill is low."""
         # Low-skill crafter: skill=5.  Cap band: min_skill_value=0 → Common (0–49).
-        CharacterTraitValueFactory(character=self.character, trait=self.skill, value=5)
+        CharacterTraitValueFactory(character=self.character.sheet_data, trait=self.skill, value=5)
         CraftingSkillCapFactory(recipe=self.recipe, min_skill_value=0, max_quality_tier=self.common)
 
         # check_result with total_points=90, success_level=1 → score=90+0=90 → Masterwork
@@ -80,7 +80,7 @@ class CapClampTests(_QualityResolutionBase):
 
     def test_cap_is_enforced_not_raw_tier(self) -> None:
         """Confirm the capped tier differs from the tier the unclamped score would give."""
-        CharacterTraitValueFactory(character=self.character, trait=self.skill, value=5)
+        CharacterTraitValueFactory(character=self.character.sheet_data, trait=self.skill, value=5)
         CraftingSkillCapFactory(recipe=self.recipe, min_skill_value=0, max_quality_tier=self.common)
 
         # Raw score = 100 + (3-1)*10 = 120 → Masterwork; cap clamps to 49 → Common.
@@ -99,7 +99,7 @@ class NoCapsTests(_QualityResolutionBase):
 
     def test_no_cap_rows_returns_raw_score_tier(self) -> None:
         """Without skill caps a high-scoring crafter gets Masterwork."""
-        CharacterTraitValueFactory(character=self.character, trait=self.skill, value=5)
+        CharacterTraitValueFactory(character=self.character.sheet_data, trait=self.skill, value=5)
         # No CraftingSkillCap rows created.
 
         result = resolve_capped_tier(
@@ -116,7 +116,7 @@ class CapAboveScoreTests(_QualityResolutionBase):
 
     def test_cap_above_score_returns_natural_tier(self) -> None:
         """Cap at Masterwork (200) does not artificially inflate a Common-range score."""
-        CharacterTraitValueFactory(character=self.character, trait=self.skill, value=80)
+        CharacterTraitValueFactory(character=self.character.sheet_data, trait=self.skill, value=80)
         CraftingSkillCapFactory(
             recipe=self.recipe, min_skill_value=0, max_quality_tier=self.masterwork
         )
@@ -181,7 +181,7 @@ class NoTiersSeededTests(TestCase):
         )
         self.character = CharacterFactory()
         CharacterSheetFactory(character=self.character)
-        CharacterTraitValueFactory(character=self.character, trait=self.skill, value=10)
+        CharacterTraitValueFactory(character=self.character.sheet_data, trait=self.skill, value=10)
 
     def test_raises_crafting_not_configured_when_no_tiers(self) -> None:
         """resolve_capped_tier raises CraftingNotConfigured if QualityTier table is empty."""

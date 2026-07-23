@@ -21,9 +21,9 @@ class CanLearnTechniqueCrossPathTests(TestCase):
     def _setup_character_on_path(self, path, trait=None, trait_value=None):
         """Create a character on *path* with optional trait value set."""
         sheet = CharacterSheetFactory()
-        CharacterPathHistoryFactory(character=sheet.character, path=path)
+        CharacterPathHistoryFactory(character=sheet, path=path)
         if trait is not None and trait_value is not None:
-            CharacterTraitValueFactory(character=sheet.character, trait=trait, value=trait_value)
+            CharacterTraitValueFactory(character=sheet, trait=trait, value=trait_value)
         return sheet
 
     def _make_technique_with_style(self, allowed_paths):

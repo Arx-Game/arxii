@@ -38,13 +38,13 @@ _CHECK_PATH = "world.progression.services.spends.check_requirements_for_unlock"
 
 def _wire_path(sheet, path) -> None:
     """Record *path* as the character's current path via CharacterPathHistory."""
-    CharacterPathHistory.objects.create(character=sheet.character, path=path)
+    CharacterPathHistory.objects.create(character=sheet, path=path)
 
 
 def _set_primary_level(sheet, *, character_class, level: int) -> None:
     """Give sheet.character a primary CharacterClassLevel at *level*."""
     CharacterClassLevelFactory(
-        character=sheet.character,
+        character=sheet,
         character_class=character_class,
         level=level,
         is_primary=True,
@@ -60,7 +60,7 @@ def _place_in_room(sheet, room) -> None:
 def _purchase_unlock(sheet, unlock) -> None:
     """Record the XP-unlock purchase gate as satisfied for ``sheet`` (#2116)."""
     CharacterUnlock.objects.create(
-        character=sheet.character,
+        character=sheet,
         character_class=unlock.character_class,
         target_level=unlock.target_level,
     )
@@ -322,7 +322,7 @@ class ConveneDuranceSiteUnlockNotPurchasedTests(TestCase):
 
     def test_purchase_then_convene_succeeds(self) -> None:
         CharacterUnlock.objects.create(
-            character=self.inductee_sheet.character,
+            character=self.inductee_sheet,
             character_class=self.inductee_class,
             target_level=3,
         )

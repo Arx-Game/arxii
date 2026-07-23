@@ -50,7 +50,7 @@ class ManageTrainingActionTests(TestCase):
         )
         self.assertTrue(result.success)
         allocation = TrainingAllocation.objects.get(pk=result.data["allocation_id"])
-        self.assertEqual(allocation.character, self.character)
+        self.assertEqual(allocation.character, self.sheet)
         self.assertEqual(allocation.skill, self.skill)
         self.assertIsNone(allocation.specialization)
         self.assertIsNone(allocation.mentor)
@@ -67,7 +67,7 @@ class ManageTrainingActionTests(TestCase):
         )
         self.assertTrue(result.success)
         allocation = TrainingAllocation.objects.get(pk=result.data["allocation_id"])
-        self.assertEqual(allocation.character, self.character)
+        self.assertEqual(allocation.character, self.sheet)
         self.assertIsNone(allocation.skill)
         self.assertEqual(allocation.specialization, self.specialization)
         self.assertEqual(allocation.mentor, self.mentor)
@@ -76,7 +76,7 @@ class ManageTrainingActionTests(TestCase):
     def test_update_allocation(self) -> None:
         """Can update AP amount and mentor on an owned allocation."""
         allocation = TrainingAllocationFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             skill=self.skill,
             ap_amount=10,
         )
@@ -96,7 +96,7 @@ class ManageTrainingActionTests(TestCase):
     def test_update_removes_mentor_when_none(self) -> None:
         """Passing mentor_persona_id=None clears the mentor."""
         allocation = TrainingAllocationFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             skill=self.skill,
             ap_amount=10,
             mentor=self.mentor,
@@ -114,7 +114,7 @@ class ManageTrainingActionTests(TestCase):
     def test_remove_allocation(self) -> None:
         """Can remove an owned training allocation."""
         allocation = TrainingAllocationFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             skill=self.skill,
             ap_amount=10,
         )
@@ -170,7 +170,7 @@ class ManageTrainingActionTests(TestCase):
         """Update fails when new total would exceed weekly budget."""
         budget = self.config.weekly_regen
         allocation = TrainingAllocationFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             skill=self.skill,
             ap_amount=budget,
         )
@@ -186,9 +186,8 @@ class ManageTrainingActionTests(TestCase):
     def test_rejects_update_of_foreign_allocation(self) -> None:
         """A character cannot update another character's allocation."""
         other_sheet = CharacterSheetFactory()
-        other_character = other_sheet.character
         allocation = TrainingAllocationFactory(
-            character=other_character,
+            character=other_sheet,
             skill=self.skill,
             ap_amount=10,
         )
@@ -204,9 +203,8 @@ class ManageTrainingActionTests(TestCase):
     def test_rejects_remove_of_foreign_allocation(self) -> None:
         """A character cannot remove another character's allocation."""
         other_sheet = CharacterSheetFactory()
-        other_character = other_sheet.character
         allocation = TrainingAllocationFactory(
-            character=other_character,
+            character=other_sheet,
             skill=self.skill,
             ap_amount=10,
         )
@@ -263,7 +261,7 @@ class PurchaseUnlockActionTests(TestCase):
 
     def _create_class_level_unlock(self, character, *, xp_cost: int):
         """Create a ClassLevelUnlock for ``character`` with an XP cost."""
-        class_level = CharacterClassLevelFactory(character=character, level=3)
+        class_level = CharacterClassLevelFactory(character=character.sheet_data, level=3)
         class_unlock = ClassLevelUnlock.objects.create(
             character_class=class_level.character_class,
             target_level=4,
@@ -419,7 +417,9 @@ class PurchaseUnlockActionTests(TestCase):
         """Can purchase a skill breakthrough when the actor has enough XP (#2115)."""
         character, _sheet, account = self._create_character_with_account()
         skill = SkillFactory()
-        skill_value = CharacterSkillValueFactory(character=character, skill=skill, value=19)
+        skill_value = CharacterSkillValueFactory(
+            character=character.sheet_data, skill=skill, value=19
+        )
         self._authored_skill_breakthrough(skill, target_rating=20, xp_cost=100)
         self._set_xp(account, total_earned=150)
 
@@ -440,7 +440,7 @@ class PurchaseUnlockActionTests(TestCase):
         """Purchasing a skill breakthrough fails without enough XP (#2115)."""
         character, _sheet, account = self._create_character_with_account()
         skill = SkillFactory()
-        CharacterSkillValueFactory(character=character, skill=skill, value=19)
+        CharacterSkillValueFactory(character=character.sheet_data, skill=skill, value=19)
         self._authored_skill_breakthrough(skill, target_rating=20, xp_cost=100)
         self._set_xp(account, total_earned=50)
 
@@ -457,7 +457,7 @@ class PurchaseUnlockActionTests(TestCase):
         """A second purchase attempt fails once the gate is already cleared (#2115)."""
         character, _sheet, account = self._create_character_with_account()
         skill = SkillFactory()
-        CharacterSkillValueFactory(character=character, skill=skill, value=19)
+        CharacterSkillValueFactory(character=character.sheet_data, skill=skill, value=19)
         self._authored_skill_breakthrough(skill, target_rating=20, xp_cost=100)
         self._set_xp(account, total_earned=300)
 

@@ -53,7 +53,7 @@ class ResonanceSubroleEndToEndTest(TestCase):
         self.sheet = _make_active_sheet()
 
         # Give the character a level so covenant_role_base_total returns > 0.
-        CharacterClassLevelFactory(character=self.sheet.character, level=5, is_primary=True)
+        CharacterClassLevelFactory(character=self.sheet, level=5, is_primary=True)
         self.sheet.invalidate_class_level_cache()
 
         # Covenant + engaged membership on the parent role.

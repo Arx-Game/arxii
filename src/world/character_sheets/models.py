@@ -264,6 +264,9 @@ class CharacterSheet(SharedMemoryModel):
     with proper Django model fields for better data integrity and querying.
     """
 
+    # ObjectDB by design (#2608): THE canonical character↔ObjectDB anchor. PK-sharing
+    # means sheet.pk == character ObjectDB pk; every character-scoped model FKs this
+    # sheet, never ObjectDB directly.
     character = models.OneToOneField(
         ObjectDB,
         on_delete=models.CASCADE,
@@ -795,13 +798,20 @@ class CharacterSheet(SharedMemoryModel):
         )
 
     @cached_property
+    def cached_path_history(self) -> list:
+        """CharacterPathHistory rows, newest first — ``to_attr`` target for the
+        shared ``path_history`` prefetch; falls back to a fresh query unprefetched
+        (the ratified shared-interface cached_property pattern)."""
+        return list(self.path_history.select_related("path").order_by("-selected_at"))
+
+    @cached_property
     def cached_character_class_levels(self) -> list[CharacterClassLevel]:
         """All CharacterClassLevel records for this character's ObjectDB.
 
         Serves as the ``to_attr`` target for::
 
             Prefetch(
-                "character__character_class_levels",
+                "character_class_levels",
                 queryset=CharacterClassLevel.objects.select_related("character_class"),
                 to_attr="cached_character_class_levels",
             )
@@ -812,16 +822,11 @@ class CharacterSheet(SharedMemoryModel):
         To invalidate after mutating levels::
 
             sheet.invalidate_class_level_cache()
-
-        Note: ``CharacterClassLevel.character`` FKs to ObjectDB (shared-pk with
-        CharacterSheet), so we walk ``self.character.character_class_levels``.
         """
         from world.classes.models import CharacterClassLevel  # noqa: PLC0415
 
         return list(
-            CharacterClassLevel.objects.filter(character=self.character).select_related(
-                "character_class"
-            )
+            CharacterClassLevel.objects.filter(character=self).select_related("character_class")
         )
 
     @cached_property
@@ -851,7 +856,7 @@ class CharacterSheet(SharedMemoryModel):
 
         Example::
 
-            CharacterClassLevel.objects.create(character=sheet.character, ...)
+            CharacterClassLevel.objects.create(character=sheet, ...)
             sheet.invalidate_class_level_cache()
         """
         self.__dict__.pop("cached_character_class_levels", None)

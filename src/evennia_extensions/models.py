@@ -362,6 +362,8 @@ class ObjectDisplayData(SharedMemoryModel):
     of object presentation.
     """
 
+    # ObjectDB by design (#2608): unified display data spans characters, rooms,
+    # items, and exits alike — the one case where "any object" is the contract.
     object = models.OneToOneField(
         _OBJECTDB_MODEL,
         on_delete=models.CASCADE,
@@ -521,6 +523,10 @@ class RoomProfile(NaturalKeyMixin, SharedMemoryModel):
     (resonances, ownership, defenses) get their own models.
     """
 
+    # ObjectDB by design (#2608): the canonical room↔ObjectDB extension bridge (room
+    # analogue of CharacterSheet.character) — rooms have no concrete model besides
+    # ObjectDB. Auto-created in Room.at_object_creation; room-valued FKs elsewhere
+    # should target THIS model, not ObjectDB.
     objectdb = models.OneToOneField(
         _OBJECTDB_MODEL,
         on_delete=models.CASCADE,
@@ -644,6 +650,8 @@ class ExitProfile(SharedMemoryModel):
     ``WINDOW``, which can be opened/closed to affect traversal and room comfort.
     """
 
+    # ObjectDB by design (#2608): exit↔ObjectDB extension bridge — Evennia exits
+    # have no concrete model besides ObjectDB.
     objectdb = models.OneToOneField(
         _OBJECTDB_MODEL,
         on_delete=models.CASCADE,

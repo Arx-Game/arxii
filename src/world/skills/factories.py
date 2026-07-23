@@ -60,7 +60,7 @@ class CharacterSkillValueFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterSkillValue
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     skill = factory.SubFactory(SkillFactory)
     value = 20
     development_points = 0
@@ -73,7 +73,7 @@ class CharacterSpecializationValueFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterSpecializationValue
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     specialization = factory.SubFactory(SpecializationFactory)
     value = 10
     development_points = 0
@@ -112,7 +112,7 @@ class TrainingAllocationFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = TrainingAllocation
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     skill = factory.SubFactory(SkillFactory)
     specialization = None
     mentor = None

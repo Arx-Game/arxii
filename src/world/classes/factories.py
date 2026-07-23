@@ -34,7 +34,7 @@ class CharacterClassLevelFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterClassLevel
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     character_class = factory.SubFactory(CharacterClassFactory)
     level = factory.Faker("random_int", min=1, max=10)
     is_primary = False

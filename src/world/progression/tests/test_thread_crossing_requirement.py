@@ -14,7 +14,6 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassFactory
 from world.classes.services import stage_for_level
@@ -191,7 +190,8 @@ class CheckRequirementsForThreadCrossingTests(TestCase):
         cls.template = ItemTemplateFactory()
 
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character)
 
     def test_fail_open_no_requirements(self) -> None:

@@ -22,7 +22,8 @@ if TYPE_CHECKING:
 def current_path_for_character(character: ObjectDB) -> Path | None:  # noqa: OBJECTDB_PARAM
     """Return the Path from the latest CharacterPathHistory row, or None."""
     history = (
-        CharacterPathHistory.objects.filter(character=character)
+        # pk filter: callers pass the ObjectDB; the FK targets CharacterSheet (PK-shared).
+        CharacterPathHistory.objects.filter(character_id=character.pk)
         .select_related("path")
         .order_by("-selected_at")
         .first()

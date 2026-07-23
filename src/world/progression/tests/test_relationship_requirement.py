@@ -43,7 +43,8 @@ class RelationshipRequirementBoundaryTierTests(TestCase):
         cls.track = _make_track_with_tiers("Trust")
 
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.other_sheet = CharacterSheetFactory()
 
@@ -114,7 +115,8 @@ class RelationshipRequirementTrackKindTests(TestCase):
         cls.respect_track = _make_track_with_tiers("Respect2")
 
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.other_sheet = CharacterSheetFactory()
         self.relationship = CharacterRelationshipFactory(
@@ -161,7 +163,8 @@ class RelationshipRequirementMinimumCountTests(TestCase):
         cls.track_b = _make_track_with_tiers("TrackB")
 
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.other_sheet = CharacterSheetFactory()
         self.relationship = CharacterRelationshipFactory(
@@ -210,7 +213,8 @@ class RelationshipRequirementNoLeakTests(TestCase):
         cls.track = _make_track_with_tiers("Secretive")
 
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.other_sheet = CharacterSheetFactory(character=CharacterFactory(db_key="OtherParty"))
 

@@ -36,7 +36,7 @@ class DeathKudosTests(TestCase):
         cls.character.db_account = cls.recipient_account
         cls.character.save(update_fields=["db_account"])
         CharacterXP.objects.create(
-            character=cls.character,
+            character=cls.character.sheet_data,
             total_earned=LIFETIME_SPENT,
             total_spent=LIFETIME_SPENT,
         )

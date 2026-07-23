@@ -42,7 +42,7 @@ class SetCharacterGoalsAction(Action):
         if not goals:
             return ActionResult(success=False, message="No goals provided.")
         try:
-            created = set_character_goals(character=actor, goals=goals)
+            created = set_character_goals(character=actor.sheet_data, goals=goals)
         except GoalError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
@@ -77,7 +77,7 @@ class LogGoalProgressAction(Action):
         if not title or not content:
             return ActionResult(success=False, message="A title and content are required.")
         journal = log_goal_progress(
-            character=actor,
+            character=actor.sheet_data,
             domain=kwargs.get("domain"),
             title=title,
             content=content,

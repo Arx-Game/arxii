@@ -29,7 +29,7 @@ def _set_primary_level(sheet, level: int) -> None:
     """Helper: give sheet.character a primary CharacterClassLevel at the given level."""
     char_class = CharacterClassFactory()
     CharacterClassLevelFactory(
-        character=sheet.character,
+        character=sheet,
         character_class=char_class,
         level=level,
         is_primary=True,
@@ -294,7 +294,7 @@ class BondLifecycleHealthRecomputeTests(TestCase):
 
         sheet = CharacterSheetFactory()
         CharacterClassLevelFactory(
-            character=sheet.character,
+            character=sheet,
             character_class=self.char_class,
             level=level,
             is_primary=True,

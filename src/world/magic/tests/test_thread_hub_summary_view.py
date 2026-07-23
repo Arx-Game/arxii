@@ -268,7 +268,7 @@ class ThreadHubSummaryPickerDataTests(APITestCase):
         )
         CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=cls.trait_unlock)
         CharacterTraitValueFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             trait=cls.trait,
             value=30,  # display_value = 3.0
         )

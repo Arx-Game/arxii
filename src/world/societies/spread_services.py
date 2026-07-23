@@ -144,7 +144,7 @@ def spread_check_modifiers(character, specialization=None) -> int:
     ensure_spread_skills()
     skill = specialization.parent_skill if specialization else _ensure_skill(PERFORMANCE_SKILL_NAME)
     skill_value = (
-        CharacterSkillValue.objects.filter(character=character, skill=skill)
+        CharacterSkillValue.objects.filter(character_id=character.pk, skill=skill)
         .values_list("value", flat=True)
         .first()
     )
@@ -152,7 +152,7 @@ def spread_check_modifiers(character, specialization=None) -> int:
     if specialization is not None:
         spec_value = (
             CharacterSpecializationValue.objects.filter(
-                character=character, specialization=specialization
+                character_id=character.pk, specialization=specialization
             )
             .values_list("value", flat=True)
             .first()

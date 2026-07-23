@@ -1172,7 +1172,7 @@ def make_court_with_mission(
 
     def _set_primary_level(sheet: object, level: int) -> None:
         CharacterClassLevelFactory(
-            character=sheet.character,
+            character=sheet,
             character_class=CharacterClassFactory(),
             level=level,
             is_primary=True,

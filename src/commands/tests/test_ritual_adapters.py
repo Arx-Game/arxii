@@ -304,12 +304,12 @@ class DuranceAdapterTests(TestCase):
         self.potential.parent_paths.add(self.prospect)
         self.inductee = CharacterSheetFactory()
         CharacterClassLevelFactory(
-            character=self.inductee.character,
+            character=self.inductee,
             character_class=CharacterClassFactory(),
             level=2,
             is_primary=True,
         )
-        CharacterPathHistory.objects.create(character=self.inductee.character, path=self.prospect)
+        CharacterPathHistory.objects.create(character=self.inductee, path=self.prospect)
 
     def test_durance_adapter_parses_testament_and_path(self) -> None:
         from commands.ritual_adapters import DuranceAdapter

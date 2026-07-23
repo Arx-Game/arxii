@@ -74,7 +74,7 @@ class SceneMagicTestMixin:
 
         presence_trait = Trait.objects.get(name="presence")
         CharacterTraitValue.objects.create(
-            character=cls.initiator.character_sheet.character,
+            character=cls.initiator.character_sheet,
             trait=presence_trait,
             value=30,
         )

@@ -58,7 +58,7 @@ from world.traits.factories import CheckOutcomeFactory
 def _level_sheet(sheet, level):
     """Give ``sheet`` a CharacterClassLevel so _character_level reads ``level``."""
     CharacterClassLevelFactory(
-        character=sheet.character, character_class=CharacterClassFactory(), level=level
+        character=sheet, character_class=CharacterClassFactory(), level=level
     )
     return sheet
 

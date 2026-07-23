@@ -50,12 +50,12 @@ class DuranceStatusHubTests(TestCase):
         self.sheet = CharacterSheetFactory(character=self.char)
         self.char_class = CharacterClassFactory()
         CharacterClassLevelFactory(
-            character=self.char,
+            character=self.sheet,
             character_class=self.char_class,
             level=2,
             is_primary=True,
         )
-        CharacterPathHistoryFactory(character=self.char, path=self.path)
+        CharacterPathHistoryFactory(character=self.sheet, path=self.path)
         # Authored unlock for level 3.
         ClassLevelUnlock.objects.create(
             character_class=self.char_class,
@@ -125,12 +125,12 @@ class DuranceXPUnlockReadinessLineTests(TestCase):
         self.sheet = CharacterSheetFactory(character=self.char)
         self.char_class = CharacterClassFactory()
         CharacterClassLevelFactory(
-            character=self.char,
+            character=self.sheet,
             character_class=self.char_class,
             level=2,
             is_primary=True,
         )
-        CharacterPathHistoryFactory(character=self.char, path=self.path)
+        CharacterPathHistoryFactory(character=self.sheet, path=self.path)
         self.unlock = ClassLevelUnlock.objects.create(
             character_class=self.char_class,
             target_level=3,
@@ -144,7 +144,7 @@ class DuranceXPUnlockReadinessLineTests(TestCase):
 
     def test_shows_purchased_when_receipt_exists(self) -> None:
         CharacterUnlock.objects.create(
-            character=self.char,
+            character=self.sheet,
             character_class=self.char_class,
             target_level=3,
         )
@@ -162,7 +162,7 @@ class DuranceXPUnlockReadinessLineTests(TestCase):
         self.assertNotIn("You are ready to advance", combined_unpurchased)
 
         CharacterUnlock.objects.create(
-            character=self.char,
+            character=self.sheet,
             character_class=self.char_class,
             target_level=3,
         )
@@ -227,12 +227,12 @@ class DuranceIntentTests(TestCase):
         self.char = CharacterFactory(db_key="IntentChar")
         self.sheet = CharacterSheetFactory(character=self.char)
         CharacterClassLevelFactory(
-            character=self.char,
+            character=self.sheet,
             character_class=CharacterClassFactory(),
             level=2,
             is_primary=True,
         )
-        CharacterPathHistoryFactory(character=self.char, path=self.path)
+        CharacterPathHistoryFactory(character=self.sheet, path=self.path)
         # A child path the character can declare intent for.
         self.child_path = PathFactory(name="Shadow Thorn", stage=PathStage.POTENTIAL)
         self.path.child_paths.add(self.child_path)

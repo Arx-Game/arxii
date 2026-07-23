@@ -53,13 +53,13 @@ _ORATION = "I have stood in the crucible and I am ready."
 
 def _wire_path(sheet, path) -> None:
     """Record *path* as the character's current path via CharacterPathHistory."""
-    CharacterPathHistory.objects.create(character=sheet.character, path=path)
+    CharacterPathHistory.objects.create(character=sheet, path=path)
 
 
 def _set_primary_level(sheet, *, character_class, level: int) -> None:
     """Give sheet.character a primary CharacterClassLevel at *level*."""
     CharacterClassLevelFactory(
-        character=sheet.character,
+        character=sheet,
         character_class=character_class,
         level=level,
         is_primary=True,
@@ -91,7 +91,7 @@ class DuranceE2ESingleInducteeTests(TestCase):
             target_level=3,
         )
         CharacterUnlock.objects.create(
-            character=self.inductee_sheet.character,
+            character=self.inductee_sheet,
             character_class=self.inductee_class,
             target_level=3,
         )
@@ -211,7 +211,7 @@ class DuranceE2EMultiInducteeTests(TestCase):
         ClassLevelUnlock.objects.create(character_class=self.shared_class, target_level=3)
         for inductee in (self.inductee_a, self.inductee_b):
             CharacterUnlock.objects.create(
-                character=inductee.character,
+                character=inductee,
                 character_class=self.shared_class,
                 target_level=3,
             )

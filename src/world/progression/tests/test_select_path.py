@@ -44,7 +44,8 @@ def _run(cmd_cls, caller, args=""):
 
 class SelectInitialPathServiceTests(TestCase):
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character, primary_persona=False)
         self.path = PathFactory(stage=PathStage.PROSPECT)
 
@@ -53,7 +54,7 @@ class SelectInitialPathServiceTests(TestCase):
         self.assertEqual(current_path_for_character(self.character), self.path)
 
     def test_raises_when_a_path_is_already_on_record(self) -> None:
-        CharacterPathHistoryFactory(character=self.character, path=self.path)
+        CharacterPathHistoryFactory(character=self.sheet, path=self.path)
         other_path = PathFactory(stage=PathStage.PROSPECT)
         with self.assertRaises(PathAlreadySelectedError):
             select_initial_path(self.character, other_path)
@@ -72,7 +73,8 @@ class SelectInitialPathServiceTests(TestCase):
 
 class SelectPathActionTests(TestCase):
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character, primary_persona=False)
         self.path = PathFactory(stage=PathStage.PROSPECT)
 
@@ -88,7 +90,7 @@ class SelectPathActionTests(TestCase):
         self.assertIsNone(current_path_for_character(self.character))
 
     def test_fails_when_already_selected(self) -> None:
-        CharacterPathHistoryFactory(character=self.character, path=self.path)
+        CharacterPathHistoryFactory(character=self.sheet, path=self.path)
         other_path = PathFactory(stage=PathStage.PROSPECT)
         result = SelectPathAction().run(actor=self.character, path_id=other_path.pk)
         self.assertFalse(result.success)
@@ -138,7 +140,8 @@ class DuranceSelectPathCommandTests(TestCase):
 class SelectPathAPIBaseTests(TestCase):
     def setUp(self) -> None:
         self.account = AccountFactory()
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character, primary_persona=False)
         self.path = PathFactory(stage=PathStage.PROSPECT)
 
@@ -186,7 +189,7 @@ class SelectPathPostTests(SelectPathAPIBaseTests):
     @patch("world.progression.views.SelectPathViewSet._get_character")
     def test_post_fails_when_already_selected(self, mock_get_char: object) -> None:
         mock_get_char.return_value = self.character
-        CharacterPathHistoryFactory(character=self.character, path=self.path)
+        CharacterPathHistoryFactory(character=self.sheet, path=self.path)
         other_path = PathFactory(stage=PathStage.PROSPECT)
         response = self.client.post(URL, {"path_id": other_path.pk}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST

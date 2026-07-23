@@ -205,7 +205,7 @@ class CmdTraining(DispatchCommand):
         from world.skills.models import TrainingAllocation  # noqa: PLC0415
         from world.skills.services import skills_at_boundary  # noqa: PLC0415
 
-        allocations = TrainingAllocation.objects.filter(character=self.caller).select_related(
+        allocations = TrainingAllocation.objects.filter(character_id=self.caller.pk).select_related(
             "skill",
             "specialization",
             "mentor",

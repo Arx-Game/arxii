@@ -205,13 +205,13 @@ class TraitResolverTests(TestCase):
 
         cls.strength = StatTraitFactory(name="strength")
         CharacterTraitValueFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             trait=cls.strength,
             value=45,
         )
         cls.sewing = SkillTraitFactory(name="sewing")
         CharacterTraitValueFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             trait=cls.sewing,
             value=20,
         )
@@ -243,9 +243,11 @@ class CharacterLevelResolverTests(TestCase):
         cls.sheet = CharacterSheetFactory(character=cls.character)
         # Two class assignments — current_level = max() = 7
         char_class = CharacterClassFactory()
-        CharacterClassLevelFactory(character=cls.character, character_class=char_class, level=3)
         CharacterClassLevelFactory(
-            character=cls.character,
+            character=cls.character.sheet_data, character_class=char_class, level=3
+        )
+        CharacterClassLevelFactory(
+            character=cls.character.sheet_data,
             character_class=CharacterClassFactory(),
             level=7,
         )

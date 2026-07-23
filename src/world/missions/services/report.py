@@ -118,7 +118,7 @@ def reporter_can_embellish(reporter: ObjectDB) -> bool:
     from world.skills.models import CharacterSkillValue  # noqa: PLC0415
 
     return CharacterSkillValue.objects.filter(
-        character=reporter, skill__trait__name__iexact="Persuasion", value__gt=0
+        character_id=reporter.pk, skill__trait__name__iexact="Persuasion", value__gt=0
     ).exists()
 
 
@@ -128,7 +128,7 @@ def _manipulation_specialization(reporter: ObjectDB) -> Specialization | None:
 
     held = (
         CharacterSpecializationValue.objects.filter(
-            character=reporter, specialization__name__iexact="Manipulation", value__gt=0
+            character_id=reporter.pk, specialization__name__iexact="Manipulation", value__gt=0
         )
         .select_related("specialization")
         .first()

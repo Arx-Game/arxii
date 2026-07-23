@@ -654,7 +654,7 @@ class ThreadViewSetTests(APITestCase):
 
         # Wire a CharacterTraitValue so compute_anchor_cap returns a real number.
         CharacterTraitValueFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             trait=self.trait,
             value=3,
         )

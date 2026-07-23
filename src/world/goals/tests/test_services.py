@@ -126,7 +126,7 @@ class GetGoalBonusTest(TestCase):
     def test_base_bonus_no_modifiers(self):
         """Base goal points returned without percentage modifiers."""
         CharacterGoalFactory(
-            character=self.character,
+            character=self.character_sheet,
             domain=self.needs_domain,
             points=10,
         )
@@ -137,7 +137,7 @@ class GetGoalBonusTest(TestCase):
     def test_zero_points_returns_zero(self):
         """Zero base points returns zero regardless of multipliers."""
         CharacterGoalFactory(
-            character=self.character,
+            character=self.character_sheet,
             domain=self.needs_domain,
             points=0,
         )
@@ -153,12 +153,12 @@ class GetGoalBonusTest(TestCase):
     def test_rapacious_applies_all_percent(self):
         """Rapacious +50% applies to all goal bonuses."""
         CharacterGoalFactory(
-            character=self.character,
+            character=self.character_sheet,
             domain=self.needs_domain,
             points=10,
         )
         CharacterGoalFactory(
-            character=self.character,
+            character=self.character_sheet,
             domain=self.standing_domain,
             points=8,
         )
@@ -182,12 +182,12 @@ class GetGoalBonusTest(TestCase):
     def test_voracious_applies_needs_only(self):
         """Voracious applies only to Needs goals."""
         CharacterGoalFactory(
-            character=self.character,
+            character=self.character_sheet,
             domain=self.needs_domain,
             points=10,
         )
         CharacterGoalFactory(
-            character=self.character,
+            character=self.character_sheet,
             domain=self.standing_domain,
             points=8,
         )
@@ -211,7 +211,7 @@ class GetGoalBonusTest(TestCase):
     def test_voracious_rank_scaling(self):
         """Voracious scales with rank: +100/200/300%."""
         CharacterGoalFactory(
-            character=self.character,
+            character=self.character_sheet,
             domain=self.needs_domain,
             points=10,
         )
@@ -231,7 +231,7 @@ class GetGoalBonusTest(TestCase):
     def test_combined_all_and_domain_modifiers(self):
         """All percent and domain percent stack additively."""
         CharacterGoalFactory(
-            character=self.character,
+            character=self.character_sheet,
             domain=self.needs_domain,
             points=10,
         )
@@ -367,7 +367,7 @@ class GetGoalBonusesBreakdownTest(TestCase):
     def test_breakdown_includes_all_domains(self):
         """Breakdown includes all goal domains."""
         CharacterGoalFactory(
-            character=self.character,
+            character=self.character_sheet,
             domain=self.needs_domain,
             points=10,
         )
@@ -382,7 +382,7 @@ class GetGoalBonusesBreakdownTest(TestCase):
     def test_breakdown_shows_percent_modifiers(self):
         """Breakdown shows percentage modifiers."""
         CharacterGoalFactory(
-            character=self.character,
+            character=self.character_sheet,
             domain=self.needs_domain,
             points=10,
         )
@@ -409,7 +409,7 @@ class ApplyGoalTests(TestCase):
         cls.character_sheet = CharacterSheetFactory()
         cls.character = cls.character_sheet.character
         cls.domain = GoalDomainFactory(name="vengeance")
-        cls.goal = CharacterGoalFactory(character=cls.character, domain=cls.domain, points=10)
+        cls.goal = CharacterGoalFactory(character=cls.character_sheet, domain=cls.domain, points=10)
 
     def test_apply_returns_bonus_and_records(self):
         from world.goals.models import GoalApplication
@@ -437,7 +437,9 @@ class ApplyGoalTests(TestCase):
         from world.goals.services import apply_goal
 
         other_domain = GoalDomainFactory(name="legacy")
-        other_goal = CharacterGoalFactory(character=self.character, domain=other_domain, points=5)
+        other_goal = CharacterGoalFactory(
+            character=self.character_sheet, domain=other_domain, points=5
+        )
         apply_goal(self.goal)
         with self.assertRaises(ValidationError):
             apply_goal(other_goal)  # one budget per character, not per goal

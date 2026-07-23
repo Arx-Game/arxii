@@ -118,7 +118,7 @@ def compute_gift_unlock_xp_cost(unlock: GiftUnlock, learner: CharacterSheet) -> 
     if not unlock_paths:
         return unlock.xp_cost
 
-    learner_paths = {h.path for h in learner.character.path_history.select_related("path")}
+    learner_paths = {h.path for h in learner.path_history.select_related("path")}
     if learner_paths & unlock_paths:
         return unlock.xp_cost
 
@@ -171,7 +171,7 @@ def spend_xp_on_gift_unlock(
         amount=-xp_cost,
         reason=ProgressionReason.XP_PURCHASE,
         description=f"Gift unlock: {unlock.gift.name}",
-        character=learner.character,
+        character=learner,
         gm=None,
     )
 

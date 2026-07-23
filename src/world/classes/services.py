@@ -59,14 +59,15 @@ def set_primary_class_level(  # noqa: OBJECTDB_PARAM
     from world.classes.models import CharacterClassLevel  # noqa: PLC0415
     from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
 
-    CharacterClassLevel.objects.filter(character=character, is_primary=True).exclude(
+    sheet = character.sheet_data
+    CharacterClassLevel.objects.filter(character=sheet, is_primary=True).exclude(
         character_class=character_class
     ).update(is_primary=False)
     CharacterClassLevel.flush_instance_cache()
     ccl, _ = CharacterClassLevel.objects.update_or_create(
-        character=character,
+        character=sheet,
         character_class=character_class,
         defaults={"level": level, "is_primary": True},
     )
-    recompute_max_health_with_threads(character.sheet_data)
+    recompute_max_health_with_threads(sheet)
     return ccl

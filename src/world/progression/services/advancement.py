@@ -48,10 +48,12 @@ def primary_class_level(character: ObjectDB) -> CharacterClassLevel | None:  # n
     """
     from world.classes.models import CharacterClassLevel as _CharacterClassLevel
 
-    primary = _CharacterClassLevel.objects.filter(character=character, is_primary=True).first()
+    primary = _CharacterClassLevel.objects.filter(
+        character_id=character.pk, is_primary=True
+    ).first()
     if primary is not None:
         return primary
-    return _CharacterClassLevel.objects.filter(character=character).order_by("-level").first()
+    return _CharacterClassLevel.objects.filter(character_id=character.pk).order_by("-level").first()
 
 
 def apply_class_level_advance(sheet: CharacterSheet, *, level_after: int) -> None:
@@ -102,7 +104,7 @@ def cross_into_path(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
 
         raise PathRequirementsNotMet(path_name=path.name, failed_messages=failed_messages)
 
-    CharacterPathHistory.objects.create(character=sheet.character, path=path)
+    CharacterPathHistory.objects.create(character=sheet, path=path)
     return grant_path_magic(sheet, path)
 
 
@@ -135,7 +137,7 @@ def select_initial_path(character: ObjectDB, path: Path) -> CharacterPathHistory
 
     if current_path_for_character(character) is not None:
         raise PathAlreadySelectedError
-    return CharacterPathHistory.objects.create(character=character, path=path)
+    return CharacterPathHistory.objects.create(character=character.sheet_data, path=path)
 
 
 # =============================================================================
@@ -342,7 +344,7 @@ def _assert_unlock_purchased(character: ObjectDB, unlock: ClassLevelUnlock) -> N
     from world.progression.models import CharacterUnlock
 
     purchased = CharacterUnlock.objects.filter(
-        character=character,
+        character=character.sheet_data,
         character_class=unlock.character_class,
         target_level=unlock.target_level,
     ).exists()

@@ -105,7 +105,7 @@ class GrantPathMagicTests(TestCase):
         result = cross_into_path(sheet, self.path)
 
         self.assertTrue(
-            CharacterPathHistory.objects.filter(character=sheet.character, path=self.path).exists()
+            CharacterPathHistory.objects.filter(character=sheet, path=self.path).exists()
         )
         self.assertEqual(
             {t.pk for t in result.granted_techniques}, {self.tech_a.pk, self.tech_b.pk}

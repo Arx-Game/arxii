@@ -383,7 +383,7 @@ class DeriveBaseMaxHealthTest(TestCase):
 
         # Primary class at level 4 so effective_combat_level returns 4.
         cls.char_class = CharacterClassLevelFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             level=4,
             is_primary=True,
         ).character_class
@@ -441,7 +441,7 @@ class RecomputeMaxHealthTest(TestCase):
 
         # Primary class at level 4: effective_combat_level returns 4.
         cls.char_class = CharacterClassLevelFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             level=4,
             is_primary=True,
         ).character_class

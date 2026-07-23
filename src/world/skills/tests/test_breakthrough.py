@@ -33,7 +33,7 @@ class BoundaryPlateauTests(TestCase):
     def test_boundary_rusty_skill_rust_paid_surplus_dissipates_with_message(self) -> None:
         """At a boundary, incoming dev points pay off rust; surplus dissipates loudly."""
         skill_value = CharacterSkillValueFactory(
-            character=self.character,
+            character=self.identity,
             skill=self.skill,
             value=19,
             development_points=0,
@@ -51,7 +51,7 @@ class BoundaryPlateauTests(TestCase):
     def test_boundary_clean_skill_all_dissipates_with_message(self) -> None:
         """At a boundary with no rust, all incoming dev points dissipate loudly."""
         skill_value = CharacterSkillValueFactory(
-            character=self.character,
+            character=self.identity,
             skill=self.skill,
             value=19,
             development_points=0,
@@ -66,7 +66,7 @@ class BoundaryPlateauTests(TestCase):
     def test_boundary_rust_fully_absorbs_dev_points_no_message(self) -> None:
         """When rust payoff exactly consumes the award, nothing dissipates — no message."""
         skill_value = CharacterSkillValueFactory(
-            character=self.character,
+            character=self.identity,
             skill=self.skill,
             value=19,
             development_points=0,
@@ -81,7 +81,7 @@ class BoundaryPlateauTests(TestCase):
     def test_overflow_on_level_up_to_boundary_dissipates_with_message(self) -> None:
         """Overflow from a level-up that lands exactly on a boundary dissipates loudly."""
         skill_value = CharacterSkillValueFactory(
-            character=self.character,
+            character=self.identity,
             skill=self.skill,
             value=18,
             development_points=0,
@@ -97,7 +97,7 @@ class BoundaryPlateauTests(TestCase):
     def test_not_at_boundary_unaffected(self) -> None:
         """Away from a boundary, dev points accumulate normally with no message."""
         skill_value = CharacterSkillValueFactory(
-            character=self.character,
+            character=self.identity,
             skill=self.skill,
             value=11,
             development_points=0,
@@ -119,12 +119,12 @@ class SkillsAtBoundaryTests(TestCase):
         self.character = self.identity.character
 
     def test_empty_when_no_skills_gated(self) -> None:
-        CharacterSkillValueFactory(character=self.character, skill=SkillFactory(), value=15)
+        CharacterSkillValueFactory(character=self.identity, skill=SkillFactory(), value=15)
         self.assertEqual(skills_at_boundary(self.character), [])
 
     def test_reports_gated_skill_without_authored_unlock(self) -> None:
         skill = SkillFactory()
-        CharacterSkillValueFactory(character=self.character, skill=skill, value=19)
+        CharacterSkillValueFactory(character=self.identity, skill=skill, value=19)
         prospects = skills_at_boundary(self.character)
         self.assertEqual(len(prospects), 1)
         self.assertEqual(prospects[0].skill, skill)
@@ -134,7 +134,7 @@ class SkillsAtBoundaryTests(TestCase):
 
     def test_reports_authored_xp_cost(self) -> None:
         skill = SkillFactory()
-        CharacterSkillValueFactory(character=self.character, skill=skill, value=19)
+        CharacterSkillValueFactory(character=self.identity, skill=skill, value=19)
         chart = XPCostChart.objects.create(name="Test Breakthrough Chart")
         XPCostEntry.objects.create(chart=chart, level=20, xp_cost=100)
         TraitXPCost.objects.create(trait=skill.trait, cost_chart=chart)
@@ -168,19 +168,19 @@ class PurchaseSkillBreakthroughTests(TestCase):
         ExperiencePointsDataFactory(account=self.account, total_earned=total_earned, total_spent=0)
 
     def test_fails_when_not_at_boundary(self) -> None:
-        CharacterSkillValueFactory(character=self.character, skill=self.skill, value=15)
+        CharacterSkillValueFactory(character=self.identity, skill=self.skill, value=15)
         success, message = purchase_skill_breakthrough(self.character, self.skill)
         self.assertFalse(success)
         self.assertIn("not at a breakthrough boundary", message.lower())
 
     def test_fails_when_no_unlock_authored(self) -> None:
-        CharacterSkillValueFactory(character=self.character, skill=self.skill, value=19)
+        CharacterSkillValueFactory(character=self.identity, skill=self.skill, value=19)
         success, message = purchase_skill_breakthrough(self.character, self.skill)
         self.assertFalse(success)
         self.assertIn("no breakthrough authored", message.lower())
 
     def test_fails_with_insufficient_xp(self) -> None:
-        CharacterSkillValueFactory(character=self.character, skill=self.skill, value=19)
+        CharacterSkillValueFactory(character=self.identity, skill=self.skill, value=19)
         self._authored_unlock(target_rating=20, xp_cost=100)
         self._set_xp(total_earned=50)
 
@@ -192,7 +192,7 @@ class PurchaseSkillBreakthroughTests(TestCase):
         """A successful purchase clears the gate; training resumes from zero (no retroactive
         credit) even if development_points is nonzero at purchase time."""
         skill_value = CharacterSkillValueFactory(
-            character=self.character,
+            character=self.identity,
             skill=self.skill,
             value=19,
             development_points=0,
@@ -221,7 +221,7 @@ class PurchaseSkillBreakthroughTests(TestCase):
     def test_duplicate_purchase_fails_once_cleared(self) -> None:
         """A second purchase attempt fails — the skill is no longer at a boundary."""
         CharacterSkillValueFactory(
-            character=self.character,
+            character=self.identity,
             skill=self.skill,
             value=19,
             development_points=0,

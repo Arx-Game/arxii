@@ -52,7 +52,9 @@ class RunCraftingRecipeTests(TestCase):
         install_full_lab_station(room_profile)
 
     def _set_skill(self, value: int) -> None:
-        CharacterTraitValueFactory(character=self.character, trait=_enchanting_trait(), value=value)
+        CharacterTraitValueFactory(
+            character=self.character.sheet_data, trait=_enchanting_trait(), value=value
+        )
 
     def _facet(self):
         from world.magic.factories import FacetFactory

@@ -45,7 +45,7 @@ class SmearActionTests(TestCase):
             name="Gossip", parent_skill__trait__name="Persuasion"
         )
         CharacterSpecializationValueFactory(
-            character=cls.smearer, specialization=gossip_spec, value=10
+            character=cls.smearer_entry.character_sheet, specialization=gossip_spec, value=10
         )
         cls.target_sheet = CharacterSheetFactory()
 

@@ -192,7 +192,9 @@ def get_development_suggestions_for_character(character: ObjectDB) -> dict[str, 
     }
 
     # Get character's current trait values
-    trait_values = character.trait_values.all()
+    from world.traits.models import CharacterTraitValue
+
+    trait_values = CharacterTraitValue.objects.filter(character_id=character.pk)
     trait_dict = {tv.trait.name: tv.value for tv in trait_values}
 
     # Get all developable traits

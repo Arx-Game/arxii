@@ -77,7 +77,7 @@ class CharacterItemDataHandler(BaseItemDataHandler):
             from world.classes.models import CharacterClassLevel
 
             self._classes_cache = list(
-                CharacterClassLevel.objects.filter(character=self.obj)
+                CharacterClassLevel.objects.filter(character_id=self.obj.pk)
                 .select_related("character_class")
                 .order_by("-is_primary", "-level", "character_class__name"),
             )

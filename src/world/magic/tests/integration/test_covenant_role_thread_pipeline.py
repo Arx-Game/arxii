@@ -34,7 +34,7 @@ class CovenantRoleThreadHappyPathTests(TestCase):
 
         # 2. Set current_level=5 via a CharacterClassLevel row (kept for context;
         #    current_level is no longer read by the anchor cap formula).
-        CharacterClassLevelFactory(character=cls.sheet.character, level=5)
+        CharacterClassLevelFactory(character=cls.sheet, level=5)
         cls.sheet.invalidate_class_level_cache()
 
         # 3. Covenant (level=1, factory default) + CovenantRole.

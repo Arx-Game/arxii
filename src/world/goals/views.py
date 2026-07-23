@@ -71,15 +71,16 @@ class CharacterGoalViewSet(CharacterContextMixin, viewsets.ViewSet):
         character = self._get_character(request)
         if not character:
             return Response({"detail": "No character found."}, status=status.HTTP_404_NOT_FOUND)
+        sheet = character.sheet_data
 
-        goals = CharacterGoal.objects.filter(character=character).select_related("domain")
+        goals = CharacterGoal.objects.filter(character=sheet).select_related("domain")
         total_points = sum(g.points for g in goals)
 
         # Read-only (2026-07 audit): this list GET used get_or_create, a DB write
         # inside a GET (breaks read-replica/caching assumptions and, worse, a
         # brand-new character was created with last_revised_at=now, so they
         # couldn't revise for a week). A missing revision means never-revised.
-        revision = GoalRevision.objects.filter(character=character).first()
+        revision = GoalRevision.objects.filter(character=sheet).first()
 
         data = {
             "goals": CharacterGoalSerializer(goals, many=True).data,
@@ -123,7 +124,7 @@ class CharacterGoalViewSet(CharacterContextMixin, viewsets.ViewSet):
         if not result.success:
             # Preserve the revision-too-soon shape (with next_revision_at) for the web.
             if result.message == GoalError.REVISION_TOO_SOON:
-                revision, _ = GoalRevision.objects.get_or_create(character=character)
+                revision, _ = GoalRevision.objects.get_or_create(character=character.sheet_data)
                 next_revision = revision.last_revised_at + timedelta(weeks=1)
                 return Response(
                     {"detail": "Cannot revise goals yet.", "next_revision_at": next_revision},
@@ -131,9 +132,11 @@ class CharacterGoalViewSet(CharacterContextMixin, viewsets.ViewSet):
                 )
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
 
-        goals = CharacterGoal.objects.filter(character=character).select_related("domain")
+        goals = CharacterGoal.objects.filter(character=character.sheet_data).select_related(
+            "domain"
+        )
         total_points = sum(g.points for g in goals)
-        revision = GoalRevision.objects.get(character=character)
+        revision = GoalRevision.objects.get(character=character.sheet_data)
         return Response(
             {
                 "goals": CharacterGoalSerializer(goals, many=True).data,
@@ -169,7 +172,7 @@ class GoalJournalViewSet(CharacterContextMixin, viewsets.ViewSet):
             return Response({"detail": "No character found."}, status=status.HTTP_404_NOT_FOUND)
 
         journals = (
-            GoalJournal.objects.filter(character=character)
+            GoalJournal.objects.filter(character=character.sheet_data)
             .select_related("domain")
             .order_by("-created_at")
         )

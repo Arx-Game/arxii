@@ -1,5 +1,6 @@
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.traits.models import Trait, TraitCategory, TraitType
 
 
@@ -95,14 +96,14 @@ class CharacterSkillValueModelTests(TestCase):
         )
 
     def setUp(self):
-        from evennia_extensions.factories import CharacterFactory
         from world.skills.models import CharacterSkillValue, Skill
 
         # Flush SharedMemoryModel caches to prevent test pollution
         CharacterSkillValue.flush_instance_cache()
         Skill.flush_instance_cache()
 
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
 
     def test_character_skill_value_creation(self):
@@ -110,7 +111,7 @@ class CharacterSkillValueModelTests(TestCase):
         from world.skills.models import CharacterSkillValue
 
         csv = CharacterSkillValue.objects.create(
-            character=self.character,
+            character=self.sheet,
             skill=self.skill,
             value=20,
         )
@@ -123,7 +124,7 @@ class CharacterSkillValueModelTests(TestCase):
         from world.skills.models import CharacterSkillValue
 
         csv = CharacterSkillValue.objects.create(
-            character=self.character,
+            character=self.sheet,
             skill=self.skill,
             value=25,
         )
@@ -136,13 +137,13 @@ class CharacterSkillValueModelTests(TestCase):
         from world.skills.models import CharacterSkillValue
 
         CharacterSkillValue.objects.create(
-            character=self.character,
+            character=self.sheet,
             skill=self.skill,
             value=10,
         )
         with self.assertRaises(IntegrityError):
             CharacterSkillValue.objects.create(
-                character=self.character,
+                character=self.sheet,
                 skill=self.skill,
                 value=20,
             )
@@ -158,7 +159,6 @@ class CharacterSpecializationValueModelTests(TestCase):
         )
 
     def setUp(self):
-        from evennia_extensions.factories import CharacterFactory
         from world.skills.models import (
             CharacterSpecializationValue,
             Skill,
@@ -170,7 +170,8 @@ class CharacterSpecializationValueModelTests(TestCase):
         Skill.flush_instance_cache()
         Specialization.flush_instance_cache()
 
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
         self.spec = Specialization.objects.get_or_create(
             name="Swords",
@@ -182,7 +183,7 @@ class CharacterSpecializationValueModelTests(TestCase):
         from world.skills.models import CharacterSpecializationValue
 
         csw = CharacterSpecializationValue.objects.create(
-            character=self.character,
+            character=self.sheet,
             specialization=self.spec,
             value=10,
         )
@@ -195,7 +196,7 @@ class CharacterSpecializationValueModelTests(TestCase):
         from world.skills.models import CharacterSpecializationValue
 
         csw = CharacterSpecializationValue.objects.create(
-            character=self.character,
+            character=self.sheet,
             specialization=self.spec,
             value=15,
         )

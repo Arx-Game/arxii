@@ -124,7 +124,7 @@ class GMAdjudicationActionsTestBase(TestCase):
         self.condition_template = ConditionTemplateFactory(name="Adjudication Winded")
 
         CharacterTraitValue.objects.get_or_create(
-            character=self.target, trait=self.check_trait, defaults={"value": 30}
+            character=self.target.sheet_data, trait=self.check_trait, defaults={"value": 30}
         )
 
 
@@ -393,7 +393,7 @@ class GMAwardActionTests(GMAdjudicationActionsTestBase):
             amount=5,
             description="training montage",
         )
-        self.assertTrue(result.success)
+        self.assertTrue(result.success, result.message)
         dp = DevelopmentPoints.objects.get(
             character_sheet=self.target.sheet_data, trait=self.dev_trait
         )
