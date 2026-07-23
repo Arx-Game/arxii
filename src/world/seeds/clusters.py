@@ -332,14 +332,6 @@ def _seed_gm() -> None:
     GMRewardConfig.load()
 
 
-def _seed_covenant_roles() -> None:
-    from world.seeds.game_content.covenant_roles import (  # noqa: PLC0415
-        seed_role_catalog_content,
-    )
-
-    seed_role_catalog_content()
-
-
 def _seed_skills() -> None:
     from world.seeds.game_content.skills import (  # noqa: PLC0415
         seed_skill_breakthrough_catalog,
@@ -522,10 +514,6 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # allow_custom_stakes, allow_global_scope_authoring per GMLevel), so a fresh
     # deploy's staff-review gates aren't silently maximally-restrictive (#2000).
     "gm": _seed_gm,
-    # Covenant role catalog: granted gifts + techniques + capabilities +
-    # archetype action scaling for the 3 canonical roles (#2022). After "items"
-    # (creates the role rows + gear compat) and "magic" (EffectType/Style/Gift).
-    "covenant_roles": _seed_covenant_roles,
     # Propaganda: PLACEHOLDER campaign-tier catalog for the money→prestige
     # project kind (#1621).
     "propaganda": _seed_propaganda,
@@ -751,9 +739,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "kinship": [Kinsperson],
         # Houses: the landed demo house; represented by Title (#1884).
         "houses": [Title],
-        # Covenant role catalog: granted gifts + techniques + capabilities +
-        # archetype scaling for the 3 canonical roles (#2022).
-        "covenant_roles": [],
         # Propaganda: the PLACEHOLDER campaign-tier catalog (#1621).
         "propaganda": [PropagandaCampaignTier],
         # Skill breakthroughs: default TraitRatingUnlock catalog at every skill's

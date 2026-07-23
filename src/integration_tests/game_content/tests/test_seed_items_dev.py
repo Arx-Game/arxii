@@ -1,8 +1,8 @@
 """Idempotency tests for seed_items_dev() and seed_facet_thread_unlock().
 
 Verifies:
-1. seed_items_dev() creates ItemTemplate, TemplateSlot, GearArchetypeCompatibility,
-   and CovenantRole rows with correct counts on first call.
+1. seed_items_dev() creates ItemTemplate and TemplateSlot rows with correct
+   counts on first call.
 2. A second call produces zero new DB writes (idempotent).
 3. seed_facet_thread_unlock() creates exactly one ThreadWeavingUnlock for FACET kind.
 4. A second call to seed_facet_thread_unlock() is a no-op.
@@ -18,7 +18,6 @@ from integration_tests.game_content.magic import (
     FacetThreadUnlockResult,
     seed_facet_thread_unlock,
 )
-from world.covenants.models import CovenantRole, GearArchetypeCompatibility
 from world.items.models import ItemTemplate, TemplateSlot
 
 
@@ -40,35 +39,6 @@ class SeedItemsDevCreationTests(TestCase):
     def test_template_slots_created(self) -> None:
         """At least one slot per template; total > 10 (multi-slot templates exist)."""
         self.assertGreater(TemplateSlot.objects.count(), 10)
-
-    def test_three_covenant_roles_created(self) -> None:
-        self.assertEqual(CovenantRole.objects.count(), 3)
-
-    def test_compatibility_matrix_has_eleven_rows(self) -> None:
-        """Sword × 5, Shield × 3, Crown × 3 = 11 compat rows."""
-        self.assertEqual(len(self.result.compatibility.compatibilities), 11)
-        self.assertEqual(GearArchetypeCompatibility.objects.count(), 11)
-
-    def test_sword_role_blend(self) -> None:
-        """The seeded sword role is placeholder-pure: sword_weight=1, others 0."""
-        role = self.result.compatibility.sword_role
-        self.assertEqual(role.sword_weight, 1)
-        self.assertEqual(role.shield_weight, 0)
-        self.assertEqual(role.crown_weight, 0)
-
-    def test_shield_role_blend(self) -> None:
-        """The seeded shield role is placeholder-pure: shield_weight=1, others 0."""
-        role = self.result.compatibility.shield_role
-        self.assertEqual(role.sword_weight, 0)
-        self.assertEqual(role.shield_weight, 1)
-        self.assertEqual(role.crown_weight, 0)
-
-    def test_crown_role_blend(self) -> None:
-        """The seeded crown role is placeholder-pure: crown_weight=1, others 0."""
-        role = self.result.compatibility.crown_role
-        self.assertEqual(role.sword_weight, 0)
-        self.assertEqual(role.shield_weight, 0)
-        self.assertEqual(role.crown_weight, 1)
 
     def test_template_archetype_keys_match_constants(self) -> None:
         """templates dict keys are actual GearArchetype values (not label strings)."""
@@ -97,8 +67,6 @@ class SeedItemsDevIdempotencyTests(TestCase):
         seed_items_dev()
         cls.template_count = ItemTemplate.objects.count()
         cls.slot_count = TemplateSlot.objects.count()
-        cls.compat_count = GearArchetypeCompatibility.objects.count()
-        cls.role_count = CovenantRole.objects.count()
 
     def test_double_call_templates_no_duplicates(self) -> None:
         seed_items_dev()
@@ -107,14 +75,6 @@ class SeedItemsDevIdempotencyTests(TestCase):
     def test_double_call_slots_no_duplicates(self) -> None:
         seed_items_dev()
         self.assertEqual(TemplateSlot.objects.count(), self.slot_count)
-
-    def test_double_call_compat_no_duplicates(self) -> None:
-        seed_items_dev()
-        self.assertEqual(GearArchetypeCompatibility.objects.count(), self.compat_count)
-
-    def test_double_call_roles_no_duplicates(self) -> None:
-        seed_items_dev()
-        self.assertEqual(CovenantRole.objects.count(), self.role_count)
 
 
 class SeedFacetThreadUnlockCreationTests(TestCase):

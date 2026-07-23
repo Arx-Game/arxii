@@ -341,9 +341,9 @@ class CovenantRiteRolePackageFlowIntegrationTest(TestCase):
         # Seed the canonical content (idempotent).
         self.rite = wire_covenant_rite_content()
 
-        # Fetch the seeded canonical roles.
-        self.sword_role: CovenantRole = CovenantRole.objects.get(slug="sword-vanguard")
-        self.shield_role: CovenantRole = CovenantRole.objects.get(slug="shield-bulwark")
+        # Fetch the seeded reference-rite roles.
+        self.sword_role: CovenantRole = CovenantRole.objects.get(slug="oath-rite-sword-role")
+        self.shield_role: CovenantRole = CovenantRole.objects.get(slug="oath-rite-shield-role")
 
         # Covenant at level 2 (satisfies rite.min_covenant_level=2; gives Fury I to Sword).
         self.room = ObjectDBFactory(
