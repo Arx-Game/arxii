@@ -26419,9 +26419,10 @@ export interface components {
     MethodEnum: 'machine' | 'gm_pick';
     /**
      * @description * `allure` - Allure
+     *     * `menace` - Menace
      * @enum {string}
      */
-    MetricEnum: 'allure';
+    MetricEnum: 'allure' | 'menace';
     /**
      * @description * `none` - None
      *     * `low` - Low
@@ -27413,6 +27414,7 @@ export interface components {
        * @description Which number of the served character the band reads.
        *
        *     * `allure` - Allure
+       *     * `menace` - Menace
        */
       metric: components['schemas']['MetricEnum'];
       /** @description Line applies from this value up (highest floor <= value wins). May be negative for a 'bottom' band. */
@@ -27430,6 +27432,7 @@ export interface components {
        * @description Which number of the served character the band reads.
        *
        *     * `allure` - Allure
+       *     * `menace` - Menace
        */
       metric: components['schemas']['MetricEnum'];
       /** @description Line applies from this value up (highest floor <= value wins). May be negative for a 'bottom' band. */
@@ -31700,6 +31703,7 @@ export interface components {
        * @description Which number of the served character the band reads.
        *
        *     * `allure` - Allure
+       *     * `menace` - Menace
        */
       metric?: components['schemas']['MetricEnum'];
       /** @description Line applies from this value up (highest floor <= value wins). May be negative for a 'bottom' band. */
