@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("combat", "0059_combatopponent_creature_template_and_more"),
         ("conditions", "0023_conditioninstance_source_vow"),
-        ("covenants", "0047_alter_vowsituationalperkrung_extra_situation_and_more"),
+        ("covenants", "0049_add_hold_family_situations"),
     ]
 
     operations = [
