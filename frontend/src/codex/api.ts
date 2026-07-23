@@ -64,6 +64,14 @@ export async function searchEntries(query: string): Promise<CodexEntryListItem[]
   return res.json();
 }
 
+export async function getFeaturedEntries(): Promise<CodexEntryListItem[]> {
+  const res = await apiFetch(`${BASE_URL}/entries/?featured=true`);
+  if (!res.ok) {
+    throw new Error('Failed to load featured entries');
+  }
+  return res.json();
+}
+
 export async function getSubjectChildren(subjectId: number): Promise<CodexSubjectTreeNode[]> {
   const res = await apiFetch(`${BASE_URL}/subjects/${subjectId}/children/`);
   if (!res.ok) {

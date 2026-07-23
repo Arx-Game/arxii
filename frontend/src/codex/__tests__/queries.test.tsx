@@ -12,6 +12,7 @@ import {
   useCodexTree,
   useCodexEntries,
   useCodexEntry,
+  useFeaturedCodexEntries,
   useCodexSearch,
   codexKeys,
 } from '../queries';
@@ -22,7 +23,9 @@ vi.mock('../api', () => ({
   getEntry: vi.fn(),
   searchEntries: vi.fn(),
   getEntries: vi.fn(),
+  getFeaturedEntries: vi.fn(),
   getSubjects: vi.fn(),
+  getSubjectChildren: vi.fn(),
 }));
 
 import * as api from '../api';
@@ -181,6 +184,36 @@ describe('Codex Query Hooks', () => {
 
       expect(result.current.data).toEqual(mockEntries);
       expect(api.getEntries).toHaveBeenCalledWith(5);
+    });
+  });
+
+  describe('useFeaturedCodexEntries', () => {
+    it('fetches featured entries', async () => {
+      const mockEntries = [
+        {
+          id: 1,
+          name: 'The Gifted',
+          summary: 'Those who carry magic',
+          is_public: true,
+          is_featured: true,
+          featured_order: 1,
+          subject: 1,
+          subject_name: 'The World',
+          subject_path: [],
+          display_order: 1,
+          knowledge_status: null,
+          art_url: null,
+        },
+      ];
+      vi.mocked(api.getFeaturedEntries).mockResolvedValue(mockEntries);
+
+      const { result } = renderHook(() => useFeaturedCodexEntries(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toEqual(mockEntries);
+      expect(api.getFeaturedEntries).toHaveBeenCalledTimes(1);
     });
   });
 

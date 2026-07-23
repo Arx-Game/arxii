@@ -7,6 +7,7 @@ import {
   getCodexTree,
   getEntry,
   getEntries,
+  getFeaturedEntries,
   searchEntries,
   getSubject,
   getSubjectChildren,
@@ -18,6 +19,7 @@ export const codexKeys = {
   subject: (id: number) => [...codexKeys.all, 'subject', id] as const,
   subjectChildren: (id: number) => [...codexKeys.all, 'subject', id, 'children'] as const,
   entries: (subjectId?: number) => [...codexKeys.all, 'entries', subjectId] as const,
+  featured: () => [...codexKeys.all, 'featured'] as const,
   entry: (id: number) => [...codexKeys.all, 'entry', id] as const,
   search: (query: string) => [...codexKeys.all, 'search', query] as const,
 };
@@ -35,6 +37,15 @@ export function useCodexEntries(subjectId?: number) {
   return useQuery({
     queryKey: codexKeys.entries(subjectId),
     queryFn: () => getEntries(subjectId),
+    throwOnError: true,
+  });
+}
+
+export function useFeaturedCodexEntries() {
+  return useQuery({
+    queryKey: codexKeys.featured(),
+    queryFn: getFeaturedEntries,
+    staleTime: 5 * 60 * 1000, // 5 minutes — codex content changes rarely
     throwOnError: true,
   });
 }
