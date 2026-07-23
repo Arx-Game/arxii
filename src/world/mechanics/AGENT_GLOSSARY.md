@@ -88,8 +88,11 @@ totalled via `mechanics.services.get_modifier_total(sheet, target)`. Canonical r
 - **allure** — social hotness; feeds attraction conditions (`world/seeds/social_relationships.py`,
   Attractive distinction ranks grant it) and any "how good do they look" read
   (e.g. NPC reaction-line bands, `npc_services.reactions`).
-- A fear-facing sibling (intimidation-check analogue of allure) is ruled-but-unnamed;
-  when ApostateCD names it, seed it the same way and list it here.
+- **menace** — the fear-facing sibling (named by ApostateCD 2026-07-23); feeds
+  Intimidation checks via its check-scoped ``target_check_type`` (the #767/#512
+  check-contribution seam carries character + equipment + fashion menace into the
+  roll); seeded in ``world/seeds/social_checks.ensure_menace_target``. Clothing/
+  cosmetics/distinctions grant it exactly like allure.
 Bare/unknown `ModifierSource` rows contribute NOTHING to totals (#909) — grants must
 ride a recognized source (distinction effect, achievement reward, comfort, equipment).
 _Avoid_: inventing an "Allure" Trait/skill row; it is a modifier target.
