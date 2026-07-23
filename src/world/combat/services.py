@@ -803,6 +803,20 @@ class CombatTechniqueResolver:
                 source_character=caster_od,
             )
         )
+        # Technique treatment (#2668): perform bounded-mend treatments on resolved
+        # targets. Fires BEFORE remove_technique_conditions. No-op when the
+        # technique has no treatment rows.
+        from world.magic.services.condition_application import (  # noqa: PLC0415
+            apply_technique_treatments,
+        )
+
+        apply_technique_treatments(
+            technique=technique,
+            success_level=check_result.success_level,
+            targets_by_kind=targets_by_kind,
+            source_character=caster_od,
+            scene=self.participant.encounter.scene,
+        )
         # Dispel/cleanse sibling (#1585): strip technique-authored conditions from
         # the same resolved targets. No-op when the technique has no
         # removed_conditions rows.
