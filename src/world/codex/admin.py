@@ -109,7 +109,13 @@ class CodexEntryAdmin(admin.ModelAdmin):
                 "this entry documents.",
             },
         ),
-        ("Display", {"fields": ("display_order", "is_public"), "classes": ["collapse"]}),
+        (
+            "Display",
+            {
+                "fields": ("display_order", "is_public", "is_featured", "featured_order"),
+                "classes": ["collapse"],
+            },
+        ),
     )
     autocomplete_fields = ["modifier_target", "art"]
 

@@ -40,6 +40,18 @@ class CodexAPITestCase(TestCase):
             is_public=True,
         )
 
+        # Create featured public entry
+        cls.featured_entry = CodexEntryFactory(
+            subject=cls.subject,
+            name="Featured Entry",
+            summary="Featured summary",
+            lore_content="Featured lore content",
+            mechanics_content="Featured mechanics content",
+            is_public=True,
+            is_featured=True,
+            featured_order=1,
+        )
+
         # Create restricted entry
         cls.restricted_entry = CodexEntryFactory(
             subject=cls.subject,
@@ -127,6 +139,21 @@ class TestCodexEntryAPI(CodexAPITestCase):
         names = [e["name"] for e in data]
         assert "Public Entry" in names
         assert "Restricted Entry" not in names
+
+    def test_featured_filter_returns_only_featured_public(self):
+        """?featured=true returns only featured public entries, ordered by featured_order."""
+        response = self.client.get("/api/codex/entries/?featured=true")
+        assert response.status_code == status.HTTP_200_OK
+        names = [e["name"] for e in response.data]
+        assert "Featured Entry" in names
+        assert "Public Entry" not in names  # public but not featured
+
+    def test_featured_field_in_list_serializer(self):
+        """List serializer includes is_featured and featured_order."""
+        response = self.client.get("/api/codex/entries/")
+        featured = next(e for e in response.data if e["name"] == "Featured Entry")
+        assert featured["is_featured"] is True
+        assert featured["featured_order"] == 1
 
     def test_retrieve_public_entry_anonymous(self):
         """Anonymous users can retrieve public entry with content."""

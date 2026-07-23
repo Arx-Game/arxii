@@ -57,6 +57,8 @@ class CodexEntryFactory(DjangoModelFactory):
     learn_difficulty = 10
     learn_threshold = 10
     display_order = factory.Sequence(lambda n: n)
+    is_public = False
+    is_featured = False
 
 
 class CharacterCodexKnowledgeFactory(DjangoModelFactory):
