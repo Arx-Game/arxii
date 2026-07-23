@@ -20,7 +20,7 @@ Replaces default Evennia web interface with custom React implementation while ma
 
 ### Lore Interface
 
-- **`LoreTabs.tsx`**: Game lore and documentation tabs
+- **`FeaturedLore.tsx`**: Data-driven lore teasers — fetches featured public codex entries via `useFeaturedCodexEntries()` and renders expandable accordion cards (#2430).
 
 ### API Integration
 
