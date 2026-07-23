@@ -167,7 +167,7 @@ modules import combat/checks contexts at function level, never the reverse):
 
 - **`constants.py`** — `Situation`/`PerkEffectKind`/`PerkBeneficiary`/`SituationOriginSide`
   `TextChoices`, plus the `SituationParamSpec`/`SITUATION_PARAM_SPECS` contract (#2623,
-  ADR-0154). `Situation` ships 15 values as of #2646: slice 1's 9 plus
+  ADR-0154). `Situation` ships 22 values as of #2664: slice 1's 9 plus
   `CHAMPION_DUEL` (Battle wiring, Task 3), `COMBAT_OPENED_FROM_PARLEY`/`AMBUSH_UNDERWAY`
   (origin-marker addition, Task 4), `ALLY_INTERCEPTED_FOR_ME` (declared-guard, Task 5), and
   `ATTACKER_AFFINITY` (defense-side seam, Task 6; originally Abyssal-only, renamed and
@@ -189,7 +189,7 @@ modules import combat/checks contexts at function level, never the reverse):
   for the full field contract and the missing-field-returns-False convention.
 - **`evaluators.py`** — `SITUATION_EVALUATORS` registry (`register(situation)` decorator,
   mirrors `magic.services.power_terms`'s `_PROVIDERS` registry pattern) + one evaluator per
-  `Situation` value (15 as of #2646). Every evaluator is a pure read (one query or a
+  `Situation` value (22 as of #2664). Every evaluator is a pure read (one query or a
   cached-handler read, never a write, never a query per situation-per-perk).
 - **`services.py`** — `applicable_perks(subject, *, effect_kind, resolution, target, attacker=None)
   -> list[FiredPerk]`, the beneficiary evaluation point every delivery seam calls (see the
