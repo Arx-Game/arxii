@@ -382,6 +382,17 @@ class CovenantRole(NaturalKeyMixin, AbstractSpecializedVariant, SharedMemoryMode
             "(#2646)."
         ),
     )
+    reveals_weakness = models.BooleanField(
+        default=False,
+        help_text=(
+            "#2665: the Sage vow's boss-reading rider. A character with an "
+            "engaged membership in this role (or one of its sub-roles, which "
+            "ride the parent's grant like every other role-scoped flag in this "
+            "table) may create a weakness-selection when their PERCEPTION-tagged "
+            "technique cast resolves against a BOSS-tier opponent — once per "
+            "encounter (CombatParticipant.weakness_reading_used)."
+        ),
+    )
 
     objects = CovenantRoleManager()
 
@@ -2154,6 +2165,69 @@ class InsightTableEntry(NaturalKeyMixin, SharedMemoryModel):
 
     class Meta:
         ordering = ["name"]
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class WeaknessPoolEntryManager(NaturalKeyManager):
+    """Manager for WeaknessPoolEntry with natural key support."""
+
+
+class WeaknessPoolEntry(NaturalKeyMixin, SharedMemoryModel):
+    """One authored candidate weakness for a specific boss (#2665).
+
+    The Sage's successful reading creates a PendingSelection whose options
+    are the active WeaknessPoolEntry rows for the boss's CreatureTemplate.
+    The player chooses one; its condition is applied to the boss as a
+    standing enemy-side state for the rest of the encounter.
+
+    Entries are lore-repo content (natural key ``name``, registered in
+    ``core_management.content_export.CONTENT_MODELS``) — **never seeded in
+    arxii**; authored in the companion lore commit.
+    Tests build rows via ``WeaknessPoolEntryFactory`` only.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Curated weakness name, e.g. 'Armor Crack' or 'Fear of Flame'.",
+    )
+    creature_template = models.ForeignKey(
+        "combat.CreatureTemplate",
+        on_delete=models.CASCADE,
+        related_name="weakness_pool_entries",
+        help_text="The boss this weakness belongs to.",
+    )
+    prose = models.TextField(
+        help_text=(
+            "The announced reading when this weakness is actualized. "
+            "Supports {caster}/{target} placeholders."
+        ),
+    )
+    condition = models.ForeignKey(
+        CONDITION_TEMPLATE_MODEL,
+        on_delete=models.PROTECT,
+        related_name="weakness_pool_entries",
+        help_text=(
+            "The standing effect this weakness applies to the boss when "
+            "actualized. Author as a persistent condition (no duration or "
+            "a very long one) — the weakness stands for the rest of the "
+            "encounter."
+        ),
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive entries are excluded from the pool without deleting them.",
+    )
+
+    objects = WeaknessPoolEntryManager()
+
+    class Meta:
+        ordering = ["creature_template", "name"]
 
     class NaturalKeyConfig:
         fields = ["name"]

@@ -28,6 +28,7 @@ from world.combat.models import (
     EngagementLock,
     EscalationCurve,
     OpponentTierTemplate,
+    PendingSelection,
     RiskScalingModifier,
     StakesLevelRequirement,
     StrainConfig,
@@ -488,3 +489,11 @@ class EngagementLockAdmin(admin.ModelAdmin):
         "opponent__name",
         "participant__character_sheet__character__db_key",
     )
+
+
+@admin.register(PendingSelection)
+class PendingSelectionAdmin(admin.ModelAdmin):
+    list_display = ("selection_type", "participant", "encounter", "is_resolved")
+    list_filter = ("selection_type",)
+    readonly_fields = ("created_at", "resolved_at")
+    autocomplete_fields = ("participant", "encounter", "target_opponent")

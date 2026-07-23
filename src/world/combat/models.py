@@ -3,6 +3,7 @@
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
@@ -48,6 +49,7 @@ from world.combat.constants import (
     PaceMode,
     ParticipantStatus,
     RiskLevel,
+    SelectionType,
     StakesLevel,
     StrikeDelivery,
     SurgeTriggerKind,
@@ -485,6 +487,18 @@ class CombatOpponent(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="opponents",
+    )
+    creature_template = models.ForeignKey(
+        "combat.CreatureTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="spawned_opponents",
+        help_text=(
+            "The bestiary template this opponent was spawned from (#2665). "
+            "Stamped in spawn_from_creature_template so the weakness-reading "
+            "rider can look up the boss's WeaknessPoolEntry rows."
+        ),
     )
     status = models.CharField(
         max_length=20,
@@ -1165,6 +1179,15 @@ class CombatParticipant(SharedMemoryModel):
             "#2645: True once this participant has produced their once-per-encounter "
             "Insight (the Know need's ace). A per-encounter row needs no reset "
             "machinery — a fresh encounter mints a fresh CombatParticipant."
+        ),
+    )
+    weakness_reading_used = models.BooleanField(
+        default=False,
+        help_text=(
+            "#2665: True once this participant has produced their once-per-encounter "
+            "weakness reading (the Sage vow's boss-reading rider). A per-encounter "
+            "row needs no reset machinery — a fresh encounter mints a fresh "
+            "CombatParticipant."
         ),
     )
     sent_flying_damage = models.PositiveIntegerField(
@@ -3414,3 +3437,79 @@ class EngagementLock(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"EngagementLock(opp={self.opponent_id}→pc={self.participant_id} [{self.status}])"
+
+
+# =============================================================================
+# PendingSelection model (#2665) — generic deferred player choice in combat.
+# The combat round is synchronous; a rider creates a PendingSelection and the
+# player resolves it out-of-band via the ``select`` command. First consumer:
+# the Sage's weakness reading. Future consumers: tarot mage, etc.
+# =============================================================================
+
+
+class PendingSelection(SharedMemoryModel):
+    """A deferred player choice created during combat resolution (#2665).
+
+    The combat round is synchronous — it cannot pause for a player prompt.
+    Instead, a rider creates a PendingSelection; the player resolves it
+    out-of-band via the ``select`` command (telnet) or web endpoint.
+
+    The first consumer is the Sage's weakness reading: on a successful
+    PERCEPTION cast against a boss, the rider creates a PendingSelection
+    whose options are the boss's active WeaknessPoolEntry rows. The player
+    chooses one; ``resolve_weakness_selection`` applies the chosen entry's
+    condition to the boss.
+    """
+
+    participant = models.ForeignKey(
+        COMBAT_PARTICIPANT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="pending_selections",
+    )
+    encounter = models.ForeignKey(
+        COMBAT_ENCOUNTER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="pending_selections",
+    )
+    selection_type = models.CharField(
+        max_length=30,
+        choices=SelectionType.choices,
+        help_text="Discriminates which resolver handles this selection.",
+    )
+    options_json = models.JSONField(
+        help_text=(
+            "Array of option objects: [{id, label, description}]. "
+            "The id is the value the player passes to ``select``."
+        ),
+    )
+    selected_option_id = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text="The chosen option's id, set when the player resolves.",
+    )
+    source_content_type = models.ForeignKey(
+        "contenttypes.ContentType",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    source_object_id = models.PositiveIntegerField(null=True, blank=True)
+    source_object = GenericForeignKey("source_content_type", "source_object_id")
+    target_opponent = models.ForeignKey(
+        "combat.CombatOpponent",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="pending_selections",
+        help_text="The boss opponent this selection targets (weakness reading).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def is_resolved(self) -> bool:
+        return self.resolved_at is not None
+
+    def __str__(self) -> str:
+        return f"PendingSelection({self.selection_type}, resolved={self.is_resolved})"

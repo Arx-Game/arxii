@@ -16,6 +16,7 @@ from world.covenants.models import (
     VowSituationalPerk,
     VowSituationalPerkRung,
     VowSituationalPerkSituation,
+    WeaknessPoolEntry,
 )
 
 
@@ -159,3 +160,11 @@ class VowSituationalPerkAdmin(admin.ModelAdmin):
     # valid. raw_id_fields has no such registration requirement.
     raw_id_fields = ("mission_category", "mission_template")
     inlines = [VowSituationalPerkSituationInline, VowSituationalPerkRungInline]
+
+
+@admin.register(WeaknessPoolEntry)
+class WeaknessPoolEntryAdmin(admin.ModelAdmin):
+    list_display = ("name", "creature_template", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("name", "creature_template__name")
+    autocomplete_fields = ("creature_template", "condition")
