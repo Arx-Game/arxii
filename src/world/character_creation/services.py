@@ -608,7 +608,7 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
         from world.progression.models import CharacterPathHistory  # noqa: PLC0415
 
         CharacterPathHistory.objects.create(
-            character=character,
+            character=character.sheet_data,
             path=draft.selected_path,
         )
 

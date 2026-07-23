@@ -798,6 +798,13 @@ class CharacterSheet(SharedMemoryModel):
         )
 
     @cached_property
+    def cached_path_history(self) -> list:
+        """CharacterPathHistory rows, newest first — ``to_attr`` target for the
+        shared ``path_history`` prefetch; falls back to a fresh query unprefetched
+        (the ratified shared-interface cached_property pattern)."""
+        return list(self.path_history.select_related("path").order_by("-selected_at"))
+
+    @cached_property
     def cached_character_class_levels(self) -> list[CharacterClassLevel]:
         """All CharacterClassLevel records for this character's ObjectDB.
 
