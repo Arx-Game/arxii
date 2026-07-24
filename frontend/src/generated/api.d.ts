@@ -3002,7 +3002,7 @@ export interface paths {
      *
      *     Empty list until both params resolve to a draft with tradition + path selected.
      *     Delegates to ``world.magic.services.cg_catalog.get_technique_options``; each
-     *     returned row's ``is_signature`` reflects membership in the tradition's curated
+     *     returned row's ``is_tradition_technique`` reflects membership in the tradition's curated
      *     signature set (as opposed to the path's starter pool).
      */
     get: operations['character_creation_technique_options_list'];
@@ -3031,7 +3031,7 @@ export interface paths {
      *
      *     Empty list until both params resolve to a draft with tradition + path selected.
      *     Delegates to ``world.magic.services.cg_catalog.get_technique_options``; each
-     *     returned row's ``is_signature`` reflects membership in the tradition's curated
+     *     returned row's ``is_tradition_technique`` reflects membership in the tradition's curated
      *     signature set (as opposed to the path's starter pool).
      */
     get: operations['character_creation_technique_options_retrieve'];
@@ -21305,8 +21305,8 @@ export interface components {
      *
      *     Backs ``GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>``
      *     — the pool ∪ signature availability set for one (path, gift, tradition) pick
-     *     (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_signature``
-     *     is resolved from the ``signature_technique_ids`` set the ViewSet places in the
+     *     (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_tradition_technique``
+     *     is resolved from the ``tradition_technique_ids`` set the ViewSet places in the
      *     serializer context — never attached to the (SharedMemoryModel) ``Technique``
      *     instance itself, to avoid leaking one request's filtered flag into another's
      *     cached row (see the ``required_distinction_id`` comment above).
@@ -21320,7 +21320,7 @@ export interface components {
       readonly category: string;
       readonly codex_entry_id: number | null;
       /** @description True when this technique came from the tradition's signature set. */
-      readonly is_signature: boolean;
+      readonly is_tradition_technique: boolean;
     };
     /**
      * @description Read/response serializer for CanonReview (#2003).
