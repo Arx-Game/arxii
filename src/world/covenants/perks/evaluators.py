@@ -37,6 +37,9 @@ from world.covenants.perks.constants import Situation, SituationOriginSide
 from world.covenants.perks.context import SituationContext, SituationParams
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from typeclasses.characters import Character
     from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
     from world.conditions.models import ConditionInstance
     from world.magic.models.aura import CharacterAura
@@ -104,6 +107,24 @@ def _resolution_participant(resolution: object | None) -> CombatParticipant | No
     instead of repeating the raw ``getattr`` at each of them.
     """
     return getattr(resolution, "participant", None)  # noqa: GETATTR_LITERAL
+
+
+def _resolve_companion_owner_character(objdb: ObjectDB | None) -> Character | None:
+    """If objdb is a companion's ObjectDB, return the companion's owner's Character.
+
+    Returns None when objdb is not a companion object or the companion has no
+    owner. Used by provenance evaluators to bridge companion-applied conditions
+    back to the owner for covenant-mate scoping (#2666).
+    """
+    if objdb is None:
+        return None
+    from world.companions.models import Companion  # noqa: PLC0415
+
+    try:
+        companion = Companion.objects.get(objectdb=objdb)
+    except Companion.DoesNotExist:
+        return None
+    return companion.owner.character
 
 
 def _melee_state(ctx: SituationContext) -> bool | None:
@@ -278,7 +299,10 @@ def target_swayed_by_ally(ctx: SituationContext, params: SituationParams) -> boo
     holder_character = ctx.holder.character
     if applier == holder_character:
         return True
-    return bool(applier.shares_covenant_with(holder_character))
+    # Companion-as-mate bridge: a companion's condition counts as the owner's (#2666).
+    companion_owner = _resolve_companion_owner_character(applier)
+    effective_applier = companion_owner if companion_owner is not None else applier
+    return bool(effective_applier.shares_covenant_with(holder_character))
 
 
 def _target_declared_action(ctx: SituationContext) -> CombatRoundAction | None:
@@ -1111,7 +1135,10 @@ def shielded_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  #
     holder_character = ctx.holder.character
     if applier == holder_character:
         return True
-    return bool(applier.shares_covenant_with(holder_character))
+    # Companion-as-mate bridge: a companion's condition counts as the owner's (#2666).
+    companion_owner = _resolve_companion_owner_character(applier)
+    effective_applier = companion_owner if companion_owner is not None else applier
+    return bool(effective_applier.shares_covenant_with(holder_character))
 
 
 @register(Situation.TARGET_IS_MARKED_BY_ALLY)
