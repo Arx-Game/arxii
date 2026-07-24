@@ -168,13 +168,15 @@ class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="tradition_grants",
     )
-    signature_techniques = models.ManyToManyField(
+    special_techniques = models.ManyToManyField(
         "magic.Technique",
         blank=True,
         related_name="granted_by_tradition_gifts",
         help_text=(
-            "Curated subset of this gift's techniques available to characters "
-            "picking this gift under this tradition."
+            "Techniques special to this tradition for this gift — additive "
+            "extras on top of the path's starter pool. Empty = no "
+            "tradition-specific extras. For partial-depth access, list only "
+            "the restricted subset the tradition offers."
         ),
     )
 
@@ -200,18 +202,14 @@ class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
     def clean(self) -> None:
         super().clean()
         # M2M rows are only queryable once the grant row exists (admin / test
-        # save-then-validate). Every signature technique must belong to this gift.
+        # save-then-validate). Every special technique must belong to this gift.
         if self.pk:
-            mismatched = [t for t in self.signature_techniques.all() if t.gift_id != self.gift_id]
+            mismatched = [t for t in self.special_techniques.all() if t.gift_id != self.gift_id]
             if mismatched:
                 from django.core.exceptions import ValidationError  # noqa: PLC0415
 
                 raise ValidationError(
-                    {
-                        "signature_techniques": (
-                            "Every signature technique must belong to this gift."
-                        )
-                    }
+                    {"special_techniques": ("Every special technique must belong to this gift.")}
                 )
 
 

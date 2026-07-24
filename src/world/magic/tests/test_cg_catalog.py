@@ -28,8 +28,8 @@ class TechniqueOptionsTest(TestCase):
         path_grant.starter_techniques.set(cls.pool_techniques)
 
         tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
-        cls.signature_technique = TechniqueFactory(gift=cls.gift)
-        tradition_grant.signature_techniques.set([cls.signature_technique])
+        cls.special_technique = TechniqueFactory(gift=cls.gift)
+        tradition_grant.special_techniques.set([cls.special_technique])
 
         # A second tradition has an authored grant row but no signature techniques.
         TraditionGiftGrantFactory(tradition=cls.other_tradition, gift=cls.gift)
@@ -38,13 +38,13 @@ class TechniqueOptionsTest(TestCase):
         options = get_technique_options(self.path, self.gift, self.tradition)
 
         self.assertCountEqual(options.pool, self.pool_techniques)
-        self.assertEqual(options.signature, [self.signature_technique])
+        self.assertEqual(options.tradition, [self.special_technique])
 
     def test_pool_present_signature_empty_for_other_tradition(self):
         options = get_technique_options(self.path, self.gift, self.other_tradition)
 
         self.assertCountEqual(options.pool, self.pool_techniques)
-        self.assertEqual(options.signature, [])
+        self.assertEqual(options.tradition, [])
 
     def test_no_grant_rows_returns_empty_options(self):
         unlinked_path = PathFactory()
@@ -53,7 +53,7 @@ class TechniqueOptionsTest(TestCase):
         options = get_technique_options(unlinked_path, self.gift, unlinked_tradition)
 
         self.assertEqual(options.pool, [])
-        self.assertEqual(options.signature, [])
+        self.assertEqual(options.tradition, [])
 
 
 class GiftOptionsTest(TestCase):

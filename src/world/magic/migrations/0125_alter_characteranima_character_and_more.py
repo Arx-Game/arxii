@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("character_sheets", "0013_charactersheet_durance_cohort_and_more"),
-        ("magic", "0123_techniquedrafttreatment"),
+        ("magic", "0124_remove_traditiongiftgrant_signature_techniques_and_more"),
     ]
 
     operations = [

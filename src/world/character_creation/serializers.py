@@ -304,9 +304,9 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
     """Technique row for the CG technique-options list (#2426).
 
     Backs ``GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>``
-    — the pool ∪ signature availability set for one (path, gift, tradition) pick
-    (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_signature``
-    is resolved from the ``signature_technique_ids`` set the ViewSet places in the
+    — the pool ∪ tradition availability set for one (path, gift, tradition) pick
+    (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_tradition_technique``
+    is resolved from the ``tradition_technique_ids`` set the ViewSet places in the
     serializer context — never attached to the (SharedMemoryModel) ``Technique``
     instance itself, to avoid leaking one request's filtered flag into another's
     cached row (see the ``required_distinction_id`` comment above).
@@ -314,16 +314,23 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
 
     category = serializers.CharField(source="effect_type.category", read_only=True)
     codex_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
-    is_signature = serializers.SerializerMethodField()
+    is_tradition_technique = serializers.SerializerMethodField()
 
     class Meta:
         model = Technique
-        fields = ["id", "name", "description", "category", "codex_entry_id", "is_signature"]
+        fields = [
+            "id",
+            "name",
+            "description",
+            "category",
+            "codex_entry_id",
+            "is_tradition_technique",
+        ]
         read_only_fields = fields
 
-    def get_is_signature(self, obj: Technique) -> bool:
-        """True when this technique came from the tradition's signature set."""
-        return obj.id in self.context.get("signature_technique_ids", set())
+    def get_is_tradition_technique(self, obj: Technique) -> bool:
+        """True when this technique came from the tradition's special technique set."""
+        return obj.id in self.context.get("tradition_technique_ids", set())
 
 
 class CGGlimpseTagSuggestedDistinctionSerializer(serializers.ModelSerializer):

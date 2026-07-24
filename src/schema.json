@@ -4483,8 +4483,8 @@ paths:
 
         Empty list until both params resolve to a draft with tradition + path selected.
         Delegates to ``world.magic.services.cg_catalog.get_technique_options``; each
-        returned row's ``is_signature`` reflects membership in the tradition's curated
-        signature set (as opposed to the path's starter pool).
+        returned row's ``is_tradition_technique`` reflects membership in the tradition's curated
+        special technique set (as opposed to the path's starter pool).
       parameters:
       - in: query
         name: draft_id
@@ -4520,8 +4520,8 @@ paths:
 
         Empty list until both params resolve to a draft with tradition + path selected.
         Delegates to ``world.magic.services.cg_catalog.get_technique_options``; each
-        returned row's ``is_signature`` reflects membership in the tradition's curated
-        signature set (as opposed to the path's starter pool).
+        returned row's ``is_tradition_technique`` reflects membership in the tradition's curated
+        special technique set (as opposed to the path's starter pool).
       parameters:
       - in: path
         name: id
@@ -35512,9 +35512,9 @@ components:
         Technique row for the CG technique-options list (#2426).
 
         Backs ``GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>``
-        — the pool ∪ signature availability set for one (path, gift, tradition) pick
-        (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_signature``
-        is resolved from the ``signature_technique_ids`` set the ViewSet places in the
+        — the pool ∪ tradition availability set for one (path, gift, tradition) pick
+        (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_tradition_technique``
+        is resolved from the ``tradition_technique_ids`` set the ViewSet places in the
         serializer context — never attached to the (SharedMemoryModel) ``Technique``
         instance itself, to avoid leaking one request's filtered flag into another's
         cached row (see the ``required_distinction_id`` comment above).
@@ -35537,17 +35537,17 @@ components:
           type: integer
           readOnly: true
           nullable: true
-        is_signature:
+        is_tradition_technique:
           type: boolean
-          description: True when this technique came from the tradition's signature
-            set.
+          description: True when this technique came from the tradition's special
+            technique set.
           readOnly: true
       required:
       - category
       - codex_entry_id
       - description
       - id
-      - is_signature
+      - is_tradition_technique
       - name
     CanonReview:
       type: object

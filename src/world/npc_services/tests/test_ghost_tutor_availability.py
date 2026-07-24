@@ -33,7 +33,7 @@ class GhostTutorAvailabilityTests(TestCase):
         )
         # Author a signature technique for this tradition+gift
         cls.grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
-        cls.grant.signature_techniques.add(cls.technique)
+        cls.grant.special_techniques.add(cls.technique)
 
         # Generalist trainer role (teaches_tradition=None)
         cls.role = NPCRoleFactory(teaches_tradition=None)

@@ -372,7 +372,7 @@ class TraditionGiftGrantAdmin(admin.ModelAdmin):
     list_display = ["tradition", "gift"]
     list_filter = ["tradition", "gift"]
     search_fields = ["tradition__name", "gift__name"]
-    filter_horizontal = ["signature_techniques"]
+    filter_horizontal = ["special_techniques"]
 
 
 @admin.register(CharacterTradition)

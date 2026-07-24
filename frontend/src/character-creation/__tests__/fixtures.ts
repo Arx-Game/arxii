@@ -525,7 +525,7 @@ export const mockCGTechniqueOptionPool: CGTechniqueOption = {
   description: 'A strike drawn from the dark.',
   category: 'attack',
   codex_entry_id: null,
-  is_signature: false,
+  is_tradition_technique: false,
 };
 
 export const mockCGTechniqueOptionSignature: CGTechniqueOption = {
@@ -534,7 +534,7 @@ export const mockCGTechniqueOptionSignature: CGTechniqueOption = {
   description: 'A signature technique of the tradition.',
   category: 'utility',
   codex_entry_id: 20,
-  is_signature: true,
+  is_tradition_technique: true,
 };
 
 export const mockCGTechniqueOptions: CGTechniqueOption[] = [
@@ -546,7 +546,7 @@ export const mockCGTechniqueOptions: CGTechniqueOption[] = [
     description: 'A shielding wall of shadow.',
     category: 'defense',
     codex_entry_id: null,
-    is_signature: false,
+    is_tradition_technique: false,
   },
 ];
 

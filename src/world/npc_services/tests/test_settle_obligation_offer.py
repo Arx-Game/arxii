@@ -182,7 +182,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
         tradition = Tradition.objects.get(name="Unbound")
         gift = get_gift_options(tradition, path)[0]
         technique_options = get_technique_options(path, gift, tradition)
-        available_techniques = technique_options.pool + technique_options.signature
+        available_techniques = technique_options.pool + technique_options.tradition
 
         trainer_role = NPCRole.objects.get(name=ACADEMY_GENERALIST_TRAINER_ROLE_NAME)
         trainer_offer = NPCServiceOffer.objects.get(

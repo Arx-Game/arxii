@@ -456,8 +456,8 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
 
     Empty list until both params resolve to a draft with tradition + path selected.
     Delegates to ``world.magic.services.cg_catalog.get_technique_options``; each
-    returned row's ``is_signature`` reflects membership in the tradition's curated
-    signature set (as opposed to the path's starter pool).
+    returned row's ``is_tradition_technique`` reflects membership in the tradition's curated
+    special technique set (as opposed to the path's starter pool).
     """
 
     serializer_class = CGTechniqueOptionSerializer
@@ -477,7 +477,7 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
     def _resolve_options(self) -> TechniqueOptions | None:
-        """Resolve pool/signature techniques for ``?draft_id=&gift_id=``, cached per request."""
+        """Resolve pool/tradition techniques for ``?draft_id=&gift_id=``, cached per request."""
         if hasattr(self, "_cg_technique_options"):
             return self._cg_technique_options
 
@@ -507,19 +507,19 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
         return options
 
     def get_queryset(self) -> QuerySet[Technique]:
-        """Return the pool U signature techniques for the resolved (path, gift, tradition)."""
+        """Return the pool U tradition techniques for the resolved (path, gift, tradition)."""
         options = self._resolve_options()
         if options is None:
             return Technique.objects.none()
 
-        technique_ids = {t.id for t in [*options.pool, *options.signature]}
+        technique_ids = {t.id for t in [*options.pool, *options.tradition]}
         return Technique.objects.filter(id__in=technique_ids).select_related("effect_type")
 
     def get_serializer_context(self) -> dict[str, Any]:
         context = super().get_serializer_context()
         options = self._resolve_options()
-        context["signature_technique_ids"] = (
-            {t.id for t in options.signature} if options is not None else set()
+        context["tradition_technique_ids"] = (
+            {t.id for t in options.tradition} if options is not None else set()
         )
         return context
 
