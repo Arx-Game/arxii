@@ -10,7 +10,7 @@ from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from core.managers import ArxSharedMemoryManager, CachedAllMixin
+from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.gm.constants import (
     CatalogSuggestionProposalKind,
@@ -464,7 +464,7 @@ class StoryRoomGrant(SharedMemoryModel):
 # ``consequence_pool`` FK anywhere -- ConsequencePoolGuide is advisory text only.
 
 
-class SituationKindManager(CachedAllMixin, NaturalKeyManager):
+class SituationKindManager(NaturalKeyManager):
     """Manager for SituationKind with natural key support, plus cached_all() (#1871).
 
     Small, admin-authored taxonomy table read on every ``FindSituationAction``

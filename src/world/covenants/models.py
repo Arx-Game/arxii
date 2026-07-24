@@ -1240,10 +1240,16 @@ class CovenantRoleBonus(NaturalKeyMixin, SharedMemoryModel):
         )
 
 
-class CovenantRite(SharedMemoryModel):
+class CovenantRite(NaturalKeyMixin, SharedMemoryModel):
     """Authored definition: a covenant-scoped group ritual ('rite') with an
     activation gate and a turnout-scaled shared buff. Sidecar on a Ritual so the
     generic Ritual table stays gate-free."""
+
+    class NaturalKeyConfig:
+        fields = ["ritual"]
+        dependencies = ["magic.Ritual"]
+
+    objects = NaturalKeyManager()
 
     ritual = models.OneToOneField(
         "magic.Ritual",
@@ -1299,7 +1305,7 @@ class CovenantRite(SharedMemoryModel):
         verbose_name_plural = "Covenant Rites"
 
 
-class CovenantRiteRolePackage(SharedMemoryModel):
+class CovenantRiteRolePackage(NaturalKeyMixin, SharedMemoryModel):
     """Role- and level-gated stat package for a covenant rite.
 
     Staff can author a different ConditionTemplate for each (role, level-band)
@@ -1310,6 +1316,12 @@ class CovenantRiteRolePackage(SharedMemoryModel):
     Unique constraint: only one band per (rite, role, level) triple — prevents
     ambiguous selection.
     """
+
+    class NaturalKeyConfig:
+        fields = ["rite", "covenant_role", "min_covenant_level"]
+        dependencies = ["covenants.CovenantRite", "covenants.CovenantRole"]
+
+    objects = NaturalKeyManager()
 
     rite = models.ForeignKey(
         "covenants.CovenantRite",
@@ -1416,7 +1428,7 @@ class CovenantRiteParticipant(SharedMemoryModel):
 # =============================================================================
 
 
-class MentorBondConfig(SharedMemoryModel):
+class MentorBondConfig(NaturalKeyMixin, SharedMemoryModel):
     """Singleton (pk=1): global parameters for Mentor's Vow bond scaling (#1165).
 
     Seeded by seed_mentor_bond_defaults() in factories.py. Services use
@@ -1429,7 +1441,10 @@ class MentorBondConfig(SharedMemoryModel):
     - max_sidekicks_per_mentor: cap on sidekick count; null means unlimited.
     """
 
-    objects = ArxSharedMemoryManager()
+    class NaturalKeyConfig:
+        fields = ["pk"]
+
+    objects = NaturalKeyManager()
 
     band_width = models.PositiveSmallIntegerField(
         default=MENTOR_BOND_BAND_WIDTH,

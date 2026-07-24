@@ -8,11 +8,10 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.types import WeightedConsequence, _entry_to_weighted
-from core.managers import CachedAllMixin
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 
-class ConsequencePoolManager(CachedAllMixin, NaturalKeyManager):
+class ConsequencePoolManager(NaturalKeyManager):
     """Manager for ConsequencePool with natural key support, plus cached_all() (#1871)."""
 
 

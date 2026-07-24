@@ -15,7 +15,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from core.managers import ArxSharedMemoryManager, CachedAllMixin
+from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 if TYPE_CHECKING:
@@ -78,7 +78,7 @@ class ModifierCategory(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class ModifierTargetManager(CachedAllMixin, NaturalKeyManager):
+class ModifierTargetManager(NaturalKeyManager):
     """Manager for ModifierTarget with natural key support, plus cached_all() (#1846)."""
 
 

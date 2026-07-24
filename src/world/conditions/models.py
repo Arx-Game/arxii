@@ -18,7 +18,6 @@ from django.db.models import Q
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from core.managers import CachedAllMixin
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.conditions.constants import (
     ConditionInteractionOutcome,
@@ -108,7 +107,7 @@ class ConditionCategory(NaturalKeyMixin, SharedMemoryModel):
         return list(self.conditions.all())
 
 
-class CapabilityTypeManager(CachedAllMixin, NaturalKeyManager):
+class CapabilityTypeManager(NaturalKeyManager):
     """Manager for CapabilityType with natural key support, plus cached_all() (#1871)."""
 
 
@@ -508,7 +507,7 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
         return ConditionTemplateReactiveHandler(self)
 
 
-class ConditionStageManager(CachedAllMixin, NaturalKeyManager):
+class ConditionStageManager(NaturalKeyManager):
     """Manager for ConditionStage with natural key support, plus cached_all() (#1871)."""
 
 

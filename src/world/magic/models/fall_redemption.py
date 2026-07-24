@@ -18,14 +18,14 @@ from decimal import Decimal
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from core.managers import ArxSharedMemoryManager
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.types.aura import AffinityType
 
 _RESONANCE_FK = "magic.Resonance"
 _CONFIG_VERBOSE = "Fall / Redemption Config"
 
 
-class CompromiseActType(SharedMemoryModel):
+class CompromiseActType(NaturalKeyMixin, SharedMemoryModel):
     """Authored act category that grants non-native resonance when performed.
 
     Staff author rows like "Combat Kill" → a Primal predation resonance,
@@ -33,6 +33,12 @@ class CompromiseActType(SharedMemoryModel):
     outcomes, and social scene actions reference these to call
     ``grant_compromise_resonance``.
     """
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+        dependencies = ["magic.Resonance"]
+
+    objects = NaturalKeyManager()
 
     name = models.CharField(max_length=80, unique=True)
     description = models.TextField(blank=True)
@@ -64,7 +70,7 @@ class CompromiseActType(SharedMemoryModel):
         return f"{self.name} → {self.target_resonance.name} ({self.amount})"
 
 
-class ResonanceConversion(SharedMemoryModel):
+class ResonanceConversion(NaturalKeyMixin, SharedMemoryModel):
     """Authored mapping: which target resonance a source resonance converts to
     for a given destination affinity.
 
@@ -73,6 +79,12 @@ class ResonanceConversion(SharedMemoryModel):
     some Primal resonance. A different row maps (Bene, ABYSSAL) → some
     Abyssal resonance. This allows different target resonances per Fall path.
     """
+
+    class NaturalKeyConfig:
+        fields = ["source_resonance", "target_affinity"]
+        dependencies = ["magic.Resonance"]
+
+    objects = NaturalKeyManager()
 
     source_resonance = models.ForeignKey(
         _RESONANCE_FK,
@@ -103,7 +115,7 @@ class ResonanceConversion(SharedMemoryModel):
         )
 
 
-class FallRedemptionConfig(SharedMemoryModel):
+class FallRedemptionConfig(NaturalKeyMixin, SharedMemoryModel):
     """Singleton (pk=1) of conversion multipliers per Fall/Redemption path.
 
     Fall multipliers are >1.0 (gain); Redemption multipliers are <1.0 (loss).
@@ -112,7 +124,10 @@ class FallRedemptionConfig(SharedMemoryModel):
     the Rite of Atonement.
     """
 
-    objects = ArxSharedMemoryManager()
+    class NaturalKeyConfig:
+        fields = ["pk"]
+
+    objects = NaturalKeyManager()
 
     # Fall multipliers (>1.0 = gain)
     celestial_to_primal_multiplier = models.DecimalField(

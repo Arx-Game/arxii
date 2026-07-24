@@ -19,7 +19,6 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import ActionCategory, ActionTargetType
-from core.managers import CachedAllMixin
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.achievements.models import DiscoverableContent
 from world.covenants.constants import RoleArchetype
@@ -196,7 +195,7 @@ class Restriction(NaturalKeyMixin, SharedMemoryModel):
         return list(self.allowed_effect_types.all())
 
 
-class IntensityTierManager(CachedAllMixin, NaturalKeyManager):
+class IntensityTierManager(NaturalKeyManager):
     """Manager for IntensityTier with natural key support, plus cached_all() (#1846)."""
 
 

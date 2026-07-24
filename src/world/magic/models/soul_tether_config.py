@@ -3,10 +3,10 @@
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from core.managers import ArxSharedMemoryManager
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 
-class SoulTetherConfig(SharedMemoryModel):
+class SoulTetherConfig(NaturalKeyMixin, SharedMemoryModel):
     """Singleton tuning surface (pk=1).
 
     All integer fields; multipliers encoded as integer-tenths or integer-hundredths
@@ -36,7 +36,10 @@ class SoulTetherConfig(SharedMemoryModel):
     - ``rescue_budget_thread_mult_hundredths``: thread-level multiplier in hundredths (5 → 0.05).
     """
 
-    objects = ArxSharedMemoryManager()
+    class NaturalKeyConfig:
+        fields = ["pk"]
+
+    objects = NaturalKeyManager()
 
     # --- Sineating ---
     anima_cost_per_unit = models.PositiveSmallIntegerField(default=2)
