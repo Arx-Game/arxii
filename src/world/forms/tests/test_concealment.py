@@ -9,7 +9,7 @@ A disguise overlay's ``concealment_level`` controls what an unpierced viewer see
 from django.test import TestCase
 from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
 from world.forms.factories import (
@@ -27,18 +27,21 @@ from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 class ConcealmentTelnetTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.hair = FormTraitFactory(name="hair_color", display_name="Hair Color")
         cls.red = FormTraitOptionFactory(trait=cls.hair, name="red", display_name="Red")
         cls.blonde = FormTraitOptionFactory(trait=cls.hair, name="blonde", display_name="Blonde")
 
     def setUp(self):
-        self.true_form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        self.true_form = CharacterFormFactory(character=self.sheet, form_type=FormType.TRUE)
         CharacterFormValueFactory(form=self.true_form, trait=self.hair, option=self.red)
-        CharacterFormState.objects.create(character=self.character, active_form=self.true_form)
+        CharacterFormState.objects.create(
+            character=self.character.sheet_data, active_form=self.true_form
+        )
         self.disguise = CharacterFormFactory(
-            character=self.character, form_type=FormType.DISGUISE, is_player_created=True
+            character=self.sheet, form_type=FormType.DISGUISE, is_player_created=True
         )
         CharacterFormValueFactory(form=self.disguise, trait=self.hair, option=self.blonde)
         self.persona = self.sheet.primary_persona
@@ -93,11 +96,13 @@ class ConcealmentWebTests(APITestCase):
         cls.blonde = FormTraitOptionFactory(trait=cls.hair, name="blonde", display_name="Blonde")
 
     def setUp(self):
-        self.true_form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        self.true_form = CharacterFormFactory(character=self.sheet, form_type=FormType.TRUE)
         CharacterFormValueFactory(form=self.true_form, trait=self.hair, option=self.red)
-        CharacterFormState.objects.create(character=self.character, active_form=self.true_form)
+        CharacterFormState.objects.create(
+            character=self.character.sheet_data, active_form=self.true_form
+        )
         self.disguise = CharacterFormFactory(
-            character=self.character, form_type=FormType.DISGUISE, is_player_created=True
+            character=self.sheet, form_type=FormType.DISGUISE, is_player_created=True
         )
         CharacterFormValueFactory(form=self.disguise, trait=self.hair, option=self.blonde)
 
@@ -135,7 +140,8 @@ class ConcealmentSdescTests(TestCase):
     def setUpTestData(cls):
         from world.character_sheets.factories import GenderFactory
 
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         # Set a gender so compose_sdesc would normally use "man"/"woman" —
         # full concealment must override it to "person" (#1272).
@@ -145,11 +151,13 @@ class ConcealmentSdescTests(TestCase):
         cls.red = FormTraitOptionFactory(trait=cls.hair, name="red", display_name="Red")
 
     def setUp(self):
-        self.true_form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        self.true_form = CharacterFormFactory(character=self.sheet, form_type=FormType.TRUE)
         CharacterFormValueFactory(form=self.true_form, trait=self.hair, option=self.red)
-        CharacterFormState.objects.create(character=self.character, active_form=self.true_form)
+        CharacterFormState.objects.create(
+            character=self.character.sheet_data, active_form=self.true_form
+        )
         self.disguise = CharacterFormFactory(
-            character=self.character, form_type=FormType.DISGUISE, is_player_created=True
+            character=self.sheet, form_type=FormType.DISGUISE, is_player_created=True
         )
         from world.scenes.factories import PersonaFactory
 

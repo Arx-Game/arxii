@@ -20,10 +20,10 @@ def _attach_pending_application(gm):
     story = StoryFactory(primary_table=table)
     StoryParticipation.objects.create(
         story=story,
-        character=entry.character_sheet.character,
+        character=entry.character_sheet,
         is_active=True,
     )
-    application = RosterApplicationFactory(character=entry.character_sheet.character)
+    application = RosterApplicationFactory(character=entry.character_sheet)
     return entry, application
 
 

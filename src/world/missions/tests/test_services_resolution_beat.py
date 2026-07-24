@@ -62,7 +62,7 @@ class SoloTerminalBeatSeamTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         CharacterSheetFactory(character=cls.character)
         cls.template = MissionTemplateFactory(name="beat-seam-solo-tmpl", risk_tier=2)
 
@@ -78,7 +78,7 @@ class SoloTerminalBeatSeamTests(TestCase):
         entry = MissionNodeFactory(template=self.template, key="entry", is_entry=True)
         actor = MissionParticipantFactory(
             instance=instance,
-            character=self.character,
+            character=self.character.sheet_data,
             is_contract_holder=True,
         )
         option = MissionOptionFactory(
@@ -150,10 +150,10 @@ class JointTerminalBeatSeamTests(TestCase):
         )
         holder = MissionParticipantFactory(
             instance=instance,
-            character=self.char_h,
+            character=self.char_h.sheet_data,
             is_contract_holder=True,
         )
-        p2 = MissionParticipantFactory(instance=instance, character=self.char_2)
+        p2 = MissionParticipantFactory(instance=instance, character=self.char_2.sheet_data)
 
         option = MissionOptionFactory(
             node=node,

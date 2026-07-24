@@ -301,7 +301,7 @@ class OutfitViewSetTests(_OutfitViewSetSetupMixin, TestCase):
         )
 
         # Cleanup so other tests don't see the equipped rows.
-        EquippedItem.objects.filter(character=self.character_a).delete()
+        EquippedItem.objects.filter(character=self.character_a.sheet_data).delete()
 
     def test_create_rejects_when_wardrobe_unreachable(self) -> None:
         """POST with a wardrobe in a different room → 400 (NotReachable).

@@ -488,7 +488,7 @@ class ChallengePathTests(PipelineTestMixin, TestCase):
         assert result.resolution_type == ResolutionType.DESTROY
         assert len(result.applied_effects) == 2
         assert CharacterChallengeRecord.objects.filter(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=self.challenge,
         ).exists()
 
@@ -540,7 +540,7 @@ class ChallengePathTests(PipelineTestMixin, TestCase):
         assert result.resolution_type == ResolutionType.PERSONAL
         assert len(result.applied_effects) == 0
         assert CharacterChallengeRecord.objects.filter(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=self.challenge,
         ).exists()
 
@@ -606,7 +606,7 @@ class SceneActionPathTests(PipelineTestMixin, TestCase):
 
         # Anima for technique use (required by enhanced action path)
         CharacterAnimaFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             current=50,
             maximum=50,
         )
@@ -909,7 +909,7 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
 
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=20,
             maximum=20,
         )
@@ -917,7 +917,7 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
         # These tests verify raw base intensity/control math; the social
         # safety bonus (+10 control) would inflate effective_cost and
         # break the delta-formula assertions.
-        self.engagement = CharacterEngagementFactory(character=self.character)
+        self.engagement = CharacterEngagementFactory(character=self.character.sheet_data)
         self.challenge = ChallengeInstance.objects.create(
             template=self.challenge_template,
             location=self.location,
@@ -1118,7 +1118,7 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
 
     def tearDown(self) -> None:
         """Clean up any engagement created during tests (OneToOne constraint)."""
-        CharacterEngagement.objects.filter(character=self.character).delete()
+        CharacterEngagement.objects.filter(character=self.character.sheet_data).delete()
 
     # --- Test 1: Social safety bonus without engagement ---
 
@@ -1138,7 +1138,7 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
 
         # Create engagement
         CharacterEngagementFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             source_content_type=self.source_ct,
             source_id=self.location.pk,
         )
@@ -1153,7 +1153,7 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
     def test_engagement_process_modifiers(self) -> None:
         """Engagement intensity_modifier is reflected in runtime stats."""
         CharacterEngagementFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             source_content_type=self.source_ct,
             source_id=self.location.pk,
             intensity_modifier=8,
@@ -1177,7 +1177,7 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
 
         # Process modifier: +5 intensity via engagement
         CharacterEngagementFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             source_content_type=self.source_ct,
             source_id=self.location.pk,
             intensity_modifier=5,
@@ -1201,7 +1201,7 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
 
         # Engage character to remove social safety bonus (cleaner math)
         CharacterEngagementFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             source_content_type=self.source_ct,
             source_id=self.location.pk,
         )
@@ -1244,7 +1244,7 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
 
         # Engagement gate
         CharacterEngagementFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             source_content_type=self.source_ct,
             source_id=self.location.pk,
         )
@@ -1287,14 +1287,14 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
 
         # Engagement
         CharacterEngagementFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             source_content_type=self.source_ct,
             source_id=self.location.pk,
         )
 
         # Anima pool
         anima = CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=20,
             maximum=20,
         )
@@ -1552,19 +1552,19 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
     def setUp(self) -> None:
         # Fresh anima per test; engaged to remove social safety bonus
         self.anima = CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=10,
             maximum=10,
         )
         self.engagement = CharacterEngagementFactory(
-            character=self.character,
+            character=self.character.sheet_data,
         )
 
     def tearDown(self) -> None:
         """Clean up per-test condition instances and engagement."""
         ConditionInstance.objects.filter(target=self.character).delete()
         CharacterEngagement.objects.filter(
-            character=self.character,
+            character=self.character.sheet_data,
         ).delete()
 
     def _make_resilience_result(

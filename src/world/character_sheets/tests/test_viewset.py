@@ -447,7 +447,7 @@ class TestAppearanceSection(TestCase):
 
         # Create TRUE form with trait values
         cls.true_form = CharacterFormFactory(
-            character=cls.character,
+            character=cls.sheet,
             form_type=FormType.TRUE,
         )
         hair_trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
@@ -952,7 +952,7 @@ class TestDistinctionsSection(TestCase):
         """A distinction linked via CharacterDistinction.from_glimpse reports True (#2427)."""
         from world.magic.factories import CharacterAuraFactory
 
-        aura = CharacterAuraFactory(character=self.character)
+        aura = CharacterAuraFactory(character=self.character.sheet_data)
         self.cd_a.from_glimpse = aura
         self.cd_a.save()
 
@@ -1139,7 +1139,7 @@ class TestMagicSectionFull(TestCase):
         # --- Aura (FK to ObjectDB) ---
 
         cls.aura = CharacterAuraFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             celestial=Decimal("20.00"),
             primal=Decimal("50.00"),
             abyssal=Decimal("30.00"),
@@ -1401,7 +1401,7 @@ class TestMagicPartialData(TestCase):
         )
 
         CharacterAuraFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             celestial=Decimal("33.33"),
             primal=Decimal("33.34"),
             abyssal=Decimal("33.33"),
@@ -1788,7 +1788,7 @@ class TestThemingSection(TestCase):
         )
 
         cls.aura = CharacterAuraFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             celestial=Decimal("20.00"),
             primal=Decimal("50.00"),
             abyssal=Decimal("30.00"),
@@ -1976,7 +1976,7 @@ class TestCharacterSheetQueryCount(TestCase):
         CharacterPathHistoryFactory(character=cls.character.sheet_data, path=cls.path)
 
         # --- TRUE form with traits ---
-        true_form = CharacterFormFactory(character=cls.character, form_type=FormType.TRUE)
+        true_form = CharacterFormFactory(character=cls.sheet, form_type=FormType.TRUE)
         hair_trait = FormTraitFactory(name="qc_hair", display_name="Hair Color")
         hair_option = FormTraitOptionFactory(
             trait=hair_trait, name="qc_black", display_name="Black"
@@ -2034,7 +2034,7 @@ class TestCharacterSheetQueryCount(TestCase):
         )
 
         CharacterAuraFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             celestial=Decimal("33.33"),
             primal=Decimal("33.34"),
             abyssal=Decimal("33.33"),
@@ -2192,7 +2192,7 @@ class TestPrefetchCompleteness(TestCase):
         CharacterPathHistoryFactory(character=cls.character.sheet_data, path=cls.path)
 
         # TRUE form with traits
-        true_form = CharacterFormFactory(character=cls.character, form_type=FormType.TRUE)
+        true_form = CharacterFormFactory(character=cls.sheet, form_type=FormType.TRUE)
         hair_trait = FormTraitFactory(name="pf_hair", display_name="Hair")
         hair_option = FormTraitOptionFactory(
             trait=hair_trait, name="pf_brown", display_name="Brown"
@@ -2248,7 +2248,7 @@ class TestPrefetchCompleteness(TestCase):
         )
 
         CharacterAuraFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             celestial=Decimal("33.33"),
             primal=Decimal("33.34"),
             abyssal=Decimal("33.33"),

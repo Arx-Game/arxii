@@ -435,7 +435,7 @@ class RestTests(TestCase):
     def test_rest_sets_flags(self):
         """Resting sets well_rested and rested_today."""
         ActionPointPool.objects.create(
-            character=self.sheet.character,
+            character=self.sheet,
             current=200,
             maximum=200,
         )
@@ -450,7 +450,7 @@ class RestTests(TestCase):
     def test_rest_spends_ap(self):
         """Resting costs the configured AP amount."""
         ap_pool = ActionPointPool.objects.create(
-            character=self.sheet.character,
+            character=self.sheet,
             current=200,
             maximum=200,
         )
@@ -463,7 +463,7 @@ class RestTests(TestCase):
     def test_rest_fails_if_already_rested(self):
         """Cannot rest twice in one day."""
         ActionPointPool.objects.create(
-            character=self.sheet.character,
+            character=self.sheet,
             current=200,
             maximum=200,
         )
@@ -479,7 +479,7 @@ class RestTests(TestCase):
     def test_rest_fails_if_insufficient_ap(self):
         """Cannot rest without enough AP."""
         ActionPointPool.objects.create(
-            character=self.sheet.character,
+            character=self.sheet,
             current=REST_AP_COST - 1,
             maximum=200,
         )

@@ -53,14 +53,15 @@ class UseItemDisguiseKitDispatchTests(TestCase):
         cls.red = FormTraitOptionFactory(trait=cls.hair, name="red_dk", display_name="Red")
         cls.blonde = FormTraitOptionFactory(trait=cls.hair, name="blonde_dk", display_name="Blonde")
 
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        cls.true_form = CharacterFormFactory(character=cls.character, form_type=FormType.TRUE)
+        cls.true_form = CharacterFormFactory(character=cls.sheet, form_type=FormType.TRUE)
         CharacterFormValueFactory(form=cls.true_form, trait=cls.hair, option=cls.red)
-        CharacterFormStateFactory(character=cls.character, active_form=cls.true_form)
+        CharacterFormStateFactory(character=cls.character.sheet_data, active_form=cls.true_form)
 
         cls.disguise = CharacterFormFactory(
-            character=cls.character, form_type=FormType.DISGUISE, is_player_created=True
+            character=cls.sheet, form_type=FormType.DISGUISE, is_player_created=True
         )
         CharacterFormValueFactory(form=cls.disguise, trait=cls.hair, option=cls.blonde)
 
@@ -90,7 +91,7 @@ class UseItemDisguiseKitDispatchTests(TestCase):
 
     def test_use_item_applies_disguise_overlay(self):
         use_item(item_instance=self.kit_instance, user=self.character)
-        state = CharacterFormState.objects.get(character=self.character)
+        state = CharacterFormState.objects.get(character=self.character.sheet_data)
         assert state.active_fake_overlay_id is not None
         assert state.overlay_kind == DisguiseKind.MUNDANE
         assert state.applied_kit_instance_id == self.kit_instance.id
@@ -98,7 +99,6 @@ class UseItemDisguiseKitDispatchTests(TestCase):
     def test_remove_disguise_clears_kit_instance(self):
         # Create a fresh character+state to avoid setUpTestData's cached
         # reverse-accessor returning a stale CharacterFormState to remove_disguise.
-        from evennia_extensions.factories import CharacterFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.forms.factories import (
             CharacterFormFactory,
@@ -108,11 +108,11 @@ class UseItemDisguiseKitDispatchTests(TestCase):
 
         character = CharacterFactory()
         CharacterSheetFactory(character=character)
-        true_form = CharacterFormFactory(character=character, form_type=FormType.TRUE)
+        true_form = CharacterFormFactory(character=character.sheet_data, form_type=FormType.TRUE)
         CharacterFormValueFactory(form=true_form, trait=self.hair, option=self.red)
-        CharacterFormStateFactory(character=character, active_form=true_form)
+        CharacterFormStateFactory(character=character.sheet_data, active_form=true_form)
         disguise = CharacterFormFactory(
-            character=character, form_type=FormType.DISGUISE, is_player_created=True
+            character=character.sheet_data, form_type=FormType.DISGUISE, is_player_created=True
         )
         CharacterFormValueFactory(form=disguise, trait=self.hair, option=self.blonde)
         apply_disguise(
@@ -121,7 +121,7 @@ class UseItemDisguiseKitDispatchTests(TestCase):
             kind=DisguiseKind.MUNDANE,
             kit_instance=self.kit_instance,
         )
-        state = CharacterFormState.objects.get(character=character)
+        state = CharacterFormState.objects.get(character=character.sheet_data)
         assert state.applied_kit_instance_id == self.kit_instance.id
         remove_disguise(character)
         state.refresh_from_db()

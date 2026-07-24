@@ -303,7 +303,7 @@ class GMTableSerializer(serializers.ModelSerializer):
         else:
             is_guest = StoryParticipation.objects.filter(
                 story__primary_table=table,
-                character__db_account=user,
+                character__character__db_account=user,
                 is_active=True,
             ).exists()
         if is_guest:
@@ -395,9 +395,9 @@ class GMRosterInviteSerializer(serializers.ModelSerializer):
         roster_entry = attrs["roster_entry"]
         oversees = RosterEntry.objects.filter(
             pk=roster_entry.pk,
-            character_sheet__character__story_participations__is_active=True,
-            character_sheet__character__story_participations__story__primary_table__gm=gm,
-            character_sheet__character__story_participations__story__primary_table__status=(
+            character_sheet__story_participations__is_active=True,
+            character_sheet__story_participations__story__primary_table__gm=gm,
+            character_sheet__story_participations__story__primary_table__status=(
                 GMTableStatus.ACTIVE
             ),
         ).exists()

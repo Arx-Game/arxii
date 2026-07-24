@@ -9,7 +9,7 @@ from actions.definitions.forms import (
     RevertFormAction,
     ShiftFormAction,
 )
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.conditions.capability_content import AT_WILL_SHIFTING
 from world.conditions.factories import CapabilityTypeFactory
@@ -38,7 +38,7 @@ class ShiftFormActionTests(TestCase):
         self.character = self.sheet.character
         true_form = self._make_form(self.character, form_type=FormType.TRUE)
         self.alt_form = self._make_form(self.character, name="Beast", form_type=FormType.ALTERNATE)
-        CharacterFormStateFactory(character=self.character, active_form=true_form)
+        CharacterFormStateFactory(character=self.character.sheet_data, active_form=true_form)
         self.alt = self._make_alt(self.sheet, form=self.alt_form, display_name="the Beast")
         self._grant_at_will_shifting()
 
@@ -66,7 +66,7 @@ class ShiftFormActionTests(TestCase):
     def _make_form(
         self, character, name: str = "", form_type: str = FormType.TRUE
     ) -> CharacterForm:
-        return CharacterFormFactory(character=character, name=name, form_type=form_type)
+        return CharacterFormFactory(character=character.sheet_data, name=name, form_type=form_type)
 
     def _make_alt(self, sheet: CharacterSheet, **kwargs) -> AlternateSelf:
         return AlternateSelfFactory(character=sheet, **kwargs)
@@ -75,7 +75,7 @@ class ShiftFormActionTests(TestCase):
         result = ShiftFormAction().run(actor=self.character, alternate_self_id=self.alt.pk)
 
         self.assertTrue(result.success)
-        state = CharacterFormState.objects.get(character=self.character)
+        state = CharacterFormState.objects.get(character=self.character.sheet_data)
         self.assertEqual(state.active_form, self.alt_form)
         self.assertEqual(result.data["alternate_self_id"], self.alt.pk)
 
@@ -145,7 +145,7 @@ class ShiftFormActionTests(TestCase):
         # rather than letting the ValueError propagate uncaught (-> 500 on web).
         from world.forms.services import FormOwnershipError
 
-        other_character = CharacterFactory()
+        other_character = CharacterSheetFactory().character
         foreign_form = self._make_form(
             other_character, name="stranger", form_type=FormType.ALTERNATE
         )
@@ -163,7 +163,7 @@ class RevertFormActionTests(TestCase):
         self.character = self.sheet.character
         self.true_form = self._make_form(self.character, form_type=FormType.TRUE)
         self.alt_form = self._make_form(self.character, name="Beast", form_type=FormType.ALTERNATE)
-        CharacterFormStateFactory(character=self.character, active_form=self.true_form)
+        CharacterFormStateFactory(character=self.character.sheet_data, active_form=self.true_form)
         self.alt = self._make_alt(self.sheet, form=self.alt_form, display_name="the Beast")
         assume_alternate_self(self.sheet, self.alt)
 
@@ -175,7 +175,7 @@ class RevertFormActionTests(TestCase):
     def _make_form(
         self, character, name: str = "", form_type: str = FormType.TRUE
     ) -> CharacterForm:
-        return CharacterFormFactory(character=character, name=name, form_type=form_type)
+        return CharacterFormFactory(character=character.sheet_data, name=name, form_type=form_type)
 
     def _make_alt(self, sheet: CharacterSheet, **kwargs) -> AlternateSelf:
         return AlternateSelfFactory(character=sheet, **kwargs)
@@ -184,7 +184,7 @@ class RevertFormActionTests(TestCase):
         result = RevertFormAction().run(actor=self.character)
 
         self.assertTrue(result.success)
-        state = CharacterFormState.objects.get(character=self.character)
+        state = CharacterFormState.objects.get(character=self.character.sheet_data)
         self.assertEqual(state.active_form, self.true_form)
         active = ActiveAlternateSelf.objects.get(character=self.sheet)
         self.assertIsNone(active.alternate_self)
@@ -201,7 +201,7 @@ class RevertFormActionTests(TestCase):
     def test_no_active_alternate_self(self) -> None:
         # Create a fresh character with no active alt-self.
         sheet = self._sheet()
-        CharacterFormStateFactory(character=sheet.character, active_form=None)
+        CharacterFormStateFactory(character=sheet, active_form=None)
 
         result = RevertFormAction().run(actor=sheet.character)
 

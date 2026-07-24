@@ -10,6 +10,7 @@ from django.test import TestCase
 from django.utils import timezone
 from evennia.utils import create
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import (
     CharacterFactory,
     PlayerDataFactory,
@@ -37,7 +38,7 @@ class RosterApplicationModelTestCase(TestCase):
         """Set up test data for each test"""
         self.player_data = PlayerDataFactory()
         self.staff_data = PlayerDataFactory(account__is_staff=True)
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.roster_entry = RosterEntryFactory(character_sheet__character=self.character)
 
     def test_approve_application_creates_tenure(self):
@@ -45,7 +46,7 @@ class RosterApplicationModelTestCase(TestCase):
         with self.suppress_email_logs():
             app = RosterApplication.objects.create(
                 player_data=self.player_data,
-                character=self.character,
+                character=self.character.sheet_data,
                 application_text="I want to play this character",
             )
 
@@ -80,7 +81,7 @@ class RosterApplicationModelTestCase(TestCase):
             # Create application for second player
             app = RosterApplication.objects.create(
                 player_data=self.player_data,
-                character=self.character,
+                character=self.character.sheet_data,
                 application_text="I want to be the second player",
             )
 
@@ -94,15 +95,15 @@ class RosterApplicationModelTestCase(TestCase):
         """Test all application state transitions"""
         # Create fresh characters for each subtest to avoid conflicts
         character2 = CharacterFactory()
-        RosterEntryFactory(character_sheet__character=character2)
+        entry2 = RosterEntryFactory(character_sheet__character=character2)
 
         character3 = CharacterFactory()
-        RosterEntryFactory(character_sheet__character=character3)
+        entry3 = RosterEntryFactory(character_sheet__character=character3)
 
         state_tests = [
             {
                 "name": "deny application",
-                "character": character2,
+                "character": entry2.character_sheet,
                 "action": lambda app: app.deny(self.staff_data, "Not enough detail"),
                 "expected_status": ApplicationStatus.DENIED,
                 "expected_result": True,
@@ -113,7 +114,7 @@ class RosterApplicationModelTestCase(TestCase):
             },
             {
                 "name": "withdraw application",
-                "character": character3,
+                "character": entry3.character_sheet,
                 "action": lambda app: app.withdraw(),
                 "expected_status": ApplicationStatus.WITHDRAWN,
                 "expected_result": True,
@@ -155,11 +156,11 @@ class RosterApplicationModelTestCase(TestCase):
             with self.subTest(status=invalid_status):
                 # Create character for this test
                 char = CharacterFactory()
-                RosterEntryFactory(character_sheet__character=char)
+                entry = RosterEntryFactory(character_sheet__character=char)
 
                 app = RosterApplication.objects.create(
                     player_data=self.player_data,
-                    character=char,
+                    character=entry.character_sheet,
                     application_text="Application text",
                     status=invalid_status,
                 )
@@ -201,7 +202,7 @@ class RosterTenureModelTestCase(TestCase):
     def setUp(self):
         """Set up test data for each test"""
         self.player_data = PlayerDataFactory()
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.roster_entry = RosterEntryFactory(character_sheet__character=self.character)
 
     def test_display_name_formatting(self):
@@ -258,7 +259,7 @@ class AccountCharactersPropertyTestCase(TestCase):
             "strongpass",
         )
         self.player_data = PlayerDataFactory(account=self.account)
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.roster_entry = RosterEntryFactory(character_sheet__character=self.character)
         self.tenure = RosterTenureFactory(
             player_data=self.player_data,

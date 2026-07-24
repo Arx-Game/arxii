@@ -19,18 +19,17 @@ def create_story_participation(
         ProtagonismLockedError: If the character's sheet is in the terminal
             corruption stage (stage 5), blocking all protagonist-track actions.
     """
-    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
 
-    try:
-        sheet = character.sheet_data
-    except (CharacterSheet.DoesNotExist, AttributeError):
-        sheet = None
+    sheet = character.character_sheet
+    if sheet is None:
+        msg = "Only sheet-backed characters can join stories."
+        raise ValueError(msg)
 
-    if sheet is not None and sheet.is_protagonism_locked:
+    if sheet.is_protagonism_locked:
         raise ProtagonismLockedError
 
     return StoryParticipation.objects.create(
         story=story,
-        character=character,
+        character=sheet,
         participation_level=participation_level,
     )

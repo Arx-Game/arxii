@@ -55,7 +55,7 @@ class CourtEngagementTests(TestCase):
         instance = MissionInstanceFactory(status=status, source_offer=offer)
         MissionParticipantFactory(
             instance=instance,
-            character=membership.character_sheet.character,
+            character=membership.character_sheet,
         )
         return instance
 
@@ -111,7 +111,7 @@ class CourtEngagementTests(TestCase):
         instance = MissionInstanceFactory(status=MissionStatus.ACTIVE, source_offer=None)
         MissionParticipantFactory(
             instance=instance,
-            character=membership.character_sheet.character,
+            character=membership.character_sheet,
         )
 
         self.assertFalse(can_engage_membership(membership))
@@ -302,6 +302,6 @@ class CourtRegardEngagementTests(TestCase):
         npc_role = NPCRoleFactory(faction_affiliation=covenant.organization)
         offer = NPCServiceOfferFactory(role=npc_role)
         instance = MissionInstanceFactory(status=MissionStatus.ACTIVE, source_offer=offer)
-        MissionParticipantFactory(instance=instance, character=membership.character_sheet.character)
+        MissionParticipantFactory(instance=instance, character=membership.character_sheet)
 
         self.assertTrue(can_engage_membership(membership))

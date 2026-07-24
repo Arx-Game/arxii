@@ -80,8 +80,8 @@ class BarricadeCastPositionJourneyTests(TestCase):
         sheet = CharacterSheetFactory()
         cls.participant = CombatParticipantFactory(encounter=cls.encounter, character_sheet=sheet)
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         sheet.character.location = cls.encounter.room
         sheet.character.save()
 

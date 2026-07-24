@@ -16,7 +16,6 @@ from django.utils.functional import cached_property
 from evennia.objects.objects import DefaultCharacter
 
 from commands.utils import serialize_cmdset
-from core.descriptors import ReverseOneToOneOrNone
 from flows.constants import EventName
 from flows.emit import emit_event
 from flows.events.payloads import AttackLandedPayload, MovedPayload, MovePreDepartPayload
@@ -62,13 +61,58 @@ class Character(ObjectParent, DefaultCharacter):
 
     state_class = CharacterState
 
-    #: Reverse-OneToOne safe accessor (#2386): the CharacterFormState row, or
-    #: None when unprovisioned. Character-scoped, so it lives here rather than
-    #: on ObjectParent (CharacterFormState.character is limited to Characters).
-    form_state_or_none = ReverseOneToOneOrNone("form_state")
+    # The character-scoped OneToOne sidecars (form state, anima, aura, engagement)
+    # FK the CharacterSheet (#2608); these forwarders keep the typeclass surface
+    # stable for the combat/forms/serializer readers that hold the puppet.
 
-    #: Reverse-OneToOne safe accessor (#2386): the CharacterAnima row, or None.
-    anima_or_none = ReverseOneToOneOrNone("anima")
+    @property
+    def form_state_or_none(self):
+        """The CharacterFormState row, or None when unprovisioned/sheet-less."""
+        sheet = self.character_sheet
+        return sheet.form_state_or_none if sheet is not None else None
+
+    @property
+    def form_state(self):
+        """The CharacterFormState row; raises where a missing row is a hard bug."""
+        from world.forms.models import CharacterFormState
+
+        sheet = self.character_sheet
+        if sheet is None:
+            raise CharacterFormState.DoesNotExist
+        return sheet.form_state
+
+    @property
+    def anima_or_none(self):
+        """The CharacterAnima row, or None."""
+        sheet = self.character_sheet
+        return sheet.anima_or_none if sheet is not None else None
+
+    @property
+    def anima(self):
+        from world.magic.models import CharacterAnima
+
+        sheet = self.character_sheet
+        if sheet is None:
+            raise CharacterAnima.DoesNotExist
+        return sheet.anima
+
+    @property
+    def aura(self):
+        from world.magic.models import CharacterAura
+
+        sheet = self.character_sheet
+        if sheet is None:
+            raise CharacterAura.DoesNotExist
+        return sheet.aura
+
+    @property
+    def engagement(self):
+        from world.mechanics.engagement import CharacterEngagement
+
+        sheet = self.character_sheet
+        if sheet is None:
+            raise CharacterEngagement.DoesNotExist
+        return sheet.engagement
 
     # Example typeclass defaults for item_data fallbacks
     # These provide sensible defaults when data objects don't exist

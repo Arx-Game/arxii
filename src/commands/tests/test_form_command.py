@@ -37,9 +37,9 @@ class CmdFormTests(TestCase):
         cls.sheet = CharacterSheetFactory()
         cls.character = cls.sheet.character
         cls.true_form = CharacterFormFactory(
-            character=cls.character, name="True", form_type=FormType.TRUE
+            character=cls.sheet, name="True", form_type=FormType.TRUE
         )
-        CharacterFormStateFactory(character=cls.character, active_form=cls.true_form)
+        CharacterFormStateFactory(character=cls.character.sheet_data, active_form=cls.true_form)
         cls.alt_self = AlternateSelfFactory(character=cls.sheet, display_name="the Beast")
 
     def setUp(self):

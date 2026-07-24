@@ -101,7 +101,7 @@ class EmergencyDrawE2ETests(TestCase):
         CharacterResonanceFactory(
             character_sheet=self.servant_sheet, resonance=self.resonance, balance=20
         )
-        CharacterAnimaFactory(character=self.servant_sheet.character, current=10, maximum=20)
+        CharacterAnimaFactory(character=self.servant_sheet, current=10, maximum=20)
         ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
 
         # wire_court_role_powers_catalog's FLAT_BONUS row is authored at

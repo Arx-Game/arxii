@@ -57,7 +57,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
 
         policy_issues = RosterPolicyService.get_policy_issues(player_data, character)
 
-        attrs["character"] = character
+        attrs["character"] = character.sheet_data
         attrs["player_data"] = player_data
         attrs["policy_issues"] = policy_issues
 
@@ -102,7 +102,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
         # 4. Player cannot have duplicate pending applications
         existing_app = RosterApplication.objects.filter(
             player_data=player_data,
-            character=character,
+            character_id=character.pk,
             status=ApplicationStatus.PENDING,
         ).first()
         if existing_app:

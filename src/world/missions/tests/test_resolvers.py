@@ -56,7 +56,8 @@ class DistinctionAchievementResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.distinction = DistinctionFactory(slug="brave")
         CharacterDistinctionFactory(character=cls.sheet, distinction=cls.distinction)
@@ -106,7 +107,8 @@ class ConditionCapabilityResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.condition = ConditionTemplateFactory(name="Blessed")
         ConditionInstanceFactory(target=cls.character, condition=cls.condition)
@@ -164,7 +166,8 @@ class ThreadResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.thread = ThreadFactory(owner=cls.sheet, level=30)
 
@@ -200,7 +203,8 @@ class TraitResolverTests(TestCase):
             StatTraitFactory,
         )
 
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
         cls.strength = StatTraitFactory(name="strength")
@@ -239,7 +243,8 @@ class CharacterLevelResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         # Two class assignments — current_level = max() = 7
         char_class = CharacterClassFactory()
@@ -290,7 +295,8 @@ class CodexEntryResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.roster_entry = RosterEntryFactory(character_sheet=cls.sheet)
         cls.subject = CodexSubjectFactory(name="Test Subject")
@@ -343,7 +349,8 @@ class ResonanceResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.held = ResonanceFactory(name="Sylva")
         cls.unheld = ResonanceFactory(name="Praedari")
@@ -378,7 +385,8 @@ class NPCStandingResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.pc_persona = cls.sheet.primary_persona
         cls.liked_npc = PersonaFactory()
@@ -467,7 +475,8 @@ class OrgMembershipResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         # CharacterSheetFactory auto-creates the PRIMARY persona (partial
         # unique constraint enforces one PRIMARY per sheet).
@@ -516,7 +525,8 @@ class OrgReputationResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.primary = cls.sheet.primary_persona
         cls.guild = OrganizationFactory(name="Honored Order")
@@ -598,7 +608,8 @@ class SocietyStandingResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.primary = cls.sheet.primary_persona
         cls.society = SocietyFactory(name="Glorious Society")
@@ -654,7 +665,8 @@ class OrgRankResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.primary = cls.sheet.primary_persona
         cls.guild = OrganizationFactory(name="Rank Guild")
@@ -700,7 +712,8 @@ class ResonanceLevelResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.resonance = ResonanceFactory(name="Umbra")
         # Spent down to 2 spendable, but 10 earned over the lifetime.
@@ -747,7 +760,8 @@ class SocietyMembershipResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.primary = cls.sheet.primary_persona
         cls.society = SocietyFactory(name="Member Society")
@@ -789,7 +803,8 @@ class HasCompletedMissionResolverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.pc_persona = cls.sheet.primary_persona
         cls.other_persona = PersonaFactory()

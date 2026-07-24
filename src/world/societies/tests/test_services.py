@@ -61,9 +61,7 @@ class CreateSoloDeedTests(TestCase):
             source_type=self.source_type,
             base_value=25,
         )
-        summary = CharacterLegendSummary.objects.get(
-            character=self.persona.character_sheet.character
-        )
+        summary = CharacterLegendSummary.objects.get(character=self.persona.character_sheet)
         self.assertEqual(summary.personal_legend, 25)
 
 
@@ -110,12 +108,8 @@ class CreateLegendEventTests(TestCase):
             base_value=30,
             personas=[self.persona_a, self.persona_b],
         )
-        summary_a = CharacterLegendSummary.objects.get(
-            character=self.persona_a.character_sheet.character
-        )
-        summary_b = CharacterLegendSummary.objects.get(
-            character=self.persona_b.character_sheet.character
-        )
+        summary_a = CharacterLegendSummary.objects.get(character=self.persona_a.character_sheet)
+        summary_b = CharacterLegendSummary.objects.get(character=self.persona_b.character_sheet)
         self.assertEqual(summary_a.personal_legend, 30)
         self.assertEqual(summary_b.personal_legend, 30)
 
@@ -220,7 +214,7 @@ class SpreadDeedTests(TestCase):
             spreader_persona=self.spreader,
             value_added=5,
         )
-        summary = CharacterLegendSummary.objects.get(character=persona.character_sheet.character)
+        summary = CharacterLegendSummary.objects.get(character=persona.character_sheet)
         # base_value 10 + spread 5 = 15
         self.assertEqual(summary.personal_legend, 15)
 

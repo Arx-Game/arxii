@@ -52,7 +52,7 @@ class DecayAllConditionsTickTests(TestCase):
         stage = ConditionStageFactory(condition=template, severity_threshold=1)
 
         engagement = CharacterEngagementFactory()
-        target = engagement.character
+        target = engagement.character.character
 
         inst = ConditionInstanceFactory(
             target=target,
@@ -77,7 +77,7 @@ class DecayAllConditionsTickTests(TestCase):
         stage = ConditionStageFactory(condition=template, severity_threshold=1)
 
         engagement = CharacterEngagementFactory()
-        target = engagement.character
+        target = engagement.character.character
 
         inst = ConditionInstanceFactory(
             target=target,

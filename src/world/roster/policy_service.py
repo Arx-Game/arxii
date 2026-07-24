@@ -43,11 +43,15 @@ class RosterPolicyService:
         if player_data is None:
             return issues
 
-        # Check roster restrictions
-        try:
-            roster_entry = character.sheet_data.roster_entry
-        except AttributeError:
-            roster_entry = None
+        # Check roster restrictions. Callers pass either the puppet (serializer
+        # pre-validate) or the sheet (application.character, #2608) — accept both.
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        if isinstance(character, CharacterSheet):
+            sheet = character
+        else:
+            sheet = character.character_sheet
+        roster_entry = sheet.roster_entry_or_none if sheet is not None else None
         if not roster_entry:
             return issues
 
@@ -103,5 +107,5 @@ class RosterPolicyService:
             player_current_characters=[
                 char.db_key for char in application.player_data.get_available_characters()
             ],
-            character_previous_players=application.character.sheet_data.roster_entry.tenures.count(),
+            character_previous_players=application.character.roster_entry.tenures.count(),
         )

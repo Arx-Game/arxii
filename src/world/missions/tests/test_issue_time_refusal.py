@@ -7,7 +7,7 @@ not a silent no-op at payout.
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import DeedRewardKind, DeedRewardSink
 from world.missions.factories import (
     MissionNodeFactory,
@@ -46,7 +46,7 @@ class IssueTimeRefusalTests(TestCase):
             sink=DeedRewardSink.PROJECT,
             amount=10,
         )
-        character = CharacterFactory(db_key="RefusalChar")
+        character = CharacterSheetFactory(character__db_key="RefusalChar").character
         with self.assertRaises(ValueError):
             staff_assign_mission(template, character)
 
@@ -62,7 +62,7 @@ class IssueTimeRefusalTests(TestCase):
             sink=DeedRewardSink.PROJECT,
             amount=10,
         )
-        character = CharacterFactory(db_key="BoundChar")
+        character = CharacterSheetFactory(character__db_key="BoundChar").character
         project = ProjectFactory()
         instance = staff_assign_mission(template, character, project=project)
         self.assertEqual(instance.target_project_id, project.pk)
@@ -70,6 +70,6 @@ class IssueTimeRefusalTests(TestCase):
     def test_staff_assign_allows_no_project_lines_without_project(self) -> None:
         """A template without PROJECT reward lines is fine without a project."""
         template = _make_template_with_entry()
-        character = CharacterFactory(db_key="NoProjectChar")
+        character = CharacterSheetFactory(character__db_key="NoProjectChar").character
         instance = staff_assign_mission(template, character)
         self.assertIsNone(instance.target_project_id)

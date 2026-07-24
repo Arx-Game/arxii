@@ -53,9 +53,11 @@ class AudereOfferServiceTests(TestCase):
     def setUp(self) -> None:
         self.character = ObjectDBFactory(db_key="offer_surface_char")
         self.sheet = CharacterSheetFactory(character=self.character)
-        self.anima = CharacterAnimaFactory(character=self.character, current=10, maximum=50)
+        self.anima = CharacterAnimaFactory(
+            character=self.character.sheet_data, current=10, maximum=50
+        )
         self.engagement = CharacterEngagement.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             engagement_type=EngagementType.CHALLENGE,
             source_content_type=self.obj_ct,
             source_id=self.character.pk,
@@ -149,9 +151,11 @@ class UseTechniqueAudereHookTests(TestCase):
         # the cast path with a real Character rather than masking the mismatch.
         self.character = CharacterFactory(db_key="audere_hook_char")
         self.sheet = CharacterSheetFactory(character=self.character)
-        self.anima = CharacterAnimaFactory(character=self.character, current=50, maximum=50)
+        self.anima = CharacterAnimaFactory(
+            character=self.character.sheet_data, current=50, maximum=50
+        )
         self.engagement = CharacterEngagement.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             engagement_type=EngagementType.CHALLENGE,
             source_content_type=self.obj_ct,
             source_id=self.character.pk,

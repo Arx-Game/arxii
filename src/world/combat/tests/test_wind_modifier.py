@@ -54,7 +54,7 @@ def _equip_weapon(character, archetype: str) -> None:
     )
     inst = ItemInstanceFactory(template=template, durability=30)
     EquippedItemFactory(
-        character=character,
+        character=character.sheet_data,
         item_instance=inst,
         body_region=BodyRegion.TORSO,
         equipment_layer=EquipmentLayer.BASE,

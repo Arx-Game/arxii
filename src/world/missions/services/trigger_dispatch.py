@@ -87,7 +87,7 @@ def _dispatch_from_giver(giver: MissionGiver, character: ObjectDB) -> MissionIns
     """
     now = timezone.now()
     if MissionGiverCooldown.objects.filter(
-        giver=giver, character=character, available_at__gt=now
+        giver=giver, character_id=character.pk, available_at__gt=now
     ).exists():
         return None
     if _holds_active_trigger_mission(character):
@@ -130,7 +130,7 @@ def _holds_active_trigger_mission(character: ObjectDB) -> bool:
     """True if the character already holds a contract on an active trigger-sourced
     mission (source_offer is null = not NPC-mediated)."""
     return MissionInstance.objects.filter(
-        Q(participants__character=character)
+        Q(participants__character_id=character.pk)
         & Q(participants__is_contract_holder=True)
         & Q(status=MissionStatus.ACTIVE)
         & Q(source_offer__isnull=True)
@@ -153,7 +153,7 @@ def _write_cooldown(
 ) -> None:
     available_at = now + (template.cooldown or _DEFAULT_COOLDOWN)
     MissionGiverCooldown.objects.update_or_create(
-        giver=giver, character=character, defaults={"available_at": available_at}
+        giver=giver, character=character.sheet_data, defaults={"available_at": available_at}
     )
 
 

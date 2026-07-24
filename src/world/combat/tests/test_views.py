@@ -752,11 +752,11 @@ class DeclareAndResolveE2ETest(TestCase):
             character_sheet=self.player_sheet, health=100, max_health=100
         )
         CharacterAnimaFactory(
-            character=self.player_character,
+            character=self.player_character.sheet_data,
             current=50,
             maximum=50,
         )
-        CharacterEngagementFactory(character=self.player_character)
+        CharacterEngagementFactory(character=self.player_character.sheet_data)
 
         # Room location for the caster character (required by use_technique)
         room = ObjectDBFactory(

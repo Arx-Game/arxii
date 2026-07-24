@@ -98,9 +98,7 @@ class IdentificationDifficultyTests(TestCase):
         cls.target_sheet = CharacterSheetFactory(character=cls.target_character)
 
     def _apply_overlay(self, *, kind: str, concealment_level: str) -> None:
-        disguise = CharacterFormFactory(
-            character=self.target_character, form_type=FormType.DISGUISE
-        )
+        disguise = CharacterFormFactory(character=self.target_sheet, form_type=FormType.DISGUISE)
         apply_disguise(
             self.target_character, disguise, kind=kind, concealment_level=concealment_level
         )
@@ -248,9 +246,7 @@ class IdentificationDifficultyTests(TestCase):
         )
         template = ItemTemplateFactory(name=f"Disguise Kit {kit_multiplier}")
         kit_instance = ItemInstanceFactory(template=template, quality_tier=tier)
-        disguise = CharacterFormFactory(
-            character=self.target_character, form_type=FormType.DISGUISE
-        )
+        disguise = CharacterFormFactory(character=self.target_sheet, form_type=FormType.DISGUISE)
         apply_disguise(
             self.target_character,
             disguise,
@@ -293,9 +289,7 @@ class IdentificationDifficultyTests(TestCase):
         )
         template = ItemTemplateFactory(name="Godlike Disguise Kit")
         kit_instance = ItemInstanceFactory(template=template, quality_tier=tier)
-        disguise = CharacterFormFactory(
-            character=self.target_character, form_type=FormType.DISGUISE
-        )
+        disguise = CharacterFormFactory(character=self.target_sheet, form_type=FormType.DISGUISE)
         apply_disguise(
             self.target_character,
             disguise,
@@ -329,9 +323,9 @@ class AttemptIdentificationTests(TestCase):
     def _magical_full_target(self):
         """A fresh, unrelated target wearing a magical FULL disguise — the auto-fail band
         against a total stranger (mirrors ``IdentificationDifficultyTests``'s equivalent)."""
-        target = CharacterFactory()
-        CharacterSheetFactory(character=target)
-        disguise = CharacterFormFactory(character=target, form_type=FormType.DISGUISE)
+        target_sheet = CharacterSheetFactory()
+        target = target_sheet.character
+        disguise = CharacterFormFactory(character=target_sheet, form_type=FormType.DISGUISE)
         apply_disguise(
             target, disguise, kind=DisguiseKind.MAGICAL, concealment_level=ConcealmentLevel.FULL
         )
@@ -455,9 +449,9 @@ class AttemptIdentificationTests(TestCase):
         # the AUTO_FAIL short-circuit). Forced to a SUCCESS-level outcome to prove the guard wins
         # BEFORE any roll happens: if it reached perform_check, a forced success would hit the
         # (pre-fix) SUCCESS path and mint a no-op PersonaDiscovery.
-        target = CharacterFactory()
-        CharacterSheetFactory(character=target)
-        disguise = CharacterFormFactory(character=target, form_type=FormType.DISGUISE)
+        target_sheet = CharacterSheetFactory()
+        target = target_sheet.character
+        disguise = CharacterFormFactory(character=target_sheet, form_type=FormType.DISGUISE)
         apply_disguise(
             target,
             disguise,

@@ -334,7 +334,7 @@ def _evaluate_majora_gates(  # noqa: PLR0911
     if stage_order < threshold.minimum_warp_stage.stage_order:
         return None, 0
 
-    if not CharacterEngagement.objects.filter(character=character).exists():
+    if not CharacterEngagement.objects.filter(character_id=character.pk).exists():
         return None, 0
 
     if threshold.requires_active_audere and not _has_active_condition(

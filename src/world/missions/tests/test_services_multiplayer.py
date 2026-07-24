@@ -109,9 +109,9 @@ class BuildGroupOptionListTests(TestCase):
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.p_a = MissionParticipantFactory(
-            instance=cls.instance, character=cls.char_a, is_contract_holder=True
+            instance=cls.instance, character=cls.char_a.sheet_data, is_contract_holder=True
         )
-        cls.p_b = MissionParticipantFactory(instance=cls.instance, character=cls.char_b)
+        cls.p_b = MissionParticipantFactory(instance=cls.instance, character=cls.char_b.sheet_data)
 
         # A owns dist_a, B owns dist_b (disjoint).
         cls.dist_a = DistinctionFactory(slug="grp-dist-a")
@@ -191,11 +191,11 @@ class TallyGroupWinnerTests(TestCase):
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.holder = MissionParticipantFactory(
             instance=cls.instance,
-            character=CharacterFactory(),
+            character=CharacterSheetFactory(),
             is_contract_holder=True,
         )
-        cls.p2 = MissionParticipantFactory(instance=cls.instance, character=CharacterFactory())
-        cls.p3 = MissionParticipantFactory(instance=cls.instance, character=CharacterFactory())
+        cls.p2 = MissionParticipantFactory(instance=cls.instance, character=CharacterSheetFactory())
+        cls.p3 = MissionParticipantFactory(instance=cls.instance, character=CharacterSheetFactory())
         cls.node = MissionNodeFactory(template=cls.template, key="n", is_entry=True)
         cls.opt1 = MissionOptionFactory(node=cls.node, order=0)
         cls.opt2 = MissionOptionFactory(node=cls.node, order=1)
@@ -251,10 +251,10 @@ class ContractHolderTests(TestCase):
         instance = MissionInstanceFactory()
         holder = MissionParticipantFactory(
             instance=instance,
-            character=CharacterFactory(),
+            character=CharacterSheetFactory(),
             is_contract_holder=True,
         )
-        MissionParticipantFactory(instance=instance, character=CharacterFactory())
+        MissionParticipantFactory(instance=instance, character=CharacterSheetFactory())
         self.assertEqual(contract_holder(instance), holder)
 
 
@@ -279,10 +279,10 @@ class GroupResolveCoinflipVoteTests(TestCase):
         cls.dest = MissionNodeFactory(template=cls.template, key="dest")
         cls.holder = MissionParticipantFactory(
             instance=cls.instance,
-            character=cls.char_h,
+            character=cls.char_h.sheet_data,
             is_contract_holder=True,
         )
-        cls.p2 = MissionParticipantFactory(instance=cls.instance, character=cls.char_2)
+        cls.p2 = MissionParticipantFactory(instance=cls.instance, character=cls.char_2.sheet_data)
 
         cls.success = CheckOutcomeFactory(name="GrpSuccess", success_level=3)
         cls.sneak = CheckTypeFactory(name="GrpSneak")
@@ -306,7 +306,7 @@ class GroupResolveCoinflipVoteTests(TestCase):
         with force_check_outcome(self.success):
             deeds = _seed_and_resolve(self.instance, self.entry, picks)
         self.assertEqual(len(deeds), 1)
-        self.assertEqual(deeds[0].actor, self.char_h)
+        self.assertEqual(deeds[0].actor, self.char_h.sheet_data)
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.current_node, self.dest)
 
@@ -355,10 +355,10 @@ class GroupResolveJointTests(TestCase):
     def _setup_participants(self, instance: object) -> tuple[object, object]:
         holder = MissionParticipantFactory(
             instance=instance,
-            character=self.char_h,
+            character=self.char_h.sheet_data,
             is_contract_holder=True,
         )
-        p2 = MissionParticipantFactory(instance=instance, character=self.char_2)
+        p2 = MissionParticipantFactory(instance=instance, character=self.char_2.sheet_data)
         return holder, p2
 
     def _outcome_by_character(self, mapping: dict[object, object]) -> object:
@@ -395,9 +395,9 @@ class GroupResolveJointTests(TestCase):
         # success deed belongs to the holder, the failure deed to p2 — no
         # cross-attribution.
         by_actor = {d.actor: d for d in deeds}
-        self.assertEqual(set(by_actor), {self.char_h, self.char_2})
-        self.assertEqual(by_actor[self.char_h].outcome, self.success)
-        self.assertEqual(by_actor[self.char_2].outcome, self.failure)
+        self.assertEqual(set(by_actor), {self.char_h.sheet_data, self.char_2.sheet_data})
+        self.assertEqual(by_actor[self.char_h.sheet_data].outcome, self.success)
+        self.assertEqual(by_actor[self.char_2.sheet_data].outcome, self.failure)
         instance.refresh_from_db()
         self.assertEqual(instance.current_node, self.win_node)
 
@@ -619,9 +619,9 @@ class GroupResolveJointTerminalRewardTests(TestCase):
     def test_joint_terminal_emits_rewards_once_on_holder_deed(self) -> None:
         instance = MissionInstanceFactory(template=self.template)
         holder = MissionParticipantFactory(
-            instance=instance, character=self.char_h, is_contract_holder=True
+            instance=instance, character=self.char_h.sheet_data, is_contract_holder=True
         )
-        p2 = MissionParticipantFactory(instance=instance, character=self.char_2)
+        p2 = MissionParticipantFactory(instance=instance, character=self.char_2.sheet_data)
         node = MissionNodeFactory(
             template=self.template,
             key="j-terminal",
@@ -661,8 +661,8 @@ class GroupResolveJointTerminalRewardTests(TestCase):
         self.assertEqual(instance.status, MissionStatus.COMPLETE)
         # Emission MUST anchor on the holder's deed, NOT any per-attempt
         # deed of a non-holder participant.
-        holder_deed = next(d for d in deeds if d.actor == self.char_h)
-        non_holder_deed = next(d for d in deeds if d.actor == self.char_2)
+        holder_deed = next(d for d in deeds if d.actor == self.char_h.sheet_data)
+        non_holder_deed = next(d for d in deeds if d.actor == self.char_2.sheet_data)
         self.assertEqual(MissionDeedRewardLine.objects.filter(deed=non_holder_deed).count(), 0)
         # Broadcast → one line per participant (2), all on the holder's deed.
         holder_lines = list(MissionDeedRewardLine.objects.filter(deed=holder_deed))
@@ -679,9 +679,9 @@ class GroupResolveJointTerminalRewardTests(TestCase):
         # on that terminal route).
         instance = MissionInstanceFactory(template=self.template)
         holder = MissionParticipantFactory(
-            instance=instance, character=self.char_h, is_contract_holder=True
+            instance=instance, character=self.char_h.sheet_data, is_contract_holder=True
         )
-        p2 = MissionParticipantFactory(instance=instance, character=self.char_2)
+        p2 = MissionParticipantFactory(instance=instance, character=self.char_2.sheet_data)
         node = MissionNodeFactory(
             template=self.template,
             key="j-non-terminal",
@@ -734,9 +734,9 @@ class GroupResolveJointTerminalRewardTests(TestCase):
         # the ONLY emission point.
         instance = MissionInstanceFactory(template=self.template)
         holder = MissionParticipantFactory(
-            instance=instance, character=self.char_h, is_contract_holder=True
+            instance=instance, character=self.char_h.sheet_data, is_contract_holder=True
         )
-        p2 = MissionParticipantFactory(instance=instance, character=self.char_2)
+        p2 = MissionParticipantFactory(instance=instance, character=self.char_2.sheet_data)
         node = MissionNodeFactory(
             template=self.template,
             key="j-per-attempt-guard",
@@ -783,8 +783,8 @@ class GroupResolveJointTerminalRewardTests(TestCase):
             deeds = _seed_and_resolve(instance, node, picks)
         instance.refresh_from_db()
         self.assertEqual(instance.status, MissionStatus.COMPLETE)
-        holder_deed = next(d for d in deeds if d.actor == self.char_h)
-        non_holder_deed = next(d for d in deeds if d.actor == self.char_2)
+        holder_deed = next(d for d in deeds if d.actor == self.char_h.sheet_data)
+        non_holder_deed = next(d for d in deeds if d.actor == self.char_2.sheet_data)
         self.assertEqual(MissionDeedRewardLine.objects.filter(deed=non_holder_deed).count(), 0)
         holder_lines = list(MissionDeedRewardLine.objects.filter(deed=holder_deed))
         # Combined failure → failure_route emits per ALL_EQUAL (2 participants).
@@ -836,8 +836,12 @@ class GroupOptionListLocationTests(TestCase):
         _t, node, option, instance = self._group_with_option(
             NodeLocationMode.ROOMS, node_room_profile=profile_a
         )
-        MissionParticipantFactory(instance=instance, character=char_a, is_contract_holder=True)
-        MissionParticipantFactory(instance=instance, character=char_b)
+        MissionParticipantFactory(
+            instance=instance,
+            character=char_a.sheet_data,
+            is_contract_holder=True,
+        )
+        MissionParticipantFactory(instance=instance, character=char_b.sheet_data)
 
         presented = build_group_option_list(instance, node)
         owners = {entry.owner for entry in presented if entry.option == option}
@@ -849,8 +853,12 @@ class GroupOptionListLocationTests(TestCase):
         char_a = self._pc_in(room_a)
         char_b = self._pc_in(None)  # placeless
         _t, node, option, instance = self._group_with_option(NodeLocationMode.ANYWHERE)
-        MissionParticipantFactory(instance=instance, character=char_a, is_contract_holder=True)
-        MissionParticipantFactory(instance=instance, character=char_b)
+        MissionParticipantFactory(
+            instance=instance,
+            character=char_a.sheet_data,
+            is_contract_holder=True,
+        )
+        MissionParticipantFactory(instance=instance, character=char_b.sheet_data)
 
         presented = build_group_option_list(instance, node)
         owners = {entry.owner for entry in presented if entry.option == option}

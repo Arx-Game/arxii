@@ -128,7 +128,7 @@ class StyleFacetCoexistenceTests(TestCase):
             attachment_quality_tier=cls.quality,
         )
         EquippedItemFactory(
-            character=cls.char,
+            character=cls.char.sheet_data,
             item_instance=cls.item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -287,7 +287,7 @@ class DilutionOnlyTests(TestCase):
 
         # Equip item A (bound style) on the character initially.
         cls.equipped_a = EquippedItemFactory(
-            character=cls.char,
+            character=cls.char.sheet_data,
             item_instance=cls.item_a,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -323,7 +323,7 @@ class DilutionOnlyTests(TestCase):
 
         # Equip item B (unbound style).
         equipped_b = EquippedItemFactory(
-            character=self.char,
+            character=self.char.sheet_data,
             item_instance=self.item_b,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.OUTER,
@@ -357,7 +357,7 @@ class DilutionOnlyTests(TestCase):
         try:
             # Equip item B (the unbound style only).
             equipped_b = EquippedItemFactory(
-                character=self.char,
+                character=self.char.sheet_data,
                 item_instance=self.item_b,
                 body_region=BodyRegion.TORSO,
                 equipment_layer=EquipmentLayer.OUTER,
@@ -378,7 +378,7 @@ class DilutionOnlyTests(TestCase):
             from world.items.constants import BodyRegion, EquipmentLayer
 
             EquippedItemFactory(
-                character=self.char,
+                character=self.char.sheet_data,
                 item_instance=self.item_a,
                 body_region=BodyRegion.TORSO,
                 equipment_layer=EquipmentLayer.BASE,
@@ -475,13 +475,13 @@ class PartialVsFullCombinationTests(TestCase):
 
         # Equip both items on cls.char (full-outfit baseline).
         cls.equipped_a = EquippedItemFactory(
-            character=cls.char,
+            character=cls.char.sheet_data,
             item_instance=cls.item_a,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
         cls.equipped_b = EquippedItemFactory(
-            character=cls.char,
+            character=cls.char.sheet_data,
             item_instance=cls.item_b,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.OUTER,
@@ -517,7 +517,7 @@ class PartialVsFullCombinationTests(TestCase):
             self.assertEqual(result, 2)
         finally:
             EquippedItemFactory(
-                character=self.char,
+                character=self.char.sheet_data,
                 item_instance=self.item_b,
                 body_region=BodyRegion.TORSO,
                 equipment_layer=EquipmentLayer.OUTER,
@@ -541,7 +541,7 @@ class PartialVsFullCombinationTests(TestCase):
             self.assertGreater(partial, 0)
         finally:
             EquippedItemFactory(
-                character=self.char,
+                character=self.char.sheet_data,
                 item_instance=self.item_b,
                 body_region=BodyRegion.TORSO,
                 equipment_layer=EquipmentLayer.OUTER,

@@ -79,7 +79,7 @@ class CharacterEquipmentHandler:
             )
 
             qs = (
-                EquippedItem.objects.filter(character=self._character)
+                EquippedItem.objects.filter(character_id=self._character.pk)
                 .select_related(
                     "item_instance",
                     "item_instance__template",

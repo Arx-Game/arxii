@@ -65,8 +65,8 @@ def _make_cancel_flow():
 def _setup_caster(room=None):
     """Return (character, anima) with a controlled technique ready."""
     anima = CharacterAnimaFactory(current=20, maximum=20)
-    char = anima.character
-    CharacterEngagementFactory(character=char)
+    char = anima.character.character
+    CharacterEngagementFactory(character=anima.character)
     if room is not None:
         char.location = room
     return char, anima

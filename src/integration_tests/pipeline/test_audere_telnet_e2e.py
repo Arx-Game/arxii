@@ -47,7 +47,9 @@ class TestAudereTelnetE2E(TestCase):
             self.majora_offer,
         ) = build_crossing_world(boundary_level=5, suffix="te2e")
 
-        self.anima = CharacterAnimaFactory(character=self.character, current=50, maximum=50)
+        self.anima = CharacterAnimaFactory(
+            character=self.character.sheet_data, current=50, maximum=50
+        )
 
         # build_majora_world already created soulfray stages (1, 2, 3) for the shared
         # template. Fetch the stage_order=3 row to wire the audere gate minimum.
@@ -93,8 +95,10 @@ class TestAudereTelnetE2E(TestCase):
 
     def test_accept_surge_via_telnet(self) -> None:
         """accept surge → resolve_audere_offer → offer consumed + bonuses applied."""
-        pre_intensity = CharacterEngagement.objects.get(character=self.character).intensity_modifier
-        pre_maximum = CharacterAnima.objects.get(character=self.character).maximum
+        pre_intensity = CharacterEngagement.objects.get(
+            character=self.character.sheet_data
+        ).intensity_modifier
+        pre_maximum = CharacterAnima.objects.get(character=self.character.sheet_data).maximum
 
         cmd = CmdAccept()
         cmd.caller = self.character
@@ -104,12 +108,12 @@ class TestAudereTelnetE2E(TestCase):
         cmd.func()
 
         self.assertFalse(PendingAudereOffer.objects.filter(character_sheet=self.sheet).exists())
-        engagement = CharacterEngagement.objects.get(character=self.character)
+        engagement = CharacterEngagement.objects.get(character=self.character.sheet_data)
         self.assertEqual(
             engagement.intensity_modifier,
             pre_intensity + self.audere_config.intensity_bonus,
         )
-        anima = CharacterAnima.objects.get(character=self.character)
+        anima = CharacterAnima.objects.get(character=self.character.sheet_data)
         self.assertEqual(anima.maximum, pre_maximum + self.audere_config.anima_pool_bonus)
         self.character.msg.assert_called()
 

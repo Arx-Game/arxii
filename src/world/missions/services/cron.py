@@ -72,7 +72,7 @@ def _grant_resonance(row: MissionRewardQueue) -> None:
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 
     line = row.line
-    sheet = line.recipient.sheet_data
+    sheet = line.recipient
     grant_resonance(
         sheet,
         line.resonance,
@@ -159,7 +159,7 @@ def apply_mission_reward_batch() -> RewardBatchResult:
     # left as a per-row query.
     unapplied = list(
         MissionRewardQueue.objects.filter(applied=False)
-        .select_related("line", "line__recipient", "line__recipient__sheet_data")
+        .select_related("line", "line__recipient")
         .order_by("pk")
     )
 

@@ -412,7 +412,7 @@ def get_character_legend_total(character: ObjectDB) -> int:
         The character's personal legend total, or 0 if no row exists.
     """
     try:
-        summary = CharacterLegendSummary.objects.get(character=character)
+        summary = CharacterLegendSummary.objects.get(character_id=character.pk)
         return summary.personal_legend
     except CharacterLegendSummary.DoesNotExist:
         return 0

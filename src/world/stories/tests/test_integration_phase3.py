@@ -109,7 +109,7 @@ class Phase3EndToEndTests(EvenniaTestCase):
         global_episode = EpisodeFactory(chapter=global_chapter)
         StoryParticipationFactory(
             story=global_story,
-            character=crucible_sheet.character,
+            character=crucible_sheet,
         )
         global_beat = BeatFactory(
             episode=global_episode,

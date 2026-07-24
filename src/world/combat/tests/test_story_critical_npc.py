@@ -50,7 +50,7 @@ class StoryCriticalNPCCombatTests(TestCase):
 
     def test_participant_can_defeat_story_critical_npc(self):
         StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
-        StoryParticipationFactory(story=self.story, character=self.attacker_obj)
+        StoryParticipationFactory(story=self.story, character=self.attacker_obj.sheet_data)
         result = apply_damage_to_opponent(self.opponent, 100, source_sheet=self.attacker_sheet)
         self.opponent.refresh_from_db()
         self.assertTrue(result.defeated)

@@ -117,7 +117,9 @@ _PLACEHOLDER_STORY_TEXT = (
 
 def participant_for(instance: MissionInstance, character: ObjectDB) -> MissionParticipant:
     """The character's participant row on ``instance``; raises BeatActionError."""
-    participant = MissionParticipant.objects.filter(instance=instance, character=character).first()
+    participant = MissionParticipant.objects.filter(
+        instance=instance, character_id=character.pk
+    ).first()
     if participant is None:
         raise NotParticipantError(_ERR_NOT_PARTICIPANT)
     return participant
@@ -210,7 +212,7 @@ def _seed_legend_stories(
     from world.societies.models import LegendDeedStory, LegendEntry  # noqa: PLC0415
     from world.societies.spread_services import save_deed_story  # noqa: PLC0415
 
-    sheet = participant.character.character_sheet
+    sheet = participant.character
     if sheet is None:
         return
     if participant.is_contract_holder and instance.accepted_as_persona_id is not None:
@@ -520,7 +522,7 @@ def _group_beat_view(
     ballot_states = tuple(
         GroupBallotState(
             character_id=ballot.participant.character_id,
-            character_name=ballot.participant.character.db_key,
+            character_name=ballot.participant.character.character.db_key,
             picked_option_id=ballot.picked_option_id,
             voted_option_id=ballot.voted_option_id,
         )
@@ -584,7 +586,7 @@ def _group_resolution_story_text(instance: MissionInstance, character: ObjectDB)
     stir already).
     """
     node = instance.current_node
-    deed_qs = instance.deeds.filter(actor=character)
+    deed_qs = instance.deeds.filter(actor_id=character.pk)
     if node is not None:
         deed_qs = deed_qs.filter(node=node)
     deed = deed_qs.order_by("-applied_at").first()
@@ -703,7 +705,7 @@ def _declared_supports_for(
     return tuple(
         SupportDeclarationView(
             character_id=decl.participant.character_id,
-            character_name=decl.participant.character.db_key,
+            character_name=decl.participant.character.character.db_key,
             label=(
                 decl.pattern.name
                 if decl.pattern_id
@@ -771,7 +773,7 @@ def maybe_pause_mission_for_disconnect(character_sheet: CharacterSheet) -> None:
     from world.missions.models import MissionInstance, MissionParticipant  # noqa: PLC0415
 
     instance_ids = MissionParticipant.objects.filter(
-        character=character_sheet.character,
+        character=character_sheet,
         instance__status=MissionStatus.ACTIVE,
     ).values_list("instance_id", flat=True)
     for instance in MissionInstance.objects.filter(pk__in=list(instance_ids)):

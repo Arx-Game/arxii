@@ -33,7 +33,7 @@ class CharacterAtMaxNotExaminedTests(TestCase):
         """Character with current == maximum → examined==0."""
         sheet = CharacterSheetFactory()
         CharacterAnimaFactory(
-            character=sheet.character,
+            character=sheet,
             current=100,
             maximum=100,
         )
@@ -63,7 +63,7 @@ class CharacterBelowMaxNoBlockingConditionsTests(TestCase):
 
         sheet = CharacterSheetFactory()
         anima = CharacterAnimaFactory(
-            character=sheet.character,
+            character=sheet,
             current=50,
             maximum=100,
         )
@@ -111,7 +111,7 @@ class CharacterBelowMaxSoulfrayStage2SkippedTests(TestCase):
 
         sheet = CharacterSheetFactory()
         anima = CharacterAnimaFactory(
-            character=sheet.character,
+            character=sheet,
             current=50,
             maximum=100,
         )
@@ -169,7 +169,7 @@ class CharacterBelowMaxSoulfrayStage1RegenAppliedTests(TestCase):
 
         sheet = CharacterSheetFactory()
         anima = CharacterAnimaFactory(
-            character=sheet.character,
+            character=sheet,
             current=50,
             maximum=100,
         )
@@ -211,13 +211,13 @@ class CharacterEngagedSkippedTests(TestCase):
 
         sheet = CharacterSheetFactory()
         anima = CharacterAnimaFactory(
-            character=sheet.character,
+            character=sheet,
             current=50,
             maximum=100,
         )
 
         # Create engagement for this character
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterEngagementFactory(character=sheet)
 
         result = anima_regen_tick()
 
@@ -250,7 +250,7 @@ class NCharactersSingleDigitQueryCountTests(TestCase):
         for _ in range(10):
             sheet = CharacterSheetFactory()
             CharacterAnimaFactory(
-                character=sheet.character,
+                character=sheet,
                 current=50,
                 maximum=100,
             )

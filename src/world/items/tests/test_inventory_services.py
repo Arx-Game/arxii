@@ -53,10 +53,8 @@ class PickUpTests(TestCase):
             db_key="PickUpTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.character = CharacterFactory(
-            db_key="PickUpTestChar",
-            location=self.room,
-        )
+        self.character = CharacterSheetFactory(character__db_key="PickUpTestChar").character
+        self.character.location = self.room
         self.character.db_account = self.account
         self.character.save()
         self.sheet = CharacterSheetFactory(character=self.character)
@@ -188,10 +186,8 @@ class DropTests(TestCase):
             db_key="DropTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.character = CharacterFactory(
-            db_key="DropTestChar",
-            location=self.room,
-        )
+        self.character = CharacterSheetFactory(character__db_key="DropTestChar").character
+        self.character.location = self.room
         self.character.db_account = self.account
         self.character.save()
 
@@ -215,7 +211,7 @@ class DropTests(TestCase):
 
     def test_drop_auto_unequips_first(self) -> None:
         EquippedItem.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=self.item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -339,7 +335,7 @@ class GiveTests(TestCase):
 
     def test_give_auto_unequips_first(self) -> None:
         EquippedItem.objects.create(
-            character=self.giver,
+            character=self.giver.sheet_data,
             item_instance=self.item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -385,10 +381,8 @@ class EquipTests(TestCase):
             db_key="EquipTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.character = CharacterFactory(
-            db_key="EquipTestChar",
-            location=self.room,
-        )
+        self.character = CharacterSheetFactory(character__db_key="EquipTestChar").character
+        self.character.location = self.room
         self.character.db_account = self.account
         self.character.save()
         self.sheet = CharacterSheetFactory(character=self.character)
@@ -415,7 +409,9 @@ class EquipTests(TestCase):
     def test_equip_into_empty_slot_creates_row(self) -> None:
         equip(self.character_state, self.item_state)
         self.assertTrue(
-            EquippedItem.objects.filter(character=self.character, item_instance=self.item).exists()
+            EquippedItem.objects.filter(
+                character=self.character.sheet_data, item_instance=self.item
+            ).exists()
         )
 
     def test_equip_same_layer_swaps_existing(self) -> None:
@@ -436,7 +432,7 @@ class EquipTests(TestCase):
 
         equip(self.character_state, self.item_state)
 
-        equipped = EquippedItem.objects.filter(character=self.character)
+        equipped = EquippedItem.objects.filter(character=self.character.sheet_data)
         self.assertEqual(equipped.count(), 1)
         self.assertEqual(equipped.first().item_instance, self.item)
 
@@ -466,7 +462,7 @@ class EquipTests(TestCase):
         equip(self.character_state, self.item_state)
 
         self.assertEqual(
-            EquippedItem.objects.filter(character=self.character).count(),
+            EquippedItem.objects.filter(character=self.character.sheet_data).count(),
             2,
         )
 
@@ -490,7 +486,9 @@ class EquipTests(TestCase):
         equip(self.character_state, plate_state)
 
         self.assertEqual(
-            EquippedItem.objects.filter(character=self.character, item_instance=plate).count(),
+            EquippedItem.objects.filter(
+                character=self.character.sheet_data, item_instance=plate
+            ).count(),
             3,
         )
 
@@ -512,7 +510,9 @@ class EquipTests(TestCase):
         # Second equip should not raise and should leave exactly one row.
         equip(self.character_state, self.item_state)
         self.assertEqual(
-            EquippedItem.objects.filter(character=self.character, item_instance=self.item).count(),
+            EquippedItem.objects.filter(
+                character=self.character.sheet_data, item_instance=self.item
+            ).count(),
             1,
         )
 
@@ -528,10 +528,8 @@ class UnequipTests(TestCase):
             db_key="UnequipTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.character = CharacterFactory(
-            db_key="UnequipTestChar",
-            location=self.room,
-        )
+        self.character = CharacterSheetFactory(character__db_key="UnequipTestChar").character
+        self.character.location = self.room
         self.character.db_account = self.account
         self.character.save()
         self.sheet = CharacterSheetFactory(character=self.character)
@@ -613,10 +611,8 @@ class PutInTests(TestCase):
             db_key="PutInTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.character = CharacterFactory(
-            db_key="PutInTestChar",
-            location=self.room,
-        )
+        self.character = CharacterSheetFactory(character__db_key="PutInTestChar").character
+        self.character.location = self.room
         self.character.db_account = self.account
         self.character.save()
 
@@ -754,10 +750,8 @@ class TakeOutTests(TestCase):
             db_key="TakeOutTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.character = CharacterFactory(
-            db_key="TakeOutTestChar",
-            location=self.room,
-        )
+        self.character = CharacterSheetFactory(character__db_key="TakeOutTestChar").character
+        self.character.location = self.room
         self.character.db_account = self.account
         self.character.save()
         # #1909 gate reads the taker's sheet_data — every acting character has one.

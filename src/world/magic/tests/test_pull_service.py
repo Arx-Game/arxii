@@ -60,7 +60,7 @@ def _setup_combat_context(
 class SpendResonanceForPullCombatTests(TestCase):
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=self.sheet.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
         self.resonance = ResonanceFactory()
         CharacterResonanceFactory(
             character_sheet=self.sheet,
@@ -132,7 +132,7 @@ class SpendResonanceForPullCombatTests(TestCase):
         cr.refresh_from_db()
         self.assertEqual(cr.balance, 8)  # 10 − 2
         # Two threads → max(0, 2−1) × 1 = 1 anima.
-        anima = CharacterAnima.objects.get(character=self.sheet.character)
+        anima = CharacterAnima.objects.get(character=self.sheet)
         self.assertEqual(anima.current, 9)
 
     def test_double_commit_same_round_rejected(self) -> None:
@@ -280,7 +280,7 @@ class SpendResonanceForPullCombatTests(TestCase):
     def test_insufficient_anima_rejected_for_multi_thread(self) -> None:
         # Make anima 0 so multi-thread pull (which needs anima_per_thread × (n-1))
         # fails even though balance is fine.
-        anima = CharacterAnima.objects.get(character=self.sheet.character)
+        anima = CharacterAnima.objects.get(character=self.sheet)
         anima.current = 0
         anima.save(update_fields=["current"])
 
@@ -342,7 +342,7 @@ class SpendResonanceForPullCombatTests(TestCase):
 class SpendResonanceForPullEphemeralTests(TestCase):
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=self.sheet.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
         self.resonance = ResonanceFactory()
         CharacterResonanceFactory(
             character_sheet=self.sheet,
@@ -590,7 +590,7 @@ class FacetWornItemsGateTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=self.sheet.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
         self.resonance = ResonanceFactory()
         CharacterResonanceFactory(
             character_sheet=self.sheet,
@@ -639,7 +639,7 @@ class FacetWornItemsGateTests(TestCase):
         # Equip an item with an ItemFacet for self.facet on self.sheet.character.
         instance = ItemInstanceFactory()
         ItemFacetFactory(item_instance=instance, facet=self.facet)
-        EquippedItemFactory(character=self.sheet.character, item_instance=instance)
+        EquippedItemFactory(character=self.sheet, item_instance=instance)
         # Invalidate so the handler re-loads from DB (setUp may have touched the cache).
         self.sheet.character.equipped_items.invalidate()
 
@@ -696,7 +696,7 @@ class ResolvePullEffectsFacetScalingTests(TestCase):
             attachment_quality_tier=attachment_quality,
         )
         EquippedItemFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             item_instance=instance,
             body_region=body_region,
         )
@@ -799,7 +799,7 @@ class SpendResonanceForPullInertEffectsTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=self.sheet.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
         self.resonance = ResonanceFactory()
         CharacterResonanceFactory(
             character_sheet=self.sheet,

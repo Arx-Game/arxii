@@ -2,7 +2,6 @@ from decimal import Decimal
 
 import factory
 
-from evennia_extensions.factories import CharacterFactory
 from world.forms.models import (
     ActiveAlternateSelf,
     AlternateSelf,
@@ -95,7 +94,7 @@ class CharacterFormFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterForm
 
-    character = factory.SubFactory(CharacterFactory)
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     name = ""
     form_type = FormType.TRUE
     is_player_created = False
@@ -128,7 +127,7 @@ class TemporaryFormChangeFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = TemporaryFormChange
 
-    character = factory.SubFactory(CharacterFactory)
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     trait = factory.SubFactory(FormTraitFactory)
     option = factory.SubFactory(
         FormTraitOptionFactory, trait=factory.SelfAttribute(_TRAIT_SELF_REF)

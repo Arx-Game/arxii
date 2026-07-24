@@ -76,7 +76,7 @@ def _equip_weapon(char):
     )
     item = ItemInstanceFactory(template=template, durability=10)
     EquippedItemFactory(
-        character=char,
+        character=char.sheet_data,
         item_instance=item,
         body_region=BodyRegion.RIGHT_HAND,
         equipment_layer=EquipmentLayer.BASE,

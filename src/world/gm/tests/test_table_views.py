@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMTableStatus
 from world.gm.factories import (
@@ -24,7 +24,7 @@ def _linked_persona(account):
     GMTableMembership.persona -> Persona.character_sheet
     -> CharacterSheet.character (ObjectDB) -> ObjectDB.db_account
     """
-    char = CharacterFactory()
+    char = CharacterSheetFactory().character
     char.db_account = account
     char.save()
     sheet = CharacterSheetFactory(character=char)
@@ -282,13 +282,13 @@ class GMTableComputedFieldsTest(TestCase):
 
         # Guest: story participant at this table but NOT a table member
         cls.guest_account = AccountFactory()
-        cls.guest_char = CharacterFactory()
+        cls.guest_char = CharacterSheetFactory().character
         cls.guest_char.db_account = cls.guest_account
         cls.guest_char.save()
         cls.guest_story = StoryFactory(primary_table=cls.table)
         cls.guest_participation = StoryParticipationFactory(
             story=cls.guest_story,
-            character=cls.guest_char,
+            character=cls.guest_char.sheet_data,
             is_active=True,
         )
 

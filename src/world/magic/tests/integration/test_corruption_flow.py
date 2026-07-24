@@ -464,7 +464,7 @@ class FullCastPipelineCorruptionTests(TestCase):
         _make_simple_template(resonance)
 
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
 
         result = use_technique(
             character=sheet.character,
@@ -499,7 +499,7 @@ class FullCastPipelineCorruptionTests(TestCase):
         _make_simple_template(resonance)
 
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
 
         result = use_technique(
             character=sheet.character,
@@ -530,7 +530,7 @@ class FullCastPipelineCorruptionTests(TestCase):
         _make_simple_template(resonance)
 
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=50, maximum=50)
+        CharacterAnimaFactory(character=sheet, current=50, maximum=50)
 
         # Pre-load to 40 — below threshold=50 so no condition yet.
         # Direct DB write bypasses the service to avoid test duplication.
@@ -572,7 +572,7 @@ class FullCastPipelineCorruptionTests(TestCase):
         _make_simple_template(resonance)
 
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=50, maximum=50)
+        CharacterAnimaFactory(character=sheet, current=50, maximum=50)
 
         # Give the character a location so emit_event fires.
         room = _create_room()
@@ -610,15 +610,16 @@ class FullCastPipelineCorruptionTests(TestCase):
 
     def test_no_sheet_character_skips_corruption_silently(self) -> None:
         """Character without a CharacterSheet → cast succeeds, no corruption attempted."""
-        # Build an ObjectDB character directly — no CharacterSheet row.
+        # Build an ObjectDB character directly — no CharacterSheet row. Anima is
+        # sheet-anchored now, so a sheet-less caster can only cast a zero-cost
+        # technique (deduct_anima early-returns before the row lookup).
         _resonance, _gift, technique = _make_abyssal_gift_and_technique(
-            intensity=2, control=10, anima_cost=2, level=1
+            intensity=2, control=10, anima_cost=0, level=1
         )
         character = ObjectDBFactory(
             db_key="NPCTestChar",
             db_typeclass_path="typeclasses.characters.Character",
         )
-        CharacterAnimaFactory(character=character, current=20, maximum=20)
 
         result = use_technique(
             character=character,

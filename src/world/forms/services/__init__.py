@@ -117,7 +117,7 @@ def get_apparent_form(character) -> dict[FormTrait, FormTraitOption]:
     }
 
     # Overlay active temporary changes (filter on active() first, then by character)
-    temp_changes = TemporaryFormChange.objects.active().filter(character=character)
+    temp_changes = TemporaryFormChange.objects.active().filter(character_id=character.pk)
     for change in temp_changes.select_related("trait", "option"):
         base_values[change.trait] = change.option
 
@@ -140,7 +140,7 @@ def switch_form(character, target_form: CharacterForm) -> None:
     if target_form.character_id != character.id:
         raise FormOwnershipError
 
-    form_state, _ = CharacterFormState.objects.get_or_create(character=character)
+    form_state, _ = CharacterFormState.objects.get_or_create(character=character.sheet_data)
     form_state.active_form = target_form
     form_state.save()
 
@@ -152,7 +152,7 @@ def revert_to_true_form(character) -> None:
     Raises:
         CharacterForm.DoesNotExist: If no true form exists
     """
-    true_form = CharacterForm.objects.get(character=character, form_type=FormType.TRUE)
+    true_form = CharacterForm.objects.get(character_id=character.pk, form_type=FormType.TRUE)
     switch_form(character, true_form)
 
 
@@ -306,9 +306,7 @@ def assume_alternate_self(
         active.return_form = current_form
     else:
         # Try to set return anchor to true form if an active form state is absent.
-        true_form = CharacterForm.objects.filter(
-            character=sheet.character, form_type=FormType.TRUE
-        ).first()
+        true_form = CharacterForm.objects.filter(character=sheet, form_type=FormType.TRUE).first()
         active.return_form = true_form
 
     active.return_persona = sheet.active_persona
@@ -509,13 +507,13 @@ def create_true_form(character, selections: dict[FormTrait, FormTraitOption]) ->
     Raises:
         ValueError: If a true form already exists for this character
     """
-    if CharacterForm.objects.filter(character=character, form_type=FormType.TRUE).exists():
+    if CharacterForm.objects.filter(character_id=character.pk, form_type=FormType.TRUE).exists():
         msg = "Character already has a true form"
         raise ValueError(msg)
 
     # Create the form
     form = CharacterForm.objects.create(
-        character=character,
+        character=character.sheet_data,
         form_type=FormType.TRUE,
         is_player_created=False,
     )
@@ -527,7 +525,9 @@ def create_true_form(character, selections: dict[FormTrait, FormTraitOption]) ->
         )
 
     # Create/update form state
-    CharacterFormState.objects.update_or_create(character=character, defaults={"active_form": form})
+    CharacterFormState.objects.update_or_create(
+        character=character.sheet_data, defaults={"active_form": form}
+    )
 
     return form
 
@@ -537,7 +537,7 @@ def create_true_form(character, selections: dict[FormTrait, FormTraitOption]) ->
 
 def _true_form(character) -> CharacterForm:
     """The character's real/true form. Raises if character creation never ran."""
-    return CharacterForm.objects.get(character=character, form_type=FormType.TRUE)
+    return CharacterForm.objects.get(character_id=character.pk, form_type=FormType.TRUE)
 
 
 def _blend_component(
@@ -718,7 +718,7 @@ def apply_disguise(
 
     disguise_form.concealment_level = concealment_level
     disguise_form.save(update_fields=["concealment_level"])
-    form_state, _ = CharacterFormState.objects.get_or_create(character=character)
+    form_state, _ = CharacterFormState.objects.get_or_create(character=character.sheet_data)
     form_state.active_fake_overlay = disguise_form
     form_state.overlay_kind = kind
     form_state.applied_kit_instance = kit_instance

@@ -7,6 +7,7 @@ ItemFacet — the same setup pattern as the sibling facet-service tests.
 
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import FASHION_MATCH_BASE, BodyRegion, EquipmentLayer
 from world.mechanics.services import fashion_outfit_bonus
 
@@ -35,7 +36,6 @@ class FashionOutfitBonusHappyPathTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import CharacterFactory
         from world.items.factories import (
             EquippedItemFactory,
             FashionStyleBonusFactory,
@@ -76,9 +76,9 @@ class FashionOutfitBonusHappyPathTests(TestCase):
         )
 
         # Character wearing the item.
-        cls.character = CharacterFactory(db_key="FashionBonusChar")
+        cls.character = CharacterSheetFactory(character__db_key="FashionBonusChar").character
         cls.equipped = EquippedItemFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             item_instance=cls.item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -149,7 +149,6 @@ class FashionOutfitBonusVogueStylesTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import CharacterFactory
         from world.items.factories import (
             EquippedItemFactory,
             FashionStyleBonusFactory,
@@ -188,9 +187,9 @@ class FashionOutfitBonusVogueStylesTests(TestCase):
         )
 
         # Character wearing the item.
-        cls.character = CharacterFactory(db_key="VogueStyleChar")
+        cls.character = CharacterSheetFactory(character__db_key="VogueStyleChar").character
         cls.equipped = EquippedItemFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             item_instance=cls.item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

@@ -22,7 +22,8 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
+from evennia_extensions.factories import RoomProfileFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import (
     AffinityInteractionAggressor,
     AffinityInteractionKind,
@@ -63,7 +64,7 @@ class AlignedPairTest(ResonanceCacheIsolationMixin, TestCase):
     """ALIGNED pair → valence ALIGNED, kind AMPLIFY, direction ENVIRONMENT_DOMINANT, magnitude>0."""
 
     def test_aligned_pair(self) -> None:
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -81,7 +82,7 @@ class AlignedPairTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("80.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("10.00"),
@@ -114,7 +115,7 @@ class OpposedRejectTest(ResonanceCacheIsolationMixin, TestCase):
     """Abyssal-caster / Celestial-place REJECT: OPPOSED, ENVIRONMENT_DOMINANT."""
 
     def test_opposed_reject(self) -> None:
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -134,7 +135,7 @@ class OpposedRejectTest(ResonanceCacheIsolationMixin, TestCase):
 
         # Abyssal-dominant caster
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("20.00"),
             abyssal=Decimal("70.00"),
@@ -172,8 +173,8 @@ class SmallerSeverityTest(ResonanceCacheIsolationMixin, TestCase):
         # Place: primal affinity (for repel) and celestial affinity (for reject)
         # Caster: celestial for repel, abyssal for reject
         # Both at 80% alignment, same place_magnitude=50
-        caster_repel = CharacterFactory()
-        caster_reject = CharacterFactory()
+        caster_repel = CharacterSheetFactory().character
+        caster_reject = CharacterSheetFactory().character
         room_profile_repel = RoomProfileFactory()
         room_profile_reject = RoomProfileFactory()
         room_repel = room_profile_repel.objectdb
@@ -197,7 +198,7 @@ class SmallerSeverityTest(ResonanceCacheIsolationMixin, TestCase):
             severity_multiplier=Decimal("0.30"),
         )
         CharacterAuraFactory(
-            character=caster_repel,
+            character=caster_repel.sheet_data,
             celestial=Decimal("80.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("10.00"),
@@ -218,7 +219,7 @@ class SmallerSeverityTest(ResonanceCacheIsolationMixin, TestCase):
             severity_multiplier=Decimal("1.00"),
         )
         CharacterAuraFactory(
-            character=caster_reject,
+            character=caster_reject.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -270,13 +271,13 @@ class CorruptDirectionTest(ResonanceCacheIsolationMixin, TestCase):
         _, _, primal_res, abyssal_res, _ = self._make_corrupt_setup()
         cfg = get_resonance_environment_config()
 
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
         _set_room_resonance_value(room_profile, primal_res, 10)
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -308,13 +309,13 @@ class CorruptDirectionTest(ResonanceCacheIsolationMixin, TestCase):
         _, _, primal_res, abyssal_res, _ = self._make_corrupt_setup()
         cfg = get_resonance_environment_config()
 
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
         _set_room_resonance_value(room_profile, primal_res, 80)
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("40.00"),
             primal=Decimal("30.00"),
             abyssal=Decimal("30.00"),
@@ -349,13 +350,13 @@ class CorruptDirectionTest(ResonanceCacheIsolationMixin, TestCase):
         _, _, primal_res, abyssal_res, _ = self._make_corrupt_setup()
         cfg = get_resonance_environment_config()
 
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
         _set_room_resonance_value(room_profile, primal_res, 25)
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("20.00"),
             primal=Decimal("38.00"),
             abyssal=Decimal("42.00"),
@@ -386,7 +387,7 @@ class MissingAuraTest(ResonanceCacheIsolationMixin, TestCase):
     """Missing CharacterAura → inert effect (valence="", magnitude=0)."""
 
     def test_missing_aura_returns_inert_cast_time(self) -> None:
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -427,7 +428,7 @@ class MultiAffinityGiftTest(ResonanceCacheIsolationMixin, TestCase):
 
     def test_highest_severity_chosen(self) -> None:
         """2 resonances, 2 affinities, 2 different-severity interactions → highest chosen."""
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -462,7 +463,7 @@ class MultiAffinityGiftTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("20.00"),
             abyssal=Decimal("70.00"),
@@ -504,7 +505,7 @@ class MultiAffinityGiftTest(ResonanceCacheIsolationMixin, TestCase):
         Use canonical affinity names so the aura field lookup works:
         "Abyssal" < "Celestial" alphabetically → Abyssal chosen.
         """
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -539,7 +540,7 @@ class MultiAffinityGiftTest(ResonanceCacheIsolationMixin, TestCase):
 
         # caster has both celestial and abyssal
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("30.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("60.00"),
@@ -568,7 +569,7 @@ class PlaceDominantAffinityTiebreakTest(ResonanceCacheIsolationMixin, TestCase):
         Abyssal→Celestial (REJECT) and Abyssal→Primal (REPEL).
         The test verifies that environment_affinity == celestial.
         """
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -603,7 +604,7 @@ class PlaceDominantAffinityTiebreakTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -625,7 +626,7 @@ class InertCasesTest(ResonanceCacheIsolationMixin, TestCase):
 
     def test_no_cascade_resonances_returns_inert(self) -> None:
         """Room with no cascade resonance → inert."""
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -633,7 +634,7 @@ class InertCasesTest(ResonanceCacheIsolationMixin, TestCase):
         abyssal_res = ResonanceFactory(affinity=abyssal)
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -654,7 +655,7 @@ class InertCasesTest(ResonanceCacheIsolationMixin, TestCase):
 
     def test_no_affinity_interaction_row_returns_inert(self) -> None:
         """Room has resonance but no AffinityInteraction row authored → inert."""
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -667,7 +668,7 @@ class InertCasesTest(ResonanceCacheIsolationMixin, TestCase):
         abyssal_res = ResonanceFactory(affinity=abyssal)
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -687,7 +688,7 @@ class InertCasesTest(ResonanceCacheIsolationMixin, TestCase):
 
     def test_zero_magnitude_result_is_inert(self) -> None:
         """round(raw) == 0 → inert (valence="")."""
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -707,7 +708,7 @@ class InertCasesTest(ResonanceCacheIsolationMixin, TestCase):
 
         # Very low abyssal alignment (1%)
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("89.00"),
             abyssal=Decimal("1.00"),
@@ -732,7 +733,7 @@ class PresenceTimeTest(ResonanceCacheIsolationMixin, TestCase):
     """Presence-time (technique=None) → caster aura dominant affinity used, no gift."""
 
     def test_presence_time_uses_aura_dominant_affinity(self) -> None:
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -752,7 +753,7 @@ class PresenceTimeTest(ResonanceCacheIsolationMixin, TestCase):
 
         # Abyssal-dominant caster
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("20.00"),
             abyssal=Decimal("70.00"),
@@ -777,7 +778,7 @@ class PresenceTimeTest(ResonanceCacheIsolationMixin, TestCase):
 
     def test_presence_time_missing_aura_returns_inert(self) -> None:
         """technique=None + no CharacterAura → inert."""
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -814,7 +815,7 @@ class TechniqueOppositionWeightingTest(ResonanceCacheIsolationMixin, TestCase):
 
     def test_secondary_gift_affinity_adds_to_magnitude(self) -> None:
         """Two OPPOSED gift affinities each contribute; sum > single-affinity alone."""
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -846,7 +847,7 @@ class TechniqueOppositionWeightingTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("40.00"),
             abyssal=Decimal("50.00"),
@@ -891,7 +892,7 @@ class TechniqueOppositionWeightingTest(ResonanceCacheIsolationMixin, TestCase):
         Gift has abyssal (OPPOSED vs celestial place) and celestial (ALIGNED vs
         celestial place). Only the abyssal contribution appears in the magnitude.
         """
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -920,7 +921,7 @@ class TechniqueOppositionWeightingTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("50.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("40.00"),
@@ -953,7 +954,7 @@ class MultiResonancePlaceWeightingTest(ResonanceCacheIsolationMixin, TestCase):
 
     def test_secondary_place_affinity_adds_to_magnitude(self) -> None:
         """Two OPPOSED place affinities each contribute; sum > dominant-only alone."""
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -987,7 +988,7 @@ class MultiResonancePlaceWeightingTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -1030,7 +1031,7 @@ class MultiResonancePlaceWeightingTest(ResonanceCacheIsolationMixin, TestCase):
         - Abyssal→Abyssal:   ALIGNED AMPLIFY → excluded (wrong valence)
         Only the Celestial contribution appears in the final magnitude.
         """
-        caster_obj = CharacterFactory()
+        caster_obj = CharacterSheetFactory().character
         room_profile = RoomProfileFactory()
         room = room_profile.objectdb
 
@@ -1060,7 +1061,7 @@ class MultiResonancePlaceWeightingTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),

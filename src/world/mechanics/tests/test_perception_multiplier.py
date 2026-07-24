@@ -96,7 +96,7 @@ class PerceptionMultiplierTests(TestCase):
             attachment_quality_tier=cls.quality,
         )
         EquippedItemFactory(
-            character=cls.char,
+            character=cls.char.sheet_data,
             item_instance=cls.item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

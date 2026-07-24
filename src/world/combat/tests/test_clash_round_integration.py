@@ -92,8 +92,8 @@ class ResolveRoundClashIntegrationTests(TestCase):
 
     def _make_participant(self, encounter: CombatEncounter) -> object:
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=30, maximum=30)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=30, maximum=30)
+        CharacterEngagementFactory(character=sheet)
         CharacterVitals.objects.create(character_sheet=sheet, health=100)
         return CombatParticipantFactory(
             encounter=encounter,

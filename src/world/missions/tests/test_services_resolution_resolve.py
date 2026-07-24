@@ -62,7 +62,8 @@ class ResolveCheckOptionTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
         cls.template = MissionTemplateFactory(name="resolve-tmpl", risk_tier=4)
@@ -72,7 +73,7 @@ class ResolveCheckOptionTests(TestCase):
         cls.node_b = MissionNodeFactory(template=cls.template, key="b")
         cls.actor = MissionParticipantFactory(
             instance=cls.instance,
-            character=cls.character,
+            character=cls.character.sheet_data,
             is_contract_holder=True,
         )
 
@@ -107,7 +108,7 @@ class ResolveCheckOptionTests(TestCase):
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.current_node, self.node_a)
         self.assertEqual(deed.outcome, self.success)
-        self.assertEqual(deed.actor, self.character)
+        self.assertEqual(deed.actor, self.sheet)
         # Authored consequence applied (exactly one call).
         self.assertEqual(mocked.call_count, 1)
         pending = mocked.call_args_list[0].args[0]
@@ -280,7 +281,8 @@ class ResolveChallengeOptionTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.template = MissionTemplateFactory(name="ch-resolve-tmpl", risk_tier=4)
         cls.instance = MissionInstanceFactory(template=cls.template)
@@ -289,7 +291,7 @@ class ResolveChallengeOptionTests(TestCase):
         cls.node_b = MissionNodeFactory(template=cls.template, key="b")
         cls.actor = MissionParticipantFactory(
             instance=cls.instance,
-            character=cls.character,
+            character=cls.character.sheet_data,
             is_contract_holder=True,
         )
         cls.top = CheckOutcomeFactory(name="ChResolveCritical", success_level=5)
@@ -371,13 +373,13 @@ class ResolveChallengeOptionTests(TestCase):
         )
         inst_1 = MissionInstanceFactory(template=self.template, current_node=self.entry)
         actor_1 = MissionParticipantFactory(
-            instance=inst_1, character=self.character, is_contract_holder=True
+            instance=inst_1, character=self.character.sheet_data, is_contract_holder=True
         )
         char_2 = CharacterFactory()
         CharacterSheetFactory(character=char_2)
         inst_2 = MissionInstanceFactory(template=self.template, current_node=self.entry)
         actor_2 = MissionParticipantFactory(
-            instance=inst_2, character=char_2, is_contract_holder=True
+            instance=inst_2, character=char_2.sheet_data, is_contract_holder=True
         )
 
         with force_check_outcome(self.failure):
@@ -414,7 +416,7 @@ class AutoSuccessNoOutcomeTiersTest(TestCase):
         instance = MissionInstanceFactory(template=template)
         entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
         actor = MissionParticipantFactory(
-            instance=instance, character=character, is_contract_holder=True
+            instance=instance, character=character.sheet_data, is_contract_holder=True
         )
         challenge = ChallengeTemplateFactory(name="AutoSuccessNoOutcomes")
         approach = ChallengeApproachFactory(
@@ -446,7 +448,7 @@ class ResolveBranchOptionTests(TestCase):
         cls.target = MissionNodeFactory(template=cls.template, key="target")
         cls.actor = MissionParticipantFactory(
             instance=cls.instance,
-            character=CharacterFactory(),
+            character=CharacterSheetFactory(),
             is_contract_holder=True,
         )
 
@@ -484,14 +486,15 @@ class TerminalCompletionTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.template = MissionTemplateFactory(name="terminal-tmpl", risk_tier=2)
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.actor = MissionParticipantFactory(
             instance=cls.instance,
-            character=cls.character,
+            character=cls.character.sheet_data,
             is_contract_holder=True,
         )
         cls.success = CheckOutcomeFactory(name="TermSuccess", success_level=3)
@@ -559,14 +562,15 @@ class TerminalRewardEmissionTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.template = MissionTemplateFactory(name="emit-int-tmpl", risk_tier=2)
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.actor = MissionParticipantFactory(
             instance=cls.instance,
-            character=cls.character,
+            character=cls.character.sheet_data,
             is_contract_holder=True,
         )
         cls.success = CheckOutcomeFactory(name="EmitIntSuccess", success_level=3)
@@ -609,7 +613,7 @@ class TerminalRewardEmissionTests(TestCase):
         lines = list(MissionDeedRewardLine.objects.filter(deed=deed))
         self.assertEqual(len(lines), 1)
         self.assertEqual(lines[0].amount, 750)
-        self.assertEqual(lines[0].recipient, self.character)
+        self.assertEqual(lines[0].recipient, self.sheet)
 
     def test_branch_terminal_via_null_route_emits_authored_rewards(self) -> None:
         option = MissionOptionFactory(
@@ -637,7 +641,7 @@ class TerminalRewardEmissionTests(TestCase):
         lines = list(MissionDeedRewardLine.objects.filter(deed=deed))
         self.assertEqual(len(lines), 1)
         self.assertEqual(lines[0].amount, 200)
-        self.assertEqual(lines[0].recipient, self.character)
+        self.assertEqual(lines[0].recipient, self.sheet)
 
     def test_non_terminal_route_emits_no_reward_lines(self) -> None:
         # Phase 5b.0 invariant: emission only happens at terminal routes.

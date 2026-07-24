@@ -441,7 +441,7 @@ class CmdMission(ArxCommand):
             msg = f"Mission id must be a number. {_USAGE}"
             raise CommandError(msg)
         instance = MissionInstance.objects.filter(
-            pk=int(token), participants__character=self.caller
+            pk=int(token), participants__character_id=self.caller.pk
         ).first()
         if instance is None:
             # Same message whether it doesn't exist or you're not on it — a

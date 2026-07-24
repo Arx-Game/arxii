@@ -115,7 +115,7 @@ class SoulfrayRecoveryFlowIntegrationTests(TestCase):
         )
         RitualCheckConfigFactory(ritual=_ritual)
         target_anima = CharacterAnimaFactory(
-            character=target_sheet.character,
+            character=target_sheet,
             current=0,
             maximum=20,
         )

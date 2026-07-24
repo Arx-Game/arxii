@@ -68,7 +68,7 @@ def _make_worn_style_setup(endorsee_sheet, resonance, *, audacity=None):
     ItemStyleFactory(item_instance=item, style=style, attachment_quality_tier=quality)
     char = endorsee_sheet.character
     EquippedItemFactory(
-        character=char,
+        character=char.sheet_data,
         item_instance=item,
         body_region=BodyRegion.TORSO,
         equipment_layer=EquipmentLayer.BASE,
@@ -473,7 +473,7 @@ class StylePresentationAudacityScalingTests(TestCase):
         item_low = ItemInstanceFactory(template=template_low, quality_tier=quality)
         ItemStyleFactory(item_instance=item_low, style=low_style, attachment_quality_tier=quality)
         EquippedItemFactory(
-            character=char,
+            character=char.sheet_data,
             item_instance=item_low,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -488,7 +488,7 @@ class StylePresentationAudacityScalingTests(TestCase):
         item_high = ItemInstanceFactory(template=template_high, quality_tier=quality)
         ItemStyleFactory(item_instance=item_high, style=high_style, attachment_quality_tier=quality)
         EquippedItemFactory(
-            character=char,
+            character=char.sheet_data,
             item_instance=item_high,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.OUTER,

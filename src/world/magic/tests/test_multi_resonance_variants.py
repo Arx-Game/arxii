@@ -224,10 +224,8 @@ class MultiResonanceTests(TestCase):
         self._level_thread(self.abyssal)
 
         # Set up form state for assume_alternate_self.
-        true_form = CharacterFormFactory(
-            character=self.sheet.character, name="True", form_type=FormType.TRUE
-        )
-        CharacterFormStateFactory(character=self.sheet.character, active_form=true_form)
+        true_form = CharacterFormFactory(character=self.sheet, name="True", form_type=FormType.TRUE)
+        CharacterFormStateFactory(character=self.sheet, active_form=true_form)
 
         # Assume an alt-self with the Abyssal resonance.
         alt = AlternateSelfFactory(
@@ -267,10 +265,8 @@ class MultiResonanceTests(TestCase):
         self._level_thread(self.celestial)
         self._level_thread(self.abyssal)
 
-        true_form = CharacterFormFactory(
-            character=self.sheet.character, name="True", form_type=FormType.TRUE
-        )
-        CharacterFormStateFactory(character=self.sheet.character, active_form=true_form)
+        true_form = CharacterFormFactory(character=self.sheet, name="True", form_type=FormType.TRUE)
+        CharacterFormStateFactory(character=self.sheet, active_form=true_form)
 
         alt = AlternateSelfFactory(
             character=self.sheet,

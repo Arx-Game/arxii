@@ -12,8 +12,8 @@ Four cases:
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
+from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.constants import FORCE_FIELD_CONDITION_NAME
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
@@ -28,8 +28,8 @@ def _make_bearer_with_buffer(
     absorb_remaining: int = 20,
 ):
     """Return (bearer ObjectDB, CharacterAnima, ConditionInstance) ready for a test."""
-    bearer = CharacterFactory()
-    anima = CharacterAnimaFactory(character=bearer, current=anima_current, maximum=10)
+    bearer = CharacterSheetFactory().character
+    anima = CharacterAnimaFactory(character=bearer.sheet_data, current=anima_current, maximum=10)
     template = ConditionTemplateFactory(
         name=FORCE_FIELD_CONDITION_NAME,
         reactive_anima_cost=reactive_anima_cost,

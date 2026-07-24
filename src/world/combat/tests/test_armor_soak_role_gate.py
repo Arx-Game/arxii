@@ -56,7 +56,7 @@ class ArmorSoakRoleGateTests(TestCase):
         )
         inst = ItemInstanceFactory(template=template, durability=durability)
         EquippedItemFactory(
-            character=char,
+            character=char.sheet_data,
             item_instance=inst,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -156,7 +156,7 @@ class DefenseProfileGearSubstitutionTests(TestCase):
         )
         inst = ItemInstanceFactory(template=template, durability=durability)
         EquippedItemFactory(
-            character=char,
+            character=char.sheet_data,
             item_instance=inst,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

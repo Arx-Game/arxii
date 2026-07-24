@@ -3,7 +3,8 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory
 from world.gm.models import GMRewardConfig
 from world.progression.models import XPTransaction
@@ -15,10 +16,10 @@ from world.stories.services.feedback import submit_story_feedback
 
 def _served_participant(story, account):
     """Create a character owned by ``account`` and seat it in ``story``."""
-    character = CharacterFactory()
+    character = CharacterSheetFactory().character
     character.db_account = account
     character.save()
-    StoryParticipationFactory(story=story, character=character)
+    StoryParticipationFactory(story=story, character=character.sheet_data)
     return character
 
 

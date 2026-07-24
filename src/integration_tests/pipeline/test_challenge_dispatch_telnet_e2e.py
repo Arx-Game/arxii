@@ -141,7 +141,7 @@ class ChallengeTelnetDispatchE2ETests(TestCase):
 
         def _fake_resolve(character, challenge_instance, approach, capability_source):  # type: ignore[no-untyped-def]
             CharacterChallengeRecord.objects.create(
-                character=character,
+                character=character.sheet_data,
                 challenge_instance=challenge_instance,
                 approach=approach,
             )
@@ -168,7 +168,7 @@ class ChallengeTelnetDispatchE2ETests(TestCase):
 
         self.assertTrue(
             CharacterChallengeRecord.objects.filter(
-                character=self.character,
+                character=self.character.sheet_data,
                 challenge_instance=self.challenge_instance,
             ).exists(),
             "CharacterChallengeRecord must exist — proves resolve_challenge was reached "

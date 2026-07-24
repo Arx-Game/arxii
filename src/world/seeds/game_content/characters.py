@@ -59,7 +59,7 @@ class CharacterContent:
         persona = identity.primary_persona
 
         # CharacterSheetFactory already ensures the sheet exists.
-        CharacterAnimaFactory(character=character, current=20, maximum=30)
+        CharacterAnimaFactory(character=identity, current=20, maximum=30)
 
         for stat_name in _SOCIAL_STAT_NAMES:
             trait = StatTraitFactory(name=stat_name)
@@ -104,7 +104,7 @@ class CharacterContent:
         persona = identity.primary_persona
 
         # CharacterSheetFactory already ensures the sheet exists.
-        CharacterAnimaFactory(character=character, current=20, maximum=30)
+        CharacterAnimaFactory(character=identity, current=20, maximum=30)
 
         for stat_name in _CHALLENGE_STAT_NAMES:
             trait = StatTraitFactory(name=stat_name)

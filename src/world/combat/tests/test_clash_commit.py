@@ -44,9 +44,9 @@ class CommitToClashTests(TestCase):
         record to the same ObjectDB.
         """
         sheet = CharacterSheetFactory()
-        anima = CharacterAnimaFactory(character=sheet.character, current=current, maximum=maximum)
+        anima = CharacterAnimaFactory(character=sheet, current=current, maximum=maximum)
         # CharacterEngagementFactory expects an ObjectDB.
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterEngagementFactory(character=sheet)
         return sheet, anima
 
     def _make_technique_with_template(
@@ -485,8 +485,8 @@ class CommitToClashLethalFlagTests(TestCase):
 
     def _make_character_with_anima(self) -> CharacterSheetFactory:
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         return sheet
 
     def _make_technique(self) -> object:
@@ -536,8 +536,8 @@ class CommitToClashSituationContextTests(TestCase):
 
     def _make_character_with_anima(self) -> CharacterSheetFactory:
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         return sheet
 
     def _make_technique(self) -> object:
@@ -615,8 +615,8 @@ class CommitToClashSituationalPerkTests(TestCase):
 
     def _make_character_with_anima(self) -> CharacterSheetFactory:
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         return sheet
 
     def _make_technique(self) -> object:

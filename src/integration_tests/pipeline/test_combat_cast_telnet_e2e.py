@@ -147,11 +147,11 @@ class CombatCastTelnetE2ETests(TestCase):
         # CharacterAnima.character FK → ObjectDB (the game object, not the sheet)
         self.character = self.sheet.character
         self.anima = CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=20,
             maximum=20,
         )
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
 
         # Place the character in a room so location-dependent queries don't fail.
         room = ObjectDBFactory(
@@ -618,7 +618,7 @@ class CombatCastTelnetE2ETests(TestCase):
         # A character with anima but no CombatParticipant / encounter.
         solo_sheet = CharacterSheetFactory()
         solo_char = solo_sheet.character
-        CharacterAnimaFactory(character=solo_char, current=7, maximum=10)
+        CharacterAnimaFactory(character=solo_char.sheet_data, current=7, maximum=10)
 
         cmd = _make_combat_cmd(solo_char, "")
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):

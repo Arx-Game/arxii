@@ -27,7 +27,7 @@ class RestActionTests(TestCase):
 
     def _create_ap_pool(self, current: int) -> ActionPointPool:
         return ActionPointPool.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             current=current,
             maximum=200,
         )

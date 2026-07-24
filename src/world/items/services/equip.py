@@ -49,7 +49,7 @@ def equip_item(
         raise ItemPlacedNotEquippable
     char_obj = character_sheet.character
     if EquippedItem.objects.filter(
-        character=char_obj,
+        character=character_sheet,
         body_region=body_region,
         equipment_layer=equipment_layer,
     ).exists():
@@ -61,7 +61,7 @@ def equip_item(
     ):
         raise SlotIncompatible
     equipped = EquippedItem.objects.create(
-        character=char_obj,
+        character=character_sheet,
         item_instance=item_instance,
         body_region=body_region,
         equipment_layer=equipment_layer,
@@ -78,17 +78,10 @@ def unequip_item(*, equipped_item: EquippedItem) -> None:
     Args:
         equipped_item: The row to delete.
     """
-    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-
-    char_obj = equipped_item.character
-    try:
-        sheet = char_obj.sheet_data
-    except CharacterSheet.DoesNotExist:
-        sheet = None
+    sheet = equipped_item.character
     equipped_item.delete()
-    char_obj.equipped_items.invalidate()
-    if sheet is not None:
-        _recompute_body_persona_items_prestige(sheet)
+    sheet.character.equipped_items.invalidate()
+    _recompute_body_persona_items_prestige(sheet)
 
 
 def _recompute_body_persona_items_prestige(character_sheet: object) -> None:

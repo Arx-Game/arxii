@@ -83,5 +83,5 @@ def attach_style_to_item(
     # a fresh Python object, meaning .equipped_items would be a different handler
     # instance that doesn't share the in-process cache.
     for equipped in EquippedItem.objects.filter(item_instance=item_instance):
-        equipped.character.equipped_items.invalidate()
+        equipped.character.character.equipped_items.invalidate()
     return row

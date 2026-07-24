@@ -266,7 +266,7 @@ def _collect_global_stories(
     """Return active GLOBAL-scope progress entries where the account has a StoryParticipation."""
     qs = (
         GlobalStoryProgress.objects.filter(
-            story__participants__character__db_account=account,
+            story__participants__character__character__db_account=account,
             story__participants__is_active=True,
             is_active=True,
         )

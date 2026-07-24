@@ -156,7 +156,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
             attachment_quality_tier=cls.attach_quality,
         )
         EquippedItemFactory(
-            character=cls.character_obj,
+            character=cls.character_obj.sheet_data,
             item_instance=cls.instance,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

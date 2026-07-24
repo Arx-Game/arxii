@@ -38,7 +38,7 @@ def _set_dominant_affinity(sheet, affinity_name: str) -> None:
         "abyssal": Decimal("5.00"),
     }
     percentages[affinity_name.lower()] = Decimal("90.00")
-    CharacterAuraFactory(character=sheet.character, **percentages)
+    CharacterAuraFactory(character=sheet, **percentages)
 
 
 class TestAtonementRiteHappyPath(TestCase):

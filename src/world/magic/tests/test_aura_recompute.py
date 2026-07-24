@@ -25,18 +25,18 @@ class RecomputeAuraTests(TestCase):
         # sheet has no CharacterAura row at all (e.g. Quiescent/NPC)
         result = recompute_aura(self.sheet)
         assert result is None
-        assert not CharacterAura.objects.filter(character=self.sheet.character).exists()
+        assert not CharacterAura.objects.filter(character=self.sheet).exists()
 
     def test_zero_lifetime_earned_leaves_stored_values_untouched(self):
-        CharacterAuraFactory(character=self.sheet.character)
-        before = CharacterAura.objects.get(character=self.sheet.character)
+        CharacterAuraFactory(character=self.sheet)
+        before = CharacterAura.objects.get(character=self.sheet)
         before_celestial = before.celestial
         recompute_aura(self.sheet)
-        after = CharacterAura.objects.get(character=self.sheet.character)
+        after = CharacterAura.objects.get(character=self.sheet)
         assert after.celestial == before_celestial
 
     def test_recompute_shifts_stored_percentages_toward_earned_affinity(self):
-        CharacterAuraFactory(character=self.sheet.character)
+        CharacterAuraFactory(character=self.sheet)
         CharacterResonance.objects.create(
             character_sheet=self.sheet,
             resonance=self.abyssal_resonance,
@@ -50,7 +50,7 @@ class RecomputeAuraTests(TestCase):
             lifetime_earned=50,
         )
         drift = recompute_aura(self.sheet)
-        aura = CharacterAura.objects.get(character=self.sheet.character)
+        aura = CharacterAura.objects.get(character=self.sheet)
         assert drift is not None
         assert float(aura.celestial) == 50.0
         assert float(aura.abyssal) == 50.0
@@ -60,7 +60,7 @@ class RecomputeAuraTests(TestCase):
         # Heavily skewed but organic split (not adversarial) — confirms ordinary
         # lopsided recomputation stays sane: celestial dominates, primal is a
         # sliver, abyssal is zero.
-        CharacterAuraFactory(character=self.sheet.character)
+        CharacterAuraFactory(character=self.sheet)
         CharacterResonance.objects.create(
             character_sheet=self.sheet,
             resonance=self.celestial_resonance,
@@ -74,7 +74,7 @@ class RecomputeAuraTests(TestCase):
             lifetime_earned=27,
         )
         drift = recompute_aura(self.sheet)
-        aura = CharacterAura.objects.get(character=self.sheet.character)
+        aura = CharacterAura.objects.get(character=self.sheet)
         assert drift is not None
         for value in (aura.celestial, aura.primal, aura.abyssal):
             assert Decimal("0.00") <= value <= Decimal("100.00")
@@ -96,7 +96,7 @@ class RecomputeAuraTests(TestCase):
         # non-negative integers), the only real input to this function. This
         # sweep pins the invariant across a wide range of splits so a future
         # change to the rounding/derivation logic can't silently break it.
-        CharacterAuraFactory(character=self.sheet.character)
+        CharacterAuraFactory(character=self.sheet)
         for celestial_total in range(1, 200, 7):
             for primal_total in range(1, 200, 11):
                 CharacterResonance.objects.filter(character_sheet=self.sheet).delete()
@@ -114,7 +114,7 @@ class RecomputeAuraTests(TestCase):
                 )
                 drift = recompute_aura(self.sheet)
                 assert drift is not None
-                aura = CharacterAura.objects.get(character=self.sheet.character)
+                aura = CharacterAura.objects.get(character=self.sheet)
                 for value in (aura.celestial, aura.primal, aura.abyssal):
                     assert Decimal("0.00") <= value <= Decimal("100.00")
                 assert aura.celestial + aura.primal + aura.abyssal == Decimal("100.00")
@@ -124,7 +124,7 @@ class FireAuraThresholdCrossingsTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.sheet = CharacterSheetFactory()
-        CharacterAuraFactory(character=cls.sheet.character)
+        CharacterAuraFactory(character=cls.sheet)
         cls.abyssal = AffinityFactory(name="Abyssal")
         cls.abyssal_resonance = ResonanceFactory(affinity=cls.abyssal)
 

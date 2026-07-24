@@ -528,7 +528,10 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        true_form = CharacterForm.objects.get(character=character, form_type=FormType.TRUE)
+        true_form = CharacterForm.objects.get(
+            character=character.sheet_data,
+            form_type=FormType.TRUE,
+        )
         values = {v.trait.name: v.option.name for v in true_form.values.all()}
         assert values == {"hair_color": "black", "eye_color": "blue"}
 
@@ -563,7 +566,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
 
         draft = self._create_complete_draft(stats=DEFAULT_STATS)
         character = finalize_character(draft, add_to_roster=True)
-        assert not CharacterForm.objects.filter(character=character).exists()
+        assert not CharacterForm.objects.filter(character=character.sheet_data).exists()
 
     def test_finalize_skips_invalid_form_trait_names(self):
         """Invalid trait names in form_traits are silently skipped."""
@@ -581,7 +584,10 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        true_form = CharacterForm.objects.get(character=character, form_type=FormType.TRUE)
+        true_form = CharacterForm.objects.get(
+            character=character.sheet_data,
+            form_type=FormType.TRUE,
+        )
         values = list(true_form.values.all())
         assert len(values) == 1
         assert values[0].trait.name == "hair_color"
@@ -605,7 +611,10 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        true_form = CharacterForm.objects.get(character=character, form_type=FormType.TRUE)
+        true_form = CharacterForm.objects.get(
+            character=character.sheet_data,
+            form_type=FormType.TRUE,
+        )
         values = {v.trait.name: v.option.name for v in true_form.values.all()}
         # hair_color should be skipped (blue belongs to eye_color, not hair_color)
         assert values == {"eye_color": "blue"}
@@ -1160,7 +1169,7 @@ class FinalizeCharacterDistinctionResonanceTests(FinalizationTestMixin, TestCase
         ).exists()
 
         # The stored CharacterAura reflects the seeded resonance.
-        aura = CharacterAura.objects.get(character=character)
+        aura = CharacterAura.objects.get(character=character.sheet_data)
         assert aura.abyssal > 0
 
         # The resonance-category-targeted DistinctionEffect on "Serene" produces NO
@@ -1327,7 +1336,7 @@ class FinalizeGiftAndTechniquesTests(TestCase):
 
         finalize_magic_data(draft, sheet)
 
-        aura = CharacterAura.objects.get(character=sheet.character)
+        aura = CharacterAura.objects.get(character=sheet)
         assert aura.celestial == Decimal("0.00")
         assert aura.primal == Decimal("80.00")
         assert aura.abyssal == Decimal("20.00")
@@ -1344,7 +1353,7 @@ class FinalizeGiftAndTechniquesTests(TestCase):
 
         finalize_magic_data(draft, sheet)
 
-        aura = CharacterAura.objects.get(character=sheet.character)
+        aura = CharacterAura.objects.get(character=sheet)
         assert aura.glimpse_story == "I first saw the threads at age twelve."
 
     def test_no_gift_selected_no_ops_gift_and_technique_linking(self) -> None:
@@ -1644,7 +1653,7 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         draft = self._create_draft()
         character = finalize_character(draft, add_to_roster=True)
 
-        aura = CharacterAura.objects.get(character=character)
+        aura = CharacterAura.objects.get(character=character.sheet_data)
         assert aura.celestial == Decimal("0.00")
         assert aura.primal == Decimal("80.00")
         assert aura.abyssal == Decimal("20.00")
@@ -1656,7 +1665,7 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         draft = self._create_draft(glimpse_story="I first saw the threads at age twelve.")
         character = finalize_character(draft, add_to_roster=True)
 
-        aura = CharacterAura.objects.get(character=character)
+        aura = CharacterAura.objects.get(character=character.sheet_data)
         assert aura.glimpse_story == "I first saw the threads at age twelve."
 
     def test_finalize_aura_without_glimpse_story(self):
@@ -1666,7 +1675,7 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         draft = self._create_draft()
         character = finalize_character(draft, add_to_roster=True)
 
-        aura = CharacterAura.objects.get(character=character)
+        aura = CharacterAura.objects.get(character=character.sheet_data)
         assert aura.glimpse_story == ""
 
     def test_finalize_persists_glimpse_tags_and_state(self):
@@ -1680,7 +1689,7 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         draft = self._create_draft(glimpse_tag_ids=[tone.pk, consequence.pk])
         character = finalize_character(draft, add_to_roster=True)
 
-        aura = CharacterAura.objects.get(character=character)
+        aura = CharacterAura.objects.get(character=character.sheet_data)
         assert aura.glimpse_state == GlimpseState.TAGS_ONLY
         assert CharacterGlimpseTag.objects.filter(aura=aura).count() == 2
 
@@ -1696,7 +1705,7 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
             glimpse_story="I burned the barn down.",
         )
         character = finalize_character(draft, add_to_roster=True)
-        aura = CharacterAura.objects.get(character=character)
+        aura = CharacterAura.objects.get(character=character.sheet_data)
         assert aura.glimpse_state == GlimpseState.COMPLETE
 
     def test_finalize_links_glimpse_distinctions(self):
@@ -1729,7 +1738,7 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         )
         character = finalize_character(draft, add_to_roster=True)
 
-        aura = CharacterAura.objects.get(character=character)
+        aura = CharacterAura.objects.get(character=character.sheet_data)
         cd = CharacterDistinction.objects.get(
             character=character.sheet_data, distinction=distinction
         )
@@ -1741,7 +1750,7 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
 
         draft = self._create_draft(glimpse_linked_distinction_ids=[999999])
         character = finalize_character(draft, add_to_roster=True)
-        assert CharacterAura.objects.filter(character=character).exists()
+        assert CharacterAura.objects.filter(character=character.sheet_data).exists()
 
 
 class FinalizeGMCharacterTests(TestCase):
@@ -1803,9 +1812,7 @@ class FinalizeGMCharacterTests(TestCase):
 
         draft = self._make_gm_draft()
         entry, story = finalize_gm_character(draft)
-        participation = StoryParticipation.objects.get(
-            story=story, character=entry.character_sheet.character
-        )
+        participation = StoryParticipation.objects.get(story=story, character=entry.character_sheet)
         assert participation.is_active is True
 
     def test_no_tenure_created(self) -> None:

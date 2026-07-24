@@ -93,7 +93,7 @@ def _maybe_award_gm_feedback_xp(
     """
     is_served_participant = StoryParticipation.objects.filter(
         story=story,
-        character__db_account=reviewer,
+        character__character__db_account=reviewer,
     ).exists()
     if not is_served_participant:
         return

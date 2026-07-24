@@ -25,7 +25,11 @@ def _make_terminal_run(status: str = MissionStatus.RESOLVED):
     instance = MissionInstanceFactory(template=template, status=status)
     holder_char = CharacterFactory(db_key="TaleHolder")
     CharacterSheetFactory(character=holder_char)
-    MissionParticipantFactory(instance=instance, character=holder_char, is_contract_holder=True)
+    MissionParticipantFactory(
+        instance=instance,
+        character=holder_char.sheet_data,
+        is_contract_holder=True,
+    )
     return instance, holder_char
 
 
@@ -87,8 +91,17 @@ def _make_legend_run(status: str = MissionStatus.COMPLETE):
     holder_char = CharacterFactory(db_key="LegendHolder")
     sheet = CharacterSheetFactory(character=holder_char)
     holder_persona = sheet.primary_persona
-    MissionParticipantFactory(instance=instance, character=holder_char, is_contract_holder=True)
-    deed = MissionDeedRecordFactory(instance=instance, actor=holder_char, node=node, option=option)
+    MissionParticipantFactory(
+        instance=instance,
+        character=holder_char.sheet_data,
+        is_contract_holder=True,
+    )
+    deed = MissionDeedRecordFactory(
+        instance=instance,
+        actor=holder_char.sheet_data,
+        node=node,
+        option=option,
+    )
     return instance, holder_char, holder_persona, deed
 
 

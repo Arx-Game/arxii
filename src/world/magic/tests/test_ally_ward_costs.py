@@ -14,7 +14,6 @@ damage but the reactive anima cost is billed to the CASTER, never the ally.
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import ParticipantStatus
@@ -37,10 +36,10 @@ class AllyWardReactiveCostTests(TestCase):
         ensure_force_field_content()
         template = ConditionTemplate.objects.get(name=FORCE_FIELD_CONDITION_NAME)
 
-        caster = CharacterFactory()
-        ally = CharacterFactory()
-        caster_anima = CharacterAnimaFactory(character=caster, current=10, maximum=10)
-        ally_anima = CharacterAnimaFactory(character=ally, current=10, maximum=10)
+        caster = CharacterSheetFactory().character
+        ally = CharacterSheetFactory().character
+        caster_anima = CharacterAnimaFactory(character=caster.sheet_data, current=10, maximum=10)
+        ally_anima = CharacterAnimaFactory(character=ally.sheet_data, current=10, maximum=10)
 
         instance = ConditionInstanceFactory(
             condition=template,
@@ -82,19 +81,20 @@ class AllyWardReactiveCostTests(TestCase):
             "the ally bearing the ward should NOT be debited for a caster-sourced condition",
         )
 
-        # Sanity: without the fix, CharacterAnima.objects.filter(character=instance.target)
+        # Sanity: without the fix,
+        # CharacterAnima.objects.filter(character=instance.target.sheet_data)
         # would have found the ally's row instead and debited it.
-        self.assertEqual(CharacterAnima.objects.get(character=ally).current, 10)
+        self.assertEqual(CharacterAnima.objects.get(character=ally.sheet_data).current, 10)
 
     def test_ally_ward_lapses_on_caster_poverty_not_ally(self) -> None:
         """drain_reactive_upkeep: caster too poor to sustain -> instance deleted, ally untouched."""
         ensure_force_field_content()
         template = ConditionTemplate.objects.get(name=FORCE_FIELD_CONDITION_NAME)
 
-        caster = CharacterFactory()
-        ally = CharacterFactory()
-        CharacterAnimaFactory(character=caster, current=0, maximum=10)
-        ally_anima = CharacterAnimaFactory(character=ally, current=10, maximum=10)
+        caster = CharacterSheetFactory().character
+        ally = CharacterSheetFactory().character
+        CharacterAnimaFactory(character=caster.sheet_data, current=0, maximum=10)
+        ally_anima = CharacterAnimaFactory(character=ally.sheet_data, current=10, maximum=10)
 
         ally_sheet = CharacterSheetFactory(character=ally)
         encounter = CombatEncounterFactory()

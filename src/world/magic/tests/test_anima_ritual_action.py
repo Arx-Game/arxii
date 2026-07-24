@@ -106,7 +106,7 @@ class AnimaRitualResolverTests(TestCase):
 
         ritual = _make_scene_action_ritual()
         anima = CharacterAnimaFactory(
-            character=sheet.character,
+            character=sheet,
             current=2,
             maximum=10,
         )

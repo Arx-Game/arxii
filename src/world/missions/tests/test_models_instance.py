@@ -10,7 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import (
     DeedRewardKind,
     DeedRewardSink,
@@ -82,22 +82,22 @@ class MissionParticipantTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.instance = MissionInstanceFactory(template__name="part-tmpl")
-        cls.char_a = CharacterFactory(db_key="Holder")
-        cls.char_b = CharacterFactory(db_key="Tagalong")
+        cls.char_a = CharacterSheetFactory(character__db_key="Holder").character
+        cls.char_b = CharacterSheetFactory(character__db_key="Tagalong").character
         cls.holder = MissionParticipantFactory(
             instance=cls.instance,
-            character=cls.char_a,
+            character=cls.char_a.sheet_data,
             is_contract_holder=True,
         )
 
     def test_participant_round_trips(self) -> None:
         self.assertTrue(self.holder.is_contract_holder)
-        self.assertEqual(self.holder.character, self.char_a)
+        self.assertEqual(self.holder.character, self.char_a.sheet_data)
 
     def test_second_contract_holder_rejected(self) -> None:
         second = MissionParticipantFactory.build(
             instance=self.instance,
-            character=self.char_b,
+            character=self.char_b.sheet_data,
             is_contract_holder=True,
         )
         with self.assertRaises(ValidationError):
@@ -106,7 +106,7 @@ class MissionParticipantTests(TestCase):
     def test_non_holder_participant_allowed(self) -> None:
         part = MissionParticipantFactory(
             instance=self.instance,
-            character=self.char_b,
+            character=self.char_b.sheet_data,
             is_contract_holder=False,
         )
         part.full_clean()
@@ -116,7 +116,7 @@ class MissionParticipantTests(TestCase):
         with transaction.atomic(), self.assertRaises(IntegrityError):
             MissionParticipantFactory(
                 instance=self.instance,
-                character=self.char_a,
+                character=self.char_a.sheet_data,
             )
 
     def test_save_enforces_single_contract_holder(self) -> None:
@@ -126,7 +126,7 @@ class MissionParticipantTests(TestCase):
         with self.assertRaises(ValidationError):
             MissionParticipantFactory(
                 instance=self.instance,
-                character=self.char_b,
+                character=self.char_b.sheet_data,
                 is_contract_holder=True,
             )
 
@@ -165,7 +165,7 @@ class MissionDeedRecordTests(TestCase):
         cls.template = MissionTemplateFactory(name="deed-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.instance = MissionInstanceFactory(template=cls.template, current_node=cls.node)
-        cls.actor = CharacterFactory(db_key="Actor")
+        cls.actor = CharacterSheetFactory(character__db_key="Actor").character
         cls.option = MissionOptionFactory(
             node=cls.node,
             order=0,
@@ -176,18 +176,18 @@ class MissionDeedRecordTests(TestCase):
     def test_branch_deed_has_null_outcome(self) -> None:
         deed = MissionDeedRecordFactory(
             instance=self.instance,
-            actor=self.actor,
+            actor=self.actor.sheet_data,
             node=self.node,
             option=self.option,
             outcome=None,
         )
         self.assertIsNone(deed.outcome)
-        self.assertEqual(deed.actor, self.actor)
+        self.assertEqual(deed.actor, self.actor.sheet_data)
 
     def test_deed_reward_lines_are_structured_rows_not_dict(self) -> None:
         deed = MissionDeedRecordFactory(
             instance=self.instance,
-            actor=self.actor,
+            actor=self.actor.sheet_data,
             node=self.node,
             option=self.option,
         )

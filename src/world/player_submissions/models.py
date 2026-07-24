@@ -285,7 +285,7 @@ class Petition(SharedMemoryModel):
         related_name="petitions",
     )
     subject_character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

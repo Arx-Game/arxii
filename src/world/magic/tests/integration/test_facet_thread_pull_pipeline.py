@@ -75,7 +75,7 @@ class FacetThreadPullCombatTests(TestCase):
 
         # 4. CharacterAnima with sufficient current (anima_per_thread=0 for tier-1, so
         #    even current=0 would pass; use 5 for clarity).
-        CharacterAnimaFactory(character=cls.sheet.character, current=5, maximum=10)
+        CharacterAnimaFactory(character=cls.sheet, current=5, maximum=10)
 
         # 5. ThreadPullCost row for tier=1.
         cls.cost = ThreadPullCostFactory(
@@ -114,7 +114,7 @@ class FacetThreadPullCombatTests(TestCase):
             quality_tier=cls.item_quality,
         )
         EquippedItemFactory(
-            character=cls.sheet.character,
+            character=cls.sheet,
             item_instance=cls.instance,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -241,7 +241,7 @@ class FacetThreadPullNoItemTests(TestCase):
             balance=20,
             lifetime_earned=20,
         )
-        CharacterAnimaFactory(character=cls.sheet.character, current=5, maximum=10)
+        CharacterAnimaFactory(character=cls.sheet, current=5, maximum=10)
         ThreadPullCostFactory(tier=1, resonance_cost=2, anima_per_thread=0)
 
         cls.thread = Thread.objects.create(

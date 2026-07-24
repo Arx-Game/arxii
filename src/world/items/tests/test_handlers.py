@@ -2,11 +2,12 @@
 
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
+
 
 class CharacterEquipmentHandlerTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import CharacterFactory
         from world.items.factories import (
             EquippedItemFactory,
             ItemFacetFactory,
@@ -16,7 +17,7 @@ class CharacterEquipmentHandlerTests(TestCase):
         )
         from world.magic.factories import FacetFactory
 
-        cls.character = CharacterFactory(db_key="HandlerTestChar")
+        cls.character = CharacterSheetFactory(character__db_key="HandlerTestChar").character
         tpl = ItemTemplateFactory(facet_capacity=2)
         cls.q = QualityTierFactory()
         cls.instance = ItemInstanceFactory(template=tpl, quality_tier=cls.q)
@@ -33,7 +34,7 @@ class CharacterEquipmentHandlerTests(TestCase):
             attachment_quality_tier=cls.q,
         )
         cls.equipped = EquippedItemFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             item_instance=cls.instance,
         )
 
@@ -64,7 +65,6 @@ class CharacterEquipmentHandlerTests(TestCase):
 class CharacterEquipmentHandlerStyleTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import CharacterFactory
         from world.items.factories import (
             EquippedItemFactory,
             ItemInstanceFactory,
@@ -74,7 +74,7 @@ class CharacterEquipmentHandlerStyleTests(TestCase):
             StyleFactory,
         )
 
-        cls.character = CharacterFactory(db_key="StyleHandlerTestChar")
+        cls.character = CharacterSheetFactory(character__db_key="StyleHandlerTestChar").character
         tpl = ItemTemplateFactory(style_capacity=2)
         cls.q = QualityTierFactory()
         cls.instance = ItemInstanceFactory(template=tpl, quality_tier=cls.q)
@@ -92,7 +92,7 @@ class CharacterEquipmentHandlerStyleTests(TestCase):
             attachment_quality_tier=cls.q,
         )
         cls.equipped = EquippedItemFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             item_instance=cls.instance,
         )
 
@@ -116,7 +116,7 @@ class CharacterCarriedItemsHandlerTests(TestCase):
     # combat suite). Keeping the data per-test is slower but the only path
     # that's safe under the full regression's cross-app test order.
     def setUp(self) -> None:
-        from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+        from evennia_extensions.factories import ObjectDBFactory
         from world.items.factories import (
             ItemInstanceFactory,
             ItemTemplateFactory,
@@ -130,8 +130,8 @@ class CharacterCarriedItemsHandlerTests(TestCase):
         # stale Python instances. Flushing forces fresh materialization.
         ItemInstance.flush_instance_cache()
 
-        self.character = CharacterFactory(db_key="CarriedHandlerChar")
-        self.other_character = CharacterFactory(db_key="OtherCarriedChar")
+        self.character = CharacterSheetFactory(character__db_key="CarriedHandlerChar").character
+        self.other_character = CharacterSheetFactory(character__db_key="OtherCarriedChar").character
         self.template = ItemTemplateFactory(name="CarriedHandlerTpl")
         self.quality = QualityTierFactory(name="CarriedHandlerQ", color_hex="#abcdef")
 
@@ -180,7 +180,7 @@ class CharacterCarriedItemsHandlerTests(TestCase):
 class CharacterSheetOutfitsHandlerTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+        from evennia_extensions.factories import ObjectDBFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.items.factories import (
             ItemInstanceFactory,
@@ -189,8 +189,8 @@ class CharacterSheetOutfitsHandlerTests(TestCase):
             QualityTierFactory,
         )
 
-        cls.character = CharacterFactory(db_key="OutfitsHandlerChar")
-        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.sheet = CharacterSheetFactory(character__db_key="OutfitsHandlerChar")
+        cls.character = cls.sheet.character
         # Wardrobe item required by Outfit.clean()
         wardrobe_tpl = ItemTemplateFactory(name="WardrobeTpl", is_wardrobe=True)
         cls.quality = QualityTierFactory(name="OutfitHandlerQ", color_hex="#123456")
@@ -216,8 +216,7 @@ class CharacterSheetOutfitsHandlerTests(TestCase):
         )
 
         # Outfit on another sheet — must not appear.
-        other_character = CharacterFactory(db_key="OutfitsOtherChar")
-        cls.other_sheet = CharacterSheetFactory(character=other_character)
+        cls.other_sheet = CharacterSheetFactory(character__db_key="OutfitsOtherChar")
         cls.other_outfit = OutfitFactory(
             character_sheet=cls.other_sheet,
             wardrobe=cls.wardrobe,

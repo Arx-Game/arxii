@@ -15,7 +15,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.scenes.factories import PersonaFactory
@@ -29,7 +29,7 @@ from world.stories.types import StoryPrivacy
 
 def _sheet_for_account(account):
     """Create a CharacterSheet whose character.db_account is account."""
-    char = CharacterFactory()
+    char = CharacterSheetFactory().character
     char.db_account = account
     char.save()
     return CharacterSheetFactory(character=char)
@@ -56,7 +56,7 @@ class StoryQuerysetScopeTest(APITestCase):
         cls.owner_account = AccountFactory()
 
         cls.participant_account = AccountFactory()
-        cls.participant_char = CharacterFactory()
+        cls.participant_char = CharacterSheetFactory().character
         cls.participant_char.db_account = cls.participant_account
         cls.participant_char.save()
 
@@ -81,7 +81,7 @@ class StoryQuerysetScopeTest(APITestCase):
         cls.participant_story = StoryFactory(privacy=StoryPrivacy.PRIVATE)
         cls.participation = StoryParticipationFactory(
             story=cls.participant_story,
-            character=cls.participant_char,
+            character=cls.participant_char.sheet_data,
             is_active=True,
         )
 

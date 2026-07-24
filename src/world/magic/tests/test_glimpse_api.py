@@ -18,7 +18,7 @@ class GlimpseAuraActionTestBase(TestCase):
         cls.tenure = RosterTenureFactory()
         cls.account = cls.tenure.player_data.account
         cls.character = cls.tenure.roster_entry.character_sheet.character
-        cls.aura = CharacterAuraFactory(character=cls.character)
+        cls.aura = CharacterAuraFactory(character=cls.character.sheet_data)
 
         cls.other_tenure = RosterTenureFactory()
         cls.other_account = cls.other_tenure.player_data.account

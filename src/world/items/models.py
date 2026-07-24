@@ -1060,7 +1060,7 @@ class EquippedItem(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        ObjectDB,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="equipped_items",
         help_text="The character wearing/wielding this item.",
@@ -1197,29 +1197,6 @@ class OwnershipEvent(SharedMemoryModel):
     def __str__(self) -> str:
         display = self.item_instance.display_name if self.item_instance else "deleted"
         return f"{display}: {self.get_event_type_display()}"
-
-
-class CurrencyBalance(SharedMemoryModel):
-    """
-    Abstract gold balance for a character.
-
-    One currency (gold), not physical items. Tracked per character (IC possession),
-    not per account.
-    """
-
-    character = models.OneToOneField(
-        ObjectDB,
-        on_delete=models.CASCADE,
-        related_name="currency_balance",
-        help_text="The character who holds this gold.",
-    )
-    gold = models.PositiveIntegerField(
-        default=0,
-        help_text="Current gold balance.",
-    )
-
-    def __str__(self) -> str:
-        return f"{self.character}: {self.gold} gold"
 
 
 class ItemAttachment(SharedMemoryModel):

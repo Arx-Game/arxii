@@ -67,7 +67,7 @@ class GetPlayerActionsEnhancementsTests(TestCase):
         self.assertTrue(intimidate.target_spec.filters.exclude_self)
 
     def test_strain_availability_present_when_anima_exists(self) -> None:
-        CharacterAnimaFactory(character=self.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=self.character.sheet_data, current=10, maximum=10)
 
         actions = get_player_actions(self.character)
         intimidate = next((a for a in actions if a.display_name == "Intimidate"), None)
@@ -114,7 +114,7 @@ class GetPlayerActionsQueryCountTests(TestCase):
             source_type="technique",
             technique=cls.technique,
         )
-        CharacterAnimaFactory(character=cls.character, current=8, maximum=8)
+        CharacterAnimaFactory(character=cls.character.sheet_data, current=8, maximum=8)
         # A second template with no enhancement to ensure unmatched paths don't
         # add per-template queries.
         _make_social_template("Persuade")

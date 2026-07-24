@@ -268,7 +268,7 @@ class ConsequenceOutcomeConstraintTests(TestCase):
             self.skipTest("No ChallengeApproach available — seeded on full DB only")
 
         record = CharacterChallengeRecord.objects.create(
-            character=self.sheet.character,
+            character=self.sheet,
             challenge_instance=challenge_instance,
             approach=approach,
         )

@@ -106,16 +106,18 @@ class CreateMaskTests(TestCase):
 
     def test_mask_with_disguise_form_applies_overlay(self):
         # Real form so apply_disguise has a body to overlay.
-        true_form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        true_form = CharacterFormFactory(character=self.sheet, form_type=FormType.TRUE)
         CharacterFormValueFactory(form=true_form, trait=self.hair, option=self.red)
-        CharacterFormState.objects.create(character=self.character, active_form=true_form)
+        CharacterFormState.objects.create(
+            character=self.character.sheet_data, active_form=true_form
+        )
         disguise = CharacterFormFactory(
-            character=self.character, form_type=FormType.DISGUISE, is_player_created=True
+            character=self.sheet, form_type=FormType.DISGUISE, is_player_created=True
         )
 
         create_mask(self.sheet, name="The Stag Mask", disguise_form=disguise)
 
-        state = CharacterFormState.objects.get(character=self.character)
+        state = CharacterFormState.objects.get(character=self.character.sheet_data)
         assert state.active_fake_overlay_id == disguise.id
 
 

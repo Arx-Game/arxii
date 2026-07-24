@@ -101,7 +101,7 @@ def _make_clash_pull_setup(
     # Anima (seed positive value; n=1 thread → anima cost = 0 at default config,
     # but we provide current > 0 so future multi-thread tests can reuse this).
     CharacterAnimaFactory(
-        character=sheet.character,
+        character=sheet,
         current=10,
         maximum=20,
     )

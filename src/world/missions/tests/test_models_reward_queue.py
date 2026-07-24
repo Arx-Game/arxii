@@ -14,7 +14,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import DeedRewardKind, DeedRewardSink
 from world.missions.factories import (
     MissionDeedRecordFactory,
@@ -35,8 +35,8 @@ class MissionRewardQueueShapeTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.template = MissionTemplateFactory(name="queue-tmpl", risk_tier=4)
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
-        cls.actor = CharacterFactory(db_key="QueueActor")
-        cls.deed = MissionDeedRecordFactory(node=cls.node, actor=cls.actor)
+        cls.actor = CharacterSheetFactory(character__db_key="QueueActor").character
+        cls.deed = MissionDeedRecordFactory(node=cls.node, actor=cls.actor.sheet_data)
 
     def test_queue_row_round_trips(self) -> None:
         line = MissionDeedRewardLineFactory(

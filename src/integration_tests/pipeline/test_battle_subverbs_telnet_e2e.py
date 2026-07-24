@@ -110,7 +110,7 @@ def _make_battle_pc(
     char, sheet = _make_pc(db_key, room)
     CharacterVitalsFactory(character_sheet=sheet, health=100, max_health=100)
     CharacterTechniqueFactory(character=sheet, technique=technique)
-    CharacterAnimaFactory(character=char, current=20, maximum=30)
+    CharacterAnimaFactory(character=char.sheet_data, current=20, maximum=30)
     participant = enlist_participant(battle=side.battle, character_sheet=sheet, side=side)
     return char, sheet, participant
 

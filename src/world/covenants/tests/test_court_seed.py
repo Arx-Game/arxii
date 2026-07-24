@@ -113,9 +113,7 @@ class MakeCourtWithMissionTests(TestCase):
         mission = self.seed.mission_instance
         self.assertEqual(mission.status, MissionStatus.ACTIVE)
         self.assertIsNotNone(mission.source_offer_id)
-        self.assertTrue(
-            mission.participants.filter(character=self.seed.servant_sheet.character).exists()
-        )
+        self.assertTrue(mission.participants.filter(character=self.seed.servant_sheet).exists())
 
     def test_engagement_predicate_true_for_servant(self):
         self.assertTrue(

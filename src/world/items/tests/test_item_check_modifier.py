@@ -37,7 +37,7 @@ class ItemCheckModifierContributionTests(TestCase):
     def tearDown(self) -> None:
         from world.items.models import EquippedItem
 
-        EquippedItem.objects.filter(character=self.character).delete()
+        EquippedItem.objects.filter(character=self.character.sheet_data).delete()
         self.character.equipped_items.invalidate()
 
     # -- no equipped item → no EQUIPMENT contribution --
@@ -51,7 +51,7 @@ class ItemCheckModifierContributionTests(TestCase):
 
     def test_equipped_item_wrong_check_type_no_contribution(self) -> None:
         EquippedItemFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=self.item,
             body_region=BodyRegion.FEET,
             equipment_layer=EquipmentLayer.BASE,
@@ -64,7 +64,7 @@ class ItemCheckModifierContributionTests(TestCase):
 
     def test_equipped_item_with_modifier_contributes_equipment_kind(self) -> None:
         EquippedItemFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=self.item,
             body_region=BodyRegion.FEET,
             equipment_layer=EquipmentLayer.BASE,
@@ -78,7 +78,7 @@ class ItemCheckModifierContributionTests(TestCase):
 
     def test_equipped_item_contribution_total_includes_equipment_value(self) -> None:
         EquippedItemFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=self.item,
             body_region=BodyRegion.FEET,
             equipment_layer=EquipmentLayer.BASE,
@@ -99,7 +99,7 @@ class ItemCheckModifierContributionTests(TestCase):
         plain_template = ItemTemplateFactory(name="Plain Gloves 851")
         plain_item = ItemInstanceFactory(template=plain_template)
         EquippedItemFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=plain_item,
             body_region=BodyRegion.HEAD,
             equipment_layer=EquipmentLayer.BASE,

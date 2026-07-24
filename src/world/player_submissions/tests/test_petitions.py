@@ -3,7 +3,8 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.player_submissions.constants import (
     PetitionCategory,
     SubmissionCategory,
@@ -65,14 +66,14 @@ class SubmitPetitionTests(TestCase):
             )
 
     def test_category_reference_satisfied(self) -> None:
-        character = CharacterFactory(db_key="DeadGuy")
+        character = CharacterSheetFactory(character__db_key="DeadGuy").character
         petition = submit_petition(
             self.account,
             category=PetitionCategory.UNFAIR_DEATH,
             description="My character died unfairly.",
             subject_character=character,
         )
-        self.assertEqual(petition.subject_character, character)
+        self.assertEqual(petition.subject_character, character.sheet_data)
 
     def test_description_truncated_to_limit(self) -> None:
         petition = submit_petition(

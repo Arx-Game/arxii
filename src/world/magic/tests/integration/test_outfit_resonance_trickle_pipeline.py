@@ -60,7 +60,7 @@ def _build_sheet_with_equipped_facet_item(
 
     instance = ItemInstanceFactory(template=template, quality_tier=item_quality)
     EquippedItemFactory(
-        character=sheet.character,
+        character=sheet,
         item_instance=instance,
         body_region=BodyRegion.TORSO,
         equipment_layer=EquipmentLayer.BASE,

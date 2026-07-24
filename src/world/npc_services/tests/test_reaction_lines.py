@@ -89,7 +89,7 @@ class StylingHandlerReactionTests(TestCase):
         self.trait = FormTraitFactory(name="hair_color_rx", is_cosmetic=True)
         self.black = FormTraitOptionFactory(trait=self.trait, name="raven")
         self.red = FormTraitOptionFactory(trait=self.trait, name="crimson", display_name="Crimson")
-        form = CharacterFormFactory(character=self.sheet.character)
+        form = CharacterFormFactory(character=self.sheet)
         CharacterFormValueFactory(form=form, trait=self.trait, option=self.black)
         self.role = NPCRoleFactory(name="Reaction Stylist")
         self.offer = NPCServiceOfferFactory(

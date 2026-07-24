@@ -70,7 +70,7 @@ def _set_primary_affinity_abyssal(sheet: object) -> None:
         aura.save()
     except AttributeError:
         CharacterAuraFactory(
-            character=char,
+            character=char.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -88,7 +88,7 @@ def _set_primary_affinity_primal(sheet: object) -> None:
         aura.save()
     except AttributeError:
         CharacterAuraFactory(
-            character=char,
+            character=char.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("80.00"),
             abyssal=Decimal("10.00"),
@@ -574,7 +574,7 @@ class ResolveStageAdvanceFromDbHappyPathTests(TestCase):
 
         # Seed Sineater anima (needed by TetherStrain apply_condition path).
         CharacterAnimaFactory(
-            character=cls.sineater_sheet.character,
+            character=cls.sineater_sheet,
             current=20,
             maximum=20,
         )

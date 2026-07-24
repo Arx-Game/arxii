@@ -48,9 +48,14 @@ def _make_holder_setup(template_name: str = "renown-emission-tmpl"):
     holder_char = CharacterFactory(db_key="RenownHolder")
     CharacterSheetFactory(character=holder_char)
     holder = MissionParticipantFactory(
-        instance=instance, character=holder_char, is_contract_holder=True
+        instance=instance, character=holder_char.sheet_data, is_contract_holder=True
     )
-    deed = MissionDeedRecordFactory(instance=instance, actor=holder_char, node=node, option=option)
+    deed = MissionDeedRecordFactory(
+        instance=instance,
+        actor=holder_char.sheet_data,
+        node=node,
+        option=option,
+    )
     return instance, route, deed, holder
 
 
@@ -73,7 +78,7 @@ class EmitRenownAwardsContractHolderTests(TestCase):
 
         self.assertEqual(len(results), 1)
         result = results[0]
-        holder_persona = holder.character.sheet_data.primary_persona
+        holder_persona = holder.character.primary_persona
         self.assertEqual(result.persona_id, holder_persona.pk)
         holder_persona.refresh_from_db()
         self.assertEqual(holder_persona.fame_points, MAGNITUDE_FAME_AWARDS["moderate"])
@@ -84,7 +89,7 @@ class EmitRenownAwardsContractHolderTests(TestCase):
         from world.scenes.factories import PersonaFactory
 
         instance, route, deed, holder = _make_holder_setup()
-        accepted = PersonaFactory(character_sheet=holder.character.sheet_data)
+        accepted = PersonaFactory(character_sheet=holder.character)
         instance.accepted_as_persona = accepted
         instance.save(update_fields=["accepted_as_persona"])
         MissionRenownAward.objects.create(
@@ -103,7 +108,11 @@ class EmitRenownAwardsBroadcastTests(TestCase):
         # Add a second participant.
         other_char = CharacterFactory(db_key="RenownHelper")
         CharacterSheetFactory(character=other_char)
-        MissionParticipantFactory(instance=instance, character=other_char, is_contract_holder=False)
+        MissionParticipantFactory(
+            instance=instance,
+            character=other_char.sheet_data,
+            is_contract_holder=False,
+        )
         MissionRenownAward.objects.create(
             route=route,
             magnitude=RenownMagnitude.SMALL,
@@ -114,7 +123,7 @@ class EmitRenownAwardsBroadcastTests(TestCase):
 
         self.assertEqual(len(results), 2)
         result_personas = {r.persona_id for r in results}
-        holder_persona_pk = holder.character.sheet_data.primary_persona.pk
+        holder_persona_pk = holder.character.primary_persona.pk
         other_persona_pk = other_char.sheet_data.primary_persona.pk
         self.assertEqual(result_personas, {holder_persona_pk, other_persona_pk})
 
@@ -150,7 +159,7 @@ class EmitRenownAwardsMultiAwardTests(TestCase):
         results = emit_terminal_renown_awards(instance, route, deed)
 
         self.assertEqual(len(results), 2)
-        holder_persona = holder.character.sheet_data.primary_persona
+        holder_persona = holder.character.primary_persona
         holder_persona.refresh_from_db()
         # Both awards land on the same persona.
         expected_fame = MAGNITUDE_FAME_AWARDS["moderate"] + MAGNITUDE_FAME_AWARDS["high"]

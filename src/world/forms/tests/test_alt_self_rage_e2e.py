@@ -70,9 +70,9 @@ class AltSelfRageEndToEndTests(TestCase):
 
         # True form + state so assume/revert have return anchors.
         cls.true_form = CharacterFormFactory(
-            character=cls.character, name="True", form_type=FormType.TRUE
+            character=cls.sheet, name="True", form_type=FormType.TRUE
         )
-        CharacterFormStateFactory(character=cls.character, active_form=cls.true_form)
+        CharacterFormStateFactory(character=cls.character.sheet_data, active_form=cls.true_form)
 
         # Alternate persona to shift into.
         cls.alt_persona = PersonaFactory(
@@ -152,7 +152,7 @@ class AltSelfRageEndToEndTests(TestCase):
         revert2 = RevertFormAction().run(self.character)
         self.assertTrue(revert2.success, revert2.message)
 
-        state = CharacterFormState.objects.get(character=self.character)
+        state = CharacterFormState.objects.get(character=self.character.sheet_data)
         self.assertEqual(state.active_form, self.true_form)
         self.sheet.refresh_from_db()
         self.assertEqual(self.sheet.active_persona, self.sheet.primary_persona)

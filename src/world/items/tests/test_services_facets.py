@@ -2,6 +2,7 @@
 
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.exceptions import FacetAlreadyAttached, FacetCapacityExceeded
 from world.items.models import ItemFacet
@@ -13,7 +14,7 @@ class AttachFacetToItemTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from evennia_extensions.factories import AccountFactory
         from world.items.factories import (
             EquippedItemFactory,
             ItemInstanceFactory,
@@ -34,14 +35,14 @@ class AttachFacetToItemTests(TestCase):
         cls.facet_b = FacetFactory(name="FacetB")
 
         # Build a character that wears item_cap2 so we can test cache invalidation.
-        cls.character = CharacterFactory(db_key="FacetTestChar")
+        cls.character = CharacterSheetFactory(character__db_key="FacetTestChar").character
         TemplateSlotFactory(
             template=cls.template_cap2,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
         cls.equipped = EquippedItemFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             item_instance=cls.item_cap2,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -132,7 +133,7 @@ class RemoveFacetFromItemTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from evennia_extensions.factories import AccountFactory
         from world.items.factories import (
             EquippedItemFactory,
             ItemFacetFactory,
@@ -155,14 +156,14 @@ class RemoveFacetFromItemTests(TestCase):
         )
 
         # Character wearing the item for cache-invalidation tests.
-        cls.character = CharacterFactory(db_key="RemoveFacetChar")
+        cls.character = CharacterSheetFactory(character__db_key="RemoveFacetChar").character
         TemplateSlotFactory(
             template=cls.template,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
         cls.equipped = EquippedItemFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             item_instance=cls.item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

@@ -288,7 +288,7 @@ class GMTableViewSet(viewsets.ModelViewSet):
         return set(
             StoryParticipation.objects.filter(
                 story__primary_table__isnull=False,
-                character__db_account=user,
+                character__character__db_account=user,
                 is_active=True,
             )
             .values_list("story__primary_table_id", flat=True)

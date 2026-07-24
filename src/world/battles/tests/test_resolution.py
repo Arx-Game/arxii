@@ -97,7 +97,7 @@ class BattleTechniqueResolverTests(TestCase):
             action_template=ActionTemplateFactory(), damage_profile=False
         )
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.sheet, current=20, maximum=30)
 
     def test_resolve_battle_technique_returns_check_result(self) -> None:
         from world.battles.resolution import resolve_battle_technique
@@ -224,7 +224,7 @@ class BattleActionKindCheckBonusScopingTests(TestCase):
             action_template=ActionTemplateFactory(), damage_profile=False
         )
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.sheet, current=20, maximum=30)
 
         role = CovenantRoleFactory()
         CharacterCovenantRoleFactory(
@@ -778,7 +778,7 @@ class ResolveBattleRoundSuccessTests(TestCase):
             action_template=ActionTemplateFactory(), damage_profile=False
         )
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.sheet, current=20, maximum=30)
 
         self.unit = add_unit(
             battle=self.battle,
@@ -947,7 +947,7 @@ class ResolveBattleRoundSupportTests(TestCase):
             action_template=ActionTemplateFactory(), damage_profile=False
         )
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.sheet, current=20, maximum=30)
 
         self.battle_round = begin_battle_round(battle=self.battle)
 
@@ -1240,8 +1240,8 @@ class RepelResolutionTests(TestCase):
         CharacterTechniqueFactory(
             character=attacker_participant.character_sheet, technique=technique
         )
-        CharacterAnimaFactory(character=repel_participant.character_sheet.character)
-        CharacterAnimaFactory(character=attacker_participant.character_sheet.character)
+        CharacterAnimaFactory(character=repel_participant.character_sheet)
+        CharacterAnimaFactory(character=attacker_participant.character_sheet)
         battle_round = begin_battle_round(battle=self.battle)
 
         # PLACE scope requires an engaged command-hierarchy tier (#1710); grant
@@ -1376,7 +1376,7 @@ class HoldResolutionTests(TestCase):
 
         technique = TechniqueFactory(action_template=ActionTemplateFactory())
         CharacterTechniqueFactory(character=self.participant.character_sheet, technique=technique)
-        CharacterAnimaFactory(character=self.participant.character_sheet.character)
+        CharacterAnimaFactory(character=self.participant.character_sheet)
         battle_round = begin_battle_round(battle=self.battle)
 
         # PLACE scope requires an engaged command-hierarchy tier (#1710); grant
@@ -1502,7 +1502,7 @@ class BreachEjectsVehicleOccupantsTests(TestCase):
             action_template=ActionTemplateFactory(), damage_profile=False
         )
         CharacterTechniqueFactory(character=self.attacker_sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.attacker_sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.attacker_sheet, current=20, maximum=30)
 
         self.battle_round = begin_battle_round(battle=self.battle)
 
@@ -1564,7 +1564,7 @@ class StrikeDestroysLivingMountEjectsOccupantsTests(TestCase):
             action_template=ActionTemplateFactory(), damage_profile=False
         )
         CharacterTechniqueFactory(character=self.attacker_sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.attacker_sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.attacker_sheet, current=20, maximum=30)
 
         self.battle_round = begin_battle_round(battle=self.battle)
 
@@ -1660,7 +1660,7 @@ class ResolveBattleRoundFailureTests(TestCase):
             action_template=ActionTemplateFactory(), damage_profile=False
         )
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.sheet, current=20, maximum=30)
 
         self.unit = add_unit(
             battle=self.battle,
@@ -1745,7 +1745,7 @@ class BattleRoundAudereWiringTests(TestCase):
             intensity=5,
         )
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.sheet, current=20, maximum=30)
 
         self.battle_round = begin_battle_round(battle=self.battle)
 
@@ -1884,7 +1884,7 @@ class EntryRollTests(TestCase):
         CharacterVitalsFactory(character_sheet=sheet)
         technique = TechniqueFactory(action_template=ActionTemplateFactory(), damage_profile=False)
         CharacterTechniqueFactory(character=sheet, technique=technique)
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=30)
 
         battle = create_battle(name="Entry Roll Test")
         side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
@@ -1969,9 +1969,7 @@ class EscalationTickTests(TestCase):
         participant = self._surrounded_participant(battle, side)
         technique = TechniqueFactory(action_template=ActionTemplateFactory(), damage_profile=False)
         CharacterTechniqueFactory(character=participant.character_sheet, technique=technique)
-        CharacterAnimaFactory(
-            character=participant.character_sheet.character, current=20, maximum=30
-        )
+        CharacterAnimaFactory(character=participant.character_sheet, current=20, maximum=30)
         battle_round = begin_battle_round(battle=battle)
         declare_battle_action(
             participant=participant,
@@ -2069,7 +2067,7 @@ class RescueResolutionTests(TestCase):
         rescuer = enlist_participant(battle=battle, character_sheet=rescuer_sheet, side=side)
         technique = TechniqueFactory(action_template=ActionTemplateFactory(), damage_profile=False)
         CharacterTechniqueFactory(character=rescuer_sheet, technique=technique)
-        CharacterAnimaFactory(character=rescuer_sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=rescuer_sheet, current=20, maximum=30)
 
         battle_round = begin_battle_round(battle=battle)
         declare_battle_action(
@@ -2313,7 +2311,7 @@ class BattleTechniqueResolverModifierStackTests(TestCase):
             action_template=ActionTemplateFactory(), damage_profile=False
         )
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.sheet, current=20, maximum=30)
 
     def test_sums_property_terrain_quality_posture_into_extra_modifiers(self) -> None:
         from world.battles.resolution import BattleTechniqueResolver
@@ -2486,7 +2484,7 @@ class PostureVpScalingTests(TestCase):
             action_template=ActionTemplateFactory(), damage_profile=False
         )
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.sheet, current=20, maximum=30)
 
     def test_aggressive_posture_scales_up_strike_vp(self) -> None:
         from world.battles.resolution import resolve_battle_round

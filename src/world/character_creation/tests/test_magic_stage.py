@@ -183,12 +183,12 @@ class MagicFinalizationCGSeedingTest(TestCase):
         """finalize_magic_data creates a CharacterAnima row for the new character."""
         draft, sheet = self._make_draft_and_sheet()
         self.assertFalse(
-            CharacterAnima.objects.filter(character=sheet.character).exists(),
+            CharacterAnima.objects.filter(character=sheet).exists(),
             "CharacterAnima must not exist before finalize",
         )
         finalize_magic_data(draft, sheet)
         self.assertTrue(
-            CharacterAnima.objects.filter(character=sheet.character).exists(),
+            CharacterAnima.objects.filter(character=sheet).exists(),
             "CharacterAnima should be seeded by finalize_magic_data",
         )
 
@@ -209,7 +209,7 @@ class MagicFinalizationCGSeedingTest(TestCase):
         """Seeded CharacterAnima has sensible defaults (current=10, maximum=10)."""
         draft, sheet = self._make_draft_and_sheet()
         finalize_magic_data(draft, sheet)
-        anima = CharacterAnima.objects.get(character=sheet.character)
+        anima = CharacterAnima.objects.get(character=sheet)
         self.assertEqual(anima.current, 10)
         self.assertEqual(anima.maximum, 10)
 
@@ -221,11 +221,11 @@ class MagicFinalizationCGSeedingTest(TestCase):
         finalize_magic_data(draft, sheet)
         # Calling the seeding helpers again must not raise or create duplicates.
         CharacterAnima.objects.get_or_create(
-            character=sheet.character,
+            character=sheet,
             defaults={"current": 10, "maximum": 10},
         )
         get_or_create_fatigue_pool(sheet)
-        self.assertEqual(CharacterAnima.objects.filter(character=sheet.character).count(), 1)
+        self.assertEqual(CharacterAnima.objects.filter(character=sheet).count(), 1)
         self.assertEqual(FatiguePool.objects.filter(character_sheet=sheet).count(), 1)
 
 

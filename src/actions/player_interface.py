@@ -1922,6 +1922,6 @@ def _get_character_anima(character: ObjectDB) -> CharacterAnima | None:
     from world.magic.models import CharacterAnima  # noqa: PLC0415
 
     try:
-        return CharacterAnima.objects.get(character=character)
+        return CharacterAnima.objects.get(character_id=character.pk)
     except CharacterAnima.DoesNotExist:
         return None

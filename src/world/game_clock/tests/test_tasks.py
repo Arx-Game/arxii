@@ -57,8 +57,8 @@ class BatchApDailyRegenTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import CharacterFactory
         from world.action_points.factories import ActionPointConfigFactory
+        from world.character_sheets.factories import CharacterSheetFactory
         from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 
         cls.config = ActionPointConfigFactory(daily_regen=5, is_active=True)
@@ -67,13 +67,13 @@ class BatchApDailyRegenTests(TestCase):
         cls.max_target = ModifierTargetFactory(name="ap_maximum", category=cls.ap_category)
 
         # Character with sheet (for modifiers)
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
 
     def test_basic_regen_no_modifiers(self) -> None:
         """Pools regenerate at base rate without modifiers."""
         from world.action_points.factories import ActionPointPoolFactory
 
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100, maximum=200)
 
         batch_ap_daily_regen()
 
@@ -84,7 +84,7 @@ class BatchApDailyRegenTests(TestCase):
         """Pools already at maximum are not updated."""
         from world.action_points.factories import ActionPointPoolFactory
 
-        pool = ActionPointPoolFactory(character=self.character, current=200, maximum=200)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=200, maximum=200)
 
         batch_ap_daily_regen()
 
@@ -95,7 +95,7 @@ class BatchApDailyRegenTests(TestCase):
         """Regenerated pools get last_daily_regen stamped (admin display)."""
         from world.action_points.factories import ActionPointPoolFactory
 
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100, maximum=200)
         old_timestamp = pool.last_daily_regen
 
         batch_ap_daily_regen()
@@ -124,7 +124,7 @@ class BatchApDailyRegenTests(TestCase):
             character=sheet, target=effect.target, value=3, source=source
         )
 
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100, maximum=200)
 
         batch_ap_daily_regen()
 
@@ -152,7 +152,7 @@ class BatchApDailyRegenTests(TestCase):
         )
 
         # At base max but below effective max (200 + 100 = 300)
-        pool = ActionPointPoolFactory(character=self.character, current=200, maximum=200)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=200, maximum=200)
 
         batch_ap_daily_regen()
 
@@ -173,12 +173,12 @@ class BatchApWeeklyRegenTests(TestCase):
 
     def test_basic_weekly_regen(self) -> None:
         """Pools regenerate at weekly rate."""
-        from evennia_extensions.factories import CharacterFactory
         from world.action_points.factories import ActionPointConfigFactory, ActionPointPoolFactory
+        from world.character_sheets.factories import CharacterSheetFactory
 
         ActionPointConfigFactory(weekly_regen=100, is_active=True)
-        character = CharacterFactory()
-        pool = ActionPointPoolFactory(character=character, current=50, maximum=200)
+        character = CharacterSheetFactory().character
+        pool = ActionPointPoolFactory(character=character.sheet_data, current=50, maximum=200)
 
         batch_ap_weekly_regen()
 
@@ -295,7 +295,7 @@ class ProtagonismLockApRegenTests(TestCase):
         sheet = CharacterSheetFactory()
         resonance = ResonanceFactory()
         with_corruption_at_stage(sheet, resonance, stage=5)
-        return ActionPointPoolFactory(character=sheet.character, current=50, maximum=200)
+        return ActionPointPoolFactory(character=sheet, current=50, maximum=200)
 
     def test_locked_sheet_skipped_by_daily_regen(self) -> None:
         pool = self._make_subsumed_pool()

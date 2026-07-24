@@ -13,7 +13,8 @@ from allauth.account.models import EmailAddress
 from django.test import TestCase
 
 from commands.account.account_info import CmdAccount, CmdRoster
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterApplicationFactory
 from world.roster.models.choices import ApplicationStatus
 
@@ -56,10 +57,10 @@ class CmdRosterStatusTests(TestCase):
         self.assertIn("no pending roster applications", sent.lower())
 
     def test_bare_and_status_are_equivalent(self):
-        character = CharacterFactory(db_key="Applicant")
+        character = CharacterSheetFactory(character__db_key="Applicant").character
         RosterApplicationFactory(
             player_data=self.account.player_data,
-            character=character,
+            character=character.sheet_data,
             status=ApplicationStatus.PENDING,
         )
         bare = self._sent_text("")
@@ -69,10 +70,10 @@ class CmdRosterStatusTests(TestCase):
         self.assertIn(character.key, status)
 
     def test_own_pending_application_shown(self):
-        character = CharacterFactory(db_key="Hopeful")
+        character = CharacterSheetFactory(character__db_key="Hopeful").character
         RosterApplicationFactory(
             player_data=self.account.player_data,
-            character=character,
+            character=character.sheet_data,
             status=ApplicationStatus.PENDING,
         )
         sent = self._sent_text("status")
@@ -80,10 +81,10 @@ class CmdRosterStatusTests(TestCase):
         self.assertIn("Pending", sent)
 
     def test_approved_application_not_shown(self):
-        character = CharacterFactory(db_key="AlreadyIn")
+        character = CharacterSheetFactory(character__db_key="AlreadyIn").character
         RosterApplicationFactory(
             player_data=self.account.player_data,
-            character=character,
+            character=character.sheet_data,
             status=ApplicationStatus.APPROVED,
         )
         sent = self._sent_text("status")
@@ -92,10 +93,10 @@ class CmdRosterStatusTests(TestCase):
     def test_another_accounts_application_never_shown(self):
         """Leak negative (#2122 leak analysis) — scoped to the caller's own PlayerData."""
         other_player_data = PlayerDataFactory()
-        other_character = CharacterFactory(db_key="NotYours")
+        other_character = CharacterSheetFactory(character__db_key="NotYours").character
         RosterApplicationFactory(
             player_data=other_player_data,
-            character=other_character,
+            character=other_character.sheet_data,
             status=ApplicationStatus.PENDING,
         )
         sent = self._sent_text("status")

@@ -5,7 +5,8 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.stories.factories import (
     ChapterFactory,
     EpisodeFactory,
@@ -31,11 +32,11 @@ class StoryViewActionsTestCase(APITestCase):
         cls.staff_account = AccountFactory(is_staff=True)
 
         # Create characters for story participation
-        cls.owner_character = CharacterFactory()
+        cls.owner_character = CharacterSheetFactory().character
         cls.owner_character.db_account = cls.owner_account
         cls.owner_character.save()
 
-        cls.participant_character = CharacterFactory()
+        cls.participant_character = CharacterSheetFactory().character
         cls.participant_character.db_account = cls.participant_account
         cls.participant_character.save()
 
@@ -49,7 +50,7 @@ class StoryViewActionsTestCase(APITestCase):
         # Create story participations
         StoryParticipationFactory(
             story=cls.public_story,
-            character=cls.participant_character,
+            character=cls.participant_character.sheet_data,
             participation_level=ParticipationLevel.OPTIONAL,
         )
 
@@ -134,7 +135,7 @@ class StoryViewActionsTestCase(APITestCase):
 
     def test_apply_to_participate_action(self):
         """Test applying to participate in a story"""
-        non_participant_character = CharacterFactory()
+        non_participant_character = CharacterSheetFactory().character
         non_participant_character.db_account = self.non_participant_account
         non_participant_character.save()
 
@@ -152,7 +153,7 @@ class StoryViewActionsTestCase(APITestCase):
 
         assert response.status_code == status.HTTP_201_CREATED
         assert StoryParticipation.objects.filter(
-            story=self.public_story, character=non_participant_character
+            story=self.public_story, character_id=non_participant_character.pk
         ).exists()
 
     def test_apply_to_participate_already_participating(self):
@@ -396,13 +397,13 @@ class StoryParticipationViewPermissionsTestCase(APITestCase):
         cls.staff_account = AccountFactory(is_staff=True)
 
         cls.story = StoryFactory(owners=[cls.owner_account])
-        cls.participant_character = CharacterFactory()
+        cls.participant_character = CharacterSheetFactory().character
         cls.participant_character.db_account = cls.participant_account
         cls.participant_character.save()
 
         cls.participation = StoryParticipationFactory(
             story=cls.story,
-            character=cls.participant_character,
+            character=cls.participant_character.sheet_data,
         )
 
     @suppress_permission_errors

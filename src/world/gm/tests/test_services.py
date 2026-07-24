@@ -148,11 +148,11 @@ class GMApplicationQueueTest(TestCase):
         story = StoryFactory(primary_table=cls.table)
         StoryParticipation.objects.create(
             story=story,
-            character=cls.entry_at_table.character_sheet.character,
+            character=cls.entry_at_table.character_sheet,
             is_active=True,
         )
         cls.app_at_table = RosterApplicationFactory(
-            character=cls.entry_at_table.character_sheet.character,
+            character=cls.entry_at_table.character_sheet,
         )
 
         # Entry at another GM's table
@@ -160,11 +160,11 @@ class GMApplicationQueueTest(TestCase):
         other_story = StoryFactory(primary_table=cls.other_table)
         StoryParticipation.objects.create(
             story=other_story,
-            character=cls.entry_at_other.character_sheet.character,
+            character=cls.entry_at_other.character_sheet,
             is_active=True,
         )
         cls.app_at_other = RosterApplicationFactory(
-            character=cls.entry_at_other.character_sheet.character,
+            character=cls.entry_at_other.character_sheet,
         )
 
     def test_queue_includes_own_table_applications(self) -> None:
@@ -226,11 +226,11 @@ class ApproveApplicationAsGMTest(TestCase):
         story = StoryFactory(primary_table=self.table)
         StoryParticipation.objects.create(
             story=story,
-            character=self.entry.character_sheet.character,
+            character=self.entry.character_sheet,
             is_active=True,
         )
         self.app = RosterApplicationFactory(
-            character=self.entry.character_sheet.character,
+            character=self.entry.character_sheet,
         )
 
     def test_approve_flips_status(self) -> None:
@@ -260,11 +260,11 @@ class DenyApplicationAsGMTest(TestCase):
         story = StoryFactory(primary_table=self.table)
         StoryParticipation.objects.create(
             story=story,
-            character=self.entry.character_sheet.character,
+            character=self.entry.character_sheet,
             is_active=True,
         )
         self.app = RosterApplicationFactory(
-            character=self.entry.character_sheet.character,
+            character=self.entry.character_sheet,
         )
 
     def test_deny_flips_status_and_records_notes(self) -> None:
@@ -402,7 +402,7 @@ class ClaimInviteTest(TestCase):
 
         application = claim_invite(invite=self.invite, account=self.account)
         assert application.pk is not None
-        assert application.character == self.invite.roster_entry.character_sheet.character
+        assert application.character == self.invite.roster_entry.character_sheet
         self.invite.refresh_from_db()
         assert self.invite.is_claimed is True
         assert self.invite.claimed_by == self.account
@@ -416,7 +416,7 @@ class ClaimInviteTest(TestCase):
         player_data, _ = PlayerData.objects.get_or_create(account=self.account)
         existing = RosterApplicationFactory(
             player_data=player_data,
-            character=self.invite.roster_entry.character_sheet.character,
+            character=self.invite.roster_entry.character_sheet,
             status=ApplicationStatus.PENDING,
         )
         result = claim_invite(invite=self.invite, account=self.account)

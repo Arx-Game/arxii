@@ -56,7 +56,7 @@ class AccountPlayerSerializerFullPayloadTests(TestCase):
         target = CharacterFactory(db_key="Lyra")
         pending_application = RosterApplication.objects.create(
             player_data=self.account.player_data,
-            character=target,
+            character=target.sheet_data,
             application_text="please",
             status=ApplicationStatus.PENDING,
         )
@@ -64,7 +64,7 @@ class AccountPlayerSerializerFullPayloadTests(TestCase):
         approved_target = CharacterFactory(db_key="Maeve")
         RosterApplication.objects.create(
             player_data=self.account.player_data,
-            character=approved_target,
+            character=approved_target.sheet_data,
             application_text="please",
             status=ApplicationStatus.APPROVED,
         )

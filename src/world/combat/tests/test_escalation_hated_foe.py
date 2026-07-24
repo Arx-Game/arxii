@@ -51,7 +51,7 @@ class HatedFoeSpikeTests(TestCase):
         )
 
     def _intensity(self) -> int:
-        return CharacterEngagement.objects.get(character=self.pc_char).intensity_modifier
+        return CharacterEngagement.objects.get(character=self.pc_char.sheet_data).intensity_modifier
 
     def test_surge_on_opponent_add_when_hated(self):
         self._hate()
@@ -176,6 +176,6 @@ class HatedFoeSpikeTests(TestCase):
         del participant
 
         latecomer_intensity = CharacterEngagement.objects.get(
-            character=latecomer_sheet.character
+            character=latecomer_sheet
         ).intensity_modifier
         self.assertEqual(latecomer_intensity, self.curve.hated_foe_spike_intensity_amount)

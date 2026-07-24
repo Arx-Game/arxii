@@ -6,9 +6,9 @@ from django.test import TestCase
 
 from evennia_extensions.factories import (
     AccountFactory,
-    CharacterFactory,
     ObjectDBFactory,
 )
+from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import (
     ItemInstanceFactory,
@@ -24,12 +24,12 @@ class _Builder:
 
     @classmethod
     def _make_character(cls, db_key: str):
-        return CharacterFactory(db_key=db_key)
+        return CharacterSheetFactory(character__db_key=db_key).character
 
     @classmethod
     def _equip(cls, character, item, region, layer):
         return EquippedItem.objects.create(
-            character=character,
+            character=character.sheet_data,
             item_instance=item,
             body_region=region,
             equipment_layer=layer,

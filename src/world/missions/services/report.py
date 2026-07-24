@@ -101,7 +101,7 @@ def _terminal_deed(instance: MissionInstance) -> MissionDeedRecord | None:
 def _base_money_for(deed: MissionDeedRecord, reporter: ObjectDB) -> int:
     """Total authored IMMEDIATE/MONEY the reporter is due on this deed."""
     total = deed.reward_lines.filter(
-        recipient=reporter,
+        recipient_id=reporter.pk,
         kind=DeedRewardKind.IMMEDIATE,
         sink=DeedRewardSink.MONEY,
     ).aggregate(total=Sum("amount"))["total"]

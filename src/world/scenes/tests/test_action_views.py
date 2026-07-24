@@ -66,7 +66,7 @@ class SceneActionRequestViewSetTestCase(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(
@@ -301,7 +301,7 @@ class MultiTargetDispatchTestCase(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(
@@ -510,7 +510,7 @@ class PlaceViewSetTestCase(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(
@@ -580,7 +580,7 @@ class CastEndpointTestCase(APITestCase):
         cls.scene = SceneFactory(location=room)
 
         cls.account = AccountFactory()
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(
@@ -590,7 +590,7 @@ class CastEndpointTestCase(APITestCase):
         cls.identity = CharacterSheetFactory(character=cls.character)
         cls.persona = cls.identity.primary_persona
 
-        CharacterAnimaFactory(character=cls.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=cls.character.sheet_data, current=20, maximum=30)
         CharacterVitals.objects.create(
             character_sheet=cls.identity,
             health=50,
@@ -961,7 +961,7 @@ class CastableTechniquesEndpointTestCase(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(
@@ -1054,7 +1054,7 @@ class PerTargetRespondTestCase(APITestCase):
     def setUpTestData(cls) -> None:
         # Initiator account + persona
         cls.account = AccountFactory()
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(
@@ -1207,7 +1207,7 @@ class TestSceneActionTargetViewSet(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(

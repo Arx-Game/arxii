@@ -429,7 +429,7 @@ class TreatmentEngagementGateTests(TestCase):
 
     def test_helper_engaged_raises(self):
         """Helper in CharacterEngagement → HelperEngagedForTreatment."""
-        CharacterEngagementFactory(character=self.helper_sheet.character)
+        CharacterEngagementFactory(character=self.helper_sheet)
         with self.assertRaises(HelperEngagedForTreatment):
             perform_treatment(
                 helper_sheet=self.helper_sheet,
@@ -441,7 +441,7 @@ class TreatmentEngagementGateTests(TestCase):
 
     def test_target_engaged_raises(self):
         """Target in CharacterEngagement → HelperEngagedForTreatment."""
-        CharacterEngagementFactory(character=self.target_sheet.character)
+        CharacterEngagementFactory(character=self.target_sheet)
         with self.assertRaises(HelperEngagedForTreatment):
             perform_treatment(
                 helper_sheet=self.helper_sheet,
@@ -460,8 +460,8 @@ class TreatmentEngagementGateTests(TestCase):
         treatment fires instead of raising.
         """
         mock_perform_check.return_value = _make_check_result(success_level=2)
-        CharacterEngagementFactory(character=self.helper_sheet.character)
-        CharacterEngagementFactory(character=self.target_sheet.character)
+        CharacterEngagementFactory(character=self.helper_sheet)
+        CharacterEngagementFactory(character=self.target_sheet)
 
         outcome = perform_treatment(
             helper_sheet=self.helper_sheet,
@@ -696,7 +696,7 @@ class TreatmentAnimaGateTests(TestCase):
     def test_insufficient_anima_raises(self):
         """CharacterAnima.current < anima_cost → TreatmentAnimaInsufficient."""
         # Create anima row with only 2 current (cost is 5)
-        CharacterAnimaFactory(character=self.helper_sheet.character, current=2, maximum=10)
+        CharacterAnimaFactory(character=self.helper_sheet, current=2, maximum=10)
         target_effect = ConditionInstanceFactory(condition=self.aftermath_cond, severity=10)
         with self.assertRaises(TreatmentAnimaInsufficient):
             perform_treatment(

@@ -4,6 +4,7 @@ Tests for roster services and business logic.
 
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import (
     CharacterFactory,
     PlayerDataFactory,
@@ -19,7 +20,7 @@ class PlayerDataServiceTestCase(TestCase):
     def setUp(self):
         """Set up test data for each test"""
         self.player_data = PlayerDataFactory()
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.roster = RosterFactory(is_active=True)
         self.roster_entry = RosterEntryFactory(
             character_sheet__character=self.character,
@@ -88,20 +89,20 @@ class PlayerDataServiceTestCase(TestCase):
     def test_get_pending_applications(self):
         """Test getting player's pending applications"""
         # Create a second character for the approved application
-        character2 = CharacterFactory()
-        RosterEntryFactory(character_sheet__character=character2, roster=self.roster)
+        character2 = CharacterSheetFactory().character
+        RosterEntryFactory(character_sheet=character2.sheet_data, roster=self.roster)
 
         # Create pending application
         app = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.character,
+            character=self.character.sheet_data,
             application_text="Test application",
         )
 
         # Create approved application for different character (should not be included)
         RosterApplication.objects.create(
             player_data=self.player_data,
-            character=character2,
+            character=character2.sheet_data,
             application_text="Approved app",
             status="approved",
         )
@@ -218,7 +219,7 @@ class RosterPolicyServiceTestCase(TestCase):
         """Test policy review info for a character with no issues"""
         app = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.regular_character,
+            character=self.regular_character.sheet_data,
             application_text="Test application",
         )
 
@@ -235,7 +236,7 @@ class RosterPolicyServiceTestCase(TestCase):
         """Test policy review info for a character with policy issues"""
         app = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.restricted_character,
+            character=self.restricted_character.sheet_data,
             application_text="Test application",
         )
 
@@ -282,7 +283,7 @@ class RosterPolicyServiceTestCase(TestCase):
 
         app = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.regular_character,
+            character=self.regular_character.sheet_data,
             application_text="Test application",
         )
 

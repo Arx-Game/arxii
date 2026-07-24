@@ -76,7 +76,7 @@ class ApplyTechniqueTreatmentsTest(TestCase):
             minimum_success_level=1,
         )
         # Ensure the caster has anima (in case the treatment costs anima).
-        CharacterAnimaFactory(character=self.caster)
+        CharacterAnimaFactory(character=self.caster_sheet)
 
     def test_no_treatment_rows_returns_empty(self):
         """A technique with no TechniqueTreatment rows returns []."""
@@ -141,8 +141,8 @@ class ApplyTechniqueTreatmentsTest(TestCase):
         # TreatmentAttempt was recorded.
         self.assertTrue(
             TreatmentAttempt.objects.filter(
-                helper=self.caster,
-                target=self.target,
+                helper=self.caster_sheet,
+                target=self.target_sheet,
                 treatment=self.treatment_template,
             ).exists()
         )

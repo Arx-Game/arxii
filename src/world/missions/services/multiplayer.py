@@ -136,9 +136,9 @@ def build_group_option_list(
     participants = instance.participants.all().order_by("pk")
     presented: list[PresentedOption] = []
     for participant in participants:
-        here = _current_room_profile(participant.character)
+        here = _current_room_profile(participant.character.character)
         local = [opt for opt in options if option_is_locally_live(opt, node, instance, here)]
-        presented.extend(present_options_for_character(participant.character, local))
+        presented.extend(present_options_for_character(participant.character.character, local))
     return presented
 
 
@@ -222,8 +222,7 @@ def _emit_group_resolution_narrative(
         if presented_opt is None:
             continue
         story_text = _story_text_for(presented_opt, deed, template_name)
-        actor = deed.actor
-        sheet = actor.character_sheet
+        sheet = deed.actor
         if sheet is not None:
             send_narrative_message(
                 recipients=[sheet],

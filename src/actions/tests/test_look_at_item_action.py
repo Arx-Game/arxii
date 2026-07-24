@@ -7,9 +7,9 @@ from django.test import TestCase
 from actions.definitions.perception import LookAtItemAction
 from evennia_extensions.factories import (
     AccountFactory,
-    CharacterFactory,
     ObjectDBFactory,
 )
+from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import (
     ItemInstanceFactory,
@@ -21,14 +21,14 @@ from world.items.models import EquippedItem
 
 class LookAtItemActionTests(TestCase):
     def setUp(self) -> None:
-        self.actor = CharacterFactory(db_key="LookActor")
+        self.actor = CharacterSheetFactory(character__db_key="LookActor").character
         self.actor_account = AccountFactory(username="actor_account")
         self.actor_account.is_staff = False
         self.actor_account.save()
         self.actor.db_account = self.actor_account
         self.actor.save()
 
-        self.target = CharacterFactory(db_key="LookTarget")
+        self.target = CharacterSheetFactory(character__db_key="LookTarget").character
         self.target.db.desc = "A poised stranger."
         self.target.save()
 
@@ -54,7 +54,7 @@ class LookAtItemActionTests(TestCase):
         )
         item = ItemInstanceFactory(template=template, game_object=item_obj)
         EquippedItem.objects.create(
-            character=character,
+            character=character.sheet_data,
             item_instance=item,
             body_region=region,
             equipment_layer=layer,
@@ -130,7 +130,7 @@ class LookAtItemActionTests(TestCase):
 
 class LookAtItemActionContainerTests(TestCase):
     def setUp(self) -> None:
-        self.actor = CharacterFactory(db_key="ContActor")
+        self.actor = CharacterSheetFactory(character__db_key="ContActor").character
         self.actor_account = AccountFactory(username="cont_actor_account")
         self.actor_account.is_staff = False
         self.actor_account.save()

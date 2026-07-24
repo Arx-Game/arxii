@@ -8758,7 +8758,7 @@ def _try_technique_interpose(
     cost = condition_template.reactive_anima_cost
     anima = None
     if cost > 0:
-        anima = CharacterAnima.objects.filter(character=interposer).first()
+        anima = CharacterAnima.objects.filter(character_id=interposer.pk).first()
         if anima is None or anima.current < cost:
             return  # Fizzle: unaffordable — no roll, no cost, damage proceeds.
 
@@ -9425,7 +9425,7 @@ def _get_anima(character: ObjectDB) -> CharacterAnima | None:  # noqa: OBJECTDB_
     from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
 
     try:
-        return CharacterAnima.objects.get(character=character)
+        return CharacterAnima.objects.get(character_id=character.pk)
     except CharacterAnima.DoesNotExist:
         return None
 

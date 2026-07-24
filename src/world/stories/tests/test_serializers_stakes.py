@@ -911,7 +911,7 @@ class StakeAuthoringCustodyGateTests(APITestCase):
         entry = RosterEntryFactory(character_sheet=owner_sheet)
         player_data = PlayerDataFactory(account=self.owner)
         RosterTenureFactory(roster_entry=entry, player_data=player_data)
-        StoryParticipationFactory(story=other_story, character=owner_sheet.character)
+        StoryParticipationFactory(story=other_story, character=owner_sheet)
 
         self.client.force_authenticate(user=self.owner)
         resp = self.client.post(reverse("stake-list"), self._payload(), format="json")

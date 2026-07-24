@@ -31,7 +31,7 @@ class CompletedCourtMissionCountTests(TestCase):
     def test_counts_only_complete_missions_for_this_org(self):
         offer = NPCServiceOfferFactory(role=self.role, kind=OfferKind.MISSION)
         instance = MissionInstanceFactory(source_offer=offer, status=MissionStatus.COMPLETE)
-        MissionParticipantFactory(instance=instance, character=self.servant.character)
+        MissionParticipantFactory(instance=instance, character=self.servant)
         self.assertEqual(
             completed_court_mission_count(character_sheet=self.servant, covenant=self.covenant),
             1,
@@ -40,7 +40,7 @@ class CompletedCourtMissionCountTests(TestCase):
     def test_ignores_active_missions(self):
         offer = NPCServiceOfferFactory(role=self.role, kind=OfferKind.MISSION)
         instance = MissionInstanceFactory(source_offer=offer, status=MissionStatus.ACTIVE)
-        MissionParticipantFactory(instance=instance, character=self.servant.character)
+        MissionParticipantFactory(instance=instance, character=self.servant)
         self.assertEqual(
             completed_court_mission_count(character_sheet=self.servant, covenant=self.covenant),
             0,

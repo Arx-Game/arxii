@@ -97,7 +97,7 @@ class CritNoSoulfrayTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             current=3,
             maximum=10,
         )
@@ -135,7 +135,7 @@ class CritWithSoulfrayTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             current=5,
             maximum=10,
         )
@@ -179,7 +179,7 @@ class SuccessWithSoulfrayTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             current=2,
             maximum=10,
         )
@@ -228,7 +228,7 @@ class PartialWithHighSoulfrayTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             current=1,
             maximum=10,
         )
@@ -275,7 +275,7 @@ class FailureNoSoulfrayTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             current=0,
             maximum=10,
         )
@@ -311,7 +311,7 @@ class GateTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             current=5,
             maximum=10,
         )
@@ -328,7 +328,7 @@ class GateTests(TestCase):
         mock_check: MagicMock,
         mock_scene: MagicMock,  # noqa: ARG002
     ) -> None:
-        CharacterEngagementFactory(character=self.sheet.character)
+        CharacterEngagementFactory(character=self.sheet)
         with self.assertRaises(CharacterEngagedForRitual):
             perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
         mock_check.assert_not_called()
@@ -365,7 +365,7 @@ class PerformanceRowTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             current=3,
             maximum=10,
         )
@@ -422,7 +422,7 @@ class AnimaRitualBudgetGuardTests(TestCase):
 
         Unchanged behavior at cost=1 (current default).
         """
-        CharacterAnimaFactory(character=self.sheet.character, current=0, maximum=10)
+        CharacterAnimaFactory(character=self.sheet, current=0, maximum=10)
         ConditionInstanceFactory(
             target=self.sheet.character,
             condition=self.soulfray_template,
@@ -457,7 +457,7 @@ class AnimaRitualBudgetGuardTests(TestCase):
           iter 1: budget=3 (>=2), decrement → budget=1, severity reduced
           iter 2: budget=1 (NOT >=2), exit. 1 leftover refills anima.
         """
-        CharacterAnimaFactory(character=self.sheet.character, current=0, maximum=10)
+        CharacterAnimaFactory(character=self.sheet, current=0, maximum=10)
         ConditionInstanceFactory(
             target=self.sheet.character,
             condition=self.soulfray_template,
@@ -488,7 +488,7 @@ class AnimaRitualBudgetGuardTests(TestCase):
         Regression guard for the no-soulfray short-circuit path; the loop
         is gated by 'if soulfray_inst is not None:' and never enters.
         """
-        CharacterAnimaFactory(character=self.sheet.character, current=0, maximum=10)
+        CharacterAnimaFactory(character=self.sheet, current=0, maximum=10)
         # No ConditionInstance created for this character
         SoulfrayConfigFactory(
             ritual_severity_cost_per_point=2,

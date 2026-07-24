@@ -50,10 +50,10 @@ def _open_gate_for_tenure(tenure, gate: AudereGateFixture) -> PendingAudereOffer
     """
     sheet = tenure.roster_entry.character_sheet
     character = sheet.character
-    CharacterAnimaFactory(character=character, current=10, maximum=50)
+    CharacterAnimaFactory(character=character.sheet_data, current=10, maximum=50)
     obj_ct = ContentType.objects.get_for_model(ObjectDB)
     CharacterEngagement.objects.create(
-        character=character,
+        character=character.sheet_data,
         engagement_type=EngagementType.CHALLENGE,
         source_content_type=obj_ct,
         source_id=character.pk,
@@ -185,7 +185,7 @@ class AudereRespondViewTests(APITestCase):
         """Declining returns accepted=False with no bonuses and deletes the offer row."""
         offer = _open_gate_for_tenure(self.my_tenure, self.gate)
         character = offer.character_sheet.character
-        engagement = CharacterEngagement.objects.get(character=character)
+        engagement = CharacterEngagement.objects.get(character=character.sheet_data)
         pre_decline_modifier = engagement.intensity_modifier
 
         self.client.force_authenticate(user=self.my_account)
@@ -220,7 +220,7 @@ class AudereRespondViewTests(APITestCase):
         """A stale offer (engagement gone) returns 400 with the stale message; row deleted."""
         offer = _open_gate_for_tenure(self.my_tenure, self.gate)
         character = offer.character_sheet.character
-        CharacterEngagement.objects.filter(character=character).delete()
+        CharacterEngagement.objects.filter(character=character.sheet_data).delete()
 
         self.client.force_authenticate(user=self.my_account)
         response = self.client.post(

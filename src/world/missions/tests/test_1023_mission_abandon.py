@@ -83,7 +83,7 @@ class AbandonMissionServiceTests(TestCase):
         instance, character = _assigned_active()
         abandon_mission(instance, character)
         still_active = MissionInstance.objects.filter(
-            participants__character=character,
+            participants__character_id=character.pk,
             status=MissionStatus.ACTIVE,
         ).count()
         self.assertEqual(still_active, 0)
@@ -91,7 +91,11 @@ class AbandonMissionServiceTests(TestCase):
     def test_non_contract_holder_cannot_abandon(self):
         instance, _ = _assigned_active()
         other = _pc()
-        MissionParticipantFactory(instance=instance, character=other, is_contract_holder=False)
+        MissionParticipantFactory(
+            instance=instance,
+            character=other.sheet_data,
+            is_contract_holder=False,
+        )
         with self.assertRaises(AbandonMissionError):
             abandon_mission(instance, other)
         instance.refresh_from_db()
@@ -153,7 +157,11 @@ class AbandonMissionAPITests(TestCase):
 
     def test_non_contract_holder_gets_400(self):
         other = _pc()
-        MissionParticipantFactory(instance=self.instance, character=other, is_contract_holder=False)
+        MissionParticipantFactory(
+            instance=self.instance,
+            character=other.sheet_data,
+            is_contract_holder=False,
+        )
         res = self._post_abandon(other)
         self.assertEqual(res.status_code, 400)
         self.instance.refresh_from_db()

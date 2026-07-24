@@ -164,7 +164,7 @@ def _active_progress_for_character(sheet: CharacterSheet) -> Iterator[AnyStoryPr
 
     yield from (
         GlobalStoryProgress.objects.filter(
-            story__participants__character=sheet.character,
+            story__participants__character=sheet,
             story__participants__is_active=True,
             is_active=True,
         )

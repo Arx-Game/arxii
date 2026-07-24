@@ -11,7 +11,6 @@ from types import SimpleNamespace
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.crafting.quality import resolve_capped_tier
 from world.items.exceptions import CraftingNotConfigured
@@ -55,7 +54,7 @@ class _QualityResolutionBase(TestCase):
         )
 
         # A character with a CharacterSheet so .traits handler works.
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         CharacterSheetFactory(character=self.character)
 
 
@@ -150,7 +149,7 @@ class NoSkillTraitTests(TestCase):
         # Cap rows exist but should be ignored.
         CraftingSkillCapFactory(recipe=self.recipe, min_skill_value=0, max_quality_tier=self.common)
 
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         CharacterSheetFactory(character=self.character)
 
     def test_no_skill_trait_returns_uncapped_tier(self) -> None:
@@ -179,7 +178,7 @@ class NoTiersSeededTests(TestCase):
             min_success_level=1,
             skill_trait=self.skill,
         )
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         CharacterSheetFactory(character=self.character)
         CharacterTraitValueFactory(character=self.character.sheet_data, trait=self.skill, value=10)
 

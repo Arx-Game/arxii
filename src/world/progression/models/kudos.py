@@ -233,7 +233,7 @@ class KudosTransaction(SharedMemoryModel):
     )
     # Link to character if relevant (e.g., death bonus)
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

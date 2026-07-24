@@ -80,7 +80,7 @@ def undress(character: CharacterState) -> None:
     a naked character.
     """
     item_ids = list(
-        EquippedItem.objects.filter(character=character.obj)
+        EquippedItem.objects.filter(character_id=character.obj.pk)
         .values_list("item_instance_id", flat=True)
         .distinct()
     )
@@ -129,7 +129,7 @@ def save_outfit(
             name=name,
             description=description,
         )
-        rows = EquippedItem.objects.filter(character=character_sheet.character)
+        rows = EquippedItem.objects.filter(character=character_sheet)
         OutfitSlot.objects.bulk_create(
             [
                 OutfitSlot(

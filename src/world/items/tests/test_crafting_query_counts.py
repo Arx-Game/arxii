@@ -150,7 +150,7 @@ class CraftAttachFacetQueryCountTests(TestCase):
         pool.current = 10
         pool.save()
         CharacterAnima.objects.update_or_create(
-            character=self.character,
+            character=self.character.sheet_data,
             defaults={"current": 10, "maximum": 10},
         )
 
@@ -323,7 +323,7 @@ class BuildCraftingQuoteQueryCountTests(TestCase):
         pool.current = 10
         pool.save()
         CharacterAnima.objects.update_or_create(
-            character=self.character,
+            character=self.character.sheet_data,
             defaults={"current": 10, "maximum": 10},
         )
 

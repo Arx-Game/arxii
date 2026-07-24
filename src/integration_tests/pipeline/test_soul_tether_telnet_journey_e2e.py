@@ -62,7 +62,7 @@ def _set_aura(sheet: object, *, celestial: str, primal: str, abyssal: str) -> No
             setattr(aura, key, value)
         aura.save()
     except AttributeError:
-        CharacterAuraFactory(character=char, **defaults)
+        CharacterAuraFactory(character=char.sheet_data, **defaults)
 
 
 def _grant_track_unlock(sheet: object, track: object) -> object:

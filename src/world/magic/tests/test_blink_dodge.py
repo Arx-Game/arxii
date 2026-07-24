@@ -15,6 +15,7 @@ from django.test import TestCase
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from world.areas.positioning.factories import ObjectPositionFactory, PositionFactory
 from world.areas.positioning.services import position_of
+from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.constants import BLINK_CONDITION_NAME
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.magic.factories import CharacterAnimaFactory
@@ -34,7 +35,8 @@ def _make_blink_setup(*, anima_current: int = 10, reactive_anima_cost: int = 2):
     pos_b = PositionFactory(room=pos_a.room)
     op = ObjectPositionFactory(position=pos_a)
     bearer = op.objectdb
-    anima = CharacterAnimaFactory(character=bearer, current=anima_current, maximum=10)
+    sheet = CharacterSheetFactory(character=bearer)
+    anima = CharacterAnimaFactory(character=sheet, current=anima_current, maximum=10)
     template = ConditionTemplateFactory(
         name=BLINK_CONDITION_NAME,
         reactive_anima_cost=reactive_anima_cost,
@@ -48,7 +50,8 @@ def _make_single_position_setup(*, anima_current: int = 10, reactive_anima_cost:
     pos_a = PositionFactory()
     op = ObjectPositionFactory(position=pos_a)
     bearer = op.objectdb
-    anima = CharacterAnimaFactory(character=bearer, current=anima_current, maximum=10)
+    sheet = CharacterSheetFactory(character=bearer)
+    anima = CharacterAnimaFactory(character=sheet, current=anima_current, maximum=10)
     template = ConditionTemplateFactory(
         name=BLINK_CONDITION_NAME,
         reactive_anima_cost=reactive_anima_cost,

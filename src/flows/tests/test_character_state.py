@@ -27,7 +27,7 @@ from world.vitals.models import CharacterVitals
 
 class CharacterStateDisplayWornTests(TestCase):
     def setUp(self) -> None:
-        self.character = CharacterFactory(db_key="DispWornChar")
+        self.character = CharacterSheetFactory(character__db_key="DispWornChar").character
         self.context = MagicMock()
         self.state = CharacterState(self.character, context=self.context)
 
@@ -45,7 +45,7 @@ class CharacterStateDisplayWornTests(TestCase):
         )
         item = ItemInstanceFactory(template=template, game_object=item_obj)
         EquippedItem.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=item,
             body_region=region,
             equipment_layer=layer,
@@ -169,7 +169,7 @@ class CharacterStateDisplayStatusTests(TestCase):
 
 class CharacterStateReturnAppearanceTests(TestCase):
     def setUp(self) -> None:
-        self.character = CharacterFactory(db_key="AppearanceChar")
+        self.character = CharacterSheetFactory(character__db_key="AppearanceChar").character
         self.character.db.desc = "A tall figure with measured eyes."
         self.context = MagicMock()
         # Make get_state_by_pk return None so name display defaults to self.name.
@@ -193,7 +193,7 @@ class CharacterStateReturnAppearanceTests(TestCase):
         )
         item = ItemInstanceFactory(template=template, game_object=item_obj)
         EquippedItem.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=item,
             body_region=BodyRegion.SHOULDERS,
             equipment_layer=EquipmentLayer.OVER,

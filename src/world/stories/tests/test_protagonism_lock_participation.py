@@ -45,4 +45,4 @@ class ProtagonismLockStoryParticipationTests(TestCase):
         )
 
         self.assertIsInstance(participation, StoryParticipation)
-        self.assertEqual(participation.character, sheet.character)
+        self.assertEqual(participation.character, sheet)

@@ -38,11 +38,15 @@ def _build_reportable():
         template=MissionTemplateFactory(report_to_role=role),
         status=MissionStatus.RESOLVED,
     )
-    MissionParticipantFactory(instance=instance, character=reporter, is_contract_holder=True)
-    deed = MissionDeedRecordFactory(instance=instance, actor=reporter)
+    MissionParticipantFactory(
+        instance=instance,
+        character=reporter.sheet_data,
+        is_contract_holder=True,
+    )
+    deed = MissionDeedRecordFactory(instance=instance, actor=reporter.sheet_data)
     MissionDeedRewardLineFactory(
         deed=deed,
-        recipient=reporter,
+        recipient=reporter.sheet_data,
         kind=DeedRewardKind.IMMEDIATE,
         sink=DeedRewardSink.MONEY,
         amount=100,
@@ -73,12 +77,12 @@ class ReportMissionTests(TestCase):
             status=MissionStatus.RESOLVED,
         )
         MissionParticipantFactory(
-            instance=self.instance, character=self.reporter, is_contract_holder=True
+            instance=self.instance, character=self.reporter.sheet_data, is_contract_holder=True
         )
-        deed = MissionDeedRecordFactory(instance=self.instance, actor=self.reporter)
+        deed = MissionDeedRecordFactory(instance=self.instance, actor=self.reporter.sheet_data)
         MissionDeedRewardLineFactory(
             deed=deed,
-            recipient=self.reporter,
+            recipient=self.reporter.sheet_data,
             kind=DeedRewardKind.IMMEDIATE,
             sink=DeedRewardSink.MONEY,
             amount=100,

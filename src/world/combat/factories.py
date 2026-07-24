@@ -738,7 +738,7 @@ class PlayableCombatScenarioFactory:
                 max_health=50,
                 base_max_health=50,
             )
-            CharacterAnimaFactory(character=sheet.character, current=10, maximum=10)
+            CharacterAnimaFactory(character=sheet, current=10, maximum=10)
             CharacterResonanceFactory(character_sheet=sheet, resonance=resonance, balance=10)
             technique = TechniqueFactory(clash_capable=True)
             CharacterTechniqueFactory(character=sheet, technique=technique)
@@ -958,9 +958,9 @@ class BossFightScenarioFactory:
                 max_health=100,
                 base_max_health=100,
             )
-            CharacterAnimaFactory(character=sheet.character, current=50, maximum=50)
+            CharacterAnimaFactory(character=sheet, current=50, maximum=50)
             FatiguePool.objects.create(character_sheet=sheet)
-            CharacterEngagementFactory(character=sheet.character)
+            CharacterEngagementFactory(character=sheet)
             effect_type = EffectTypeFactory(name=f"Boss Fight Effect {i}", base_power=10)
             technique = TechniqueFactory(
                 gift=gift,

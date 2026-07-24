@@ -72,7 +72,7 @@ class EquipActionTests(TestCase):
 
         assert result.success is True
         assert EquippedItem.objects.filter(
-            character=actor,
+            character=actor.sheet_data,
             item_instance=item_instance,
         ).exists()
 
@@ -483,7 +483,7 @@ def _fake_use_result():
 
 
 def _pool_with_condition_effect():
-    """Build a ConsequencePool with one apply_condition effect (target=self).
+    """Build a ConsequencePool with one apply_condition effect (target=self.character.sheet_data).
 
     Mirrors the construction used in world/items/tests/test_item_instance_views.py
     for the use-endpoint tests.

@@ -189,7 +189,7 @@ class UnpuppetPausesCombatBattleMissionTests(TestCase):
         from world.missions.factories import MissionInstanceFactory, MissionParticipantFactory
 
         instance = MissionInstanceFactory()
-        MissionParticipantFactory(instance=instance, character=self.character)
+        MissionParticipantFactory(instance=instance, character=self.character.sheet_data)
 
         self.character.at_post_unpuppet()
 

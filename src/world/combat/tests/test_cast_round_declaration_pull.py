@@ -86,7 +86,7 @@ def _make_pull_setup(
     # Anima (current >= anima_per_thread × max(0, n-1); n=1 → anima cost = 0,
     # but we seed a positive value so future multi-thread tests can reuse this).
     CharacterAnimaFactory(
-        character=sheet.character,
+        character=sheet,
         current=10,
         maximum=20,
     )

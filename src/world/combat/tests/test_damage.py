@@ -223,8 +223,8 @@ class KnockoutDeathProcessingTest(TestCase):
             health=pc_health,
             max_health=100,
         )
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         room = ObjectDBFactory(
             db_key="TestRoomKO",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -320,8 +320,8 @@ class KnockoutDeathProcessingTest(TestCase):
             max_health=100,
             life_state=CharacterLifeState.ALIVE,
         )
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         room = ObjectDBFactory(
             db_key="TestRoomDying",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -528,8 +528,8 @@ class NpcActionInteractionLazyCreationTests(TestCase):
             health=pc_health,
             max_health=100,
         )
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         room = ObjectDBFactory(
             db_key=f"LazyNPCRoom-{pc_health}-{npc_damage}",
             db_typeclass_path="typeclasses.rooms.Room",

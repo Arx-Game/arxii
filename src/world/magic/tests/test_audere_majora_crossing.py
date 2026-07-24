@@ -321,12 +321,12 @@ class CrossingStaleTests(TestCase):
         ) = _build_crossing_character(boundary_level=10, suffix="_stale")
 
     def test_stale_raises_error(self) -> None:
-        CharacterEngagement.objects.filter(character=self.character).delete()
+        CharacterEngagement.objects.filter(character=self.character.sheet_data).delete()
         with self.assertRaises(AudereMajoraOfferStaleError):
             _accept(self.offer, self.puissant_path)
 
     def test_stale_deletes_offer(self) -> None:
-        CharacterEngagement.objects.filter(character=self.character).delete()
+        CharacterEngagement.objects.filter(character=self.character.sheet_data).delete()
         offer_pk = self.offer.pk
         with contextlib.suppress(AudereMajoraOfferStaleError):
             _accept(self.offer, self.puissant_path)

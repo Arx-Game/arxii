@@ -445,8 +445,9 @@ def _render_status_section(command: Command) -> list[str]:
     lines.append(f"  Coin: {format_coppers(purse.balance)}")
 
     pool = ActionPointPool.get_or_create_for_character(character)
-    banked = f" (+{pool.banked} banked)" if pool.banked else ""
-    lines.append(f"  AP: {pool.current} of {pool.get_effective_maximum()} this week{banked}")
+    if pool is not None:
+        banked = f" (+{pool.banked} banked)" if pool.banked else ""
+        lines.append(f"  AP: {pool.current} of {pool.get_effective_maximum()} this week{banked}")
     return lines
 
 

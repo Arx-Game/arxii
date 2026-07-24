@@ -20,7 +20,6 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.services import _compute_check_breakdown, perform_check
@@ -59,7 +58,7 @@ class MissionCheckSituationCtxScopingTests(TestCase):
     """
 
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.check_type = CheckTypeFactory(name="CourtScopeSneak")
         self.success = CheckOutcomeFactory(name="CourtScopeSuccess", success_level=3)
@@ -96,7 +95,7 @@ class MissionCheckSituationCtxScopingTests(TestCase):
         )
         MissionOptionRouteFactory(option=option, outcome_tier=self.success, target_node=None)
         actor = MissionParticipantFactory(
-            instance=instance, character=self.character, is_contract_holder=True
+            instance=instance, character=self.character.sheet_data, is_contract_holder=True
         )
         return instance, entry, option, actor
 

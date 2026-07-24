@@ -36,12 +36,11 @@ def _deed_time_persona(line: MissionDeedRewardLine) -> Persona | None:
     """
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    actor = line.deed.actor
-    sheet = actor.character_sheet
+    sheet = line.deed.actor
     accepted = line.deed.instance.accepted_as_persona
-    if accepted is not None and sheet is not None and accepted.character_sheet_id == sheet.pk:
+    if accepted is not None and accepted.character_sheet_id == sheet.pk:
         return accepted
-    return active_persona_for_sheet(sheet) if sheet is not None else None
+    return active_persona_for_sheet(sheet)
 
 
 def flag_crime(line: MissionDeedRewardLine, *, room: ObjectDB) -> None:

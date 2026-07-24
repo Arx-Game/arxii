@@ -45,7 +45,7 @@ class EngagementLifecycleWiringTests(TestCase):
     def test_add_participant_creates_combat_engagement(self):
         sheet = CharacterSheetFactory()
         add_participant(self.encounter, sheet)
-        eng = CharacterEngagement.objects.get(character=sheet.character)
+        eng = CharacterEngagement.objects.get(character=sheet)
         self.assertEqual(eng.engagement_type, EngagementType.COMBAT)
 
     def test_join_encounter_creates_combat_engagement(self):
@@ -53,18 +53,18 @@ class EngagementLifecycleWiringTests(TestCase):
         self.encounter.save(update_fields=["status"])
         sheet = CharacterSheetFactory()
         join_encounter(self.encounter, sheet)
-        eng = CharacterEngagement.objects.get(character=sheet.character)
+        eng = CharacterEngagement.objects.get(character=sheet)
         self.assertEqual(eng.engagement_type, EngagementType.COMBAT)
 
     def test_begin_declaration_phase_backfills_engagements(self):
         self.encounter.status = RoundStatus.BETWEEN_ROUNDS
         self.encounter.save(update_fields=["status"])
         CombatOpponentFactory(encounter=self.encounter)
-        CharacterEngagement.objects.filter(character=self.character).delete()
+        CharacterEngagement.objects.filter(character=self.character.sheet_data).delete()
 
         begin_declaration_phase(self.encounter)
 
-        eng = CharacterEngagement.objects.get(character=self.character)
+        eng = CharacterEngagement.objects.get(character=self.character.sheet_data)
         self.assertEqual(eng.engagement_type, EngagementType.COMBAT)
 
     def test_cleanup_deletes_combat_engagements(self):
@@ -72,16 +72,18 @@ class EngagementLifecycleWiringTests(TestCase):
 
         cleanup_completed_encounter(self.encounter)
 
-        self.assertFalse(CharacterEngagement.objects.filter(character=self.character).exists())
+        self.assertFalse(
+            CharacterEngagement.objects.filter(character=self.character.sheet_data).exists()
+        )
 
     def test_cleanup_preserves_noncombat_engagement(self):
         CharacterEngagementFactory(
-            character=self.character, engagement_type=EngagementType.CHALLENGE
+            character=self.character.sheet_data, engagement_type=EngagementType.CHALLENGE
         )
 
         cleanup_completed_encounter(self.encounter)
 
-        eng = CharacterEngagement.objects.get(character=self.character)
+        eng = CharacterEngagement.objects.get(character=self.character.sheet_data)
         self.assertEqual(eng.engagement_type, EngagementType.CHALLENGE)
 
     def test_flee_success_deletes_engagement(self):
@@ -107,14 +109,16 @@ class EngagementLifecycleWiringTests(TestCase):
 
         participant.refresh_from_db()
         self.assertEqual(participant.status, ParticipantStatus.FLED)
-        self.assertFalse(CharacterEngagement.objects.filter(character=sheet.character).exists())
+        self.assertFalse(CharacterEngagement.objects.filter(character=sheet).exists())
 
     def test_remove_participant_deletes_engagement(self):
         begin_engagement(self.character, EngagementType.COMBAT, source=self.encounter)
         remove_participant(self.participant)
         self.participant.refresh_from_db()
         self.assertEqual(self.participant.status, ParticipantStatus.REMOVED)
-        self.assertFalse(CharacterEngagement.objects.filter(character=self.character).exists())
+        self.assertFalse(
+            CharacterEngagement.objects.filter(character=self.character.sheet_data).exists()
+        )
 
     def test_flee_failure_preserves_engagement(self):
         # A failed flee (success_level < FLEE_PARTIAL_SUCCESS_LEVEL) leaves
@@ -141,7 +145,7 @@ class EngagementLifecycleWiringTests(TestCase):
 
         participant.refresh_from_db()
         self.assertEqual(participant.status, ParticipantStatus.ACTIVE)
-        self.assertTrue(CharacterEngagement.objects.filter(character=sheet.character).exists())
+        self.assertTrue(CharacterEngagement.objects.filter(character=sheet).exists())
 
 
 class EscalationRoundWiringTests(TestCase):
@@ -183,7 +187,7 @@ class EscalationRoundWiringTests(TestCase):
             begin_declaration_phase(self.encounter)
 
     def _engagement(self):
-        return CharacterEngagement.objects.get(character=self.character)
+        return CharacterEngagement.objects.get(character=self.character.sheet_data)
 
     def test_begin_declaration_phase_ticks_escalating_encounter(self):
         # Round 1 is below start_round (2): no tick. Round 2 ticks once.

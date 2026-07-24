@@ -185,7 +185,7 @@ class DefensiveFashionWiringTests(TestCase):
     """
 
     def setUp(self) -> None:
-        from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+        from evennia_extensions.factories import ObjectDBFactory
         from evennia_extensions.models import RoomProfile
         from world.areas.constants import AreaLevel
         from world.areas.factories import AreaFactory
@@ -220,14 +220,13 @@ class DefensiveFashionWiringTests(TestCase):
         )
         item = ItemInstanceFactory(template=template, quality_tier=quality)
         ItemFacetFactory(item_instance=item, facet=facet, attachment_quality_tier=quality)
-        character = CharacterFactory(db_key="DefenseChar")
+        self.sheet = CharacterSheetFactory(character__db_key="DefenseChar")
         EquippedItemFactory(
-            character=character,
+            character=self.sheet,
             item_instance=item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
-        self.sheet = CharacterSheetFactory(character=character)
 
         # --- a defensive CheckType with a scoped ModifierTarget (so fashion lands) ---
         self.check_type = CheckTypeFactory(name="DefenseCheck")

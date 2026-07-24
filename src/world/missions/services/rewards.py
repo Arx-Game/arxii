@@ -31,7 +31,7 @@ from django.db import transaction
 
 from world.currency.services import deliver_mission_money
 from world.missions.constants import DeedRewardKind, DeedRewardSink, RewardGroupRule
-from world.missions.integrations import beat_stub, crime_watch, money_stub, rumor_stub
+from world.missions.integrations import beat_stub, crime_watch, rumor_stub
 from world.missions.models import MissionDeedRewardLine, MissionRewardQueue
 from world.missions.types import ApplyDeedRewardsResult, ProjectSkipRecord, StubCallRecord
 
@@ -303,14 +303,8 @@ def _route_crime_watch(
 
 
 def _deliver_immediate_money(line: MissionDeedRewardLine) -> None:
-    """Deliver an IMMEDIATE MONEY line, falling back to the stub when sheet-less."""
-    # character_sheet is the safe accessor: sheet-less recipient → None (stub
-    # fallback); genuine faults propagate instead of misrouting to the stub.
-    sheet = line.recipient.character_sheet
-    if sheet is not None:
-        deliver_mission_money(recipient_sheet=sheet, amount=line.amount, ref=line.ref)
-    else:
-        money_stub.deliver_money(line)
+    """Deliver an IMMEDIATE MONEY line into the recipient's purse."""
+    deliver_mission_money(recipient_sheet=line.recipient, amount=line.amount, ref=line.ref)
 
 
 def _route_unbuilt_propagation(
@@ -378,7 +372,7 @@ def _route_line(  # noqa: PLR0913, PLR0911 — one early-return branch per (kind
             grant_touchstone_item_to_character,
         )
 
-        recipient_sheet = line.recipient.sheet_data
+        recipient_sheet = line.recipient
         grant_touchstone_item_to_character(
             character_sheet=recipient_sheet, template=line.item_template
         )
@@ -606,8 +600,7 @@ def apply_deed_rewards(
 
       * ``(IMMEDIATE, MONEY)``   → real payout via
         :func:`world.currency.services.deliver_mission_money` into the
-        recipient's ``CharacterPurse`` (falls back to the money_stub only for
-        a sheet-less recipient).
+        recipient's ``CharacterPurse``.
       * ``(IMMEDIATE, ITEM)`` → real payout via
         :func:`world.items.services.narrative_grants.grant_touchstone_item_to_character`:
         mints an ``ItemInstance`` of ``line.item_template`` held by the

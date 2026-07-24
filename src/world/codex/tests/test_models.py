@@ -437,7 +437,7 @@ class CodexTeachingOfferCancelTests(CodexTeachingOfferTestCase):
     def test_cancel_restores_banked_ap(self):
         """cancel restores banked AP to teacher."""
         pool = ActionPointPoolFactory(
-            character=self.teacher.character,
+            character=self.teacher.roster_entry.character_sheet,
             current=100,
             maximum=200,
             banked=50,
@@ -457,7 +457,7 @@ class CodexTeachingOfferCancelTests(CodexTeachingOfferTestCase):
 
     def test_cancel_deletes_offer(self):
         """cancel deletes the offer."""
-        ActionPointPoolFactory(character=self.teacher.character, banked=50)
+        ActionPointPoolFactory(character=self.teacher.roster_entry.character_sheet, banked=50)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -482,7 +482,7 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
 
     def test_cannot_accept_own_offer(self):
         """Teacher cannot accept their own offer."""
-        ActionPointPoolFactory(character=self.teacher.character, current=100)
+        ActionPointPoolFactory(character=self.teacher.roster_entry.character_sheet, current=100)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -495,7 +495,7 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
 
     def test_cannot_accept_if_already_known(self):
         """Cannot accept if character already knows the entry."""
-        ActionPointPoolFactory(character=self.learner.character, current=100)
+        ActionPointPoolFactory(character=self.learner.roster_entry.character_sheet, current=100)
         CharacterCodexKnowledgeFactory(
             roster_entry=self.learner.roster_entry,
             entry=self.entry,
@@ -513,7 +513,7 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
 
     def test_cannot_accept_if_already_learning(self):
         """Cannot accept if character is already learning the entry."""
-        ActionPointPoolFactory(character=self.learner.character, current=100)
+        ActionPointPoolFactory(character=self.learner.roster_entry.character_sheet, current=100)
         CharacterCodexKnowledgeFactory(
             roster_entry=self.learner.roster_entry,
             entry=self.entry,
@@ -533,7 +533,7 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
         """Cannot accept if missing prerequisites."""
         prereq = CodexEntryFactory()
         self.entry.prerequisites.add(prereq)
-        ActionPointPoolFactory(character=self.learner.character, current=100)
+        ActionPointPoolFactory(character=self.learner.roster_entry.character_sheet, current=100)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -548,7 +548,7 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
         """Can accept if character's prerequisites are met."""
         prereq = CodexEntryFactory()
         self.entry.prerequisites.add(prereq)
-        ActionPointPoolFactory(character=self.learner.character, current=100)
+        ActionPointPoolFactory(character=self.learner.roster_entry.character_sheet, current=100)
         CharacterCodexKnowledgeFactory(
             roster_entry=self.learner.roster_entry,
             entry=prereq,
@@ -567,7 +567,7 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
     def test_cannot_accept_without_ap(self):
         """Cannot accept without sufficient AP."""
         # Less than learn_cost=10
-        ActionPointPoolFactory(character=self.learner.character, current=5)
+        ActionPointPoolFactory(character=self.learner.roster_entry.character_sheet, current=5)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -580,7 +580,7 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
 
     def test_can_accept_valid_offer(self):
         """Can accept a valid offer."""
-        ActionPointPoolFactory(character=self.learner.character, current=100)
+        ActionPointPoolFactory(character=self.learner.roster_entry.character_sheet, current=100)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -604,8 +604,8 @@ class CodexTeachingOfferAcceptTests(CodexTeachingOfferTestCase):
 
     def test_accept_creates_knowledge(self):
         """accept creates a CharacterCodexKnowledge entry."""
-        ActionPointPoolFactory(character=self.teacher.character, banked=50)
-        ActionPointPoolFactory(character=self.learner.character, current=100)
+        ActionPointPoolFactory(character=self.teacher.roster_entry.character_sheet, banked=50)
+        ActionPointPoolFactory(character=self.learner.roster_entry.character_sheet, current=100)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -621,8 +621,10 @@ class CodexTeachingOfferAcceptTests(CodexTeachingOfferTestCase):
 
     def test_accept_spends_learner_ap(self):
         """accept spends learner's AP."""
-        ActionPointPoolFactory(character=self.teacher.character, banked=50)
-        pool = ActionPointPoolFactory(character=self.learner.character, current=100)
+        ActionPointPoolFactory(character=self.teacher.roster_entry.character_sheet, banked=50)
+        pool = ActionPointPoolFactory(
+            character=self.learner.roster_entry.character_sheet, current=100
+        )
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -637,11 +639,11 @@ class CodexTeachingOfferAcceptTests(CodexTeachingOfferTestCase):
     def test_accept_consumes_teacher_banked_ap(self):
         """accept consumes teacher's banked AP."""
         pool = ActionPointPoolFactory(
-            character=self.teacher.character,
+            character=self.teacher.roster_entry.character_sheet,
             current=100,
             banked=50,
         )
-        ActionPointPoolFactory(character=self.learner.character, current=100)
+        ActionPointPoolFactory(character=self.learner.roster_entry.character_sheet, current=100)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -655,7 +657,9 @@ class CodexTeachingOfferAcceptTests(CodexTeachingOfferTestCase):
 
     def test_accept_raises_on_invalid(self):
         """accept raises ValueError if cannot accept."""
-        ActionPointPoolFactory(character=self.learner.character, current=5)  # Insufficient
+        ActionPointPoolFactory(
+            character=self.learner.roster_entry.character_sheet, current=5
+        )  # Insufficient
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -683,8 +687,10 @@ class LibraryDiscountTests(TestCase):
 
         kind = ensure_library_kind()
         instance = RoomFeatureInstanceFactory(feature_kind=kind, level=3)
-        ActionPointPoolFactory(character=self.teacher.character, banked=50)
-        pool = ActionPointPoolFactory(character=self.learner.character, current=100)
+        ActionPointPoolFactory(character=self.teacher.roster_entry.character_sheet, banked=50)
+        pool = ActionPointPoolFactory(
+            character=self.learner.roster_entry.character_sheet, current=100
+        )
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -699,8 +705,10 @@ class LibraryDiscountTests(TestCase):
 
     def test_no_library_means_full_cost(self):
         """Without a Library, the full learn_cost is spent (regression)."""
-        ActionPointPoolFactory(character=self.teacher.character, banked=50)
-        pool = ActionPointPoolFactory(character=self.learner.character, current=100)
+        ActionPointPoolFactory(character=self.teacher.roster_entry.character_sheet, banked=50)
+        pool = ActionPointPoolFactory(
+            character=self.learner.roster_entry.character_sheet, current=100
+        )
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -720,8 +728,10 @@ class LibraryDiscountTests(TestCase):
         kind = ensure_library_kind()
         # A level-10 Library (max) would discount 10, flooring at 1.
         instance = RoomFeatureInstanceFactory(feature_kind=kind, level=10)
-        ActionPointPoolFactory(character=self.teacher.character, banked=50)
-        pool = ActionPointPoolFactory(character=self.learner.character, current=100)
+        ActionPointPoolFactory(character=self.teacher.roster_entry.character_sheet, banked=50)
+        pool = ActionPointPoolFactory(
+            character=self.learner.roster_entry.character_sheet, current=100
+        )
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,

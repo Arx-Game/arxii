@@ -63,7 +63,7 @@ class CovenantRoleBonusGatingTests(TestCase):
         )
         cls.instance = ItemInstanceFactory(template=cls.template, quality_tier=cls.quality_tier)
         EquippedItemFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             item_instance=cls.instance,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

@@ -7,6 +7,7 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
@@ -56,7 +57,7 @@ class ResolveValidationTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDBFactory(db_key="ResolveChar")
+        cls.character = CharacterSheetFactory(character__db_key="ResolveChar").character
         cls.location = ObjectDBFactory(db_key="ResolveRoom")
 
         cls.capability = CapabilityTypeFactory(name="fire_resolve")
@@ -133,7 +134,7 @@ class ResolveValidationTests(TestCase):
         from world.mechanics.challenge_resolution import resolve_challenge
 
         CharacterChallengeRecord.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=self.challenge,
             approach=self.approach,
         )
@@ -142,7 +143,7 @@ class ResolveValidationTests(TestCase):
                 resolve_challenge(self.character, self.challenge, self.approach, self.source)
         finally:
             CharacterChallengeRecord.objects.filter(
-                character=self.character,
+                character=self.character.sheet_data,
                 challenge_instance=self.challenge,
             ).delete()
 
@@ -254,7 +255,7 @@ class EffectHandlerTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.location = ObjectDBFactory(db_key="EffectRoom")
-        cls.character = ObjectDBFactory(db_key="EffectChar")
+        cls.character = CharacterSheetFactory(character__db_key="EffectChar").character
         # Set location via FK update to avoid Evennia's at_db_location_postsave hook.
         # Flush the SharedMemoryModel identity-map cache so the next get() hits the DB.
         ObjectDB.objects.filter(pk=cls.character.pk).update(db_location=cls.location)
@@ -384,7 +385,7 @@ class ResolveFullTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDBFactory(db_key="FullResolveChar")
+        cls.character = CharacterSheetFactory(character__db_key="FullResolveChar").character
         cls.location = ObjectDBFactory(db_key="FullResolveRoom")
 
         cls.capability = CapabilityTypeFactory(name="fire_full")
@@ -478,7 +479,7 @@ class ResolveFullTests(TestCase):
         assert challenge.is_active is False
 
         record = CharacterChallengeRecord.objects.get(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=challenge,
         )
         assert record.outcome == self.outcome_success
@@ -654,7 +655,7 @@ class ResolveFullTests(TestCase):
             result = resolve_challenge(self.character, challenge, self.approach, self.source)
             assert result.consequence is not None
             assert CharacterChallengeRecord.objects.filter(
-                character=self.character,
+                character=self.character.sheet_data,
                 challenge_instance=challenge,
             ).exists()
         finally:
@@ -717,7 +718,7 @@ class ResolveFullTests(TestCase):
             resolve_challenge(character, challenge, self.approach, self.source)
 
             record = CharacterChallengeRecord.objects.get(
-                character=character,
+                character=character.sheet_data,
                 challenge_instance=challenge,
             )
             outcomes = list(ConsequenceOutcome.objects.filter(challenge_record=record))
@@ -817,7 +818,7 @@ class ResolveFullTests(TestCase):
         assert result.applied_effects == []
         # Record created with saved consequence
         record = CharacterChallengeRecord.objects.get(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=challenge,
         )
         assert record.consequence == override_consequence

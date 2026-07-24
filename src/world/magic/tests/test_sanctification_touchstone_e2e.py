@@ -8,7 +8,7 @@ from django.test import TestCase
 
 from actions.definitions.sanctum import SanctumInstallAction
 from commands.sanctum import CmdSanctum
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.factories import ItemInstanceFactory
 from world.items.models import ItemInstance
@@ -61,9 +61,8 @@ class SanctificationTouchstoneJourneyTests(TestCase):
         mock_check = self._check_patcher.start()
         mock_check.return_value = _mock_check_success()
 
-        self.character = CharacterFactory()
-        self.sheet = CharacterSheetFactory(character=self.character)
-        self.character.sheet_data = self.sheet
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.room_profile = RoomProfileFactory()
         self.character.db_location = self.room_profile.objectdb
         self.character.save()
@@ -159,9 +158,8 @@ class SanctumInstallTelnetComponentsE2ETests(TestCase):
         mock_check = self._check_patcher.start()
         mock_check.return_value = _mock_check_success()
 
-        self.character = CharacterFactory()
-        self.sheet = CharacterSheetFactory(character=self.character)
-        self.character.sheet_data = self.sheet
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.room_profile = RoomProfileFactory()
         self.character.db_location = self.room_profile.objectdb
         self.character.save()

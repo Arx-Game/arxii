@@ -13,7 +13,7 @@ class PendingApplicationSerializerTests(TestCase):
         character = CharacterFactory(db_key="Lyra")
         app = RosterApplication.objects.create(
             player_data=account.player_data,
-            character=character,
+            character=character.sheet_data,
             application_text="please",
             status=ApplicationStatus.PENDING,
         )

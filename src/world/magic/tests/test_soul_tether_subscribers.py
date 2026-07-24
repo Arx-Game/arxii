@@ -99,7 +99,7 @@ def _set_primary_affinity_abyssal(sheet: object) -> None:
         aura.save()
     except AttributeError:
         CharacterAuraFactory(
-            character=char,
+            character=char.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -116,7 +116,7 @@ def _set_primary_affinity_primal(sheet: object) -> None:
         aura.save()
     except AttributeError:
         CharacterAuraFactory(
-            character=char,
+            character=char.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("80.00"),
             abyssal=Decimal("10.00"),

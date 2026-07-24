@@ -115,13 +115,13 @@ class MotifStylePipelineFullVsPartialTests(TestCase):
 
         # Equip BOTH items on cls.char (the full-outfit baseline).
         cls.equipped_a = EquippedItemFactory(
-            character=cls.char,
+            character=cls.char.sheet_data,
             item_instance=cls.item_a,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
         cls.equipped_b = EquippedItemFactory(
-            character=cls.char,
+            character=cls.char.sheet_data,
             item_instance=cls.item_b,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.OUTER,
@@ -152,7 +152,7 @@ class MotifStylePipelineFullVsPartialTests(TestCase):
         finally:
             # Restore item_b for other tests.
             EquippedItemFactory(
-                character=self.char,
+                character=self.char.sheet_data,
                 item_instance=self.item_b,
                 body_region=BodyRegion.TORSO,
                 equipment_layer=EquipmentLayer.OUTER,
@@ -180,7 +180,7 @@ class MotifStylePipelineFullVsPartialTests(TestCase):
             self.assertEqual(result, 2)
         finally:
             EquippedItemFactory(
-                character=self.char,
+                character=self.char.sheet_data,
                 item_instance=self.item_b,
                 body_region=BodyRegion.TORSO,
                 equipment_layer=EquipmentLayer.OUTER,

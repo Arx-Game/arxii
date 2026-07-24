@@ -30,7 +30,6 @@ from dataclasses import FrozenInstanceError
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import DeedRewardKind, DeedRewardSink
 from world.missions.factories import (
@@ -52,8 +51,8 @@ class ApplyMissionRewardBatchEmptyTests(TestCase):
         self.assertEqual(result.failed, ())
 
     def test_only_applied_rows_returns_empty_result(self) -> None:
-        actor = CharacterFactory(db_key="OnlyAppliedActor")
-        deed = MissionDeedRecordFactory(actor=actor)
+        actor = CharacterSheetFactory(character__db_key="OnlyAppliedActor").character
+        deed = MissionDeedRecordFactory(actor=actor.sheet_data)
         line = MissionDeedRewardLineFactory(
             deed=deed,
             kind=DeedRewardKind.POST_CRON,
@@ -71,8 +70,8 @@ class ApplyMissionRewardBatchLegendPointsStubSealTests(TestCase):
     """LP queue rows stub-seal: applied=False, failure_reason references DESIGN §13.3."""
 
     def setUp(self) -> None:
-        self.actor = CharacterFactory(db_key="LpBatchActor")
-        self.deed = MissionDeedRecordFactory(actor=self.actor)
+        self.actor = CharacterSheetFactory(character__db_key="LpBatchActor").character
+        self.deed = MissionDeedRecordFactory(actor=self.actor.sheet_data)
         self.line = MissionDeedRewardLineFactory(
             deed=self.deed,
             kind=DeedRewardKind.POST_CRON,
@@ -117,10 +116,10 @@ class ApplyMissionRewardBatchMixedQueueTests(TestCase):
 
         sheet = CharacterSheetFactory(character__db_key="MixedBatchActor")
         self.actor = sheet.character
-        self.deed = MissionDeedRecordFactory(actor=self.actor)
+        self.deed = MissionDeedRecordFactory(actor=self.actor.sheet_data)
         self.lp_line = MissionDeedRewardLineFactory(
             deed=self.deed,
-            recipient=self.actor,
+            recipient=self.actor.sheet_data,
             kind=DeedRewardKind.POST_CRON,
             sink=DeedRewardSink.LEGEND_POINTS,
             amount=10,
@@ -128,7 +127,7 @@ class ApplyMissionRewardBatchMixedQueueTests(TestCase):
         self.resonance = ResonanceFactory()
         self.resonance_line = MissionDeedRewardLineFactory(
             deed=self.deed,
-            recipient=self.actor,
+            recipient=self.actor.sheet_data,
             kind=DeedRewardKind.POST_CRON,
             sink=DeedRewardSink.RESONANCE,
             resonance=self.resonance,
@@ -136,7 +135,7 @@ class ApplyMissionRewardBatchMixedQueueTests(TestCase):
         )
         self.applied_line = MissionDeedRewardLineFactory(
             deed=self.deed,
-            recipient=self.actor,
+            recipient=self.actor.sheet_data,
             kind=DeedRewardKind.POST_CRON,
             sink=DeedRewardSink.LEGEND_POINTS,
             amount=1,
@@ -186,10 +185,10 @@ class ApplyMissionRewardBatchIdempotencyTests(TestCase):
 
         sheet = CharacterSheetFactory(character__db_key="IdempotentBatchActor")
         self.actor = sheet.character
-        self.deed = MissionDeedRecordFactory(actor=self.actor)
+        self.deed = MissionDeedRecordFactory(actor=self.actor.sheet_data)
         self.lp_line = MissionDeedRewardLineFactory(
             deed=self.deed,
-            recipient=self.actor,
+            recipient=self.actor.sheet_data,
             kind=DeedRewardKind.POST_CRON,
             sink=DeedRewardSink.LEGEND_POINTS,
             amount=10,
@@ -197,7 +196,7 @@ class ApplyMissionRewardBatchIdempotencyTests(TestCase):
         self.resonance = ResonanceFactory()
         self.resonance_line = MissionDeedRewardLineFactory(
             deed=self.deed,
-            recipient=self.actor,
+            recipient=self.actor.sheet_data,
             kind=DeedRewardKind.POST_CRON,
             sink=DeedRewardSink.RESONANCE,
             resonance=self.resonance,
@@ -224,7 +223,7 @@ class ApplyMissionRewardBatchIdempotencyTests(TestCase):
         apply_mission_reward_batch()
         apply_mission_reward_batch()
         cr = self._CharacterResonance.objects.get(
-            character_sheet=self.resonance_line.recipient.sheet_data,
+            character_sheet=self.resonance_line.recipient,
             resonance=self.resonance,
         )
         self.assertEqual(cr.balance, 2)
@@ -235,8 +234,8 @@ class ApplyMissionRewardBatchPerRowAtomicityTests(TestCase):
     """A fault on one row does not corrupt the state of other rows."""
 
     def setUp(self) -> None:
-        self.actor = CharacterFactory(db_key="AtomicBatchActor")
-        self.deed = MissionDeedRecordFactory(actor=self.actor)
+        self.actor = CharacterSheetFactory(character__db_key="AtomicBatchActor").character
+        self.deed = MissionDeedRecordFactory(actor=self.actor.sheet_data)
         self.line_a = MissionDeedRewardLineFactory(
             deed=self.deed,
             kind=DeedRewardKind.POST_CRON,
@@ -310,11 +309,11 @@ class ApplyMissionRewardBatchResonanceGrantTests(TestCase):
 
         sheet = CharacterSheetFactory(character__db_key="ResonanceGrantActor")
         actor = sheet.character
-        deed = MissionDeedRecordFactory(actor=actor)
+        deed = MissionDeedRecordFactory(actor=actor.sheet_data)
         resonance = ResonanceFactory()
         line = MissionDeedRewardLineFactory(
             deed=deed,
-            recipient=actor,
+            recipient=actor.sheet_data,
             kind=DeedRewardKind.POST_CRON,
             sink=DeedRewardSink.RESONANCE,
             resonance=resonance,
@@ -327,9 +326,7 @@ class ApplyMissionRewardBatchResonanceGrantTests(TestCase):
         row.refresh_from_db()
         self.assertTrue(row.applied)
         self.assertEqual(row.failure_reason, "")
-        cr = CharacterResonance.objects.get(
-            character_sheet=line.recipient.sheet_data, resonance=resonance
-        )
+        cr = CharacterResonance.objects.get(character_sheet=line.recipient, resonance=resonance)
         self.assertEqual(cr.balance, 25)
         self.assertEqual(cr.lifetime_earned, 25)
         self.assertIn(row, result.applied)
@@ -339,8 +336,8 @@ class ApplyMissionRewardBatchResultShapeTests(TestCase):
     """The result is a frozen :class:`RewardBatchResult` carrying tuples."""
 
     def test_result_is_frozen_dataclass_with_tuples(self) -> None:
-        actor = CharacterFactory(db_key="ShapeBatchActor")
-        deed = MissionDeedRecordFactory(actor=actor)
+        actor = CharacterSheetFactory(character__db_key="ShapeBatchActor").character
+        deed = MissionDeedRecordFactory(actor=actor.sheet_data)
         line = MissionDeedRewardLineFactory(
             deed=deed,
             kind=DeedRewardKind.POST_CRON,

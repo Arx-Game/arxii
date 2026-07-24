@@ -171,8 +171,8 @@ class NoncombatCastPullChangesCheckModifierE2ETests(TestCase):
             balance=10,
             lifetime_earned=10,
         )
-        CharacterAnimaFactory(character=self.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=self.character)
+        CharacterAnimaFactory(character=self.character.sheet_data, current=20, maximum=20)
+        CharacterEngagementFactory(character=self.character.sheet_data)
         CharacterVitals.objects.create(
             character_sheet=self.sheet, health=50, max_health=50, base_max_health=50
         )
@@ -233,7 +233,7 @@ class NoncombatCastPullChangesCheckModifierE2ETests(TestCase):
         # --- Pulled: cast WITH pull --- (fresh anima needed; refill in-place)
         from world.magic.models import CharacterAnima
 
-        anima = CharacterAnima.objects.get(character=self.character)
+        anima = CharacterAnima.objects.get(character=self.character.sheet_data)
         anima.current = 20
         anima.save(update_fields=["current"])
 
@@ -312,8 +312,10 @@ class CombatCastPullFlatBonusReadPathE2ETests(TestCase):
             status=ParticipantStatus.ACTIVE,
         )
         self.character = self.sheet.character
-        self.anima = CharacterAnimaFactory(character=self.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=self.character)
+        self.anima = CharacterAnimaFactory(
+            character=self.character.sheet_data, current=20, maximum=20
+        )
+        CharacterEngagementFactory(character=self.character.sheet_data)
         CharacterVitals.objects.create(
             character_sheet=self.sheet, health=100, max_health=100, base_max_health=100
         )
@@ -464,8 +466,8 @@ class CombatClashPullIntensityReadPathE2ETests(TestCase):
             status=ParticipantStatus.ACTIVE,
         )
         self.character = self.sheet.character
-        CharacterAnimaFactory(character=self.character, current=30, maximum=30)
-        CharacterEngagementFactory(character=self.character)
+        CharacterAnimaFactory(character=self.character.sheet_data, current=30, maximum=30)
+        CharacterEngagementFactory(character=self.character.sheet_data)
         CharacterVitals.objects.create(
             character_sheet=self.sheet, health=100, max_health=100, base_max_health=100
         )
@@ -632,8 +634,8 @@ class RefuseWithoutChargeE2ETests(TestCase):
             balance=10,
             lifetime_earned=10,
         )
-        CharacterAnimaFactory(character=self.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=self.character)
+        CharacterAnimaFactory(character=self.character.sheet_data, current=20, maximum=20)
+        CharacterEngagementFactory(character=self.character.sheet_data)
         CharacterVitals.objects.create(
             character_sheet=self.sheet, health=50, max_health=50, base_max_health=50
         )

@@ -60,7 +60,9 @@ class AssumeAlternateSelfEffectTests(TestCase):
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
-        self.anima = CharacterAnimaFactory(character=self.character, current=20, maximum=20)
+        self.anima = CharacterAnimaFactory(
+            character=self.character.sheet_data, current=20, maximum=20
+        )
         CharacterResonanceFactory(
             character_sheet=self.sheet,
             resonance=self.resonance,
@@ -68,15 +70,15 @@ class AssumeAlternateSelfEffectTests(TestCase):
             lifetime_earned=10,
         )
         self.true_form = CharacterFormFactory(
-            character=self.character,
+            character=self.sheet,
             name="True",
             form_type=FormType.TRUE,
         )
-        CharacterFormStateFactory(character=self.character, active_form=self.true_form)
+        CharacterFormStateFactory(character=self.character.sheet_data, active_form=self.true_form)
         PersonaFactory(character_sheet=self.sheet)
 
         self.alt_form = CharacterFormFactory(
-            character=self.character,
+            character=self.sheet,
             name="Beast",
             form_type=FormType.ALTERNATE,
         )
@@ -235,7 +237,7 @@ class AssumeAlternateSelfEffectTests(TestCase):
         not to the profile index — otherwise a crit would incorrectly grant 1.5x.
         """
         two_profile_form = CharacterFormFactory(
-            character=self.character,
+            character=self.sheet,
             name="Hybrid",
             form_type=FormType.ALTERNATE,
         )

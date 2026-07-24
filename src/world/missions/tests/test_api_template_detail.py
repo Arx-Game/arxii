@@ -15,7 +15,8 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import MissionStatus
 from world.missions.factories import (
     MissionInstanceFactory,
@@ -40,7 +41,7 @@ class TemplateDetailFootprintTests(TestCase):
         # One abandoned run (not a completion, not active).
         MissionInstanceFactory(template=cls.template, status=MissionStatus.ABANDONED)
         # Three live runs at the entry node.
-        cls.live_holder = CharacterFactory(db_key="LiveHolder")
+        cls.live_holder = CharacterSheetFactory(character__db_key="LiveHolder").character
         cls.live_instance = MissionInstanceFactory(
             template=cls.template,
             status=MissionStatus.ACTIVE,
@@ -48,7 +49,7 @@ class TemplateDetailFootprintTests(TestCase):
         )
         MissionParticipantFactory(
             instance=cls.live_instance,
-            character=cls.live_holder,
+            character=cls.live_holder.sheet_data,
             is_contract_holder=True,
         )
         for _ in range(2):

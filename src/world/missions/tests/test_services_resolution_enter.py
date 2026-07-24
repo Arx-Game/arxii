@@ -7,7 +7,7 @@ record (re-entering writes another row).
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.factories import (
     MissionInstanceFactory,
     MissionNodeFactory,
@@ -29,7 +29,7 @@ class EnterNodeTests(TestCase):
         cls.next_node = MissionNodeFactory(template=cls.template, key="next")
         cls.participant = MissionParticipantFactory(
             instance=cls.instance,
-            character=CharacterFactory(),
+            character=CharacterSheetFactory(),
             is_contract_holder=True,
         )
 
@@ -57,7 +57,7 @@ class EnterNodeTests(TestCase):
     def test_one_snapshot_per_participant(self) -> None:
         MissionParticipantFactory(
             instance=self.instance,
-            character=CharacterFactory(),
+            character=CharacterSheetFactory(),
             is_contract_holder=False,
         )
         enter_node(self.instance, self.entry)

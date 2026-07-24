@@ -121,7 +121,7 @@ def staff_assign_mission(
     )
     MissionParticipant.objects.create(
         instance=instance,
-        character=character,
+        character=character.sheet_data,
         is_contract_holder=True,
     )
     enter_node(instance, _entry_node(template))
@@ -162,7 +162,7 @@ def gm_assign_mission(
     )
     MissionParticipant.objects.create(
         instance=instance,
-        character=character,
+        character=character.sheet_data,
         is_contract_holder=True,
     )
     enter_node(instance, _entry_node(template))
@@ -189,7 +189,7 @@ def grant_rescue_mission(
     )
     MissionParticipant.objects.create(
         instance=instance,
-        character=character,
+        character=character.sheet_data,
         is_contract_holder=True,
     )
     enter_node(instance, _entry_node(template))
@@ -212,7 +212,7 @@ def grant_captive_mission(template: MissionTemplate, character: ObjectDB) -> Mis
     )
     MissionParticipant.objects.create(
         instance=instance,
-        character=character,
+        character=character.sheet_data,
         is_contract_holder=True,
     )
     enter_node(instance, _entry_node(template))
@@ -230,7 +230,7 @@ def share_mission(
     """
     return MissionParticipant.objects.create(
         instance=instance,
-        character=other_character,
+        character=other_character.sheet_data,
         is_contract_holder=False,
     )
 
@@ -272,7 +272,7 @@ def invite_to_mission(
     if instance.status != MissionStatus.ACTIVE:
         raise InviteError(_ERR_NOT_ACTIVE)
     holder = contract_holder(instance)
-    if holder.character.sheet_data.primary_persona.pk != holder_persona.pk:
+    if holder.character.primary_persona.pk != holder_persona.pk:
         raise InviteError(_ERR_NOT_HOLDER)
     if MissionParticipant.objects.filter(
         instance=instance, character_id=invitee_persona.character_sheet.character_id

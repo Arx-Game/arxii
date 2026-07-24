@@ -66,7 +66,7 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
     docstring).
     """
     participations = list(
-        MissionParticipant.objects.filter(character=character)
+        MissionParticipant.objects.filter(character_id=character.pk)
         .select_related(
             "instance",
             "instance__template",
@@ -217,7 +217,7 @@ def _tales_by_instance(instance_ids: list[int], character: ObjectDB) -> dict[int
         return {}
     rows = MissionRunTale.objects.filter(
         instance_id__in=instance_ids,
-        participant__character=character,
+        participant__character_id=character.pk,
     ).values_list("instance_id", "text")
     return dict(rows)
 
@@ -230,7 +230,7 @@ def _deeds_by_instance(
     deed_rows = list(
         MissionDeedRecord.objects.filter(
             instance_id__in=instance_ids,
-            actor=character,
+            actor_id=character.pk,
         )
         .select_related("node", "outcome")
         .order_by("instance_id", "applied_at", "pk")

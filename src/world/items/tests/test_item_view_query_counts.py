@@ -94,7 +94,7 @@ class EquippedItemListQueryCountTests(_OwnedCharacterMixin, TestCase):
         item_obj.save()
         instance = ItemInstanceFactory(template=template, game_object=item_obj)
         EquippedItem.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=instance,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

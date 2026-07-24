@@ -17,7 +17,6 @@ import math
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.action_points.factories import ActionPointPoolFactory
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
@@ -40,14 +39,18 @@ class _CraftingCostBase(TestCase):
 
     def setUp(self) -> None:
         # A character ObjectDB and its CharacterSheet (the sheet is the inventory holder).
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
 
         # AP pool: default 200 current. Override per test as needed.
-        self.pool = ActionPointPoolFactory(character=self.character, current=200, maximum=200)
+        self.pool = ActionPointPoolFactory(
+            character=self.character.sheet_data, current=200, maximum=200
+        )
 
         # Anima row: default 10 current.
-        self.anima = CharacterAnimaFactory(character=self.character, current=10, maximum=10)
+        self.anima = CharacterAnimaFactory(
+            character=self.character.sheet_data, current=10, maximum=10
+        )
 
         # A minimal recipe with no costs and no material requirements by default.
         self.recipe = CraftingRecipeFactory(action_point_cost=0, anima_cost=0)
@@ -135,7 +138,7 @@ class StageAndAssertAffordableTests(_CraftingCostBase):
     def test_missing_anima_row_treats_as_zero(self) -> None:
         """A character with no CharacterAnima row is treated as having 0 anima."""
         # Delete the anima row created in setUp.
-        CharacterAnima.objects.filter(character=self.character).delete()
+        CharacterAnima.objects.filter(character=self.character.sheet_data).delete()
 
         self.recipe.anima_cost = 5
         self.recipe.save(update_fields=["anima_cost"])
@@ -378,7 +381,7 @@ class ConsumeCostApPoolCreationTests(_CraftingCostBase):
 
     def test_spend_on_auto_created_pool(self) -> None:
         # Delete the pool set up in setUp.
-        ActionPointPool.objects.filter(character=self.character).delete()
+        ActionPointPool.objects.filter(character=self.character.sheet_data).delete()
 
         staged = StagedCost(action_points=10, anima=0, material_allocations=[])
 
@@ -389,7 +392,7 @@ class ConsumeCostApPoolCreationTests(_CraftingCostBase):
         )
 
         self.assertEqual(result["action_points"], 10)
-        pool = ActionPointPool.objects.get(character=self.character)
+        pool = ActionPointPool.objects.get(character=self.character.sheet_data)
         # Default created with 200 current (from ActionPointConfig default), then spent 10.
         self.assertEqual(pool.current, 190)
 
@@ -441,7 +444,7 @@ class ConsumeCostAnimaShortfallTests(_CraftingCostBase):
     def test_anima_row_deleted_after_staging_raises(self) -> None:
         """A positive anima cost can't be paid when the anima row vanished after staging."""
         staged = StagedCost(action_points=0, anima=5, material_allocations=[])
-        CharacterAnima.objects.filter(character=self.character).delete()
+        CharacterAnima.objects.filter(character=self.character.sheet_data).delete()
 
         with self.assertRaises(CraftingCostUnaffordable):
             consume_cost(

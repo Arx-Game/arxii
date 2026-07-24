@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import GiverKind, MissionVisibility
 from world.missions.factories import (
@@ -40,7 +40,7 @@ class PostingsForGiverTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.board_obj = ObjectDBFactory()  # plain Object typeclass
         cls.template_open = _template_with_entry("board-mission-open")
 
@@ -69,10 +69,12 @@ class PostingsForGiverTests(TestCase):
         giver.templates.add(self.template_open)
         postings_for_giver(giver, self.character)
         self.assertFalse(
-            MissionInstance.objects.filter(participants__character=self.character).exists()
+            MissionInstance.objects.filter(participants__character_id=self.character.pk).exists()
         )
         self.assertFalse(
-            MissionGiverCooldown.objects.filter(giver=giver, character=self.character).exists()
+            MissionGiverCooldown.objects.filter(
+                giver=giver, character_id=self.character.pk
+            ).exists()
         )
 
     def test_capped_at_max(self) -> None:
@@ -101,7 +103,7 @@ class TakeFromBoardTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.board_obj = ObjectDBFactory()  # plain Object typeclass
         cls.template_open = _template_with_entry("board-take-open")
 
@@ -133,7 +135,9 @@ class TakeFromBoardTests(TestCase):
         giver.templates.add(self.template_open)
         take_from_board(giver, self.character, self.template_open.pk)
         self.assertTrue(
-            MissionGiverCooldown.objects.filter(giver=giver, character=self.character).exists()
+            MissionGiverCooldown.objects.filter(
+                giver=giver, character_id=self.character.pk
+            ).exists()
         )
 
     def test_rejects_inactive_giver(self) -> None:
@@ -168,7 +172,7 @@ class BoardExamineTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.board_obj = ObjectDBFactory()  # plain Object typeclass
         cls.template_open = _template_with_entry("board-examine-open")
 
@@ -179,7 +183,7 @@ class BoardExamineTests(TestCase):
         giver.templates.add(self.template_open)
         maybe_dispatch_on_examine(self.character, self.board_obj)
         self.assertFalse(
-            MissionInstance.objects.filter(participants__character=self.character).exists()
+            MissionInstance.objects.filter(participants__character_id=self.character.pk).exists()
         )
 
     def test_examine_renders_postings_section(self) -> None:

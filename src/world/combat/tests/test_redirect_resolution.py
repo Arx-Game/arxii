@@ -160,7 +160,7 @@ class _RedirectResolutionTestBase(TestCase):
         CharacterTechnique.objects.create(character=self.guardian_sheet, technique=self.mirror_ward)
         self.starting_anima = 10
         self.anima = CharacterAnimaFactory(
-            character=self.guardian, current=self.starting_anima, maximum=10
+            character=self.guardian.sheet_data, current=self.starting_anima, maximum=10
         )
         self.ally_vitals = _make_vitals(self.ally_participant, health=100, max_health=100)
         _make_vitals(self.guardian_participant)

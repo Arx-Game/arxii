@@ -178,7 +178,7 @@ class CraftedModifierHandlerTests(TestCase):
             quality_scale_factor=5,
         )
         EquippedItemFactory(
-            character=character,
+            character=character.sheet_data,
             item_instance=item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -227,7 +227,7 @@ class CraftedModifierInChecksTests(TestCase):
             quality_scale_factor=5,
         )
         EquippedItemFactory(
-            character=character,
+            character=character.sheet_data,
             item_instance=item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -273,7 +273,7 @@ class CraftedModifierInGetModifierTotalTests(TestCase):
             quality_scale_factor=5,
         )
         EquippedItemFactory(
-            character=character,
+            character=character.sheet_data,
             item_instance=item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

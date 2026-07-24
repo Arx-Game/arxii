@@ -87,7 +87,7 @@ class ChargeCastPullCourtRegardAmplificationTests(TestCase):
             target_trait=None,
         )
         CharacterResonanceFactory(character_sheet=servant, resonance=self.resonance, balance=20)
-        CharacterAnimaFactory(character=servant.character, current=10, maximum=20)
+        CharacterAnimaFactory(character=servant, current=10, maximum=20)
         cast_pull = CastPullDeclaration(resonance=self.resonance, tier=1, threads=(thread,))
 
         pull_flat_bonus, _effective_power, _resolved = _charge_cast_pull(
@@ -128,7 +128,7 @@ class UseTechniqueForwardsFirstTargetTests(TestCase):
     def _character(self) -> object:
         sheet = CharacterSheetFactory()
         character = sheet.character
-        CharacterAnimaFactory(character=character, current=20, maximum=20)
+        CharacterAnimaFactory(character=character.sheet_data, current=20, maximum=20)
         return character
 
     def test_forwards_first_target_when_present(self) -> None:

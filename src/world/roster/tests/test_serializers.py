@@ -8,6 +8,7 @@ import logging
 from django.test import TestCase
 from django.utils import timezone
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import (
     CharacterFactory,
     PlayerDataFactory,
@@ -23,7 +24,7 @@ class CharacterSerializerCovenantTestCase(TestCase):
     """The covenant identity summary on CharacterSerializer (#1446)."""
 
     def setUp(self):
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
 
     def test_covenant_null_when_no_active_role(self):
         from world.character_sheets.factories import CharacterSheetFactory
@@ -112,7 +113,7 @@ class CharacterSerializerTestCase(TestCase):
         """Set up test data."""
         from world.species.models import Species
 
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         # Use existing species from data migration, or create a test-specific one
         self.species, _ = Species.objects.get_or_create(
             name="Human",
@@ -130,14 +131,12 @@ class CharacterSerializerTestCase(TestCase):
 
     def test_race_serialization_with_species_and_subspecies(self):
         """Test that race field includes species data with parent info."""
-        from world.character_sheets.factories import CharacterSheetFactory
         from world.roster.serializers import CharacterSerializer
 
         # Create character sheet with subspecies
-        CharacterSheetFactory(
-            character=self.character,
-            species=self.subspecies,
-        )
+        sheet = self.character.sheet_data
+        sheet.species = self.subspecies
+        sheet.save(update_fields=["species"])
 
         serializer = CharacterSerializer(instance=self.character)
         data = serializer.data
@@ -153,11 +152,12 @@ class CharacterSerializerTestCase(TestCase):
 
     def test_race_serialization_with_species_only(self):
         """Test that race field works with species that has no parent."""
-        from world.character_sheets.factories import CharacterSheetFactory
         from world.roster.serializers import CharacterSerializer
 
         # Create character sheet with top-level species (no parent)
-        CharacterSheetFactory(character=self.character, species=self.species)
+        sheet = self.character.sheet_data
+        sheet.species = self.species
+        sheet.save(update_fields=["species"])
 
         serializer = CharacterSerializer(instance=self.character)
         data = serializer.data
@@ -318,7 +318,7 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
         """Set up test data for each test"""
         self.player_data = PlayerDataFactory()
         self.staff_data = PlayerDataFactory(account__is_staff=True)
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.roster_entry = RosterEntryFactory(character_sheet__character=self.character)
 
     def test_create_valid_application(self):
@@ -355,7 +355,7 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
         assert app is not None
         assert app.status == ApplicationStatus.PENDING
         assert app.player_data == self.player_data
-        assert app.character == self.character
+        assert app.character == self.character.sheet_data
 
     def test_application_validation_scenarios(self):
         """Test all scenarios where applications should be rejected"""
@@ -384,7 +384,7 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
                 "name": "duplicate pending application",
                 "setup": lambda: RosterApplication.objects.create(
                     player_data=self.player_data,
-                    character=self.character,
+                    character=self.character.sheet_data,
                     application_text="First application",
                 ),
                 "character_attr": "character",

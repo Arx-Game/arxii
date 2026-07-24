@@ -97,7 +97,7 @@ def apply_escalation_tick(
 
     for participant in participants:
         character = participant.character_sheet.character
-        engagement = CharacterEngagement.objects.filter(character=character).first()
+        engagement = CharacterEngagement.objects.filter(character_id=character.pk).first()
         if engagement is None:
             logger.warning(
                 "Escalation tick: missing engagement for %s in encounter %s; recreating.",
@@ -299,7 +299,7 @@ def apply_dramatic_surge(
 
     encounter_ct = ContentType.objects.get_for_model(_CombatEncounter)
     engagement = CharacterEngagement.objects.filter(
-        character=participant.character_sheet.character,
+        character=participant.character_sheet,
         engagement_type=EngagementType.COMBAT,
         source_content_type=encounter_ct,
         source_id=encounter.pk,

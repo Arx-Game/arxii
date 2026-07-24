@@ -150,7 +150,7 @@ class ResolveBattleRoundActionTests(BattleActionTestBase):
             action_template=ActionTemplateFactory(), damage_profile=False
         )
         CharacterTechniqueFactory(character=self.player_sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.player_sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.player_sheet, current=20, maximum=30)
 
         # Enlist the player on the defender side.
         self.participant = BattleParticipantFactory(

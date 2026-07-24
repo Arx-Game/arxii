@@ -16,7 +16,6 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.factories import CharacterCovenantRoleFactory
 from world.magic.factories import ThreadFactory
@@ -46,7 +45,7 @@ class ResolveExternalActOptionTests(TestCase):
         cls.target = MissionNodeFactory(template=cls.template, key="target")
         cls.actor = MissionParticipantFactory(
             instance=cls.instance,
-            character=CharacterFactory(),
+            character=CharacterSheetFactory(),
             is_contract_holder=True,
         )
 
@@ -108,7 +107,7 @@ class ExternalActNeverPickableTests(TestCase):
         cls.instance = MissionInstanceFactory(template=cls.template, current_node=cls.entry)
         cls.actor = MissionParticipantFactory(
             instance=cls.instance,
-            character=CharacterFactory(),
+            character=CharacterSheetFactory(),
             is_contract_holder=True,
         )
         cls.branch_option = MissionOptionFactory(
@@ -143,7 +142,7 @@ class ExternalActNeverPickableTests(TestCase):
         with self.assertRaises(BeatActionError):
             resolve_beat_option(
                 self.instance,
-                self.actor.character,
+                self.actor.character.character,
                 option_id=self.external_act_option.pk,
             )
 
@@ -164,7 +163,7 @@ class SatisfyExternalActTests(TestCase):
         instance = MissionInstanceFactory(template=self.template, current_node=self.entry)
         MissionParticipantFactory(
             instance=instance,
-            character=self.character_sheet.character,
+            character=self.character_sheet,
             is_contract_holder=True,
         )
         option = MissionOptionFactory(
@@ -222,7 +221,7 @@ class SatisfyExternalActTests(TestCase):
         instance = MissionInstanceFactory(template=self.template, current_node=self.entry)
         MissionParticipantFactory(
             instance=instance,
-            character=self.character_sheet.character,
+            character=self.character_sheet,
             is_contract_holder=True,
         )
         MissionOptionFactory(
@@ -265,7 +264,7 @@ class FastForwardExternalActsTests(TestCase):
         instance = MissionInstanceFactory(template=self.template)
         MissionParticipantFactory(
             instance=instance,
-            character=self.character_sheet.character,
+            character=self.character_sheet,
             is_contract_holder=True,
         )
         option = MissionOptionFactory(
@@ -348,7 +347,7 @@ class WeaveThreadExternalActWiringTests(TestCase):
         instance = MissionInstanceFactory(template=template, current_node=entry)
         MissionParticipantFactory(
             instance=instance,
-            character=sheet.character,
+            character=sheet,
             is_contract_holder=True,
         )
         MissionOptionFactory(
@@ -388,7 +387,7 @@ class WeaveGiftThreadExternalActWiringTests(TestCase):
         instance = MissionInstanceFactory(template=template, current_node=entry)
         MissionParticipantFactory(
             instance=instance,
-            character=sheet.character,
+            character=sheet,
             is_contract_holder=True,
         )
         MissionOptionFactory(
@@ -427,7 +426,7 @@ class CreateCovenantExternalActWiringTests(TestCase):
             instance = MissionInstanceFactory(template=template, current_node=entry)
             MissionParticipantFactory(
                 instance=instance,
-                character=founder_sheet.character,
+                character=founder_sheet,
                 is_contract_holder=True,
             )
             MissionOptionFactory(
@@ -538,7 +537,7 @@ class InductMemberExternalActWiringTests(TestCase):
         instance = MissionInstanceFactory(template=template, current_node=entry)
         MissionParticipantFactory(
             instance=instance,
-            character=candidate.character,
+            character=candidate,
             is_contract_holder=True,
         )
         MissionOptionFactory(
@@ -567,9 +566,9 @@ class UseTechniqueExternalActWiringTests(TestCase):
         from world.mechanics.factories import CharacterEngagementFactory
 
         anima = CharacterAnimaFactory(current=20, maximum=20)
-        character = anima.character
-        CharacterEngagementFactory(character=character)
-        sheet = CharacterSheetFactory(character=character)
+        sheet = anima.character
+        character = sheet.character
+        CharacterEngagementFactory(character=sheet)
         technique = TechniqueFactory(intensity=5, control=10, anima_cost=3)
 
         template = MissionTemplateFactory(name="technique-cast-wiring-tmpl")
@@ -578,7 +577,7 @@ class UseTechniqueExternalActWiringTests(TestCase):
         instance = MissionInstanceFactory(template=template, current_node=entry)
         MissionParticipantFactory(
             instance=instance,
-            character=character,
+            character=sheet,
             is_contract_holder=True,
         )
         MissionOptionFactory(
@@ -635,7 +634,7 @@ class ExternalActFailureIsolationTests(TestCase):
         instance = MissionInstanceFactory(template=template, current_node=entry)
         MissionParticipantFactory(
             instance=instance,
-            character=sheet.character,
+            character=sheet,
             is_contract_holder=True,
         )
         MissionOptionFactory(
@@ -689,7 +688,7 @@ class NotifyExternalActGuardTests(TestCase):
         instance = MissionInstanceFactory(template=template, current_node=entry)
         MissionParticipantFactory(
             instance=instance,
-            character=sheet.character,
+            character=sheet,
             is_contract_holder=True,
         )
         MissionOptionFactory(

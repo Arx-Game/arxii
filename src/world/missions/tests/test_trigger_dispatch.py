@@ -9,7 +9,7 @@ trigger mission already held, per-(giver, character) cooldown).
 from django.test import TestCase
 from django.utils import timezone
 
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import GiverKind, MissionStatus, MissionVisibility
 from world.missions.factories import (
@@ -36,7 +36,8 @@ def _template_with_entry(name: str) -> object:
 class TriggerDispatchTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         cls.template = _template_with_entry("trigger-mission")
         cls.giver = MissionGiverFactory(
@@ -58,7 +59,7 @@ class TriggerDispatchTests(TestCase):
         self.assertIsNone(instance.source_offer)
         self.assertTrue(
             MissionInstance.objects.filter(
-                participants__character=self.character, status=MissionStatus.ACTIVE
+                participants__character_id=self.character.pk, status=MissionStatus.ACTIVE
             ).exists()
         )
 
@@ -75,7 +76,7 @@ class TriggerDispatchTests(TestCase):
         self.template.save(update_fields=["visibility"])
         self.assertIsNone(maybe_dispatch_on_enter(self.character, self.room))
         self.assertFalse(
-            MissionInstance.objects.filter(participants__character=self.character).exists()
+            MissionInstance.objects.filter(participants__character_id=self.character.pk).exists()
         )
 
     def test_cooldown_blocks_redispatch(self) -> None:
@@ -84,11 +85,13 @@ class TriggerDispatchTests(TestCase):
         # A cooldown row was written; a second entry is now blocked.
         self.assertTrue(
             MissionGiverCooldown.objects.filter(
-                giver=self.giver, character=self.character, available_at__gt=timezone.now()
+                giver=self.giver,
+                character=self.character.sheet_data,
+                available_at__gt=timezone.now(),
             ).exists()
         )
         # Clear the active-mission guard so the cooldown is what's tested.
-        MissionInstance.objects.filter(participants__character=self.character).update(
+        MissionInstance.objects.filter(participants__character_id=self.character.pk).update(
             status=MissionStatus.COMPLETE
         )
         self.assertIsNone(maybe_dispatch_on_enter(self.character, self.room))
@@ -96,7 +99,7 @@ class TriggerDispatchTests(TestCase):
     def test_active_trigger_mission_blocks(self) -> None:
         instance = MissionInstanceFactory(template=self.template, source_offer=None)
         MissionParticipantFactory(
-            instance=instance, character=self.character, is_contract_holder=True
+            instance=instance, character=self.character.sheet_data, is_contract_holder=True
         )
         instance.status = MissionStatus.ACTIVE
         instance.save(update_fields=["status"])
@@ -132,7 +135,8 @@ class ChainGateOpensAfterFixedGrantTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.persona = cls.sheet.primary_persona
         cls.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")

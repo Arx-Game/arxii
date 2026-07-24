@@ -84,7 +84,7 @@ class CovenantWeaponDamageFullChainTests(TestCase):
         )
         item = ItemInstanceFactory(template=template, durability=10)
         EquippedItemFactory(
-            character=char,
+            character=char.sheet_data,
             item_instance=item,
             body_region=BodyRegion.RIGHT_HAND,
             equipment_layer=EquipmentLayer.BASE,
@@ -115,7 +115,7 @@ class CovenantArmorSoakSeamTests(TestCase):
         )
         inst = ItemInstanceFactory(template=template, durability=30)
         EquippedItemFactory(
-            character=character,
+            character=character.sheet_data,
             item_instance=inst,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -239,7 +239,7 @@ class NonCovenantRegressionGuardTests(TestCase):
         )
         inst = ItemInstanceFactory(template=template, durability=30)
         EquippedItemFactory(
-            character=char,
+            character=char.sheet_data,
             item_instance=inst,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -284,7 +284,7 @@ class UnseededTargetGuardTests(TestCase):
         )
         item = ItemInstanceFactory(template=template, durability=10)
         EquippedItemFactory(
-            character=char,
+            character=char.sheet_data,
             item_instance=item,
             body_region=BodyRegion.RIGHT_HAND,
             equipment_layer=EquipmentLayer.BASE,

@@ -47,7 +47,7 @@ def _make_room(key: str):
 def _make_traveler(location, *, technique=None, anima=10):
     character = CharacterFactory(location=location)
     sheet = CharacterSheetFactory(character=character)
-    CharacterAnimaFactory(character=character, current=anima, maximum=anima)
+    CharacterAnimaFactory(character=character.sheet_data, current=anima, maximum=anima)
     if technique is not None:
         CharacterTechniqueFactory(character=sheet, technique=technique)
     return character, sheet
@@ -301,7 +301,7 @@ class PerformPortalTravelTests(TestCase):
         with patch.object(traveler, "msg"):
             _perform_portal_travel(traveler, route)
 
-        anima = CharacterAnima.objects.get(character=traveler)
+        anima = CharacterAnima.objects.get(character=traveler.sheet_data)
         self.assertEqual(anima.current, 10 - route.technique.anima_cost)
 
 

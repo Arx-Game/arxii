@@ -95,12 +95,12 @@ class TriggerTransformationFlowTests(TestCase):
         char = CharacterFactory(location=self.room)
         sheet = CharacterSheetFactory(character=char)
 
-        true_form = CharacterFormFactory(character=char, name="True", form_type=FormType.TRUE)
-        CharacterFormState.objects.create(character=char, active_form=true_form)
+        true_form = CharacterFormFactory(character=sheet, name="True", form_type=FormType.TRUE)
+        CharacterFormState.objects.create(character=sheet, active_form=true_form)
 
         form_name = f"Beast-{char.db_key}"
         alt_form = CharacterFormFactory(
-            character=char, name=form_name, form_type=FormType.ALTERNATE
+            character=sheet, name=form_name, form_type=FormType.ALTERNATE
         )
 
         target = ModifierTargetFactory(
@@ -199,7 +199,7 @@ class TriggerTransformationFlowTests(TestCase):
         active = ActiveAlternateSelf.objects.get(character=sheet)
         self.assertIsNone(active.alternate_self)
 
-        state = CharacterFormState.objects.get(character=char)
+        state = CharacterFormState.objects.get(character=sheet)
         self.assertEqual(state.active_form.name, "True")
 
     def test_resist_check_failure_forces_shift(self):

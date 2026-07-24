@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.stories.constants import (
@@ -46,7 +46,7 @@ class AggregateBeatContributionViewSetTest(APITestCase):
 
         # Contributing character's account
         cls.contributor_account = AccountFactory()
-        cls.contributor_char = CharacterFactory()
+        cls.contributor_char = CharacterSheetFactory().character
         cls.contributor_char.db_account = cls.contributor_account
         cls.contributor_char.save()
         cls.character_sheet = CharacterSheetFactory(character=cls.contributor_char)
@@ -317,7 +317,7 @@ class SessionRequestViewSetTest(APITestCase):
 
         # Participant's account
         cls.participant_account = AccountFactory()
-        cls.participant_char = CharacterFactory()
+        cls.participant_char = CharacterSheetFactory().character
         cls.participant_char.db_account = cls.participant_account
         cls.participant_char.save()
 
@@ -332,7 +332,7 @@ class SessionRequestViewSetTest(APITestCase):
         cls.story = StoryFactory(scope=StoryScope.GROUP, owners=[cls.story_owner])
         cls.chapter = ChapterFactory(story=cls.story)
         cls.episode = EpisodeFactory(chapter=cls.chapter)
-        StoryParticipationFactory(story=cls.story, character=cls.participant_char)
+        StoryParticipationFactory(story=cls.story, character=cls.participant_char.sheet_data)
         cls.session_request = SessionRequestFactory(
             episode=cls.episode,
             status=SessionRequestStatus.OPEN,

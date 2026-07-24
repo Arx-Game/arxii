@@ -716,7 +716,7 @@ class ThreadPullPreviewTests(APITestCase):
             balance=10,
             lifetime_earned=10,
         )
-        CharacterAnimaFactory(character=cls.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=cls.character.sheet_data, current=10, maximum=10)
 
         # A tier-0 FLAT_BONUS gives a non-empty resolved_effects list.
         ThreadPullEffectFactory(

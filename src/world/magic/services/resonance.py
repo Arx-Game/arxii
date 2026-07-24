@@ -885,7 +885,7 @@ def preview_resonance_pull(  # noqa: PLR0913
         resonance=resonance,
     ).first()
     balance = cr.balance if cr else 0
-    anima = CharacterAnima.objects.filter(character=character_sheet.character).first()
+    anima = CharacterAnima.objects.filter(character=character_sheet).first()
     current_anima = anima.current if anima else 0
 
     affordable = balance >= cost.resonance_cost and current_anima >= anima_cost
@@ -1078,7 +1078,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         anima_total = anima_cost_override
     if anima_total > 0:
         anima = CharacterAnima.objects.select_for_update().get(
-            character=character_sheet.character,
+            character=character_sheet,
         )
         if anima.current < anima_total:
             msg = "Insufficient anima for this pull."

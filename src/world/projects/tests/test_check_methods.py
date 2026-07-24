@@ -38,7 +38,11 @@ class _CheckBase(TestCase):
         self.sheet.active_persona = self.persona
         self.sheet.save(update_fields=["active_persona"])
         self.actor = self.sheet.character
-        self.pool = ActionPointPoolFactory(character=self.actor, current=100, maximum=200)
+        self.pool = ActionPointPoolFactory(
+            character=self.actor.sheet_data,
+            current=100,
+            maximum=200,
+        )
         self.success = CheckOutcomeFactory(name="proj-success", success_level=2)
         self.failure = CheckOutcomeFactory(name="proj-failure", success_level=-1)
 

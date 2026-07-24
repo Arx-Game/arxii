@@ -121,7 +121,7 @@ class CheckSubjectCustodyTests(TestCase):
         StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
         participant_sheet = CharacterSheetFactory()
         participant_account = _account_playing(participant_sheet)
-        StoryParticipationFactory(story=self.story, character=participant_sheet.character)
+        StoryParticipationFactory(story=self.story, character=participant_sheet)
 
         verdict = check_subject_custody(
             subject_identity=self.subject_identity,
@@ -163,7 +163,7 @@ class CheckSubjectCustodyTests(TestCase):
 
         actor_sheet = CharacterSheetFactory()
         actor_account = _account_playing(actor_sheet)
-        StoryParticipationFactory(story=self.story, character=actor_sheet.character)
+        StoryParticipationFactory(story=self.story, character=actor_sheet)
         # Not a participant in story_b.
 
         verdict = check_subject_custody(
@@ -181,8 +181,8 @@ class CheckSubjectCustodyTests(TestCase):
 
         actor_sheet = CharacterSheetFactory()
         actor_account = _account_playing(actor_sheet)
-        StoryParticipationFactory(story=self.story, character=actor_sheet.character)
-        StoryParticipationFactory(story=story_b, character=actor_sheet.character)
+        StoryParticipationFactory(story=self.story, character=actor_sheet)
+        StoryParticipationFactory(story=story_b, character=actor_sheet)
 
         verdict = check_subject_custody(
             subject_identity=self.subject_identity,

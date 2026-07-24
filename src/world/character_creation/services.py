@@ -635,7 +635,7 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
     if post_cg_bonuses:
         for stat_name, bonus in post_cg_bonuses.items():
             trait_value = CharacterTraitValue.objects.filter(
-                character=character, trait__name=stat_name
+                character_id=character.pk, trait__name=stat_name
             ).first()
             if trait_value:
                 trait_value.value += int(bonus)
@@ -1433,7 +1433,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         set_glimpse_tags,
     )
 
-    aura = CharacterAura(character=sheet.character)
+    aura = CharacterAura(character=sheet)
     aura.full_clean()
     aura.save()
 
@@ -1470,7 +1470,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     # 5. Seed CharacterAnima + FatiguePool (idempotent — skip if already present).
     #    These must exist for Soul Tether sineating/rescue deductions to apply.
     CharacterAnima.objects.get_or_create(
-        character=sheet.character,
+        character=sheet,
         defaults={"current": 10, "maximum": 10},
     )
     get_or_create_fatigue_pool(sheet)
@@ -2078,7 +2078,7 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
     # Link character to the story.
     StoryParticipation.objects.create(
         story=story,
-        character=character,
+        character=character.sheet_data,
         is_active=True,
     )
 

@@ -107,7 +107,7 @@ class PulledResistanceCommitTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=self.sheet.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
         self.resonance = ResonanceFactory()
         CharacterResonanceFactory(
             character_sheet=self.sheet,
@@ -213,7 +213,7 @@ class FlatBonusPullNonRegressionTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=self.sheet.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
         self.resonance = ResonanceFactory()
         CharacterResonanceFactory(
             character_sheet=self.sheet,

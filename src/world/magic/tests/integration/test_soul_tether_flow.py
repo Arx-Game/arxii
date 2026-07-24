@@ -100,7 +100,7 @@ def _set_aura(sheet: object, *, celestial: str, primal: str, abyssal: str) -> No
             setattr(aura, k, v)
         aura.save()
     except AttributeError:
-        CharacterAuraFactory(character=char, **defaults)
+        CharacterAuraFactory(character=char.sheet_data, **defaults)
 
 
 def _set_abyssal_primary(sheet: object) -> None:
@@ -290,7 +290,7 @@ class SoulTetherFullPipelineTests(TestCase):
         CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
 
         # Seed Sineater anima for Sineating cost deductions.
-        CharacterAnimaFactory(character=self.sineater.character, current=50, maximum=50)
+        CharacterAnimaFactory(character=self.sineater, current=50, maximum=50)
 
         # Five-stage Corruption ConditionTemplate for the resonance.
         _make_simple_corruption_template(self.resonance)
@@ -526,7 +526,7 @@ class AntiResentmentInvariantTests(TestCase):
         )
         # Seed Sineater anima — this is what we monitor.
         cls.sineater_anima = CharacterAnimaFactory(
-            character=cls.sineater.character,
+            character=cls.sineater,
             current=30,
             maximum=30,
         )
@@ -551,13 +551,13 @@ class AntiResentmentInvariantTests(TestCase):
         """N decay ticks with no Sineating leave the Sineater's anima exactly as seeded."""
         from world.magic.models import CharacterAnima
 
-        initial_anima = CharacterAnima.objects.get(character=self.sineater.character).current
+        initial_anima = CharacterAnima.objects.get(character=self.sineater).current
 
         # Run 5 daily decay ticks (no shared scenes, no Sineating, no rescue).
         for _ in range(5):
             decay_all_conditions_tick()
 
-        final_anima = CharacterAnima.objects.get(character=self.sineater.character).current
+        final_anima = CharacterAnima.objects.get(character=self.sineater).current
         self.assertEqual(
             final_anima,
             initial_anima,
@@ -691,7 +691,7 @@ class ManyToManyIndependenceTests(TestCase):
         # Sineater: Primal-primary.  No track unlock required on Sineater side.
         cls.sineater = CharacterSheetFactory()
         _set_primal_primary(cls.sineater)
-        CharacterAnimaFactory(character=cls.sineater.character, current=50, maximum=50)
+        CharacterAnimaFactory(character=cls.sineater, current=50, maximum=50)
 
         # Sinner A: Abyssal-primary, RELATIONSHIP_TRACK unlock for track_a.
         cls.sinner_a = CharacterSheetFactory()

@@ -11,6 +11,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import MissionStatus
 from world.missions.factories import (
     MissionInstanceFactory,
@@ -27,6 +28,7 @@ class AssignActionTests(TestCase):
         cls.template = MissionTemplateFactory(name="assign-tmpl")
         cls.entry = MissionNodeFactory(template=cls.template, key="assign-entry", is_entry=True)
         cls.character = CharacterFactory()
+        CharacterSheetFactory(character=cls.character)
 
     def setUp(self) -> None:
         self.client = APIClient()

@@ -50,13 +50,13 @@ class MissionInviteCommandTest(TestCase):
         _run(self.holder, f"invite {self.instance.pk} {self.p2.key}")
         invite = MissionInvite.objects.get(instance=self.instance)
         _run(self.p2, f"accept {invite.pk}")
-        self.assertTrue(self.instance.participants.filter(character=self.p2).exists())
+        self.assertTrue(self.instance.participants.filter(character_id=self.p2.pk).exists())
 
     def test_decline_leaves_party_unchanged(self) -> None:
         _run(self.holder, f"invite {self.instance.pk} {self.p2.key}")
         invite = MissionInvite.objects.get(instance=self.instance)
         _run(self.p2, f"decline {invite.pk}")
-        self.assertFalse(self.instance.participants.filter(character=self.p2).exists())
+        self.assertFalse(self.instance.participants.filter(character_id=self.p2.pk).exists())
         invite.refresh_from_db()
         self.assertEqual(invite.response, MissionInvite.Response.DECLINED)
 

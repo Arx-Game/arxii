@@ -861,7 +861,7 @@ def resolve_sineating(
             anima_cost = units * offer.anima_cost_per_unit
             try:
                 anima_row = CharacterAnima.objects.select_for_update().get(
-                    character=offer.sineater_sheet.character
+                    character=offer.sineater_sheet
                 )
                 anima_row.current = max(0, anima_row.current - anima_cost)
                 anima_row.save(update_fields=["current"])
@@ -1134,7 +1134,7 @@ def perform_soul_tether_rescue(
             raise RescueValidationError(msg)
 
         # 4. Gate: Sineater must not be in active engagement.
-        if CharacterEngagement.objects.filter(character=sineater_sheet.character).exists():
+        if CharacterEngagement.objects.filter(character=sineater_sheet).exists():
             msg = "Rescue ritual cannot be performed during combat."
             raise RescueValidationError(msg)
 

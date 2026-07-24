@@ -21,7 +21,7 @@ from world.mechanics.factories import (
 
 def _setup_anima(character, current=20, maximum=20):
     CharacterAnima.objects.update_or_create(
-        character=character,
+        character=character.sheet_data,
         defaults={"current": current, "maximum": maximum},
     )
 
@@ -40,7 +40,7 @@ class TechniqueFatigueAccrualTests(TestCase):
         self.character = self.sheet.character
         # Engagement suppresses social-safety +10 control bonus, so
         # effective_cost = max(anima_cost - 0, 0) = anima_cost (intensity=control=1).
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
         self.technique = TechniqueFactory(
             action_category=ActionCategory.PHYSICAL,
             anima_cost=8,
@@ -100,7 +100,7 @@ class TechniqueFatigueImmunityTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
         # Engagement suppresses social-safety +10 control bonus so effective_cost > 0.
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
         _setup_anima(self.character, current=20, maximum=20)
 
     def test_audere_character_passes_immune_flag_true(self):

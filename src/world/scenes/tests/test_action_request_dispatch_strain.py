@@ -23,7 +23,7 @@ class DispatchActionRequestStrainTests(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(
@@ -66,7 +66,7 @@ class DispatchActionRequestStrainTests(APITestCase):
 
     def test_strain_commitment_validated_against_anima(self) -> None:
         """Strain_commitment greater than available anima → 400."""
-        CharacterAnimaFactory(character=self.character, current=5, maximum=10)
+        CharacterAnimaFactory(character=self.character.sheet_data, current=5, maximum=10)
         response = self.client.post(
             self._url(),
             self._payload(strain_commitment=20),
@@ -77,7 +77,7 @@ class DispatchActionRequestStrainTests(APITestCase):
 
     def test_strain_within_cap_accepted(self) -> None:
         """Strain_commitment within the anima cap → 201."""
-        CharacterAnimaFactory(character=self.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=self.character.sheet_data, current=10, maximum=10)
         response = self.client.post(
             self._url(),
             self._payload(strain_commitment=5),

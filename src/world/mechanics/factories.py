@@ -514,7 +514,7 @@ class CharacterEngagementFactory(DjangoModelFactory):
     class Meta:
         model = CharacterEngagement
 
-    character = factory.SubFactory("evennia_extensions.factories.ObjectDBFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     engagement_type = EngagementType.CHALLENGE
     source_content_type = factory.LazyFunction(lambda: ContentType.objects.get_for_model(ObjectDB))
     source_id = factory.LazyAttribute(lambda o: o.character.pk)

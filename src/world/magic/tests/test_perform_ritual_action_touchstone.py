@@ -14,7 +14,6 @@ from __future__ import annotations
 from django.test import TestCase
 
 from actions.definitions.ritual import PerformRitualAction
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import ItemInstance
@@ -30,9 +29,8 @@ from world.magic.factories import (
 
 class PerformRitualActionTouchstoneTests(TestCase):
     def setUp(self) -> None:
-        self.character = CharacterFactory()
-        self.sheet = CharacterSheetFactory(character=self.character)
-        self.character.sheet_data = self.sheet
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.resonance = ResonanceFactory(name="Praedari")
         self.tier = ResonanceTierFactory(name="Faint", tier_level=1)
         CharacterResonanceFactory(character_sheet=self.sheet, resonance=self.resonance)

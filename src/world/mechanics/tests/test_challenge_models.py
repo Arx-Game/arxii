@@ -5,6 +5,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.models import ConsequenceEffect
@@ -244,7 +245,7 @@ class InstanceModelTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.room = ObjectDBFactory(db_key="Test Room")
-        cls.character = ObjectDBFactory(db_key="Test Character")
+        cls.character = CharacterSheetFactory(character__db_key="Test Character").character
         cls.situation_template = SituationTemplateFactory(name="Siege")
         cls.challenge_template = ChallengeTemplateFactory(name="Barricade")
         cls.situation_instance = SituationInstance.objects.create(
@@ -279,7 +280,7 @@ class InstanceModelTests(TestCase):
 
     def test_character_challenge_record(self) -> None:
         record = CharacterChallengeRecord.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=self.challenge_instance,
             approach=self.approach,
         )
@@ -287,13 +288,13 @@ class InstanceModelTests(TestCase):
 
     def test_character_challenge_record_unique(self) -> None:
         CharacterChallengeRecord.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=self.challenge_instance,
             approach=self.approach,
         )
         with self.assertRaises(IntegrityError):
             CharacterChallengeRecord.objects.create(
-                character=self.character,
+                character=self.character.sheet_data,
                 challenge_instance=self.challenge_instance,
                 approach=self.approach,
             )

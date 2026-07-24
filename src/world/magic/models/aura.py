@@ -10,7 +10,6 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.constants import GlimpseState
@@ -27,7 +26,7 @@ class CharacterAura(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        ObjectDB,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="aura",
         help_text="The character this aura belongs to.",

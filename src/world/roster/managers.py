@@ -69,9 +69,9 @@ class RosterEntryQuerySet(models.QuerySet):
         from world.gm.constants import GMTableStatus  # noqa: PLC0415
 
         return self.filter(
-            character_sheet__character__story_participations__is_active=True,
-            character_sheet__character__story_participations__story__primary_table__isnull=False,
-            character_sheet__character__story_participations__story__primary_table__status=GMTableStatus.ACTIVE,
+            character_sheet__story_participations__is_active=True,
+            character_sheet__story_participations__story__primary_table__isnull=False,
+            character_sheet__story_participations__story__primary_table__status=GMTableStatus.ACTIVE,
         ).distinct()
 
     def character_ids(self) -> models.QuerySet:
@@ -142,8 +142,8 @@ class RosterApplicationQuerySet(models.QuerySet):
         return self.filter(status="pending")
 
     def for_character(self, character: ObjectDB) -> RosterApplicationQuerySet:
-        """Get all applications for a specific character."""
-        return self.filter(character=character)
+        """Get all applications for a specific character (pk-shared with the sheet)."""
+        return self.filter(character_id=character.pk)
 
     def for_player(self, player_data: PlayerData) -> RosterApplicationQuerySet:
         """Get all applications by a specific player."""

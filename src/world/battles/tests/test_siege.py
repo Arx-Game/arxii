@@ -74,12 +74,8 @@ class SiegeBreachJourneyTests(TestCase):
         self.defender = BattleParticipantFactory(battle=self.battle, side=self.defender_side)
         CharacterTechniqueFactory(character=self.attacker.character_sheet, technique=self.technique)
         CharacterTechniqueFactory(character=self.defender.character_sheet, technique=self.technique)
-        CharacterAnimaFactory(
-            character=self.attacker.character_sheet.character, current=30, maximum=30
-        )
-        CharacterAnimaFactory(
-            character=self.defender.character_sheet.character, current=30, maximum=30
-        )
+        CharacterAnimaFactory(character=self.attacker.character_sheet, current=30, maximum=30)
+        CharacterAnimaFactory(character=self.defender.character_sheet, current=30, maximum=30)
 
     def test_breach_own_fortification_is_rejected(self):
         """Sanity-check the ownership guard end-to-end (not just Task 3's direct unit
@@ -198,9 +194,7 @@ class RepositionDeclarationTests(TestCase):
         CharacterTechniqueFactory(
             character=self.participant.character_sheet, technique=self.technique
         )
-        CharacterAnimaFactory(
-            character=self.participant.character_sheet.character, current=30, maximum=30
-        )
+        CharacterAnimaFactory(character=self.participant.character_sheet, current=30, maximum=30)
 
     def test_commander_can_declare_reposition(self):
         self.vehicle.unit.military_unit.commander = self.participant.character_sheet
@@ -251,9 +245,7 @@ class RepositionResolutionTests(TestCase):
         CharacterTechniqueFactory(
             character=self.participant.character_sheet, technique=self.technique
         )
-        CharacterAnimaFactory(
-            character=self.participant.character_sheet.character, current=30, maximum=30
-        )
+        CharacterAnimaFactory(character=self.participant.character_sheet, current=30, maximum=30)
 
     def test_moves_place_toward_declared_delta_bounded_by_speed(self):
         battle_round = begin_battle_round(battle=self.battle)
@@ -297,9 +289,7 @@ class CrossVehicleTargetingTests(TestCase):
             place=self.attacker_ship.place,
         )
         CharacterTechniqueFactory(character=self.attacker.character_sheet, technique=self.technique)
-        CharacterAnimaFactory(
-            character=self.attacker.character_sheet.character, current=30, maximum=30
-        )
+        CharacterAnimaFactory(character=self.attacker.character_sheet, current=30, maximum=30)
         self.hull = self.defender_ship.place.fortifications.get(kind=FortificationKind.HULL)
 
     def _set_positions(self, *, overlapping: bool) -> None:

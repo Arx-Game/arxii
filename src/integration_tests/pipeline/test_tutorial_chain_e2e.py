@@ -215,7 +215,9 @@ class TutorialChainJourneyE2ETests(TestCase):
         )
         self.assertTrue(result.success, result.message)
         return (
-            MissionInstance.objects.filter(participants__character=self.pc, source_offer=offer)
+            MissionInstance.objects.filter(
+                participants__character_id=self.pc.pk, source_offer=offer
+            )
             .order_by("-pk")
             .first()
         )
@@ -273,8 +275,8 @@ class TutorialChainJourneyE2ETests(TestCase):
 
         # Real minimal technique cast (mirrors
         # UseTechniqueExternalActWiringTests's fixture in test_external_acts.py).
-        CharacterAnimaFactory(character=self.pc, current=20, maximum=20)
-        CharacterEngagementFactory(character=self.pc)
+        CharacterAnimaFactory(character=self.pc.sheet_data, current=20, maximum=20)
+        CharacterEngagementFactory(character=self.pc.sheet_data)
         technique = TechniqueFactory(intensity=5, control=10, anima_cost=3)
 
         room_stir_before = self.room_stir.call_count
@@ -310,7 +312,7 @@ class TutorialChainJourneyE2ETests(TestCase):
         ordinal = next(i for i, p in enumerate(postings, start=1) if p.template_id == self.t4.pk)
         _run(self.pc, f"take {ordinal}")  # the `take` surface
         instance_t4 = (
-            MissionInstance.objects.filter(participants__character=self.pc, template=self.t4)
+            MissionInstance.objects.filter(participants__character_id=self.pc.pk, template=self.t4)
             .order_by("-pk")
             .first()
         )
@@ -333,7 +335,9 @@ class TutorialChainJourneyE2ETests(TestCase):
         summons_result = respond_to_summons(summons, self.pc, accept=True)
         self.assertTrue(summons_result.success, summons_result.message)
         instance_t5 = (
-            MissionInstance.objects.filter(participants__character=self.pc, source_offer=t5_offer)
+            MissionInstance.objects.filter(
+                participants__character_id=self.pc.pk, source_offer=t5_offer
+            )
             .order_by("-pk")
             .first()
         )
@@ -421,7 +425,9 @@ class TutorialChainJourneyE2ETests(TestCase):
         )
         self.assertTrue(second_attempt.success, second_attempt.message)
         instance_t7 = (
-            MissionInstance.objects.filter(participants__character=self.pc, source_offer=t7_offer)
+            MissionInstance.objects.filter(
+                participants__character_id=self.pc.pk, source_offer=t7_offer
+            )
             .order_by("-pk")
             .first()
         )

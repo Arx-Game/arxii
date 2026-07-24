@@ -364,7 +364,7 @@ class StoryParticipation(SharedMemoryModel):
         related_name="participants",
     )
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="story_participations",
     )

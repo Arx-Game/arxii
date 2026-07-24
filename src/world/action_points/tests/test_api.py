@@ -35,7 +35,7 @@ class ActionPointsApiTests(TestCase):
         self.character = _played_character(account=self.account)
 
     def test_owner_reads_pool(self) -> None:
-        pool = ActionPointPoolFactory(character=self.character, current=140, banked=25)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=140, banked=25)
 
         response = self.client.get(AP_URL.format(pk=self.character.pk))
 
@@ -69,7 +69,7 @@ class ActionPointsApiTests(TestCase):
         response = self.client.get(AP_URL.format(pk=vase.pk))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertFalse(ActionPointPool.objects.filter(character=vase).exists())
+        self.assertFalse(ActionPointPool.objects.filter(character_id=vase.pk).exists())
 
     def test_anonymous_is_denied(self) -> None:
         self.client.force_authenticate(user=None)

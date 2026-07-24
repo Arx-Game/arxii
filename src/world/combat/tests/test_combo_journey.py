@@ -115,9 +115,9 @@ class ComboJourneyTests(TestCase):
             covenant_role=role,
         )
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
-        CharacterAnimaFactory(character=sheet.character, current=50, maximum=50)
+        CharacterAnimaFactory(character=sheet, current=50, maximum=50)
         FatiguePool.objects.create(character_sheet=sheet)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterEngagementFactory(character=sheet)
         technique = TechniqueFactory(
             gift=self.gift,
             effect_type=effect,

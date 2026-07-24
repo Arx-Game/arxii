@@ -159,7 +159,7 @@ def build_majora_world(  # noqa: PLR0913 — fixture knobs are keyword-only by d
 
     obj_ct = ContentType.objects.get_for_model(ObjectDB)
     CharacterEngagement.objects.create(
-        character=character,
+        character=character.sheet_data,
         engagement_type=EngagementType.CHALLENGE,
         source_content_type=obj_ct,
         source_id=character.pk,

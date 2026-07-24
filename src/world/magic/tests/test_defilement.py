@@ -51,7 +51,7 @@ def _effect(*, environment_affinity, source_affinity, defiles: bool, direction: 
 class DefilePlaceForCastTest(TestCase):
     def setUp(self) -> None:
         self.caster_sheet = CharacterSheetFactory()
-        CharacterAuraFactory(character=self.caster_sheet.character)  # → magically active
+        CharacterAuraFactory(character=self.caster_sheet)  # → magically active
         self.room_profile = RoomProfileFactory()
         self.technique = TechniqueFactory()
         self.place_affinity = AffinityFactory(name="Primal")

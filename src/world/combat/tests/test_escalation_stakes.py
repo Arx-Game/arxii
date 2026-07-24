@@ -39,7 +39,7 @@ class StakesStepBonusTests(TestCase):
 
         apply_escalation_tick(encounter, check_fn=_fake_check_fn)
 
-        engagement = CharacterEngagement.objects.get(character=character)
+        engagement = CharacterEngagement.objects.get(character=character.sheet_data)
         self.assertEqual(engagement.intensity_modifier, 3)  # 1 (curve) + 2 (stakes)
 
     def test_no_matching_row_is_zero_bonus(self):
@@ -53,7 +53,7 @@ class StakesStepBonusTests(TestCase):
 
         apply_escalation_tick(encounter, check_fn=_fake_check_fn)
 
-        engagement = CharacterEngagement.objects.get(character=character)
+        engagement = CharacterEngagement.objects.get(character=character.sheet_data)
         self.assertEqual(engagement.intensity_modifier, 1)
 
 
@@ -73,7 +73,7 @@ class InitialStakesSurgeTests(TestCase):
         encounter.save(update_fields=["round_number"])
         apply_escalation_tick(encounter, check_fn=_fake_check_fn)
 
-        engagement = CharacterEngagement.objects.get(character=character)
+        engagement = CharacterEngagement.objects.get(character=character.sheet_data)
         self.assertEqual(engagement.intensity_modifier, 4)
         self.assertEqual(
             DramaticSurgeRecord.objects.filter(trigger_kind=SurgeTriggerKind.HIGH_STAKES).count(),

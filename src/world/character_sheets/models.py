@@ -797,6 +797,10 @@ class CharacterSheet(SharedMemoryModel):
             ).order_by("-persona_type", "created_at", "id")
         )
 
+    #: Reverse-OneToOne safe accessors for the sheet-keyed sidecars (#2608).
+    form_state_or_none = ReverseOneToOneOrNone("form_state")
+    anima_or_none = ReverseOneToOneOrNone("anima")
+
     @cached_property
     def cached_path_history(self) -> list:
         """CharacterPathHistory rows, newest first — ``to_attr`` target for the

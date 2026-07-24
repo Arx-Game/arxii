@@ -7,7 +7,6 @@ ChallengeApproach. Real factory objects, no ORM mocks, single participant.
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.conditions.factories import CapabilityTypeFactory
@@ -33,7 +32,8 @@ class BuildOptionListTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
         cls.template = MissionTemplateFactory(name="opt-list-tmpl")
@@ -41,7 +41,7 @@ class BuildOptionListTests(TestCase):
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.participant = MissionParticipantFactory(
             instance=cls.instance,
-            character=cls.character,
+            character=cls.character.sheet_data,
             is_contract_holder=True,
         )
 
@@ -117,14 +117,15 @@ class BuildOptionListChallengeTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.template = MissionTemplateFactory(name="ch-opt-list-tmpl")
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.participant = MissionParticipantFactory(
             instance=cls.instance,
-            character=cls.character,
+            character=cls.character.sheet_data,
             is_contract_holder=True,
         )
         cls.challenge = ChallengeTemplateFactory(name="ChOptList Pit")

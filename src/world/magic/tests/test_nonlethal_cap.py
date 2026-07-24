@@ -130,9 +130,9 @@ class _SoulfrayCapTestBase(TestCase):
 
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(current=0, maximum=10)
-        self.character = self.anima.character
+        self.character = self.anima.character.character
         # Engage so the social-safety control bonus does not inflate control.
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.anima.character)
 
     def _run(self, *, lethal: bool):
         """Run use_technique twice (create then advance/fire) with a mocked resilience check.

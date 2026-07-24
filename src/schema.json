@@ -41542,8 +41542,8 @@ components:
           readOnly: true
         character:
           type: integer
-          readOnly: true
           description: The character wearing/wielding this item.
+          readOnly: true
         item_instance:
           type: integer
           readOnly: true
@@ -42997,6 +42997,7 @@ components:
           readOnly: true
         character:
           type: integer
+          description: The character this sheet belongs to
           readOnly: true
         character_key:
           type: string
@@ -57622,6 +57623,7 @@ components:
           nullable: true
         subject_character:
           type: integer
+          description: The character this sheet belongs to
           readOnly: true
           nullable: true
         description:

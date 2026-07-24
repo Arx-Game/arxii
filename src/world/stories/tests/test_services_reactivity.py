@@ -314,7 +314,7 @@ class GlobalScopeProgressIterationTests(EvenniaTestCase):
         """Hook walks through StoryParticipation → GlobalStoryProgress."""
         sheet = CharacterSheetFactory()
         story = StoryFactory(scope=StoryScope.GLOBAL, character_sheet=None)
-        StoryParticipationFactory(story=story, character=sheet.character)
+        StoryParticipationFactory(story=story, character=sheet)
         episode = EpisodeFactory(chapter=ChapterFactory(story=story))
         GlobalStoryProgressFactory(story=story, current_episode=episode)
 

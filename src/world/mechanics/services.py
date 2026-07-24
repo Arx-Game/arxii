@@ -1817,7 +1817,7 @@ def begin_engagement(
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
     engagement, _ = CharacterEngagement.objects.get_or_create(
-        character=character,
+        character=character.sheet_data,
         defaults={
             "engagement_type": engagement_type,
             "source_content_type": ContentType.objects.get_for_model(source),
@@ -1843,7 +1843,7 @@ def end_engagement(
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
     CharacterEngagement.objects.filter(
-        character=character,
+        character_id=character.pk,
         engagement_type=engagement_type,
         source_content_type=ContentType.objects.get_for_model(source),
         source_id=source.pk,

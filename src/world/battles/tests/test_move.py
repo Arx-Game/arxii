@@ -56,9 +56,7 @@ class MoveDeclarationTests(TestCase):
         CharacterTechniqueFactory(
             character=self.participant.character_sheet, technique=self.technique
         )
-        CharacterAnimaFactory(
-            character=self.participant.character_sheet.character, current=30, maximum=30
-        )
+        CharacterAnimaFactory(character=self.participant.character_sheet, current=30, maximum=30)
 
     def test_self_move_requires_no_command_tier(self) -> None:
         begin_battle_round(battle=self.battle)
@@ -214,9 +212,7 @@ class MoveResolutionTests(TestCase):
         CharacterTechniqueFactory(
             character=self.participant.character_sheet, technique=self.technique
         )
-        CharacterAnimaFactory(
-            character=self.participant.character_sheet.character, current=30, maximum=30
-        )
+        CharacterAnimaFactory(character=self.participant.character_sheet, current=30, maximum=30)
         self.movement = CapabilityTypeFactory(
             name=FoundationalCapability.MOVEMENT, innate_baseline=10
         )
