@@ -134,7 +134,7 @@ class TestSeededCharacterCreation(TestCase):
         self.assertTrue(gift_options, "Unbound must have a gift option for Path of Steel")
         gift = gift_options[0]
         technique_options = get_technique_options(path, gift, tradition)
-        available_techniques = technique_options.pool + technique_options.signature
+        available_techniques = technique_options.pool + technique_options.tradition
         self.assertTrue(available_techniques, "the picked gift must have >=1 available technique")
         technique = available_techniques[0]
         resonance = Resonance.objects.first()

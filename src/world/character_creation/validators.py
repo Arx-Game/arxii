@@ -234,7 +234,7 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: PLR0911
 
     technique_options = get_technique_options(draft.selected_path, gift, draft.selected_tradition)
     available_ids = {t.id for t in technique_options.pool} | {
-        t.id for t in technique_options.signature
+        t.id for t in technique_options.tradition
     }
     if any(technique_id not in available_ids for technique_id in technique_ids):
         return ["Selected technique is not available"]

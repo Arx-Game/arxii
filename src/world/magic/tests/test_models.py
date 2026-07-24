@@ -473,7 +473,7 @@ class TraditionGiftGrantTests(TestCase):
     def test_signature_technique_must_belong_to_gift(self):
         grant = TraditionGiftGrantFactory(tradition=self.tradition, gift=self.gift)
         stray = TechniqueFactory(gift=self.other_gift)
-        grant.signature_techniques.add(stray)
+        grant.special_techniques.add(stray)
         with self.assertRaises(ValidationError):
             grant.clean()
 

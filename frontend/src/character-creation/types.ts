@@ -442,7 +442,7 @@ export interface CGTechniqueOption {
   description: string;
   category: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
   codex_entry_id: number | null;
-  is_signature: boolean;
+  is_tradition_technique: boolean;
 }
 
 // =============================================================================

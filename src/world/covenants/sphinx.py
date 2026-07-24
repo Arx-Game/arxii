@@ -290,8 +290,8 @@ def _uncovered_target_functions(demands: list[SphinxDemand]) -> set[str]:
     return targets
 
 
-def _signature_technique_ids(sheet: CharacterSheet) -> set[int]:
-    """PKs of Techniques in the sheet's active tradition's signature pool.
+def _special_technique_ids(sheet: CharacterSheet) -> set[int]:
+    """PKs of Techniques in the sheet's active tradition's special techniques pool.
 
     One row lookup (the active ``CharacterTradition``) + one bulk
     ``values_list`` — no per-candidate query later.
@@ -305,7 +305,7 @@ def _signature_technique_ids(sheet: CharacterSheet) -> set[int]:
         return set()
     ids = set(
         TraditionGiftGrant.objects.filter(tradition=active_row.tradition).values_list(
-            "signature_techniques", flat=True
+            "special_techniques", flat=True
         )
     )
     ids.discard(None)
@@ -327,7 +327,7 @@ def _shopping_list(
     target_functions = _uncovered_target_functions(demands)
     if not target_functions:
         return []
-    signature_ids = _signature_technique_ids(sheet)
+    special_ids = _special_technique_ids(sheet)
 
     shopping_list: list[SphinxShoppingItem] = []
     for function in sorted(target_functions):
@@ -342,7 +342,7 @@ def _shopping_list(
         for technique in candidates:
             if found >= _SHOPPING_LIST_PER_FUNCTION:
                 break
-            if technique.pk in signature_ids or can_learn_technique(sheet, technique):
+            if technique.pk in special_ids or can_learn_technique(sheet, technique):
                 shopping_list.append(
                     SphinxShoppingItem(
                         technique_name=technique.name,
@@ -388,9 +388,9 @@ def judge_vow(sheet: CharacterSheet, role: CovenantRole) -> SphinxVerdict:
 
 
 def _tradition_function_pools(tradition_ids: list[int]) -> dict[int, set[str]]:
-    """Bulk: tradition id -> union of function tags over its grants' signature pool.
+    """Bulk: tradition id -> union of function tags over its grants' special techniques pool.
 
-    One query total via the ``TraditionGiftGrant.signature_techniques``
+    One query total via the ``TraditionGiftGrant.special_techniques``
     reverse relation (``Technique.granted_by_tradition_gifts``) — no
     per-tradition query loop.
     """

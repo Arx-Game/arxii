@@ -145,9 +145,9 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
                       </span>
                       {isSelected && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />}
                     </CardTitle>
-                    {technique.is_signature && (
+                    {technique.is_tradition_technique && (
                       <Badge variant="outline" className="w-fit text-xs">
-                        {traditionName} signature
+                        {traditionName} technique
                       </Badge>
                     )}
                   </CardHeader>
