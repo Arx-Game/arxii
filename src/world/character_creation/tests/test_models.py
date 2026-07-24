@@ -37,7 +37,7 @@ class GetStartingRoomFallbackTests(TestCase):
         from evennia_extensions.factories import ObjectDBFactory
 
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
-        beginnings = BeginningsFactory(starting_room_override=room)
+        beginnings = BeginningsFactory(starting_room_override=room.room_profile)
         draft = CharacterDraftFactory(selected_beginnings=beginnings)
         self.assertEqual(draft.get_starting_room(), room)
 

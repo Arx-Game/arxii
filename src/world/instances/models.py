@@ -9,7 +9,7 @@ class InstancedRoom(SharedMemoryModel):
     """Tracks the lifecycle of a temporary instanced room."""
 
     room = models.OneToOneField(
-        "objects.ObjectDB",
+        "evennia_extensions.RoomProfile",
         on_delete=models.CASCADE,
         related_name="instance_data",
     )
@@ -28,6 +28,11 @@ class InstancedRoom(SharedMemoryModel):
         related_name="owned_instances",
         help_text="GM who spun this instance up (story scene rooms, #2450).",
     )
+    # ObjectDB by design (#2608): the captivity path passes a raw, unvalidated
+    # `character.location` (world/mechanics/effect_handlers.py:861) — no Room
+    # typeclass guarantee, so no RoomProfile to point at. `clean()` below asserts
+    # Room-ness but is NOT enforced on ORM writes (no full_clean() in save()), so
+    # it cannot be relied on as the guarantee. Sibling of Captivity.return_location.
     return_location = models.ForeignKey(
         "objects.ObjectDB",
         null=True,
@@ -52,7 +57,7 @@ class InstancedRoom(SharedMemoryModel):
         verbose_name_plural = "Instanced Rooms"
 
     def __str__(self):
-        return f"Instance: {self.room.db_key} ({self.get_status_display()})"
+        return f"Instance: {self.room.objectdb.db_key} ({self.get_status_display()})"
 
     def clean(self):
         if self.return_location_id is not None:

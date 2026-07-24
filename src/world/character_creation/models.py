@@ -318,7 +318,7 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         "Null defaults to 'Normal' heritage at finalization.",
     )
     starting_room_override = models.ForeignKey(
-        ObjectDB,
+        "evennia_extensions.RoomProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -900,7 +900,7 @@ class CharacterDraft(SharedMemoryModel):
            error; callers must not assume this can't happen.
         """
         if self.selected_beginnings and self.selected_beginnings.starting_room_override:
-            return self.selected_beginnings.starting_room_override
+            return self.selected_beginnings.starting_room_override.objectdb
 
         if self.selected_area and self.selected_area.default_starting_room:
             return self.selected_area.default_starting_room.objectdb

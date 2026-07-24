@@ -18,6 +18,7 @@ from world.vitals.services import process_damage_consequences
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from evennia_extensions.models import RoomProfile
     from world.areas.positioning.models import Position
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import Consequence, ConsequenceEffect
@@ -732,12 +733,13 @@ def _apply_magical_scars(
     )
 
 
-def _find_brig_for_captor(context: "ResolutionContext") -> "ObjectDB | None":
+def _find_brig_for_captor(context: "ResolutionContext") -> "RoomProfile | None":
     """Find an active Brig room feature in the captor's building (#1862).
 
     Resolves the captor's building from ``context.location``, then searches
     for an active Brig ``RoomFeatureInstance`` in that building's rooms.
-    Returns the Brig's room (``ObjectDB``) if found, ``None`` otherwise.
+    Returns the Brig's ``RoomProfile`` if found, ``None`` otherwise (#2608 —
+    ``Captivity.holding_room`` takes the profile, so no ObjectDB round-trip).
     """
     from world.buildings.room_services import building_for_room  # noqa: PLC0415
     from world.room_features.constants import RoomFeatureServiceStrategy  # noqa: PLC0415
@@ -760,10 +762,10 @@ def _find_brig_for_captor(context: "ResolutionContext") -> "ObjectDB | None":
     )
     if brig_instance is None:
         return None
-    return brig_instance.room_profile.objectdb
+    return brig_instance.room_profile
 
 
-def _brig_has_capacity(brig_room: "ObjectDB") -> bool:
+def _brig_has_capacity(brig_room: "RoomProfile") -> bool:
     """Check if the Brig room has capacity for another prisoner (#1862)."""
     from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
     from world.captivity.models import Captivity  # noqa: PLC0415
@@ -771,7 +773,7 @@ def _brig_has_capacity(brig_room: "ObjectDB") -> bool:
 
     instance = (
         RoomFeatureInstance.objects.filter(
-            room_profile__objectdb=brig_room,
+            room_profile=brig_room,
             dissolved_at__isnull=True,
         )
         .select_related("brig_details")

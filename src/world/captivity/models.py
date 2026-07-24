@@ -51,7 +51,7 @@ class Captivity(SharedMemoryModel):
         ),
     )
     holding_room = models.ForeignKey(
-        "objects.ObjectDB",
+        "evennia_extensions.RoomProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

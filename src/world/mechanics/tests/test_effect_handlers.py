@@ -287,7 +287,7 @@ class CaptureHandlerTests(TestCase):
 
         assert result.applied
         captivity = Captivity.objects.get(captive=sheet)
-        assert captivity.cell.room.db_key == "The Blood Crypt"
+        assert captivity.cell.room.objectdb.db_key == "The Blood Crypt"
 
     def test_capture_plants_a_rescue_clue_at_the_capture_site(self) -> None:
         from evennia_extensions.factories import RoomProfileFactory

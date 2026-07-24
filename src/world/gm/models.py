@@ -422,7 +422,7 @@ class StoryRoomGrant(SharedMemoryModel):
         related_name="story_grants_issued",
     )
     return_location = models.ForeignKey(
-        "objects.ObjectDB",
+        "evennia_extensions.RoomProfile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -437,18 +437,6 @@ class StoryRoomGrant(SharedMemoryModel):
         constraints = [
             UniqueConstraint(fields=["room", "character"], name="unique_story_room_grant"),
         ]
-
-    def clean(self) -> None:
-        if self.return_location_id is not None:
-            loc = self.return_location
-            if loc is None or not loc.is_typeclass("typeclasses.rooms.Room", exact=False):
-                msg = "return_location must be a Room typeclass."
-                raise ValidationError({"return_location": msg})
-
-    def save(self, *args: Any, **kwargs: Any) -> None:
-        """full_clean() on save so direct ORM writes can't bypass clean()."""
-        self.full_clean()
-        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"StoryRoomGrant({self.character}, room={self.room_id})"
