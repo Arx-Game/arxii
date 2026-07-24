@@ -227,7 +227,9 @@ class CharacterWithCharacteristicsFactory:
         data = CompleteCharacterFactory.create(character_name)
         character = data["character"]
 
-        form, _ = CharacterForm.objects.get_or_create(character=character, form_type=FormType.TRUE)
+        form, _ = CharacterForm.objects.get_or_create(
+            character=character.sheet_data, form_type=FormType.TRUE
+        )
         for char_name, value in characteristics.items():
             # Height isn't a FormTrait (test shim); it lives on the height system.
             if char_name == "height":  # noqa: STRING_LITERAL

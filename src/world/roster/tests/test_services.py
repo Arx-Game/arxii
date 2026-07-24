@@ -89,8 +89,8 @@ class PlayerDataServiceTestCase(TestCase):
     def test_get_pending_applications(self):
         """Test getting player's pending applications"""
         # Create a second character for the approved application
-        character2 = CharacterFactory()
-        RosterEntryFactory(character_sheet__character=character2.sheet_data, roster=self.roster)
+        character2 = CharacterSheetFactory().character
+        RosterEntryFactory(character_sheet=character2.sheet_data, roster=self.roster)
 
         # Create pending application
         app = RosterApplication.objects.create(

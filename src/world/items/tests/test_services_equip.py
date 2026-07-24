@@ -46,7 +46,7 @@ class EquipItemTests(TestCase):
             equipment_layer=EquipmentLayer.BASE,
         )
         self.assertIsNotNone(equipped.pk)
-        self.assertEqual(equipped.character, self.character)
+        self.assertEqual(equipped.character, self.sheet)
         self.assertEqual(equipped.item_instance, self.item)
         self.assertEqual(equipped.body_region, BodyRegion.TORSO)
         self.assertEqual(equipped.equipment_layer, EquipmentLayer.BASE)

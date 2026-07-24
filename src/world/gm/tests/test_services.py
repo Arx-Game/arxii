@@ -402,7 +402,7 @@ class ClaimInviteTest(TestCase):
 
         application = claim_invite(invite=self.invite, account=self.account)
         assert application.pk is not None
-        assert application.character == self.invite.roster_entry.character_sheet.character
+        assert application.character == self.invite.roster_entry.character_sheet
         self.invite.refresh_from_db()
         assert self.invite.is_claimed is True
         assert self.invite.claimed_by == self.account

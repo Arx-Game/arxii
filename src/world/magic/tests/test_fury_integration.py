@@ -329,8 +329,8 @@ class StrainAndFuryStackedTests(TestCase):
         from world.character_sheets.factories import CharacterSheetFactory
 
         anima = CharacterAnimaFactory(current=50, maximum=50)
-        character = anima.character
-        CharacterEngagementFactory(character=character.sheet_data)
+        character = anima.character.character
+        CharacterEngagementFactory(character=anima.character)
         sheet = CharacterSheetFactory(character=character)
         return character, sheet, anima
 

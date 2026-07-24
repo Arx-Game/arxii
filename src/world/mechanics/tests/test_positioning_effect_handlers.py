@@ -19,6 +19,7 @@ from world.areas.positioning.services import (
     place_in_position,
     position_of,
 )
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectTarget, EffectType, PositionDestination
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
@@ -44,7 +45,8 @@ class CreatePositionHandlerTests(TestCase):
         from evennia import create_object
 
         self.room = create_object("typeclasses.rooms.Room", key="CPHandlerRoom", nohome=True)
-        self.char = CharacterFactory(location=self.room)
+        self.char = CharacterSheetFactory().character
+        self.char.location = self.room
         self.start = Position.objects.create(room=self.room, name="start")
         place_in_position(self.char, self.start)
         self.consequence = ConsequenceFactory()
@@ -110,7 +112,8 @@ class MoveToPositionHandlerTests(TestCase):
         from evennia import create_object
 
         self.room = create_object("typeclasses.rooms.Room", key="MTHandlerRoom", nohome=True)
-        self.char = CharacterFactory(location=self.room)
+        self.char = CharacterSheetFactory().character
+        self.char.location = self.room
         self.other = CharacterFactory(location=self.room)
         self.actor_pos = Position.objects.create(room=self.room, name="actor_spot")
         self.other_pos = Position.objects.create(room=self.room, name="other_spot")
@@ -296,7 +299,8 @@ class SeverEdgeHandlerTests(TestCase):
         from world.areas.positioning.services import connect_positions
 
         self.room = create_object("typeclasses.rooms.Room", key="SEHandlerRoom", nohome=True)
-        self.char = CharacterFactory(location=self.room)
+        self.char = CharacterSheetFactory().character
+        self.char.location = self.room
         self.pos_a = Position.objects.create(room=self.room, name="courtyard")
         self.pos_b = Position.objects.create(room=self.room, name="gate")
         connect_positions(self.pos_a, self.pos_b)
@@ -350,7 +354,8 @@ class ConnectEdgeHandlerTests(TestCase):
         from evennia import create_object
 
         self.room = create_object("typeclasses.rooms.Room", key="CEHandlerRoom", nohome=True)
-        self.char = CharacterFactory(location=self.room)
+        self.char = CharacterSheetFactory().character
+        self.char.location = self.room
         self.pos_a = Position.objects.create(room=self.room, name="tower")
         self.pos_b = Position.objects.create(room=self.room, name="bridge")
         place_in_position(self.char, self.pos_a)
@@ -404,7 +409,8 @@ class GrantFlightHandlerTests(TestCase):
 
         AerialPropertyFactory()
         self.room = create_object("typeclasses.rooms.Room", key="GFHandlerRoom", nohome=True)
-        self.char = CharacterFactory(location=self.room)
+        self.char = CharacterSheetFactory().character
+        self.char.location = self.room
         self.ground = Position.objects.create(
             room=self.room, name="ground", kind=PositionKind.PRIMARY
         )
@@ -445,7 +451,8 @@ class RemoveFlightHandlerTests(TestCase):
 
         AerialPropertyFactory()
         self.room = create_object("typeclasses.rooms.Room", key="RFHandlerRoom", nohome=True)
-        self.char = CharacterFactory(location=self.room)
+        self.char = CharacterSheetFactory().character
+        self.char.location = self.room
         self.ground = Position.objects.create(
             room=self.room, name="ground", kind=PositionKind.PRIMARY
         )
@@ -499,7 +506,8 @@ class GatingFarSideEffectTests(TestCase):
         from evennia import create_object
 
         self.room = create_object("typeclasses.rooms.Room", key="GFSRoom", nohome=True)
-        self.char = CharacterFactory(location=self.room)
+        self.char = CharacterSheetFactory().character
+        self.char.location = self.room
         self.courtyard = Position.objects.create(room=self.room, name="courtyard")
         self.balcony = Position.objects.create(room=self.room, name="balcony")
         place_in_position(self.char, self.courtyard)
@@ -571,7 +579,8 @@ class GatedEdgeCrossingIntegrationTests(TestCase):
         from world.traits.factories import CheckOutcomeFactory
 
         self.room = create_object("typeclasses.rooms.Room", key="GECRoom", nohome=True)
-        self.char = CharacterFactory(location=self.room)
+        self.char = CharacterSheetFactory().character
+        self.char.location = self.room
         self.courtyard = Position.objects.create(room=self.room, name="courtyard_gec")
         self.balcony = Position.objects.create(room=self.room, name="balcony_gec")
         place_in_position(self.char, self.courtyard)

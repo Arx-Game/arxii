@@ -29,9 +29,8 @@ from world.magic.factories import (
 
 class PerformRitualActionTouchstoneTests(TestCase):
     def setUp(self) -> None:
-        self.character = CharacterSheetFactory().character
-        self.sheet = CharacterSheetFactory(character=self.character)
-        self.character = self.sheet
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.resonance = ResonanceFactory(name="Praedari")
         self.tier = ResonanceTierFactory(name="Faint", tier_level=1)
         CharacterResonanceFactory(character_sheet=self.sheet, resonance=self.resonance)

@@ -24,7 +24,6 @@ class FashionPipelineTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import CharacterFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.items.constants import BodyRegion, EquipmentLayer
         from world.items.factories import (
@@ -66,7 +65,7 @@ class FashionPipelineTests(TestCase):
         )
 
         # Character wearing the item.
-        cls.character = CharacterFactory(db_key="PipelineChar")
+        cls.character = CharacterSheetFactory(character__db_key="PipelineChar").character
         cls.equipped = EquippedItemFactory(
             character=cls.character.sheet_data,
             item_instance=cls.item,

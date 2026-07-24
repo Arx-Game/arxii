@@ -835,8 +835,8 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
 
         # --- Caster: CharacterSheet + CharacterAura + CharacterAnima ---
         self.anima = CharacterAnimaFactory(current=20, maximum=20)
-        self.character = self.anima.character
-        CharacterEngagementFactory(character=self.character.sheet_data)
+        self.character = self.anima.character.character
+        CharacterEngagementFactory(character=self.anima.character)
         # Place character in the room
         self.character.db_location = self.room_obj
         self.character.save(update_fields=["db_location"])

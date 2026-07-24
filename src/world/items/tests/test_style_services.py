@@ -5,6 +5,7 @@ from unittest import mock
 
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.exceptions import StyleAlreadyAttached, StyleCapacityExceeded
 from world.items.models import ItemStyle
@@ -16,7 +17,7 @@ class AttachStyleToItemTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from evennia_extensions.factories import AccountFactory
         from world.items.factories import (
             EquippedItemFactory,
             ItemInstanceFactory,
@@ -37,7 +38,7 @@ class AttachStyleToItemTests(TestCase):
         cls.style_b = StyleFactory(name="StyleB")
 
         # Build a character that wears item_cap2 so we can test cache invalidation.
-        cls.character = CharacterFactory(db_key="StyleTestChar")
+        cls.character = CharacterSheetFactory(character__db_key="StyleTestChar").character
         TemplateSlotFactory(
             template=cls.template_cap2,
             body_region=BodyRegion.TORSO,

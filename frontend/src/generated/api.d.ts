@@ -24753,6 +24753,7 @@ export interface components {
     /** @description Pending application surfaced to the overseeing GM. */
     GMApplicationQueue: {
       readonly id: number;
+      /** @description The character this sheet belongs to */
       readonly character: number;
       readonly character_key: string;
       readonly applicant_username: string;
@@ -32852,6 +32853,7 @@ export interface components {
       readonly category: components['schemas']['PetitionCategoryEnum'];
       readonly category_display: string;
       readonly scene: number | null;
+      /** @description The character this sheet belongs to */
       readonly subject_character: number | null;
       /** @description Short and specific — this is an emergency line. */
       readonly description: string;

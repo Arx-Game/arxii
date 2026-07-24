@@ -60,8 +60,8 @@ class ControlPenaltyIntegrationTests(TestCase):
 
     def _make_caster(self) -> object:
         anima = CharacterAnimaFactory(current=50, maximum=50)
-        character = anima.character
-        CharacterEngagementFactory(character=character.sheet_data)
+        character = anima.character.character
+        CharacterEngagementFactory(character=anima.character)
         return character, anima
 
     def test_control_penalty_raises_effective_anima_cost(self) -> None:

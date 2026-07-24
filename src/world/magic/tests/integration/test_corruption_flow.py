@@ -610,15 +610,16 @@ class FullCastPipelineCorruptionTests(TestCase):
 
     def test_no_sheet_character_skips_corruption_silently(self) -> None:
         """Character without a CharacterSheet → cast succeeds, no corruption attempted."""
-        # Build an ObjectDB character directly — no CharacterSheet row.
+        # Build an ObjectDB character directly — no CharacterSheet row. Anima is
+        # sheet-anchored now, so a sheet-less caster can only cast a zero-cost
+        # technique (deduct_anima early-returns before the row lookup).
         _resonance, _gift, technique = _make_abyssal_gift_and_technique(
-            intensity=2, control=10, anima_cost=2, level=1
+            intensity=2, control=10, anima_cost=0, level=1
         )
         character = ObjectDBFactory(
             db_key="NPCTestChar",
             db_typeclass_path="typeclasses.characters.Character",
         )
-        CharacterAnimaFactory(character=character.sheet_data, current=20, maximum=20)
 
         result = use_technique(
             character=character,

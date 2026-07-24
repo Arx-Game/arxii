@@ -14,7 +14,6 @@ damage but the reactive anima cost is billed to the CASTER, never the ally.
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import ParticipantStatus
@@ -37,8 +36,8 @@ class AllyWardReactiveCostTests(TestCase):
         ensure_force_field_content()
         template = ConditionTemplate.objects.get(name=FORCE_FIELD_CONDITION_NAME)
 
-        caster = CharacterFactory()
-        ally = CharacterFactory()
+        caster = CharacterSheetFactory().character
+        ally = CharacterSheetFactory().character
         caster_anima = CharacterAnimaFactory(character=caster.sheet_data, current=10, maximum=10)
         ally_anima = CharacterAnimaFactory(character=ally.sheet_data, current=10, maximum=10)
 
@@ -92,8 +91,8 @@ class AllyWardReactiveCostTests(TestCase):
         ensure_force_field_content()
         template = ConditionTemplate.objects.get(name=FORCE_FIELD_CONDITION_NAME)
 
-        caster = CharacterFactory()
-        ally = CharacterFactory()
+        caster = CharacterSheetFactory().character
+        ally = CharacterSheetFactory().character
         CharacterAnimaFactory(character=caster.sheet_data, current=0, maximum=10)
         ally_anima = CharacterAnimaFactory(character=ally.sheet_data, current=10, maximum=10)
 

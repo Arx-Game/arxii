@@ -74,7 +74,12 @@ class Character(ObjectParent, DefaultCharacter):
     @property
     def form_state(self):
         """The CharacterFormState row; raises where a missing row is a hard bug."""
-        return self.sheet_data.form_state
+        from world.forms.models import CharacterFormState
+
+        sheet = self.character_sheet
+        if sheet is None:
+            raise CharacterFormState.DoesNotExist
+        return sheet.form_state
 
     @property
     def anima_or_none(self):
@@ -84,15 +89,30 @@ class Character(ObjectParent, DefaultCharacter):
 
     @property
     def anima(self):
-        return self.sheet_data.anima
+        from world.magic.models import CharacterAnima
+
+        sheet = self.character_sheet
+        if sheet is None:
+            raise CharacterAnima.DoesNotExist
+        return sheet.anima
 
     @property
     def aura(self):
-        return self.sheet_data.aura
+        from world.magic.models import CharacterAura
+
+        sheet = self.character_sheet
+        if sheet is None:
+            raise CharacterAura.DoesNotExist
+        return sheet.aura
 
     @property
     def engagement(self):
-        return self.sheet_data.engagement
+        from world.mechanics.engagement import CharacterEngagement
+
+        sheet = self.character_sheet
+        if sheet is None:
+            raise CharacterEngagement.DoesNotExist
+        return sheet.engagement
 
     # Example typeclass defaults for item_data fallbacks
     # These provide sensible defaults when data objects don't exist

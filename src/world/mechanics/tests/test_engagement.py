@@ -3,6 +3,7 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.constants import EngagementType
 from world.mechanics.factories import CharacterEngagementFactory
 
@@ -54,7 +55,7 @@ class EngagementLifecycleServiceTests(TestCase):
     def setUp(self):
         from evennia import create_object
 
-        self.character = create_object("typeclasses.characters.Character", key="Engager")
+        self.character = CharacterSheetFactory(character__db_key="Engager").character
         self.room = create_object("typeclasses.rooms.Room", key="eng-room", nohome=True)
 
     def test_begin_engagement_creates_combat_row(self):

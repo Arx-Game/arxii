@@ -53,10 +53,8 @@ class PickUpTests(TestCase):
             db_key="PickUpTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.character = CharacterFactory(
-            db_key="PickUpTestChar",
-            location=self.room,
-        )
+        self.character = CharacterSheetFactory(character__db_key="PickUpTestChar").character
+        self.character.location = self.room
         self.character.db_account = self.account
         self.character.save()
         self.sheet = CharacterSheetFactory(character=self.character)
@@ -188,10 +186,8 @@ class DropTests(TestCase):
             db_key="DropTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.character = CharacterFactory(
-            db_key="DropTestChar",
-            location=self.room,
-        )
+        self.character = CharacterSheetFactory(character__db_key="DropTestChar").character
+        self.character.location = self.room
         self.character.db_account = self.account
         self.character.save()
 
@@ -385,10 +381,8 @@ class EquipTests(TestCase):
             db_key="EquipTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.character = CharacterFactory(
-            db_key="EquipTestChar",
-            location=self.room,
-        )
+        self.character = CharacterSheetFactory(character__db_key="EquipTestChar").character
+        self.character.location = self.room
         self.character.db_account = self.account
         self.character.save()
         self.sheet = CharacterSheetFactory(character=self.character)
@@ -534,10 +528,8 @@ class UnequipTests(TestCase):
             db_key="UnequipTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.character = CharacterFactory(
-            db_key="UnequipTestChar",
-            location=self.room,
-        )
+        self.character = CharacterSheetFactory(character__db_key="UnequipTestChar").character
+        self.character.location = self.room
         self.character.db_account = self.account
         self.character.save()
         self.sheet = CharacterSheetFactory(character=self.character)
@@ -619,10 +611,8 @@ class PutInTests(TestCase):
             db_key="PutInTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.character = CharacterFactory(
-            db_key="PutInTestChar",
-            location=self.room,
-        )
+        self.character = CharacterSheetFactory(character__db_key="PutInTestChar").character
+        self.character.location = self.room
         self.character.db_account = self.account
         self.character.save()
 
@@ -760,10 +750,8 @@ class TakeOutTests(TestCase):
             db_key="TakeOutTestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        self.character = CharacterFactory(
-            db_key="TakeOutTestChar",
-            location=self.room,
-        )
+        self.character = CharacterSheetFactory(character__db_key="TakeOutTestChar").character
+        self.character.location = self.room
         self.character.db_account = self.account
         self.character.save()
         # #1909 gate reads the taker's sheet_data — every acting character has one.

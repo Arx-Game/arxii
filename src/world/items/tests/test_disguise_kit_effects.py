@@ -108,11 +108,11 @@ class UseItemDisguiseKitDispatchTests(TestCase):
 
         character = CharacterFactory()
         CharacterSheetFactory(character=character)
-        true_form = CharacterFormFactory(character=character, form_type=FormType.TRUE)
+        true_form = CharacterFormFactory(character=character.sheet_data, form_type=FormType.TRUE)
         CharacterFormValueFactory(form=true_form, trait=self.hair, option=self.red)
         CharacterFormStateFactory(character=character.sheet_data, active_form=true_form)
         disguise = CharacterFormFactory(
-            character=character, form_type=FormType.DISGUISE, is_player_created=True
+            character=character.sheet_data, form_type=FormType.DISGUISE, is_player_created=True
         )
         CharacterFormValueFactory(form=disguise, trait=self.hair, option=self.blonde)
         apply_disguise(

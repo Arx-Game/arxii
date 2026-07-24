@@ -3,6 +3,7 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype, OwnershipEventType
 from world.items.factories import (
     InteractionTypeFactory,
@@ -280,9 +281,7 @@ class EquippedItemTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import CharacterFactory
-
-        cls.character = CharacterFactory(db_key="EquipTestChar")
+        cls.character = CharacterSheetFactory(character__db_key="EquipTestChar").character
 
     def test_equip_item(self) -> None:
         """An item can be equipped at a region/layer."""
@@ -320,11 +319,10 @@ class OwnershipEventTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import CharacterFactory
         from world.character_sheets.factories import CharacterSheetFactory
 
-        cls.sheet1 = CharacterSheetFactory(character=CharacterFactory(db_key="owner1"))
-        cls.sheet2 = CharacterSheetFactory(character=CharacterFactory(db_key="owner2"))
+        cls.sheet1 = CharacterSheetFactory(character__db_key="owner1")
+        cls.sheet2 = CharacterSheetFactory(character__db_key="owner2")
 
     def test_creation_event(self) -> None:
         """Can log item creation."""

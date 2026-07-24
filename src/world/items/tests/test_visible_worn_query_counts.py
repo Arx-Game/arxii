@@ -150,7 +150,8 @@ class VisibleWornServiceQueryCountTests(_SharedSetupMixin, TestCase):
         template slots in one go — then the service runs zero further queries.
         """
         # Use a fresh character so the handler is cold.
-        cold_character = CharacterFactory(db_key="QCColdChar", location=self.room)
+        cold_character = CharacterSheetFactory(character__db_key="QCColdChar").character
+        cold_character.location = self.room
         # Equip one item to give the handler something to load.
         template = ItemTemplateFactory(name="QCColdShirt")
         TemplateSlotFactory(

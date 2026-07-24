@@ -319,7 +319,9 @@ class MyActiveStoriesGlobalScopeTest(APITestCase):
         cls.story = StoryFactory(scope=StoryScope.GLOBAL)
         cls.progress = GlobalStoryProgressFactory(story=cls.story, current_episode=None)
         # Link character to story via StoryParticipation
-        cls.participation = StoryParticipationFactory(story=cls.story, character=cls.char)
+        cls.participation = StoryParticipationFactory(
+            story=cls.story, character=cls.char.sheet_data
+        )
 
     def test_global_story_appears_in_global_stories(self):
         """Account with StoryParticipation sees the global story."""

@@ -96,7 +96,7 @@ def stage_and_assert_affordable(
     # --- Anima check ---
     anima_cost = recipe.anima_cost
     if anima_cost > 0:
-        anima_row = CharacterAnima.objects.filter(character=crafter_character).first()
+        anima_row = CharacterAnima.objects.filter(character_id=crafter_character.pk).first()
         current_anima = anima_row.current if anima_row is not None else 0
         if current_anima < anima_cost:
             msg = f"You need {anima_cost} anima but only have {current_anima}."
@@ -249,7 +249,7 @@ def _deduct_anima(crafter_character: ObjectDB, anima_to_spend: int) -> None:
     from world.magic.models import CharacterAnima  # noqa: PLC0415
     from world.magic.services.anima import deduct_anima  # noqa: PLC0415
 
-    anima_row = CharacterAnima.objects.filter(character=crafter_character).first()
+    anima_row = CharacterAnima.objects.filter(character_id=crafter_character.pk).first()
     current_anima = anima_row.current if anima_row is not None else 0
     if current_anima < anima_to_spend:
         msg = "Anima was spent elsewhere before crafting completed."

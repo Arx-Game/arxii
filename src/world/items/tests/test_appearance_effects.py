@@ -185,7 +185,7 @@ class PCStylistTests(TestCase):
         self.stylist = self.stylist_sheet.character
         self.client_sheet = CharacterSheetFactory()
         self.client_char = self.client_sheet.character
-        self.client_form = CharacterFormFactory(character=self.client_char)
+        self.client_form = CharacterFormFactory(character=self.client_sheet)
         CharacterFormValueFactory(
             form=self.client_form,
             trait=self.trait,
@@ -243,7 +243,7 @@ class PCStylistTests(TestCase):
 
     def test_styling_self_unaffected_by_gate(self) -> None:
         """Passing target=user behaves as self-makeover (no consent check)."""
-        stylist_form = CharacterFormFactory(character=self.stylist)
+        stylist_form = CharacterFormFactory(character=self.stylist_sheet)
         CharacterFormValueFactory(form=stylist_form, trait=self.trait, option=self.black)
         self._tenure_for(self.stylist_sheet)
         result = use_item(item_instance=self.item, user=self.stylist, target=self.stylist)

@@ -215,7 +215,9 @@ class TutorialChainJourneyE2ETests(TestCase):
         )
         self.assertTrue(result.success, result.message)
         return (
-            MissionInstance.objects.filter(participants__character=self.pc, source_offer=offer)
+            MissionInstance.objects.filter(
+                participants__character_id=self.pc.pk, source_offer=offer
+            )
             .order_by("-pk")
             .first()
         )

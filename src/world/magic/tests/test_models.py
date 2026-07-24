@@ -5,7 +5,6 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from actions.factories import ConsequencePoolFactory
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import GiftKind, TechniqueCategory
 from world.magic.factories import (
@@ -78,10 +77,10 @@ class CharacterAuraModelTests(TestCase):
 
     def test_aura_validation_requires_100_percent(self):
         """Test that aura validation requires percentages to sum to 100."""
-        character2 = CharacterFactory()
+        character2 = CharacterSheetFactory()
         with self.assertRaises(ValidationError):
             CharacterAura.objects.create(
-                character=character2.sheet_data,
+                character=character2,
                 celestial=Decimal("50.00"),
                 primal=Decimal("50.00"),
                 abyssal=Decimal("50.00"),  # Total is 150, should fail
@@ -246,10 +245,10 @@ class CharacterAnimaModelTests(TestCase):
 
     def test_anima_current_cannot_exceed_maximum(self):
         """Test that current anima cannot exceed maximum."""
-        character2 = CharacterFactory()
+        character2 = CharacterSheetFactory()
         with self.assertRaises(ValidationError):
             CharacterAnima.objects.create(
-                character=character2.sheet_data,
+                character=character2,
                 current=15,
                 maximum=10,
             )

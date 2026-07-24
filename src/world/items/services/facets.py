@@ -69,7 +69,7 @@ def attach_facet_to_item(
     # a fresh Python object, meaning .equipped_items would be a different handler
     # instance that doesn't share the in-process cache.
     for equipped in EquippedItem.objects.filter(item_instance=item_instance):
-        equipped.character.equipped_items.invalidate()
+        equipped.character.character.equipped_items.invalidate()
     return row
 
 
@@ -87,4 +87,4 @@ def remove_facet_from_item(*, item_facet: ItemFacet) -> None:
         del instance.cached_item_facets
     # Same select_related caveat — see attach_facet_to_item.
     for equipped in EquippedItem.objects.filter(item_instance=instance):
-        equipped.character.equipped_items.invalidate()
+        equipped.character.character.equipped_items.invalidate()

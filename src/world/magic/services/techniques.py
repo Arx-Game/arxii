@@ -1035,7 +1035,7 @@ def _charge_cast_pull(
     return pull_flat_bonus, effective_power, pull_result.resolved_effects
 
 
-def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibilities
+def use_technique(  # noqa: PLR0913, PLR0915 — orchestrator; multiple small responsibilities
     *,
     character: ObjectDB,
     technique: Technique,
@@ -1117,13 +1117,15 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     if control_penalty:
         stats = replace(stats, control=max(stats.control - control_penalty, 0))
 
-    # Step 2: Calculate effective anima cost
-    anima = CharacterAnima.objects.get(character_id=character.pk)
+    # Step 2: Calculate effective anima cost. A sheet-less caster (GM puppet,
+    # companion) holds no anima row — treat as zero available.
+    anima = CharacterAnima.objects.filter(character_id=character.pk).first()
+    anima_current = anima.current if anima is not None else 0
     cost = calculate_effective_anima_cost(
         base_cost=technique.anima_cost,
         runtime_intensity=stats.intensity,
         runtime_control=stats.control,
-        current_anima=anima.current,
+        current_anima=anima_current,
         strain_commitment=strain_commitment,
         lethal=lethal,
     )
@@ -1136,7 +1138,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
         base_cost=technique.anima_cost,
         runtime_intensity=base_stats.intensity,
         runtime_control=base_stats.control,
-        current_anima=anima.current,
+        current_anima=anima_current,
         strain_commitment=strain_commitment,
         lethal=lethal,
     )

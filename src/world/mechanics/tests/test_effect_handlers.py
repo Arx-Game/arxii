@@ -69,7 +69,7 @@ class MagicalScarsHandlerTests(TestCase):
     def setUpTestData(cls) -> None:
         super().setUpTestData()
         # Character with no CharacterSheet — exercises the skip path.
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.consequence = ConsequenceFactory()
         cls.effect = ConsequenceEffectFactory(
             consequence=cls.consequence,
@@ -90,7 +90,7 @@ class DealDamageHandlerTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.character = CharacterFactory(db_key="damage_target")
+        cls.character = CharacterSheetFactory(character__db_key="damage_target").character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.vitals = CharacterVitals.objects.create(
             character_sheet=cls.sheet,
@@ -335,7 +335,7 @@ class CaptureHandlerTests(TestCase):
         assert result.applied
         instance = MissionInstance.objects.get(template__name="cell-loop")
         assert instance.participants.filter(
-            character=character,
+            character_id=character.pk,
             is_contract_holder=True,
         ).exists()
 

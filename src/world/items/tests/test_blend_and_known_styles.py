@@ -40,7 +40,7 @@ class BlendTests(TestCase):
 
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
-        self.form = CharacterFormFactory(character=self.character)
+        self.form = CharacterFormFactory(character=self.sheet)
         CharacterFormValueFactory(form=self.form, trait=self.trait, option=self.green)
 
     def _item(self, template):
@@ -96,7 +96,7 @@ class KnownStyleTests(TestCase):
         )
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
-        self.form = CharacterFormFactory(character=self.character)
+        self.form = CharacterFormFactory(character=self.sheet)
         CharacterFormValueFactory(form=self.form, trait=self.trait, option=self.loose)
         self.item = ItemInstanceFactory(
             template=self.kit, holder_character_sheet=self.sheet, charges=0
@@ -119,7 +119,7 @@ class KnownStyleTests(TestCase):
         learn_style(self.sheet, self.coils, taught_by_label="Test")
         client_sheet = CharacterSheetFactory()
         client = client_sheet.character
-        client_form = CharacterFormFactory(character=client)
+        client_form = CharacterFormFactory(character=client_sheet)
         CharacterFormValueFactory(form=client_form, trait=self.trait, option=self.loose)
 
         use_item(

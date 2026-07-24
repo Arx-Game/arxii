@@ -269,7 +269,7 @@ def test_alternate_self_optional_facets_default_none():
 
 def test_active_alternate_self_holds_return_anchors():
     alt = AlternateSelfFactory()
-    true_form = CharacterFormFactory(character=alt.character.character, form_type=FormType.TRUE)
+    true_form = CharacterFormFactory(character=alt.character, form_type=FormType.TRUE)
     active = ActiveAlternateSelfFactory(
         character=alt.character, alternate_self=alt, return_form=true_form
     )

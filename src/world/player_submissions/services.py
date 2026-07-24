@@ -173,7 +173,7 @@ def submit_petition(
         category=category,
         description=description[:1000],
         scene=scene,
-        subject_character=subject_character,
+        subject_character=(subject_character.sheet_data if subject_character is not None else None),
     )
 
 
