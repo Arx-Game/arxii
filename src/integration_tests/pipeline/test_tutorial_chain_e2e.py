@@ -312,7 +312,7 @@ class TutorialChainJourneyE2ETests(TestCase):
         ordinal = next(i for i, p in enumerate(postings, start=1) if p.template_id == self.t4.pk)
         _run(self.pc, f"take {ordinal}")  # the `take` surface
         instance_t4 = (
-            MissionInstance.objects.filter(participants__character=self.pc, template=self.t4)
+            MissionInstance.objects.filter(participants__character_id=self.pc.pk, template=self.t4)
             .order_by("-pk")
             .first()
         )
@@ -335,7 +335,9 @@ class TutorialChainJourneyE2ETests(TestCase):
         summons_result = respond_to_summons(summons, self.pc, accept=True)
         self.assertTrue(summons_result.success, summons_result.message)
         instance_t5 = (
-            MissionInstance.objects.filter(participants__character=self.pc, source_offer=t5_offer)
+            MissionInstance.objects.filter(
+                participants__character_id=self.pc.pk, source_offer=t5_offer
+            )
             .order_by("-pk")
             .first()
         )
@@ -423,7 +425,9 @@ class TutorialChainJourneyE2ETests(TestCase):
         )
         self.assertTrue(second_attempt.success, second_attempt.message)
         instance_t7 = (
-            MissionInstance.objects.filter(participants__character=self.pc, source_offer=t7_offer)
+            MissionInstance.objects.filter(
+                participants__character_id=self.pc.pk, source_offer=t7_offer
+            )
             .order_by("-pk")
             .first()
         )
