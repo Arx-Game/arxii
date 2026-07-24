@@ -37,6 +37,11 @@ class ContentExportError(Exception):
 #: are identity-stable (no pk churn) and round-trip through ``load_entries``.
 CONTENT_MODELS: frozenset[str] = frozenset(
     {
+        # achievements
+        "achievements.statdefinition",
+        # areas
+        "areas.rampartelementprofile",
+        "areas.rampartelementresistance",
         # character_creation
         "character_creation.beginnings",
         "character_creation.beginningtradition",
@@ -57,6 +62,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "classes.pathaspect",
         # clues
         "clues.clue",
+        # combat
+        "combat.threatpool",
+        "combat.threatpoolentry",
         # codex
         "codex.codexcategory",
         "codex.codexentry",
@@ -73,18 +81,22 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "conditions.conditionconditioninteraction",
         "conditions.conditiondamageinteraction",
         "conditions.conditiondamageovertime",
+        "conditions.conditionmodifiereffect",
         "conditions.conditionresistancemodifier",
         "conditions.conditionstage",
         "conditions.conditiontemplate",
         "conditions.damagetype",
         # covenants
         "covenants.covenantrole",
+        "covenants.covenantrite",
+        "covenants.covenantriterolepackage",
         "covenants.covenantroleactionscaling",
         "covenants.covenantrolebonus",
         "covenants.covenantroledefenseprofile",
         "covenants.covenantroletechniquespecialty",
         "covenants.geararchetypecompatibility",
         "covenants.insighttableentry",
+        "covenants.mentorbondconfig",
         "covenants.weaknesspoolentry",
         "covenants.vowsituationalperk",
         "covenants.vowsituationalperkrung",
@@ -113,8 +125,11 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "items.itemtemplateproperty",
         # magic
         "magic.affinity",
+        "magic.compromiseacttype",
+        "magic.dramaticmomenttype",
         "magic.effecttype",
         "magic.facet",
+        "magic.fallredemptionconfig",
         "magic.gift",
         "magic.glimpsetag",
         "magic.glimpsetagdistinctionsuggestion",
@@ -123,6 +138,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.portalanchorkind",
         "magic.resonance",
         "magic.restriction",
+        "magic.resonanceconversion",
+        "magic.ritual",
+        "magic.soultetherconfig",
         "magic.technique",
         "magic.techniqueappliedcondition",
         "magic.techniquecapabilitygrant",
@@ -132,6 +150,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.techniqueoutcomemodifier",
         "magic.techniqueremovedcondition",
         "magic.techniquestyle",
+        "magic.threadweavingunlock",
         "magic.tradition",
         "magic.traditiongiftgrant",
         # mechanics
@@ -155,6 +174,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "missions.missionrenownaward",
         # realms
         "realms.realm",
+        # relationships
+        "relationships.relationshiptrack",
         # skills
         "skills.skill",
         # species

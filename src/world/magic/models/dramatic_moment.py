@@ -11,16 +11,23 @@ from django.db import models
 from django.db.models import Q
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.constants import SuggestionStatus
 from world.societies.renown_config import RenownAwardConfig
 
 
-class DramaticMomentType(RenownAwardConfig):
+class DramaticMomentType(NaturalKeyMixin, RenownAwardConfig):
     """Staff-authored lookup describing a type of dramatic moment.
 
     Staff tags a character in a scene with a DramaticMomentType to fire both
     a resonance grant and a renown award in one atomic service call.
     """
+
+    class NaturalKeyConfig:
+        fields = ["label"]
+        dependencies = ["magic.Resonance"]
+
+    objects = NaturalKeyManager()
 
     label = models.CharField(
         max_length=100,

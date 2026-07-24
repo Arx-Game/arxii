@@ -14,6 +14,7 @@ from evennia.accounts.models import AccountDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.constants import SoulTetherRole
 from world.relationships.constants import (
     DECAY_DAYS,
@@ -78,7 +79,7 @@ class RelationshipCondition(SharedMemoryModel):
         return list(self.gates_modifiers.all())
 
 
-class RelationshipTrack(SharedMemoryModel):
+class RelationshipTrack(NaturalKeyMixin, SharedMemoryModel):
     """
     A named axis along which a relationship can develop.
 
@@ -86,6 +87,11 @@ class RelationshipTrack(SharedMemoryModel):
     such as Trust, Respect, Rivalry, or Fear. Each track has a sign indicating
     whether it represents positive or negative feelings.
     """
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    objects = NaturalKeyManager()
 
     name = models.CharField(
         max_length=100,

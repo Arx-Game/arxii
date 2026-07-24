@@ -24,13 +24,18 @@ from world.achievements.constants import (
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 
 
-class StatDefinition(SharedMemoryModel):
+class StatDefinition(NaturalKeyMixin, SharedMemoryModel):
     """
     Defines a trackable stat with display metadata.
 
     Normalizes stat keys so they can't get out of sync between
     StatTracker and AchievementRequirement. Staff-defined.
     """
+
+    class NaturalKeyConfig:
+        fields = ["key"]
+
+    objects = NaturalKeyManager()
 
     key = models.CharField(
         max_length=200,

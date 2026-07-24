@@ -12,10 +12,11 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.constants import TargetKind
 
 
-class ThreadWeavingUnlock(SharedMemoryModel):
+class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
     """Authored unlock catalog. Discriminator + typed-FK; one unlock per anchor.
 
     No name/description: ``display_name`` derives from the discriminator FK
@@ -26,6 +27,12 @@ class ThreadWeavingUnlock(SharedMemoryModel):
 
     Spec A §2.1 lines 313-429.
     """
+
+    class NaturalKeyConfig:
+        fields = ["target_kind", "unlock_trait", "unlock_gift", "unlock_track"]
+        dependencies = ["traits.Trait", "magic.Gift", "relationships.RelationshipTrack"]
+
+    objects = NaturalKeyManager()
 
     target_kind = models.CharField(
         max_length=32,

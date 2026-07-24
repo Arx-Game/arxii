@@ -11,6 +11,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.descriptors import ReverseOneToOneOrNone
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.constants import ParticipationRule, RitualExecutionKind, TargetKind
 from world.magic.models.ritual_check_config import RitualCheckConfig
 
@@ -47,7 +48,7 @@ class ImbuingProseTemplate(SharedMemoryModel):
         return f"ImbuingProse({res} / {tk})"
 
 
-class Ritual(SharedMemoryModel):
+class Ritual(NaturalKeyMixin, SharedMemoryModel):
     """A ritual: authored magical procedure executed via service, flow, or scene action.
 
     Spec A §4.3. Each Ritual is dispatched via one of three modes:
@@ -59,6 +60,12 @@ class Ritual(SharedMemoryModel):
     (SCENE_ACTION requires a RitualCheckConfig; other kinds may carry one)
     is enforced in clean() only since DB CHECK constraints cannot span tables.
     """
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+        dependencies = ["flows.FlowDefinition"]
+
+    objects = NaturalKeyManager()
 
     # Reverse-OneToOne safe accessor (#2386): missing row -> None.
     check_config_or_none = ReverseOneToOneOrNone("check_config")
