@@ -490,6 +490,9 @@ class UseItemAction(Action):
             option_id = int(option_raw) if option_raw is not None else None
         except (TypeError, ValueError):
             return ActionResult(success=False, message="option_id must be a number.")
+        # #2632 — blend adds the color (green dye onto black = Black-Green)
+        # instead of replacing; only composite-capable traits accept it.
+        blend = bool(kwargs.get("blend"))
 
         try:
             result = use_item(
@@ -498,6 +501,7 @@ class UseItemAction(Action):
                 target=target,
                 descriptor=descriptor,
                 option_id=option_id,
+                blend=blend,
             )
         except ItemError as exc:
             return ActionResult(success=False, message=exc.user_message)

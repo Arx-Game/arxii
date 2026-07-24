@@ -46,6 +46,18 @@ class NonCosmeticTraitError(ValueError):
     user_message = "That feature can't be changed cosmetically."
 
 
+class TraitNotBlendableError(ValueError):
+    """Raised when a blend is attempted on a trait with no composite option (#2632)."""
+
+    user_message = "Those can't be blended together."
+
+
+class StyleNotKnownError(ValueError):
+    """Raised when the acting character doesn't know an exotic option (#2632)."""
+
+    user_message = "You don't know how to produce that look."
+
+
 class RevertBlockedError(ValueError):
     """Raised when a character tries to revert an alternate self while not in
     control (rage/possession/charm/mind-control — any ``alters_behavior``
@@ -528,6 +540,30 @@ def _true_form(character) -> CharacterForm:
     return CharacterForm.objects.get(character=character, form_type=FormType.TRUE)
 
 
+def _blend_component(
+    value: CharacterFormValue, trait: FormTrait, new_option: FormTraitOption
+) -> None:
+    """Fold ``new_option`` into ``value`` as a blend component (#2632).
+
+    First blend seeds the current option as the base component, then appends
+    the new color; the value itself moves to the trait's composite option.
+    Blending a color already in the mix is a no-op on components.
+    """
+    from world.forms.models import FormValueComponent  # noqa: PLC0415
+
+    if value.option_id == new_option.id and not value.components.exists():
+        return  # blending a color onto itself: nothing to mix
+    if not value.components.exists():
+        # Seed the base: what the hair/eyes were before this blend.
+        FormValueComponent.objects.create(value=value, option=value.option, sort_order=0)
+    if not value.components.filter(option=new_option).exists():
+        next_order = value.components.count()
+        FormValueComponent.objects.create(value=value, option=new_option, sort_order=next_order)
+    if value.option_id != trait.composite_option_id:
+        value.option = trait.composite_option
+        value.save(update_fields=["option"])
+
+
 def change_appearance(  # noqa: PLR0913
     character,
     trait: FormTrait,
@@ -537,6 +573,7 @@ def change_appearance(  # noqa: PLR0913
     descriptor: str | None = None,
     note: str = "",
     actor_persona: Persona | None = None,
+    blend: bool = False,
 ) -> CharacterFormValue:
     """Cosmetically edit one trait of the character's real form (hair dye, restyle).
 
@@ -544,12 +581,22 @@ def change_appearance(  # noqa: PLR0913
     the natural baseline is preserved, the active persona's descriptor is updated, and
     the change is logged for roster continuity. ``descriptor=None`` leaves the descriptor
     untouched; ``descriptor=""`` clears it (render falls back to the normalized value).
+
+    ``blend=True`` (#2632) ADDS ``new_option`` to the current look instead of
+    replacing it: the value moves to the trait's ``composite_option`` (multihued
+    hair, mismatched eyes) and the ACTUAL components are kept as ordered
+    ``FormValueComponent`` rows — so the normalized layer renders "red-green"
+    (honest under descriptor concealment) rather than the umbrella word alone.
+    A non-blend change clears any components (you dyed over the whole look).
+    Raises ``TraitNotBlendableError`` when the trait has no composite option.
     """
     if not trait.is_cosmetic:
         raise NonCosmeticTraitError
     if new_option.trait_id != trait.id:
         msg = "Option does not belong to this trait"
         raise ValueError(msg)
+    if blend and trait.composite_option_id is None:
+        raise TraitNotBlendableError
 
     form = _true_form(character)
     value, created = CharacterFormValue.objects.get_or_create(
@@ -557,13 +604,22 @@ def change_appearance(  # noqa: PLR0913
         trait=trait,
         defaults={"option": new_option, "natural_option": new_option},
     )
-    if created:
+    if blend and not created:
+        from_option = value.option
+        _blend_component(value, trait, new_option)
+    elif created:
         from_option = None
+        if blend:
+            # Blending onto a bare value: nothing to mix with — the "blend" is
+            # just the color itself; components stay empty.
+            pass
     else:
         from_option = value.option
         if value.option_id != new_option.id:
             value.option = new_option
             value.save(update_fields=["option"])
+        # Full application replaces the whole look — stale components go.
+        value.components.all().delete()
 
     existing = PersonaTraitDescriptor.objects.filter(persona=persona, trait=trait).first()
     from_text = existing.text if existing else ""
@@ -754,10 +810,26 @@ def get_presented_appearance(character, *, pierced: bool = False) -> list[Presen
                 for row in PersonaTraitDescriptor.objects.filter(persona=persona)
             }
 
+    # Blend components (#2632): one query, keyed by value pk — deliberately NOT
+    # a prefetch onto the identity-mapped CharacterFormValue instances. A
+    # blended value renders its ACTUAL components ("Red-Green") as the
+    # normalized form, so descriptor concealment still tells the honest,
+    # witness-visible truth without the distinctive prose.
+    from world.forms.models import FormValueComponent  # noqa: PLC0415
+
+    components_by_value: dict[int, list[str]] = {}
+    for comp in (
+        FormValueComponent.objects.filter(value__form=form)
+        .select_related("option")
+        .order_by("value_id", "sort_order")
+    ):
+        components_by_value.setdefault(comp.value_id, []).append(comp.option.display_name)
+
     presented: list[PresentedTrait] = []
     for value in form.values.select_related("trait", "option").order_by("trait__sort_order"):
         text = descriptors.get(value.trait_id, "")
-        normalized = value.option.display_name
+        component_names = components_by_value.get(value.pk)
+        normalized = "-".join(component_names) if component_names else value.option.display_name
         presented.append(
             PresentedTrait(
                 trait_name=value.trait.name,
@@ -862,3 +934,33 @@ def get_cg_height_bands() -> QuerySet[HeightBand]:
 def get_cg_builds() -> QuerySet[Build]:
     """Get builds available in character creation."""
     return Build.objects.filter(is_cg_selectable=True)
+
+
+# --- Exotic style knowledge (#2632) ---
+
+
+def knows_style(character_sheet, option: FormTraitOption) -> bool:
+    """True when the sheet may produce ``option`` (ungated options always may)."""
+    from world.forms.models import CharacterKnownStyle  # noqa: PLC0415
+
+    if not option.requires_teaching:
+        return True
+    return CharacterKnownStyle.objects.filter(
+        character_sheet=character_sheet, option=option
+    ).exists()
+
+
+def learn_style(character_sheet, option: FormTraitOption, *, taught_by_label: str = "") -> None:
+    """Grant knowledge of an exotic option — 'learned by having it done' (#2632).
+
+    Idempotent. Ungated options are a no-op (nothing to learn).
+    """
+    from world.forms.models import CharacterKnownStyle  # noqa: PLC0415
+
+    if not option.requires_teaching:
+        return
+    CharacterKnownStyle.objects.get_or_create(
+        character_sheet=character_sheet,
+        option=option,
+        defaults={"taught_by_label": taught_by_label},
+    )

@@ -1251,6 +1251,27 @@ def _seed_form_traits(species: Species) -> None:
             trait=trait,
             defaults={"is_available_in_cg": True},
         )
+    _wire_composite_options()
+
+
+#: Trait → the umbrella option blends resolve to (#2632). Wired after options
+#: exist so composite_option can point at the seeded row.
+_COMPOSITE_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("hair_color", "multihued"),
+    ("eye_color", "mismatched"),
+)
+
+
+def _wire_composite_options() -> None:
+    """Point each blendable trait at its umbrella option (idempotent)."""
+    for trait_name, option_name in _COMPOSITE_OPTIONS:
+        trait = FormTrait.objects.filter(name=trait_name).first()
+        if trait is None or trait.composite_option_id is not None:
+            continue
+        option = FormTraitOption.objects.filter(trait=trait, name=option_name).first()
+        if option is not None:
+            trait.composite_option = option
+            trait.save(update_fields=["composite_option"])
 
 
 # ---------------------------------------------------------------------------

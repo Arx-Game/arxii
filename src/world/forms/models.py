@@ -101,6 +101,20 @@ class FormTrait(NaturalKeyMixin, SharedMemoryModel):
             "without magic. Fixed traits (height, species markers) stay False."
         ),
     )
+    composite_option = models.ForeignKey(
+        "forms.FormTraitOption",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="composite_for_traits",
+        help_text=(
+            "The umbrella value blends resolve to (#2632 — hair_color: multihued, "
+            "eye_color: mismatched). Null = this trait does not support blends. "
+            "The blend's actual colors live in FormValueComponent rows, so the "
+            "normalized layer can still say 'red-green' under descriptor "
+            "concealment without the distinctive prose."
+        ),
+    )
 
     objects = NaturalKeyManager()
 
@@ -135,6 +149,15 @@ class FormTraitOption(NaturalKeyMixin, SharedMemoryModel):
         null=True,
         blank=True,
         help_text="Inches added to apparent height when visible (e.g., horns)",
+    )
+    requires_teaching = models.BooleanField(
+        default=False,
+        help_text=(
+            "Exotic option gated on knowing it (#2632 — 'learned/taught, another "
+            "crafting recipe almost'). A choose-at-use cosmetic (Styling Kit) "
+            "refuses it unless the ACTING character holds a CharacterKnownStyle; "
+            "having it done on you (NPC stylist, a knowing PC stylist) teaches it."
+        ),
     )
 
     objects = NaturalKeyManager()
@@ -688,3 +711,76 @@ class AppearanceChangeLog(SharedMemoryModel):
 
     def __str__(self):
         return f"{self.form}: {self.trait.display_name} change"
+
+
+class FormValueComponent(SharedMemoryModel):
+    """One component color/value of a blended trait value (#2632).
+
+    When a ``CharacterFormValue`` sits on its trait's ``composite_option``
+    (multihued hair, mismatched eyes), these rows list the ACTUAL components
+    in order — so the normalized layer can render "red-green" instead of the
+    umbrella word alone. This matters under disguise: descriptor concealment
+    hides the distinctive prose, but "a masked figure with red-green hair" is
+    what a witness genuinely sees, and hiding the components would leak less
+    than reality warrants.
+    """
+
+    value = models.ForeignKey(
+        CharacterFormValue,
+        on_delete=models.CASCADE,
+        related_name="components",
+    )
+    option = models.ForeignKey(
+        FormTraitOption,
+        on_delete=models.PROTECT,
+        related_name="component_of_values",
+        help_text="One actual component of the blend (e.g. 'red').",
+    )
+    sort_order = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Blend order — first is the base/dominant component.",
+    )
+
+    class Meta:
+        unique_together = [["value", "option"]]
+        ordering = ["sort_order", "pk"]
+        verbose_name = "Form Value Component"
+        verbose_name_plural = "Form Value Components"
+
+    def __str__(self):
+        return f"{self.value_id}: {self.option.display_name} (#{self.sort_order})"
+
+
+class CharacterKnownStyle(SharedMemoryModel):
+    """A character knows how to produce an exotic (requires_teaching) option (#2632).
+
+    Learned by having it done: an NPC stylist's exotic service, or a knowing PC
+    stylist applying it to you, grants the row. A choose-at-use cosmetic
+    (Styling Kit) requires the ACTING character to hold one for the option.
+    """
+
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="known_styles",
+    )
+    option = models.ForeignKey(
+        FormTraitOption,
+        on_delete=models.CASCADE,
+        related_name="knowers",
+    )
+    learned_at = models.DateTimeField(auto_now_add=True)
+    taught_by_label = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Display name of who taught it (stylist NPC, a PC stylist).",
+    )
+
+    class Meta:
+        unique_together = [["character_sheet", "option"]]
+        verbose_name = "Character Known Style"
+        verbose_name_plural = "Character Known Styles"
+
+    def __str__(self):
+        return f"sheet {self.character_sheet_id} knows {self.option.display_name}"
