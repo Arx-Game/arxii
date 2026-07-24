@@ -190,6 +190,8 @@ These can be added later without breaking existing trigger content.
 | `FlowStepDefinition` | One step of a flow (set/eval/call/emit/cancel/modify/prompt) | `flow`, `parent`, `action`, `variable_name`, `parameters` (JSON) |
 | `FlowStack` | Per-execution recursion-capped stack | `owner`, `originating_event`, `depth`, `cap` |
 
+All three reactive-layer definition models (`FlowDefinition`, `FlowStepDefinition`, `TriggerDefinition`) carry `NaturalKeyMixin` and are in `CONTENT_MODELS` (#2663), so the lore repo can author the trigger→flow→step wiring as fixtures. Flow step parameters use name-based lookups (not raw PKs) for entity references, keeping fixtures identity-stable across environments.
+
 ### Reactive
 
 | Model | Purpose | Key Fields |

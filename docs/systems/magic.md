@@ -1751,7 +1751,7 @@ grammar is what #2206 made actually reach validation/persistence in combat.
 | `summon_ally(*, payload)` | direct handler | Create a `CombatOpponent` with `allegiance=ALLY`, `summoned_by=caster` |
 | `move_position_on_condition(*, payload, destination_position_id)` | CONDITION_APPLIED adapter | Thin wrapper → `move_position` |
 | `create_obstacle_on_condition(*, payload, ...)` | CONDITION_APPLIED adapter | Thin wrapper → `create_obstacle` |
-| `summon_ally_on_condition(*, payload, threat_pool_id, ...)` | CONDITION_APPLIED adapter | Bridges `ConditionAppliedPayload` (`.target` as bearer/caster) → `summon_ally` |
+| `summon_ally_on_condition(*, payload, threat_pool_name, ...)` | CONDITION_APPLIED adapter | Bridges `ConditionAppliedPayload` (`.target` as bearer/caster) → `summon_ally` |
 | `init_absorb_buffer(*, payload, buffer)` | CONDITION_APPLIED handler | Seeds `ConditionInstance.absorb_remaining` on Aegis Field application |
 
 **Reactive interceptor cost pattern** (ADR-0060):

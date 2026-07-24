@@ -5804,7 +5804,7 @@ Database-driven game logic engine for complex branching sequences, plus the reac
 - **Object States:** `BaseState`, `CharacterState`, `RoomState`, `ExitState` — ephemeral wrappers with permission methods (`can_move`, `can_traverse`) and appearance rendering
 - **Service Functions:** `send_message`, `message_location`, `send_room_state`, `move_object`, `check_exit_traversal`, `traverse_exit`, `get_formatted_description`, `show_inventory` — accept `BaseState` directly (no `FlowExecution` dependency)
 - **Where events are emitted:** `world/combat/services.py` (damage/attack/incap/death), `world/conditions/services.py` (apply/stage-change/remove), `world/magic/services.py` (technique pre-cast/cast/affected), and the typeclass move/examine hooks
-- **Critical Note:** No `FlowDefinition` records exist in the database yet. The reactive layer ships the plumbing; authoring trigger content (e.g., retaliation scars, environmental wards) happens against `ConditionTemplate.reactive_triggers` and similar M2Ms in later scopes.
+- **Critical Note:** `FlowDefinition`/`FlowStepDefinition`/`TriggerDefinition` are content-exportable via `NaturalKeyMixin` + `CONTENT_MODELS` (#2663), so the lore repo can author the trigger→flow→step wiring that `ConditionTemplate.reactive_triggers` references. The `ensure_*` palette seeds in `world/magic/effect_palette_content.py` remain test/E2E fixtures only; real content ships as lore-repo fixtures. Flow step parameters use name-based lookups (e.g. `threat_pool_name`) rather than raw PKs so they are identity-stable across environments.
 - **Source:** `src/flows/`
 - **Details:** [flows.md](flows.md)
 
