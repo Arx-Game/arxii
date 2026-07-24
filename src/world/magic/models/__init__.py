@@ -200,6 +200,7 @@ from world.magic.models.technique_draft import (
     TechniqueDraftCapabilityGrant,
     TechniqueDraftDamageProfile,
     TechniqueDraftRemovedCondition,
+    TechniqueDraftTreatment,
 )
 from world.magic.models.technique_grant import TechniqueGrant
 from world.magic.models.techniques import (
@@ -424,6 +425,7 @@ __all__ = [
     "TechniqueDraftCapabilityGrant",
     "TechniqueDraftDamageProfile",
     "TechniqueDraftRemovedCondition",
+    "TechniqueDraftTreatment",
     # fine-grained technique function tags (#2443)
     "TechniqueFunctionTag",
     "TechniqueFunctionTagManager",
