@@ -120,7 +120,9 @@ class SwitchFormTest(TestCase):
         self.assertEqual(state.active_form, alt_form)
 
     def test_switch_form_raises_for_wrong_character(self):
-        form = CharacterFormFactory(character=self.other_character, form_type=FormType.TRUE)
+        form = CharacterFormFactory(
+            character=self.other_character.sheet_data, form_type=FormType.TRUE
+        )
         CharacterFormStateFactory(character=self.character.sheet_data, active_form=None)
 
         with self.assertRaises(ValueError):
