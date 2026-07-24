@@ -51,7 +51,7 @@ class HatedFoeSpikeTests(TestCase):
         )
 
     def _intensity(self) -> int:
-        return CharacterEngagement.objects.get(character=self.pc_char).intensity_modifier
+        return CharacterEngagement.objects.get(character=self.pc_char.sheet_data).intensity_modifier
 
     def test_surge_on_opponent_add_when_hated(self):
         self._hate()

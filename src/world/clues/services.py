@@ -106,7 +106,7 @@ def target_already_known(clue: Clue, roster_entry: RosterEntry) -> bool:
         if character is None:
             return False
         return MissionParticipant.objects.filter(
-            character=character,
+            character_id=character.pk,
             instance__template=clue.target_mission,
         ).exists()
 

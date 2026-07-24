@@ -571,7 +571,7 @@ def get_runtime_technique_stats(
     process_control = 0
     social_safety = 0
     try:
-        engagement = CharacterEngagement.objects.get(character=character)
+        engagement = CharacterEngagement.objects.get(character_id=character.pk)
         process_intensity = engagement.intensity_modifier
         process_control = engagement.control_modifier
     except CharacterEngagement.DoesNotExist:
@@ -1118,7 +1118,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
         stats = replace(stats, control=max(stats.control - control_penalty, 0))
 
     # Step 2: Calculate effective anima cost
-    anima = CharacterAnima.objects.get(character=character)
+    anima = CharacterAnima.objects.get(character_id=character.pk)
     cost = calculate_effective_anima_cost(
         base_cost=technique.anima_cost,
         runtime_intensity=stats.intensity,

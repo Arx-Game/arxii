@@ -58,6 +58,7 @@ class BatchApDailyRegenTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         from world.action_points.factories import ActionPointConfigFactory
+        from world.character_sheets.factories import CharacterSheetFactory
         from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 
         cls.config = ActionPointConfigFactory(daily_regen=5, is_active=True)
@@ -172,12 +173,12 @@ class BatchApWeeklyRegenTests(TestCase):
 
     def test_basic_weekly_regen(self) -> None:
         """Pools regenerate at weekly rate."""
-        from evennia_extensions.factories import CharacterFactory
         from world.action_points.factories import ActionPointConfigFactory, ActionPointPoolFactory
+        from world.character_sheets.factories import CharacterSheetFactory
 
         ActionPointConfigFactory(weekly_regen=100, is_active=True)
-        character = CharacterFactory()
-        pool = ActionPointPoolFactory(character=character, current=50, maximum=200)
+        character = CharacterSheetFactory().character
+        pool = ActionPointPoolFactory(character=character.sheet_data, current=50, maximum=200)
 
         batch_ap_weekly_regen()
 

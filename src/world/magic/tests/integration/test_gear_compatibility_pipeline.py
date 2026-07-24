@@ -70,7 +70,7 @@ class GearCompatibilityPipelineTests(TestCase):
         )
         cls.compat_item = ItemInstanceFactory(template=cls.compat_template)
         cls.compat_equipped = EquippedItemFactory(
-            character=cls.character_obj,
+            character=cls.character_obj.sheet_data,
             item_instance=cls.compat_item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -82,7 +82,7 @@ class GearCompatibilityPipelineTests(TestCase):
         )
         cls.incompat_item = ItemInstanceFactory(template=cls.incompat_template)
         cls.incompat_equipped = EquippedItemFactory(
-            character=cls.character_obj,
+            character=cls.character_obj.sheet_data,
             item_instance=cls.incompat_item,
             body_region=BodyRegion.RIGHT_HAND,
             equipment_layer=EquipmentLayer.BASE,
@@ -121,7 +121,7 @@ class GearCompatibilityPipelineTests(TestCase):
         char.covenant_roles.invalidate()
 
         item = ItemInstanceFactory(template=cls.compat_template)
-        EquippedItemFactory(character=char, item_instance=item)
+        EquippedItemFactory(character=char.sheet_data, item_instance=item)
         char.equipped_items.invalidate()
 
         GearArchetypeCompatibilityFactory(
@@ -146,7 +146,7 @@ class GearCompatibilityPipelineTests(TestCase):
         char.covenant_roles.invalidate()
 
         item = ItemInstanceFactory(template=cls.incompat_template)
-        EquippedItemFactory(character=char, item_instance=item)
+        EquippedItemFactory(character=char.sheet_data, item_instance=item)
         char.equipped_items.invalidate()
         # No GearArchetypeCompatibility row — RANGED is intentionally absent
         return sheet
@@ -213,7 +213,7 @@ class GearCompatibilityPipelineTests(TestCase):
         item = ItemInstanceFactory(
             template=ItemTemplateFactory(gear_archetype=GearArchetype.HEAVY_ARMOR)
         )
-        EquippedItemFactory(character=char, item_instance=item)
+        EquippedItemFactory(character=char.sheet_data, item_instance=item)
         char.equipped_items.invalidate()
 
         with (

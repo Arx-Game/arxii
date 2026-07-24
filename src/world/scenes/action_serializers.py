@@ -129,9 +129,8 @@ def _cap_strain_by_anima(attrs: dict) -> dict:
             {"strain_commitment": "Initiator persona not found."}
         ) from None
 
-    character = persona.character_sheet.character
     try:
-        cap = CharacterAnima.objects.get(character=character).current
+        cap = CharacterAnima.objects.get(character=persona.character_sheet).current
     except CharacterAnima.DoesNotExist:
         cap = 0
 

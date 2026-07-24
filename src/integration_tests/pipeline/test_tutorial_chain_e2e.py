@@ -273,8 +273,8 @@ class TutorialChainJourneyE2ETests(TestCase):
 
         # Real minimal technique cast (mirrors
         # UseTechniqueExternalActWiringTests's fixture in test_external_acts.py).
-        CharacterAnimaFactory(character=self.pc, current=20, maximum=20)
-        CharacterEngagementFactory(character=self.pc)
+        CharacterAnimaFactory(character=self.pc.sheet_data, current=20, maximum=20)
+        CharacterEngagementFactory(character=self.pc.sheet_data)
         technique = TechniqueFactory(intensity=5, control=10, anima_cost=3)
 
         room_stir_before = self.room_stir.call_count

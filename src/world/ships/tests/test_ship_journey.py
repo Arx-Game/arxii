@@ -198,7 +198,7 @@ class ShipJourneyE2ETests(TestCase):
         covenant_vehicle.unit.military_unit.commander = sheet
         covenant_vehicle.unit.military_unit.save(update_fields=["commander"])
         CharacterTechniqueFactory(character=sheet, technique=technique)
-        CharacterAnimaFactory(character=captain, current=30, maximum=30)
+        CharacterAnimaFactory(character=captain.sheet_data, current=30, maximum=30)
 
         gunner = BattleParticipantFactory(
             battle=battle,

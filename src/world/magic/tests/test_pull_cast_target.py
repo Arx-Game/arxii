@@ -128,7 +128,7 @@ class UseTechniqueForwardsFirstTargetTests(TestCase):
     def _character(self) -> object:
         sheet = CharacterSheetFactory()
         character = sheet.character
-        CharacterAnimaFactory(character=character, current=20, maximum=20)
+        CharacterAnimaFactory(character=character.sheet_data, current=20, maximum=20)
         return character
 
     def test_forwards_first_target_when_present(self) -> None:

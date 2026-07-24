@@ -17,8 +17,8 @@ Four cases:
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from flows.events.payloads import DamagePreApplyPayload
+from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.damage_source import classify_source
 from world.combat.factories import CombatOpponentFactory
 from world.conditions.constants import REFLECT_CONDITION_NAME
@@ -37,8 +37,8 @@ def _make_reflect_template(*, reactive_anima_cost: int = 2):
 
 def _make_bearer(*, anima_current: int = 10, reactive_anima_cost: int = 2):
     """Return (bearer ObjectDB, CharacterAnima, ConditionInstance) for the reflector."""
-    bearer = CharacterFactory()
-    anima = CharacterAnimaFactory(character=bearer, current=anima_current, maximum=10)
+    bearer = CharacterSheetFactory().character
+    anima = CharacterAnimaFactory(character=bearer.sheet_data, current=anima_current, maximum=10)
     template = _make_reflect_template(reactive_anima_cost=reactive_anima_cost)
     instance = ConditionInstanceFactory(condition=template, target=bearer)
     return bearer, anima, instance

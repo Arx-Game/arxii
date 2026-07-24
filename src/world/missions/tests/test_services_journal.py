@@ -78,10 +78,10 @@ class JournalForTests(TestCase):
         # Two deeds: one by holder, one by sharee.
         option = MissionOptionFactory(node=self.entry_node)
         MissionDeedRecordFactory(
-            instance=instance, actor=self.holder, node=self.entry_node, option=option
+            instance=instance, actor=self.holder.sheet_data, node=self.entry_node, option=option
         )
         MissionDeedRecordFactory(
-            instance=instance, actor=sharee, node=self.entry_node, option=option
+            instance=instance, actor=sharee.sheet_data, node=self.entry_node, option=option
         )
 
         holder_entries = journal_for(self.holder)
@@ -133,7 +133,7 @@ class JournalForTests(TestCase):
             option = MissionOptionFactory(node=entry_node)
             MissionDeedRecordFactory(
                 instance=instance,
-                actor=self.holder,
+                actor=self.holder.sheet_data,
                 node=entry_node,
                 option=option,
             )

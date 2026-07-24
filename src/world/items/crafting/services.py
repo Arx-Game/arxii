@@ -235,11 +235,11 @@ def build_crafting_quote(
     # 2. AP availability ---
     ap_cost = recipe.action_point_cost
     pool = ActionPointPool.get_or_create_for_character(crafter_character)
-    ap_have = pool.current
+    ap_have = pool.current if pool is not None else 0
 
     # 3. Anima availability ---
     anima_cost = recipe.anima_cost
-    anima_row = CharacterAnima.objects.filter(character=crafter_character).first()
+    anima_row = CharacterAnima.objects.filter(character=crafter_character_sheet).first()
     anima_have = anima_row.current if anima_row is not None else 0
 
     # 4. Materials availability ---

@@ -348,7 +348,11 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
         CharacterTechnique.objects.create(character=guardian_sheet, technique=aegis_field)
 
         starting_anima = 10
-        anima = CharacterAnimaFactory(character=guardian, current=starting_anima, maximum=10)
+        anima = CharacterAnimaFactory(
+            character=guardian.sheet_data,
+            current=starting_anima,
+            maximum=10,
+        )
         expected_cost = aegis_field.condition_applications.get().condition.reactive_anima_cost
         self.assertGreater(
             expected_cost,
@@ -454,7 +458,7 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
 
         aegis_field = Technique.objects.get(name=FORCE_FIELD_TECHNIQUE_NAME)
         CharacterTechnique.objects.create(character=guardian_sheet, technique=aegis_field)
-        CharacterAnimaFactory(character=guardian, current=10, maximum=10)
+        CharacterAnimaFactory(character=guardian.sheet_data, current=10, maximum=10)
 
         action = CombatRoundAction.objects.create(
             participant=guardian_participant,

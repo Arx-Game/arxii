@@ -407,7 +407,7 @@ class StylePresentationEndorsementViewTests(APITestCase):
         ItemStyleFactory(item_instance=item, style=style, attachment_quality_tier=quality)
         char = endorsee_sheet.character
         EquippedItemFactory(
-            character=char,
+            character=char.sheet_data,
             item_instance=item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

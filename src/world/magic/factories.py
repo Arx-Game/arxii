@@ -274,7 +274,7 @@ class CharacterAuraFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterAura
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     celestial = Decimal("10.00")
     primal = Decimal("70.00")
     abyssal = Decimal("20.00")
@@ -822,7 +822,7 @@ class CharacterAnimaFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterAnima
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     current = 10
     maximum = 10
 

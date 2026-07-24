@@ -138,7 +138,7 @@ def award_death_kudos(
 
     already_gave = KudosTransaction.objects.filter(
         awarded_by=giver_account,
-        character=dead_character,
+        character_id=dead_character.pk,
         source_category=category,
     ).exists()
     if already_gave:
@@ -149,7 +149,7 @@ def award_death_kudos(
     scaled = max(floor, lifetime_spent // divisor)
     prior_total = (
         KudosTransaction.objects.filter(
-            character=dead_character, source_category=category
+            character_id=dead_character.pk, source_category=category
         ).aggregate(total=Sum("amount"))["total"]
         or 0
     )
@@ -163,7 +163,7 @@ def award_death_kudos(
         category,
         f"Honoring the death of {dead_character.key}",
         awarded_by=giver_account,
-        character=dead_character,
+        character=dead_character.sheet_data,
     )
     return DeathKudosResult(
         amount=amount,

@@ -6,7 +6,7 @@ Stakes arm on first engagement, not at drop time.
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.factories import (
     MissionNodeFactory,
     MissionTemplateFactory,
@@ -33,7 +33,7 @@ class GMAssignMissionTests(TestCase):
         episode = EpisodeFactory(chapter=chapter)
         beat = BeatFactory(episode=episode)
         template = _make_template_with_entry()
-        character = CharacterFactory(db_key="GMAssignChar")
+        character = CharacterSheetFactory(character__db_key="GMAssignChar").character
 
         from world.missions.services.run import gm_assign_mission
 
@@ -45,7 +45,7 @@ class GMAssignMissionTests(TestCase):
 
     def test_gm_assign_without_beat(self):
         template = _make_template_with_entry()
-        character = CharacterFactory(db_key="NoBeatChar")
+        character = CharacterSheetFactory(character__db_key="NoBeatChar").character
 
         from world.missions.services.run import gm_assign_mission
 
@@ -67,7 +67,7 @@ class GMAssignMissionTests(TestCase):
         episode = EpisodeFactory(chapter=chapter)
         beat = BeatFactory(episode=episode, risk=RenownRisk.LOW)
         template = _make_template_with_entry()
-        character = CharacterFactory(db_key="NoStakesChar")
+        character = CharacterSheetFactory(character__db_key="NoStakesChar").character
 
         from world.missions.services.run import gm_assign_mission
 

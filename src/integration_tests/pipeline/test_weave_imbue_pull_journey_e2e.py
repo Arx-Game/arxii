@@ -377,7 +377,7 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
         # Restore anima spent by the first cast so the second can proceed.
         from world.magic.models import CharacterAnima
 
-        anima = CharacterAnima.objects.get(character=character)
+        anima = CharacterAnima.objects.get(character=character.sheet_data)
         anima.current = 50
         anima.save(update_fields=["current"])
 

@@ -150,10 +150,10 @@ class JointTerminalBeatSeamTests(TestCase):
         )
         holder = MissionParticipantFactory(
             instance=instance,
-            character=self.char_h,
+            character=self.char_h.sheet_data,
             is_contract_holder=True,
         )
-        p2 = MissionParticipantFactory(instance=instance, character=self.char_2)
+        p2 = MissionParticipantFactory(instance=instance, character=self.char_2.sheet_data)
 
         option = MissionOptionFactory(
             node=node,

@@ -5,6 +5,7 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionStageFactory,
@@ -96,11 +97,11 @@ class AudereEligibilityTests(TestCase):
         cls.obj_ct = ContentType.objects.get_for_model(ObjectDB)
 
     def _create_character(self) -> ObjectDB:
-        return ObjectDBFactory(db_key="test_char")
+        return CharacterSheetFactory(character__db_key="test_char").character
 
     def _create_engagement(self, character: ObjectDB) -> CharacterEngagement:
         return CharacterEngagement.objects.create(
-            character=character,
+            character=character.sheet_data,
             engagement_type=EngagementType.CHALLENGE,
             source_content_type=self.obj_ct,
             source_id=character.pk,
@@ -207,7 +208,7 @@ class AudereLifecycleTests(TestCase):
         cls.obj_ct = ContentType.objects.get_for_model(ObjectDB)
 
     def setUp(self) -> None:
-        self.character = ObjectDBFactory(db_key="lifecycle_char")
+        self.character = CharacterSheetFactory(character__db_key="lifecycle_char").character
         self.anima = CharacterAnimaFactory(
             character=self.character.sheet_data, current=10, maximum=50
         )

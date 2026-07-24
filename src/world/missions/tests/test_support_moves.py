@@ -309,7 +309,7 @@ class DeclareSupportTests(TestCase):
             )
         self.assertEqual(decl.easing_banked, self.pattern.easing)
         self.assertEqual(decl.outcome, decl.outcome)  # outcome is set
-        self.assertEqual(decl.participant.character, self.helper)
+        self.assertEqual(decl.participant.character, self.helper.sheet_data)
 
     def test_declare_support_zero_easing_on_failure(self) -> None:
         """A failed support check banks 0 easing."""
@@ -339,7 +339,9 @@ class DeclareSupportTests(TestCase):
                 source_id=self.pattern.pk,
             )
         self.assertTrue(
-            MissionDeedRecord.objects.filter(instance=self.instance, actor=self.helper).exists()
+            MissionDeedRecord.objects.filter(
+                instance=self.instance, actor=self.helper.sheet_data
+            ).exists()
         )
 
     def test_non_participant_cannot_declare(self) -> None:

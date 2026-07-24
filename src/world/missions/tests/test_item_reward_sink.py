@@ -19,7 +19,7 @@ class ItemRewardSinkTests(TestCase):
         # (unlike MONEY, which falls back to a stub for sheet-less
         # recipients), so the recipient needs a CharacterSheetFactory-backed
         # character.
-        recipient = CharacterSheetFactory().character
+        recipient = CharacterSheetFactory()
         template = ItemTemplateFactory()
         deed = MissionDeedRecordFactory()
         line = MissionDeedRewardLineFactory(
@@ -34,6 +34,6 @@ class ItemRewardSinkTests(TestCase):
         project_skips: list = []
         _route_line(deed, line, enqueued, stub_calls, project_skips)
         assert ItemInstance.objects.filter(
-            template=template, holder_character_sheet=recipient.sheet_data
+            template=template, holder_character_sheet=recipient
         ).exists()
         assert enqueued == []

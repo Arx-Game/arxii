@@ -118,7 +118,7 @@ class _SharedSetupMixin:
             holder_character_sheet=self.sheet_a,
         )
         EquippedItem.objects.create(
-            character=self.character_a,
+            character=self.character_a.sheet_data,
             item_instance=instance,
             body_region=region,
             equipment_layer=layer,
@@ -167,7 +167,7 @@ class VisibleWornServiceQueryCountTests(_SharedSetupMixin, TestCase):
         cold_obj.save()
         cold_instance = ItemInstanceFactory(template=template, game_object=cold_obj)
         EquippedItem.objects.create(
-            character=cold_character,
+            character=cold_character.sheet_data,
             item_instance=cold_instance,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

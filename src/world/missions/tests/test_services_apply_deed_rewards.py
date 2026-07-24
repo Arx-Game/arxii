@@ -18,10 +18,11 @@ per line is the invariant (UniqueConstraint(line) + update_or_create).
 """
 
 from dataclasses import FrozenInstanceError
+from unittest.mock import patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import DeedRewardKind, DeedRewardSink
 from world.missions.factories import (
     MissionDeedRecordFactory,
@@ -41,8 +42,8 @@ class ApplyDeedRewardsQueueingTests(TestCase):
     def setUp(self) -> None:
         money_stub.clear_calls()
         beat_stub.clear_calls()
-        self.actor = CharacterFactory(db_key="QueueApplyActor")
-        self.deed = MissionDeedRecordFactory(actor=self.actor)
+        self.actor = CharacterSheetFactory(character__db_key="QueueApplyActor").character
+        self.deed = MissionDeedRecordFactory(actor=self.actor.sheet_data)
 
     def test_post_cron_legend_points_enqueues(self) -> None:
         line = MissionDeedRewardLineFactory(
@@ -79,21 +80,20 @@ class ApplyDeedRewardsStubCallsTests(TestCase):
     def setUp(self) -> None:
         money_stub.clear_calls()
         beat_stub.clear_calls()
-        self.actor = CharacterFactory(db_key="StubApplyActor")
-        self.deed = MissionDeedRecordFactory(actor=self.actor)
+        self.actor = CharacterSheetFactory(character__db_key="StubApplyActor").character
+        self.deed = MissionDeedRecordFactory(actor=self.actor.sheet_data)
 
-    def test_immediate_money_calls_money_stub(self) -> None:
+    def test_immediate_money_delivers_real_payout(self) -> None:
         line = MissionDeedRewardLineFactory(
             deed=self.deed,
             kind=DeedRewardKind.IMMEDIATE,
             sink=DeedRewardSink.MONEY,
             amount=100,
         )
-        result = apply_deed_rewards(self.deed)
+        with patch("world.missions.services.rewards.deliver_mission_money") as mock_pay:
+            result = apply_deed_rewards(self.deed)
         self.assertEqual(result.enqueued, ())
-        calls = money_stub.get_calls()
-        self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0].line_id, line.pk)
+        mock_pay.assert_called_once_with(recipient_sheet=line.recipient, amount=100, ref=line.ref)
         self.assertEqual(MissionRewardQueue.objects.filter(deed=self.deed).count(), 0)
 
     def test_beat_sink_calls_beat_stub_for_each_kind(self) -> None:
@@ -118,8 +118,8 @@ class ApplyDeedRewardsPropagationFailuresTests(TestCase):
     def setUp(self) -> None:
         money_stub.clear_calls()
         beat_stub.clear_calls()
-        self.actor = CharacterFactory(db_key="PropApplyActor")
-        self.deed = MissionDeedRecordFactory(actor=self.actor)
+        self.actor = CharacterSheetFactory(character__db_key="PropApplyActor").character
+        self.deed = MissionDeedRecordFactory(actor=self.actor.sheet_data)
 
     def test_propagation_rumor_raises_not_implemented(self) -> None:
         MissionDeedRewardLineFactory(
@@ -175,8 +175,8 @@ class ApplyDeedRewardsUnsupportedComboTests(TestCase):
     def setUp(self) -> None:
         money_stub.clear_calls()
         beat_stub.clear_calls()
-        self.actor = CharacterFactory(db_key="UnsupportedApplyActor")
-        self.deed = MissionDeedRecordFactory(actor=self.actor)
+        self.actor = CharacterSheetFactory(character__db_key="UnsupportedApplyActor").character
+        self.deed = MissionDeedRecordFactory(actor=self.actor.sheet_data)
 
     def test_immediate_legend_points_raises_routing_error(self) -> None:
         # LP is POST_CRON-only; IMMEDIATE/LEGEND_POINTS is an author error.
@@ -227,8 +227,8 @@ class ApplyDeedRewardsIdempotencyTests(TestCase):
     def setUp(self) -> None:
         money_stub.clear_calls()
         beat_stub.clear_calls()
-        self.actor = CharacterFactory(db_key="IdempotentApplyActor")
-        self.deed = MissionDeedRecordFactory(actor=self.actor)
+        self.actor = CharacterSheetFactory(character__db_key="IdempotentApplyActor").character
+        self.deed = MissionDeedRecordFactory(actor=self.actor.sheet_data)
 
     def test_double_apply_does_not_duplicate_queue_rows(self) -> None:
         MissionDeedRewardLineFactory(
@@ -254,7 +254,7 @@ class ApplyDeedRewardsIdempotencyTests(TestCase):
             sorted(r.line_id for r in second.enqueued),
         )
 
-    def test_double_apply_records_stub_calls_each_time(self) -> None:
+    def test_double_apply_delivers_money_each_time(self) -> None:
         # Stub-call records are NOT idempotent — they fire on each apply
         # (the cron itself is the idempotent layer for queued payouts;
         # immediate sinks are the caller's responsibility to gate). This
@@ -265,9 +265,10 @@ class ApplyDeedRewardsIdempotencyTests(TestCase):
             sink=DeedRewardSink.MONEY,
             amount=50,
         )
-        apply_deed_rewards(self.deed)
-        apply_deed_rewards(self.deed)
-        self.assertEqual(len(money_stub.get_calls()), 2)
+        with patch("world.missions.services.rewards.deliver_mission_money") as mock_pay:
+            apply_deed_rewards(self.deed)
+            apply_deed_rewards(self.deed)
+        self.assertEqual(mock_pay.call_count, 2)
 
 
 class ApplyDeedRewardsResultShapeTests(TestCase):
@@ -278,8 +279,8 @@ class ApplyDeedRewardsResultShapeTests(TestCase):
         beat_stub.clear_calls()
 
     def test_result_is_frozen_dataclass_with_tuples(self) -> None:
-        actor = CharacterFactory(db_key="ShapeActor")
-        deed = MissionDeedRecordFactory(actor=actor)
+        actor = CharacterSheetFactory(character__db_key="ShapeActor").character
+        deed = MissionDeedRecordFactory(actor=actor.sheet_data)
         MissionDeedRewardLineFactory(
             deed=deed,
             kind=DeedRewardKind.POST_CRON,
@@ -317,7 +318,7 @@ class ApplyDeedRewardsFollowOnSummonsTests(TestCase):
         from world.npc_services.models import OfferSummons
 
         cls.OfferSummons = OfferSummons
-        cls.actor = CharacterFactory(db_key="FollowOnSummonsActor")
+        cls.actor = CharacterSheetFactory(character__db_key="FollowOnSummonsActor").character
         cls.sheet = CharacterSheetFactory(character=cls.actor)
         cls.persona = cls.sheet.primary_persona
 
@@ -327,7 +328,7 @@ class ApplyDeedRewardsFollowOnSummonsTests(TestCase):
         cls.instance = MissionInstanceFactory()
         cls.instance.accepted_as_persona = cls.persona
         cls.instance.save(update_fields=["accepted_as_persona"])
-        cls.deed = MissionDeedRecordFactory(instance=cls.instance, actor=cls.actor)
+        cls.deed = MissionDeedRecordFactory(instance=cls.instance, actor=cls.actor.sheet_data)
 
     def test_creates_pending_summons_with_created_by_none(self):
         """A (IMMEDIATE, FOLLOW_ON_SUMMONS) line fires create_summons."""
@@ -337,7 +338,7 @@ class ApplyDeedRewardsFollowOnSummonsTests(TestCase):
             sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
             followon_offer=self.offer,
             followon_message="Come at once.",
-            recipient=self.actor,
+            recipient=self.actor.sheet_data,
         )
         apply_deed_rewards(self.deed)
 
@@ -360,7 +361,7 @@ class ApplyDeedRewardsFollowOnSummonsTests(TestCase):
             kind=DeedRewardKind.IMMEDIATE,
             sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
             followon_offer=self.offer,
-            recipient=self.actor,
+            recipient=self.actor.sheet_data,
         )
         # Must not raise — the dedup path catches IntegrityError.
         apply_deed_rewards(self.deed)
@@ -369,13 +370,13 @@ class ApplyDeedRewardsFollowOnSummonsTests(TestCase):
     def test_skips_when_no_accepted_as_persona(self):
         """Instance with accepted_as_persona=None → skip + warn."""
         instance = MissionInstanceFactory()  # accepted_as_persona defaults to None
-        deed = MissionDeedRecordFactory(instance=instance, actor=self.actor)
+        deed = MissionDeedRecordFactory(instance=instance, actor=self.actor.sheet_data)
         MissionDeedRewardLineFactory(
             deed=deed,
             kind=DeedRewardKind.IMMEDIATE,
             sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
             followon_offer=self.offer,
-            recipient=self.actor,
+            recipient=self.actor.sheet_data,
         )
         apply_deed_rewards(deed)
         self.assertEqual(self.OfferSummons.objects.filter(offer=self.offer).count(), 0)
@@ -392,7 +393,7 @@ class ApplyDeedRewardsFollowOnSummonsTests(TestCase):
             sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
             followon_offer=self.offer,
             followon_expiry_hours=24,
-            recipient=self.actor,
+            recipient=self.actor.sheet_data,
         )
         before = timezone.now()
         apply_deed_rewards(self.deed)
@@ -428,7 +429,7 @@ class ProjectSinkTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.actor = self.sheet.character
         self.persona = self.sheet.primary_persona
-        self.deed = MissionDeedRecordFactory(actor=self.actor)
+        self.deed = MissionDeedRecordFactory(actor=self.actor.sheet_data)
         # Set accepted_as_persona on the instance so _resolve_contributor_persona resolves.
         self.deed.instance.accepted_as_persona = self.persona
         self.deed.instance.save(update_fields=["accepted_as_persona"])
@@ -449,7 +450,7 @@ class ProjectSinkTests(TestCase):
 
         line = MissionDeedRewardLineFactory(
             deed=self.deed,
-            recipient=self.actor,
+            recipient=self.actor.sheet_data,
             kind=DeedRewardKind.IMMEDIATE,
             sink=DeedRewardSink.PROJECT,
             amount=10,
@@ -476,7 +477,7 @@ class ProjectSinkTests(TestCase):
         self.project.save(update_fields=["status"])
         MissionDeedRewardLineFactory(
             deed=self.deed,
-            recipient=self.actor,
+            recipient=self.actor.sheet_data,
             kind=DeedRewardKind.IMMEDIATE,
             sink=DeedRewardSink.PROJECT,
             amount=10,
@@ -494,7 +495,7 @@ class ProjectSinkTests(TestCase):
         """A PROJECT line with no bound project soft-skips (not raise)."""
         MissionDeedRewardLineFactory(
             deed=self.deed,
-            recipient=self.actor,
+            recipient=self.actor.sheet_data,
             kind=DeedRewardKind.IMMEDIATE,
             sink=DeedRewardSink.PROJECT,
             amount=10,

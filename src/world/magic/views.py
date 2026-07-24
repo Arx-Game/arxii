@@ -578,7 +578,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
         character_distinction = get_object_or_404(
             CharacterDistinction,
             pk=serializer.validated_data["character_distinction_id"],
-            character=aura.character.sheet_data,
+            character=aura.character,
         )
         try:
             glimpse_services.link_distinction_to_glimpse(character_distinction, aura)
@@ -601,7 +601,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
         character_distinction = get_object_or_404(
             CharacterDistinction,
             pk=serializer.validated_data["character_distinction_id"],
-            character=aura.character.sheet_data,
+            character=aura.character,
         )
         glimpse_services.unlink_distinction_from_glimpse(character_distinction)
         return Response(CharacterAuraSerializer(aura).data)

@@ -72,7 +72,7 @@ class EquipActionTests(TestCase):
 
         assert result.success is True
         assert EquippedItem.objects.filter(
-            character=actor,
+            character=actor.sheet_data,
             item_instance=item_instance,
         ).exists()
 

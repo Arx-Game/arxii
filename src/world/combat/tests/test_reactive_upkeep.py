@@ -19,7 +19,7 @@ class ReactiveUpkeepTests(TestCase):
         enc = CombatEncounterFactory()
         part = CombatParticipantFactory(encounter=enc)
         char = part.character_sheet.character
-        CharacterAnimaFactory(character=char, current=anima_current, maximum=20)
+        CharacterAnimaFactory(character=char.sheet_data, current=anima_current, maximum=20)
         tmpl = ConditionTemplateFactory(upkeep_anima_per_round=upkeep)
         inst = ConditionInstanceFactory(condition=tmpl, target=char)
         return enc, char, inst

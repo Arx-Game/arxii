@@ -191,7 +191,7 @@ class CmdRoster(Command):  # ty: ignore[invalid-base]
 
         lines = ["Your pending roster applications:"]
         lines.extend(
-            f"  {application.character.key} — {application.get_status_display()} "
+            f"  {application.character.character.db_key} — {application.get_status_display()} "
             f"(applied {application.applied_date:%Y-%m-%d})"
             for application in pending
         )

@@ -21,7 +21,7 @@ from world.mechanics.factories import (
 
 def _setup_anima(character, current=20, maximum=20):
     CharacterAnima.objects.update_or_create(
-        character=character,
+        character=character.sheet_data,
         defaults={"current": current, "maximum": maximum},
     )
 

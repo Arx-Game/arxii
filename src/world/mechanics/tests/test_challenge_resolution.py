@@ -717,7 +717,7 @@ class ResolveFullTests(TestCase):
             resolve_challenge(character, challenge, self.approach, self.source)
 
             record = CharacterChallengeRecord.objects.get(
-                character=character,
+                character=character.sheet_data,
                 challenge_instance=challenge,
             )
             outcomes = list(ConsequenceOutcome.objects.filter(challenge_record=record))

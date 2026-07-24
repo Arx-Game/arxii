@@ -120,7 +120,7 @@ class MantlePassiveBonusPipelineTests(TestCase):
             ),
         )
         EquippedItemFactory(
-            character=self.character_obj,
+            character=self.character_obj.sheet_data,
             item_instance=instance,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

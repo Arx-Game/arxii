@@ -40,7 +40,7 @@ class GrantRescueMissionTests(TestCase):
 
         assert instance.rescue_target == captive
         assert instance.participants.filter(
-            character=rescuer,
+            character_id=rescuer.pk,
             is_contract_holder=True,
         ).exists()
 
@@ -55,6 +55,6 @@ class GrantCaptiveMissionTests(TestCase):
         # The captive holds their own run; no rescue target (they free themselves).
         assert instance.rescue_target is None
         assert instance.participants.filter(
-            character=captive,
+            character_id=captive.pk,
             is_contract_holder=True,
         ).exists()

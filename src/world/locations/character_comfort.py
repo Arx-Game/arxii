@@ -48,7 +48,7 @@ def _worn_garment_mitigation(character: DefaultObject) -> dict[StatKey, int]:
     from world.items.models import EquippedItem, GarmentMitigation  # noqa: PLC0415
 
     template_ids = list(
-        EquippedItem.objects.filter(character=character).values_list(
+        EquippedItem.objects.filter(character_id=character.pk).values_list(
             "item_instance__template_id", flat=True
         )
     )

@@ -22,7 +22,6 @@ from evennia_extensions.factories import ObjectDBFactory
 from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
-from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ReactiveConditionFactory
 from world.magic.constants import TargetKind
 from world.magic.exceptions import ResonanceInsufficient
@@ -77,9 +76,9 @@ def _capture_power() -> "tuple[dict[str, object], object]":
 def _make_caster() -> "tuple[object, object]":
     """Create a caster (ObjectDB) + CharacterSheet with full anima and engagement."""
     anima = CharacterAnimaFactory(current=20, maximum=20)
-    character = anima.character
-    CharacterEngagementFactory(character=character)
-    sheet = CharacterSheetFactory(character=character)
+    sheet = anima.character
+    character = sheet.character
+    CharacterEngagementFactory(character=sheet)
     return character, sheet
 
 

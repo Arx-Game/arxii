@@ -23,7 +23,7 @@ class TestCharacterEngagement(TestCase):
         """Verify IntegrityError on duplicate character."""
         engagement = CharacterEngagementFactory()
         with self.assertRaises(IntegrityError):
-            CharacterEngagementFactory(character=engagement)
+            CharacterEngagementFactory(character=engagement.character)
 
     def test_delete_clears_process_state(self) -> None:
         """Verify delete removes the record, even with non-trivial state."""

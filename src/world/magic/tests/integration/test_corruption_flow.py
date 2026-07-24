@@ -618,7 +618,7 @@ class FullCastPipelineCorruptionTests(TestCase):
             db_key="NPCTestChar",
             db_typeclass_path="typeclasses.characters.Character",
         )
-        CharacterAnimaFactory(character=character, current=20, maximum=20)
+        CharacterAnimaFactory(character=character.sheet_data, current=20, maximum=20)
 
         result = use_technique(
             character=character,

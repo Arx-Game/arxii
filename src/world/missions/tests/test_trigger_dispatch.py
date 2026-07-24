@@ -59,7 +59,7 @@ class TriggerDispatchTests(TestCase):
         self.assertIsNone(instance.source_offer)
         self.assertTrue(
             MissionInstance.objects.filter(
-                participants__character=self.character, status=MissionStatus.ACTIVE
+                participants__character_id=self.character.pk, status=MissionStatus.ACTIVE
             ).exists()
         )
 
@@ -76,7 +76,7 @@ class TriggerDispatchTests(TestCase):
         self.template.save(update_fields=["visibility"])
         self.assertIsNone(maybe_dispatch_on_enter(self.character, self.room))
         self.assertFalse(
-            MissionInstance.objects.filter(participants__character=self.character).exists()
+            MissionInstance.objects.filter(participants__character_id=self.character.pk).exists()
         )
 
     def test_cooldown_blocks_redispatch(self) -> None:
@@ -91,7 +91,7 @@ class TriggerDispatchTests(TestCase):
             ).exists()
         )
         # Clear the active-mission guard so the cooldown is what's tested.
-        MissionInstance.objects.filter(participants__character=self.character).update(
+        MissionInstance.objects.filter(participants__character_id=self.character.pk).update(
             status=MissionStatus.COMPLETE
         )
         self.assertIsNone(maybe_dispatch_on_enter(self.character, self.room))

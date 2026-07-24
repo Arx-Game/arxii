@@ -76,7 +76,7 @@ class EscalationPerilSpikeTests(TestCase):
         apply_condition(target=self.victim_char, condition=self.bleed_out)
 
     def _intensity(self, character) -> int:
-        return CharacterEngagement.objects.get(character=character).intensity_modifier
+        return CharacterEngagement.objects.get(character=character.sheet_data).intensity_modifier
 
     def test_spike_on_ally_entering_mortal_peril(self):
         self._bond()

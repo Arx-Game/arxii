@@ -271,7 +271,7 @@ class BondedSpikeRealDamagePathTests(TestCase):
         self._bond(self.sheet_a, self.sheet_b)
         self._reset_vitals(self.sheet_b)
 
-        engagement_a = CharacterEngagement.objects.get(character=self.char_a)
+        engagement_a = CharacterEngagement.objects.get(character=self.char_a.sheet_data)
         self.assertEqual(engagement_a.engagement_type, EngagementType.COMBAT)
         self.assertEqual(engagement_a.intensity_modifier, 0)
 
@@ -300,5 +300,5 @@ class BondedSpikeRealDamagePathTests(TestCase):
 
         engagement_a.refresh_from_db()
         self.assertEqual(engagement_a.intensity_modifier, self.curve.spike_intensity_amount)
-        engagement_b = CharacterEngagement.objects.get(character=self.char_b)
+        engagement_b = CharacterEngagement.objects.get(character=self.char_b.sheet_data)
         self.assertEqual(engagement_b.intensity_modifier, 0)

@@ -10,7 +10,7 @@ which character's ledger the row pays into.
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.items.factories import ItemTemplateFactory
 from world.magic.factories import ResonanceFactory
@@ -173,24 +173,24 @@ class MissionDeedRewardLineRecipientTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.template = MissionTemplateFactory(name="reward-recipient-tmpl")
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
-        cls.actor = CharacterFactory(db_key="RecipientActor")
-        cls.deed = MissionDeedRecordFactory(node=cls.node, actor=cls.actor)
+        cls.actor = CharacterSheetFactory(character__db_key="RecipientActor").character
+        cls.deed = MissionDeedRecordFactory(node=cls.node, actor=cls.actor.sheet_data)
 
     def test_reward_line_has_recipient_field(self) -> None:
         field_names = {f.name for f in MissionDeedRewardLine._meta.get_fields()}
         self.assertIn("recipient", field_names)
 
     def test_recipient_round_trips(self) -> None:
-        helper = CharacterFactory(db_key="Helper")
+        helper = CharacterSheetFactory(character__db_key="Helper").character
         line = MissionDeedRewardLineFactory(
             deed=self.deed,
             kind=DeedRewardKind.IMMEDIATE,
             sink=DeedRewardSink.MONEY,
             amount=42,
-            recipient=helper,
+            recipient=helper.sheet_data,
         )
         line.refresh_from_db()
-        self.assertEqual(line.recipient, helper)
+        self.assertEqual(line.recipient, helper.sheet_data)
 
 
 class MissionOptionRouteRewardResonanceTests(TestCase):

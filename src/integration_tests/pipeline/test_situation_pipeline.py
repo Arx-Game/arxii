@@ -227,7 +227,7 @@ class TestSituationPipeline(TestCase):
         _result, fresh_instance = self._resolve_darkness(self.char)
 
         assert CharacterChallengeRecord.objects.filter(
-            character=self.char,
+            character=self.char.sheet_data,
             challenge_instance=fresh_instance,
         ).exists()
 

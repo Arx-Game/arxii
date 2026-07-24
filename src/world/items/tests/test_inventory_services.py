@@ -339,7 +339,7 @@ class GiveTests(TestCase):
 
     def test_give_auto_unequips_first(self) -> None:
         EquippedItem.objects.create(
-            character=self.giver,
+            character=self.giver.sheet_data,
             item_instance=self.item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

@@ -122,7 +122,7 @@ class EquipmentWalkInChecksTests(TestCase):
             attachment_quality_tier=cls.attach_quality,
         )
         EquippedItemFactory(
-            character=cls.character_obj,
+            character=cls.character_obj.sheet_data,
             item_instance=cls.facet_item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -184,7 +184,7 @@ class EquipmentWalkInChecksTests(TestCase):
             attachment_quality_tier=cls.unit_quality,
         )
         EquippedItemFactory(
-            character=cls.character_obj,
+            character=cls.character_obj.sheet_data,
             item_instance=cls.fashion_item,
             body_region=BodyRegion.HEAD,
             equipment_layer=EquipmentLayer.BASE,

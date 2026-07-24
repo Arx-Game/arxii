@@ -40,7 +40,7 @@ def completed_court_mission_count(
     from world.missions.models import MissionInstance  # noqa: PLC0415
 
     return MissionInstance.objects.filter(
-        participants__character=character_sheet.character,
+        participants__character=character_sheet,
         status=MissionStatus.COMPLETE,
         source_offer__role__faction_affiliation_id=covenant.organization_id,
     ).count()

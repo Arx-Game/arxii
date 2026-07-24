@@ -214,7 +214,7 @@ def _resolve_holder_persona(
     holder = next((p for p in participants if p.is_contract_holder), None)
     if holder is None:
         return None
-    return holder.character.sheet_data.primary_persona
+    return holder.character.primary_persona
 
 
 def _resolve_participant_persona(participant: object) -> Persona:
@@ -223,4 +223,4 @@ def _resolve_participant_persona(participant: object) -> Persona:
     Broadcast renown distribution doesn't carry per-participant persona
     choice the way ``accepted_as_persona`` does for the holder.
     """
-    return participant.character.sheet_data.primary_persona
+    return participant.character.primary_persona

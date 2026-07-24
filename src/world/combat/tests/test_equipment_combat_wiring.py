@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatParticipantFactory
 from world.combat.services import (
     apply_damage_to_participant,
@@ -27,12 +27,12 @@ from world.vitals.models import CharacterVitals
 
 class EquipmentStatHelperTests(TestCase):
     def setUp(self) -> None:
-        self.character = CharacterFactory(db_key="CombatWiringChar")
+        self.character = CharacterSheetFactory(character__db_key="CombatWiringChar").character
 
     def _equip(self, character, template, durability, body_region, quality=None):
         inst = ItemInstanceFactory(template=template, durability=durability, quality_tier=quality)
         EquippedItem.objects.create(
-            character=character,
+            character=character.sheet_data,
             item_instance=inst,
             body_region=body_region,
             equipment_layer=EquipmentLayer.BASE,
@@ -141,7 +141,7 @@ class WeaponDamageWiringTests(TestCase):
         )
         inst = ItemInstanceFactory(template=template, durability=durability)
         EquippedItem.objects.create(
-            character=character,
+            character=character.sheet_data,
             item_instance=inst,
             body_region=BodyRegion.RIGHT_HAND,
             equipment_layer=EquipmentLayer.BASE,

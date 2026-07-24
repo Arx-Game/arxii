@@ -173,7 +173,11 @@ class PCActiveNPCMissionCapTests(TestCase):
         """Bypass the offer flow: create an active instance with source_offer set."""
         offer, _, template = _make_mission_offer(role)
         instance = MissionInstance.objects.create(template=template, source_offer=offer)
-        MissionParticipantFactory(instance=instance, character=character, is_contract_holder=True)
+        MissionParticipantFactory(
+            instance=instance,
+            character=character.sheet_data,
+            is_contract_holder=True,
+        )
         return instance
 
     def test_under_cap_offer_visible(self):
@@ -222,7 +226,7 @@ class PCActiveNPCMissionCapTests(TestCase):
         for _ in range(3):
             instance = MissionInstance.objects.create(template=template, source_offer=None)
             MissionParticipantFactory(
-                instance=instance, character=character, is_contract_holder=True
+                instance=instance, character=character.sheet_data, is_contract_holder=True
             )
         # An NPC-mediated offer is still visible because the cap counter ignores
         # trigger-based runs.
@@ -240,7 +244,7 @@ class PCActiveNPCMissionCapTests(TestCase):
         # active runs; the slot frees up. Order by pk for deterministic
         # selection across DB backends.
         active_runs = list(
-            MissionInstance.objects.filter(participants__character=character).order_by("pk")
+            MissionInstance.objects.filter(participants__character_id=character.pk).order_by("pk")
         )
         active_runs[0].status = MissionStatus.COMPLETE
         active_runs[0].save(update_fields=["status"])
@@ -293,7 +297,11 @@ class PerPersonaRoleOneInFlightGateTests(TestCase):
         instance = MissionInstance.objects.create(
             template=template, source_offer=offer, accepted_as_persona=persona
         )
-        MissionParticipantFactory(instance=instance, character=character, is_contract_holder=True)
+        MissionParticipantFactory(
+            instance=instance,
+            character=character.sheet_data,
+            is_contract_holder=True,
+        )
         # Author a SECOND mission offer on the same role.
         second_offer, _, _ = _make_mission_offer(role, label="second")
         session = start_interaction(role=role, persona=persona, character=character)
@@ -313,7 +321,11 @@ class PerPersonaRoleOneInFlightGateTests(TestCase):
         instance = MissionInstance.objects.create(
             template=template, source_offer=offer, accepted_as_persona=persona_a
         )
-        MissionParticipantFactory(instance=instance, character=character_a, is_contract_holder=True)
+        MissionParticipantFactory(
+            instance=instance,
+            character=character_a.sheet_data,
+            is_contract_holder=True,
+        )
 
         # character_b (different sheet → different persona) sees the offer.
         session = start_interaction(role=role, persona=persona_b, character=character_b)
@@ -334,7 +346,11 @@ class PerPersonaRoleOneInFlightGateTests(TestCase):
         instance = MissionInstance.objects.create(
             template=template, source_offer=offer, accepted_as_persona=primary
         )
-        MissionParticipantFactory(instance=instance, character=character, is_contract_holder=True)
+        MissionParticipantFactory(
+            instance=instance,
+            character=character.sheet_data,
+            is_contract_holder=True,
+        )
 
         # ESTABLISHED on the same character still sees the offer — different IC
         # person from the role's perspective.
@@ -348,7 +364,11 @@ class PerPersonaRoleOneInFlightGateTests(TestCase):
         instance = MissionInstance.objects.create(
             template=template, source_offer=offer, accepted_as_persona=persona
         )
-        MissionParticipantFactory(instance=instance, character=character, is_contract_holder=True)
+        MissionParticipantFactory(
+            instance=instance,
+            character=character.sheet_data,
+            is_contract_holder=True,
+        )
 
         # Complete the run; gate releases.
         instance.status = MissionStatus.COMPLETE
@@ -617,7 +637,7 @@ class IssueMissionContractTests(TestCase):
         result = issue_mission(offer, persona)
         participants = list(MissionParticipant.objects.filter(instance_id=result.object_pk))
         self.assertEqual(len(participants), 1)
-        self.assertEqual(participants[0].character, character)
+        self.assertEqual(participants[0].character, character.sheet_data)
         self.assertTrue(participants[0].is_contract_holder)
 
     def test_issue_mission_sets_accepted_as_persona(self):

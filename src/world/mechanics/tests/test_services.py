@@ -490,7 +490,7 @@ class PassiveFacetBonusesTests(TestCase):
             facet=cls.facet,
             attachment_quality_tier=cls.attach_quality,
         )
-        EquippedItemFactory(character=cls.character_obj, item_instance=cls.item_instance)
+        EquippedItemFactory(character=cls.character_obj.sheet_data, item_instance=cls.item_instance)
 
         # FACET thread anchored to cls.facet, resonance=cls.resonance, level=2
         cls.thread = ThreadFactory(
@@ -586,13 +586,13 @@ class PassiveFacetBonusesTests(TestCase):
         from world.items.constants import BodyRegion, EquipmentLayer
 
         EquippedItemFactory(
-            character=two_item_char,
+            character=two_item_char.sheet_data,
             item_instance=inst_a,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
         EquippedItemFactory(
-            character=two_item_char,
+            character=two_item_char.sheet_data,
             item_instance=inst_b,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.OUTER,
@@ -663,7 +663,7 @@ class CovenantRoleBonusTests(TestCase):
 
         template = ItemTemplateFactory(gear_archetype=GearArchetype.HEAVY_ARMOR)
         item = ItemInstanceFactory(template=template)
-        EquippedItemFactory(character=char, item_instance=item)
+        EquippedItemFactory(character=char.sheet_data, item_instance=item)
         char.equipped_items.invalidate()
 
         result = covenant_role_bonus(sheet, target)
@@ -696,7 +696,7 @@ class CovenantRoleBonusTests(TestCase):
 
         template = ItemTemplateFactory(gear_archetype=GearArchetype.HEAVY_ARMOR)
         item = ItemInstanceFactory(template=template)
-        EquippedItemFactory(character=char, item_instance=item)
+        EquippedItemFactory(character=char.sheet_data, item_instance=item)
         char.equipped_items.invalidate()
 
         # Create compatibility row so is_gear_compatible returns True
@@ -737,7 +737,7 @@ class CovenantRoleBonusTests(TestCase):
 
         template = ItemTemplateFactory(gear_archetype=GearArchetype.MELEE_ONE_HAND)
         item = ItemInstanceFactory(template=template)
-        EquippedItemFactory(character=char, item_instance=item)
+        EquippedItemFactory(character=char.sheet_data, item_instance=item)
         char.equipped_items.invalidate()
 
         # No GearArchetypeCompatibility row → incompatible
@@ -774,7 +774,7 @@ class CovenantRoleBonusTests(TestCase):
 
         template = ItemTemplateFactory(gear_archetype=GearArchetype.RANGED)
         item = ItemInstanceFactory(template=template)
-        EquippedItemFactory(character=char, item_instance=item)
+        EquippedItemFactory(character=char.sheet_data, item_instance=item)
         char.equipped_items.invalidate()
 
         with (
@@ -825,7 +825,7 @@ class CovenantRoleBonusTests(TestCase):
         compat_template = ItemTemplateFactory(gear_archetype=GearArchetype.HEAVY_ARMOR)
         compat_item = ItemInstanceFactory(template=compat_template)
         EquippedItemFactory(
-            character=char,
+            character=char.sheet_data,
             item_instance=compat_item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -839,7 +839,7 @@ class CovenantRoleBonusTests(TestCase):
         incompat_template = ItemTemplateFactory(gear_archetype=GearArchetype.RANGED)
         incompat_item = ItemInstanceFactory(template=incompat_template)
         EquippedItemFactory(
-            character=char,
+            character=char.sheet_data,
             item_instance=incompat_item,
             body_region=BodyRegion.RIGHT_HAND,
             equipment_layer=EquipmentLayer.BASE,

@@ -68,7 +68,7 @@ class PerformRitualActionAttunementIntegrationTests(TestCase):
     def setUp(self) -> None:
         self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
-        self.character.sheet_data = self.sheet
+        self.character = self.sheet
         self.resonance = ResonanceFactory(name="Praedari")
         self.tier = ResonanceTierFactory(name="Faint", tier_level=1)
         CharacterResonanceFactory(character_sheet=self.sheet, resonance=self.resonance)

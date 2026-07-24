@@ -90,10 +90,9 @@ def satisfy_external_act(character_sheet: CharacterSheet, act: str) -> list[Miss
     matching option (wrong act, or no EXTERNAL_ACT option at all) is untouched.
     Returns the collected deeds (empty list when nothing matched).
     """
-    character = character_sheet.character
     deeds: list[MissionDeedRecord] = []
     participants = MissionParticipant.objects.filter(
-        character=character,
+        character=character_sheet,
         instance__status=MissionStatus.ACTIVE,
     ).select_related("instance", "instance__current_node", "instance__template")
     for participant in participants:
@@ -173,9 +172,7 @@ def fast_forward_external_acts(instance: MissionInstance, node: MissionNode) -> 
     holder = instance.participants.filter(is_contract_holder=True).first()
     if holder is None:
         return
-    sheet = holder.character.character_sheet
-    if sheet is None:
-        return
+    sheet = holder.character
     option = node.options.filter(
         option_kind=OptionKind.EXTERNAL_ACT,
         required_act__in=_DURABLE_ACTS,

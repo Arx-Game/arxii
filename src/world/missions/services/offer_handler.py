@@ -211,7 +211,7 @@ def issue_mission(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     )
     MissionParticipant.objects.create(
         instance=instance,
-        character=character,
+        character=character.sheet_data,
         is_contract_holder=True,
     )
     enter_node(instance, _entry_node(template))

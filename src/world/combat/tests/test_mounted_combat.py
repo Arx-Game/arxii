@@ -87,7 +87,7 @@ def _equip_weapon(character, *, archetype, damage=6, durability=10):
     )
     inst = ItemInstanceFactory(template=template, durability=durability)
     EquippedItem.objects.create(
-        character=character,
+        character=character.sheet_data,
         item_instance=inst,
         body_region=BodyRegion.RIGHT_HAND,
         equipment_layer=EquipmentLayer.BASE,

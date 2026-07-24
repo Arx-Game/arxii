@@ -85,7 +85,9 @@ class GrantRescueTargetTests(TestCase):
 
         instance = MissionInstance.objects.get(template=captivity.rescue_template)
         assert instance.rescue_target == captive
-        assert instance.participants.filter(character=character, is_contract_holder=True).exists()
+        assert instance.participants.filter(
+            character_id=character.pk, is_contract_holder=True
+        ).exists()
 
     def test_grant_is_noop_without_a_rescue_template(self) -> None:
         captivity = capture_character(captive=CharacterSheetFactory())  # no rescue_template

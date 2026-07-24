@@ -140,7 +140,7 @@ def resolve_challenge(
 
     # 7. Create record
     record = CharacterChallengeRecord.objects.create(
-        character=character,
+        character=character.sheet_data,
         challenge_instance=challenge_instance,
         approach=approach,
         outcome=check_result.outcome,
@@ -234,7 +234,7 @@ def _validate(
     if not challenge_instance.is_revealed:
         raise ChallengeResolutionError(_ERR_NOT_REVEALED)
     if CharacterChallengeRecord.objects.filter(
-        character=character,
+        character_id=character.pk,
         challenge_instance=challenge_instance,
     ).exists():
         raise ChallengeResolutionError(_ERR_ALREADY_RESOLVED)
@@ -359,7 +359,7 @@ def _resolve_via_template(
         challenge_deactivated = True
 
     record = CharacterChallengeRecord.objects.create(
-        character=character,
+        character=character.sheet_data,
         challenge_instance=challenge_instance,
         approach=approach,
         outcome=check_result.outcome if check_result else None,

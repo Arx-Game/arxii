@@ -46,7 +46,7 @@ class CovenantRoleBaseTotalTests(TestCase):
         )
         inst = ItemInstanceFactory(template=template, durability=30)
         EquippedItemFactory(
-            character=char,
+            character=char.sheet_data,
             item_instance=inst,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -81,7 +81,7 @@ class EquipmentWalkUnblendedTests(TestCase):
         )
         inst = ItemInstanceFactory(template=template, durability=30)
         EquippedItemFactory(
-            character=char,
+            character=char.sheet_data,
             item_instance=inst,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

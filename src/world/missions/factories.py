@@ -41,6 +41,7 @@ from world.missions.models import (
 
 # SubFactory import path, extracted to satisfy S1192.
 _CHARACTER_FACTORY = "evennia_extensions.factories.CharacterFactory"
+_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
 
 
 class MissionCategoryFactory(DjangoModelFactory):
@@ -185,7 +186,7 @@ class MissionParticipantFactory(DjangoModelFactory):
         model = MissionParticipant
 
     instance = factory.SubFactory(MissionInstanceFactory)
-    character = factory.SubFactory(_CHARACTER_FACTORY)
+    character = factory.SubFactory(_SHEET_FACTORY)
     is_contract_holder = False
 
 
@@ -207,7 +208,7 @@ class MissionDeedRecordFactory(DjangoModelFactory):
         model = MissionDeedRecord
 
     instance = factory.SubFactory(MissionInstanceFactory)
-    actor = factory.SubFactory(_CHARACTER_FACTORY)
+    actor = factory.SubFactory(_SHEET_FACTORY)
     node = factory.SubFactory(MissionNodeFactory)
     option = factory.SubFactory(MissionOptionFactory)
     outcome = None
@@ -236,7 +237,7 @@ class MissionGiverFactory(DjangoModelFactory):
 class MissionDeedRewardLineFactory(DjangoModelFactory):
     """Factory for a persisted structured reward line.
 
-    ``recipient`` defaults to a fresh CharacterFactory; callers that want the
+    ``recipient`` defaults to a fresh CharacterSheetFactory; callers that want the
     line to point at the deed's actor or a participant should pass it
     explicitly.
     """
@@ -245,7 +246,7 @@ class MissionDeedRewardLineFactory(DjangoModelFactory):
         model = MissionDeedRewardLine
 
     deed = factory.SubFactory(MissionDeedRecordFactory)
-    recipient = factory.SubFactory(_CHARACTER_FACTORY)
+    recipient = factory.SubFactory(_SHEET_FACTORY)
     kind = DeedRewardKind.IMMEDIATE
     sink = DeedRewardSink.MONEY
     amount = 100

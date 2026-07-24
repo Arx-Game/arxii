@@ -81,7 +81,7 @@ class CharacterAuraModelTests(TestCase):
         character2 = CharacterFactory()
         with self.assertRaises(ValidationError):
             CharacterAura.objects.create(
-                character=character2,
+                character=character2.sheet_data,
                 celestial=Decimal("50.00"),
                 primal=Decimal("50.00"),
                 abyssal=Decimal("50.00"),  # Total is 150, should fail
@@ -249,7 +249,7 @@ class CharacterAnimaModelTests(TestCase):
         character2 = CharacterFactory()
         with self.assertRaises(ValidationError):
             CharacterAnima.objects.create(
-                character=character2,
+                character=character2.sheet_data,
                 current=15,
                 maximum=10,
             )

@@ -382,7 +382,9 @@ class ApplyOutfitInputfuncIntegrationTests(TestCase):
             payload["kwargs"]["success"],
             f"Expected success, got: {payload['kwargs']}",
         )
-        self.assertTrue(EquippedItem.objects.filter(character=actor, item_instance=shirt).exists())
+        self.assertTrue(
+            EquippedItem.objects.filter(character=actor.sheet_data, item_instance=shirt).exists()
+        )
 
 
 class UnifiedDispatchPathTests(TestCase):

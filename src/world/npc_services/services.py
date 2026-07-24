@@ -200,7 +200,7 @@ def _build_eligibility_cache(
         pc_at_npc_cap = True
     else:
         active_npc_count = MissionInstance.objects.filter(
-            participants__character=character,
+            participants__character=sheet,
             participants__is_contract_holder=True,
             status=MissionStatus.ACTIVE,
             source_offer__isnull=False,

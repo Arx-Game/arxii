@@ -16,7 +16,7 @@ Real factory objects, no ORM mocks.
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.items.factories import ItemTemplateFactory
 from world.magic.factories import ResonanceFactory
 from world.missions.constants import (
@@ -70,10 +70,10 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
 
     def test_single_participant_all_equal_one_line(self) -> None:
         instance = MissionInstanceFactory(template=self.template)
-        holder_char = CharacterFactory(db_key="SoloHolder")
+        holder_char = CharacterSheetFactory(character__db_key="SoloHolder").character
         holder = MissionParticipantFactory(
             instance=instance,
-            character=holder_char,
+            character=holder_char.sheet_data,
             is_contract_holder=True,
         )
         route = _make_terminal_route(self.option)
@@ -86,7 +86,7 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
         )
         deed = MissionDeedRecordFactory(
             instance=instance,
-            actor=holder_char,
+            actor=holder_char.sheet_data,
             node=self.node,
             option=self.option,
         )
@@ -95,23 +95,27 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
         self.assertEqual(len(created), 1)
         line = created[0]
         self.assertEqual(line.deed, deed)
-        self.assertEqual(line.recipient, holder_char)
+        self.assertEqual(line.recipient, holder_char.sheet_data)
         self.assertEqual(line.kind, DeedRewardKind.IMMEDIATE)
         self.assertEqual(line.sink, DeedRewardSink.MONEY)
         self.assertEqual(line.amount, 500)
         # And the row is persisted.
         self.assertEqual(MissionDeedRewardLine.objects.filter(deed=deed).count(), 1)
         # Side test: verify holder factory was not unused.
-        self.assertEqual(holder.character, holder_char)
+        self.assertEqual(holder.character, holder_char.sheet_data)
 
     def test_multi_participant_all_equal_one_line_per_participant(self) -> None:
         instance = MissionInstanceFactory(template=self.template)
-        char_h = CharacterFactory(db_key="MultiHolder")
-        char_a = CharacterFactory(db_key="HelperA")
-        char_b = CharacterFactory(db_key="HelperB")
-        MissionParticipantFactory(instance=instance, character=char_h, is_contract_holder=True)
-        MissionParticipantFactory(instance=instance, character=char_a)
-        MissionParticipantFactory(instance=instance, character=char_b)
+        char_h = CharacterSheetFactory(character__db_key="MultiHolder").character
+        char_a = CharacterSheetFactory(character__db_key="HelperA").character
+        char_b = CharacterSheetFactory(character__db_key="HelperB").character
+        MissionParticipantFactory(
+            instance=instance,
+            character=char_h.sheet_data,
+            is_contract_holder=True,
+        )
+        MissionParticipantFactory(instance=instance, character=char_a.sheet_data)
+        MissionParticipantFactory(instance=instance, character=char_b.sheet_data)
         route = _make_terminal_route(self.option)
         MissionOptionRouteRewardFactory(
             route=route,
@@ -121,7 +125,7 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
             contract_holder_only=False,
         )
         deed = MissionDeedRecordFactory(
-            instance=instance, actor=char_h, node=self.node, option=self.option
+            instance=instance, actor=char_h.sheet_data, node=self.node, option=self.option
         )
 
         created = emit_terminal_rewards(instance, route, deed)
@@ -135,12 +139,16 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
 
     def test_contract_holder_only_emits_single_line_to_holder(self) -> None:
         instance = MissionInstanceFactory(template=self.template)
-        char_h = CharacterFactory(db_key="ContractHolder")
-        char_a = CharacterFactory(db_key="ContractHelperA")
-        char_b = CharacterFactory(db_key="ContractHelperB")
-        MissionParticipantFactory(instance=instance, character=char_h, is_contract_holder=True)
-        MissionParticipantFactory(instance=instance, character=char_a)
-        MissionParticipantFactory(instance=instance, character=char_b)
+        char_h = CharacterSheetFactory(character__db_key="ContractHolder").character
+        char_a = CharacterSheetFactory(character__db_key="ContractHelperA").character
+        char_b = CharacterSheetFactory(character__db_key="ContractHelperB").character
+        MissionParticipantFactory(
+            instance=instance,
+            character=char_h.sheet_data,
+            is_contract_holder=True,
+        )
+        MissionParticipantFactory(instance=instance, character=char_a.sheet_data)
+        MissionParticipantFactory(instance=instance, character=char_b.sheet_data)
         route = _make_terminal_route(self.option)
         MissionOptionRouteRewardFactory(
             route=route,
@@ -152,24 +160,28 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
         # Actor is intentionally NOT the holder — the recipient field must
         # name the holder, not the actor.
         deed = MissionDeedRecordFactory(
-            instance=instance, actor=char_a, node=self.node, option=self.option
+            instance=instance, actor=char_a.sheet_data, node=self.node, option=self.option
         )
 
         created = emit_terminal_rewards(instance, route, deed)
         self.assertEqual(len(created), 1)
-        self.assertEqual(created[0].recipient, char_h)
+        self.assertEqual(created[0].recipient, char_h.sheet_data)
         self.assertEqual(created[0].amount, 50)
         self.assertEqual(created[0].sink, DeedRewardSink.LEGEND_POINTS)
         self.assertEqual(created[0].kind, DeedRewardKind.POST_CRON)
 
     def test_mixed_broadcast_and_contract_holder_only(self) -> None:
         instance = MissionInstanceFactory(template=self.template)
-        char_h = CharacterFactory(db_key="MixHolder")
-        char_a = CharacterFactory(db_key="MixA")
-        char_b = CharacterFactory(db_key="MixB")
-        MissionParticipantFactory(instance=instance, character=char_h, is_contract_holder=True)
-        MissionParticipantFactory(instance=instance, character=char_a)
-        MissionParticipantFactory(instance=instance, character=char_b)
+        char_h = CharacterSheetFactory(character__db_key="MixHolder").character
+        char_a = CharacterSheetFactory(character__db_key="MixA").character
+        char_b = CharacterSheetFactory(character__db_key="MixB").character
+        MissionParticipantFactory(
+            instance=instance,
+            character=char_h.sheet_data,
+            is_contract_holder=True,
+        )
+        MissionParticipantFactory(instance=instance, character=char_a.sheet_data)
+        MissionParticipantFactory(instance=instance, character=char_b.sheet_data)
         route = _make_terminal_route(self.option)
         # 1 broadcast row + 1 contract_holder_only row.
         MissionOptionRouteRewardFactory(
@@ -188,7 +200,7 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
             contract_holder_only=True,
         )
         deed = MissionDeedRecordFactory(
-            instance=instance, actor=char_h, node=self.node, option=self.option
+            instance=instance, actor=char_h.sheet_data, node=self.node, option=self.option
         )
 
         created = emit_terminal_rewards(instance, route, deed)
@@ -198,18 +210,22 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
         contractual = [line for line in created if line.amount == 200]
         self.assertEqual(len(broadcast), 3)
         self.assertEqual(len(contractual), 1)
-        self.assertEqual(contractual[0].recipient, char_h)
+        self.assertEqual(contractual[0].recipient, char_h.sheet_data)
         self.assertEqual(contractual[0].ref, "contract-bonus")
         broadcast_recipients = sorted(line.recipient_id for line in broadcast)
         self.assertEqual(broadcast_recipients, sorted([char_h.id, char_a.id, char_b.id]))
 
     def test_no_reward_templates_returns_empty_list(self) -> None:
         instance = MissionInstanceFactory(template=self.template)
-        char_h = CharacterFactory(db_key="NoRewardHolder")
-        MissionParticipantFactory(instance=instance, character=char_h, is_contract_holder=True)
+        char_h = CharacterSheetFactory(character__db_key="NoRewardHolder").character
+        MissionParticipantFactory(
+            instance=instance,
+            character=char_h.sheet_data,
+            is_contract_holder=True,
+        )
         route = _make_terminal_route(self.option)
         deed = MissionDeedRecordFactory(
-            instance=instance, actor=char_h, node=self.node, option=self.option
+            instance=instance, actor=char_h.sheet_data, node=self.node, option=self.option
         )
 
         created = emit_terminal_rewards(instance, route, deed)
@@ -219,8 +235,12 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
     def test_emit_terminal_rewards_copies_resonance_onto_the_line(self) -> None:
         resonance = ResonanceFactory()
         instance = MissionInstanceFactory(template=self.template)
-        char_h = CharacterFactory(db_key="ResonanceHolder")
-        MissionParticipantFactory(instance=instance, character=char_h, is_contract_holder=True)
+        char_h = CharacterSheetFactory(character__db_key="ResonanceHolder").character
+        MissionParticipantFactory(
+            instance=instance,
+            character=char_h.sheet_data,
+            is_contract_holder=True,
+        )
         route = _make_terminal_route(self.option)
         route.reward_templates.create(
             kind=DeedRewardKind.POST_CRON,
@@ -230,7 +250,7 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
             contract_holder_only=False,
         )
         deed = MissionDeedRecordFactory(
-            instance=instance, actor=char_h, node=self.node, option=self.option
+            instance=instance, actor=char_h.sheet_data, node=self.node, option=self.option
         )
 
         lines = emit_terminal_rewards(instance, route, deed)
@@ -242,8 +262,12 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
     def test_emit_terminal_rewards_copies_item_template_onto_the_line(self) -> None:
         item_template = ItemTemplateFactory()
         instance = MissionInstanceFactory(template=self.template)
-        char_h = CharacterFactory(db_key="ItemTemplateHolder")
-        MissionParticipantFactory(instance=instance, character=char_h, is_contract_holder=True)
+        char_h = CharacterSheetFactory(character__db_key="ItemTemplateHolder").character
+        MissionParticipantFactory(
+            instance=instance,
+            character=char_h.sheet_data,
+            is_contract_holder=True,
+        )
         route = _make_terminal_route(self.option)
         route.reward_templates.create(
             kind=DeedRewardKind.IMMEDIATE,
@@ -252,7 +276,7 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
             contract_holder_only=False,
         )
         deed = MissionDeedRecordFactory(
-            instance=instance, actor=char_h, node=self.node, option=self.option
+            instance=instance, actor=char_h.sheet_data, node=self.node, option=self.option
         )
 
         lines = emit_terminal_rewards(instance, route, deed)
@@ -285,8 +309,12 @@ class EmitTerminalRewardsStubSealedRulesTests(TestCase):
             source_kind=OptionSource.AUTHORED,
         )
         instance = MissionInstanceFactory(template=template)
-        char_h = CharacterFactory(db_key=f"StubHolder-{rule}")
-        MissionParticipantFactory(instance=instance, character=char_h, is_contract_holder=True)
+        char_h = CharacterSheetFactory(character__db_key=f"StubHolder-{rule}").character
+        MissionParticipantFactory(
+            instance=instance,
+            character=char_h.sheet_data,
+            is_contract_holder=True,
+        )
         route = _make_terminal_route(option)
         MissionOptionRouteRewardFactory(
             route=route,
@@ -295,7 +323,12 @@ class EmitTerminalRewardsStubSealedRulesTests(TestCase):
             amount=100,
             contract_holder_only=False,
         )
-        deed = MissionDeedRecordFactory(instance=instance, actor=char_h, node=node, option=option)
+        deed = MissionDeedRecordFactory(
+            instance=instance,
+            actor=char_h.sheet_data,
+            node=node,
+            option=option,
+        )
         return instance, route, deed, char_h
 
     def test_by_role_raises_not_implemented(self) -> None:
@@ -328,8 +361,12 @@ class EmitTerminalRewardsStubSealedRulesTests(TestCase):
             source_kind=OptionSource.AUTHORED,
         )
         instance = MissionInstanceFactory(template=template)
-        char_h = CharacterFactory(db_key="StubPartialHolder")
-        MissionParticipantFactory(instance=instance, character=char_h, is_contract_holder=True)
+        char_h = CharacterSheetFactory(character__db_key="StubPartialHolder").character
+        MissionParticipantFactory(
+            instance=instance,
+            character=char_h.sheet_data,
+            is_contract_holder=True,
+        )
         route = _make_terminal_route(option)
         MissionOptionRouteRewardFactory(
             route=route,
@@ -345,7 +382,12 @@ class EmitTerminalRewardsStubSealedRulesTests(TestCase):
             amount=200,
             contract_holder_only=False,
         )
-        deed = MissionDeedRecordFactory(instance=instance, actor=char_h, node=node, option=option)
+        deed = MissionDeedRecordFactory(
+            instance=instance,
+            actor=char_h.sheet_data,
+            node=node,
+            option=option,
+        )
         with self.assertRaises(NotImplementedError):
             emit_terminal_rewards(instance, route, deed)
         # No partial writes: the contract-only row must NOT have been
@@ -375,15 +417,19 @@ class EmitTerminalRewardsGuardTests(TestCase):
         # caller bug and should fail loudly, not silently emit lines that
         # would otherwise belong to the destination's terminal route.
         instance = MissionInstanceFactory(template=self.template)
-        char_h = CharacterFactory(db_key="GuardHolder")
-        MissionParticipantFactory(instance=instance, character=char_h, is_contract_holder=True)
+        char_h = CharacterSheetFactory(character__db_key="GuardHolder").character
+        MissionParticipantFactory(
+            instance=instance,
+            character=char_h.sheet_data,
+            is_contract_holder=True,
+        )
         non_terminal_route = MissionOptionRouteFactory(
             option=self.option,
             outcome_tier=None,
             target_node=self.dest,  # non-null = NOT terminal
         )
         deed = MissionDeedRecordFactory(
-            instance=instance, actor=char_h, node=self.node, option=self.option
+            instance=instance, actor=char_h.sheet_data, node=self.node, option=self.option
         )
         with self.assertRaises(ValueError):
             emit_terminal_rewards(instance, non_terminal_route, deed)
@@ -396,9 +442,9 @@ class EmitTerminalRewardsGuardTests(TestCase):
         instance = MissionInstanceFactory(template=self.template)
         # Only a non-holder participant — pathological state, used to
         # exercise the assertion.
-        non_holder_char = CharacterFactory(db_key="NoHolder")
+        non_holder_char = CharacterSheetFactory(character__db_key="NoHolder").character
         MissionParticipantFactory(
-            instance=instance, character=non_holder_char, is_contract_holder=False
+            instance=instance, character=non_holder_char.sheet_data, is_contract_holder=False
         )
         route = _make_terminal_route(self.option)
         MissionOptionRouteRewardFactory(
@@ -409,7 +455,7 @@ class EmitTerminalRewardsGuardTests(TestCase):
             contract_holder_only=True,
         )
         deed = MissionDeedRecordFactory(
-            instance=instance, actor=non_holder_char, node=self.node, option=self.option
+            instance=instance, actor=non_holder_char.sheet_data, node=self.node, option=self.option
         )
         with self.assertRaises(ValueError):
             emit_terminal_rewards(instance, route, deed)
@@ -435,8 +481,12 @@ class EmitCandidateRewardsTests(TestCase):
 
     def _instance_with_holder(self):
         instance = MissionInstanceFactory(template=self.template)
-        holder_char = CharacterFactory(db_key="CandRewardHolder")
-        MissionParticipantFactory(instance=instance, character=holder_char, is_contract_holder=True)
+        holder_char = CharacterSheetFactory(character__db_key="CandRewardHolder").character
+        MissionParticipantFactory(
+            instance=instance,
+            character=holder_char.sheet_data,
+            is_contract_holder=True,
+        )
         return instance, holder_char
 
     def _candidate(self):
@@ -456,7 +506,7 @@ class EmitCandidateRewardsTests(TestCase):
         )
         deed = MissionDeedRecordFactory(
             instance=instance,
-            actor=holder_char,
+            actor=holder_char.sheet_data,
             node=self.node,
             option=self.option,
             route_candidate=candidate,
@@ -471,7 +521,7 @@ class EmitCandidateRewardsTests(TestCase):
         candidate = self._candidate()
         deed = MissionDeedRecordFactory(
             instance=instance,
-            actor=holder_char,
+            actor=holder_char.sheet_data,
             node=self.node,
             option=self.option,
             route_candidate=candidate,

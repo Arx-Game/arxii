@@ -73,7 +73,7 @@ def _build_worn_style_scenario(*, audacity: int, name_prefix: str):
     item = ItemInstanceFactory(template=template, quality_tier=quality)
     ItemStyleFactory(item_instance=item, style=style, attachment_quality_tier=quality)
     EquippedItemFactory(
-        character=char,
+        character=char.sheet_data,
         item_instance=item,
         body_region=BodyRegion.TORSO,
         equipment_layer=EquipmentLayer.BASE,

@@ -8,7 +8,6 @@ from django.test import TestCase
 from actions.base import Action
 from actions.constants import ActionCategory
 from actions.types import ActionContext, ActionResult, TargetType
-from evennia_extensions.factories import ObjectDBFactory
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
 from world.fatigue.services import get_or_create_fatigue_pool
@@ -47,7 +46,7 @@ class _FatigueAction(Action):
 
 class ActionApCostTests(TestCase):
     def setUp(self) -> None:
-        self.actor = ObjectDBFactory(db_key="Searcher")
+        self.actor = CharacterSheetFactory(character__db_key="Searcher").character
         self.pool = ActionPointPool.get_or_create_for_character(self.actor)
 
     def test_ap_is_charged_before_execute(self) -> None:

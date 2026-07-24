@@ -10,7 +10,7 @@ must fail loudly during apply. (Crime-watch went live with #1765 — see
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import DeedRewardKind, DeedRewardSink
 from world.missions.factories import (
     MissionDeedRecordFactory,
@@ -24,8 +24,8 @@ class MoneyStubTests(TestCase):
 
     def setUp(self) -> None:
         money_stub.clear_calls()
-        self.actor = CharacterFactory(db_key="MoneyStubActor")
-        self.deed = MissionDeedRecordFactory(actor=self.actor)
+        self.actor = CharacterSheetFactory(character__db_key="MoneyStubActor").character
+        self.deed = MissionDeedRecordFactory(actor=self.actor.sheet_data)
 
     def test_deliver_money_records_call(self) -> None:
         line = MissionDeedRewardLineFactory(
@@ -60,8 +60,8 @@ class BeatStubTests(TestCase):
 
     def setUp(self) -> None:
         beat_stub.clear_calls()
-        self.actor = CharacterFactory(db_key="BeatStubActor")
-        self.deed = MissionDeedRecordFactory(actor=self.actor)
+        self.actor = CharacterSheetFactory(character__db_key="BeatStubActor").character
+        self.deed = MissionDeedRecordFactory(actor=self.actor.sheet_data)
 
     def test_propagate_beat_records_call(self) -> None:
         line = MissionDeedRewardLineFactory(
@@ -94,8 +94,8 @@ class RumorStubTests(TestCase):
     """Rumor stub MUST hard-fail with a DESIGN message until Phase 6+."""
 
     def test_propagate_rumor_raises_not_implemented(self) -> None:
-        actor = CharacterFactory(db_key="RumorStubActor")
-        deed = MissionDeedRecordFactory(actor=actor)
+        actor = CharacterSheetFactory(character__db_key="RumorStubActor").character
+        deed = MissionDeedRecordFactory(actor=actor.sheet_data)
         line = MissionDeedRewardLineFactory(
             deed=deed,
             kind=DeedRewardKind.PROPAGATION,

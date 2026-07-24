@@ -319,12 +319,12 @@ class TestImmediateCastSurfacesEnvironmentLedger(ResonanceCacheIsolationMixin, T
         caster_char = initiator.character_sheet.character
         caster_char.location = room
         CharacterAuraFactory(
-            character=caster_char,
+            character=caster_char.sheet_data,
             celestial=Decimal("80.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("10.00"),
         )
-        CharacterAnimaFactory(character=caster_char, current=20, maximum=30)
+        CharacterAnimaFactory(character=caster_char.sheet_data, current=20, maximum=30)
 
         # Benign, standalone-castable technique whose gift channels the resonance
         # so the cast-time working affinity resolves to Celestial.
@@ -538,7 +538,7 @@ class TestImmediateCastThreadRaisesPower(ResonanceCacheIsolationMixin, TestCase)
         initiator = PersonaFactory()
         caster_char = initiator.character_sheet.character
         caster_char.location = room
-        CharacterAnimaFactory(character=caster_char, current=20, maximum=30)
+        CharacterAnimaFactory(character=caster_char.sheet_data, current=20, maximum=30)
 
         technique = TechniqueFactory(
             effect_type=BinaryEffectTypeFactory(),

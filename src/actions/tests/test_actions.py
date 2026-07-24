@@ -441,12 +441,13 @@ class DropActionTests(TestCase):
             db_key="DropAutoUnequipRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        actor = CharacterFactory(db_key="DropAutoUnequipActor", location=room)
+        actor = CharacterSheetFactory(character__db_key="DropAutoUnequipActor").character
+        actor.location = room
 
         item_obj = ObjectDBFactory(db_key="DropAutoUnequipShirt", location=actor)
         item_instance = ItemInstanceFactory(game_object=item_obj)
         EquippedItem.objects.create(
-            character=actor,
+            character=actor.sheet_data,
             item_instance=item_instance,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

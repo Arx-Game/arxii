@@ -90,7 +90,7 @@ class ResolveOptionAdvanceFalseTests(TestCase):
         # Deed emitted with the rolled outcome + correct actor (same as
         # advance=True).
         self.assertEqual(deed.outcome, self.success)
-        self.assertEqual(deed.actor, self.character)
+        self.assertEqual(deed.actor, self.sheet)
         self.assertTrue(MissionDeedRecord.objects.filter(pk=deed.pk).exists())
         # Per-act consequence still applied (the reuse boundary).
         self.assertEqual(mocked.call_count, 1)

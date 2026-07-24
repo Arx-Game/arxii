@@ -97,7 +97,7 @@ def apply_escalation_tick(
 
     for participant in participants:
         character = participant.character_sheet.character
-        engagement = CharacterEngagement.objects.filter(character=character).first()
+        engagement = CharacterEngagement.objects.filter(character_id=character.pk).first()
         if engagement is None:
             logger.warning(
                 "Escalation tick: missing engagement for %s in encounter %s; recreating.",

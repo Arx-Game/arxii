@@ -61,12 +61,12 @@ class ReportHeatTestCase(TestCase):
             status=MissionStatus.RESOLVED,
         )
         self.participant = MissionParticipantFactory(
-            instance=self.instance, character=self.reporter, is_contract_holder=True
+            instance=self.instance, character=self.reporter.sheet_data, is_contract_holder=True
         )
-        deed = MissionDeedRecordFactory(instance=self.instance, actor=self.reporter)
+        deed = MissionDeedRecordFactory(instance=self.instance, actor=self.reporter.sheet_data)
         MissionDeedRewardLineFactory(
             deed=deed,
-            recipient=self.reporter,
+            recipient=self.reporter.sheet_data,
             kind=DeedRewardKind.PROPAGATION,
             sink=DeedRewardSink.CRIME_WATCH,
             ref="theft",
@@ -167,7 +167,7 @@ class ReportHeatTestCase(TestCase):
         deed.reward_lines.all().delete()
         MissionDeedRewardLineFactory(
             deed=deed,
-            recipient=self.reporter,
+            recipient=self.reporter.sheet_data,
             kind=DeedRewardKind.PROPAGATION,
             sink=DeedRewardSink.CRIME_WATCH,
             ref="not-a-crime-kind",

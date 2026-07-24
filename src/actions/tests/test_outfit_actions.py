@@ -112,11 +112,11 @@ class ApplyOutfitActionTests(TestCase):
 
         assert result.success is True
         assert EquippedItem.objects.filter(
-            character=actor,
+            character=actor.sheet_data,
             item_instance=shirt,
         ).exists()
         assert EquippedItem.objects.filter(
-            character=actor,
+            character=actor.sheet_data,
             item_instance=glove,
         ).exists()
 
@@ -204,14 +204,14 @@ class UndressActionTests(TestCase):
 
     def test_happy_path_unequips_all_items(self) -> None:
         room, actor = self._build_actor_with_equipped_items(count=2)
-        assert EquippedItem.objects.filter(character=actor).count() == 2
+        assert EquippedItem.objects.filter(character=actor.sheet_data).count() == 2
 
         action = UndressAction()
         with patch.object(room, "msg_contents"):
             result = action.run(actor)
 
         assert result.success is True
-        assert EquippedItem.objects.filter(character=actor).count() == 0
+        assert EquippedItem.objects.filter(character=actor.sheet_data).count() == 0
 
     def test_undress_naked_character_returns_success(self) -> None:
         room = ObjectDBFactory(
@@ -220,14 +220,14 @@ class UndressActionTests(TestCase):
         )
         actor = CharacterFactory(db_key="UndressActionNakedAlice", location=room)
         CharacterSheetFactory(character=actor)
-        assert EquippedItem.objects.filter(character=actor).count() == 0
+        assert EquippedItem.objects.filter(character=actor.sheet_data).count() == 0
 
         action = UndressAction()
         with patch.object(room, "msg_contents"):
             result = action.run(actor)
 
         assert result.success is True
-        assert EquippedItem.objects.filter(character=actor).count() == 0
+        assert EquippedItem.objects.filter(character=actor.sheet_data).count() == 0
 
     def test_inventory_error_surfaces_user_message(self) -> None:
         _room, actor = self._build_actor_with_equipped_items(count=1)

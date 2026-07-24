@@ -62,7 +62,7 @@ class BattlePerilRescueE2EJourneyTest(TestCase):
         self.rescuer_char, self.rescuer_sheet = _make_pc("peril_rescuer", self.room)
         for sheet, char in ((self.pc_sheet, self.pc_char), (self.rescuer_sheet, self.rescuer_char)):
             CharacterTechniqueFactory(character=sheet, technique=self.technique)
-            CharacterAnimaFactory(character=char, current=20, maximum=30)
+            CharacterAnimaFactory(character=char.sheet_data, current=20, maximum=30)
 
         self.pc_participant = enlist_participant(
             battle=self.battle, character_sheet=self.pc_sheet, side=self.side, place=self.place

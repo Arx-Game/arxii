@@ -48,7 +48,7 @@ class CharacterComfortTests(TestCase):
 
     def _wear(self, character, template):
         EquippedItemFactory(
-            character=character, item_instance=ItemInstanceFactory(template=template)
+            character=character.sheet_data, item_instance=ItemInstanceFactory(template=template)
         )
 
     def test_unclothed_character_feels_the_cold(self) -> None:

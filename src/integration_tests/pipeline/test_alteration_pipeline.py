@@ -450,7 +450,7 @@ class AlterationFullPipelineTests(TestCase):
         )
 
         # Engage the character so the social safety bonus does not inflate control
-        CharacterEngagementFactory(character=character)
+        CharacterEngagementFactory(character=character.sheet_data)
 
         # Cache the outcome_tier for the MAGICAL_SCARS consequence so tests don't
         # re-query get_effective_consequences on every call.

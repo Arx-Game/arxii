@@ -9,7 +9,7 @@ from actions.definitions.forms import (
     RevertFormAction,
     ShiftFormAction,
 )
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.conditions.capability_content import AT_WILL_SHIFTING
 from world.conditions.factories import CapabilityTypeFactory
@@ -66,7 +66,7 @@ class ShiftFormActionTests(TestCase):
     def _make_form(
         self, character, name: str = "", form_type: str = FormType.TRUE
     ) -> CharacterForm:
-        return CharacterFormFactory(character=character, name=name, form_type=form_type)
+        return CharacterFormFactory(character=character.sheet_data, name=name, form_type=form_type)
 
     def _make_alt(self, sheet: CharacterSheet, **kwargs) -> AlternateSelf:
         return AlternateSelfFactory(character=sheet, **kwargs)
@@ -145,7 +145,7 @@ class ShiftFormActionTests(TestCase):
         # rather than letting the ValueError propagate uncaught (-> 500 on web).
         from world.forms.services import FormOwnershipError
 
-        other_character = CharacterFactory()
+        other_character = CharacterSheetFactory().character
         foreign_form = self._make_form(
             other_character, name="stranger", form_type=FormType.ALTERNATE
         )
@@ -175,7 +175,7 @@ class RevertFormActionTests(TestCase):
     def _make_form(
         self, character, name: str = "", form_type: str = FormType.TRUE
     ) -> CharacterForm:
-        return CharacterFormFactory(character=character, name=name, form_type=form_type)
+        return CharacterFormFactory(character=character.sheet_data, name=name, form_type=form_type)
 
     def _make_alt(self, sheet: CharacterSheet, **kwargs) -> AlternateSelf:
         return AlternateSelfFactory(character=sheet, **kwargs)

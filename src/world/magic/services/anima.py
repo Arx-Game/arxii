@@ -40,7 +40,7 @@ def deduct_anima(character: ObjectDB, effective_cost: int, *, lethal: bool = Tru
         return 0
 
     with transaction.atomic():
-        anima = CharacterAnima.objects.select_for_update().get(character=character)
+        anima = CharacterAnima.objects.select_for_update().get(character_id=character.pk)
         if not lethal:
             # Non-lethal: never spend past available anima — no life-force draw.
             effective_cost = min(effective_cost, anima.current)
@@ -117,7 +117,7 @@ def perform_anima_ritual(
     if config.check_type is None:
         raise NoRitualConfigured
 
-    if CharacterEngagement.objects.filter(character=character).exists():
+    if CharacterEngagement.objects.filter(character_id=character.pk).exists():
         raise CharacterEngagedForRitual
 
     if not scene.is_active or not _scene_participant(scene, character):
@@ -173,7 +173,7 @@ def apply_anima_ritual_outcome(
     config = SoulfrayConfig.objects.cached_singleton()
     budget = _budget_for_outcome(outcome)
 
-    anima = CharacterAnima.objects.select_for_update().get(character=character)
+    anima = CharacterAnima.objects.select_for_update().get(character=character_sheet)
 
     soulfray_template = ConditionTemplate.get_by_name(SOULFRAY_CONDITION_NAME)
     soulfray_inst = (

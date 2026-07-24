@@ -132,13 +132,13 @@ class _VisibleWornSetupMixin:
 
         # Equip both on character A.
         EquippedItem.objects.create(
-            character=self.character_a,
+            character=self.character_a.sheet_data,
             item_instance=self.shirt,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
         EquippedItem.objects.create(
-            character=self.character_a,
+            character=self.character_a.sheet_data,
             item_instance=self.coat,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.OVER,

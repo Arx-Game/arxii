@@ -174,7 +174,7 @@ def _evaluate_audere_gates(
     if stage_order < threshold.minimum_warp_stage.stage_order:
         return None
 
-    if not CharacterEngagement.objects.filter(character=character).exists():
+    if not CharacterEngagement.objects.filter(character_id=character.pk).exists():
         return None
 
     if ConditionInstance.objects.filter(
@@ -257,13 +257,13 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
 
         # Boost engagement intensity modifier
         engagement = CharacterEngagement.objects.select_for_update().get(
-            character=character,
+            character_id=character.pk,
         )
         engagement.intensity_modifier += threshold.intensity_bonus
         engagement.save(update_fields=["intensity_modifier"])
 
         # Expand anima pool
-        anima = CharacterAnima.objects.select_for_update().get(character=character)
+        anima = CharacterAnima.objects.select_for_update().get(character_id=character.pk)
         anima.pre_audere_maximum = anima.maximum
         anima.maximum += threshold.anima_pool_bonus
         anima.save(update_fields=["pre_audere_maximum", "maximum"])
@@ -305,14 +305,16 @@ def end_audere(character: ObjectDB) -> None:
         # Revert engagement intensity modifier
         if threshold is not None:
             engagement = (
-                CharacterEngagement.objects.select_for_update().filter(character=character).first()
+                CharacterEngagement.objects.select_for_update()
+                .filter(character_id=character.pk)
+                .first()
             )
             if engagement is not None:
                 engagement.intensity_modifier -= threshold.intensity_bonus
                 engagement.save(update_fields=["intensity_modifier"])
 
         # Revert anima pool
-        anima = CharacterAnima.objects.select_for_update().filter(character=character).first()
+        anima = CharacterAnima.objects.select_for_update().filter(character_id=character.pk).first()
         if anima is not None and anima.pre_audere_maximum is not None:
             anima.maximum = anima.pre_audere_maximum
             anima.current = min(anima.current, anima.maximum)

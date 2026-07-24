@@ -37,7 +37,7 @@ def has_active_court_mission(*, character_sheet: CharacterSheet, covenant: Coven
     from world.missions.models import MissionInstance  # noqa: PLC0415
 
     return MissionInstance.objects.filter(
-        participants__character=character_sheet.character,
+        participants__character=character_sheet,
         status=MissionStatus.ACTIVE,
         source_offer__role__faction_affiliation_id=covenant.organization_id,
     ).exists()

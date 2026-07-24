@@ -192,7 +192,7 @@ def _participant_or_raise(instance: MissionInstance, character: ObjectDB) -> Mis
     """Return the participant row or raise BeatActionError."""
     from world.missions.services.play import BeatActionError  # noqa: PLC0415
 
-    participant = instance.participants.filter(character=character).first()
+    participant = instance.participants.filter(character_id=character.pk).first()
     if participant is None:
         raise BeatActionError(_ERR_NOT_PARTICIPANT)
     return participant
@@ -266,7 +266,7 @@ def _roll_and_bank(  # noqa: PLR0913
         first_option = node.options.first()
         MissionDeedRecord.objects.create(
             instance=instance,
-            actor=character,
+            actor=character.sheet_data,
             node=node,
             option=first_option,
             outcome=result.outcome,

@@ -170,8 +170,8 @@ class BattleTelnetE2EJourneyTest(TestCase):
         # Both PCs know the shared technique and have anima to cast it.
         CharacterTechniqueFactory(character=self.pc1_sheet, technique=self.technique)
         CharacterTechniqueFactory(character=self.pc2_sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.pc1_char, current=20, maximum=30)
-        CharacterAnimaFactory(character=self.pc2_char, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.pc1_char.sheet_data, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.pc2_char.sheet_data, current=20, maximum=30)
 
         self.pc1_participant = enlist_participant(
             battle=self.battle,

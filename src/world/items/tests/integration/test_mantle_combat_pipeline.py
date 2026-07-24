@@ -219,7 +219,7 @@ class MantleCombatPipelineTests(TestCase):
         from world.items.models import EquippedItem
         from world.magic.models import Thread
 
-        EquippedItem.objects.filter(character=self.character_obj).delete()
+        EquippedItem.objects.filter(character=self.character_obj.sheet_data).delete()
         Thread.objects.filter(owner=self.sheet).delete()
         self.character_obj.equipped_items.invalidate()
         self.character_obj.threads.invalidate()

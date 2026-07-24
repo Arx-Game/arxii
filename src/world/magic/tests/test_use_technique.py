@@ -146,7 +146,7 @@ class PreCastModifyPowerInvariantTests(TestCase):
         room = _create_room(f"InvariantRoom{'Ward' if with_ward else 'Control'}")
         anima = CharacterAnimaFactory(current=20, maximum=20)
         character = anima.character
-        CharacterEngagementFactory(character=character)
+        CharacterEngagementFactory(character=character.sheet_data)
         character.location = room
 
         if with_ward:

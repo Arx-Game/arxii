@@ -241,7 +241,7 @@ class MissionTemplateDetailSerializer(MissionTemplateSerializer):
             contract_holder = None
             for participant in instance.cached_participants:
                 if participant.is_contract_holder:
-                    contract_holder = participant.character.db_key
+                    contract_holder = participant.character.character.db_key
                     break
             rows.append(
                 {

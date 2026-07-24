@@ -64,6 +64,6 @@ class TargetAlreadyKnownTests(TestCase):
 
         character = roster.character_sheet.character
         instance = MissionInstanceFactory(template=template)
-        MissionParticipantFactory(instance=instance, character=character)
+        MissionParticipantFactory(instance=instance, character=character.sheet_data)
 
         assert target_already_known(clue, roster) is True

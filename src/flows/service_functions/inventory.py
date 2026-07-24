@@ -399,7 +399,7 @@ def equip(character: CharacterState, item: ItemState) -> None:
     sheet = character.obj.sheet_data
     for slot in item.instance.template.cached_slots:
         existing = EquippedItem.objects.filter(
-            character=character.obj,
+            character=sheet,
             body_region=slot.body_region,
             equipment_layer=slot.equipment_layer,
         ).first()
@@ -425,7 +425,7 @@ def unequip(character: CharacterState, item: ItemState) -> None:
     location is unchanged.
     """
     # Snapshot rows before iteration — unequip_item deletes them as we go.
-    equipped_rows = list(item.instance.equipped_slots.filter(character=character.obj))
+    equipped_rows = list(item.instance.equipped_slots.filter(character_id=character.obj.pk))
     if not equipped_rows:
         raise NotEquipped
     for row in equipped_rows:

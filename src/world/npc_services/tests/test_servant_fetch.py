@@ -445,7 +445,9 @@ class ServantFetchOutfitTests(TestCase):
         self.assertEqual(self.piece.game_object.location, self.char)
         # And should have an equipped row.
         self.assertTrue(
-            EquippedItem.objects.filter(character=self.char, item_instance=self.piece).exists()
+            EquippedItem.objects.filter(
+                character=self.char.sheet_data, item_instance=self.piece
+            ).exists()
         )
 
     def test_outfit_fetch_stale_callback_no_ops(self):
@@ -474,5 +476,7 @@ class ServantFetchOutfitTests(TestCase):
         self.piece.refresh_from_db()
         self.assertEqual(self.piece.game_object.location, self.other_room)
         self.assertFalse(
-            EquippedItem.objects.filter(character=self.char, item_instance=self.piece).exists()
+            EquippedItem.objects.filter(
+                character=self.char.sheet_data, item_instance=self.piece
+            ).exists()
         )

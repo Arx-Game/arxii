@@ -107,7 +107,7 @@ def _try_spend_reactive(instance: ConditionInstance) -> bool:
     if cost <= 0:
         return True
     payer = instance.source_character or instance.target
-    anima = CharacterAnima.objects.filter(character=payer).first()
+    anima = CharacterAnima.objects.filter(character_id=payer.pk).first()
     if anima is None or anima.current < cost:
         return False
     anima.current -= cost

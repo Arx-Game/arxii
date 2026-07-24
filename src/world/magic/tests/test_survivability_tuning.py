@@ -299,7 +299,7 @@ class CoherenceAmplifierBaselineTests(TestCase):
             attachment_quality_tier=cls.quality,
         )
         cls.equipped_a = EquippedItemFactory(
-            character=cls.char,
+            character=cls.char.sheet_data,
             item_instance=cls.item_a,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -326,7 +326,7 @@ class CoherenceAmplifierBaselineTests(TestCase):
         lone_mr = MotifResonanceFactory(motif=lone_motif, resonance=cls.resonance)
         MotifResonanceStyleFactory(motif_resonance=lone_mr, style=cls.style_bound)
         EquippedItemFactory(
-            character=cls.lone_char,
+            character=cls.lone_char.sheet_data,
             item_instance=cls.item_a,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -351,7 +351,7 @@ class CoherenceAmplifierBaselineTests(TestCase):
 
             # Now re-equip the bound-style item.
             dressed = EquippedItemFactory(
-                character=self.char,
+                character=self.char.sheet_data,
                 item_instance=self.item_a,
                 body_region=BodyRegion.TORSO,
                 equipment_layer=EquipmentLayer.BASE,
@@ -372,7 +372,7 @@ class CoherenceAmplifierBaselineTests(TestCase):
             from world.items.factories import EquippedItemFactory
 
             self.__class__.equipped_a = EquippedItemFactory(
-                character=self.char,
+                character=self.char.sheet_data,
                 item_instance=self.item_a,
                 body_region=BodyRegion.TORSO,
                 equipment_layer=EquipmentLayer.BASE,
@@ -396,7 +396,7 @@ class CoherenceAmplifierBaselineTests(TestCase):
 
             # Equip only the unbound-style item.
             uncoordinated = EquippedItemFactory(
-                character=self.char,
+                character=self.char.sheet_data,
                 item_instance=self.item_b,
                 body_region=BodyRegion.TORSO,
                 equipment_layer=EquipmentLayer.OUTER,
@@ -420,7 +420,7 @@ class CoherenceAmplifierBaselineTests(TestCase):
             from world.items.factories import EquippedItemFactory
 
             self.__class__.equipped_a = EquippedItemFactory(
-                character=self.char,
+                character=self.char.sheet_data,
                 item_instance=self.item_a,
                 body_region=BodyRegion.TORSO,
                 equipment_layer=EquipmentLayer.BASE,
@@ -495,7 +495,7 @@ class CoherenceMemoizationTests(TestCase):
             attachment_quality_tier=cls.quality,
         )
         cls.equipped = EquippedItemFactory(
-            character=cls.char,
+            character=cls.char.sheet_data,
             item_instance=cls.item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

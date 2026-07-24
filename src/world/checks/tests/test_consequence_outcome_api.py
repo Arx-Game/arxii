@@ -391,7 +391,7 @@ class ConsequenceOutcomePoollessDisplayTest(TestCase):
         self.challenge_instance = ChallengeInstanceFactory(template=self.template)
 
         self.challenge_record = CharacterChallengeRecord.objects.create(
-            character=char,
+            character=char.sheet_data,
             challenge_instance=self.challenge_instance,
             approach=self.approach,
             consequence=self.approach_consequence,

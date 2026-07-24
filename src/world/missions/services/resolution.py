@@ -154,9 +154,9 @@ def build_option_list(
         )
         .order_by("order", "pk")
     )
-    here = _current_room_profile(viewer.character)
+    here = _current_room_profile(viewer.character.character)
     local = [opt for opt in options if option_is_locally_live(opt, node, instance, here)]
-    return present_options_for_character(viewer.character, local)
+    return present_options_for_character(viewer.character.character, local)
 
 
 def _current_room_profile(character: ObjectDB) -> RoomProfile | None:
@@ -584,7 +584,7 @@ def resolve_option(  # noqa: PLR0913
 
     M1: writes ``current_node`` but never reads a stale cached one.
     """
-    character = actor.character
+    character = actor.character.character
 
     if option.spawns_instance:
         _spawn_mission_instance_room(instance, option, character)
@@ -650,7 +650,7 @@ def resolve_option(  # noqa: PLR0913
 
     deed = MissionDeedRecord.objects.create(
         instance=instance,
-        actor=character,
+        actor=character.sheet_data,
         node=node,
         option=option,
         outcome=result.outcome,
@@ -715,7 +715,7 @@ def _resolve_branch(
 
     deed = MissionDeedRecord.objects.create(
         instance=instance,
-        actor=character,
+        actor=character.sheet_data,
         node=node,
         option=option,
         outcome=None,

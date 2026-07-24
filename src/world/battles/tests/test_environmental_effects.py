@@ -384,7 +384,7 @@ class SetEnvironmentSuccessTests(TestCase):
             action_template=ActionTemplateFactory(), target_weather_type=self.weather_type
         )
         CharacterTechniqueFactory(character=self.character, technique=self.technique)
-        CharacterAnimaFactory(character=self.character.sheet_data)
+        CharacterAnimaFactory(character=self.character)
 
     def test_battle_scope_cast_sets_battle_weather_override(self) -> None:
         battle_round = begin_battle_round(battle=self.battle)

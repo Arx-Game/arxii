@@ -41,8 +41,8 @@ class TechniqueUseResultFieldTests(TestCase):
 
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(current=20, maximum=20)
-        self.character = self.anima.character
-        CharacterEngagementFactory(character=self.character.sheet_data)
+        self.character = self.anima.character.character
+        CharacterEngagementFactory(character=self.anima.character)
 
     def test_use_technique_populates_technique_field(self) -> None:
         """result.technique is the technique passed to use_technique."""
@@ -58,8 +58,8 @@ class TechniqueUseResultFieldTests(TestCase):
         """was_deficit is True when anima cost exceeds available anima."""
         # Use a high-cost technique with very little anima
         anima = CharacterAnimaFactory(current=1, maximum=20)
-        character = anima.character
-        CharacterEngagementFactory(character=character)
+        character = anima.character.character
+        CharacterEngagementFactory(character=anima.character)
         expensive_technique = TechniqueFactory(
             intensity=5,
             control=5,

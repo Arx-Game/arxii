@@ -7,8 +7,8 @@ ensuring that balance updates and audit trail creation happen together.
 
 from django.db import transaction
 from evennia.accounts.models import AccountDB
-from evennia.objects.models import ObjectDB
 
+from world.character_sheets.models import CharacterSheet
 from world.progression.models import (
     KudosClaimCategory,
     KudosPointsData,
@@ -30,7 +30,7 @@ def award_kudos(  # noqa: PLR0913
     source_category: KudosSourceCategory,
     description: str,
     awarded_by: AccountDB | None = None,
-    character: ObjectDB | None = None,
+    character: CharacterSheet | None = None,
 ) -> AwardResult:
     """
     Award kudos to an account with full audit trail.

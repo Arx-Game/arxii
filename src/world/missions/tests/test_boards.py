@@ -69,11 +69,11 @@ class PostingsForGiverTests(TestCase):
         giver.templates.add(self.template_open)
         postings_for_giver(giver, self.character)
         self.assertFalse(
-            MissionInstance.objects.filter(participants__character=self.character).exists()
+            MissionInstance.objects.filter(participants__character_id=self.character.pk).exists()
         )
         self.assertFalse(
             MissionGiverCooldown.objects.filter(
-                giver=giver, character=self.character.sheet_data
+                giver=giver, character_id=self.character.pk
             ).exists()
         )
 
@@ -136,7 +136,7 @@ class TakeFromBoardTests(TestCase):
         take_from_board(giver, self.character, self.template_open.pk)
         self.assertTrue(
             MissionGiverCooldown.objects.filter(
-                giver=giver, character=self.character.sheet_data
+                giver=giver, character_id=self.character.pk
             ).exists()
         )
 
@@ -183,7 +183,7 @@ class BoardExamineTests(TestCase):
         giver.templates.add(self.template_open)
         maybe_dispatch_on_examine(self.character, self.board_obj)
         self.assertFalse(
-            MissionInstance.objects.filter(participants__character=self.character).exists()
+            MissionInstance.objects.filter(participants__character_id=self.character.pk).exists()
         )
 
     def test_examine_renders_postings_section(self) -> None:

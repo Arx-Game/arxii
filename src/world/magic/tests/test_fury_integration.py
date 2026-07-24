@@ -330,7 +330,7 @@ class StrainAndFuryStackedTests(TestCase):
 
         anima = CharacterAnimaFactory(current=50, maximum=50)
         character = anima.character
-        CharacterEngagementFactory(character=character)
+        CharacterEngagementFactory(character=character.sheet_data)
         sheet = CharacterSheetFactory(character=character)
         return character, sheet, anima
 

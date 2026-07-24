@@ -578,7 +578,7 @@ class ProcessWeeklyTrainingTests(TestCase):
     def test_consumes_ap(self) -> None:
         """AP is consumed from the character's pool."""
         pool, _ = ActionPointPool.objects.get_or_create(
-            character=self.student,
+            character=self.student.sheet_data,
             defaults={"current": 100, "maximum": 200},
         )
         pool.current = 100
@@ -630,7 +630,7 @@ class ProcessWeeklyTrainingTests(TestCase):
     def test_logs_warning_on_insufficient_ap(self) -> None:
         """Logs a warning when AP pool has insufficient points."""
         pool, _ = ActionPointPool.objects.get_or_create(
-            character=self.student,
+            character=self.student.sheet_data,
             defaults={"current": 0, "maximum": 200},
         )
         pool.current = 0

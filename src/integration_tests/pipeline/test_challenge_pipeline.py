@@ -103,7 +103,7 @@ class ChallengeAvailabilityTests(TestCase):
         bare_char = CharacterFactory(db_key="Nobody")
         # CharacterSheetFactory also ensures a CharacterSheet exists.
         CharacterSheetFactory(character=bare_char)
-        CharacterAnimaFactory(character=bare_char)
+        CharacterAnimaFactory(character=bare_char.sheet_data)
 
         actions = get_available_actions(bare_char, self.room)
         assert len(actions) == 0, f"Expected 0 actions, got {len(actions)}: {actions}"
@@ -276,7 +276,7 @@ class ChallengeResolutionTests(TestCase):
             resolve_challenge(self.char, instance, approach, source)
 
         assert CharacterChallengeRecord.objects.filter(
-            character=self.char,
+            character=self.char.sheet_data,
             challenge_instance=instance,
         ).exists()
 
@@ -304,7 +304,7 @@ class ChallengeResolutionTests(TestCase):
             resolve_challenge(self.char, instance, approach, source)
 
         record = CharacterChallengeRecord.objects.get(
-            character=self.char,
+            character=self.char.sheet_data,
             challenge_instance=instance,
         )
         assert record.consequence is not None

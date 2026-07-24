@@ -149,7 +149,7 @@ def take_from_board(giver: MissionGiver, character: ObjectDB, template_id: int) 
     instance = staff_assign_mission(template, character, persona=persona)
     available_at = timezone.now() + (template.cooldown or _DEFAULT_COOLDOWN)
     MissionGiverCooldown.objects.update_or_create(
-        giver=giver, character=character, defaults={"available_at": available_at}
+        giver=giver, character=character.sheet_data, defaults={"available_at": available_at}
     )
     return instance
 

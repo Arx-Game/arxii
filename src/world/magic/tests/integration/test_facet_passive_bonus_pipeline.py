@@ -103,13 +103,13 @@ class FacetPassiveBonusPipelineTests(TestCase):
 
         # 7. EQUIP both items on distinct slots
         EquippedItemFactory(
-            character=cls.character_obj,
+            character=cls.character_obj.sheet_data,
             item_instance=cls.instance_a,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
         EquippedItemFactory(
-            character=cls.character_obj,
+            character=cls.character_obj.sheet_data,
             item_instance=cls.instance_b,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.OUTER,
@@ -245,7 +245,7 @@ class FacetPassiveBonusNoResonanceLinkTests(TestCase):
             ),
         )
         EquippedItemFactory(
-            character=char,
+            character=char.sheet_data,
             item_instance=instance,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

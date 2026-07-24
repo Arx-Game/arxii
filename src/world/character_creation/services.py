@@ -1433,7 +1433,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         set_glimpse_tags,
     )
 
-    aura = CharacterAura(character=sheet.character)
+    aura = CharacterAura(character=sheet)
     aura.full_clean()
     aura.save()
 

@@ -100,7 +100,7 @@ def _set_aura(sheet: object, *, celestial: str, primal: str, abyssal: str) -> No
             setattr(aura, k, v)
         aura.save()
     except AttributeError:
-        CharacterAuraFactory(character=char, **defaults)
+        CharacterAuraFactory(character=char.sheet_data, **defaults)
 
 
 def _set_abyssal_primary(sheet: object) -> None:

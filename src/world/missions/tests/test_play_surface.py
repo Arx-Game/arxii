@@ -130,7 +130,7 @@ class LocationConjunctTests(TestCase):
         # when the character started elsewhere.
         instance.anchor_room = self.here
         instance.save(update_fields=["anchor_room"])
-        participant = instance.participants.get(character=character)
+        participant = instance.participants.get(character_id=character.pk)
         return build_option_list(instance, entry, participant)
 
     def test_anywhere_is_live_everywhere(self) -> None:
@@ -172,7 +172,7 @@ class LocationConjunctTests(TestCase):
         instance = staff_assign_mission(template, character)
         instance.anchor_room = None
         instance.save(update_fields=["anchor_room"])
-        participant = instance.participants.get(character=character)
+        participant = instance.participants.get(character_id=character.pk)
         self.assertEqual(len(build_option_list(instance, entry, participant)), 0)
 
 
@@ -205,7 +205,7 @@ class AreaLocationConjunctTests(TestCase):
         entry.save(update_fields=["location_mode", "target_area"])
         character = _pc(in_room)
         instance = staff_assign_mission(template, character)
-        participant = instance.participants.get(character=character)
+        participant = instance.participants.get(character_id=character.pk)
         return build_option_list(instance, entry, participant)
 
     def test_area_live_in_target_area(self) -> None:
@@ -231,7 +231,7 @@ class AreaLocationConjunctTests(TestCase):
         entry.target_area_id = None
         character = _pc(self.here_room)
         instance = staff_assign_mission(template, character)
-        participant = instance.participants.get(character=character)
+        participant = instance.participants.get(character_id=character.pk)
         self.assertEqual(len(build_option_list(instance, entry, participant)), 0)
 
 
@@ -557,7 +557,7 @@ class InstancedPlayTests(TestCase):
         second.save(update_fields=["location_mode"])
         character = _pc(self.start_room)
         instance = staff_assign_mission(template, character)
-        participant = instance.participants.get(character=character)
+        participant = instance.participants.get(character_id=character.pk)
         return instance, entry, entry_option, second, second_option, character, participant
 
     def test_resolving_spawning_option_moves_actor_into_instance(self) -> None:

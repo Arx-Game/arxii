@@ -88,7 +88,7 @@ class EscalationSpikeTests(TestCase):
         )
 
     def _intensity(self, character) -> int:
-        return CharacterEngagement.objects.get(character=character).intensity_modifier
+        return CharacterEngagement.objects.get(character=character.sheet_data).intensity_modifier
 
     def test_spike_applies_to_bonded_survivor_via_emit(self):
         self._bond(self.sheet_a, self.sheet_b)

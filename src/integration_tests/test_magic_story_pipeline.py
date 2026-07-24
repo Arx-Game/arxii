@@ -186,14 +186,14 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         # CharacterAura: abyssal=100 so caster_alignment=1.0 against any room.
         # celestial=0, primal=0 (sum must equal 100 per clean()).
         self.aura = CharacterAuraFactory(
-            character=self.caster,
+            character=self.caster.sheet_data,
             celestial=Decimal("0.00"),
             primal=Decimal("0.00"),
             abyssal=Decimal("100.00"),
         )
 
         # CharacterAnima is required by use_technique (anima cost deduction).
-        self.anima = CharacterAnimaFactory(character=self.caster, current=20, maximum=20)
+        self.anima = CharacterAnimaFactory(character=self.caster.sheet_data, current=20, maximum=20)
 
         # Build an Abyssal-affinity Technique for the caster:
         # create a Gift whose resonances M2M includes "Dissolution" (Abyssal affinity).
@@ -1168,12 +1168,12 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         primal_caster = primal_sheet.character
 
         CharacterAuraFactory(
-            character=primal_caster,
+            character=primal_caster.sheet_data,
             celestial=Decimal("0.00"),
             primal=Decimal("100.00"),
             abyssal=Decimal("0.00"),
         )
-        CharacterAnimaFactory(character=primal_caster, current=20, maximum=20)
+        CharacterAnimaFactory(character=primal_caster.sheet_data, current=20, maximum=20)
 
         # Seed a Primal resonance and wire it into a technique.
         primal_affinity = Affinity.objects.get(name="Primal")
@@ -1296,12 +1296,12 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         second_caster = second_sheet.character
 
         CharacterAuraFactory(
-            character=second_caster,
+            character=second_caster.sheet_data,
             celestial=Decimal("0.00"),
             primal=Decimal("0.00"),
             abyssal=Decimal("100.00"),
         )
-        CharacterAnimaFactory(character=second_caster, current=20, maximum=20)
+        CharacterAnimaFactory(character=second_caster.sheet_data, current=20, maximum=20)
 
         second_caster.location = self.high_room
         second_caster.save()

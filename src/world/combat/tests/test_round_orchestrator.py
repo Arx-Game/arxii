@@ -704,7 +704,7 @@ class ResolveDeclaredChallengesTests(TestCase):
         character = participant.character_sheet.character
         self.assertTrue(
             CharacterChallengeRecord.objects.filter(
-                character=character,
+                character=character.sheet_data,
                 challenge_instance=challenge_instance,
             ).exists(),
             "CharacterChallengeRecord should exist after challenge was resolved",
@@ -1027,7 +1027,7 @@ class ResolveDeclaredChallengesTests(TestCase):
         character = participant.character_sheet.character
         self.assertFalse(
             CharacterChallengeRecord.objects.filter(
-                character=character,
+                character=character.sheet_data,
                 challenge_instance=challenge_instance,
             ).exists(),
             "CharacterChallengeRecord should NOT exist when declaration was skipped",

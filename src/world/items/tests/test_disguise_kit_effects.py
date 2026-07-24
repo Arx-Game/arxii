@@ -110,7 +110,7 @@ class UseItemDisguiseKitDispatchTests(TestCase):
         CharacterSheetFactory(character=character)
         true_form = CharacterFormFactory(character=character, form_type=FormType.TRUE)
         CharacterFormValueFactory(form=true_form, trait=self.hair, option=self.red)
-        CharacterFormStateFactory(character=character, active_form=true_form)
+        CharacterFormStateFactory(character=character.sheet_data, active_form=true_form)
         disguise = CharacterFormFactory(
             character=character, form_type=FormType.DISGUISE, is_player_created=True
         )
@@ -121,7 +121,7 @@ class UseItemDisguiseKitDispatchTests(TestCase):
             kind=DisguiseKind.MUNDANE,
             kit_instance=self.kit_instance,
         )
-        state = CharacterFormState.objects.get(character=character)
+        state = CharacterFormState.objects.get(character=character.sheet_data)
         assert state.applied_kit_instance_id == self.kit_instance.id
         remove_disguise(character)
         state.refresh_from_db()

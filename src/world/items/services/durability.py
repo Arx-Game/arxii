@@ -30,7 +30,7 @@ def decrement_item_durability(*, item_instance: ItemInstance, amount: int = 1) -
             delattr(item_instance, attr)
 
     for equipped in EquippedItem.objects.filter(item_instance=item_instance):
-        equipped.character.equipped_items.invalidate()
+        equipped.character.character.equipped_items.invalidate()
 
     if item_instance.durability == 0 and not was_broken:
         OwnershipEvent.objects.create(

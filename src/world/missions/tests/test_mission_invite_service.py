@@ -71,7 +71,7 @@ class RespondToMissionInviteTest(TestCase):
     def test_accept_adds_participant(self) -> None:
         invite, _instance, invitee = self._make_invite()
         participant = respond_to_mission_invite(invite, MissionInvite.Response.ACCEPTED)
-        self.assertEqual(participant.character, invitee)
+        self.assertEqual(participant.character, invitee.sheet_data)
         self.assertFalse(participant.is_contract_holder)
         invite.refresh_from_db()
         self.assertEqual(invite.response, MissionInvite.Response.ACCEPTED)
@@ -82,7 +82,9 @@ class RespondToMissionInviteTest(TestCase):
         result = respond_to_mission_invite(invite, MissionInvite.Response.DECLINED)
         self.assertIsNone(result)
         self.assertFalse(
-            MissionParticipant.objects.filter(instance=instance, character=invitee).exists()
+            MissionParticipant.objects.filter(
+                instance=instance, character=invitee.sheet_data
+            ).exists()
         )
         invite.refresh_from_db()
         self.assertEqual(invite.response, MissionInvite.Response.DECLINED)

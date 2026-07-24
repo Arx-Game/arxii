@@ -81,7 +81,7 @@ class AlignedPairTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("80.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("10.00"),
@@ -134,7 +134,7 @@ class OpposedRejectTest(ResonanceCacheIsolationMixin, TestCase):
 
         # Abyssal-dominant caster
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("20.00"),
             abyssal=Decimal("70.00"),
@@ -197,7 +197,7 @@ class SmallerSeverityTest(ResonanceCacheIsolationMixin, TestCase):
             severity_multiplier=Decimal("0.30"),
         )
         CharacterAuraFactory(
-            character=caster_repel,
+            character=caster_repel.sheet_data,
             celestial=Decimal("80.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("10.00"),
@@ -218,7 +218,7 @@ class SmallerSeverityTest(ResonanceCacheIsolationMixin, TestCase):
             severity_multiplier=Decimal("1.00"),
         )
         CharacterAuraFactory(
-            character=caster_reject,
+            character=caster_reject.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -276,7 +276,7 @@ class CorruptDirectionTest(ResonanceCacheIsolationMixin, TestCase):
         _set_room_resonance_value(room_profile, primal_res, 10)
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -314,7 +314,7 @@ class CorruptDirectionTest(ResonanceCacheIsolationMixin, TestCase):
         _set_room_resonance_value(room_profile, primal_res, 80)
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("40.00"),
             primal=Decimal("30.00"),
             abyssal=Decimal("30.00"),
@@ -355,7 +355,7 @@ class CorruptDirectionTest(ResonanceCacheIsolationMixin, TestCase):
         _set_room_resonance_value(room_profile, primal_res, 25)
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("20.00"),
             primal=Decimal("38.00"),
             abyssal=Decimal("42.00"),
@@ -462,7 +462,7 @@ class MultiAffinityGiftTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("20.00"),
             abyssal=Decimal("70.00"),
@@ -539,7 +539,7 @@ class MultiAffinityGiftTest(ResonanceCacheIsolationMixin, TestCase):
 
         # caster has both celestial and abyssal
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("30.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("60.00"),
@@ -603,7 +603,7 @@ class PlaceDominantAffinityTiebreakTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -633,7 +633,7 @@ class InertCasesTest(ResonanceCacheIsolationMixin, TestCase):
         abyssal_res = ResonanceFactory(affinity=abyssal)
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -667,7 +667,7 @@ class InertCasesTest(ResonanceCacheIsolationMixin, TestCase):
         abyssal_res = ResonanceFactory(affinity=abyssal)
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -707,7 +707,7 @@ class InertCasesTest(ResonanceCacheIsolationMixin, TestCase):
 
         # Very low abyssal alignment (1%)
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("89.00"),
             abyssal=Decimal("1.00"),
@@ -752,7 +752,7 @@ class PresenceTimeTest(ResonanceCacheIsolationMixin, TestCase):
 
         # Abyssal-dominant caster
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("20.00"),
             abyssal=Decimal("70.00"),
@@ -846,7 +846,7 @@ class TechniqueOppositionWeightingTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("40.00"),
             abyssal=Decimal("50.00"),
@@ -920,7 +920,7 @@ class TechniqueOppositionWeightingTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("50.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("40.00"),
@@ -987,7 +987,7 @@ class MultiResonancePlaceWeightingTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
@@ -1060,7 +1060,7 @@ class MultiResonancePlaceWeightingTest(ResonanceCacheIsolationMixin, TestCase):
         )
 
         CharacterAuraFactory(
-            character=caster_obj,
+            character=caster_obj.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("80.00"),
