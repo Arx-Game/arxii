@@ -127,6 +127,46 @@ def _resolve_companion_owner_character(objdb: ObjectDB | None) -> Character | No
     return companion.owner.character
 
 
+def _companion_order_owner_matches_covenant(
+    encounter: object,
+    round_number: int,
+    holder_covenant_ids: frozenset[int],
+    target_opponent_id: int | None = None,
+) -> bool:
+    """Check if a companion ATTACK_TARGET order owner is a covenant-mate (#2666).
+
+    Shared by ``enemy_held_by_ally`` and ``barrier_contested``. When
+    ``target_opponent_id`` is set, filters to orders targeting that opponent;
+    when None, checks any ATTACK_TARGET order in the encounter.
+    """
+    from world.companions.constants import CompanionOrderKind  # noqa: PLC0415
+    from world.companions.models import CompanionOrder  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    filters = {
+        "encounter": encounter,
+        "round_number": round_number,
+        "order_kind": CompanionOrderKind.ATTACK_TARGET,
+    }
+    if target_opponent_id is not None:
+        filters["target_opponent_id"] = target_opponent_id
+
+    companion_orders = list(
+        CompanionOrder.objects.filter(**filters).select_related("companion__owner")
+    )
+    if not companion_orders:
+        return False
+
+    order_owner_ids = {order.companion.owner_id for order in companion_orders}
+    return bool(
+        CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=order_owner_ids,
+            covenant_id__in=holder_covenant_ids,
+            left_at__isnull=True,
+        ).exists()
+    )
+
+
 def _melee_state(ctx: SituationContext) -> bool | None:
     """Shared read for AT_RANGE/IN_MELEE. Returns True (melee), False (range),
     or None (undetermined — no participant, unplaced, or no engaged enemy).
@@ -955,7 +995,7 @@ def ally_sent_flying(ctx: SituationContext, params: SituationParams) -> bool:  #
 
 
 @register(Situation.ENEMY_HELD_BY_ALLY)
-def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001, PLR0911
     """A covenant-mate of the holder holds an active EngagementLock on the
     opponent the subject is attacking this round.
 
@@ -1020,7 +1060,15 @@ def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool: 
             left_at__isnull=True,
         ).values_list("character_sheet_id", flat=True)
     )
-    return any(lock.participant.character_sheet_id in mate_sheet_ids for lock in locks)
+    if any(lock.participant.character_sheet_id in mate_sheet_ids for lock in locks):
+        return True
+
+    # Companion-as-mate bridge: a companion ordered ATTACK_TARGET on the
+    # subject's declared enemy, owned by a covenant-mate, counts as the
+    # mate holding that enemy (#2666).
+    return _companion_order_owner_matches_covenant(
+        encounter, encounter.round_number, holder_covenant_ids, target_opponent_id
+    )
 
 
 @register(Situation.BARRIER_CONTESTED)
@@ -1079,7 +1127,14 @@ def barrier_contested(ctx: SituationContext, params: SituationParams) -> bool:  
             left_at__isnull=True,
         ).values_list("character_sheet_id", flat=True)
     )
-    return any(lock.participant.character_sheet_id in mate_sheet_ids for lock in locks)
+    if any(lock.participant.character_sheet_id in mate_sheet_ids for lock in locks):
+        return True
+
+    # Companion-as-mate bridge: a companion ordered ATTACK_TARGET in the
+    # encounter, owned by a covenant-mate, counts as contesting the barrier (#2666).
+    return _companion_order_owner_matches_covenant(
+        encounter, encounter.round_number, holder_covenant_ids
+    )
 
 
 @register(Situation.SHIELDED_BY_ALLY)
