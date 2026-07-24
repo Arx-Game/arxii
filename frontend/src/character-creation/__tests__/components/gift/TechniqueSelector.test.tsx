@@ -1,7 +1,7 @@
 /**
  * TechniqueSelector Component Tests (#2426 Task 10)
  *
- * Covers the technique-pick budget cap ("n of m chosen"), the signature-row
+ * Covers the technique-pick budget cap ("n of m chosen"), the tradition-technique-row
  * badge, and that selection writes `selected_technique_ids` — porting the
  * old CantripSelector.test.tsx selection-writes-draft-keys pattern.
  */
@@ -66,11 +66,11 @@ describe('TechniqueSelector', () => {
     expect(screen.getByText('Utility')).toBeInTheDocument();
   });
 
-  it('badges signature rows with the tradition name', () => {
+  it('badges tradition technique rows with the tradition name', () => {
     const draft = createMockDraft({ id: 1, selected_tradition: mockTradition });
     renderSelector(draft);
 
-    expect(screen.getByText('The Whispering Path signature')).toBeInTheDocument();
+    expect(screen.getByText('The Whispering Path technique')).toBeInTheDocument();
   });
 
   it('shows the "n of m chosen" budget banner', () => {

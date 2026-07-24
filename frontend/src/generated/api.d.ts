@@ -3003,7 +3003,7 @@ export interface paths {
      *     Empty list until both params resolve to a draft with tradition + path selected.
      *     Delegates to ``world.magic.services.cg_catalog.get_technique_options``; each
      *     returned row's ``is_tradition_technique`` reflects membership in the tradition's curated
-     *     signature set (as opposed to the path's starter pool).
+     *     special technique set (as opposed to the path's starter pool).
      */
     get: operations['character_creation_technique_options_list'];
     put?: never;
@@ -3032,7 +3032,7 @@ export interface paths {
      *     Empty list until both params resolve to a draft with tradition + path selected.
      *     Delegates to ``world.magic.services.cg_catalog.get_technique_options``; each
      *     returned row's ``is_tradition_technique`` reflects membership in the tradition's curated
-     *     signature set (as opposed to the path's starter pool).
+     *     special technique set (as opposed to the path's starter pool).
      */
     get: operations['character_creation_technique_options_retrieve'];
     put?: never;
@@ -21304,7 +21304,7 @@ export interface components {
      * @description Technique row for the CG technique-options list (#2426).
      *
      *     Backs ``GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>``
-     *     — the pool ∪ signature availability set for one (path, gift, tradition) pick
+     *     — the pool ∪ tradition availability set for one (path, gift, tradition) pick
      *     (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_tradition_technique``
      *     is resolved from the ``tradition_technique_ids`` set the ViewSet places in the
      *     serializer context — never attached to the (SharedMemoryModel) ``Technique``
@@ -21319,7 +21319,7 @@ export interface components {
       readonly description: string;
       readonly category: string;
       readonly codex_entry_id: number | null;
-      /** @description True when this technique came from the tradition's signature set. */
+      /** @description True when this technique came from the tradition's special technique set. */
       readonly is_tradition_technique: boolean;
     };
     /**
