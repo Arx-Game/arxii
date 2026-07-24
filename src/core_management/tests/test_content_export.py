@@ -234,6 +234,53 @@ class ContentExportTests(TestCase):
             model = apps.get_model(app_label, model_name)
             assert issubclass(model, NaturalKeyMixin), f"{model_label} lacks NaturalKeyMixin"
 
+    #: Content models legitimately keyed on ``pk`` — documented singletons pinned
+    #: to pk=1, where identity is stable by construction and there is no other
+    #: distinguishing field to key on. Any *other* pk-keyed content model is a bug
+    #: (see ``test_content_model_natural_keys_are_not_pk_based``).
+    PK_KEYED_SINGLETONS = frozenset(
+        {
+            "magic.soultetherconfig",
+            "magic.fallredemptionconfig",
+            "covenants.mentorbondconfig",
+        }
+    )
+
+    def test_content_model_natural_keys_are_not_pk_based(self) -> None:
+        """No content model may key on its pk unless it is a pinned singleton.
+
+        The point of a natural key here is identity that survives database
+        wipes, pk churn, and migration rebuilds — a pk-based key is exactly the
+        thing it exists to avoid. It also silently breaks dependent models: a
+        child declaring ``dependencies = [parent]`` resolves its parent through
+        the parent's natural key, so an exported fixture carries the parent's
+        name while the parent expects an integer, and the load fails.
+
+        ``test_content_models_all_have_natural_key`` does not catch this — the
+        mixin is present, only its configured fields are wrong. ``ThreatPool``
+        shipped that way and made its exported ``ThreatPoolEntry`` rows
+        unloadable, which is why this guard exists.
+        """
+        from django.apps import apps
+
+        offenders = []
+        for model_label in CONTENT_MODELS:
+            if model_label in self.PK_KEYED_SINGLETONS:
+                continue
+            app_label, model_name = model_label.split(".")
+            model = apps.get_model(app_label, model_name)
+            # NaturalKeyConfig.fields is the mixin's contract — a content model
+            # missing it should fail loudly here rather than be skipped.
+            fields = list(model.NaturalKeyConfig.fields)
+            if any(field in {"pk", "id"} for field in fields):
+                offenders.append(f"{model_label} -> {fields}")
+
+        assert not offenders, (
+            "Content models keyed on pk instead of a natural key: "
+            + ", ".join(offenders)
+            + ". If the model is a pinned singleton, add it to PK_KEYED_SINGLETONS."
+        )
+
     def test_magic_catalog_round_trips_with_payload(self) -> None:
         """A payload-bearing Technique + all three grant tables export → load = no-op."""
         from world.classes.factories import PathFactory

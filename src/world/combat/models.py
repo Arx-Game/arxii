@@ -258,11 +258,16 @@ class ThreatPool(NaturalKeyMixin, SharedMemoryModel):
     """Named collection of NPC actions."""
 
     class NaturalKeyConfig:
-        fields = ["pk"]
+        # Keyed by name, not pk: this model is in ``CONTENT_MODELS``, and the
+        # whole point of a natural key there is identity that survives database
+        # wipes and pk churn (see ``core_management.content_fixtures``). A
+        # pk-based key defeats that, and ``ThreatPoolEntry`` resolves its parent
+        # through this key — exported fixtures carry ``"pool": ["<name>"]``.
+        fields = ["name"]
 
     objects = NaturalKeyManager()
 
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=200, unique=True)
     description = models.TextField(blank=True)
 
     def __str__(self) -> str:
@@ -471,6 +476,12 @@ class ThreatPoolEntry(NaturalKeyMixin, SharedMemoryModel):
             )
         if errors:
             raise ValidationError(errors)
+
+    class Meta:
+        # Backs ``NaturalKeyConfig.fields = ["pool", "name"]`` — without it the
+        # natural key is not actually unique and ``update_or_create`` on a
+        # content load can match more than one row.
+        unique_together = ("pool", "name")
 
     def __str__(self) -> str:
         return f"{self.pool.name}: {self.name}"
