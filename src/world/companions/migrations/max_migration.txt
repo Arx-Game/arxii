@@ -1,1 +1,1 @@
-0009_add_charm_difficulty_reduction
+0010_companionabilityfunctiontag

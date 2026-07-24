@@ -37,6 +37,9 @@ from world.covenants.perks.constants import Situation, SituationOriginSide
 from world.covenants.perks.context import SituationContext, SituationParams
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from typeclasses.characters import Character
     from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
     from world.conditions.models import ConditionInstance
     from world.magic.models.aura import CharacterAura
@@ -104,6 +107,64 @@ def _resolution_participant(resolution: object | None) -> CombatParticipant | No
     instead of repeating the raw ``getattr`` at each of them.
     """
     return getattr(resolution, "participant", None)  # noqa: GETATTR_LITERAL
+
+
+def _resolve_companion_owner_character(objdb: ObjectDB | None) -> Character | None:
+    """If objdb is a companion's ObjectDB, return the companion's owner's Character.
+
+    Returns None when objdb is not a companion object or the companion has no
+    owner. Used by provenance evaluators to bridge companion-applied conditions
+    back to the owner for covenant-mate scoping (#2666).
+    """
+    if objdb is None:
+        return None
+    from world.companions.models import Companion  # noqa: PLC0415
+
+    try:
+        companion = Companion.objects.get(objectdb=objdb)
+    except Companion.DoesNotExist:
+        return None
+    return companion.owner.character
+
+
+def _companion_order_owner_matches_covenant(
+    encounter: object,
+    round_number: int,
+    holder_covenant_ids: frozenset[int],
+    target_opponent_id: int | None = None,
+) -> bool:
+    """Check if a companion ATTACK_TARGET order owner is a covenant-mate (#2666).
+
+    Shared by ``enemy_held_by_ally`` and ``barrier_contested``. When
+    ``target_opponent_id`` is set, filters to orders targeting that opponent;
+    when None, checks any ATTACK_TARGET order in the encounter.
+    """
+    from world.companions.constants import CompanionOrderKind  # noqa: PLC0415
+    from world.companions.models import CompanionOrder  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    filters = {
+        "encounter": encounter,
+        "round_number": round_number,
+        "order_kind": CompanionOrderKind.ATTACK_TARGET,
+    }
+    if target_opponent_id is not None:
+        filters["target_opponent_id"] = target_opponent_id
+
+    companion_orders = list(
+        CompanionOrder.objects.filter(**filters).select_related("companion__owner")
+    )
+    if not companion_orders:
+        return False
+
+    order_owner_ids = {order.companion.owner_id for order in companion_orders}
+    return bool(
+        CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=order_owner_ids,
+            covenant_id__in=holder_covenant_ids,
+            left_at__isnull=True,
+        ).exists()
+    )
 
 
 def _melee_state(ctx: SituationContext) -> bool | None:
@@ -278,7 +339,10 @@ def target_swayed_by_ally(ctx: SituationContext, params: SituationParams) -> boo
     holder_character = ctx.holder.character
     if applier == holder_character:
         return True
-    return bool(applier.shares_covenant_with(holder_character))
+    # Companion-as-mate bridge: a companion's condition counts as the owner's (#2666).
+    companion_owner = _resolve_companion_owner_character(applier)
+    effective_applier = companion_owner if companion_owner is not None else applier
+    return bool(effective_applier.shares_covenant_with(holder_character))
 
 
 def _target_declared_action(ctx: SituationContext) -> CombatRoundAction | None:
@@ -931,7 +995,7 @@ def ally_sent_flying(ctx: SituationContext, params: SituationParams) -> bool:  #
 
 
 @register(Situation.ENEMY_HELD_BY_ALLY)
-def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001, PLR0911
     """A covenant-mate of the holder holds an active EngagementLock on the
     opponent the subject is attacking this round.
 
@@ -996,7 +1060,15 @@ def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool: 
             left_at__isnull=True,
         ).values_list("character_sheet_id", flat=True)
     )
-    return any(lock.participant.character_sheet_id in mate_sheet_ids for lock in locks)
+    if any(lock.participant.character_sheet_id in mate_sheet_ids for lock in locks):
+        return True
+
+    # Companion-as-mate bridge: a companion ordered ATTACK_TARGET on the
+    # subject's declared enemy, owned by a covenant-mate, counts as the
+    # mate holding that enemy (#2666).
+    return _companion_order_owner_matches_covenant(
+        encounter, encounter.round_number, holder_covenant_ids, target_opponent_id
+    )
 
 
 @register(Situation.BARRIER_CONTESTED)
@@ -1055,7 +1127,14 @@ def barrier_contested(ctx: SituationContext, params: SituationParams) -> bool:  
             left_at__isnull=True,
         ).values_list("character_sheet_id", flat=True)
     )
-    return any(lock.participant.character_sheet_id in mate_sheet_ids for lock in locks)
+    if any(lock.participant.character_sheet_id in mate_sheet_ids for lock in locks):
+        return True
+
+    # Companion-as-mate bridge: a companion ordered ATTACK_TARGET in the
+    # encounter, owned by a covenant-mate, counts as contesting the barrier (#2666).
+    return _companion_order_owner_matches_covenant(
+        encounter, encounter.round_number, holder_covenant_ids
+    )
 
 
 @register(Situation.SHIELDED_BY_ALLY)
@@ -1111,7 +1190,10 @@ def shielded_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  #
     holder_character = ctx.holder.character
     if applier == holder_character:
         return True
-    return bool(applier.shares_covenant_with(holder_character))
+    # Companion-as-mate bridge: a companion's condition counts as the owner's (#2666).
+    companion_owner = _resolve_companion_owner_character(applier)
+    effective_applier = companion_owner if companion_owner is not None else applier
+    return bool(effective_applier.shares_covenant_with(holder_character))
 
 
 @register(Situation.TARGET_IS_MARKED_BY_ALLY)
