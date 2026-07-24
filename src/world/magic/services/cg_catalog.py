@@ -3,10 +3,11 @@
 Character creation's magic stage lets a player pick a Gift (from their chosen
 Tradition) and then techniques for that Gift, pooled from two curated authoring
 tables: the (path, gift) starter set (``PathGiftGrant``, #1579) and the
-(tradition, gift) signature set (``TraditionGiftGrant``, #2426). This module is
-the read-only availability seam the CG catalog and pick-budget validators
-consume — it mints no rows (contrast with ``services.path_magic.grant_path_magic``,
-which mints ``CharacterGift``/``CharacterTechnique`` rows on a live path crossing).
+(tradition, gift) special technique set (``TraditionGiftGrant``, #2426). This
+module is the read-only availability seam the CG catalog and pick-budget
+validators consume — it mints no rows (contrast with
+``services.path_magic.grant_path_magic``, which mints
+``CharacterGift``/``CharacterTechnique`` rows on a live path crossing).
 """
 
 from __future__ import annotations
@@ -25,12 +26,12 @@ if TYPE_CHECKING:
 
 
 def get_technique_options(path: Path, gift: Gift, tradition: Tradition) -> TechniqueOptions:
-    """The pool U signature availability set for one (path, gift, tradition) pick.
+    """The pool U tradition availability set for one (path, gift, tradition) pick.
 
     ``pool`` comes from the path's curated starter set (``PathGiftGrant``);
-    ``signature`` comes from the tradition's curated signature set
-    (``TraditionGiftGrant``). Either grant row may be absent (no authored row for
-    that combination), in which case that half of the pool is simply empty.
+    ``tradition`` comes from the tradition's special technique set
+    (``TraditionGiftGrant``). Either grant row may be absent (no authored row
+    for that combination), in which case that half of the pool is simply empty.
     """
     technique_qs = Technique.objects.select_related("effect_type")
 
@@ -47,24 +48,24 @@ def get_technique_options(path: Path, gift: Gift, tradition: Tradition) -> Techn
         TraditionGiftGrant.objects.filter(tradition=tradition, gift=gift)
         .prefetch_related(
             Prefetch(
-                "signature_techniques",
+                "special_techniques",
                 queryset=technique_qs,
-                to_attr="cached_signature_techniques",
+                to_attr="cached_special_techniques",
             )
         )
         .first()
     )
 
     pool = path_grant.cached_starter_techniques if path_grant else []
-    signature = tradition_grant.cached_signature_techniques if tradition_grant else []
-    return TechniqueOptions(pool=pool, signature=signature)
+    tradition_techniques = tradition_grant.cached_special_techniques if tradition_grant else []
+    return TechniqueOptions(pool=pool, tradition=tradition_techniques)
 
 
 def get_gift_options(tradition: Tradition, path: Path) -> list[Gift]:
     """Gifts pickable under ``tradition`` that have >=1 technique available for ``path``.
 
     A gift with an authored ``TraditionGiftGrant`` row but zero combined
-    (pool U signature) techniques for this path has nothing to pick and is
+    (pool U tradition) techniques for this path has nothing to pick and is
     excluded. Resolves both grant tables in two queries total — no per-gift
     query loop.
     """
@@ -75,9 +76,9 @@ def get_gift_options(tradition: Tradition, path: Path) -> list[Gift]:
         .select_related("gift")
         .prefetch_related(
             Prefetch(
-                "signature_techniques",
+                "special_techniques",
                 queryset=technique_qs,
-                to_attr="cached_signature_techniques",
+                to_attr="cached_special_techniques",
             )
         )
     )
@@ -93,5 +94,5 @@ def get_gift_options(tradition: Tradition, path: Path) -> list[Gift]:
     return [
         grant.gift
         for grant in tradition_grants
-        if pool_counts.get(grant.gift_id, 0) or grant.cached_signature_techniques
+        if pool_counts.get(grant.gift_id, 0) or grant.cached_special_techniques
     ]
