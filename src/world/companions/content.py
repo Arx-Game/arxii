@@ -12,7 +12,7 @@ from __future__ import annotations
 from world.checks.models import CheckCategory, CheckType
 from world.companions.constants import CompanionDomain
 from world.companions.models import CompanionArchetype
-from world.magic.constants import EffectKind, GiftKind, TargetKind
+from world.magic.constants import EffectKind, GiftKind, TargetKind, TechniqueFunction
 from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.gifts import Gift
 from world.magic.models.threads import ThreadPullEffect
@@ -149,4 +149,45 @@ def ensure_companion_abilities() -> None:
                 "base_damage": 4,
                 "description": "A raking talon strike.",
             },
+        )
+
+    # Function tags — framework-proving seeds (#2666)
+    from world.companions.models import CompanionAbilityFunctionTag  # noqa: PLC0415
+
+    # Wolf "Pin" — an ATTACK ability tagged HOLD (feeds Bulwark vow qualification).
+    # Uses ATTACK kind because UTILITY requires grants_property (clean() validation);
+    # the function tag is what the Sphinx reads, not the ability kind.
+    wolf = CompanionArchetype.objects.filter(name="Wolf").first()
+    if wolf is not None:
+        pin, _ = CompanionAbility.objects.get_or_create(
+            archetype=wolf,
+            name="Pin",
+            defaults={
+                "ability_kind": CompanionAbilityKind.ATTACK,
+                "attack_category": ActionCategory.PHYSICAL,
+                "base_damage": 3,
+                "description": "The wolf pins an enemy in place.",
+            },
+        )
+        CompanionAbilityFunctionTag.objects.get_or_create(
+            ability=pin,
+            function=TechniqueFunction.HOLD,
+        )
+
+    # Hawk "Scout" — an ATTACK ability tagged PERCEPTION (feeds Pathfinder vow qualification).
+    hawk = CompanionArchetype.objects.filter(name="Hawk").first()
+    if hawk is not None:
+        scout, _ = CompanionAbility.objects.get_or_create(
+            archetype=hawk,
+            name="Scout",
+            defaults={
+                "ability_kind": CompanionAbilityKind.ATTACK,
+                "attack_category": ActionCategory.PHYSICAL,
+                "base_damage": 2,
+                "description": "The hawk scouts from above, spotting threats.",
+            },
+        )
+        CompanionAbilityFunctionTag.objects.get_or_create(
+            ability=scout,
+            function=TechniqueFunction.PERCEPTION,
         )
