@@ -62,14 +62,14 @@ class MagicStageValidationTest(TestCase):
         path_grant.starter_techniques.set(cls.pool_techniques)
 
         tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
-        cls.signature_technique = TechniqueFactory(gift=cls.gift)
-        tradition_grant.signature_techniques.set([cls.signature_technique])
+        cls.special_technique = TechniqueFactory(gift=cls.gift)
+        tradition_grant.special_techniques.set([cls.special_technique])
 
         # A gift with no TraditionGiftGrant for this tradition — never a valid pick.
         cls.other_gift = GiftFactory(name="Not Granted")
 
         # A technique belonging to the gift but attached to neither the pool nor
-        # the signature set — outside the (path, gift, tradition) availability set.
+        # the tradition technique set — outside the (path, gift, tradition) availability set.
         cls.unavailable_technique = TechniqueFactory(gift=cls.gift)
 
         cls.resonance = ResonanceFactory()
@@ -124,7 +124,7 @@ class MagicStageValidationTest(TestCase):
 
     def test_signature_technique_is_available(self):
         """Signature techniques (tradition grant) are pickable, not just pool ones."""
-        draft = self._draft(selected_technique_ids=[self.signature_technique.id])
+        draft = self._draft(selected_technique_ids=[self.special_technique.id])
         errors = compute_magic_errors(draft)
         assert errors == []
 
@@ -495,8 +495,8 @@ class CGTechniqueOptionEndpointTest(TestCase):
         path_grant.starter_techniques.set(cls.pool_techniques)
 
         tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
-        cls.signature_technique = TechniqueFactory(gift=cls.gift)
-        tradition_grant.signature_techniques.set([cls.signature_technique])
+        cls.special_technique = TechniqueFactory(gift=cls.gift)
+        tradition_grant.special_techniques.set([cls.special_technique])
 
     def setUp(self):
         self.client = APIClient()
@@ -511,7 +511,7 @@ class CGTechniqueOptionEndpointTest(TestCase):
         defaults.update(kwargs)
         return CharacterDraftFactory(**defaults)
 
-    def test_pool_and_signature_techniques_listed_with_is_signature_flag(self):
+    def test_pool_and_tradition_techniques_listed_with_is_tradition_technique_flag(self):
         draft = self._draft()
 
         response = self.client.get(
@@ -523,11 +523,11 @@ class CGTechniqueOptionEndpointTest(TestCase):
         by_id = {row["id"]: row for row in response.data}
         assert set(by_id) == {
             *[t.id for t in self.pool_techniques],
-            self.signature_technique.id,
+            self.special_technique.id,
         }
-        assert by_id[self.signature_technique.id]["is_signature"] is True
+        assert by_id[self.special_technique.id]["is_tradition_technique"] is True
         for pool_technique in self.pool_techniques:
-            assert by_id[pool_technique.id]["is_signature"] is False
+            assert by_id[pool_technique.id]["is_tradition_technique"] is False
 
     def test_category_resolved_from_effect_type(self):
         draft = self._draft()

@@ -163,13 +163,13 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
 
         self.gift = GiftFactory(kind=GiftKind.MINOR)
         self.gift.resonances.add(ResonanceFactory())
-        self.signature_technique = TechniqueFactory(gift=self.gift)
+        self.special_technique = TechniqueFactory(gift=self.gift)
         self.path = PathFactory()
         CharacterPathHistoryFactory(character=self.character.sheet_data, path=self.path)
 
         self.tradition = TraditionFactory()
         sig_grant = TraditionGiftGrantFactory(tradition=self.tradition, gift=self.gift)
-        sig_grant.signature_techniques.add(self.signature_technique)
+        sig_grant.special_techniques.add(self.special_technique)
         # Deliberately no PathGiftGrant row for this technique — it is ONLY
         # reachable via the tradition's signature list.
 
@@ -181,7 +181,7 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
         self.offer = NPCServiceOfferFactory(
             role=self.role, kind=OfferKind.TRAIN, label="Learn the signature", is_final=True
         )
-        TrainOfferDetailsFactory(offer=self.offer, technique=self.signature_technique)
+        TrainOfferDetailsFactory(offer=self.offer, technique=self.special_technique)
 
         from world.action_points.models import ActionPointPool
 
@@ -199,7 +199,7 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
         self.assertIsNone(result.object_pk)
         self.assertIn("isn't yours to learn", result.message)
         known = CharacterTechnique.objects.filter(
-            character=self.sheet, technique=self.signature_technique
+            character=self.sheet, technique=self.special_technique
         )
         self.assertFalse(known.exists())
 
@@ -210,7 +210,7 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
 
         self.assertIsNotNone(result.object_pk)
         known = CharacterTechnique.objects.filter(
-            character=self.sheet, technique=self.signature_technique
+            character=self.sheet, technique=self.special_technique
         )
         self.assertTrue(known.exists())
 
@@ -228,7 +228,7 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
         self.assertIsNone(result.object_pk)
         self.assertIn("isn't yours to learn", result.message)
         known = CharacterTechnique.objects.filter(
-            character=self.sheet, technique=self.signature_technique
+            character=self.sheet, technique=self.special_technique
         )
         self.assertFalse(known.exists())
 

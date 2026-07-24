@@ -288,7 +288,7 @@ class ContentExportTests(TestCase):
         tradition_grant = TraditionGiftGrant.objects.create(
             tradition=TraditionFactory(), gift=technique.gift
         )
-        tradition_grant.signature_techniques.set([technique])
+        tradition_grant.special_techniques.set([technique])
         path_grant = PathGiftGrant.objects.create(path=PathFactory(), gift=technique.gift)
         path_grant.starter_techniques.set([technique])
         SpeciesGiftGrantFactory(gift=GiftFactory(name="RT Minor Gift"))
@@ -411,7 +411,7 @@ class MagicCatalogContentExportTests(TestCase):
     def test_populated_grant_m2m_resolves_across_multiple_retry_passes(self) -> None:
         """#2474 review fix: a 3-hop chain (grant -> gift -> technique) needs >1 retry.
 
-        ``PathGiftGrant.starter_techniques``/``TraditionGiftGrant.signature_techniques``
+        ``PathGiftGrant.starter_techniques``/``TraditionGiftGrant.special_techniques``
         name ``Technique`` rows. On a fresh load, alphabetical file order puts
         ``pathgiftgrant.json``/``traditiongiftgrant.json`` BEFORE ``technique.json`` —
         so even after the single retry pass resolves ``gift`` (technique.json's own
@@ -448,7 +448,7 @@ class MagicCatalogContentExportTests(TestCase):
         path_grant.starter_techniques.add(technique)
         tradition = TraditionFactory(name="Chain Tradition")
         tradition_grant = TraditionGiftGrantFactory(tradition=tradition, gift=gift)
-        tradition_grant.signature_techniques.add(technique)
+        tradition_grant.special_techniques.add(technique)
 
         result = export_to_content_repo(self.root)
         assert result.errors == []
@@ -474,7 +474,7 @@ class MagicCatalogContentExportTests(TestCase):
         reloaded_tradition_grant = TraditionGiftGrant.objects.get(
             tradition=tradition, gift=reloaded_gift
         )
-        assert list(reloaded_tradition_grant.signature_techniques.all()) == [reloaded_technique]
+        assert list(reloaded_tradition_grant.special_techniques.all()) == [reloaded_technique]
 
 
 class SpeciesFormTraitContentExportTests(TestCase):

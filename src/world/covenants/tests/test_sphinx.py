@@ -207,7 +207,7 @@ class AuditVowCoverageTests(TestCase):
         grant = TraditionGiftGrantFactory(tradition=tradition)
         technique = TechniqueFactory()
         TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
-        grant.signature_techniques.set([technique])
+        grant.special_techniques.set([technique])
 
         rows = audit_vow_coverage()
 
@@ -229,7 +229,7 @@ class AuditVowCoverageTests(TestCase):
         # Pool carries an unrelated function only.
         technique = TechniqueFactory()
         TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.BARRIER)
-        grant.signature_techniques.set([technique])
+        grant.special_techniques.set([technique])
 
         rows = audit_vow_coverage()
 
@@ -251,7 +251,7 @@ class AuditVowCoverageTests(TestCase):
         grant = TraditionGiftGrantFactory(tradition=tradition)
         technique = TechniqueFactory()
         TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.WEAKEN)
-        grant.signature_techniques.set([technique])
+        grant.special_techniques.set([technique])
 
         rows = audit_vow_coverage()
 
