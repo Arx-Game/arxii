@@ -7717,7 +7717,8 @@ def _resolve_npc_action(
         from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
 
         bulk_apply_conditions(
-            [BulkConditionApplication(target=t, template=ct) for (t, ct) in condition_applications]
+            [BulkConditionApplication(target=t, template=ct) for (t, ct) in condition_applications],
+            source_character=opponent.objectdb,
         )
 
     # Broadcast a durable, Narrator-authored OUTCOME line for the NPC action.
