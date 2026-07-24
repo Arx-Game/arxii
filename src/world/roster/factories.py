@@ -6,7 +6,7 @@ from django.utils import timezone
 import factory
 import factory.django as factory_django
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory, MediaFactory
+from evennia_extensions.factories import AccountFactory, MediaFactory
 from evennia_extensions.models import Artist, PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.models import (
@@ -155,7 +155,7 @@ class RosterApplicationFactory(factory_django.DjangoModelFactory):
         model = RosterApplication
 
     player_data = factory.SubFactory(PlayerDataFactory)
-    character = factory.SubFactory(CharacterFactory)
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     application_text = "I would like to play this character because they seem interesting."
     status = "pending"
 

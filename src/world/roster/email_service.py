@@ -114,10 +114,10 @@ class RosterEmailService(EmailServiceBase):
             bool: True if email was sent successfully
         """
         try:
-            subject = f"[Arx II] Application Received for {application.character.db_key}"
+            subject = f"[Arx II] Application Received for {application.character.character.db_key}"
 
             context = {
-                "character_name": application.character.db_key,
+                "character_name": application.character.character.db_key,
                 "application_text": application.application_text,
                 "player_name": application.player_data.account.username,
                 "application_id": application.id,
@@ -160,10 +160,10 @@ class RosterEmailService(EmailServiceBase):
             bool: True if email was sent successfully
         """
         try:
-            subject = f"[Arx II] Application Approved for {application.character.db_key}"
+            subject = f"[Arx II] Application Approved for {application.character.character.db_key}"
 
             context = {
-                "character_name": application.character.db_key,
+                "character_name": application.character.character.db_key,
                 "player_name": application.player_data.account.username,
                 "tenure_display": tenure.display_name,
                 "approved_by": (
@@ -203,10 +203,10 @@ class RosterEmailService(EmailServiceBase):
             bool: True if email was sent successfully
         """
         try:
-            subject = f"[Arx II] Application Update for {application.character.db_key}"
+            subject = f"[Arx II] Application Update for {application.character.character.db_key}"
 
             context = {
-                "character_name": application.character.db_key,
+                "character_name": application.character.character.db_key,
                 "player_name": application.player_data.account.username,
                 "reviewed_by": (
                     application.reviewed_by.account.username if application.reviewed_by else "Staff"
@@ -248,12 +248,12 @@ class RosterEmailService(EmailServiceBase):
             bool: True if email was sent successfully
         """
         try:
-            subject = f"[Arx II Staff] New Application: {application.character.db_key}"
+            subject = f"[Arx II Staff] New Application: {application.character.character.db_key}"
 
             policy_info = application.get_policy_review_info()
 
             context = {
-                "character_name": application.character.db_key,
+                "character_name": application.character.character.db_key,
                 "character_pk": application.character.pk,
                 "player_name": application.player_data.account.username,
                 "application_text": application.application_text,

@@ -356,7 +356,7 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
         assert app is not None
         assert app.status == ApplicationStatus.PENDING
         assert app.player_data == self.player_data
-        assert app.character == self.character
+        assert app.character == self.character.sheet_data
 
     def test_application_validation_scenarios(self):
         """Test all scenarios where applications should be rejected"""

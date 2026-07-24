@@ -1045,7 +1045,7 @@ def collect_check_modifiers(
     if isinstance(check_type, _DjangoModel) and character is not None:
         item_mods = (
             ItemCheckModifier.objects.filter(
-                template__instances__equipped_slots__character=character,
+                template__instances__equipped_slots__character=character_sheet,
                 check_type=check_type,
             )
             .select_related("template")

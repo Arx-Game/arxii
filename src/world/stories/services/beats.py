@@ -791,7 +791,7 @@ def _members_for_beat(
             )
             for participation in participations:
                 try:
-                    yield participation.character.sheet_data
+                    yield participation.character
                 except CharacterSheet.DoesNotExist:
                     continue
 

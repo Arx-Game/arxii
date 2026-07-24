@@ -102,7 +102,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
         # 4. Player cannot have duplicate pending applications
         existing_app = RosterApplication.objects.filter(
             player_data=player_data,
-            character=character,
+            character_id=character.pk,
             status=ApplicationStatus.PENDING,
         ).first()
         if existing_app:

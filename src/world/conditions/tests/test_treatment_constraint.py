@@ -6,19 +6,20 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone as tz
 
+from world.character_sheets.factories import CharacterSheetFactory
+
 
 class TreatmentAttemptUniqueConstraintTests(TestCase):
     """Constraint fires for once_per_scene_per_helper=True treatments only."""
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import CharacterFactory
         from world.conditions.factories import TreatmentTemplateFactory
         from world.scenes.factories import SceneFactory
         from world.traits.factories import CheckOutcomeFactory
 
-        cls.helper = CharacterFactory(db_key="TreatmentTestHelper")
-        cls.target = CharacterFactory(db_key="TreatmentTestTarget")
+        cls.helper = CharacterSheetFactory()
+        cls.target = CharacterSheetFactory()
         cls.scene = SceneFactory()
         cls.outcome = CheckOutcomeFactory()
         cls.treatment_unique = TreatmentTemplateFactory(once_per_scene_per_helper=True)

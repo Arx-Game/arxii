@@ -26,7 +26,7 @@ class ActionPointPoolFactory(DjangoModelFactory):
     class Meta:
         model = ActionPointPool
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     current = 200
     maximum = 200
     banked = 0

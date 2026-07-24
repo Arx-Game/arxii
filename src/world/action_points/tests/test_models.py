@@ -339,7 +339,7 @@ class ActionPointPoolGetOrCreateTests(ActionPointPoolTestCase):
         """get_or_create_for_character creates pool if none exists."""
         pool = ActionPointPool.get_or_create_for_character(self.character)
 
-        assert pool.character == self.character
+        assert pool.character == self.character.sheet_data
         assert pool.current == 200  # Default
         assert pool.maximum == 200  # Default
 
@@ -357,7 +357,7 @@ class ActionPointPoolGetOrCreateTests(ActionPointPoolTestCase):
     def test_uses_active_config_defaults(self):
         """get_or_create_for_character uses active config for defaults."""
         ActionPointConfigFactory(default_maximum=300, is_active=True)
-        character = CharacterFactory()
+        character = CharacterSheetFactory().character
 
         pool = ActionPointPool.get_or_create_for_character(character)
 
@@ -442,12 +442,11 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
 
         assert effective_max == 1
 
-    def test_modifier_without_sheet_is_zero(self) -> None:
-        """Characters without a CharacterSheet have no modifiers (base rate)."""
+    def test_sheetless_character_gets_no_pool(self) -> None:
+        """Sheet-less actors have no AP economy — the helper returns None (#2608)."""
         character_no_sheet = CharacterFactory()
-        pool = ActionPointPoolFactory(character=character_no_sheet, current=100, maximum=200)
 
-        assert pool._get_ap_modifier("ap_daily_regen") == 0
+        assert ActionPointPool.get_or_create_for_character(character_no_sheet) is None
 
     def test_unknown_target_returns_zero(self) -> None:
         """Unknown modifier target name returns 0."""

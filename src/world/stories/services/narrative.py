@@ -113,7 +113,7 @@ def _recipients_for_progress(
             )
             for participation in participations:
                 try:
-                    yield participation.character.sheet_data
+                    yield participation.character
                 except CharacterSheet.DoesNotExist:
                     continue
 

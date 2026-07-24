@@ -90,7 +90,7 @@ class PlayerDataServiceTestCase(TestCase):
         """Test getting player's pending applications"""
         # Create a second character for the approved application
         character2 = CharacterFactory()
-        RosterEntryFactory(character_sheet__character=character2, roster=self.roster)
+        RosterEntryFactory(character_sheet__character=character2.sheet_data, roster=self.roster)
 
         # Create pending application
         app = RosterApplication.objects.create(
@@ -102,7 +102,7 @@ class PlayerDataServiceTestCase(TestCase):
         # Create approved application for different character (should not be included)
         RosterApplication.objects.create(
             player_data=self.player_data,
-            character=character2,
+            character=character2.sheet_data,
             application_text="Approved app",
             status="approved",
         )
@@ -219,7 +219,7 @@ class RosterPolicyServiceTestCase(TestCase):
         """Test policy review info for a character with no issues"""
         app = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.regular_character,
+            character=self.regular_character.sheet_data,
             application_text="Test application",
         )
 
@@ -236,7 +236,7 @@ class RosterPolicyServiceTestCase(TestCase):
         """Test policy review info for a character with policy issues"""
         app = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.restricted_character,
+            character=self.restricted_character.sheet_data,
             application_text="Test application",
         )
 
@@ -283,7 +283,7 @@ class RosterPolicyServiceTestCase(TestCase):
 
         app = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.regular_character,
+            character=self.regular_character.sheet_data,
             application_text="Test application",
         )
 

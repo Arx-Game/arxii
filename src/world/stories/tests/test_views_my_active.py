@@ -19,7 +19,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory, GMTableMembershipFactory
 from world.scenes.factories import PersonaFactory
@@ -49,7 +49,7 @@ MY_ACTIVE_URL = reverse("stories-my-active")
 
 def _make_character_for_account(account):
     """Return a CharacterSheet whose character.db_account is account."""
-    char = CharacterFactory()
+    char = CharacterSheetFactory().character
     char.db_account = account
     char.save()
     return CharacterSheetFactory(character=char)
@@ -312,14 +312,16 @@ class MyActiveStoriesGlobalScopeTest(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.account = AccountFactory()
-        cls.char = CharacterFactory()
+        cls.char = CharacterSheetFactory().character
         cls.char.db_account = cls.account
         cls.char.save()
 
         cls.story = StoryFactory(scope=StoryScope.GLOBAL)
         cls.progress = GlobalStoryProgressFactory(story=cls.story, current_episode=None)
         # Link character to story via StoryParticipation
-        cls.participation = StoryParticipationFactory(story=cls.story, character=cls.char)
+        cls.participation = StoryParticipationFactory(
+            story=cls.story, character=cls.char.sheet_data
+        )
 
     def test_global_story_appears_in_global_stories(self):
         """Account with StoryParticipation sees the global story."""

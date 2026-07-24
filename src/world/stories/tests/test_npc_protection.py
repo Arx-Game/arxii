@@ -34,7 +34,7 @@ class IsDeathPreventedByStoryTests(TestCase):
 
     def test_story_level_dep_participant_permitted(self):
         StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
-        StoryParticipationFactory(story=self.story, character=self.attacker_obj)
+        StoryParticipationFactory(story=self.story, character=self.attacker_obj.sheet_data)
         result = is_death_prevented_by_story(self.npc_sheet, self.attacker_obj)
         self.assertFalse(result)
 
@@ -75,7 +75,7 @@ class IsDeathPreventedByStoryTests(TestCase):
         story_b = StoryFactory(status=StoryStatus.ACTIVE)
         StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
         StoryProtectedSubjectFactory(story=story_b, subject_sheet=self.npc_sheet)
-        StoryParticipationFactory(story=self.story, character=self.attacker_obj)
+        StoryParticipationFactory(story=self.story, character=self.attacker_obj.sheet_data)
         # Attacker is in story A but NOT story B
         result = is_death_prevented_by_story(self.npc_sheet, self.attacker_obj)
         self.assertTrue(result)
@@ -84,7 +84,7 @@ class IsDeathPreventedByStoryTests(TestCase):
         story_b = StoryFactory(status=StoryStatus.ACTIVE)
         StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
         StoryProtectedSubjectFactory(story=story_b, subject_sheet=self.npc_sheet)
-        StoryParticipationFactory(story=self.story, character=self.attacker_obj)
-        StoryParticipationFactory(story=story_b, character=self.attacker_obj)
+        StoryParticipationFactory(story=self.story, character=self.attacker_obj.sheet_data)
+        StoryParticipationFactory(story=story_b, character=self.attacker_obj.sheet_data)
         result = is_death_prevented_by_story(self.npc_sheet, self.attacker_obj)
         self.assertFalse(result)

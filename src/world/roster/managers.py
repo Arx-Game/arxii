@@ -142,8 +142,8 @@ class RosterApplicationQuerySet(models.QuerySet):
         return self.filter(status="pending")
 
     def for_character(self, character: ObjectDB) -> RosterApplicationQuerySet:
-        """Get all applications for a specific character."""
-        return self.filter(character=character)
+        """Get all applications for a specific character (pk-shared with the sheet)."""
+        return self.filter(character_id=character.pk)
 
     def for_player(self, player_data: PlayerData) -> RosterApplicationQuerySet:
         """Get all applications by a specific player."""

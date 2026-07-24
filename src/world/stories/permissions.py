@@ -76,7 +76,7 @@ class IsStoryOwnerOrStaff(permissions.BasePermission):
             return (
                 story.owners.filter(id=user.id).exists()
                 or story.participants.filter(
-                    character__db_account=user,
+                    character__character__db_account=user,
                     is_active=True,
                 ).exists()
             )
@@ -86,7 +86,7 @@ class IsStoryOwnerOrStaff(permissions.BasePermission):
             return (
                 story.owners.filter(id=user.id).exists()
                 or story.participants.filter(
-                    character__db_account=user,
+                    character__character__db_account=user,
                     is_active=True,
                     trusted_by_owner=True,
                 ).exists()
@@ -208,7 +208,7 @@ class IsPlayerTrustOwnerOrStaff(permissions.BasePermission):
             # where this account participates
             user_owned_stories = cast(Any, Story).objects.filter(owners=request.user)
             participant_stories = cast(Any, Story).objects.filter(
-                participants__character__db_account=obj.account,
+                participants__character__character__db_account=obj.account,
                 participants__is_active=True,
             )
             if user_owned_stories.filter(id__in=participant_stories).exists():
@@ -652,7 +652,7 @@ class IsSessionRequestParticipantOrStaff(permissions.BasePermission):
             return True
         # Players with story participation
         return story.participants.filter(
-            character__db_account=request.user,
+            character__character__db_account=request.user,
             is_active=True,
         ).exists()
 
@@ -1336,7 +1336,7 @@ def _story_log_user_has_access(
     return (
         cast(Any, story)
         .participants.filter(
-            character__db_account=user,
+            character__character__db_account=user,
             is_active=True,
         )
         .exists()
@@ -1388,7 +1388,7 @@ def _user_can_read_bulletin_post(
         cast(Any, StoryParticipation)
         .objects.filter(
             story_id=post.story_id,
-            character__db_account=user,
+            character__character__db_account=user,
             is_active=True,
         )
         .exists()

@@ -14,7 +14,8 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.stories.constants import BeatVisibility
 from world.stories.factories import (
     BeatFactory,
@@ -28,7 +29,7 @@ from world.stories.factories import (
 
 def _character_with_account(account):
     """Return an ObjectDB character whose ``db_account`` is ``account``."""
-    char = CharacterFactory()
+    char = CharacterSheetFactory().character
     char.db_account = account
     char.save()
     return char
@@ -65,7 +66,7 @@ class BeatListVisibilityTest(APITestCase):
         cls.participant_char = _character_with_account(cls.participant)
         cls.participation = StoryParticipationFactory(
             story=cls.private_story,
-            character=cls.participant_char,
+            character=cls.participant_char.sheet_data,
             is_active=True,
             trusted_by_owner=False,
         )

@@ -69,7 +69,7 @@ class ActionPointsApiTests(TestCase):
         response = self.client.get(AP_URL.format(pk=vase.pk))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertFalse(ActionPointPool.objects.filter(character=vase).exists())
+        self.assertFalse(ActionPointPool.objects.filter(character_id=vase.pk).exists())
 
     def test_anonymous_is_denied(self) -> None:
         self.client.force_authenticate(user=None)

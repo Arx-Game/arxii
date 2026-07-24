@@ -409,7 +409,7 @@ class StoryViewSet(viewsets.ModelViewSet):
 
         # Stories the user actively participates in (via ObjectDB → db_account).
         participant_q = models.Q(
-            participants__character__db_account=user,
+            participants__character__character__db_account=user,
             participants__is_active=True,
         )
 
@@ -1351,7 +1351,7 @@ class SessionRequestViewSet(viewsets.ReadOnlyModelViewSet):
         except GMProfile.DoesNotExist:
             gm_profile = None
         filters_q = models.Q(
-            episode__chapter__story__participants__character__db_account=self.request.user,
+            episode__chapter__story__participants__character__character__db_account=self.request.user,
             episode__chapter__story__participants__is_active=True,
         ) | models.Q(episode__chapter__story__owners=self.request.user)
         if gm_profile is not None:
@@ -1510,7 +1510,7 @@ class BeatViewSet(viewsets.ModelViewSet):
         # ... or active participants. INVITE_ONLY additionally requires
         # trusted_by_owner (mirrors _can_read_story's invite-only branch).
         participant_q = models.Q(
-            **{f"{story__}participants__character__db_account": user},
+            **{f"{story__}participants__character__character__db_account": user},
             **{f"{story__}participants__is_active": True},
         )
         trusted_participant_q = participant_q & models.Q(
@@ -3157,7 +3157,7 @@ class TableBulletinPostViewSet(viewsets.ModelViewSet):
 
         # Active story participant — sees story-scoped posts for their stories.
         active_participant_q = models.Q(
-            story__participants__character__db_account=user,
+            story__participants__character__character__db_account=user,
             story__participants__is_active=True,
         )
 
@@ -3272,7 +3272,7 @@ class TableBulletinReplyViewSet(viewsets.ModelViewSet):
             post__story__isnull=True,
         )
         active_participant_q = models.Q(
-            post__story__participants__character__db_account=user,
+            post__story__participants__character__character__db_account=user,
             post__story__participants__is_active=True,
         )
 

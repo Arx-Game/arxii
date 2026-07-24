@@ -26,21 +26,21 @@ class RosterApplicationManagerTestCase(TestCase):
         self.character1 = CharacterFactory()
         self.character2 = CharacterFactory()
 
-        RosterEntryFactory(character_sheet__character=self.character1)
-        RosterEntryFactory(character_sheet__character=self.character2)
+        self.entry1 = RosterEntryFactory(character_sheet__character=self.character1)
+        self.entry2 = RosterEntryFactory(character_sheet__character=self.character2)
 
     def test_pending_applications_query(self):
         """Test the pending() manager method"""
         # Create applications with different statuses
         pending_app = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.character1,
+            character=self.character1.sheet_data,
             application_text="Pending app",
             status=ApplicationStatus.PENDING,
         )
         RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.character2,
+            character=self.character2.sheet_data,
             application_text="Approved app",
             status=ApplicationStatus.APPROVED,
         )
@@ -54,12 +54,12 @@ class RosterApplicationManagerTestCase(TestCase):
         """Test the for_character() manager method"""
         app1 = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.character1,
+            character=self.character1.sheet_data,
             application_text="App for char1",
         )
         RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.character2,
+            character=self.character2.sheet_data,
             application_text="App for char2",
         )
 
@@ -72,12 +72,12 @@ class RosterApplicationManagerTestCase(TestCase):
         """Test the for_player() manager method"""
         app1 = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.character1,
+            character=self.character1.sheet_data,
             application_text="Player app",
         )
         RosterApplication.objects.create(
             player_data=self.staff_data,
-            character=self.character2,
+            character=self.character2.sheet_data,
             application_text="Staff app",
         )
 
@@ -91,7 +91,7 @@ class RosterApplicationManagerTestCase(TestCase):
         # Create apps at different times
         old_app = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.character1,
+            character=self.character1.sheet_data,
             application_text="Old app",
         )
         old_app.applied_date = timezone.now() - timedelta(days=2)
@@ -99,7 +99,7 @@ class RosterApplicationManagerTestCase(TestCase):
 
         new_app = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.character2,
+            character=self.character2.sheet_data,
             application_text="New app",
         )
 
@@ -114,7 +114,7 @@ class RosterApplicationManagerTestCase(TestCase):
         # Create reviewed application within the time window
         recent_app = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.character1,
+            character=self.character1.sheet_data,
             application_text="Recent app",
             status=ApplicationStatus.APPROVED,
             reviewed_date=timezone.now() - timedelta(days=3),
@@ -123,7 +123,7 @@ class RosterApplicationManagerTestCase(TestCase):
         # Create old reviewed application outside the time window
         RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.character2,
+            character=self.character2.sheet_data,
             application_text="Old app",
             status=ApplicationStatus.DENIED,
             reviewed_date=timezone.now() - timedelta(days=10),
