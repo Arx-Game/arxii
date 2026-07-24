@@ -71,6 +71,7 @@ from world.magic.models import (
     TechniqueRemovedCondition,
     TechniqueStyle,
     TechniqueTeachingOffer,
+    TechniqueTreatment,
     Thread,
     ThreadLevelUnlock,
     ThreadPullCost,
@@ -205,6 +206,13 @@ class TechniqueRemovedConditionInline(admin.TabularInline):
     autocomplete_fields = ["condition"]
 
 
+class TechniqueTreatmentInline(admin.TabularInline):
+    """Inline treatment payload rows on the Technique admin (#2668)."""
+
+    model = TechniqueTreatment
+    extra = 1
+
+
 class TechniqueFunctionTagInline(admin.TabularInline):
     """Inline fine-grained function labels on the Technique admin (#2443)."""
 
@@ -235,6 +243,7 @@ class TechniqueAdmin(admin.ModelAdmin):
     inlines = [
         TechniqueCapabilityGrantInline,
         TechniqueRemovedConditionInline,
+        TechniqueTreatmentInline,
         TechniqueFunctionTagInline,
     ]
 

@@ -1676,4 +1676,4 @@ not in a standalone pull.
 - Technique has intensity (power) and control (safety/precision) as base stats
 - Technique tier is derived from level (1-5=T1, 6-10=T2, etc.)
 - CG links a staff-authored catalog Gift + Techniques — it never mints new rows (#2426)
-- No healing mechanics — shielding yes, restoration no (counter to tension design)
+- Bounded mends are castable via `TechniqueTreatment` payload rows → `perform_treatment` (#2668); the attrition invariant (ADR-0156) holds — per-healer-once-per-wound, never-to-full fraction. Magical treatment works in combat (`skip_engagement_gate=True`); mundane treatment stays non-combat-only.

@@ -18,7 +18,12 @@ from world.character_sheets.models import CharacterSheet
 
 if TYPE_CHECKING:
     from world.magic.audere import AudereThreshold
-from world.conditions.models import CapabilityType, ConditionTemplate, DamageType
+from world.conditions.models import (
+    CapabilityType,
+    ConditionTemplate,
+    DamageType,
+    TreatmentTemplate,
+)
 from world.items.models import ItemInstance
 from world.magic.constants import (
     ALTERATION_TIER_CAPS,
@@ -3209,6 +3214,16 @@ class _RemovedConditionSpecSerializer(serializers.Serializer):
     remove_all_stacks = serializers.BooleanField(default=True)
 
 
+class _TreatmentSpecSerializer(serializers.Serializer):
+    """A treatment payload row for technique authoring (#2668)."""
+
+    treatment_template_id = serializers.PrimaryKeyRelatedField(
+        queryset=TreatmentTemplate.objects.all()
+    )
+    target_kind = serializers.ChoiceField(choices=ConditionTargetKind.choices, default="ally")
+    minimum_success_level = serializers.IntegerField(min_value=0, default=1)
+
+
 class TechniqueDesignSerializer(serializers.Serializer):
     """Policy-aware write input for the technique builder.
 
@@ -3239,6 +3254,7 @@ class TechniqueDesignSerializer(serializers.Serializer):
     damage_profiles = _DamageProfileSpecSerializer(many=True, required=False, default=list)
     applied_conditions = _AppliedConditionSpecSerializer(many=True, required=False, default=list)
     removed_conditions = _RemovedConditionSpecSerializer(many=True, required=False, default=list)
+    treatments = _TreatmentSpecSerializer(many=True, required=False, default=list)
     consequence_pool_id = serializers.IntegerField(required=False, allow_null=True, default=None)
 
     def validate(self, attrs):
@@ -3280,6 +3296,7 @@ class TechniqueDesignSerializer(serializers.Serializer):
             DamageProfileSpec,
             RemovedConditionSpec,
             TechniqueDesignInput,
+            TreatmentSpec,
         )
 
         tier = attrs["tier"]
@@ -3331,6 +3348,14 @@ class TechniqueDesignSerializer(serializers.Serializer):
                     remove_all_stacks=r["remove_all_stacks"],
                 )
                 for r in attrs["removed_conditions"]
+            ),
+            treatments=tuple(
+                TreatmentSpec(
+                    treatment_template_id=t["treatment_template_id"].id,
+                    target_kind=t["target_kind"],
+                    minimum_success_level=t["minimum_success_level"],
+                )
+                for t in attrs["treatments"]
             ),
             consequence_pool_id=attrs.get("consequence_pool_id"),
         )

@@ -24,6 +24,7 @@ from world.magic.models import (
     TechniqueDamageProfile,
     TechniqueRemovedCondition,
     TechniqueTierBudget,
+    TechniqueTreatment,
 )
 from world.magic.types.technique_builder import (
     TechniqueCostBreakdown,
@@ -236,6 +237,14 @@ def price_design(
         )
         for _spec in design.removed_conditions
     )
+    lines.extend(
+        TechniqueCostLine(
+            "condition",
+            "Treatment (bounded mend)",
+            config.payload_base_cost,
+        )
+        for _spec in design.treatments
+    )
 
     gross = sum(line.power_cost for line in lines)
     refund = 0
@@ -368,6 +377,15 @@ def build_technique(design: TechniqueDesignInput, *, creator) -> Technique:
             target_kind=spec.target_kind,
             minimum_success_level=spec.minimum_success_level,
             remove_all_stacks=spec.remove_all_stacks,
+        )
+    for spec in design.treatments:
+        from world.conditions.models import TreatmentTemplate  # noqa: PLC0415
+
+        TechniqueTreatment.objects.create(
+            technique=tech,
+            treatment_template=TreatmentTemplate.objects.get(pk=spec.treatment_template_id),
+            target_kind=spec.target_kind,
+            minimum_success_level=spec.minimum_success_level,
         )
     return tech
 

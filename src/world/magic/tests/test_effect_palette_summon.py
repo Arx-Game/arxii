@@ -82,7 +82,7 @@ class EnsureSummonContentSeedTests(TestCase):
             "world.magic.services.effect_handlers.summon_ally_on_condition",
         )
         self.assertEqual(step.parameters["payload"], "@payload")
-        self.assertEqual(step.parameters["threat_pool_id"], pool.pk)
+        self.assertEqual(step.parameters["threat_pool_name"], pool.name)
 
         # 5. The technique applies the Summoning condition to SELF.
         applied = TechniqueAppliedCondition.objects.filter(
@@ -113,7 +113,7 @@ class SummonAllyOnConditionAdapterTests(TestCase):
         stub = SimpleNamespace(target=caster_objectdb, instance=None, stage=None)
 
         before = CombatOpponent.objects.filter(encounter=encounter).count()
-        summon_ally_on_condition(payload=stub, threat_pool_id=pool.pk, bond_rounds=5)
+        summon_ally_on_condition(payload=stub, threat_pool_name=pool.name, bond_rounds=5)
         after = CombatOpponent.objects.filter(encounter=encounter).count()
 
         self.assertEqual(after, before + 1)

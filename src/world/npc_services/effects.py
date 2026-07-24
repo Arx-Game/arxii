@@ -820,6 +820,11 @@ def run_styling_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
             descriptor="",
             note=f"{stylist_label}: {offer.label}",
         )
+        # Learned by having it done (#2632): an exotic style from the stylist
+        # teaches it — you can maintain the look with your own kit afterwards.
+        from world.forms.services import learn_style  # noqa: PLC0415
+
+        learn_style(sheet, details.target_option, taught_by_label=stylist_label)
     except NonCosmeticTraitError:
         return EffectResult(
             kind=OfferKind.STYLING.value,

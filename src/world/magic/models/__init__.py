@@ -200,6 +200,7 @@ from world.magic.models.technique_draft import (
     TechniqueDraftCapabilityGrant,
     TechniqueDraftDamageProfile,
     TechniqueDraftRemovedCondition,
+    TechniqueDraftTreatment,
 )
 from world.magic.models.technique_grant import TechniqueGrant
 from world.magic.models.techniques import (
@@ -220,6 +221,7 @@ from world.magic.models.techniques import (
     TechniqueRemovedCondition,
     TechniqueStyle,
     TechniqueStyleManager,
+    TechniqueTreatment,
 )
 from world.magic.models.threads import (
     Thread,
@@ -423,6 +425,7 @@ __all__ = [
     "TechniqueDraftCapabilityGrant",
     "TechniqueDraftDamageProfile",
     "TechniqueDraftRemovedCondition",
+    "TechniqueDraftTreatment",
     # fine-grained technique function tags (#2443)
     "TechniqueFunctionTag",
     "TechniqueFunctionTagManager",
@@ -433,6 +436,7 @@ __all__ = [
     "TechniqueStyleManager",
     "TechniqueTeachingOffer",
     "TechniqueTierBudget",
+    "TechniqueTreatment",
     # gift-technique specialization variants (#1578)
     "TechniqueVariant",
     "TechniqueVariantAppliedCondition",

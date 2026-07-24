@@ -15,6 +15,7 @@ from actions.constants import ActionCategory
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.combat.constants import OpponentTier
 from world.companions.constants import CompanionAbilityKind, CompanionDomain, CompanionOrderKind
+from world.magic.constants import TechniqueFunction
 
 
 class CompanionArchetype(NaturalKeyMixin, SharedMemoryModel):
@@ -181,6 +182,34 @@ class CompanionAbility(NaturalKeyMixin, SharedMemoryModel):
             if self.grants_property is None:
                 msg = "UTILITY abilities must set grants_property."
                 raise ValidationError(msg)
+
+
+class CompanionAbilityFunctionTag(SharedMemoryModel):
+    """One fine-grained function label carried by a companion ability (#2666).
+
+    Same vocabulary as TechniqueFunctionTag — companion abilities declare which
+    TechniqueFunction values they cover, so the Sphinx can fold companion
+    capabilities into its kit supply map.
+    """
+
+    ability = models.ForeignKey(
+        CompanionAbility,
+        on_delete=models.CASCADE,
+        related_name="function_tags",
+    )
+    function = models.CharField(max_length=32, choices=TechniqueFunction.choices)
+
+    class Meta:
+        ordering = ["ability", "function"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ability", "function"],
+                name="unique_function_per_companion_ability",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.ability.name}: {self.get_function_display()}"
 
 
 class Companion(SharedMemoryModel):

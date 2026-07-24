@@ -105,6 +105,10 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "forms.formtraitoption",
         "forms.heightband",
         "forms.speciesformtrait",
+        # flows
+        "flows.flowdefinition",
+        "flows.flowstepdefinition",
+        "flows.triggerdefinition",
         # items
         "items.itemtemplateproperty",
         # magic

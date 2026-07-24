@@ -151,6 +151,44 @@ def _kit_supply(sheet: CharacterSheet) -> dict[str, list[str]]:
     return supply
 
 
+def _companion_supply(sheet: CharacterSheet) -> dict[str, list[str]]:
+    """Map TechniqueFunction -> companion ability names carrying it (#2666).
+
+    One query for active companions + prefetch of their archetype abilities'
+    function tags. Companion entries are prefixed 'Companion: ' to distinguish
+    from technique names in the verdict display.
+    """
+    from world.companions.models import (  # noqa: PLC0415
+        Companion,
+        CompanionAbility,
+        CompanionAbilityFunctionTag,
+    )
+
+    companions = (
+        Companion.objects.filter(owner=sheet, released_at__isnull=True)
+        .select_related("archetype")
+        .prefetch_related(
+            Prefetch(
+                "archetype__abilities",
+                queryset=CompanionAbility.objects.prefetch_related(
+                    Prefetch(
+                        "function_tags",
+                        queryset=CompanionAbilityFunctionTag.objects.all(),
+                        to_attr="cached_function_tags",
+                    )
+                ),
+                to_attr="cached_abilities",
+            ),
+        )
+    )
+    supply: dict[str, list[str]] = {}
+    for companion in companions:
+        for ability in companion.archetype.cached_abilities:
+            for tag in ability.cached_function_tags:
+                supply.setdefault(tag.function, []).append(f"Companion: {ability.name}")
+    return supply
+
+
 def _specialty_demands(role_ids: list[int], supply: dict[str, list[str]]) -> list[SphinxDemand]:
     """One ``SphinxDemand`` per unique specialty function across ``role_ids``."""
     functions = sorted(
@@ -329,6 +367,9 @@ def judge_vow(sheet: CharacterSheet, role: CovenantRole) -> SphinxVerdict:
     """
     role_ids = _role_ids_for_judgment(role)
     supply = _kit_supply(sheet)
+    companion_supply = _companion_supply(sheet)
+    for function, names in companion_supply.items():
+        supply.setdefault(function, []).extend(names)
 
     demands = _specialty_demands(role_ids, supply) + _situation_demands(role_ids, supply)
     tier = _tier_for(demands)

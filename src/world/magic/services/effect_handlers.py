@@ -232,7 +232,7 @@ def summon_ally(*, payload: Any) -> None:
 
     Reads from payload:
     - ``payload.caster``         – caster's character ObjectDB.
-    - ``payload.threat_pool_id`` – pk of the ThreatPool to use.
+    - ``payload.threat_pool_name`` – name of the ThreatPool to use.
     - ``payload.bond_rounds``    – optional int; sets bond_expires_round on the
                                    skirmish summon. Not applicable to the military
                                    branch (battles have no per-encounter round-bond
@@ -292,7 +292,7 @@ def summon_ally(*, payload: Any) -> None:
     encounter = participant.encounter
     caster_sheet = participant.character_sheet
 
-    threat_pool = ThreatPool.objects.get(pk=payload.threat_pool_id)
+    threat_pool = ThreatPool.objects.get(name=payload.threat_pool_name)
     # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
     max_health: int = getattr(payload, "max_health", 30)  # noqa: GETATTR_LITERAL
     # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
@@ -555,7 +555,7 @@ def raise_rampart_on_condition(
     *,
     payload: Any,
     position_id: int,
-    element_profile_id: int,
+    element_profile_name: str,
     integrity: int,
     duration_rounds: int | None = None,
 ) -> None:
@@ -582,7 +582,7 @@ def raise_rampart_on_condition(
     else:
         return  # no position resolved — no-op
 
-    element_profile = RampartElementProfile.objects.get(pk=element_profile_id)
+    element_profile = RampartElementProfile.objects.get(name=element_profile_name)
     caster_sheet = _caster_sheet_from_instance(instance)
 
     raise_rampart(
@@ -595,14 +595,14 @@ def raise_rampart_on_condition(
 
 
 def summon_ally_on_condition(
-    *, payload: Any, threat_pool_id: int, bond_rounds: int | None = None, max_health: int = 30
+    *, payload: Any, threat_pool_name: str, bond_rounds: int | None = None, max_health: int = 30
 ) -> None:
     """CONDITION_APPLIED adapter that bridges to ``summon_ally`` (#1584, Task 14a).
 
     Seeded as the CALL_SERVICE_FUNCTION step of the Summoning condition's reactive
     flow: casting a SELF summon technique applies the Summoning condition, whose
     trigger fires this with the event's ``ConditionAppliedPayload`` plus the static
-    ``threat_pool_id`` / ``bond_rounds`` / ``max_health`` params from the flow step.
+    ``threat_pool_name`` / ``bond_rounds`` / ``max_health`` params from the flow step.
 
     ``payload.target`` is the bearer of the condition, which — for a SELF condition —
     is the caster. We repackage it into the bespoke namespace ``summon_ally`` reads.
@@ -612,7 +612,7 @@ def summon_ally_on_condition(
     summon_ally(
         payload=SimpleNamespace(
             caster=payload.target,
-            threat_pool_id=threat_pool_id,
+            threat_pool_name=threat_pool_name,
             bond_rounds=bond_rounds,
             max_health=max_health,
         )

@@ -80,6 +80,12 @@ class UseItemSerializer(serializers.Serializer):
         help_text="Chosen FormTraitOption for a choose-at-use cosmetic (#2632 — "
         "Styling Kit style, Ariwn Lenses color). Ignored by fixed-option items.",
     )
+    blend = serializers.BooleanField(
+        required=False,
+        default=False,
+        help_text="Add the color instead of replacing (#2632) — green dye onto "
+        "black hair yields Black-Green (composite value + component list).",
+    )
 
 
 class UseItemResultSerializer(serializers.Serializer):

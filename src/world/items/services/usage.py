@@ -22,10 +22,12 @@ from world.checks.consequence_resolution import (
 from world.checks.types import ResolutionContext
 from world.items.constants import OwnershipEventType
 from world.items.exceptions import (
+    BlendNotSupported,
     ItemNotUsable,
     MakeoverNotPermitted,
     NoChargesRemaining,
     StyleChoiceRequired,
+    StyleNotKnown,
 )
 from world.items.models import EquippedItem, ItemInstance, OwnershipEvent
 from world.items.types import UseItemResult
@@ -134,13 +136,14 @@ def forfeit_item_instance(*, item_instance: ItemInstance, note: str = "") -> Ite
 
 
 @transaction.atomic
-def use_item(
+def use_item(  # noqa: PLR0913
     *,
     item_instance: ItemInstance,
     user: ObjectDB,
     target: ObjectDB | None = None,
     descriptor: str | None = None,
     option_id: int | None = None,
+    blend: bool = False,
 ) -> UseItemResult:
     """Use an item with an on-use pool: apply its effects (deterministic when the
     template has no on_use_check_type, else check-gated). Consumables spend one
@@ -156,7 +159,17 @@ def use_item(
     ``option_id`` (#2632) selects the target value for a CHOOSE-AT-USE cosmetic
     (an appearance effect with a null ``target_option`` — the one Styling Kit
     picks the style; Ariwn Lenses take "a drop of dye" in any color). Required
-    for such items; ignored for fixed-option cosmetics."""
+    for such items; ignored for fixed-option cosmetics.
+
+    ``blend=True`` (#2632) ADDS the color instead of replacing — green dye onto
+    black hair yields the trait's composite value (multihued/mismatched) with
+    the ACTUAL components kept as ordered rows, so the normalized layer renders
+    "Black-Green" honestly even under descriptor concealment. Only traits with
+    a composite option blend (BlendNotSupported otherwise, checked pre-charge).
+
+    Exotic (requires_teaching) choose-at-use options are gated on the ACTING
+    character knowing them (StyleNotKnown, pre-charge); a successful
+    application teaches the recipient — you learn a look by having it done."""
     locked = ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
     template = locked.template
     has_appearance_effects = template.appearance_effects.exists()
@@ -176,10 +189,16 @@ def use_item(
         _require_makeover_consent(user, target)
 
     # Choose-at-use cosmetics (#2632): resolve the chosen option BEFORE any
-    # charge is spent, so a missing/invalid choice never burns a use.
+    # charge is spent, so a missing/invalid choice never burns a use. The
+    # exotic-style gate and blendability check run pre-charge for the same
+    # reason.
     chosen_option = (
         _resolve_choose_at_use_option(template, option_id) if has_appearance_effects else None
     )
+    if has_appearance_effects:
+        _require_style_knowledge(user, chosen_option)
+        if blend:
+            _require_blendable(template)
 
     context = ResolutionContext(character=user, target=target)
     check_result = None
@@ -215,7 +234,7 @@ def use_item(
         soft_deleted = False
 
     appearance_changes = _apply_appearance_effects(
-        template, user, target, descriptor, chosen_option
+        template, user, target, descriptor, chosen_option, blend=blend
     )
 
     _apply_disguise_kit_effects(template, user, locked)
@@ -290,12 +309,37 @@ def _resolve_choose_at_use_option(
     return option
 
 
-def _apply_appearance_effects(
+def _require_style_knowledge(user: ObjectDB, chosen_option: FormTraitOption | None) -> None:
+    """Gate exotic options on the ACTING character's knowledge (#2632).
+
+    Applies to the chosen option of a choose-at-use cosmetic; fixed-option
+    templates are authored content and don't gate. Runs pre-charge.
+    """
+    from world.forms.services import knows_style  # noqa: PLC0415
+
+    if chosen_option is None or not chosen_option.requires_teaching:
+        return
+    sheet = user.character_sheet
+    if sheet is None or not knows_style(sheet, chosen_option):
+        raise StyleNotKnown
+
+
+def _require_blendable(template: ItemTemplate) -> None:
+    """Blends need the trait to declare a composite option (#2632). Pre-charge."""
+    from world.forms.models import FormTrait  # noqa: PLC0415
+
+    trait_ids = template.appearance_effects.values_list("trait_id", flat=True)
+    if FormTrait.objects.filter(pk__in=trait_ids, composite_option__isnull=True).exists():
+        raise BlendNotSupported
+
+
+def _apply_appearance_effects(  # noqa: PLR0913
     template: ItemTemplate,
     user: ObjectDB,
     target: ObjectDB | None = None,
     descriptor: str | None = None,
     chosen_option: FormTraitOption | None = None,
+    blend: bool = False,
 ) -> list[tuple[FormTrait, FormTraitOption]]:
     """Apply cosmetic appearance effects declared on the item template.
 
@@ -322,6 +366,8 @@ def _apply_appearance_effects(
     persona = active_persona_for_sheet(sheet)
     actor_sheet = user.character_sheet
     actor_persona = active_persona_for_sheet(actor_sheet) if actor_sheet is not None else persona
+    from world.forms.services import learn_style  # noqa: PLC0415
+
     changes = []
     for effect in effects:
         applied_option = effect.target_option or chosen_option
@@ -338,8 +384,13 @@ def _apply_appearance_effects(
                 # stale descriptor never describes a dyed-over look.
                 descriptor=(descriptor or "").strip(),
                 note=template.name,
+                blend=blend,
             )
             changes.append((effect.trait, applied_option))
+            # Learned by having it done (#2632): a successful exotic
+            # application teaches the recipient. Idempotent; no-op for
+            # ungated options and for a self-use by someone who knows it.
+            learn_style(sheet, applied_option, taught_by_label=actor_persona.name)
         except NonCosmeticTraitError:
             pass  # defense-in-depth; clean() should prevent this
     return changes

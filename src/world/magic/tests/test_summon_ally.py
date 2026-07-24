@@ -49,7 +49,7 @@ class SummonAllyHandlerTests(TestCase):
 
         payload = SimpleNamespace(
             caster=caster_objectdb,
-            threat_pool_id=pool.pk,
+            threat_pool_name=pool.name,
             bond_rounds=5,
         )
 
@@ -104,7 +104,7 @@ class SummonAllyHandlerTests(TestCase):
 
         payload = SimpleNamespace(
             caster=unrelated_caster,
-            threat_pool_id=pool.pk,
+            threat_pool_name=pool.name,
             bond_rounds=5,
         )
 
@@ -145,7 +145,7 @@ class SummonAllyMilitaryBranchTests(TestCase):
 
         payload = SimpleNamespace(
             caster=sheet.character,
-            threat_pool_id=pool.pk,
+            threat_pool_name=pool.name,
             military=True,
             max_health=200,
             properties=["flying"],
@@ -178,7 +178,7 @@ class SummonAllyMilitaryBranchTests(TestCase):
         ThreatPoolEntryFactory(pool=pool)
         caster = CharacterFactory()
 
-        payload = SimpleNamespace(caster=caster, threat_pool_id=pool.pk, military=True)
+        payload = SimpleNamespace(caster=caster, threat_pool_name=pool.name, military=True)
 
         before = BattleUnit.objects.count()
         result = summon_ally(payload=payload)
@@ -193,7 +193,7 @@ class SummonAllyMilitaryBranchTests(TestCase):
         participant = CombatParticipantFactory(encounter=encounter, status=ParticipantStatus.ACTIVE)
         caster_objectdb = participant.character_sheet.character
 
-        payload = SimpleNamespace(caster=caster_objectdb, threat_pool_id=pool.pk)
+        payload = SimpleNamespace(caster=caster_objectdb, threat_pool_name=pool.name)
 
         before = CombatOpponent.objects.filter(encounter=encounter).count()
         summon_ally(payload=payload)

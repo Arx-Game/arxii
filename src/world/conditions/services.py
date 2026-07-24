@@ -3198,6 +3198,7 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     treatment: TreatmentTemplate,
     target_effect: "ConditionInstance | PendingAlteration",
     bond_thread: "Thread | None" = None,
+    skip_engagement_gate: bool = False,
 ) -> TreatmentOutcome:
     """Resolve a TreatmentTemplate against an effect instance.
 
@@ -3206,7 +3207,8 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
       2. Parent/primary match (condition ancestry)
       3. Bond gate (thread anchored to target when requires_bond)
       4. Scene gate (active scene + both participants present)
-      5. Engagement gate (neither helper nor target engaged)
+      5. Engagement gate (neither helper nor target engaged) — skipped when
+         ``skip_engagement_gate=True`` (magical treatment works in combat; #2668)
       6. Duplicate pre-check (racy; INSERT-time UniqueConstraint is authoritative)
       7. Resonance cost debit
       8. Anima cost debit
@@ -3284,7 +3286,13 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     # ------------------------------------------------------------------
     # Gate 5: engagement gate (both helper and target)
     # ------------------------------------------------------------------
-    if CharacterEngagement.objects.filter(character_id__in=[helper.pk, target.pk]).exists():
+    # #2668: skip_engagement_gate lifts the out-of-combat restriction for
+    # magical treatment (technique-cast path). Mundane treatment (the
+    # treat_condition scene action) leaves it False (default — unchanged).
+    if (
+        not skip_engagement_gate
+        and CharacterEngagement.objects.filter(character_id__in=[helper.pk, target.pk]).exists()
+    ):
         raise HelperEngagedForTreatment
 
     # ------------------------------------------------------------------

@@ -803,6 +803,20 @@ class CombatTechniqueResolver:
                 source_character=caster_od,
             )
         )
+        # Technique treatment (#2668): perform bounded-mend treatments on resolved
+        # targets. Fires BEFORE remove_technique_conditions. No-op when the
+        # technique has no treatment rows.
+        from world.magic.services.condition_application import (  # noqa: PLC0415
+            apply_technique_treatments,
+        )
+
+        apply_technique_treatments(
+            technique=technique,
+            success_level=check_result.success_level,
+            targets_by_kind=targets_by_kind,
+            source_character=caster_od,
+            scene=self.participant.encounter.scene,
+        )
         # Dispel/cleanse sibling (#1585): strip technique-authored conditions from
         # the same resolved targets. No-op when the technique has no
         # removed_conditions rows.
@@ -7703,7 +7717,8 @@ def _resolve_npc_action(
         from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
 
         bulk_apply_conditions(
-            [BulkConditionApplication(target=t, template=ct) for (t, ct) in condition_applications]
+            [BulkConditionApplication(target=t, template=ct) for (t, ct) in condition_applications],
+            source_character=opponent.objectdb,
         )
 
     # Broadcast a durable, Narrator-authored OUTCOME line for the NPC action.

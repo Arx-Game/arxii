@@ -68,8 +68,33 @@ _ARIWN_LENSES_DESC = (
 def seed_styling_content() -> None:
     """Seed cosmetic item templates + stylist/scribe roles and offers."""
     _seed_cosmetic_templates()
+    _seed_exotic_style()
     _seed_stylist_role()
     _seed_profile_scribe_role()
+
+
+def _seed_exotic_style() -> None:
+    """One PLACEHOLDER exotic (requires_teaching) hair style (#2632).
+
+    Exercises the learned/taught loop end to end on a fresh DB: the stylist's
+    menu offers it (having it done teaches it), after which the player can
+    maintain it with their own Styling Kit. Name PLACEHOLDER pending
+    ApostateCD's style-list batch.
+    """
+    from world.forms.models import FormTrait, FormTraitOption  # noqa: PLC0415
+
+    trait = FormTrait.objects.filter(name="hair_style", is_cosmetic=True).first()
+    if trait is None:
+        return
+    FormTraitOption.objects.get_or_create(
+        trait=trait,
+        name="court_coils",
+        defaults={
+            "display_name": "Court Coils",
+            "sort_order": 90,
+            "requires_teaching": True,
+        },
+    )
 
 
 def _ensure_cosmetic_template(  # noqa: PLR0913

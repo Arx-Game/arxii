@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Optional, cast
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from flows.consts import ITEM_REF, OPERATOR_MAP, RESULT_VARIABLE_KEY, FlowActionChoices, FlowState
 from flows.execution.prompts import register_pending_prompt
 from flows.flow_event import FlowEvent
@@ -41,11 +42,17 @@ def _resolve_emit_location(flow_execution: "FlowExecution") -> Any:
     return owner.location
 
 
-class FlowDefinition(SharedMemoryModel):
+class FlowDefinition(NaturalKeyMixin, SharedMemoryModel):
     """Represents a reusable definition for a flow, consisting of multiple steps."""
 
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
     if TYPE_CHECKING:
         steps: "models.Manager[FlowStepDefinition]"
         _unsaved_steps: list["FlowStepDefinition"]
@@ -68,7 +75,7 @@ class FlowDefinition(SharedMemoryModel):
         return flow_def
 
 
-class FlowStepDefinition(SharedMemoryModel):
+class FlowStepDefinition(NaturalKeyMixin, SharedMemoryModel):
     """Represents a single step in a flow definition.
 
     The ``variable_name`` field is a generic reference whose meaning depends on
@@ -114,6 +121,12 @@ class FlowStepDefinition(SharedMemoryModel):
         blank=True,
         help_text="Additional parameters for this step.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["flow", "variable_name", "parent"]
+        dependencies = ["flows.FlowDefinition"]
 
     def _parameters_mapping(self) -> dict[str, Any]:
         """Return step parameters as a dictionary."""

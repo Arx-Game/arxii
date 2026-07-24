@@ -3,16 +3,24 @@ from django.contrib import admin
 from world.companions.models import (
     Companion,
     CompanionAbility,
+    CompanionAbilityFunctionTag,
     CompanionArchetype,
     CompanionDeployment,
     CompanionOrder,
 )
 
 
+class CompanionAbilityFunctionTagInline(admin.TabularInline):
+    model = CompanionAbilityFunctionTag
+    extra = 0
+    list_display = ["function"]
+
+
 class CompanionAbilityInline(admin.TabularInline):
     model = CompanionAbility
     extra = 0
     list_display = ["name", "ability_kind", "base_damage"]
+    inlines = [CompanionAbilityFunctionTagInline]
 
 
 @admin.register(CompanionArchetype)

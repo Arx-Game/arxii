@@ -269,7 +269,7 @@ def ensure_summon_content() -> None:
        damage_type) so the summon can attack. The pool is created FIRST so its pk can
        be embedded as a static parameter in the flow step.
     2. A ``FlowDefinition`` with a single ``CALL_SERVICE_FUNCTION`` step whose
-       ``parameters`` carry ``{"payload": "@payload", "threat_pool_id": <pool.pk>,
+       ``parameters`` carry ``{"payload": "@payload", "threat_pool_name": "<pool name>",
        "bond_rounds": 5, "max_health": 30}`` — the static literals resolve alongside
        ``@payload``.
     3. A ``TriggerDefinition`` on ``CONDITION_APPLIED`` with ``base_filter_condition``
@@ -310,7 +310,7 @@ def ensure_summon_content() -> None:
             "parent_id": None,
             "parameters": {
                 "payload": PAYLOAD_PLACEHOLDER,
-                "threat_pool_id": pool.pk,
+                "threat_pool_name": pool.name,
                 "bond_rounds": _SUMMON_BOND_ROUNDS,
                 "max_health": _SUMMON_MAX_HEALTH,
             },
@@ -1256,7 +1256,7 @@ def ensure_rampart_content() -> None:
        ``signature_behavior``/``signature_value`` and a couple of small
        ``RampartElementResistance`` rows (2-6).
     2. A ``FlowDefinition`` with a single ``CALL_SERVICE_FUNCTION`` step pointing at
-       ``raise_rampart_on_condition``, carrying the profile's pk and a mid-tier
+       ``raise_rampart_on_condition``, carrying the profile's name and a mid-tier
        ``integrity`` (24) as static params alongside the placeholder ``position_id``
        (runtime destination selection is the cast-time ``cast_destination``, same
        mechanism Barricade/teleport use).
@@ -1343,7 +1343,7 @@ def ensure_rampart_content() -> None:
             _RAISE_RAMPART_ADAPTER_PATH,
             extra_params={
                 "position_id": _PLACEHOLDER_POSITION_ID,
-                "element_profile_id": profile.pk,
+                "element_profile_name": profile.name,
                 "integrity": _RAMPART_INTEGRITY,
             },
         )

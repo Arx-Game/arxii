@@ -5,6 +5,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from flows.constants import EventName
 from flows.filters.validator import validate_filter_schema
 from flows.flow_event import FlowEvent
@@ -12,7 +13,7 @@ from flows.helpers.logic import resolve_self_placeholders
 from flows.models.flows import FlowDefinition
 
 
-class TriggerDefinition(SharedMemoryModel):
+class TriggerDefinition(NaturalKeyMixin, SharedMemoryModel):
     """Reusable template describing when to launch another flow.
 
     ``base_filter_condition`` allows simple equality checks against event data to
@@ -55,6 +56,11 @@ class TriggerDefinition(SharedMemoryModel):
         help_text="Higher priority triggers fire first.",
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
     def clean(self) -> None:
         super().clean()
         if self.base_filter_condition:
@@ -84,8 +90,6 @@ class Trigger(SharedMemoryModel):
         on_delete=models.CASCADE,
         help_text="The trigger template this is based on.",
     )
-    # ObjectDB by design (#2608): triggers install on rooms (combat/duel wiring) and
-    # reactive items (condition installs), not just characters.
     obj = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.CASCADE,

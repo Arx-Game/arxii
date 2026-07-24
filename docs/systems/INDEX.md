@@ -735,14 +735,26 @@ Species/race definitions with stat bonuses, language assignments, and species-gi
 Physical appearance options (height, build, hair/eye colors) and the alternate-self
 shapeshift lifecycle.
 
-- **Models:** `HeightBand`, `Build`, `FormTrait`, `FormTraitOption`, `CharacterForm`,
-  `FormCombatProfile`, `FormCombatProfileEffect`, `AlternateSelf`, `ActiveAlternateSelf`
+- **Models:** `HeightBand`, `Build`, `FormTrait` (+ `composite_option` FK, #2632 — the
+  umbrella value blends resolve to: multihued hair, mismatched eyes), `FormTraitOption`
+  (+ `requires_teaching`, #2632 — exotic looks gated on knowing them), `CharacterForm`,
+  `FormValueComponent` (#2632 — the ACTUAL ordered components of a blended value, so the
+  normalized layer renders "Red-Green" honestly under descriptor concealment),
+  `CharacterKnownStyle` (#2632 — learned by having it done: NPC stylist or a knowing PC
+  stylist teaches on application), `FormCombatProfile`, `FormCombatProfileEffect`,
+  `AlternateSelf`, `ActiveAlternateSelf`
 - **Enums:** `TraitType` (color/style), `FormType` (TRUE/ALTERNATE/DISGUISE), `DurationType`
 - **Key Services:** `assume_alternate_self(sheet, alt)`, `revert_alternate_self(sheet)`,
   `switch_form(character, target_form)`, `revert_to_true_form(character)`,
-  `get_presented_appearance(character)`, `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (the seam both non-command cause-paths call; #1604),
+  `get_presented_appearance(character)` (normalized = joined blend components when present),
+  `change_appearance(..., blend=)` (#2632 — blend ADDS the color: composite value +
+  component rows; a full application clears components),
+  `knows_style(sheet, option)` / `learn_style(sheet, option)` (#2632),
+  `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (the seam both non-command cause-paths call; #1604),
   `identification_difficulty(viewer_sheet, target_character)` / `attempt_identification(viewer, target, guess_name=None)` (`world/forms/services/identification.py`, #1107 slice 5 — the PC-to-PC "who's really under this mask" check; second `PersonaDiscovery` producer, see [appearance_and_identity.md](appearance_and_identity.md) §"Identification loop (slice 5)")
-- **Key Exceptions:** `RevertBlockedError`, `AlternateSelfActiveError`, `FormOwnershipError`
+- **Key Exceptions:** `RevertBlockedError`, `AlternateSelfActiveError`, `FormOwnershipError`,
+  `TraitNotBlendableError`, `StyleNotKnownError` (#2632; items-side wrappers
+  `BlendNotSupported` / `StyleNotKnown` / `StyleChoiceRequired` on `use_item`)
 - **Integrates with:** character_sheets (appearance, character anchor), scenes (Persona,
   `PersonaDiscovery`, `CharacterRelationship`-adjacent familiarity), mechanics
   (ModifierSource / CharacterModifier), magic (CharacterTechnique), npc_services
@@ -5792,7 +5804,7 @@ Database-driven game logic engine for complex branching sequences, plus the reac
 - **Object States:** `BaseState`, `CharacterState`, `RoomState`, `ExitState` — ephemeral wrappers with permission methods (`can_move`, `can_traverse`) and appearance rendering
 - **Service Functions:** `send_message`, `message_location`, `send_room_state`, `move_object`, `check_exit_traversal`, `traverse_exit`, `get_formatted_description`, `show_inventory` — accept `BaseState` directly (no `FlowExecution` dependency)
 - **Where events are emitted:** `world/combat/services.py` (damage/attack/incap/death), `world/conditions/services.py` (apply/stage-change/remove), `world/magic/services.py` (technique pre-cast/cast/affected), and the typeclass move/examine hooks
-- **Critical Note:** No `FlowDefinition` records exist in the database yet. The reactive layer ships the plumbing; authoring trigger content (e.g., retaliation scars, environmental wards) happens against `ConditionTemplate.reactive_triggers` and similar M2Ms in later scopes.
+- **Critical Note:** `FlowDefinition`/`FlowStepDefinition`/`TriggerDefinition` are content-exportable via `NaturalKeyMixin` + `CONTENT_MODELS` (#2663), so the lore repo can author the trigger→flow→step wiring that `ConditionTemplate.reactive_triggers` references. The `ensure_*` palette seeds in `world/magic/effect_palette_content.py` remain test/E2E fixtures only; real content ships as lore-repo fixtures. Flow step parameters use name-based lookups (e.g. `threat_pool_name`) rather than raw PKs so they are identity-stable across environments.
 - **Source:** `src/flows/`
 - **Details:** [flows.md](flows.md)
 

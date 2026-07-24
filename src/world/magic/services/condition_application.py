@@ -9,6 +9,7 @@ split is in target resolution, not in condition application.
 from __future__ import annotations
 
 from collections.abc import Iterable
+import logging
 from typing import TYPE_CHECKING
 
 from world.checks.services import perform_check
@@ -27,6 +28,9 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.magic.models.techniques import Technique
+    from world.scenes.models import Scene
+
+logger = logging.getLogger(__name__)
 
 
 def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-application params
@@ -271,3 +275,129 @@ def _attempt_removal(
         success=removed,
         skipped_reason="" if removed else "not_present",
     )
+
+
+def apply_technique_treatments(  # noqa: C901
+    *,
+    technique: Technique,
+    success_level: int,
+    targets_by_kind: dict[str, list[ObjectDB]],  # noqa: OBJECTDB_PARAM
+    source_character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    scene: Scene,
+) -> list:
+    """Perform technique-authored treatments on pre-resolved targets.
+
+    Iterates all ``TechniqueTreatment`` rows on *technique*, skips rows whose
+    ``minimum_success_level`` exceeds *success_level*, and for each row attempts
+    ``perform_treatment`` on each target in
+    ``targets_by_kind.get(row.target_kind, [])`` that carries the treatment's
+    target condition.
+
+    For each target:
+      1. Finds the matching ``ConditionInstance`` / ``PendingAlteration`` via
+         ``_condition_matches_treatment`` (handles PRIMARY, AFTERMATH, and
+         PENDING_ALTERATION kinds — same helper the consent flow uses).
+      2. If the treatment ``requires_bond``, resolves the caster's bond thread
+         anchored to the target via ``_find_bond_thread``. If no bond thread
+         is found, skips (no-op).
+      3. Calls ``perform_treatment`` with ``skip_engagement_gate=True``.
+      4. Catches ``TreatmentError`` subclasses — a treatment no-op does not
+         abort the cast.
+
+    Args:
+        technique: The ``Technique`` whose ``treatments`` rows are iterated.
+        success_level: The cast technique's check success level (SL).
+        targets_by_kind: Mapping from ``ConditionTargetKind`` value (str) to
+            resolved ``ObjectDB`` targets. Callers build this before calling.
+        source_character: The caster's ``ObjectDB``, used as the treatment helper.
+        scene: The active ``Scene``.
+
+    Returns:
+        List of ``TreatmentOutcome`` for successful treatments. Empty when no
+        rows pass the SL gate or no targets carry matching conditions.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.conditions.constants import TreatmentTargetKind  # noqa: PLC0415
+    from world.conditions.exceptions import TreatmentError  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.conditions.services import (  # noqa: PLC0415
+        _condition_matches_treatment,
+        _find_bond_thread,
+        perform_treatment,
+    )
+    from world.magic.constants import PendingAlterationStatus  # noqa: PLC0415
+    from world.magic.models import PendingAlteration, Thread  # noqa: PLC0415
+
+    rows = list(technique.treatments.select_related("treatment_template").all())
+    if not rows:
+        return []
+
+    caster_sheet = CharacterSheet.objects.get(character=source_character)
+
+    # Pre-fetch the caster's threads for bond resolution (mirrors
+    # get_treatment_candidates' candidate_threads pattern).
+    candidate_threads = list(Thread.objects.filter(owner=caster_sheet, retired_at__isnull=True))
+
+    results: list = []
+    for row in rows:
+        if success_level < row.minimum_success_level:
+            continue
+        treatment = row.treatment_template
+        targets = targets_by_kind.get(row.target_kind, [])
+        for target in targets:
+            target_sheet = CharacterSheet.objects.get(character=target)
+
+            # Find the matching effect instance on the target.
+            target_effect = None
+            if treatment.target_kind == TreatmentTargetKind.PENDING_ALTERATION:
+                target_effect = PendingAlteration.objects.filter(
+                    character=target_sheet,
+                    status=PendingAlterationStatus.OPEN,
+                ).first()
+            else:
+                instances = ConditionInstance.objects.filter(
+                    target=target,
+                    resolved_at__isnull=True,
+                ).select_related("condition")
+                for inst in instances:
+                    if _condition_matches_treatment(treatment, inst):
+                        target_effect = inst
+                        break
+
+            if target_effect is None:
+                continue
+
+            # Resolve bond thread if required.
+            bond_thread = None
+            if treatment.requires_bond:
+                bond_thread = _find_bond_thread(candidate_threads, target_sheet)
+                if bond_thread is None:
+                    logger.debug(
+                        "Technique treatment %s skipped for target %s: no bond thread found.",
+                        treatment.name,
+                        target,
+                    )
+                    continue
+
+            try:
+                outcome = perform_treatment(
+                    helper_sheet=caster_sheet,
+                    target_sheet=target_sheet,
+                    scene=scene,
+                    treatment=treatment,
+                    target_effect=target_effect,
+                    bond_thread=bond_thread,
+                    skip_engagement_gate=True,
+                )
+            except TreatmentError as exc:
+                logger.warning(
+                    "Technique treatment %s failed for target %s: %s",
+                    treatment.name,
+                    target,
+                    exc,
+                )
+                continue
+
+            results.append(outcome)
+
+    return results

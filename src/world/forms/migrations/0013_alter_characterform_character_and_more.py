@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("character_sheets", "0013_charactersheet_durance_cohort_and_more"),
-        ("forms", "0011_alter_alternateself_thumbnail"),
+        ("forms", "0012_formtrait_composite_option_and_more"),
     ]
 
     operations = [

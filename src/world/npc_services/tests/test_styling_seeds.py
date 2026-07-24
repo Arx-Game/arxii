@@ -37,8 +37,14 @@ class StylingSeedTests(TestCase):
         seed_styling_content()
 
         stylist_offers = NPCServiceOffer.objects.filter(role__name=STYLIST_ROLE_NAME)
-        self.assertEqual(stylist_offers.count(), 2)  # red + braided
-        self.assertEqual(StylingOfferDetails.objects.count(), 2)
+        # red + braided + the seeded exotic Court Coils (requires_teaching).
+        self.assertEqual(stylist_offers.count(), 3)
+        self.assertEqual(StylingOfferDetails.objects.count(), 3)
+        self.assertTrue(
+            StylingOfferDetails.objects.filter(
+                target_option__name="court_coils", target_option__requires_teaching=True
+            ).exists()
+        )
         self.assertTrue(
             NPCServiceOffer.objects.filter(role__name=PROFILE_SCRIBE_ROLE_NAME).exists()
         )

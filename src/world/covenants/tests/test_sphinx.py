@@ -286,3 +286,56 @@ class AuditVowCoverageTests(TestCase):
         rows = audit_vow_coverage()
 
         self.assertFalse(any(row.role_name == "Child Vow" for row in rows))
+
+
+class JudgeVowCompanionSupplyTests(TestCase):
+    """Companion ability function tags count toward Sphinx supply (#2666)."""
+
+    def test_companion_ability_covers_specialty_demand(self) -> None:
+        from world.companions.factories import (
+            CompanionAbilityFactory,
+            CompanionAbilityFunctionTagFactory,
+            CompanionArchetypeFactory,
+            CompanionFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        CovenantRoleTechniqueSpecialtyFactory(covenant_role=role, function=TechniqueFunction.HOLD)
+
+        archetype = CompanionArchetypeFactory(name="Test Wolf")
+        ability = CompanionAbilityFactory(archetype=archetype, name="Pin")
+        CompanionAbilityFunctionTagFactory(ability=ability, function=TechniqueFunction.HOLD)
+        CompanionFactory(owner=sheet, archetype=archetype, name="Fang")
+
+        verdict = judge_vow(sheet, role)
+
+        self.assertEqual(verdict.tier, SphinxTier.TAKES)
+        demand = verdict.demands[0]
+        self.assertTrue(demand.covered)
+        self.assertIn("Companion: Pin", demand.qualifying_technique_names)
+
+    def test_released_companion_does_not_supply(self) -> None:
+        from django.utils import timezone
+
+        from world.companions.factories import (
+            CompanionAbilityFactory,
+            CompanionAbilityFunctionTagFactory,
+            CompanionArchetypeFactory,
+            CompanionFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        CovenantRoleTechniqueSpecialtyFactory(covenant_role=role, function=TechniqueFunction.HOLD)
+
+        archetype = CompanionArchetypeFactory(name="Released Wolf")
+        ability = CompanionAbilityFactory(archetype=archetype, name="Old Pin")
+        CompanionAbilityFunctionTagFactory(ability=ability, function=TechniqueFunction.HOLD)
+        companion = CompanionFactory(owner=sheet, archetype=archetype, name="Ghost")
+        companion.released_at = timezone.now()
+        companion.save(update_fields=["released_at"])
+
+        verdict = judge_vow(sheet, role)
+
+        self.assertEqual(verdict.tier, SphinxTier.NOT_YET)
