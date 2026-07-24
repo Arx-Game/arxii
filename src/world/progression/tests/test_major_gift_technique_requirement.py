@@ -37,7 +37,8 @@ class MajorGiftTechniqueRequirementTests(TestCase):
         )
 
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.major_gift = GiftFactory(kind=GiftKind.MAJOR)
         self.minor_gift = GiftFactory(kind=GiftKind.MINOR)
@@ -120,7 +121,8 @@ class MajorGiftTechniqueRequirementRegistryWiringTests(TestCase):
         )
 
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.major_gift = GiftFactory(kind=GiftKind.MAJOR)
         CharacterGiftFactory(character=self.sheet, gift=self.major_gift)

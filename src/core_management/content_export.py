@@ -85,6 +85,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "covenants.covenantroletechniquespecialty",
         "covenants.geararchetypecompatibility",
         "covenants.insighttableentry",
+        "covenants.weaknesspoolentry",
         "covenants.vowsituationalperk",
         "covenants.vowsituationalperkrung",
         "covenants.vowsituationalperksituation",

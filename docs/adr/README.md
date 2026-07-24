@@ -190,6 +190,7 @@ treat those names as hints to confirm, not gospel.
 - [0159 — Secondary vows scale Layers 2/4 by a potency dial; Layers 1/3 stay strictly primary-only](0159-secondary-vow-layer-split-and-potency-dial.md) (#2641; related ADR-0149, ADR-0151, ADR-0152, ADR-0153)
 - [0160 — Boss fights get their three-act shape from diversity-weighted break accrual, a proportional lieutenant gate, and a Soulfray-derived pacing floor](0160-boss-fight-structure-diversity-weighted-accrual.md) (#2642; related ADR-0007)
 - [0161 — Telegraphed wind-ups downgrade, never mid-round-interrupt; a 1-reaction budget plus a 2-answer absorption cap](0161-telegraphed-windups-downgrade-not-cancel-reaction-budget.md) (#2637, #2639; extends ADR-0118; related ADR-0060, ADR-0151)
+- [0162 — Sent Flying clones the plummet pattern: marker + reactable window + explicit end-of-round resolution](0162-sent-flying-clones-the-plummet-pattern.md) (#2638; extends ADR-0161; related ADR-0118, ADR-0151)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

@@ -141,7 +141,9 @@ class CraftAttachFacetQueryCountTests(TestCase):
         install_full_lab_station(room_profile)
 
         # Give the character enough skill to qualify for the Fine cap band (skill >= 40).
-        CharacterTraitValueFactory(character=self.character, trait=_enchanting_trait(), value=50)
+        CharacterTraitValueFactory(
+            character=self.character.sheet_data, trait=_enchanting_trait(), value=50
+        )
 
         # Fund AP and Anima.
         pool = ActionPointPool.get_or_create_for_character(self.character)
@@ -313,7 +315,9 @@ class BuildCraftingQuoteQueryCountTests(TestCase):
         self.account = AccountFactory()
         self.character = self.sheet.character
 
-        CharacterTraitValueFactory(character=self.character, trait=_enchanting_trait(), value=50)
+        CharacterTraitValueFactory(
+            character=self.character.sheet_data, trait=_enchanting_trait(), value=50
+        )
 
         pool = ActionPointPool.get_or_create_for_character(self.character)
         pool.current = 10

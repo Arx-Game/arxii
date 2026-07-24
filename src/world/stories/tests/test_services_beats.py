@@ -70,7 +70,7 @@ class EvaluateAutoBeatsLevelTests(EvenniaTestCase):
         progress, sheet, episode = self._make_progress_with_sheet()
         # Give the character a class at level 5.
         char_class = CharacterClassFactory()
-        CharacterClassLevelFactory(character=sheet.character, character_class=char_class, level=5)
+        CharacterClassLevelFactory(character=sheet, character_class=char_class, level=5)
 
         beat = BeatFactory(
             episode=episode,
@@ -90,7 +90,7 @@ class EvaluateAutoBeatsLevelTests(EvenniaTestCase):
         progress, sheet, episode = self._make_progress_with_sheet()
         # Character only at level 3, requirement is 5.
         char_class = CharacterClassFactory()
-        CharacterClassLevelFactory(character=sheet.character, character_class=char_class, level=3)
+        CharacterClassLevelFactory(character=sheet, character_class=char_class, level=3)
 
         beat = BeatFactory(
             episode=episode,
@@ -135,7 +135,7 @@ class EvaluateAutoBeatsLevelTests(EvenniaTestCase):
         era = EraFactory(status=EraStatus.ACTIVE)
         progress, sheet, episode = self._make_progress_with_sheet()
         char_class = CharacterClassFactory()
-        CharacterClassLevelFactory(character=sheet.character, character_class=char_class, level=5)
+        CharacterClassLevelFactory(character=sheet, character_class=char_class, level=5)
         beat = BeatFactory(
             episode=episode,
             predicate_type=BeatPredicateType.CHARACTER_LEVEL_AT_LEAST,
@@ -154,7 +154,7 @@ class EvaluateAutoBeatsLevelTests(EvenniaTestCase):
         roster = RosterFactory()
         entry = RosterEntryFactory(character_sheet=sheet, roster=roster)
         char_class = CharacterClassFactory()
-        CharacterClassLevelFactory(character=sheet.character, character_class=char_class, level=5)
+        CharacterClassLevelFactory(character=sheet, character_class=char_class, level=5)
         beat = BeatFactory(
             episode=episode,
             predicate_type=BeatPredicateType.CHARACTER_LEVEL_AT_LEAST,
@@ -171,7 +171,7 @@ class EvaluateAutoBeatsLevelTests(EvenniaTestCase):
         """BeatCompletion.roster_entry is None when no RosterEntry exists."""
         progress, sheet, episode = self._make_progress_with_sheet()
         char_class = CharacterClassFactory()
-        CharacterClassLevelFactory(character=sheet.character, character_class=char_class, level=5)
+        CharacterClassLevelFactory(character=sheet, character_class=char_class, level=5)
         beat = BeatFactory(
             episode=episode,
             predicate_type=BeatPredicateType.CHARACTER_LEVEL_AT_LEAST,
@@ -872,7 +872,7 @@ class EvaluateAutoBeatsIdempotencyTests(EvenniaTestCase):
         """Calling evaluate_auto_beats twice creates exactly one BeatCompletion."""
         sheet = CharacterSheetFactory()
         char_class = CharacterClassFactory()
-        CharacterClassLevelFactory(character=sheet.character, character_class=char_class, level=5)
+        CharacterClassLevelFactory(character=sheet, character_class=char_class, level=5)
         episode = EpisodeFactory()
         beat = BeatFactory(
             episode=episode,

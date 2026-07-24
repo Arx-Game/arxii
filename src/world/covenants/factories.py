@@ -36,6 +36,7 @@ from world.covenants.models import (
     VowSituationalPerk,
     VowSituationalPerkRung,
     VowSituationalPerkSituation,
+    WeaknessPoolEntry,
 )
 from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
 from world.items.constants import GearArchetype
@@ -200,6 +201,20 @@ class InsightTableEntryFactory(factory_django.DjangoModelFactory):
     condition = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
     target_kind = InsightTargetKind.ALLY
     weight = 1
+    is_active = True
+
+
+class WeaknessPoolEntryFactory(factory_django.DjangoModelFactory):
+    """Factory for WeaknessPoolEntry (#2665). Test-only — real entries are lore-repo content."""
+
+    class Meta:
+        model = WeaknessPoolEntry
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Weakness {n}")
+    creature_template = factory.SubFactory("world.combat.factories.CreatureTemplateFactory")
+    prose = "{caster} reveals {target}'s weakness — it is vulnerable!"
+    condition = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
     is_active = True
 
 
@@ -592,35 +607,41 @@ def wire_covenant_rite_content() -> CovenantRite:
     )
 
     # ------------------------------------------------------------------
-    # Canonical DURANCE roles (get_or_create on slug, mirroring the
-    # pattern in world/seeds/game_content/items.py).
+    # Reference-rite DURANCE roles, built via CovenantRoleFactory with a
+    # fixed ``slug=`` (its ``django_get_or_create`` key) so repeated calls
+    # stay idempotent. Formerly hardcoded ``sword-vanguard``/``shield-bulwark``/
+    # ``crown-luminary`` (mirroring world/seeds/game_content/items.py) — those
+    # placeholder slugs/names collided with the 13 real Durance covenant vows
+    # once they became lore-repo content (unique on (covenant_type, name); e.g.
+    # placeholder "Bulwark" blocked the real "Bulwark" row). Renamed to
+    # obviously-scaffolding names that cannot collide with authored vow titles.
     # ------------------------------------------------------------------
-    sword_role, _ = CovenantRole.objects.get_or_create(
-        slug="sword-vanguard",
-        defaults={
-            "name": "Vanguard",
-            "covenant_type": CovenantType.DURANCE,
-            "sword_weight": 1,
-            "speed_rank": 2,
-        },
+    sword_role = CovenantRoleFactory(
+        slug="oath-rite-sword-role",
+        name="Oath Rite: Sword Role",
+        covenant_type=CovenantType.DURANCE,
+        sword_weight=1,
+        shield_weight=0,
+        crown_weight=0,
+        speed_rank=2,
     )
-    shield_role, _ = CovenantRole.objects.get_or_create(
-        slug="shield-bulwark",
-        defaults={
-            "name": "Bulwark",
-            "covenant_type": CovenantType.DURANCE,
-            "shield_weight": 1,
-            "speed_rank": 3,
-        },
+    shield_role = CovenantRoleFactory(
+        slug="oath-rite-shield-role",
+        name="Oath Rite: Shield Role",
+        covenant_type=CovenantType.DURANCE,
+        sword_weight=0,
+        shield_weight=1,
+        crown_weight=0,
+        speed_rank=3,
     )
-    crown_role, _ = CovenantRole.objects.get_or_create(
-        slug="crown-luminary",
-        defaults={
-            "name": "Luminary",
-            "covenant_type": CovenantType.DURANCE,
-            "crown_weight": 1,
-            "speed_rank": 1,
-        },
+    crown_role = CovenantRoleFactory(
+        slug="oath-rite-crown-role",
+        name="Oath Rite: Crown Role",
+        covenant_type=CovenantType.DURANCE,
+        sword_weight=0,
+        shield_weight=0,
+        crown_weight=1,
+        speed_rank=1,
     )
 
     # ------------------------------------------------------------------
@@ -1151,7 +1172,7 @@ def make_court_with_mission(
 
     def _set_primary_level(sheet: object, level: int) -> None:
         CharacterClassLevelFactory(
-            character=sheet.character,
+            character=sheet,
             character_class=CharacterClassFactory(),
             level=level,
             is_primary=True,

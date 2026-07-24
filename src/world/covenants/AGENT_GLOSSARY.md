@@ -243,6 +243,31 @@ WHICH is the flagged player-directed upgrade path, not yet built. (#2637 design 
 _Avoid_: The Know (a lore-repo niche name for a role archetype that might carry this flag —
 the mechanic itself is generic data, not tied to any one authored role).
 
+**Sent Flying / Consequence Moment**:
+The plummet pattern's first "in-flight" clone, and the template for future consequence
+events (#2638, ADR-0162): a `sends_flying` `ThreatPoolEntry`'s attack that lands damage
+> 0 applies the seeded "Sent Flying" marker `ConditionTemplate` — a produced, reactable
+moment, dual-dispatched loud ("X is sent FLYING by the blow!"). The moment is
+IMMEDIATELY answerable by an armed guardian INTERPOSE (budget-gated via
+`REACTIONS_PER_ROUND`, no skill roll — a mid-air catch is a binary rescue, not gradeable
+damage mitigation, unlike mundane Interpose); a caught victim's marker clears with a
+celebration naming the catcher (+ the wind-up's caller, if the source attack was called
+out). Left unanswered, the marker resolves EXPLICITLY at the end of `resolve_round` —
+never a per-round DoT tick, and never the generic condition-duration countdown (the
+template is `PERMANENT`, not a literal `ROUNDS`/1, so it can't race that tick) — either
+launching the victim into an existing CHASM `Position` (handed off entirely to the
+plummet system's own `maybe_emit_fall`/`begin_plummet` machinery) or debiting
+`floor(sent_flying_damage * SENT_FLYING_IMPACT_FRACTION)` Physical damage through the
+standard damage path with NO extra narration. `Situation.ALLY_SENT_FLYING` holds while a
+covenant-mate currently carries the marker (mate scoping mirrors `ALLY_LOW_HEALTH`).
+"Rescues are loud; absences are unremarked" — the same celebrate/silence boundary the
+wind-up family already established.
+_Avoid_: knockback (that's `ThreatPoolEntry.on_hit_consequence_pool`'s existing
+MOVE_TO_POSITION effect — a same-instant reposition with no reactable window; Sent
+Flying is specifically the plummet-pattern clone: marker + window + explicit
+resolution), stun (Sent Flying never gates the victim's own actions — it is purely a
+consequence-in-flight marker for OTHERS to answer).
+
 **Defense-Side Seam**:
 The evaluation point making situational perks reachable on a defender's OWN roll, not only the
 attacker's: `SituationContext.attacker` (populated only here, `None` on every offense-side
@@ -359,6 +384,33 @@ flag, not the Layer 4 perk machinery above.
 _Avoid_: situational perk, dormant vow (a different mechanism entirely — the Insight has no
 dormant/disengaged variant, it simply doesn't fire off a disengaged role); "Look out!" callout
 (the light, frequent sibling — see #2637, not this ace).
+
+**Weakness Reading (the)**:
+The Sage vow's boss-reading rider (#2665). A character with an engaged
+`CovenantRole.reveals_weakness` role, casting a PERCEPTION-tagged technique against a BOSS-tier
+opponent, reads the boss and creates a `PendingSelection` from the boss's authored
+`WeaknessPoolEntry` pool. The player chooses which weakness to actualize via the `select`
+command; the chosen entry's `ConditionTemplate` is applied to the boss as a standing
+enemy-side state for the rest of the encounter. Once per encounter
+(`CombatParticipant.weakness_reading_used`); rides the existing cast per the riding rule (no
+new button for the trigger). Distinct from the Insight (#2645): the Insight is a random draw
+from a global table, while the Weakness Reading is a player choice from a per-boss pool, and
+the condition persists (not one-round). "Anathema erodes; the Sage reveals what was always
+true" — the actualized weakness is a standing enemy-side state, not an Anathema-style
+authored delta.
+_Avoid_: Insight (the random-draw sibling — see #2645); mage-scar weakness (a damage-type
+vulnerability modifier on alteration templates, a completely different concept).
+
+**Pending Selection**:
+`world.combat.models.PendingSelection` — a generic deferred player choice created during
+combat resolution (#2665). The combat round is synchronous and cannot pause for a player
+prompt; instead, a rider creates a `PendingSelection` and the player resolves it out-of-band
+via the `select` command (telnet) or web endpoint. `selection_type` discriminates which
+resolver handles it (currently `WEAKNESS`; future: `TAROT_DRAW`, etc.). The first consumer is
+the Sage's weakness reading; the mechanism is intentionally generic so future menu-driven
+archetypes can plug in without retrofit.
+_Avoid_: CrossingOption (a thread-crossing-specific player choice — see `world/magic/models/
+crossing.py`, domain-specific not generic combat-scoped).
 
 **Covenant Rank**:
 The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals / request-gm. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).

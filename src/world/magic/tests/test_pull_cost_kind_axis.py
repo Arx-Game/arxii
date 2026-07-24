@@ -90,7 +90,7 @@ class ImbueCostMultiplierTests(TestCase):
             developed_points=0,
         )
         CharacterTraitValueFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             trait=trait_thread.target_trait,
             value=50,
         )

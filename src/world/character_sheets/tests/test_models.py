@@ -238,21 +238,21 @@ class CurrentLevelTests(TestCase):
 
     def test_current_level_returns_highest_across_classes(self):
         sheet = CharacterSheetFactory()
-        CharacterClassLevelFactory(character=sheet.character, level=3)
-        CharacterClassLevelFactory(character=sheet.character, level=5)
-        CharacterClassLevelFactory(character=sheet.character, level=2)
+        CharacterClassLevelFactory(character=sheet, level=3)
+        CharacterClassLevelFactory(character=sheet, level=5)
+        CharacterClassLevelFactory(character=sheet, level=2)
         self.assertEqual(sheet.current_level, 5)
 
     def test_current_level_is_cached(self):
         sheet = CharacterSheetFactory()
-        CharacterClassLevelFactory(character=sheet.character, level=5)
+        CharacterClassLevelFactory(character=sheet, level=5)
 
         # First access populates cache.
         first = sheet.current_level
         self.assertEqual(first, 5)
 
         # Now add a higher level; without invalidation, cached value persists.
-        CharacterClassLevelFactory(character=sheet.character, level=7)
+        CharacterClassLevelFactory(character=sheet, level=7)
         self.assertEqual(sheet.current_level, 5, "Cached value should persist")
 
         # Invalidate and confirm the cache re-derives the new higher value.

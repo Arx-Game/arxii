@@ -23,7 +23,7 @@ class PrivacyTierTests(APITestCase):
         sheet.stats_visibility = stats_visibility
         sheet.save()
         CharacterTraitValueFactory(
-            character=sheet.character, trait=StatTraitFactory(name="strength"), value=5
+            character=sheet, trait=StatTraitFactory(name="strength"), value=5
         )
         return sheet
 

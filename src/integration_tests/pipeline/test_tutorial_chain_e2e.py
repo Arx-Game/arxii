@@ -194,7 +194,7 @@ class TutorialChainJourneyE2ETests(TestCase):
         # NPC-offer eligibility gates on level_band (1-5 for every tutorial
         # template); a freshly-created sheet has no class assignments and
         # current_level=0, which fails level_band_min=1 for T3/T5/T6/T7.
-        CharacterClassLevelFactory(character=character, level=1, is_primary=True)
+        CharacterClassLevelFactory(character=sheet, level=1, is_primary=True)
         sheet.invalidate_class_level_cache()
         character.db_location = self.room
         character.save(update_fields=["db_location"])

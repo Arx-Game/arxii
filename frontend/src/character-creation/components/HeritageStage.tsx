@@ -154,6 +154,9 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         <div>
           <h2 className="theme-heading text-2xl font-bold">{copy?.heritage_heading ?? ''}</h2>
           <p className="mt-2 text-muted-foreground">{copy?.heritage_intro ?? ''}</p>
+          {copy?.heritage_lore_intro && (
+            <p className="mt-2 text-sm text-muted-foreground">{copy.heritage_lore_intro}</p>
+          )}
         </div>
 
         {/* Beginnings Selection */}

@@ -33,7 +33,7 @@ def _make_encounter_with_avg_level(avg_level: float, stakes_level: str) -> objec
         status=ParticipantStatus.ACTIVE,
     )
     CharacterClassLevelFactory(
-        character=participant.character_sheet.character,
+        character=participant.character_sheet,
         level=int(avg_level),
         is_primary=True,
     )

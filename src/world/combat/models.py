@@ -3,6 +3,7 @@
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
@@ -48,6 +49,7 @@ from world.combat.constants import (
     PaceMode,
     ParticipantStatus,
     RiskLevel,
+    SelectionType,
     StakesLevel,
     StrikeDelivery,
     SurgeTriggerKind,
@@ -371,6 +373,19 @@ class ThreatPoolEntry(SharedMemoryModel):
         help_text="If True, this entry is skipped when the opponent is faltering "
         "(morale_state FALTER). Lets designers author 'weakened' entries (#2015).",
     )
+    sends_flying = models.BooleanField(
+        default=False,
+        help_text=(
+            "Big attacks that launch their victim on a damaging hit (#2638). "
+            "Pairs naturally with windup_rounds — a telegraphed haymaker that "
+            "connects sends the victim flying. Applies the seeded 'Sent Flying' "
+            "marker condition (world.combat.sent_flying_content) whenever this "
+            "entry's attack deals damage > 0; the marker is then reactable "
+            "(an armed guardian INTERPOSE may catch it mid-air) or resolves "
+            "explicitly at end of round — see world.combat.services."
+            "_resolve_sent_flying_markers."
+        ),
+    )
 
     # === Clash fields (Task 1.5) ===
     clash_capable = models.BooleanField(
@@ -472,6 +487,18 @@ class CombatOpponent(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="opponents",
+    )
+    creature_template = models.ForeignKey(
+        "combat.CreatureTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="spawned_opponents",
+        help_text=(
+            "The bestiary template this opponent was spawned from (#2665). "
+            "Stamped in spawn_from_creature_template so the weakness-reading "
+            "rider can look up the boss's WeaknessPoolEntry rows."
+        ),
     )
     status = models.CharField(
         max_length=20,
@@ -1154,6 +1181,30 @@ class CombatParticipant(SharedMemoryModel):
             "machinery — a fresh encounter mints a fresh CombatParticipant."
         ),
     )
+    weakness_reading_used = models.BooleanField(
+        default=False,
+        help_text=(
+            "#2665: True once this participant has produced their once-per-encounter "
+            "weakness reading (the Sage vow's boss-reading rider). A per-encounter "
+            "row needs no reset machinery — a fresh encounter mints a fresh "
+            "CombatParticipant."
+        ),
+    )
+    sent_flying_damage = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "The triggering hit's damage, stamped when a `sends_flying` "
+            "ThreatPoolEntry's attack applies the Sent Flying marker condition "
+            "to this participant (#2638). v1 carrier choice: rather than a new "
+            "model, the amount rides this single field (only one Sent Flying "
+            "marker can be active on a participant at a time — the condition "
+            "is non-stackable) so world.combat.services._resolve_sent_flying_markers "
+            "can compute the unanswered-impact debit "
+            "(floor(sent_flying_damage * SENT_FLYING_IMPACT_FRACTION)) at end of "
+            "round without threading extra state through the condition system. "
+            "0 = not currently marked; cleared back to 0 on catch or landing."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -1476,6 +1527,19 @@ class CombatOpponentAction(SharedMemoryModel):
             "(PendingOpponentAttack) sets this from its downgrade ladder — "
             "x(1 - 0.25*downgrades), floored at x0.25 — so a wrecked telegraph "
             "lands weaker without touching the authored ThreatPoolEntry row."
+        ),
+    )
+    matured_from_called_out_windup = models.BooleanField(
+        default=False,
+        help_text=(
+            "Stamped True at wind-up maturation (#2638) when the "
+            "PendingOpponentAttack this action was synthesized from carried "
+            "called_out=True (#2637 design 6). PendingOpponentAttack is deleted "
+            "at maturation, so this is the only surviving record of whether the "
+            "attack that lands was called out — read by a sends_flying "
+            "consequence's celebration broadcast to credit the auto-caller "
+            "alongside the catcher. False (the default) for every non-wind-up "
+            "same-round action."
         ),
     )
 
@@ -3373,3 +3437,129 @@ class EngagementLock(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"EngagementLock(opp={self.opponent_id}→pc={self.participant_id} [{self.status}])"
+
+
+# =============================================================================
+# PendingSelection model (#2665) — generic deferred player choice in combat.
+# The combat round is synchronous; a rider creates a PendingSelection and the
+# player resolves it out-of-band via the ``select`` command. First consumer:
+# the Sage's weakness reading. Future consumers: tarot mage, etc.
+# =============================================================================
+
+
+class PendingSelection(SharedMemoryModel):
+    """A deferred player choice created during combat resolution (#2665).
+
+    The combat round is synchronous — it cannot pause for a player prompt.
+    Instead, a rider creates a PendingSelection; the player resolves it
+    out-of-band via the ``select`` command (telnet) or web endpoint.
+
+    The first consumer is the Sage's weakness reading: on a successful
+    PERCEPTION cast against a boss, the rider creates a PendingSelection
+    whose options are the boss's active WeaknessPoolEntry rows. The player
+    chooses one; ``resolve_weakness_selection`` applies the chosen entry's
+    condition to the boss.
+    """
+
+    participant = models.ForeignKey(
+        COMBAT_PARTICIPANT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="pending_selections",
+    )
+    encounter = models.ForeignKey(
+        COMBAT_ENCOUNTER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="pending_selections",
+    )
+    selection_type = models.CharField(
+        max_length=30,
+        choices=SelectionType.choices,
+        help_text="Discriminates which resolver handles this selection.",
+    )
+    options_json = models.JSONField(
+        help_text=(
+            "Array of option objects: [{id, label, description}]. "
+            "The id is the value the player passes to ``select``."
+        ),
+    )
+    selected_option_id = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text="The chosen option's id, set when the player resolves.",
+    )
+    source_content_type = models.ForeignKey(
+        "contenttypes.ContentType",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    source_object_id = models.PositiveIntegerField(null=True, blank=True)
+    source_object = GenericForeignKey("source_content_type", "source_object_id")
+    target_opponent = models.ForeignKey(
+        "combat.CombatOpponent",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="pending_selections",
+        help_text="The boss opponent this selection targets (weakness reading).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def is_resolved(self) -> bool:
+        return self.resolved_at is not None
+
+    def __str__(self) -> str:
+        return f"PendingSelection({self.selection_type}, resolved={self.is_resolved})"
+
+
+class CombatMark(SharedMemoryModel):
+    """A directed, round-scoped combatant reference — the Fulmination mark (#2664).
+
+    Created by ``declare_mark`` during the DECLARING phase. Persists for the
+    round; old marks are ignored (query-scoped by ``round_number``). The mark
+    is a generic combat primitive: a participant declares a target for
+    covenant-mates to focus. Vow content (perks, rungs) is lore-repo data that
+    reads the mark via the ``TARGET_IS_MARKED_BY_ALLY`` situation evaluator.
+
+    Open seam: a general combatant-relationship model that could subsume
+    EngagementLock, Clash, and the mark is a ``needs-design`` follow-up.
+    """
+
+    encounter = models.ForeignKey(
+        CombatEncounter,
+        on_delete=models.CASCADE,
+        related_name="marks",
+    )
+    participant = models.ForeignKey(
+        CombatParticipant,
+        on_delete=models.CASCADE,
+        related_name="marks",
+    )
+    opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        related_name="marks",
+    )
+    round_number = models.PositiveIntegerField()
+    source_technique = models.ForeignKey(
+        "magic.Technique",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Technique that created the mark (provenance).",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["participant", "round_number"],
+                name="combat_mark_unique_per_participant_round",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"CombatMark({self.participant} → {self.opponent}, round {self.round_number})"

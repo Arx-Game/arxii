@@ -245,7 +245,7 @@ class StageCrossingMilestoneTests(TestCase):
         from world.progression.factories import CharacterPathHistoryFactory
 
         path = PathFactory(name=f"Test Path Stage {int(stage)}", stage=stage)
-        CharacterPathHistoryFactory(character=self.sheet.character, path=path)
+        CharacterPathHistoryFactory(character=self.sheet, path=path)
 
     def _crossing_milestone(self, stage):
         """Create a KNOWN (public) stage_crossing milestone at the destination stage."""

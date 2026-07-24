@@ -30,7 +30,7 @@ class RosterEntryFilterSet(django_filters.FilterSet):
         self, queryset: QuerySet[RosterEntry], name: str, value: str
     ) -> QuerySet[RosterEntry]:
         return queryset.filter(
-            character_sheet__character__character_class_levels__character_class__name__icontains=value,
+            character_sheet__character_class_levels__character_class__name__icontains=value,
         ).distinct()
 
 

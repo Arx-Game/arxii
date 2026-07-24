@@ -3,6 +3,7 @@ Progression models package.
 
 This package organizes progression models into logical modules:
 - advancement: Class-level advancement receipts and shared abstract base
+- durance_cohort: Intake cohort models for the Ritual of the Durance (#2479)
 - rewards: XP and development point models
 - kudos: Kudos "good sport" currency models
 - unlocks: Unlock types, requirements, and XP cost system
@@ -21,6 +22,10 @@ from world.progression.models.advancement import (
 from world.progression.models.character_xp import (
     CharacterXP,
     CharacterXPTransaction,
+)
+from world.progression.models.durance_cohort import (
+    CohortEnrollment,
+    DuranceCohort,
 )
 from world.progression.models.engagement import (
     WeeklyEngagementInitiator,
@@ -90,8 +95,10 @@ __all__ = [
     "ClassLevelUnlock",
     "ClassXPCost",
     "CodexKnowledgeRequirement",
+    "CohortEnrollment",
     "DevelopmentPoints",
     "DevelopmentTransaction",
+    "DuranceCohort",
     "DuranceTrainingSite",
     "ExperiencePointsData",
     "ItemRequirement",

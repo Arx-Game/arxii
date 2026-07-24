@@ -138,7 +138,7 @@ class FullLoopPhase1IntegrationTest(EvenniaTestCase):
         # Act 2: Level up — auto beat satisfies.                              #
         # ------------------------------------------------------------------ #
         char_class = CharacterClassFactory()
-        CharacterClassLevelFactory(character=sheet.character, character_class=char_class, level=2)
+        CharacterClassLevelFactory(character=sheet, character_class=char_class, level=2)
         # Simulate what production progression code does after mutating a
         # CharacterClassLevel: invalidate the sheet's cached level data so
         # evaluate_auto_beats sees the new level.

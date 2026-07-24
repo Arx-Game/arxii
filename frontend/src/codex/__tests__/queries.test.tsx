@@ -12,6 +12,7 @@ import {
   useCodexTree,
   useCodexEntries,
   useCodexEntry,
+  useFeaturedCodexEntries,
   useCodexSearch,
   codexKeys,
 } from '../queries';
@@ -22,7 +23,9 @@ vi.mock('../api', () => ({
   getEntry: vi.fn(),
   searchEntries: vi.fn(),
   getEntries: vi.fn(),
+  getFeaturedEntries: vi.fn(),
   getSubjects: vi.fn(),
+  getSubjectChildren: vi.fn(),
 }));
 
 import * as api from '../api';
@@ -108,6 +111,8 @@ describe('Codex Query Hooks', () => {
           name: 'Bene',
           summary: 'Resonance of giving',
           is_public: true,
+          is_featured: false,
+          featured_order: null,
           subject: 1,
           subject_name: 'Celestial',
           subject_path: [
@@ -124,6 +129,8 @@ describe('Codex Query Hooks', () => {
           name: 'Male',
           summary: 'Resonance of taking',
           is_public: true,
+          is_featured: false,
+          featured_order: null,
           subject: 1,
           subject_name: 'Celestial',
           subject_path: [
@@ -157,6 +164,8 @@ describe('Codex Query Hooks', () => {
           name: 'Bene',
           summary: 'Resonance of giving',
           is_public: true,
+          is_featured: false,
+          featured_order: null,
           subject: 5,
           subject_name: 'Celestial',
           subject_path: [
@@ -184,6 +193,36 @@ describe('Codex Query Hooks', () => {
     });
   });
 
+  describe('useFeaturedCodexEntries', () => {
+    it('fetches featured entries', async () => {
+      const mockEntries = [
+        {
+          id: 1,
+          name: 'The Gifted',
+          summary: 'Those who carry magic',
+          is_public: true,
+          is_featured: true,
+          featured_order: 1,
+          subject: 1,
+          subject_name: 'The World',
+          subject_path: [],
+          display_order: 1,
+          knowledge_status: null,
+          art_url: null,
+        },
+      ];
+      vi.mocked(api.getFeaturedEntries).mockResolvedValue(mockEntries);
+
+      const { result } = renderHook(() => useFeaturedCodexEntries(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toEqual(mockEntries);
+      expect(api.getFeaturedEntries).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('useCodexEntry', () => {
     it('fetches entry by id', async () => {
       const mockEntry = {
@@ -195,6 +234,8 @@ describe('Codex Query Hooks', () => {
         lore_links: [],
         mechanics_links: [],
         is_public: true,
+        is_featured: false,
+        featured_order: null,
         subject: 1,
         subject_name: 'Celestial',
         subject_path: [
@@ -249,6 +290,8 @@ describe('Codex Query Hooks', () => {
           name: 'Bene',
           summary: 'Test',
           is_public: true,
+          is_featured: false,
+          featured_order: null,
           subject: 1,
           subject_name: 'Celestial',
           subject_path: [{ type: 'category' as const, id: 1, name: 'Magic' }],

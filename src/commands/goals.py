@@ -111,7 +111,9 @@ class CmdGoal(ArxCommand):
         notes = kwargs.get(_KEY_NOTES, "")
         from world.goals.models import CharacterGoal  # noqa: PLC0415
 
-        existing = {g.domain_id: g for g in CharacterGoal.objects.filter(character=self.caller)}
+        existing = {
+            g.domain_id: g for g in CharacterGoal.objects.filter(character=self.caller.sheet_data)
+        }
         goals = []
         for domain_id, goal in existing.items():
             goals.append({"domain": domain_id, "points": goal.points, "notes": goal.notes})
@@ -177,7 +179,9 @@ class CmdGoal(ArxCommand):
         from world.goals.models import CharacterGoal  # noqa: PLC0415
         from world.goals.services import MAX_GOAL_POINTS  # noqa: PLC0415
 
-        goals = list(CharacterGoal.objects.filter(character=self.caller).select_related("domain"))
+        goals = list(
+            CharacterGoal.objects.filter(character=self.caller.sheet_data).select_related("domain")
+        )
         total = sum(g.points for g in goals)
         lines = [f"|wGoals: {total}/{MAX_GOAL_POINTS} points allocated|n"]
         if not goals:

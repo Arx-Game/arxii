@@ -581,7 +581,8 @@ def _calculate_aspect_bonus(
     5. Return total
     """
     latest_history = (
-        CharacterPathHistory.objects.filter(character=character)
+        # pk filter: callers pass the ObjectDB; the FK targets CharacterSheet (PK-shared).
+        CharacterPathHistory.objects.filter(character_id=character.pk)
         .select_related("path")
         .order_by("-selected_at")
         .first()
@@ -752,11 +753,13 @@ def _get_character_level(character: "ObjectDB") -> int:
     """
     Get the character's primary class level, or highest level, or default to 1.
     """
-    primary = CharacterClassLevel.objects.filter(character=character, is_primary=True).first()
+    primary = CharacterClassLevel.objects.filter(character_id=character.pk, is_primary=True).first()
     if primary:
         return cast(int, primary.level)
 
-    highest = CharacterClassLevel.objects.filter(character=character).order_by("-level").first()
+    highest = (
+        CharacterClassLevel.objects.filter(character_id=character.pk).order_by("-level").first()
+    )
     if highest:
         return cast(int, highest.level)
 

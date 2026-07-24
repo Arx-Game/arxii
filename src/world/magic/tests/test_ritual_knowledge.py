@@ -129,7 +129,7 @@ class ReconcileRitualKnowledgeTests(TestCase):
 
         # Assign path to character via CharacterPathHistory
         CharacterPathHistoryFactory(
-            character=roster_entry.character_sheet.character,
+            character=roster_entry.character_sheet,
             path=path,
         )
 
@@ -249,7 +249,7 @@ class ReconcileRitualKnowledgeTests(TestCase):
 
         PathRitualGrant.objects.create(path=path, ritual=ritual)
         CharacterPathHistoryFactory(
-            character=roster_entry.character_sheet.character,
+            character=roster_entry.character_sheet,
             path=path,
         )
 
@@ -289,7 +289,7 @@ class ReconcileRitualKnowledgeTests(TestCase):
         # Create grant for this path
         PathRitualGrant.objects.create(path=path, ritual=ritual)
         CharacterPathHistoryFactory(
-            character=roster_entry.character_sheet.character,
+            character=roster_entry.character_sheet,
             path=path,
         )
 

@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 import pytest
 
-from evennia_extensions.factories import ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.progression.models import CharacterXP, CharacterXPTransaction
 from world.progression.types import ProgressionReason
 
@@ -14,12 +14,13 @@ class CharacterXPModelTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDBFactory(db_key="TestChar")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
     def test_create_locked_xp(self):
         """Test creating locked (non-transferable) XP record."""
         xp = CharacterXP.objects.create(
-            character=self.character,
+            character=self.sheet,
             total_earned=30,
             total_spent=0,
             transferable=False,
@@ -30,7 +31,7 @@ class CharacterXPModelTest(TestCase):
     def test_create_unlocked_xp(self):
         """Test creating unlocked (transferable) XP record."""
         xp = CharacterXP.objects.create(
-            character=self.character,
+            character=self.sheet,
             total_earned=50,
             total_spent=10,
             transferable=True,
@@ -41,22 +42,22 @@ class CharacterXPModelTest(TestCase):
     def test_multiple_xp_rows_per_character(self):
         """Test that a character can have multiple XP rows with the same transferable flag."""
         xp1 = CharacterXP.objects.create(
-            character=self.character,
+            character=self.sheet,
             total_earned=30,
             transferable=False,
         )
         xp2 = CharacterXP.objects.create(
-            character=self.character,
+            character=self.sheet,
             total_earned=20,
             transferable=False,
         )
         assert xp1.pk != xp2.pk
-        assert CharacterXP.objects.filter(character=self.character, transferable=False).count() == 2
+        assert CharacterXP.objects.filter(character=self.sheet, transferable=False).count() == 2
 
     def test_can_spend(self):
         """Test spending validation."""
         xp = CharacterXP.objects.create(
-            character=self.character,
+            character=self.sheet,
             total_earned=30,
             total_spent=10,
             transferable=False,
@@ -67,7 +68,7 @@ class CharacterXPModelTest(TestCase):
     def test_spend_xp(self):
         """Test XP spending updates totals."""
         xp = CharacterXP.objects.create(
-            character=self.character,
+            character=self.sheet,
             total_earned=30,
             total_spent=0,
             transferable=False,
@@ -79,7 +80,7 @@ class CharacterXPModelTest(TestCase):
     def test_spend_xp_insufficient(self):
         """Test spending more than available fails."""
         xp = CharacterXP.objects.create(
-            character=self.character,
+            character=self.sheet,
             total_earned=10,
             total_spent=0,
             transferable=False,
@@ -90,7 +91,7 @@ class CharacterXPModelTest(TestCase):
     def test_award_xp(self):
         """Test awarding XP."""
         xp = CharacterXP.objects.create(
-            character=self.character,
+            character=self.sheet,
             total_earned=10,
             transferable=False,
         )
@@ -102,7 +103,7 @@ class CharacterXPModelTest(TestCase):
         """Test validation prevents spent exceeding earned."""
         with pytest.raises(ValidationError):
             xp = CharacterXP(
-                character=self.character,
+                character=self.sheet,
                 total_earned=5,
                 total_spent=10,
                 transferable=False,
@@ -115,12 +116,13 @@ class CharacterXPTransactionModelTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDBFactory(db_key="TestChar2")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
     def test_create_cg_conversion_transaction(self):
         """Test creating a CG conversion transaction."""
         txn = CharacterXPTransaction.objects.create(
-            character=self.character,
+            character=self.sheet,
             amount=30,
             reason=ProgressionReason.CG_CONVERSION,
             description="15 unspent CG points converted at 2:1",
@@ -133,18 +135,18 @@ class CharacterXPTransactionModelTest(TestCase):
     def test_transaction_ordering(self):
         """Test transactions are ordered newest first."""
         txn1 = CharacterXPTransaction.objects.create(
-            character=self.character,
+            character=self.sheet,
             amount=10,
             reason=ProgressionReason.CG_CONVERSION,
             transferable=False,
         )
         txn2 = CharacterXPTransaction.objects.create(
-            character=self.character,
+            character=self.sheet,
             amount=20,
             reason=ProgressionReason.SYSTEM_AWARD,
             transferable=True,
         )
-        txns = list(CharacterXPTransaction.objects.filter(character=self.character))
+        txns = list(CharacterXPTransaction.objects.filter(character=self.sheet))
         assert txns[0].id == txn2.id
         assert txns[1].id == txn1.id
 
@@ -154,7 +156,8 @@ class AwardCGConversionXPTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = ObjectDBFactory(db_key="ConvertChar")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
     def test_awards_correct_xp(self):
         """Test conversion awards remaining * rate XP."""
@@ -162,7 +165,7 @@ class AwardCGConversionXPTest(TestCase):
 
         award_cg_conversion_xp(self.character, remaining_cg_points=15, conversion_rate=2)
 
-        xp = CharacterXP.objects.get(character=self.character, transferable=False)
+        xp = CharacterXP.objects.get(character=self.sheet, transferable=False)
         assert xp.total_earned == 30
         assert xp.current_available == 30
 
@@ -172,7 +175,7 @@ class AwardCGConversionXPTest(TestCase):
 
         award_cg_conversion_xp(self.character, remaining_cg_points=10, conversion_rate=2)
 
-        txn = CharacterXPTransaction.objects.get(character=self.character)
+        txn = CharacterXPTransaction.objects.get(character=self.sheet)
         assert txn.amount == 20
         assert txn.reason == ProgressionReason.CG_CONVERSION
         assert txn.transferable is False
@@ -183,8 +186,8 @@ class AwardCGConversionXPTest(TestCase):
 
         award_cg_conversion_xp(self.character, remaining_cg_points=0, conversion_rate=2)
 
-        assert not CharacterXP.objects.filter(character=self.character).exists()
-        assert not CharacterXPTransaction.objects.filter(character=self.character).exists()
+        assert not CharacterXP.objects.filter(character=self.sheet).exists()
+        assert not CharacterXPTransaction.objects.filter(character=self.sheet).exists()
 
     def test_skips_negative_remaining(self):
         """Test no XP created when remaining is negative (should not happen)."""
@@ -192,7 +195,7 @@ class AwardCGConversionXPTest(TestCase):
 
         award_cg_conversion_xp(self.character, remaining_cg_points=-5, conversion_rate=2)
 
-        assert not CharacterXP.objects.filter(character=self.character).exists()
+        assert not CharacterXP.objects.filter(character=self.sheet).exists()
 
     def test_custom_conversion_rate(self):
         """Test conversion with non-default rate."""
@@ -200,5 +203,5 @@ class AwardCGConversionXPTest(TestCase):
 
         award_cg_conversion_xp(self.character, remaining_cg_points=10, conversion_rate=3)
 
-        xp = CharacterXP.objects.get(character=self.character, transferable=False)
+        xp = CharacterXP.objects.get(character=self.sheet, transferable=False)
         assert xp.total_earned == 30

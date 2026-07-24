@@ -27,6 +27,7 @@ from actions.definitions.npc_services import (
 from world.gm.permissions import IsGMOrStaff
 from world.npc_services.filters import (
     MissionOfferDetailsFilterSet,
+    NPCReactionLineFilterSet,
     NPCRoleFilterSet,
     NPCServiceOfferFilterSet,
     NPCStandingFilterSet,
@@ -36,6 +37,7 @@ from world.npc_services.filters import (
 )
 from world.npc_services.models import (
     MissionOfferDetails,
+    NPCReactionLine,
     NPCRole,
     NPCServiceOffer,
     NPCStanding,
@@ -49,6 +51,7 @@ from world.npc_services.serializers import (
     InteractionStartRequestSerializer,
     InteractionStateSerializer,
     MissionOfferDetailsSerializer,
+    NPCReactionLineSerializer,
     NPCRoleSerializer,
     NPCServiceOfferSerializer,
     NPCStandingSerializer,
@@ -497,3 +500,20 @@ class RecordedProfileViewSet(viewsets.ReadOnlyModelViewSet):
         except RecordedProfileError as exc:
             raise ValidationError(exc.user_message) from exc
         return Response(RecordedProfileSerializer(profile).data)
+
+
+class NPCReactionLineViewSet(viewsets.ModelViewSet):
+    """Staff CRUD over banded NPC reaction lines (#2632).
+
+    The builder-facing authoring surface: place a functionary, add rows —
+    per-role defaults (functionary null) or a placement's personal set.
+    """
+
+    queryset = NPCReactionLine.objects.select_related("role", "functionary").order_by(
+        "role", "metric", "-band_floor"
+    )
+    serializer_class = NPCReactionLineSerializer
+    filterset_class = NPCReactionLineFilterSet
+    filter_backends = [DjangoFilterBackend]
+    pagination_class = NPCServicesPagination
+    permission_classes = [IsGMOrStaff]

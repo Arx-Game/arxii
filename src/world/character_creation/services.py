@@ -135,6 +135,7 @@ def finalize_character(
         character.home = starting_room
         _grant_cg_residence_tenancy(draft, starting_room, primary_persona)
         _grant_prelude_mission(draft, character, primary_persona)
+        _grant_orientation_mission(draft, character, primary_persona)
 
     # Populate sheet fields (demographics, descriptive text, physical traits) and save.
     _apply_sheet_demographics(sheet, draft)
@@ -393,6 +394,24 @@ def _grant_prelude_mission(draft: CharacterDraft, character: ObjectDB, persona: 
     staff_assign_mission(beginnings.prelude_mission, character, persona=persona)
 
 
+def _grant_orientation_mission(
+    _draft: CharacterDraft, character: ObjectDB, persona: Persona
+) -> None:
+    """Auto-grant the Academy orientation Mission at CG finalization (#2479).
+
+    The orientation mission funnels the new Gifted toward the intake Ritual of
+    the Durance. It is best-effort: if the MissionTemplate row has not been
+    seeded yet, the character is created without it and can be granted later.
+    """
+    from world.missions.services.run import staff_assign_mission  # noqa: PLC0415
+    from world.seeds.character_creation import ensure_orientation_mission  # noqa: PLC0415
+
+    template = ensure_orientation_mission()
+    if template is None:
+        return
+    staff_assign_mission(template, character, persona=persona)
+
+
 def _finalize_origin_slots(sheet: CharacterSheet, origin_slots: dict[str, str]) -> str:
     """Upsert CharacterOriginSlot rows from draft_data and assemble prose (#2478).
 
@@ -564,7 +583,9 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
 
         # Create trait values in bulk
         trait_values = [
-            CharacterTraitValue(character=character, trait=traits_by_name[name], value=value)
+            CharacterTraitValue(
+                character=character.sheet_data, trait=traits_by_name[name], value=value
+            )
             for name, value in stats.items()
             if name in traits_by_name
         ]
@@ -587,7 +608,7 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
         from world.progression.models import CharacterPathHistory  # noqa: PLC0415
 
         CharacterPathHistory.objects.create(
-            character=character,
+            character=character.sheet_data,
             path=draft.selected_path,
         )
 
@@ -757,7 +778,7 @@ def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
     # Build and create instances
     goals_to_create = [
         CharacterGoal(
-            character=character,
+            character=character.sheet_data,
             domain=domains_by_id[g["domain_id"]],
             points=g["points"],
             notes=g.get("notes", ""),
@@ -979,7 +1000,7 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
             try:
                 skill = Skill.objects.get(pk=int(skill_id))
                 CharacterSkillValue.objects.create(
-                    character=character,
+                    character=character.sheet_data,
                     skill=skill,
                     value=value,
                     development_points=0,
@@ -998,7 +1019,7 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
             try:
                 spec = Specialization.objects.get(pk=int(spec_id))
                 CharacterSpecializationValue.objects.create(
-                    character=character,
+                    character=character.sheet_data,
                     specialization=spec,
                     value=value,
                     development_points=0,

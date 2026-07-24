@@ -18,6 +18,7 @@ magic-cluster-seeded.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 import logging
 from typing import TYPE_CHECKING
@@ -41,6 +42,23 @@ from world.forms.models import (
     HeightBand,
     SpeciesFormTrait,
     TraitType as FormTraitType,
+)
+from world.magic.constants import ParticipationRule, RitualExecutionKind
+from world.magic.models import Ritual
+from world.missions.constants import (
+    ArcScope,
+    ConflictMode,
+    MissionVisibility,
+    OptionKind,
+    OptionSource,
+    RewardGroupRule,
+)
+from world.missions.models import (
+    MissionCategory,
+    MissionNode,
+    MissionOption,
+    MissionOptionRoute,
+    MissionTemplate,
 )
 from world.realms.models import Realm
 from world.roster.models import Roster
@@ -181,6 +199,40 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "review_glimpse_label": "What your character would speak of themselves",
     "review_record_heading": "The Record",
     "review_banner_submitted": "Your testament has been submitted for review.",
+    "review_approved_enter_world": "Enter the World",
+    "origin_lore_intro": (
+        "You are one of the Gifted — those who carry magic in their blood "
+        "and stand bound to the Durance, the arc of trials that shapes every "
+        "Gifted life. The world you enter is one of the Shroud's making: a "
+        "thinning veil between what is and what should not be. The words you "
+        "choose for your character now are the beginning of their testament — "
+        "the oration they will one day speak at their Durance."
+    ),
+    "heritage_lore_intro": (
+        "What your character is born as shapes how the world reads them. "
+        "The Gifted are not one people — they are human, Sleeper, Misbegotten, "
+        "and more, each heritage carrying its own relationship to the Shroud "
+        "and the magic that runs through them."
+    ),
+    "path_lore_durance": (
+        "Your path is the road your character walks through their Durance — "
+        "the life-arc that defines who they become among the Gifted. Each "
+        "path shapes the skills, techniques, and story beats available as "
+        "they grow through their trials."
+    ),
+    "gift_lore_intro": (
+        "The Gift is the magic your character carries — a power drawn from "
+        "the Shroud and shaped by the tradition that taught them. Your "
+        "tradition is the school or lineage that trained them; your gift is "
+        "the specific power they wield. Choose the resonance that sings "
+        "truest to who they are."
+    ),
+    "roster_lore_intro": (
+        "Every character on this roster is one of the Gifted — a person who "
+        "carries magic and stands bound to the Durance. Taking one on means "
+        "stepping into their life, their trials, and their place in the "
+        "world's thinning veil."
+    ),
 }
 
 
@@ -555,6 +607,86 @@ def ensure_shroudwatch_academy() -> Organization:
     return academy
 
 
+def ensure_durance_registration_ritual():
+    """Get or create the intake Ritual of the Durance row (#2479).
+
+    Liturgy text lives in the lore repo / content pipeline. This machinery row
+    only exists so the registration service path can be dispatched.
+    """
+    path = "world.progression.services.durance_registration.register_durance_via_session"
+    ritual, _ = Ritual.objects.get_or_create(
+        service_function_path=path,
+        defaults={
+            "name": "Ritual of the Durance: Registration",
+            "description": "The intake rite that enters a new Gifted into the Durance arc.",
+            "narrative_prose": "",
+            "execution_kind": RitualExecutionKind.SERVICE,
+            "participation_rule": ParticipationRule.INDUCTION,
+            "min_participants": 2,
+        },
+    )
+    return ritual
+
+
+def ensure_orientation_mission():
+    """Get or create the orientation mission that funnels to the registration rite (#2479).
+
+    Full authored prose is lore-repo content; this is a structural get-or-create.
+    A minimal entry node graph is created so ``staff_assign_mission`` can enter the
+    run immediately; future authoring will replace this with the real narrative graph.
+    """
+    category, _ = MissionCategory.objects.get_or_create(
+        name="Orientation",
+        defaults={"description": "New player experience orientation missions."},
+    )
+    template, created = MissionTemplate.objects.get_or_create(
+        name="Orientation at Shroudwatch Academy",
+        defaults={
+            "summary": "Learn what the Durance is and speak your name before the Academy.",
+            "epilogue": "",
+            "level_band_min": 1,
+            "level_band_max": 1,
+            "risk_tier": 1,
+            "base_weight": 0,
+            "arc_scope": ArcScope.GLOBAL,
+            "percent_replace": 0,
+            "cooldown": timedelta(0),
+            "reward_group_rule": RewardGroupRule.ALL_EQUAL,
+            "is_active": True,
+            "visibility": MissionVisibility.RESTRICTED,
+        },
+    )
+    template.categories.add(category)
+
+    if created or not template.nodes.exists():
+        entry, _ = MissionNode.objects.get_or_create(
+            template=template,
+            key="entry",
+            defaults={
+                "is_entry": True,
+                "conflict_mode": ConflictMode.GROUP_VOTE,
+                "flavor_text": "You stand at the threshold of the Academy.",
+            },
+        )
+        option, _ = MissionOption.objects.get_or_create(
+            node=entry,
+            key="begin",
+            defaults={
+                "order": 1,
+                "option_kind": OptionKind.BRANCH,
+                "source_kind": OptionSource.AUTHORED,
+                "authored_ic_framing": "Begin the orientation.",
+            },
+        )
+        MissionOptionRoute.objects.get_or_create(
+            option=option,
+            outcome_tier=None,
+            defaults={"target_node": None, "outcome_text": "Orientation begun."},
+        )
+
+    return template
+
+
 def ensure_orphaned_tradition_distinction():
     """Seed the 'Orphaned Tradition' drawback distinction (#2428 Task 5).
 
@@ -845,9 +977,12 @@ def seed_character_creation_dev() -> None:
         },
     )
     _seed_cg_explanations()
+    seed_onboarding_codex()
     ensure_tradition_training_distinction()
     seed_beginning_traditions()
     ensure_shroudwatch_academy()
+    ensure_durance_registration_ritual()
+    ensure_orientation_mission()
     seed_metallic_order_tradition()
     ensure_somehow_always_broke_distinction()
 
@@ -913,6 +1048,86 @@ def _seed_cg_explanations() -> None:
 
     for key, text in CG_EXPLANATION_COPY.items():
         CGExplanation.objects.update_or_create(key=key, defaults={"text": text})
+
+
+def seed_onboarding_codex() -> None:
+    """Seed placeholder codex entries for lore onboarding (#2430).
+
+    Creates a "The World" category with subjects and 3 featured public
+    entries so the front-page FeaturedLore component and CG CodexTerm links
+    have data in dev. Real authored prose ships from arx2-lore via
+    CONTENT_MODELS; these are content-overridable placeholders.
+    """
+    from world.codex.models import (  # noqa: PLC0415
+        CodexCategory,
+        CodexEntry,
+        CodexSubject,
+    )
+
+    category, _ = CodexCategory.objects.get_or_create(
+        name="The World",
+        defaults={
+            "description": "Core lore about the Gifted, the Durance, and the Shroud.",
+        },
+    )
+
+    subject, _ = CodexSubject.objects.get_or_create(
+        category=category,
+        parent=None,
+        name="The Gifted",
+        defaults={"description": "Who the Gifted are and what their world means."},
+    )
+
+    entries_data = [
+        {
+            "name": "The Gifted",
+            "summary": "Those who carry magic in their blood and stand bound to the Durance.",
+            "lore_content": (
+                "The Gifted are the magic-bearing souls of this world. "
+                "They are not a people or a nation but a condition — born "
+                "with the power to touch the Shroud and shape what lies "
+                "beyond it. Every Gifted life is measured by the Durance, "
+                "the arc of trials that tests and shapes them."
+            ),
+            "featured_order": 1,
+        },
+        {
+            "name": "The Durance",
+            "summary": "The life-arc of trials that defines every Gifted.",
+            "lore_content": (
+                "The Durance is the arc of a Gifted life — the trials, "
+                "rituals, and ordeals that shape who they become. It "
+                "begins with the testament, the words spoken at the rite "
+                "of entry: 'One stands before us in Durance. Speak thy "
+                "name and testament.'"
+            ),
+            "featured_order": 2,
+        },
+        {
+            "name": "The Shroud",
+            "summary": "The thinning veil between what is and what should not be.",
+            "lore_content": (
+                "The Shroud is the veil between the world as it is and "
+                "the world as it should not be. It thins where the Gifted "
+                "gather, and through its tears come the powers and perils "
+                "that define their lives."
+            ),
+            "featured_order": 3,
+        },
+    ]
+
+    for data in entries_data:
+        CodexEntry.objects.update_or_create(
+            subject=subject,
+            name=data["name"],
+            defaults={
+                "summary": data["summary"],
+                "lore_content": data["lore_content"],
+                "is_public": True,
+                "is_featured": True,
+                "featured_order": data["featured_order"],
+            },
+        )
 
 
 # ---------------------------------------------------------------------------

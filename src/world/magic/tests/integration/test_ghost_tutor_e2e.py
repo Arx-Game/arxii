@@ -48,7 +48,7 @@ class GhostTutorE2ETest(TestCase):
 
         # Path so get_technique_options doesn't bail
         cls.path = PathFactory()
-        CharacterPathHistoryFactory(character=cls.sheet.character, path=cls.path)
+        CharacterPathHistoryFactory(character=cls.sheet, path=cls.path)
 
     def test_full_journey(self):
         """Summon -> GhostTutelage created -> signature available."""

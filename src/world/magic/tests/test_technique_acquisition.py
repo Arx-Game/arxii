@@ -66,7 +66,7 @@ class LearnTechniqueTest(TestCase):
 
         allowed = PathFactory()
         other = PathFactory()
-        CharacterPathHistoryFactory(character=self.sheet.character, path=other)
+        CharacterPathHistoryFactory(character=self.sheet, path=other)
         style = TechniqueStyleFactory(allowed_paths=[allowed])
         forbidden_tech = TechniqueFactory(gift=self.gift, style=style)
         with self.assertRaises(TechniqueStyleForbidden):

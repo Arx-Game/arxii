@@ -19,7 +19,7 @@ def setup_stat(
         category: TraitCategory for the stat.
     """
     trait = StatTraitFactory(name=stat_name, category=category)
-    CharacterTraitValueFactory(character=character, trait=trait, value=internal_value)
+    CharacterTraitValueFactory(character=character.sheet_data, trait=trait, value=internal_value)
     # Clear trait handler cache so it picks up the new value
     if hasattr(character, "traits") and character.traits.initialized:
         character.traits.clear_cache()

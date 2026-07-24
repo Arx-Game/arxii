@@ -183,3 +183,28 @@ def seed_social_check_content() -> None:
     specs = ensure_social_specializations(skills)
     _rename_legacy_deception()
     ensure_social_check_compositions(skills, specs)
+    ensure_menace_target()
+
+
+def ensure_menace_target() -> None:
+    """Seed the ``menace`` ModifierTarget — allure's fear-facing sibling (#2632).
+
+    Named by ApostateCD 2026-07-23. Clothing/cosmetics/distinctions grant it
+    exactly like allure (any recognized ModifierSource; facets ride the
+    equipment walk). Scoping it to the Intimidation CheckType
+    (``target_check_type`` OneToOne) makes character menace + equipment +
+    fashion flow into Intimidation checks through the existing #767/#512
+    check-contribution seam — no new code. Idempotent.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
+
+    category, _ = ModifierCategory.objects.get_or_create(name="roll_modifier")
+    intimidation = CheckType.objects.filter(name="Intimidation").first()
+    target, created = ModifierTarget.objects.get_or_create(
+        name="menace",
+        defaults={"category": category, "target_check_type": intimidation},
+    )
+    if not created and target.target_check_type_id is None and intimidation is not None:
+        target.target_check_type = intimidation
+        target.save(update_fields=["target_check_type"])

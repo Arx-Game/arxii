@@ -115,7 +115,7 @@ class CraftAttachFacetTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
         CharacterTraitValueFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             trait=Trait.objects.get(name="Enchanting"),
             value=50,
         )

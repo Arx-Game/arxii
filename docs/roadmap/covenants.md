@@ -781,10 +781,10 @@ exists in a real deploy, not only under test setup:
 | Role | Level band | Condition | Stats buffed |
 |---|---|---|---|
 | (default / unmapped) | any | Oathbound Resolve | willpower, composure, stability |
-| Sword Vanguard (`sword-vanguard`) | ≥1 | Oathbound Fury I | strength, presence |
-| Sword Vanguard (`sword-vanguard`) | ≥4 | Oathbound Fury II | strength, presence, wits |
-| Shield Bulwark (`shield-bulwark`) | ≥1 | Oathbound Bulwark | stability, stamina |
-| Crown Luminary (`crown-luminary`) | ≥1 | Oathbound Grace | composure, charm |
+| Oath Rite: Sword Role (`oath-rite-sword-role`) | ≥1 | Oathbound Fury I | strength, presence |
+| Oath Rite: Sword Role (`oath-rite-sword-role`) | ≥4 | Oathbound Fury II | strength, presence, wits |
+| Oath Rite: Shield Role (`oath-rite-shield-role`) | ≥1 | Oathbound Bulwark | stability, stamina |
+| Oath Rite: Crown Role (`oath-rite-crown-role`) | ≥1 | Oathbound Grace | composure, charm |
 
 The `ConditionModifierEffect.scales_with_severity` flag (also added in #753)
 causes `get_condition_modifier_total` to multiply each effect's `value` by the

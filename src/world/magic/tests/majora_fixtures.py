@@ -139,14 +139,14 @@ def build_majora_world(  # noqa: PLR0913 — fixture knobs are keyword-only by d
 
     char_class = CharacterClassFactory(name=f"Mage_{boundary_level}{suffix}")
     CharacterClassLevel.objects.create(
-        character=character,
+        character=sheet,
         character_class=char_class,
         level=boundary_level,
         is_primary=True,
     )
     sheet.invalidate_class_level_cache()
 
-    CharacterPathHistory.objects.create(character=character, path=prospect_path)
+    CharacterPathHistory.objects.create(character=sheet, path=prospect_path)
 
     ConditionInstanceFactory(
         target=character,

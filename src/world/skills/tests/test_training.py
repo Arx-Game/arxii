@@ -42,12 +42,12 @@ class TrainingAllocationModelTests(TestCase):
     def test_create_skill_allocation(self) -> None:
         """Can create an allocation for a skill with a mentor."""
         alloc = TrainingAllocation.objects.create(
-            character=self.character,
+            character=self.identity,
             skill=self.skill,
             mentor=self.mentor,
             ap_amount=20,
         )
-        self.assertEqual(alloc.character, self.character)
+        self.assertEqual(alloc.character, self.identity)
         self.assertEqual(alloc.skill, self.skill)
         self.assertIsNone(alloc.specialization)
         self.assertEqual(alloc.mentor, self.mentor)
@@ -56,7 +56,7 @@ class TrainingAllocationModelTests(TestCase):
     def test_create_specialization_allocation(self) -> None:
         """Can create an allocation for a specialization."""
         alloc = TrainingAllocation.objects.create(
-            character=self.character,
+            character=self.identity,
             specialization=self.specialization,
             ap_amount=10,
         )
@@ -67,7 +67,7 @@ class TrainingAllocationModelTests(TestCase):
     def test_create_self_study(self) -> None:
         """Null mentor means self-study."""
         alloc = TrainingAllocation.objects.create(
-            character=self.character,
+            character=self.identity,
             skill=self.skill,
             ap_amount=5,
         )
@@ -76,13 +76,13 @@ class TrainingAllocationModelTests(TestCase):
     def test_unique_skill_per_character(self) -> None:
         """Cannot create two allocations for same skill+character."""
         TrainingAllocation.objects.create(
-            character=self.character,
+            character=self.identity,
             skill=self.skill,
             ap_amount=10,
         )
         with self.assertRaises(IntegrityError):
             TrainingAllocation.objects.create(
-                character=self.character,
+                character=self.identity,
                 skill=self.skill,
                 ap_amount=5,
             )
@@ -90,13 +90,13 @@ class TrainingAllocationModelTests(TestCase):
     def test_unique_specialization_per_character(self) -> None:
         """Cannot create two allocations for same specialization+character."""
         TrainingAllocation.objects.create(
-            character=self.character,
+            character=self.identity,
             specialization=self.specialization,
             ap_amount=10,
         )
         with self.assertRaises(IntegrityError):
             TrainingAllocation.objects.create(
-                character=self.character,
+                character=self.identity,
                 specialization=self.specialization,
                 ap_amount=5,
             )
@@ -104,7 +104,7 @@ class TrainingAllocationModelTests(TestCase):
     def test_str_skill(self) -> None:
         """String representation includes character and skill name."""
         alloc = TrainingAllocation.objects.create(
-            character=self.character,
+            character=self.identity,
             skill=self.skill,
             ap_amount=10,
         )
@@ -115,7 +115,7 @@ class TrainingAllocationModelTests(TestCase):
         """Cannot set both skill and specialization."""
         with self.assertRaises(IntegrityError):
             TrainingAllocation.objects.create(
-                character=self.character,
+                character=self.identity,
                 skill=self.skill,
                 specialization=self.specialization,
                 ap_amount=10,
@@ -125,7 +125,7 @@ class TrainingAllocationModelTests(TestCase):
         """Must set either skill or specialization."""
         with self.assertRaises(IntegrityError):
             TrainingAllocation.objects.create(
-                character=self.character,
+                character=self.identity,
                 ap_amount=10,
             )
 
@@ -138,15 +138,11 @@ class CalculateTrainingDevelopmentTests(TestCase):
         super().setUpTestData()
         cls.student_identity = CharacterSheetFactory()
         cls.student = cls.student_identity.character
-        # Ensure CharacterSheet exists (DevelopmentTransaction uses CharacterSheet FK)
-        from world.character_sheets.models import CharacterSheet
-
-        CharacterSheet.objects.get_or_create(character=cls.student)
         cls.skill = SkillFactory()
 
         # Student has skill value 40
         cls.student_skill = CharacterSkillValueFactory(
-            character=cls.student,
+            character=cls.student_identity,
             skill=cls.skill,
             value=40,
         )
@@ -157,7 +153,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
 
         # Mentor has skill value 100
         CharacterSkillValueFactory(
-            character=cls.mentor,
+            character=cls.mentor_identity,
             skill=cls.skill,
             value=100,
         )
@@ -165,7 +161,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
         # Teaching skill for mentor (value=20), registered on config
         cls.teaching_skill = SkillFactory()
         CharacterSkillValueFactory(
-            character=cls.mentor,
+            character=cls.mentor_identity,
             skill=cls.teaching_skill,
             value=20,
         )
@@ -174,12 +170,12 @@ class CalculateTrainingDevelopmentTests(TestCase):
         budget.save()
 
         # Path level for student = 5
-        CharacterClassLevelFactory(character=cls.student, level=5)
+        CharacterClassLevelFactory(character=cls.student_identity, level=5)
 
     def test_self_study_base_gain(self) -> None:
         """Self-study: base_gain = 5 * AP * path_level."""
         alloc = TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             ap_amount=20,
         )
@@ -190,7 +186,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
     def test_with_mentor(self) -> None:
         """With mentor: base_gain + mentor_bonus."""
         alloc = TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             mentor=self.mentor_identity.primary_persona,
             ap_amount=20,
@@ -209,10 +205,9 @@ class CalculateTrainingDevelopmentTests(TestCase):
     def test_no_path_level_defaults_to_one(self) -> None:
         """Character with no class levels uses path_level=1."""
         student_identity = CharacterSheetFactory()
-        student = student_identity.character
-        CharacterSkillValueFactory(character=student, skill=self.skill, value=20)
+        CharacterSkillValueFactory(character=student_identity, skill=self.skill, value=20)
         alloc = TrainingAllocation.objects.create(
-            character=student,
+            character=student_identity,
             skill=self.skill,
             ap_amount=10,
         )
@@ -223,7 +218,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
     def test_returns_integer(self) -> None:
         """Result is always an integer (truncated)."""
         alloc = TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             mentor=self.mentor_identity.primary_persona,
             ap_amount=7,
@@ -234,11 +229,10 @@ class CalculateTrainingDevelopmentTests(TestCase):
     def test_zero_student_skill_uses_floor(self) -> None:
         """Student with 0 skill uses 1 to prevent division by zero."""
         student_identity = CharacterSheetFactory()
-        student = student_identity.character
         # No CharacterSkillValue created — defaults to 0 -> floor to 1
-        CharacterClassLevelFactory(character=student, level=1)
+        CharacterClassLevelFactory(character=student_identity, level=1)
         alloc = TrainingAllocation.objects.create(
-            character=student,
+            character=student_identity,
             skill=self.skill,
             mentor=self.mentor_identity.primary_persona,
             ap_amount=10,
@@ -267,9 +261,9 @@ class CalculateSpecializationTrainingTests(TestCase):
         cls.spec = SpecializationFactory(parent_skill=cls.skill)
 
         # Student: parent=30, spec=10, total=40
-        CharacterSkillValueFactory(character=cls.student, skill=cls.skill, value=30)
+        CharacterSkillValueFactory(character=cls.student_identity, skill=cls.skill, value=30)
         CharacterSpecializationValueFactory(
-            character=cls.student,
+            character=cls.student_identity,
             specialization=cls.spec,
             value=10,
         )
@@ -277,15 +271,15 @@ class CalculateSpecializationTrainingTests(TestCase):
         # Mentor: parent=50, spec=50, teaching=20
         cls.mentor_identity = CharacterSheetFactory()
         cls.mentor = cls.mentor_identity.character
-        CharacterSkillValueFactory(character=cls.mentor, skill=cls.skill, value=50)
+        CharacterSkillValueFactory(character=cls.mentor_identity, skill=cls.skill, value=50)
         CharacterSpecializationValueFactory(
-            character=cls.mentor,
+            character=cls.mentor_identity,
             specialization=cls.spec,
             value=50,
         )
         cls.teaching_skill = SkillFactory()
         CharacterSkillValueFactory(
-            character=cls.mentor,
+            character=cls.mentor_identity,
             skill=cls.teaching_skill,
             value=20,
         )
@@ -293,12 +287,12 @@ class CalculateSpecializationTrainingTests(TestCase):
         budget.teaching_skill = cls.teaching_skill
         budget.save()
 
-        CharacterClassLevelFactory(character=cls.student, level=5)
+        CharacterClassLevelFactory(character=cls.student_identity, level=5)
 
     def test_specialization_with_mentor(self) -> None:
         """Spec training uses parent+spec for both student and mentor."""
         alloc = TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             specialization=self.spec,
             mentor=self.mentor_identity.primary_persona,
             ap_amount=20,
@@ -317,7 +311,7 @@ class CalculateSpecializationTrainingTests(TestCase):
     def test_specialization_self_study(self) -> None:
         """Specialization self-study only uses base gain."""
         alloc = TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             specialization=self.spec,
             ap_amount=10,
         )
@@ -344,7 +338,7 @@ class CreateTrainingAllocationTests(TestCase):
             skill=self.skill,
             ap_amount=20,
         )
-        self.assertEqual(alloc.character, self.character)
+        self.assertEqual(alloc.character, self.identity)
         self.assertEqual(alloc.skill, self.skill)
         self.assertEqual(alloc.ap_amount, 20)
 
@@ -466,20 +460,20 @@ class ProcessWeeklyTrainingTests(TestCase):
         from world.classes.models import CharacterClassLevel
 
         # Clean up any leftover allocations and class levels from prior tests
-        TrainingAllocation.objects.filter(character=self.student).delete()
-        CharacterClassLevel.objects.filter(character=self.student).delete()
+        TrainingAllocation.objects.filter(character=self.student_identity).delete()
+        CharacterClassLevel.objects.filter(character=self.student_identity).delete()
 
         # Create fresh mutable data each test
-        self.student_skill, _ = self.student.skill_values.update_or_create(
+        self.student_skill, _ = self.student_identity.skill_values.update_or_create(
             skill=self.skill,
             defaults={"value": 10, "development_points": 0, "rust_points": 0},
         )
-        CharacterClassLevelFactory(character=self.student, level=1)
+        CharacterClassLevelFactory(character=self.student_identity, level=1)
 
     def test_awards_development_points(self) -> None:
         """Training awards development points to the skill."""
         TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             ap_amount=10,
         )
@@ -492,7 +486,7 @@ class ProcessWeeklyTrainingTests(TestCase):
     def test_levels_up_on_threshold(self) -> None:
         """Skill levels up when dev points exceed cost."""
         TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             ap_amount=20,
         )
@@ -507,7 +501,7 @@ class ProcessWeeklyTrainingTests(TestCase):
         self.student_skill.development_points = 50
         self.student_skill.save()
         TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             ap_amount=20,
         )
@@ -521,11 +515,11 @@ class ProcessWeeklyTrainingTests(TestCase):
         """Can gain multiple levels in one week with enough dev points."""
         from world.classes.models import CharacterClassLevel
 
-        ccl = CharacterClassLevel.objects.get(character=self.student)
+        ccl = CharacterClassLevel.objects.get(character=self.student_identity)
         ccl.level = 5
         ccl.save()
         TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             ap_amount=20,
         )
@@ -541,7 +535,7 @@ class ProcessWeeklyTrainingTests(TestCase):
         self.student_skill.value = 19
         self.student_skill.save()
         TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             ap_amount=10,
         )
@@ -556,7 +550,7 @@ class ProcessWeeklyTrainingTests(TestCase):
         self.student_skill.value = 19
         self.student_skill.save()
         TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             ap_amount=10,
         )
@@ -570,7 +564,7 @@ class ProcessWeeklyTrainingTests(TestCase):
         self.student_skill.rust_points = 30
         self.student_skill.save()
         TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             ap_amount=10,
         )
@@ -590,7 +584,7 @@ class ProcessWeeklyTrainingTests(TestCase):
         pool.current = 100
         pool.save()
         TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             ap_amount=20,
         )
@@ -601,7 +595,7 @@ class ProcessWeeklyTrainingTests(TestCase):
     def test_returns_trained_skills_set(self) -> None:
         """Returns dict mapping character PKs to sets of trained skill PKs."""
         TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             ap_amount=10,
         )
@@ -611,7 +605,7 @@ class ProcessWeeklyTrainingTests(TestCase):
     def test_creates_development_transaction(self) -> None:
         """Each allocation creates a DevelopmentTransaction audit record."""
         TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             ap_amount=10,
         )
@@ -625,7 +619,7 @@ class ProcessWeeklyTrainingTests(TestCase):
     def test_logs_warning_on_missing_ap_pool(self) -> None:
         """Logs a warning when character has no AP pool."""
         TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             ap_amount=10,
         )
@@ -642,7 +636,7 @@ class ProcessWeeklyTrainingTests(TestCase):
         pool.current = 0
         pool.save()
         TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             skill=self.skill,
             ap_amount=10,
         )
@@ -654,7 +648,7 @@ class ProcessWeeklyTrainingTests(TestCase):
         """Specialization training records transaction under parent skill's trait."""
         spec = SpecializationFactory(parent_skill=self.skill)
         TrainingAllocation.objects.create(
-            character=self.student,
+            character=self.student_identity,
             specialization=spec,
             ap_amount=10,
         )
@@ -674,12 +668,12 @@ class ApplyWeeklyRustTests(TestCase):
         RosterEntryFactory(character_sheet__character=self.character)
         self.skill = SkillFactory()
         self.skill_value = CharacterSkillValueFactory(
-            character=self.character,
+            character=self.identity,
             skill=self.skill,
             value=11,
             rust_points=0,
         )
-        CharacterClassLevelFactory(character=self.character, level=5)
+        CharacterClassLevelFactory(character=self.identity, level=5)
 
     def test_adds_rust_to_unused_skill(self) -> None:
         """Unused skill gains character_level + 5 rust."""
@@ -723,7 +717,7 @@ class RustPayoffTests(TestCase):
         self.character = self.identity.character
         self.skill = SkillFactory()
         self.skill_value = CharacterSkillValueFactory(
-            character=self.character,
+            character=self.identity,
             skill=self.skill,
             value=11,
             development_points=0,
@@ -786,21 +780,21 @@ class RunWeeklySkillCronTests(TestCase):
         self.trained_skill = SkillFactory()
         self.untrained_skill = SkillFactory()
         self.trained_sv = CharacterSkillValueFactory(
-            character=self.character,
+            character=self.identity,
             skill=self.trained_skill,
             value=10,
         )
         self.untrained_sv = CharacterSkillValueFactory(
-            character=self.character,
+            character=self.identity,
             skill=self.untrained_skill,
             value=11,
         )
-        CharacterClassLevelFactory(character=self.character, level=1)
+        CharacterClassLevelFactory(character=self.identity, level=1)
 
     def test_trains_and_rusts(self) -> None:
         """Trained skill advances, untrained skill gets rust."""
         TrainingAllocation.objects.create(
-            character=self.character,
+            character=self.identity,
             skill=self.trained_skill,
             ap_amount=20,
         )

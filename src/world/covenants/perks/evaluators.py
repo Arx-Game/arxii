@@ -851,3 +851,332 @@ def enemy_windup_called_out(ctx: SituationContext, params: SituationParams) -> b
         resolves_round__gte=participant.encounter.round_number,
         called_out=True,
     ).exists()
+
+
+@register(Situation.ALLY_SENT_FLYING)
+def ally_sent_flying(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """A covenant-mate of the holder currently carries the Sent Flying marker (#2638).
+
+    Mate scoping mirrors ``ally_low_health`` exactly (see that function's
+    docstring, "Ally scoping rule"): a candidate mate counts if they hold a
+    non-departed (``CharacterCovenantRole.left_at__isnull=True``) role in a
+    covenant the HOLDER is also actively engaged in AND are co-present
+    (an ACTIVE ``CombatParticipant``) in the SUBJECT's encounter roster — the
+    mate's own engagement is irrelevant. The holder themself is excluded from
+    the mate pool (mirrors ``ally_low_health``'s ``.exclude(character_sheet=
+    ctx.holder)``).
+
+    Data source, verified: one roster query (ACTIVE participants in the
+    subject's encounter, excluding the holder), one BATCHED
+    ``CharacterCovenantRole`` membership query across every candidate mate's
+    sheet id, and one BATCHED ``ConditionInstance`` existence check (Sent
+    Flying template) across the surviving mates' character ids — never a
+    query per candidate ("no queries in loops"). Three queries total, fixed
+    regardless of roster size. False outside combat. Reads no params (absent
+    from ``SITUATION_PARAM_SPECS``).
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None or ctx.holder is None:
+        return False
+    holder_character = ctx.holder.character
+    if holder_character is None:
+        return False
+
+    holder_covenant_ids = holder_character.active_covenant_ids()
+    if not holder_covenant_ids:
+        return False
+
+    from world.combat.constants import ParticipantStatus  # noqa: PLC0415
+    from world.combat.models import CombatParticipant as _CombatParticipant  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    mates = list(
+        _CombatParticipant.objects.filter(
+            encounter_id=participant.encounter_id,
+            status=ParticipantStatus.ACTIVE,
+        )
+        .exclude(character_sheet=ctx.holder)
+        .select_related("character_sheet__character")
+    )
+    if not mates:
+        return False
+
+    mate_sheet_ids = set(
+        CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=[m.character_sheet_id for m in mates],
+            covenant_id__in=holder_covenant_ids,
+            left_at__isnull=True,
+        ).values_list("character_sheet_id", flat=True)
+    )
+    # No early return on an empty mate_sheet_ids: the final query below
+    # naturally returns False against an empty target_id__in list, and
+    # skipping the extra branch keeps this function's return count under the
+    # repo's lint threshold.
+    from world.combat.sent_flying_content import SENT_FLYING_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance, ConditionTemplate  # noqa: PLC0415
+
+    try:
+        template = ConditionTemplate.get_by_name(SENT_FLYING_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
+        return False
+
+    mate_character_ids = [
+        m.character_sheet.character_id for m in mates if m.character_sheet_id in mate_sheet_ids
+    ]
+    return ConditionInstance.objects.filter(
+        condition=template,
+        target_id__in=mate_character_ids,
+        is_suppressed=False,
+    ).exists()
+
+
+@register(Situation.ENEMY_HELD_BY_ALLY)
+def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """A covenant-mate of the holder holds an active EngagementLock on the
+    opponent the subject is attacking this round.
+
+    Reads the SUBJECT's declared ``CombatRoundAction.focused_opponent_target``
+    (the NPC the subject is attacking), then checks whether a covenant-mate
+    of the holder has an active ``EngagementLock`` on that opponent.
+
+    Mate-scoping mirrors ``ally_intercepted_for_me``: a candidate counts if
+    they hold a non-departed ``CharacterCovenantRole`` in a covenant the
+    holder is also actively engaged in. The subject themself is excluded.
+
+    Data source, verified: ``CombatRoundAction`` (``world/combat/models.py``)
+    filtered to the SUBJECT's encounter + current ``round_number`` +
+    ``focused_opponent_target_id`` + ``EngagementLock`` ACTIVE on that
+    opponent. Two queries: the subject's declared action + one batched
+    ``CharacterCovenantRole`` membership query. Reads ``holder`` +
+    ``resolution``; False outside combat or when the subject has no declared
+    opponent target. No params (absent from ``SITUATION_PARAM_SPECS``).
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None or ctx.holder is None:
+        return False
+    holder_character = ctx.holder.character
+    if holder_character is None:
+        return False
+
+    holder_covenant_ids = holder_character.active_covenant_ids()
+    if not holder_covenant_ids:
+        return False
+
+    from world.combat.constants import EngagementLockStatus  # noqa: PLC0415
+    from world.combat.models import CombatRoundAction, EngagementLock  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    encounter = participant.encounter
+
+    subject_action = CombatRoundAction.objects.filter(
+        participant=participant,
+        round_number=encounter.round_number,
+    ).first()
+    if subject_action is None or subject_action.focused_opponent_target_id is None:
+        return False
+
+    target_opponent_id = subject_action.focused_opponent_target_id
+
+    locks = list(
+        EngagementLock.objects.filter(
+            encounter=encounter,
+            opponent_id=target_opponent_id,
+            status=EngagementLockStatus.ACTIVE,
+        )
+        .exclude(participant=participant)
+        .select_related("participant__character_sheet")
+    )
+    if not locks:
+        return False
+
+    mate_sheet_ids = set(
+        CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=[lock.participant.character_sheet_id for lock in locks],
+            covenant_id__in=holder_covenant_ids,
+            left_at__isnull=True,
+        ).values_list("character_sheet_id", flat=True)
+    )
+    return any(lock.participant.character_sheet_id in mate_sheet_ids for lock in locks)
+
+
+@register(Situation.BARRIER_CONTESTED)
+def barrier_contested(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """A covenant-mate of the holder has an active EngagementLock in the
+    subject's encounter.
+
+    v1 approximation: the "contested" qualifier is a positional read — the
+    lock itself IS the contest. Checks if any covenant-mate (excluding the
+    subject) has an active ``EngagementLock`` in the encounter, regardless
+    of which opponent is locked. May be narrowed later without a schema
+    change, mirroring ADR-0153's parley/ambush approximations.
+
+    Mate-scoping mirrors ``ally_intercepted_for_me``: a candidate counts if
+    they hold a non-departed ``CharacterCovenantRole`` in a covenant the
+    holder is also actively engaged in.
+
+    Data source, verified: ``EngagementLock`` (``world/combat/models.py``)
+    filtered to the SUBJECT's encounter + ACTIVE status, excluding the
+    subject's own participant. Two queries: the locks + one batched
+    ``CharacterCovenantRole`` membership query. Reads ``holder`` +
+    ``resolution``; False outside combat. No params.
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None or ctx.holder is None:
+        return False
+    holder_character = ctx.holder.character
+    if holder_character is None:
+        return False
+
+    holder_covenant_ids = holder_character.active_covenant_ids()
+    if not holder_covenant_ids:
+        return False
+
+    from world.combat.constants import EngagementLockStatus  # noqa: PLC0415
+    from world.combat.models import EngagementLock  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    encounter = participant.encounter
+
+    locks = list(
+        EngagementLock.objects.filter(
+            encounter=encounter,
+            status=EngagementLockStatus.ACTIVE,
+        )
+        .exclude(participant=participant)
+        .select_related("participant__character_sheet")
+    )
+    if not locks:
+        return False
+
+    mate_sheet_ids = set(
+        CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=[lock.participant.character_sheet_id for lock in locks],
+            covenant_id__in=holder_covenant_ids,
+            left_at__isnull=True,
+        ).values_list("character_sheet_id", flat=True)
+    )
+    return any(lock.participant.character_sheet_id in mate_sheet_ids for lock in locks)
+
+
+@register(Situation.SHIELDED_BY_ALLY)
+def shielded_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """The target carries a "Shielded" ConditionInstance applied by a
+    covenant-mate of the holder.
+
+    Mirrors ``target_swayed_by_ally``'s condition-reading pattern exactly
+    (the closest existing analog — same condition, ally-applied): queries
+    the target's active conditions for a "Shielded" template match, reads
+    ``ConditionInstance.source_character``, and checks
+    ``Character.shares_covenant_with`` (the cached covenant-role handler
+    read) — NOT the batched ``CharacterCovenantRole`` query that
+    ``ally_intercepted_for_me`` uses.
+
+    Data source, verified: ``ConditionInstance.source_character``
+    (``world/conditions/models.py:1230`` — an ``ObjectDB`` FK) +
+    ``Character.shares_covenant_with``
+    (``typeclasses/characters.py:247`` — reads the cached covenant-role
+    handler). One query for the condition instance;
+    ``shares_covenant_with`` is a cached-handler read (no fresh query once
+    the handler is warm). Reads ``holder`` + ``target``; DB-state, evaluates
+    anywhere (False when ``target`` is None). No params.
+    """
+    if ctx.holder is None or ctx.target is None:
+        return False
+
+    from world.combat.defend_content import SHIELDED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance, ConditionTemplate  # noqa: PLC0415
+
+    target_character = ctx.target.character
+    if target_character is None:
+        return False
+
+    try:
+        template = ConditionTemplate.get_by_name(SHIELDED_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
+        return False
+
+    instance = (
+        ConditionInstance.objects.filter(
+            target=target_character,
+            condition=template,
+            resolved_at__isnull=True,
+        )
+        .select_related("source_character")
+        .first()
+    )
+    if instance is None or instance.source_character is None:
+        return False
+
+    applier = instance.source_character
+    holder_character = ctx.holder.character
+    if applier == holder_character:
+        return True
+    return bool(applier.shares_covenant_with(holder_character))
+
+
+@register(Situation.TARGET_IS_MARKED_BY_ALLY)
+def target_is_marked_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """The opponent the subject is attacking matches a covenant-mate's
+    CombatMark for this round.
+
+    Reads the SUBJECT's declared ``CombatRoundAction.focused_opponent_target``
+    (the NPC the subject is attacking), then checks whether a covenant-mate
+    of the holder has a ``CombatMark`` on that opponent this round.
+
+    Mate-scoping mirrors ``ally_intercepted_for_me``: a candidate counts if
+    they hold a non-departed ``CharacterCovenantRole`` in a covenant the
+    holder is also actively engaged in. The subject themself is excluded.
+
+    Data source, verified: ``CombatRoundAction`` (``world/combat/models.py``)
+    filtered to the SUBJECT's encounter + current ``round_number`` +
+    ``focused_opponent_target_id`` + ``CombatMark`` on that opponent this
+    round. Two queries: the subject's declared action + one batched
+    ``CharacterCovenantRole`` membership query. Reads ``holder`` +
+    ``resolution``; False outside combat or when the subject has no declared
+    opponent target. No params.
+    """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None or ctx.holder is None:
+        return False
+    holder_character = ctx.holder.character
+    if holder_character is None:
+        return False
+
+    holder_covenant_ids = holder_character.active_covenant_ids()
+    if not holder_covenant_ids:
+        return False
+
+    from world.combat.models import CombatMark, CombatRoundAction  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    encounter = participant.encounter
+
+    subject_action = CombatRoundAction.objects.filter(
+        participant=participant,
+        round_number=encounter.round_number,
+    ).first()
+    if subject_action is None or subject_action.focused_opponent_target_id is None:
+        return False
+
+    target_opponent_id = subject_action.focused_opponent_target_id
+
+    marks = list(
+        CombatMark.objects.filter(
+            encounter=encounter,
+            round_number=encounter.round_number,
+            opponent_id=target_opponent_id,
+        )
+        .exclude(participant=participant)
+        .select_related("participant__character_sheet")
+    )
+    if not marks:
+        return False
+
+    mate_sheet_ids = set(
+        CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=[mark.participant.character_sheet_id for mark in marks],
+            covenant_id__in=holder_covenant_ids,
+            left_at__isnull=True,
+        ).values_list("character_sheet_id", flat=True)
+    )
+    return any(mark.participant.character_sheet_id in mate_sheet_ids for mark in marks)

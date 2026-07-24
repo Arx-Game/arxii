@@ -29,6 +29,7 @@ from world.npc_services.constants import (
     DrawMode,
     NpcRegardEventReason,
     OfferKind,
+    ReactionMetric,
     RecordedProfileStatus,
     RegardTargetType,
     SummonsStatus,
@@ -1437,3 +1438,54 @@ class RecordedProfile(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"RecordedProfile({self.persona_id}, {self.status}, #{self.pk})"
+
+
+class NPCReactionLine(SharedMemoryModel):
+    """A banded, data-authored NPC reaction ("Alphonso sees to <name>…", #2632).
+
+    Authored per ROLE (every placement of the role inherits) with optional
+    per-FUNCTIONARY override rows — a functionary with ANY lines for a metric
+    replaces the role's set for that metric wholesale. Band selection is the
+    highest ``band_floor`` <= the character's metric value (the affection→
+    pool-count walk); ``<name>`` in the template is replaced with the served
+    character's presented name. No custom code per NPC, ever — builders add
+    rows.
+    """
+
+    role = models.ForeignKey(
+        NPCRole,
+        on_delete=models.CASCADE,
+        related_name="reaction_lines",
+        help_text="The role these lines belong to.",
+    )
+    functionary = models.ForeignKey(
+        Functionary,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="reaction_lines",
+        help_text="Set for a specific placement's personal lines (e.g. Alphonso's); "
+        "null = the role's shared defaults.",
+    )
+    metric = models.CharField(
+        max_length=30,
+        choices=ReactionMetric.choices,
+        help_text="Which number of the served character the band reads.",
+    )
+    band_floor = models.IntegerField(
+        help_text="Line applies from this value up (highest floor <= value wins). "
+        "May be negative for a 'bottom' band.",
+    )
+    template = models.TextField(
+        help_text="The reaction text; <name> is replaced with the served "
+        "character's presented name.",
+    )
+
+    class Meta:
+        ordering = ["metric", "-band_floor"]
+        verbose_name = "NPC Reaction Line"
+        verbose_name_plural = "NPC Reaction Lines"
+
+    def __str__(self) -> str:
+        anchor = f"functionary {self.functionary_id}" if self.functionary_id else "role"
+        return f"ReactionLine({self.role_id}/{anchor}, {self.metric}>={self.band_floor})"

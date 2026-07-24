@@ -60,7 +60,7 @@ class CovenantWeaponDamageFullChainTests(TestCase):
 
         # Set character level to 2 so role_base_bonus_for_target returns level * bonus_per_level.
         char_class = CharacterClassFactory()
-        CharacterClassLevelFactory(character=char, character_class=char_class, level=2)
+        CharacterClassLevelFactory(character=sheet, character_class=char_class, level=2)
         sheet.invalidate_class_level_cache()
         self.assertEqual(sheet.current_level, 2)
 
@@ -136,7 +136,7 @@ class CovenantArmorSoakSeamTests(TestCase):
         sheet = CharacterSheetFactory(character=char, primary_persona=False)
 
         char_class = CharacterClassFactory()
-        CharacterClassLevelFactory(character=char, character_class=char_class, level=2)
+        CharacterClassLevelFactory(character=sheet, character_class=char_class, level=2)
         sheet.invalidate_class_level_cache()
 
         armor_soak_target = wire_armor_soak_modifier_target()
@@ -184,7 +184,7 @@ class CovenantArmorSoakSeamTests(TestCase):
         char_c = CharacterFactory(db_key="CovSoakChar2")
         sheet_c = CharacterSheetFactory(character=char_c, primary_persona=False)
         char_class = CharacterClassFactory()
-        CharacterClassLevelFactory(character=char_c, character_class=char_class, level=2)
+        CharacterClassLevelFactory(character=sheet_c, character_class=char_class, level=2)
         sheet_c.invalidate_class_level_cache()
 
         membership = make_engaged_member(character_sheet=sheet_c)

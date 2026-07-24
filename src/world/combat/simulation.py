@@ -298,7 +298,7 @@ def _build_party(encounter: CombatEncounter, params: SimulationParams) -> list[C
     for _ in range(params.party_size):
         sheet = CharacterSheetFactory()
         CharacterClassLevelFactory(
-            character=sheet.character,
+            character=sheet,
             level=params.avg_level,
             is_primary=True,
         )

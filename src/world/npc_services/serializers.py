@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from world.npc_services.models import (
     MissionOfferDetails,
+    NPCReactionLine,
     NPCRole,
     NPCServiceOffer,
     NPCStanding,
@@ -300,3 +301,11 @@ class RecordedProfileCompleteSerializer(serializers.Serializer):
     """The write-up text for a COMMISSIONED sitting (#2632)."""
 
     text = serializers.CharField()
+
+
+class NPCReactionLineSerializer(serializers.ModelSerializer):
+    """Staff CRUD for banded NPC reaction lines (#2632)."""
+
+    class Meta:
+        model = NPCReactionLine
+        fields = ["id", "role", "functionary", "metric", "band_floor", "template"]

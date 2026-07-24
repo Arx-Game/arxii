@@ -170,7 +170,7 @@ class ProfileIdentityPrivacyTests(APITestCase):
         # passer-by, even of a non-anonymous character.
         sheet = self._character_sheet(AccountFactory(), fake_active=False)
         CharacterTraitValueFactory(
-            character=sheet.character, trait=StatTraitFactory(name="strength"), value=5
+            character=sheet, trait=StatTraitFactory(name="strength"), value=5
         )
         viewer = AccountFactory()
         self._character_sheet(viewer)
@@ -188,7 +188,7 @@ class ProfileIdentityPrivacyTests(APITestCase):
         owner = AccountFactory()
         sheet = self._character_sheet(owner, fake_active=False)
         CharacterTraitValueFactory(
-            character=sheet.character, trait=StatTraitFactory(name="strength"), value=5
+            character=sheet, trait=StatTraitFactory(name="strength"), value=5
         )
         data = self._get(sheet, owner).data
         assert data["stats"] == {"strength": 5}

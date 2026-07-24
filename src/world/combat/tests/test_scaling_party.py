@@ -31,7 +31,7 @@ class ComputePartyProfileBasicTest(TestCase):
                 status=ParticipantStatus.ACTIVE,
             )
             CharacterClassLevelFactory(
-                character=participant.character_sheet.character,
+                character=participant.character_sheet,
                 level=level,
                 is_primary=True,
             )
@@ -70,7 +70,7 @@ class ComputePartyProfileExcludesInactiveTest(TestCase):
                 status=ParticipantStatus.ACTIVE,
             )
             CharacterClassLevelFactory(
-                character=participant.character_sheet.character,
+                character=participant.character_sheet,
                 level=4,
                 is_primary=True,
             )
@@ -82,7 +82,7 @@ class ComputePartyProfileExcludesInactiveTest(TestCase):
             status=ParticipantStatus.FLED,
         )
         CharacterClassLevelFactory(
-            character=fled_participant.character_sheet.character,
+            character=fled_participant.character_sheet,
             level=10,
             is_primary=True,
         )
@@ -93,7 +93,7 @@ class ComputePartyProfileExcludesInactiveTest(TestCase):
             status=ParticipantStatus.REMOVED,
         )
         CharacterClassLevelFactory(
-            character=removed_participant.character_sheet.character,
+            character=removed_participant.character_sheet,
             level=10,
             is_primary=True,
         )
@@ -141,7 +141,7 @@ class ComputePartyProfileThreadInvariantTest(TestCase):
                 covenant_role=None,
             )
             CharacterClassLevelFactory(
-                character=participant.character_sheet.character,
+                character=participant.character_sheet,
                 level=level,
                 is_primary=True,
             )
@@ -158,7 +158,7 @@ class ComputePartyProfileThreadInvariantTest(TestCase):
                 covenant_role=role,
             )
             CharacterClassLevelFactory(
-                character=participant.character_sheet.character,
+                character=participant.character_sheet,
                 level=level,
                 is_primary=True,
             )
@@ -209,7 +209,7 @@ class ComputePartyProfileOutlierBondedTest(TestCase):
                 status=ParticipantStatus.ACTIVE,
             )
             CharacterClassLevelFactory(
-                character=participant.character_sheet.character,
+                character=participant.character_sheet,
                 level=4,
                 is_primary=True,
             )
@@ -221,7 +221,7 @@ class ComputePartyProfileOutlierBondedTest(TestCase):
         )
         sidekick_sheet = sidekick_participant.character_sheet
         CharacterClassLevelFactory(
-            character=sidekick_sheet.character,
+            character=sidekick_sheet,
             level=1,
             is_primary=True,
         )
@@ -231,7 +231,7 @@ class ComputePartyProfileOutlierBondedTest(TestCase):
 
         mentor_sheet = CharacterSheetFactory()
         CharacterClassLevelFactory(
-            character=mentor_sheet.character,
+            character=mentor_sheet,
             level=5,
             is_primary=True,
         )
@@ -274,7 +274,7 @@ class ComputePartyProfileOutlierBondedTest(TestCase):
                 covenant_role=None,
             )
             CharacterClassLevelFactory(
-                character=plain_p.character_sheet.character, level=level, is_primary=True
+                character=plain_p.character_sheet, level=level, is_primary=True
             )
             role_p = CombatParticipantFactory(
                 encounter=encounter_with_role,
@@ -282,7 +282,7 @@ class ComputePartyProfileOutlierBondedTest(TestCase):
                 covenant_role=role,
             )
             CharacterClassLevelFactory(
-                character=role_p.character_sheet.character, level=level, is_primary=True
+                character=role_p.character_sheet, level=level, is_primary=True
             )
 
         profile_plain = compute_party_profile(encounter_plain)

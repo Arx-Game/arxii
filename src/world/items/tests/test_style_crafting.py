@@ -33,7 +33,7 @@ class CraftAttachStyleTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
         CharacterTraitValueFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             trait=Trait.objects.get(name="Enchanting"),
             value=50,
         )
@@ -169,7 +169,7 @@ class ItemStyleCraftViewTests(TestCase):
             player_data=PlayerDataFactory(account=self.owner),
         )
         CharacterTraitValueFactory(
-            character=self.owner_char,
+            character=self.owner_sheet,
             trait=Trait.objects.get(name="Enchanting"),
             value=50,
         )

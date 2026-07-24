@@ -359,13 +359,13 @@ class SheetCommandTests(TestCase):
 
         # Assign classes to character
         CharacterClassLevel.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             character_class=warrior_class,
             level=3,
             is_primary=True,
         )
         CharacterClassLevel.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             character_class=scholar_class,
             level=6,  # Elite eligible
         )

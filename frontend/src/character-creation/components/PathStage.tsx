@@ -168,6 +168,9 @@ export function PathStage({ draft }: PathStageProps) {
       <div>
         <h2 className="theme-heading text-2xl font-bold">{copy?.path_heading ?? ''}</h2>
         <p className="mt-2 text-muted-foreground">{copy?.path_intro ?? ''}</p>
+        {copy?.path_lore_durance && (
+          <p className="mt-2 text-sm text-muted-foreground">{copy.path_lore_durance}</p>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_300px]">

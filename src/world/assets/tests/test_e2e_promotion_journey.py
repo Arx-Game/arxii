@@ -29,14 +29,20 @@ class PromotionJourneyTests(EvenniaTestCase):
         self.room_profile = get_room_profile(self.room)
         self.functionary = place_functionary(role=self.role, room=self.room_profile)
         stealth = Trait.objects.get(name="Stealth")
-        CharacterTraitValue.objects.create(character=self.character, trait=stealth, value=5)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=stealth, value=5
+        )
         # #1907 — also gate on Persuasion (the GUARD variant's min_trait) and
         # Scholarship (the MINOR_ALLY variant's min_trait) so the new offers are
         # eligible once rapport is met.
         persuasion = Trait.objects.get(name="Persuasion")
-        CharacterTraitValue.objects.create(character=self.character, trait=persuasion, value=5)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=persuasion, value=5
+        )
         scholarship = Trait.objects.get(name="Scholarship")
-        CharacterTraitValue.objects.create(character=self.character, trait=scholarship, value=5)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=scholarship, value=5
+        )
 
     def test_full_promotion_journey(self) -> None:
         from actions.definitions.npc_services import (

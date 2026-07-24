@@ -2,7 +2,7 @@
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.goals.factories import (
     CharacterGoalFactory,
     GoalDomainFactory,
@@ -55,7 +55,7 @@ class CharacterGoalSerializerTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory()
         cls.domain = GoalDomainFactory(name="Wealth")
 
     def test_serializes_goal_with_domain_info(self):
@@ -194,7 +194,7 @@ class GoalJournalSerializerTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory()
         cls.domain = GoalDomainFactory(name="Bonds")
 
     def test_serializes_journal_with_domain_info(self):
@@ -232,7 +232,7 @@ class GoalJournalCreateSerializerTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory()
         cls.domain = GoalDomainFactory(name="Mastery")
 
     def test_creates_journal_with_valid_data(self):
@@ -295,7 +295,7 @@ class GoalRevisionSerializerTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory()
 
     def test_serializes_revision_with_can_revise(self):
         """Serializer includes computed can_revise field."""

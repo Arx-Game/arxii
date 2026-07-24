@@ -26,7 +26,8 @@ class Situation(models.TextChoices):
     v1 spelling, #2623) is slice 3's defense-side seam addition (#2536 Task
     6); ``ON_CHOSEN_GROUND`` is #2646's whole-encounter chosen-ground
     addition; ``ENEMY_WINDUP_UNDERWAY`` and ``ENEMY_WINDUP_CALLED_OUT`` are the
-    telegraphed-enemy-wind-up addition (#2637) — the enum ships no other
+    telegraphed-enemy-wind-up addition (#2637); ``ALLY_SENT_FLYING`` is the
+    sent-flying consequence addition (#2638) — the enum ships no other
     inert entries; every value here has a
     registered evaluator with signature ``(ctx: SituationContext, params:
     SituationParams) -> bool`` (params parameterization landed #2623 Task 3 —
@@ -156,6 +157,14 @@ class Situation(models.TextChoices):
     - ``ENEMY_WINDUP_CALLED_OUT`` — same as ``ENEMY_WINDUP_UNDERWAY``, plus
       the pending row's ``called_out`` flag is True (#2637 design 6, the
       flagged-role auto-callout). Reads ``resolution``; False outside combat.
+    - ``ALLY_SENT_FLYING`` — a covenant-mate of the HOLDER, co-present in the
+      SUBJECT's encounter, currently carries the seeded "Sent Flying" marker
+      condition (#2638). Mirrors ``ally_intercepted_for_me``'s mate-scoping
+      exactly: a candidate mate counts if they hold a non-departed
+      (``CharacterCovenantRole.left_at__isnull=True``) role in a covenant the
+      HOLDER is also actively engaged in, restricted to ACTIVE participants in
+      the subject's encounter roster (the mate's own engagement is
+      irrelevant). Reads ``holder`` + ``resolution``; False outside combat.
     """
 
     AT_RANGE = "at_range", "At Range"
@@ -175,6 +184,11 @@ class Situation(models.TextChoices):
     ON_CHOSEN_GROUND = "on_chosen_ground", "On Chosen Ground"
     ENEMY_WINDUP_UNDERWAY = "enemy_windup_underway", "Enemy Wind-Up Underway"
     ENEMY_WINDUP_CALLED_OUT = "enemy_windup_called_out", "Enemy Wind-Up Called Out"
+    ALLY_SENT_FLYING = "ally_sent_flying", "Ally Sent Flying"
+    ENEMY_HELD_BY_ALLY = "enemy_held_by_ally", "Enemy Held by Ally"
+    BARRIER_CONTESTED = "barrier_contested", "Barrier Contested"
+    SHIELDED_BY_ALLY = "shielded_by_ally", "Shielded by Ally"
+    TARGET_IS_MARKED_BY_ALLY = "target_is_marked_by_ally", "Target Is Marked by Ally"
 
 
 class PerkEffectKind(models.TextChoices):
@@ -277,4 +291,5 @@ SITUATION_CREATOR_FUNCTIONS: dict[str, frozenset[str]] = {
         {TechniqueFunction.CHARM, TechniqueFunction.DISTRACTION}
     ),
     Situation.TARGET_FAVORABLY_DISPOSED: frozenset({TechniqueFunction.CHARM}),
+    Situation.SHIELDED_BY_ALLY: frozenset({TechniqueFunction.DEFENSE_BUFF}),
 }

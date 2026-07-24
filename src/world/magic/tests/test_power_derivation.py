@@ -152,7 +152,7 @@ class LevelPowerTermTests(TestCase):
     def _set_character_level(self, level: int) -> None:
         from world.classes.factories import CharacterClassLevelFactory
 
-        CharacterClassLevelFactory(character=self.character, level=level)
+        CharacterClassLevelFactory(character=self.character.sheet_data, level=level)
         self.sheet.invalidate_class_level_cache()
 
     def _make_config(self, *, char_bonus: int = 0, tech_bonus: int = 0):
@@ -426,7 +426,7 @@ class PowerLedgerStructureTests(TestCase):
         from world.magic.models import LevelPowerConfig
 
         LevelPowerConfig.objects.create(pk=1, character_level_bonus=2, technique_level_bonus=0)
-        CharacterClassLevelFactory(character=self.character, level=3)
+        CharacterClassLevelFactory(character=self.character.sheet_data, level=3)
         self.sheet.invalidate_class_level_cache()
         ledger = _derive_power(
             channeled_intensity=5, technique=self.technique, character=self.character
@@ -453,7 +453,7 @@ class PowerLedgerStructureTests(TestCase):
         self._add_power(mult_target, 35)
         # Term: 4 character levels * 2 = 8.
         LevelPowerConfig.objects.create(pk=1, character_level_bonus=2, technique_level_bonus=0)
-        CharacterClassLevelFactory(character=self.character, level=4)
+        CharacterClassLevelFactory(character=self.character.sheet_data, level=4)
         self.sheet.invalidate_class_level_cache()
 
         base = 13
@@ -754,7 +754,7 @@ class AuraPowerTermTests(TestCase):
     def _set_level(self, level: int) -> None:
         from world.classes.factories import CharacterClassLevelFactory
 
-        CharacterClassLevelFactory(character=self.character, level=level)
+        CharacterClassLevelFactory(character=self.character.sheet_data, level=level)
         self.sheet.invalidate_class_level_cache()
 
     def _standing_setup(self, lifetime_earned: int, bonus: int) -> None:

@@ -431,7 +431,7 @@ Term" below) shows "this much came from your vow" as a distinct announced line.
 2** of `covenants`' four-layer vow-power model (see `docs/systems/covenants.md`'s "Vow
 power, four-layer model" and ADR-0149's 2026-07-20 amendment). It rewards a vow for
 casting techniques that match what the role specializes in, keyed on the shared
-`TechniqueFunction` vocabulary (`constants.py`, 12-value `TextChoices` — also consumed
+`TechniqueFunction` vocabulary (`constants.py`, 13-value `TextChoices` — also consumed
 by Layer 4's situational perks, #2536) rather than the coarser SWORD/SHIELD/CROWN axis
 Layer 1 reads.
 

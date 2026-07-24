@@ -9,6 +9,7 @@ pipeline and a live multi-round encounter are Phase 2, out of scope here.
 
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.seeds.database import seed_dev_database
 from world.seeds.tests.content_stub import stub_content_root
 
@@ -39,7 +40,6 @@ class TestPlayableSlice(TestCase):
         for a trait the seeded ``flee`` CheckType weights, then call the live
         ``perform_check`` and assert a real (non-null) CheckOutcome comes back.
         """
-        from evennia_extensions.factories import CharacterFactory
         from world.checks.models import CheckType, CheckTypeTrait
         from world.checks.services import perform_check
         from world.checks.types import CheckResult
@@ -63,8 +63,9 @@ class TestPlayableSlice(TestCase):
         self.assertIsNotNone(weighted_trait)
         trait = weighted_trait.trait
 
-        character = CharacterFactory()
-        CharacterTraitValue.objects.create(character=character, trait=trait, value=30)
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        CharacterTraitValue.objects.create(character=sheet, trait=trait, value=30)
 
         result = perform_check(character, flee, target_difficulty=0)
 
@@ -303,7 +304,7 @@ class TestAcademyTrainingLoopReachable(TestCase):
             persona = PersonaFactory()
             sheet = persona.character_sheet
             character = sheet.character
-            CharacterPathHistoryFactory(character=character, path=path)
+            CharacterPathHistoryFactory(character=sheet, path=path)
             # Mirrors CG's own `_finalize_magic_data` call shape: a real Prospect
             # always already owns their one Path-matched major Gift (with a
             # provisioned, resonance-anchored GIFT thread) by the time they can

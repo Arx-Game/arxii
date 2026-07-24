@@ -61,6 +61,8 @@ class Captivity(SharedMemoryModel):
             " Null for instanced-cell captures — set when cell is null."
         ),
     )
+    # ObjectDB by design (#2608): raw capture-time `character.location` — no Room
+    # typeclass guarantee, so no RoomProfile to point at.
     return_location = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.SET_NULL,

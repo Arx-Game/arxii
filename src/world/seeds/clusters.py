@@ -21,6 +21,7 @@ def _seed_combat() -> None:
     from world.combat.factories import (  # noqa: PLC0415
         wire_elevation_advantage_modifier_target,
     )
+    from world.combat.sent_flying_content import ensure_sent_flying_content  # noqa: PLC0415
     from world.seeds.game_content.combat import (  # noqa: PLC0415
         seed_dramatic_surge_content,
         seed_encounter_beat_wiring,
@@ -33,6 +34,15 @@ def _seed_combat() -> None:
     seed_encounter_beat_wiring()
     seed_dramatic_surge_content()
     wire_elevation_advantage_modifier_target()
+    # Sent Flying marker content (#2638). Belongs conceptually beside the
+    # reactive-challenge content family (interpose/catch/redirect — #2636's
+    # "reactive_challenges" cluster) but that cluster is not yet in this
+    # branch's ancestry (df34c23cf, #2636, is a main-tip sibling not merged
+    # into #2637/#2638's base as of this branch — see the #2638 commit body).
+    # Wired here instead, in the existing production "combat" cluster;
+    # trivially movable to "reactive_challenges" at the next rebase — both are
+    # idempotent get_or_create seeders, so no reconciliation risk either way.
+    ensure_sent_flying_content()
 
 
 def _seed_battles() -> None:
@@ -322,14 +332,6 @@ def _seed_gm() -> None:
     GMRewardConfig.load()
 
 
-def _seed_covenant_roles() -> None:
-    from world.seeds.game_content.covenant_roles import (  # noqa: PLC0415
-        seed_role_catalog_content,
-    )
-
-    seed_role_catalog_content()
-
-
 def _seed_skills() -> None:
     from world.seeds.game_content.skills import (  # noqa: PLC0415
         seed_skill_breakthrough_catalog,
@@ -512,10 +514,6 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # allow_custom_stakes, allow_global_scope_authoring per GMLevel), so a fresh
     # deploy's staff-review gates aren't silently maximally-restrictive (#2000).
     "gm": _seed_gm,
-    # Covenant role catalog: granted gifts + techniques + capabilities +
-    # archetype action scaling for the 3 canonical roles (#2022). After "items"
-    # (creates the role rows + gear compat) and "magic" (EffectType/Style/Gift).
-    "covenant_roles": _seed_covenant_roles,
     # Propaganda: PLACEHOLDER campaign-tier catalog for the money→prestige
     # project kind (#1621).
     "propaganda": _seed_propaganda,
@@ -741,9 +739,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "kinship": [Kinsperson],
         # Houses: the landed demo house; represented by Title (#1884).
         "houses": [Title],
-        # Covenant role catalog: granted gifts + techniques + capabilities +
-        # archetype scaling for the 3 canonical roles (#2022).
-        "covenant_roles": [],
         # Propaganda: the PLACEHOLDER campaign-tier catalog (#1621).
         "propaganda": [PropagandaCampaignTier],
         # Skill breakthroughs: default TraitRatingUnlock catalog at every skill's

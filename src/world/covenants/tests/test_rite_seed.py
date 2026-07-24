@@ -129,9 +129,9 @@ class WireCovenantRiteContentPackagesTests(TestCase):
     def test_sword_has_two_level_bands(self) -> None:
         """Sword role has packages at level 1 (Fury I) and level 4 (Fury II)."""
         rite = wire_covenant_rite_content()
-        sword_pkgs = rite.role_packages.filter(covenant_role__slug="sword-vanguard").values_list(
-            "min_covenant_level", flat=True
-        )
+        sword_pkgs = rite.role_packages.filter(
+            covenant_role__slug="oath-rite-sword-role"
+        ).values_list("min_covenant_level", flat=True)
         self.assertIn(1, list(sword_pkgs), "Sword must have a level-1 band (Oathbound Fury I).")
         self.assertIn(4, list(sword_pkgs), "Sword must have a level-4 band (Oathbound Fury II).")
 

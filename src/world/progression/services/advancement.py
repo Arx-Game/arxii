@@ -48,10 +48,12 @@ def primary_class_level(character: ObjectDB) -> CharacterClassLevel | None:  # n
     """
     from world.classes.models import CharacterClassLevel as _CharacterClassLevel
 
-    primary = _CharacterClassLevel.objects.filter(character=character, is_primary=True).first()
+    primary = _CharacterClassLevel.objects.filter(
+        character_id=character.pk, is_primary=True
+    ).first()
     if primary is not None:
         return primary
-    return _CharacterClassLevel.objects.filter(character=character).order_by("-level").first()
+    return _CharacterClassLevel.objects.filter(character_id=character.pk).order_by("-level").first()
 
 
 def apply_class_level_advance(sheet: CharacterSheet, *, level_after: int) -> None:
@@ -102,7 +104,7 @@ def cross_into_path(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
 
         raise PathRequirementsNotMet(path_name=path.name, failed_messages=failed_messages)
 
-    CharacterPathHistory.objects.create(character=sheet.character, path=path)
+    CharacterPathHistory.objects.create(character=sheet, path=path)
     return grant_path_magic(sheet, path)
 
 
@@ -135,7 +137,7 @@ def select_initial_path(character: ObjectDB, path: Path) -> CharacterPathHistory
 
     if current_path_for_character(character) is not None:
         raise PathAlreadySelectedError
-    return CharacterPathHistory.objects.create(character=character, path=path)
+    return CharacterPathHistory.objects.create(character=character.sheet_data, path=path)
 
 
 # =============================================================================
@@ -342,7 +344,7 @@ def _assert_unlock_purchased(character: ObjectDB, unlock: ClassLevelUnlock) -> N
     from world.progression.models import CharacterUnlock
 
     purchased = CharacterUnlock.objects.filter(
-        character=character,
+        character=character.sheet_data,
         character_class=unlock.character_class,
         target_level=unlock.target_level,
     ).exists()
@@ -408,6 +410,50 @@ def convene_durance_at_site(*, inductee_sheet: CharacterSheet, room: ObjectDB) -
             initiator=site.officiant,
             proposed_terms="",
             session_kwargs={"site_convened": "1"},
+            invitee_sheets=[inductee_sheet],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=timezone.now() + timedelta(hours=24),
+        )
+    raise NoDuranceSiteError
+
+
+# Service-function path for the intake registration rite (new character enters the
+# Durance arc, distinct from the ongoing level-advancement rite). #2479
+_DURANCE_REGISTRATION_SERVICE_PATH = (
+    "world.progression.services.durance_registration.register_durance_via_session"
+)
+
+
+def convene_durance_registration_at_site(
+    *,
+    inductee_sheet: CharacterSheet,
+    room: ObjectDB,
+) -> RitualSession:
+    """Open a registration-only Durance session at the Academy training site.
+
+    Unlike ``convene_durance_at_site``, this does NOT advance a class level. It
+    registers a new Gifted into the Durance arc via the intake cohort. The
+    officiant gate is relaxed because a new character has no path lineage yet.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from world.areas.services import get_room_profile
+    from world.magic.models import Ritual
+    from world.magic.services.sessions import draft_session
+    from world.progression.models import DuranceTrainingSite
+
+    profile = get_room_profile(room)
+    for site in DuranceTrainingSite.objects.filter(room_profile=profile, is_active=True):
+        ritual = Ritual.objects.get(service_function_path=_DURANCE_REGISTRATION_SERVICE_PATH)
+        return draft_session(
+            ritual=ritual,
+            initiator=site.officiant,
+            proposed_terms="",
+            session_kwargs={"site_convened": "1", "registration": "1"},
             invitee_sheets=[inductee_sheet],
             session_references=[],
             initiator_participant_kwargs={},

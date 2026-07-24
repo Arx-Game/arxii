@@ -65,7 +65,7 @@ class OnCharacterLevelChangedTests(EvenniaTestCase):
         )
         char_class = CharacterClassFactory()
         CharacterClassLevelFactory(
-            character=sheet.character,
+            character=sheet,
             character_class=char_class,
             level=3,
         )

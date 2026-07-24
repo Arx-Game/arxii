@@ -48,7 +48,7 @@ class BeginDeclarationPhaseDissolvesBondTest(TestCase):
         )
         self.sidekick_sheet = self.sidekick_participant.character_sheet
         CharacterClassLevelFactory(
-            character=self.sidekick_sheet.character,
+            character=self.sidekick_sheet,
             level=3,
             is_primary=True,
         )
@@ -58,7 +58,7 @@ class BeginDeclarationPhaseDissolvesBondTest(TestCase):
 
         self.mentor_sheet = CharacterSheetFactory()
         CharacterClassLevelFactory(
-            character=self.mentor_sheet.character,
+            character=self.mentor_sheet,
             level=4,
             is_primary=True,
         )
@@ -116,7 +116,7 @@ class BeginDeclarationPhasePreservesActiveBondTest(TestCase):
         )
         self.sidekick_sheet = self.sidekick_participant.character_sheet
         CharacterClassLevelFactory(
-            character=self.sidekick_sheet.character,
+            character=self.sidekick_sheet,
             level=2,
             is_primary=True,
         )
@@ -125,7 +125,7 @@ class BeginDeclarationPhasePreservesActiveBondTest(TestCase):
 
         self.mentor_sheet = CharacterSheetFactory()
         CharacterClassLevelFactory(
-            character=self.mentor_sheet.character,
+            character=self.mentor_sheet,
             level=6,
             is_primary=True,
         )

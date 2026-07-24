@@ -2,7 +2,7 @@
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.models import CheckType, CheckTypeSpecialization, CheckTypeTrait
 from world.checks.services import perform_check
 from world.seeds.checks import seed_check_resolution_tables
@@ -80,13 +80,14 @@ class SocialCheckSeedTests(TestCase):
         assert trait_names == {"charm", "Persuasion"}
 
     def test_owned_seduction_spec_contributes_to_the_check(self):
-        character = CharacterFactory()
+        sheet = CharacterSheetFactory()
+        character = sheet.character
         CharacterTraitValue.objects.create(
-            character=character, trait=Trait.objects.get(name="charm"), value=30
+            character=sheet, trait=Trait.objects.get(name="charm"), value=30
         )
         seduction = CheckType.objects.get(name="Seduction")
         base = perform_check(character, seduction, target_difficulty=0)
         spec = Specialization.objects.get(name="Seduction", parent_skill__trait__name="Persuasion")
-        CharacterSpecializationValueFactory(character=character, specialization=spec, value=30)
+        CharacterSpecializationValueFactory(character=sheet, specialization=spec, value=30)
         with_spec = perform_check(character, seduction, target_difficulty=0)
         assert with_spec.specialization_points > base.specialization_points

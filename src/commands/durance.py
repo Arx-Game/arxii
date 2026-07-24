@@ -142,7 +142,7 @@ class CmdDurance(ArxCommand):
 
         met, failed = check_requirements_for_unlock(sheet.character, unlock)
         purchased = CharacterUnlock.objects.filter(
-            character=sheet.character,
+            character=sheet,
             character_class=unlock.character_class,
             target_level=unlock.target_level,
         ).exists()

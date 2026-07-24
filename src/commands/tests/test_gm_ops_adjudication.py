@@ -109,7 +109,7 @@ class GMOpsAdjudicationTestBase(TestCase):
             check_type=self.check_type, trait=self.check_trait, weight=Decimal("1.0")
         )
         CharacterTraitValue.objects.get_or_create(
-            character=self.target, trait=self.check_trait, defaults={"value": 30}
+            character=self.target.sheet_data, trait=self.check_trait, defaults={"value": 30}
         )
 
         self.dev_trait = TraitFactory(name="gmops_dev_skill", trait_type=TraitType.SKILL)

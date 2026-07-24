@@ -520,8 +520,14 @@ def install_fall_triggers(room: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
     trigger_def = TriggerDefinition.objects.filter(name=FALL_TRIGGER_NAME).first()
     if trigger_def is None:
         return
-    trigger, created = Trigger.objects.get_or_create(obj=room, trigger_definition=trigger_def)
+    _trigger, created = Trigger.objects.get_or_create(obj=room, trigger_definition=trigger_def)
     if created:
         handler = room.trigger_handler
         if handler is not None:
-            handler.on_trigger_added(trigger)
+            # refresh(), not on_trigger_added(): callers install-then-emit FELL in
+            # the same transaction (maybe_emit_fall), and on_trigger_added defers
+            # its cache reset to transaction.on_commit — a room handler already
+            # populated earlier in the transaction (e.g. by a CONDITION_REMOVED
+            # emission during combat resolution, #2638) would never see this
+            # trigger before the fall dispatches against it.
+            handler.refresh()

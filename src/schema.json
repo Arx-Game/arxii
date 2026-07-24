@@ -5153,6 +5153,10 @@ paths:
         schema:
           type: number
       - in: query
+        name: featured
+        schema:
+          type: boolean
+      - in: query
         name: search
         schema:
           type: string
@@ -22632,6 +22636,182 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/npc-services/reaction-lines/:
+    get:
+      operationId: npc_services_reaction_lines_list
+      description: |-
+        Staff CRUD over banded NPC reaction lines (#2632).
+
+        The builder-facing authoring surface: place a functionary, add rows —
+        per-role defaults (functionary null) or a placement's personal set.
+      parameters:
+      - in: query
+        name: functionary
+        schema:
+          type: number
+      - in: query
+        name: metric
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: number
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNPCReactionLineList'
+          description: ''
+    post:
+      operationId: npc_services_reaction_lines_create
+      description: |-
+        Staff CRUD over banded NPC reaction lines (#2632).
+
+        The builder-facing authoring surface: place a functionary, add rows —
+        per-role defaults (functionary null) or a placement's personal set.
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NPCReactionLineRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCReactionLine'
+          description: ''
+  /api/npc-services/reaction-lines/{id}/:
+    get:
+      operationId: npc_services_reaction_lines_retrieve
+      description: |-
+        Staff CRUD over banded NPC reaction lines (#2632).
+
+        The builder-facing authoring surface: place a functionary, add rows —
+        per-role defaults (functionary null) or a placement's personal set.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this NPC Reaction Line.
+        required: true
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCReactionLine'
+          description: ''
+    put:
+      operationId: npc_services_reaction_lines_update
+      description: |-
+        Staff CRUD over banded NPC reaction lines (#2632).
+
+        The builder-facing authoring surface: place a functionary, add rows —
+        per-role defaults (functionary null) or a placement's personal set.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this NPC Reaction Line.
+        required: true
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NPCReactionLineRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCReactionLine'
+          description: ''
+    patch:
+      operationId: npc_services_reaction_lines_partial_update
+      description: |-
+        Staff CRUD over banded NPC reaction lines (#2632).
+
+        The builder-facing authoring surface: place a functionary, add rows —
+        per-role defaults (functionary null) or a placement's personal set.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this NPC Reaction Line.
+        required: true
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedNPCReactionLineRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCReactionLine'
+          description: ''
+    delete:
+      operationId: npc_services_reaction_lines_destroy
+      description: |-
+        Staff CRUD over banded NPC reaction lines (#2632).
+
+        The builder-facing authoring surface: place a functionary, add rows —
+        per-role defaults (functionary null) or a placement's personal set.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this NPC Reaction Line.
+        required: true
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/npc-services/recorded-profiles/:
     get:
       operationId: npc_services_recorded_profiles_list
@@ -37570,6 +37750,16 @@ components:
           type: boolean
           description: If True, visible to everyone including logged-out visitors.
             If False, only visible to characters who have learned it.
+        is_featured:
+          type: boolean
+          description: If True, included in the curated onboarding lore shown on the
+            front page and linked from CG stages. Requires is_public=True.
+        featured_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: Display order for featured entries (1, 2, 3...). NULL for non-featured.
         subject:
           type: integer
         subject_name:
@@ -37639,6 +37829,16 @@ components:
           type: boolean
           description: If True, visible to everyone including logged-out visitors.
             If False, only visible to characters who have learned it.
+        is_featured:
+          type: boolean
+          description: If True, included in the curated onboarding lore shown on the
+            front page and linked from CG stages. Requires is_public=True.
+        featured_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: Display order for featured entries (1, 2, 3...). NULL for non-featured.
         subject:
           type: integer
         subject_name:
@@ -42652,6 +42852,7 @@ components:
       - weaken
       - perception
       - concealment
+      - hold
       type: string
       description: |-
         * `damage_buff_self` - Self Damage Buff
@@ -42666,6 +42867,7 @@ components:
         * `weaken` - Weaken
         * `perception` - Perception
         * `concealment` - Concealment
+        * `hold` - Hold / Lock
     FundWardResult:
       type: object
       properties:
@@ -46413,6 +46615,14 @@ components:
       description: |-
         * `machine` - Machine
         * `gm_pick` - GM pick
+    MetricEnum:
+      enum:
+      - allure
+      - menace
+      type: string
+      description: |-
+        * `allure` - Allure
+        * `menace` - Menace
     MinRiskEnum:
       enum:
       - none
@@ -48250,6 +48460,81 @@ components:
         * `compromised` - Compromised
         * `lost` - Lost
         * `dismissed` - Dismissed
+    NPCReactionLine:
+      type: object
+      description: Staff CRUD for banded NPC reaction lines (#2632).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        role:
+          type: integer
+          description: The role these lines belong to.
+        functionary:
+          type: integer
+          nullable: true
+          description: Set for a specific placement's personal lines (e.g. Alphonso's);
+            null = the role's shared defaults.
+        metric:
+          allOf:
+          - $ref: '#/components/schemas/MetricEnum'
+          description: |-
+            Which number of the served character the band reads.
+
+            * `allure` - Allure
+            * `menace` - Menace
+        band_floor:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Line applies from this value up (highest floor <= value wins).
+            May be negative for a 'bottom' band.
+        template:
+          type: string
+          description: The reaction text; <name> is replaced with the served character's
+            presented name.
+      required:
+      - band_floor
+      - id
+      - metric
+      - role
+      - template
+    NPCReactionLineRequest:
+      type: object
+      description: Staff CRUD for banded NPC reaction lines (#2632).
+      properties:
+        role:
+          type: integer
+          description: The role these lines belong to.
+        functionary:
+          type: integer
+          nullable: true
+          description: Set for a specific placement's personal lines (e.g. Alphonso's);
+            null = the role's shared defaults.
+        metric:
+          allOf:
+          - $ref: '#/components/schemas/MetricEnum'
+          description: |-
+            Which number of the served character the band reads.
+
+            * `allure` - Allure
+            * `menace` - Menace
+        band_floor:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Line applies from this value up (highest floor <= value wins).
+            May be negative for a 'bottom' band.
+        template:
+          type: string
+          minLength: 1
+          description: The reaction text; <name> is replaced with the served character's
+            presented name.
+      required:
+      - band_floor
+      - metric
+      - role
+      - template
     NPCRole:
       type: object
       properties:
@@ -51792,6 +52077,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NPCAsset'
+    PaginatedNPCReactionLineList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NPCReactionLine'
     PaginatedNPCRoleList:
       type: object
       required:
@@ -55302,6 +55610,37 @@ components:
         availability_rule:
           description: Phase 0 predicate tree gating front-door availability for this
             template.
+    PatchedNPCReactionLineRequest:
+      type: object
+      description: Staff CRUD for banded NPC reaction lines (#2632).
+      properties:
+        role:
+          type: integer
+          description: The role these lines belong to.
+        functionary:
+          type: integer
+          nullable: true
+          description: Set for a specific placement's personal lines (e.g. Alphonso's);
+            null = the role's shared defaults.
+        metric:
+          allOf:
+          - $ref: '#/components/schemas/MetricEnum'
+          description: |-
+            Which number of the served character the band reads.
+
+            * `allure` - Allure
+            * `menace` - Menace
+        band_floor:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Line applies from this value up (highest floor <= value wins).
+            May be negative for a 'bottom' band.
+        template:
+          type: string
+          minLength: 1
+          description: The reaction text; <name> is replaced with the served character's
+            presented name.
     PatchedNPCRoleRequest:
       type: object
       properties:
@@ -67198,11 +67537,6 @@ components:
           nullable: true
           description: Chosen FormTraitOption for a choose-at-use cosmetic (#2632
             — Styling Kit style, Ariwn Lenses color). Ignored by fixed-option items.
-        blend:
-          type: boolean
-          default: false
-          description: Add the color instead of replacing (#2632) — green dye onto
-            black hair yields Black-Green (composite value + component list).
     UseItemResult:
       type: object
       description: 'Response shape mirroring ``UseItemResult`` (issue #509).'

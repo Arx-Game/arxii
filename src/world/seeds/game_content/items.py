@@ -1,11 +1,19 @@
-"""Items test-infrastructure: seed helpers for ItemTemplate + compatibility matrix.
+"""Items test-infrastructure: seed helpers for ItemTemplate + style vocabulary.
 
 Exports:
 - ``seed_item_template_starter_catalog()`` — reference ItemTemplates per gear_archetype
-- ``seed_gear_archetype_compatibility()`` — canonical role × archetype compatibility matrix
 - ``seed_style_vocabulary()`` — seeded ``Style`` aesthetic vocabulary spread across the
   audacity tiers (#2029)
 - ``seed_items_dev()`` — master orchestrator for the items cluster
+
+The canonical covenant-role × gear-archetype compatibility matrix (formerly
+``seed_gear_archetype_compatibility()`` here, keyed on three placeholder
+CovenantRole rows — ``sword-vanguard``/``shield-bulwark``/``crown-luminary``)
+was retired: the 13 real Durance covenant vows are now lore-repo content
+(``covenants.covenantrole``/``covenants.geararchetypecompatibility`` are
+``CONTENT_MODELS``), and the placeholders collided with them on the
+``(covenant_type, name)`` unique constraint. ``GearArchetypeCompatibility``
+rows are authored in the lore repo now.
 """
 
 from __future__ import annotations
@@ -14,7 +22,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from world.covenants.models import CovenantRole, GearArchetypeCompatibility
     from world.items.models import ItemTemplate, Style
 
 
@@ -26,21 +33,10 @@ class ItemTemplateStarterCatalogResult:
 
 
 @dataclass
-class GearArchetypeCompatibilityResult:
-    """Returned by seed_gear_archetype_compatibility()."""
-
-    compatibilities: list[GearArchetypeCompatibility]
-    sword_role: CovenantRole
-    shield_role: CovenantRole
-    crown_role: CovenantRole
-
-
-@dataclass
 class ItemsDevSeedResult:
     """Returned by seed_items_dev()."""
 
     template_catalog: ItemTemplateStarterCatalogResult
-    compatibility: GearArchetypeCompatibilityResult
     styles: dict[str, Style]  # Style name -> row, keyed by the seeded vocabulary
 
 
@@ -160,94 +156,6 @@ def seed_item_template_starter_catalog() -> ItemTemplateStarterCatalogResult:
         templates[archetype] = tmpl
 
     return ItemTemplateStarterCatalogResult(templates=templates)
-
-
-# ---------------------------------------------------------------------------
-# Compatibility matrix: canonical role × archetype pairs.
-# ---------------------------------------------------------------------------
-
-
-def seed_gear_archetype_compatibility() -> GearArchetypeCompatibilityResult:
-    """Author the canonical role × archetype compatibility matrix.
-
-    Roles authored (get_or_create on slug):
-    - sword-vanguard  (SWORD archetype)
-    - shield-bulwark  (SHIELD archetype)
-    - crown-luminary  (CROWN archetype)
-
-    Compatibility matrix:
-    - Sword: heavy_armor, medium_armor, light_armor, melee_one_hand, melee_two_hand
-    - Shield: heavy_armor, medium_armor, shield
-    - Crown: robe, clothing, jewelry
-
-    All idempotent via get_or_create on (covenant_role, gear_archetype).
-
-    Returns:
-        GearArchetypeCompatibilityResult with all compat rows + role instances.
-    """
-    from world.covenants.constants import CovenantType  # noqa: PLC0415
-    from world.covenants.models import CovenantRole, GearArchetypeCompatibility  # noqa: PLC0415
-    from world.items.constants import GearArchetype  # noqa: PLC0415
-
-    sword_role, _ = CovenantRole.objects.get_or_create(
-        slug="sword-vanguard",
-        defaults={
-            "name": "Vanguard",
-            "covenant_type": CovenantType.DURANCE,
-            "sword_weight": 1,
-            "speed_rank": 2,
-        },
-    )
-    shield_role, _ = CovenantRole.objects.get_or_create(
-        slug="shield-bulwark",
-        defaults={
-            "name": "Bulwark",
-            "covenant_type": CovenantType.DURANCE,
-            "shield_weight": 1,
-            "speed_rank": 3,
-        },
-    )
-    crown_role, _ = CovenantRole.objects.get_or_create(
-        slug="crown-luminary",
-        defaults={
-            "name": "Luminary",
-            "covenant_type": CovenantType.DURANCE,
-            "crown_weight": 1,
-            "speed_rank": 1,
-        },
-    )
-
-    matrix: list[tuple[CovenantRole, str]] = [
-        # Sword — offense; works with all armour weights and both melee archetypes
-        (sword_role, GearArchetype.HEAVY_ARMOR),
-        (sword_role, GearArchetype.MEDIUM_ARMOR),
-        (sword_role, GearArchetype.LIGHT_ARMOR),
-        (sword_role, GearArchetype.MELEE_ONE_HAND),
-        (sword_role, GearArchetype.MELEE_TWO_HAND),
-        # Shield — defense; heavy/medium armour + shield archetype
-        (shield_role, GearArchetype.HEAVY_ARMOR),
-        (shield_role, GearArchetype.MEDIUM_ARMOR),
-        (shield_role, GearArchetype.SHIELD),
-        # Crown — support; robes, clothing, jewelry
-        (crown_role, GearArchetype.ROBE),
-        (crown_role, GearArchetype.CLOTHING),
-        (crown_role, GearArchetype.JEWELRY),
-    ]
-
-    compats: list[GearArchetypeCompatibility] = [
-        GearArchetypeCompatibility.objects.get_or_create(
-            covenant_role=role,
-            gear_archetype=archetype,
-        )[0]
-        for role, archetype in matrix
-    ]
-
-    return GearArchetypeCompatibilityResult(
-        compatibilities=compats,
-        sword_role=sword_role,
-        shield_role=shield_role,
-        crown_role=crown_role,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -396,26 +304,22 @@ def seed_items_dev() -> ItemsDevSeedResult:
     Composes:
     1. ``seed_item_template_starter_catalog()`` — one reference template per
        major gear_archetype with TemplateSlot rows.
-    2. ``seed_gear_archetype_compatibility()`` — canonical covenant role rows +
-       role × archetype compatibility matrix.
-    3. ``seed_style_vocabulary()`` — the seeded aesthetic Style vocabulary
+    2. ``seed_style_vocabulary()`` — the seeded aesthetic Style vocabulary
        spread across the four audacity tiers (#2029).
 
     All writes are idempotent (get_or_create/update_or_create throughout).
     Re-running on a populated database is a no-op; staff edits to existing
-    template/compatibility rows are preserved (style vocabulary vectors are
-    authoritative on reseed, matching seed_scandal_archetypes).
+    template rows are preserved (style vocabulary vectors are authoritative
+    on reseed, matching seed_scandal_archetypes).
 
     Returns:
         ItemsDevSeedResult composing all sub-results.
     """
     template_catalog = seed_item_template_starter_catalog()
-    compatibility = seed_gear_archetype_compatibility()
     styles = seed_style_vocabulary()
     seed_cosmetic_items()
     seed_lance_item()
     return ItemsDevSeedResult(
         template_catalog=template_catalog,
-        compatibility=compatibility,
         styles=styles,
     )

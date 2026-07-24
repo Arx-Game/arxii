@@ -1,1 +1,1 @@
-0056_combatopponentaction_damage_scale_and_more
+0059_combatopponent_creature_template_and_more

@@ -66,7 +66,7 @@ class ComputedXPCostTests(TestCase):
         unlock = ThreadWeavingUnlockFactory(xp_cost=100)
         unlock.paths.add(steel)
         learner = CharacterSheetFactory()
-        CharacterPathHistoryFactory(character=learner.character, path=steel)
+        CharacterPathHistoryFactory(character=learner, path=steel)
         self.assertEqual(compute_thread_weaving_xp_cost(unlock, learner), 100)
 
     def test_out_of_path_unlock_applies_multiplier(self) -> None:
@@ -76,7 +76,7 @@ class ComputedXPCostTests(TestCase):
         unlock = ThreadWeavingUnlockFactory(xp_cost=100, out_of_path_multiplier=Decimal("2.0"))
         unlock.paths.add(whispers)
         learner = CharacterSheetFactory()
-        CharacterPathHistoryFactory(character=learner.character, path=steel)
+        CharacterPathHistoryFactory(character=learner, path=steel)
         self.assertEqual(compute_thread_weaving_xp_cost(unlock, learner), 200)
 
     def test_out_of_path_result_is_int(self) -> None:
@@ -96,8 +96,8 @@ class ComputedXPCostTests(TestCase):
         unlock = ThreadWeavingUnlockFactory(xp_cost=80, out_of_path_multiplier=Decimal("3.0"))
         unlock.paths.add(steel)
         learner = CharacterSheetFactory()
-        CharacterPathHistoryFactory(character=learner.character, path=steel)
-        CharacterPathHistoryFactory(character=learner.character, path=whispers)
+        CharacterPathHistoryFactory(character=learner, path=steel)
+        CharacterPathHistoryFactory(character=learner, path=whispers)
         self.assertEqual(compute_thread_weaving_xp_cost(unlock, learner), 80)
 
 
@@ -161,7 +161,7 @@ class AcceptThreadWeavingUnlockTests(TestCase):
         offer = ThreadWeavingTeachingOfferFactory(teacher=tenure, unlock=unlock, banked_ap=5)
 
         learner = CharacterSheetFactory()
-        CharacterPathHistoryFactory(character=learner.character, path=steel)
+        CharacterPathHistoryFactory(character=learner, path=steel)
         _seed_xp(learner, 500)
 
         result = accept_thread_weaving_unlock(learner, offer)

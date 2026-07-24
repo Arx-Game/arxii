@@ -64,7 +64,7 @@ class CharacterContent:
         for stat_name in _SOCIAL_STAT_NAMES:
             trait = StatTraitFactory(name=stat_name)
             CharacterTraitValue.objects.get_or_create(
-                character=character,
+                character=character.sheet_data,
                 trait=trait,
                 defaults={"value": _SOCIAL_TRAIT_VALUE},
             )
@@ -109,7 +109,7 @@ class CharacterContent:
         for stat_name in _CHALLENGE_STAT_NAMES:
             trait = StatTraitFactory(name=stat_name)
             CharacterTraitValue.objects.get_or_create(
-                character=character,
+                character=character.sheet_data,
                 trait=trait,
                 defaults={"value": _CHALLENGE_TRAIT_VALUE},
             )

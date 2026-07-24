@@ -212,7 +212,7 @@ class CharacterClassLevel(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="character_class_levels",
     )

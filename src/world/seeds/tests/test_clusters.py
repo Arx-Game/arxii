@@ -48,7 +48,6 @@ class TestClusterRegistry(TestCase):
                 "gm",
                 "kinship",
                 "houses",
-                "covenant_roles",
                 "propaganda",
                 "skills",
                 "project_resonance",

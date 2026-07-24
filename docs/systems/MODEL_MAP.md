@@ -1521,6 +1521,7 @@
   - true_profile -> character_sheets.Profile [OneToOne] (nullable)
   - active_persona -> scenes.Persona [FK] (nullable)
   - created_by -> accounts.AccountDB [FK] (nullable)
+  - durance_cohort -> progression.DuranceCohort [FK] (nullable)
 **Pointed to by:**
   - kinsperson <- roster.Kinsperson
   - deferred_kin <- roster.Kinsperson
@@ -1591,7 +1592,6 @@
   - story_progress <- stories.StoryProgress
   - alternate_selves <- forms.AlternateSelf
   - active_alternate_self <- forms.ActiveAlternateSelf
-  - known_styles <- forms.CharacterKnownStyle
   - distinctions <- distinctions.CharacterDistinction
   - distinction_other_entries <- distinctions.CharacterDistinctionOther
   - sheet_update_requests <- distinctions.SheetUpdateRequest
@@ -2349,7 +2349,17 @@
   - clash -> combat.Clash [FK] (nullable)
   - break_in_consequence_pool -> actions.ConsequencePool [FK] (nullable)
 
+### CombatMark
+**Fields:** encounter, participant, opponent, round_number, source_technique (nullable)
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - participant -> combat.CombatParticipant [FK]
+  - opponent -> combat.CombatOpponent [FK]
+  - source_technique -> magic.Technique [FK] (nullable, provenance)
+**Constraints:** unique per (participant, round_number)
+
 ### Service Functions
+- `declare_mark(participant: 'CombatParticipant', opponent: 'CombatOpponent', *, technique: 'Technique | None' = None) -> 'CombatMark' — Declare a directed, round-scoped combatant reference (the Fulmination mark, #2664). Validates encounter DECLARING status, participant ACTIVE, opponent ACTIVE and same-encounter. Idempotent per round.`
 - `accumulate_threat(encounter: 'CombatEncounter', opponent: 'CombatOpponent', participant: 'CombatParticipant', amount: 'int') -> 'None' — Increment the threat value for an (opponent, participant) pairing (#2020).`
 - `acknowledge_encounter_risk(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet') -> 'EncounterRiskAcknowledgement' — Idempotently record that a character acknowledged the encounter's risk (#777).`
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None) -> 'CombatOpponent' — Create a CombatOpponent. Three sources for the ObjectDB:`
@@ -3466,8 +3476,6 @@
   - drafts <- character_creation.CharacterDraft
 
 ### FormTrait
-**Foreign Keys:**
-  - composite_option -> forms.FormTraitOption [FK] (nullable)
 **Pointed to by:**
   - options <- forms.FormTraitOption
   - species_links <- forms.SpeciesFormTrait
@@ -3482,13 +3490,10 @@
 **Foreign Keys:**
   - trait -> forms.FormTrait [FK]
 **Pointed to by:**
-  - composite_for_traits <- forms.FormTrait
   - species_restrictions <- forms.SpeciesFormTrait
   - character_values <- forms.CharacterFormValue
   - natural_for_values <- forms.CharacterFormValue
   - temporary_changes <- forms.TemporaryFormChange
-  - component_of_values <- forms.FormValueComponent
-  - knowers <- forms.CharacterKnownStyle
   - item_template_effects <- items.ItemTemplateAppearanceEffect
   - styling_offers <- npc_services.StylingOfferDetails
 
@@ -3517,8 +3522,6 @@
   - trait -> forms.FormTrait [FK]
   - option -> forms.FormTraitOption [FK]
   - natural_option -> forms.FormTraitOption [FK] (nullable)
-**Pointed to by:**
-  - components <- forms.FormValueComponent
 
 ### CharacterFormState
 **Foreign Keys:**
@@ -3579,21 +3582,11 @@
   - to_option -> forms.FormTraitOption [FK] (nullable)
   - actor_persona -> scenes.Persona [FK] (nullable)
 
-### FormValueComponent
-**Foreign Keys:**
-  - value -> forms.CharacterFormValue [FK]
-  - option -> forms.FormTraitOption [FK]
-
-### CharacterKnownStyle
-**Foreign Keys:**
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - option -> forms.FormTraitOption [FK]
-
 ### Service Functions
 - `apply_disguise(character, disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE, concealment_level: 'ConcealmentLevel' = ConcealmentLevel.NONE, kit_instance=None) -> 'CharacterFormState' — Paint a fake overlay over the character's real form (#1110).`
 - `assume_alternate_self(sheet: 'CharacterSheet', alt: 'AlternateSelf', instance_value: 'float' = 1.0) -> 'ActiveAlternateSelf' — Assume an alternate self — swap in form/persona facets, create the`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' — Calculate weight in pounds from height and build.`
-- `change_appearance(character, trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None, blend: 'bool' = False) -> 'CharacterFormValue' — Cosmetically edit one trait of the character's real form (hair dye, restyle).`
+- `change_appearance(character, trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None) -> 'CharacterFormValue' — Cosmetically edit one trait of the character's real form (hair dye, restyle).`
 - `create_true_form(character, selections: 'dict[FormTrait, FormTraitOption]') -> 'CharacterForm' — Create the true form for a character during character creation.`
 - `get_apparent_build(character) -> 'Build | None' — Get the apparent build for a character.`
 - `get_apparent_form(character) -> 'dict[FormTrait, FormTraitOption]' — Get the apparent form for a character, combining active form with temporaries.`
@@ -3603,8 +3596,6 @@
 - `get_cg_height_bands() -> 'QuerySet[HeightBand]' — Get height bands available in character creation.`
 - `get_height_band(height_inches: 'int') -> 'HeightBand | None' — Get the HeightBand for a given height in inches.`
 - `get_presented_appearance(character, *, pierced: 'bool' = False) -> 'list[PresentedTrait]' — Compose what a viewer sees: the presented form's normalized traits overlaid with the`
-- `knows_style(character_sheet, option: 'FormTraitOption') -> 'bool' — True when the sheet may produce ``option`` (ungated options always may).`
-- `learn_style(character_sheet, option: 'FormTraitOption', *, taught_by_label: 'str' = '') -> 'None' — Grant knowledge of an exotic option — 'learned by having it done' (#2632).`
 - `remove_disguise(character) -> 'None' — Drop the active fake overlay — the real form presents again (#1110). Idempotent.`
 - `reset_trait_to_natural(character, trait: 'FormTrait', *, persona: 'Persona', actor_persona: 'Persona | None' = None, note: 'str' = '') -> 'CharacterFormValue' — Restore one trait to its natural (origin) value — "wash out the dye.`
 - `revert_alternate_self(sheet: 'CharacterSheet') -> 'None' — Revert the active alternate self — restore return anchors, delete the`
@@ -4299,7 +4290,7 @@
 - `record_mantle_clearances(sheet: 'CharacterSheet', mantle: 'Mantle') -> 'list[MantleLevelClearance]' — Idempotently record codex-gated mantle clearances for ``sheet``.`
 - `remove_facet_from_item(*, item_facet: 'ItemFacet') -> 'None' — Remove a facet attachment and invalidate wearers' handler caches.`
 - `unequip_item(*, equipped_item: 'EquippedItem') -> 'None' — Remove an EquippedItem and invalidate the character's handler cache.`
-- `use_item(*, item_instance: 'ItemInstance', user: 'ObjectDB', target: 'ObjectDB | None' = None, descriptor: 'str | None' = None, option_id: 'int | None' = None, blend: 'bool' = False) -> 'UseItemResult' — Use an item with an on-use pool: apply its effects (deterministic when the`
+- `use_item(*, item_instance: 'ItemInstance', user: 'ObjectDB', target: 'ObjectDB | None' = None, descriptor: 'str | None' = None, option_id: 'int | None' = None) -> 'UseItemResult' — Use an item with an on-use pool: apply its effects (deterministic when the`
 - `visible_worn_items_for(character: 'ObjectDB', observer: 'object | None' = None) -> 'list[VisibleWornItem]' — Return ``character``'s worn items visible to ``observer``.`
 
 
@@ -6164,6 +6155,7 @@
   - functionaries <- npc_services.Functionary
   - offers <- npc_services.NPCServiceOffer
   - role_cooldowns <- npc_services.NPCRoleCooldown
+  - reaction_lines <- npc_services.NPCReactionLine
   - permits_issued <- buildings.BuildingPermitDetails
 
 ### Functionary
@@ -6174,6 +6166,7 @@
   - kinspeople <- roster.Kinsperson
   - promotions <- assets.NPCAsset
   - assignments <- npc_services.NPCAssignment
+  - reaction_lines <- npc_services.NPCReactionLine
 
 ### NPCServiceOffer
 **Foreign Keys:**
@@ -6283,6 +6276,11 @@
   - persona -> scenes.Persona [FK]
   - era -> stories.Era [FK] (nullable)
 
+### NPCReactionLine
+**Foreign Keys:**
+  - role -> npc_services.NPCRole [FK]
+  - functionary -> npc_services.Functionary [FK] (nullable)
+
 ### Service Functions
 - `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' — Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
 - `available_offers(session: 'InteractionSession', *, pool_count: 'int | None' = None) -> 'list[NPCServiceOffer]' — Return offers the PC can currently see/select, in stable order.`
@@ -6376,6 +6374,20 @@
 ### CharacterXPTransaction
 **Foreign Keys:**
   - character -> objects.ObjectDB [FK]
+
+### DuranceCohort
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - enrollment_scene -> scenes.Scene [FK] (nullable)
+**Pointed to by:**
+  - members <- character_sheets.CharacterSheet
+  - enrollments <- progression.CohortEnrollment
+
+### CohortEnrollment
+**Foreign Keys:**
+  - cohort -> progression.DuranceCohort [FK]
+  - persona -> scenes.Persona [FK]
+  - enrollment_scene -> scenes.Scene [FK] (nullable)
 
 ### WeeklySocialEngagement
 **Foreign Keys:**
@@ -7202,6 +7214,8 @@
   - participants -> accounts.AccountDB [M2M]
 **Pointed to by:**
   - petitions <- player_submissions.Petition
+  - durance_cohorts_opened_here <- progression.DuranceCohort
+  - cohort_enrollments_here <- progression.CohortEnrollment
   - developmenttransaction_set <- progression.DevelopmentTransaction
   - entry_flourish_offers <- magic.PendingEntryFlourishOffer
   - triggered_alterations <- magic.PendingAlteration
@@ -7270,6 +7284,7 @@
   - reports_submitted <- player_submissions.PlayerReport
   - reports_against <- player_submissions.PlayerReport
   - witnessed_advancements <- progression.ClassLevelAdvancement
+  - cohort_enrollments <- progression.CohortEnrollment
   - targeted_for_random_scene <- progression.RandomSceneTarget
   - random_scene_completed_by <- progression.RandomSceneCompletion
   - poseendorsement_set <- magic.PoseEndorsement
@@ -7873,6 +7888,7 @@
   - society -> societies.Society [FK] (nullable)
   - org_type -> societies.OrganizationType [FK]
 **Pointed to by:**
+  - durance_cohorts <- progression.DuranceCohort
   - ritualsessionreference_set <- magic.RitualSessionReference
   - anchored_threads <- magic.Thread
   - ranks <- societies.OrganizationRank

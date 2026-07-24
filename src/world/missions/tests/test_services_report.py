@@ -154,7 +154,7 @@ class ReportMissionTests(TestCase):
         CheckTypeFactory(name="Persuasion")
         if has_skill:
             skill = SkillFactory(trait=SkillTraitFactory(name="Persuasion"))
-            CharacterSkillValueFactory(character=self.reporter, skill=skill, value=30)
+            CharacterSkillValueFactory(character=self.reporter.sheet_data, skill=skill, value=30)
 
     def test_embellished_requires_persuasion(self) -> None:
         self._seed_persuasion(has_skill=False)

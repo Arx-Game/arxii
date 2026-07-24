@@ -298,7 +298,7 @@ def provision_player_anima_ritual(  # noqa: PLR0913
     #    skill value.
     if skill is None:
         skill_value = (
-            CharacterSkillValue.objects.filter(character=character).order_by("-value").first()
+            CharacterSkillValue.objects.filter(character_id=character.pk).order_by("-value").first()
         )
         if skill_value is not None:
             skill = skill_value.skill

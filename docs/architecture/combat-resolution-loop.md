@@ -1434,3 +1434,89 @@ never selected actions in live play. `resolve_round`'s new fallback (see the ord
 change above) closes this conservatively — it only fires when the round has ZERO
 selection of either shape yet, so any explicit prior selection (staff, the simulation
 harness, tests that call `select_npc_actions` themselves) is left untouched.
+
+## Implementation addendum — consequence events in flight: Sent Flying (#2638)
+
+**Status: BUILT** (ADR-0162 — clones #1228's plummet pattern: marker + reactable
+window + explicit resolution, generalized as the template for future "consequence
+event in flight" content)
+
+### `resolve_round` ordering change
+
+One new step lands after the existing round-tick pass, before status transitions:
+
+```
+_resolve_actions(...)  # PC/NPC loop calls _trigger_sent_flying on a landed sends_flying hit
+_process_combo_outcomes(...)
+assess_break_bar(...)
+_resolve_declared_challenges(...)
+_resolve_clashes(...)
+tick_round_for_targets(end_targets, timing="end")   # generic duration countdown — see below
+_resolve_sent_flying_markers(enc)                    # NEW — unanswered markers land now
+_check_boss_transitions(...)
+# ...encounter completion / status transitions...
+```
+
+`_resolve_sent_flying_markers` runs AFTER `tick_round_for_targets` deliberately: the Sent
+Flying `ConditionTemplate` is seeded `PERMANENT` (not a literal `ROUNDS`/`1`, despite the
+design doc's "1-round marker" shorthand) precisely so the generic duration countdown
+never races it — see ADR-0162 and `world.combat.sent_flying_content`'s module docstring.
+
+### Trigger → catch → explicit-resolution flow
+
+```
+_resolve_npc_action_on_target (PC resolution loop, either the defense-check or
+                                flat-damage branch)
+  dmg_result = apply_damage_to_participant(...) / resolve_npc_attack(...).damage_result
+  npc_action.threat_entry.sends_flying AND dmg_result.damage_dealt > 0?
+    yes → _trigger_sent_flying(target_participant, npc_action, dmg_result.damage_dealt)
+            → apply_condition(character, Sent Flying template)
+            → participant.sent_flying_damage = damage; save()
+            → _broadcast_sent_flying_launch          # "X is sent FLYING by the blow!"
+            → catcher = _try_catch_sent_flying(participant)
+                 armed INTERPOSE this round (participant or guard-anyone) found,
+                 AND interposer.reactions_used < REACTIONS_PER_ROUND?
+                   yes → interposer.reactions_used += 1; save()
+                         return interposer's character            # "fires" — budget only, no roll
+                   no  → return None
+            → catcher is not None?
+                 yes → _clear_sent_flying_marker (remove_condition + carrier=0)
+                       _broadcast_sent_flying_catch     # names the catcher (+ the wind-up's
+                                                         # caller, if matured_from_called_out_windup)
+                 no  → marker stays, silent, for _resolve_sent_flying_markers
+
+# ...zero or more rounds pass would be possible in principle, but PERMANENT + only
+# _resolve_sent_flying_markers ever removing it means it survives exactly to the end
+# of THIS round if uncaught...
+
+_resolve_sent_flying_markers (end of resolve_round, see ordering change above)
+  for each ACTIVE participant with sent_flying_damage > 0:
+    still carries the ConditionInstance? (defensive — a stale carrier is just reset)
+      no  → carrier = 0; save(); continue
+    remove the marker; carrier = 0; save()
+    victim's room has a CHASM Position?
+      yes → force_move_to_position(character, chasm); maybe_emit_fall(character, chasm)
+            # hands off entirely to the EXISTING FELL → begin_plummet machinery (#1228)
+      no  → impact = floor(sent_flying_damage * SENT_FLYING_IMPACT_FRACTION)  # 0.5
+            apply_damage_to_participant(participant, impact, damage_type=Physical)
+            process_damage_consequences(...)   # standard path — NO extra narration
+                                                # (unanswered = unremarked)
+```
+
+`_try_catch_sent_flying` reuses `_try_interpose`'s query shape but never calls
+`dispatch_interpose` — the mundane/technique challenge chain grades HOW MUCH of a
+landing hit's *amount* a block reduces, which has no meaning for a binary mid-air
+rescue. "Fires" means the same thing `_dispatch_interpose_action`'s docstring already
+establishes for the mundane interpose path: an attempt that clears
+`REACTIONS_PER_ROUND`, independent of any roll. `ABSORPTION_CAP_PER_MOMENT` is not
+consulted — only the first eligible guardian is ever queried (mirrors `_try_interpose`'s
+own v1 scope), so there is never a second attempt on the same moment to cap.
+
+### Bug fix folded in: `focused_ally_target__in=[participant, None]`
+
+Writing `_try_catch_sent_flying`'s query surfaced that `_try_interpose`'s identical
+pattern silently never matched a guard-anyone (`focused_ally_target=None`) declaration —
+Django compiles `field__in=[x, None]` to a bare `IN (x)`, dropping the `None` entirely
+rather than adding an `OR field IS NULL` branch. Both queries now use
+`Q(focused_ally_target=participant) | Q(focused_ally_target__isnull=True)`. See
+ADR-0162.

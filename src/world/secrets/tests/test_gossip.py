@@ -65,7 +65,7 @@ class GossipActionTests(TestCase):
             name="Gossip", parent_skill__trait__name="Persuasion"
         )
         CharacterSpecializationValueFactory(
-            character=cls.character, specialization=cls.gossip_spec, value=10
+            character=cls.character.sheet_data, specialization=cls.gossip_spec, value=10
         )
         # A self-secret (you may always spread gossip about yourself).
         cls.secret = SecretFactory(subject_sheet=cls.sheet, level=SecretLevel.UNCOMMON_KNOWLEDGE)
@@ -115,7 +115,7 @@ class GossipActionTests(TestCase):
         seeker_sheet = CharacterSheetFactory()
         seeker = seeker_sheet.character
         CharacterSpecializationValueFactory(
-            character=seeker, specialization=self.gossip_spec, value=10
+            character=seeker_sheet, specialization=self.gossip_spec, value=10
         )
         entry = RosterEntryFactory(character_sheet=seeker_sheet)
         target = CharacterSheetFactory()
@@ -159,7 +159,7 @@ class SmearGossipTests(TestCase):
             name="Gossip", parent_skill__trait__name="Persuasion"
         )
         CharacterSpecializationValueFactory(
-            character=cls.smearer, specialization=gossip_spec, value=10
+            character=cls.smearer_sheet, specialization=gossip_spec, value=10
         )
         cls.target_sheet = CharacterSheetFactory()  # tenure-less — always frameable
 

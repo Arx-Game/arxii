@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import SECURITY_CHECK_TYPE_NAMES, SecurityCheckKind
 from world.checks.security_services import resolve_security_check
 from world.checks.test_helpers import force_check_outcome
@@ -46,7 +46,7 @@ class ResolveSecurityCheckTests(TestCase):
         seed_check_resolution_tables()
         seed_stealth_check_content()
         seed_security_check_content()
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
 
     def setUp(self):
         Trait.flush_instance_cache()
@@ -114,7 +114,9 @@ class ResolveSecurityCheckTests(TestCase):
         success = CheckOutcome.objects.filter(success_level__gt=0).first()
         # Give the character stats so perform_check's breakdown is non-zero.
         agility = Trait.objects.get(name="agility")
-        CharacterTraitValue.objects.create(character=self.character, trait=agility, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=agility, value=30
+        )
         with force_check_outcome(success):
             base = resolve_security_check(
                 SecurityCheckKind.SNEAK, self.character, target_difficulty=0
@@ -146,9 +148,13 @@ class ResolveSecurityCheckTests(TestCase):
     def test_owned_lockpicking_spec_contributes(self):
         """Owning the Lockpicking specialization adds to specialization_points."""
         wits = Trait.objects.get(name="wits")
-        CharacterTraitValue.objects.create(character=self.character, trait=wits, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=wits, value=30
+        )
         skulduggery = Trait.objects.get(name="Skulduggery")
-        CharacterTraitValue.objects.create(character=self.character, trait=skulduggery, value=30)
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=skulduggery, value=30
+        )
 
         success = CheckOutcome.objects.filter(success_level__gt=0).first()
         with force_check_outcome(success):
@@ -159,7 +165,9 @@ class ResolveSecurityCheckTests(TestCase):
         spec = Specialization.objects.get(
             name="Lockpicking", parent_skill__trait__name="Skulduggery"
         )
-        CharacterSpecializationValueFactory(character=self.character, specialization=spec, value=30)
+        CharacterSpecializationValueFactory(
+            character=self.character.sheet_data, specialization=spec, value=30
+        )
         with force_check_outcome(success):
             with_spec = resolve_security_check(
                 SecurityCheckKind.LOCKPICK, self.character, target_difficulty=0

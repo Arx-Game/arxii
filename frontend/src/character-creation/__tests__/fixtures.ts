@@ -564,6 +564,8 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
     name: `Codex Entry ${id}`,
     summary: 'A lore entry.',
     is_public: true,
+    is_featured: false,
+    featured_order: null,
     subject: 1,
     subject_name: 'Test Subject',
     subject_path: [],
@@ -586,6 +588,7 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
 export const mockCGExplanations: Record<string, string> = {
   origin_heading: 'Choose Your Origin',
   origin_intro: "Select the city or region where your character's story begins.",
+  origin_lore_intro: 'You are one of the Gifted.',
   heritage_heading: 'Heritage',
   heritage_intro: "Define your character's beginnings, species, and identity.",
   heritage_beginnings_heading: 'Beginnings',

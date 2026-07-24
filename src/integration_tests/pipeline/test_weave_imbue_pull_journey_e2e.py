@@ -93,7 +93,7 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
         # Trait value: anchor cap for the TRAIT thread; controls how high the thread can level.
         # Value=50 gives anchor_cap=50 so imbuing 5 dp from level 0 can advance 5 levels.
         CharacterTraitValueFactory(
-            character=cls.sheet.character,
+            character=cls.sheet,
             trait=cls.trait,
             value=50,
         )

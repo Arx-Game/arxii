@@ -71,7 +71,7 @@ class CraftedFacetPowersFacetPullTest(TestCase):
 
         # Give the crafter the Enchanting trait so perform_check has something to roll.
         CharacterTraitValueFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             trait=Trait.objects.get(name="Enchanting"),
             value=50,
         )

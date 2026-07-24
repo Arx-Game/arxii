@@ -197,7 +197,7 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
         """Return all allocations for the active character plus remaining budget."""
         puppet = self._active_puppet(request)
         allocations = (
-            TrainingAllocation.objects.filter(character=puppet)
+            TrainingAllocation.objects.filter(character_id=puppet.pk)
             .select_related(
                 "skill__trait",
                 "specialization__parent_skill__trait",

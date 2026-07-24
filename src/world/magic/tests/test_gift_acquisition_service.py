@@ -44,7 +44,7 @@ class ComputeGiftUnlockXpCostTest(TestCase):
 
         path = PathFactory()
         self.unlock.paths.add(path)
-        CharacterPathHistoryFactory(character=self.sheet.character, path=path)
+        CharacterPathHistoryFactory(character=self.sheet, path=path)
         cost = compute_gift_unlock_xp_cost(self.unlock, self.sheet)
         self.assertEqual(cost, 10)  # in-Path, base cost
 
@@ -388,7 +388,7 @@ class AcceptTechniqueOfferTest(TestCase):
         mock_gate.return_value = None
         allowed_path = PathFactory()
         other_path = PathFactory()
-        CharacterPathHistoryFactory(character=self.sheet.character, path=other_path)
+        CharacterPathHistoryFactory(character=self.sheet, path=other_path)
         style = TechniqueStyleFactory(allowed_paths=[allowed_path])
         from world.magic.factories import TechniqueFactory
         from world.magic.services.gift_acquisition import accept_technique_offer

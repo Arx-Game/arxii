@@ -4,7 +4,6 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import CapabilityTypeFactory
 from world.magic.factories import (
@@ -84,7 +83,7 @@ class TraitSourceTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDBFactory(db_key="TraitTestChar")
+        cls.character = CharacterSheetFactory().character
         cls.capability = CapabilityTypeFactory(name="physical_force")
         cls.trait = Trait.objects.create(
             name="test_strength_src",
@@ -98,7 +97,7 @@ class TraitSourceTests(TestCase):
             trait_multiplier=Decimal("1.00"),
         )
         CharacterTraitValue.objects.create(
-            character=cls.character,
+            character=cls.character.sheet_data,
             trait=cls.trait,
             value=20,
         )
@@ -117,9 +116,10 @@ class TraitSourceTests(TestCase):
 
     def test_zero_trait_value_excluded(self) -> None:
         """Trait with value 0 produces no source."""
-        char2 = ObjectDBFactory(db_key="NoTraitChar")
+        sheet2 = CharacterSheetFactory()
+        char2 = sheet2.character
         CharacterTraitValue.objects.create(
-            character=char2,
+            character=sheet2,
             trait=self.trait,
             value=0,
         )
@@ -168,7 +168,7 @@ class MultipleSameCapabilityTests(TestCase):
             trait_multiplier=Decimal("1.00"),
         )
         CharacterTraitValue.objects.create(
-            character=cls.character,
+            character=cls.character.sheet_data,
             trait=cls.trait,
             value=10,
         )

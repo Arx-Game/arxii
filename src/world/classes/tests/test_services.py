@@ -88,13 +88,11 @@ class SetPrimaryClassLevelTests(TestCase):
         # Switch to class B as primary.
         ccl_b = set_primary_class_level(self.character, klass_b, 5)
 
-        primary_rows = CharacterClassLevel.objects.filter(character=self.character, is_primary=True)
+        primary_rows = CharacterClassLevel.objects.filter(character=self.sheet, is_primary=True)
         self.assertEqual(primary_rows.count(), 1)
         self.assertEqual(primary_rows.first().character_class, klass_b)
         self.assertTrue(ccl_b.is_primary)
 
         # Class A must now be demoted.
-        ccl_a = CharacterClassLevel.objects.get(
-            character=self.character, character_class=self.klass
-        )
+        ccl_a = CharacterClassLevel.objects.get(character=self.sheet, character_class=self.klass)
         self.assertFalse(ccl_a.is_primary)

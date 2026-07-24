@@ -48,7 +48,7 @@ class CraftingApiTestCase(TestCase):
         # Give the owner an Enchanting trait value in the mid-tier band (>=40, <80 → Fine cap).
         self.enchanting_trait = Trait.objects.get(name="Enchanting")
         CharacterTraitValueFactory(
-            character=self.owner_char,
+            character=self.owner_sheet,
             trait=self.enchanting_trait,
             value=50,  # band: Fine cap (min_skill=40 → Fine tier)
         )
