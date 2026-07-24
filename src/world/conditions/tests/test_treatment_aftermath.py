@@ -451,6 +451,28 @@ class TreatmentEngagementGateTests(TestCase):
                 target_effect=self.target_effect,
             )
 
+    @patch("world.checks.services.perform_check")
+    def test_skip_engagement_gate_allows_engaged_treatment(self, mock_perform_check):
+        """skip_engagement_gate=True bypasses the HelperEngagedForTreatment gate (#2668).
+
+        Magical treatment (technique-cast path) must work in combat. Both
+        helper and target are engaged, but with skip_engagement_gate=True the
+        treatment fires instead of raising.
+        """
+        mock_perform_check.return_value = _make_check_result(success_level=2)
+        CharacterEngagementFactory(character=self.helper_sheet.character)
+        CharacterEngagementFactory(character=self.target_sheet.character)
+
+        outcome = perform_treatment(
+            helper_sheet=self.helper_sheet,
+            target_sheet=self.target_sheet,
+            scene=self.scene,
+            treatment=self.treatment,
+            target_effect=self.target_effect,
+            skip_engagement_gate=True,
+        )
+        self.assertTrue(outcome.effect_applied)
+
 
 # =============================================================================
 # Gate 6 — Duplicate gate

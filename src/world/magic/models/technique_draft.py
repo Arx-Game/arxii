@@ -19,6 +19,7 @@ from world.magic.models.techniques import (
     AbstractAppliedCondition,
     AbstractCapabilityGrant,
     AbstractDamageProfile,
+    ConditionTargetKind,
 )
 
 
@@ -215,3 +216,36 @@ class TechniqueDraftRemovedCondition(AbstractAppliedCondition):
 
     def __str__(self) -> str:
         return f"{self.draft} → removes {self.condition} ({self.target_kind})"
+
+
+class TechniqueDraftTreatment(SharedMemoryModel):
+    """A treatment payload row belonging to a TechniqueDraft.
+
+    Mirrors ``TechniqueTreatment`` for the draft workbench. Points at a
+    TreatmentTemplate; on author, the technique-cast path calls
+    perform_treatment with the caster as helper.
+    """
+
+    draft = models.ForeignKey(
+        TechniqueDraft,
+        on_delete=models.CASCADE,
+        related_name="treatments",
+    )
+    treatment_template = models.ForeignKey(
+        "conditions.TreatmentTemplate",
+        on_delete=models.PROTECT,
+        related_name="draft_technique_payloads",
+    )
+    target_kind = models.CharField(
+        max_length=16,
+        choices=ConditionTargetKind.choices,
+        default=ConditionTargetKind.ALLY,
+    )
+    minimum_success_level = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        verbose_name = "Technique Draft Treatment"
+        verbose_name_plural = "Technique Draft Treatments"
+
+    def __str__(self) -> str:
+        return f"{self.draft} → treats {self.treatment_template.name} ({self.target_kind})"

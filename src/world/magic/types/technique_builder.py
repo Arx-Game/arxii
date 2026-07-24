@@ -45,6 +45,20 @@ class RemovedConditionSpec:
 
 
 @dataclass(frozen=True)
+class TreatmentSpec:
+    """A treatment payload row for technique authoring (#2668).
+
+    Points at a TreatmentTemplate; the technique-cast path calls perform_treatment
+    with the caster as helper. target_kind defaults to ALLY (healing is
+    ally-directed); minimum_success_level defaults to 1.
+    """
+
+    treatment_template_id: int
+    target_kind: str = "ally"
+    minimum_success_level: int = 1
+
+
+@dataclass(frozen=True)
 class TechniqueDesignInput:
     name: str
     description: str
@@ -62,6 +76,7 @@ class TechniqueDesignInput:
     damage_profiles: tuple[DamageProfileSpec, ...] = ()
     applied_conditions: tuple[AppliedConditionSpec, ...] = ()
     removed_conditions: tuple[RemovedConditionSpec, ...] = ()
+    treatments: tuple[TreatmentSpec, ...] = ()
     consequence_pool_id: int | None = None
 
 

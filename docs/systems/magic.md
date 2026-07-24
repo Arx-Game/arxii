@@ -1655,6 +1655,46 @@ Sanctum (Aligned)") so the network is reachable, not just cataloged. Idempotent 
 | `AnimaRitualPerformance` | Historical record of ritual performances |
 | `Reincarnation` | Tracks character reincarnation events |
 
+### Technique Treatment (#2668) [BUILT & WIRED]
+
+A technique can perform a **bounded mend** — routing through `perform_treatment`'s
+double-bounded machinery (per-healer-once-per-wound + never-to-full fraction,
+ADR-0156) rather than creating a new healing path. This makes the Lifeward healer
+fantasy castable magic, not just the mundane `treat_condition` scene action.
+
+**Model:** `TechniqueTreatment` (`models/techniques.py`) — payload row FK linking a
+`Technique` to a `conditions.TreatmentTemplate`. Fields: `target_kind` (default
+ALLY), `minimum_success_level` (default 1). UniqueConstraint on
+`(technique, treatment_template)`. Mirrors the `TechniqueAppliedCondition` /
+`TechniqueRemovedCondition` pattern.
+
+**Service:** `apply_technique_treatments` (`services/condition_application.py`) —
+sibling to `apply_technique_conditions` / `remove_technique_conditions`. For each
+row passing the SL gate, finds the matching `ConditionInstance` (or
+`PendingAlteration`) on each resolved target via `_condition_matches_treatment`,
+resolves bond threads when `requires_bond`, and calls `perform_treatment` with
+`skip_engagement_gate=True`. Treatment exceptions are caught — a treatment no-op
+does not abort the cast.
+
+**Cast pipeline ordering:** `apply_technique_treatments` fires AFTER
+`apply_technique_conditions` + `apply_signature_bonus_conditions` and BEFORE
+`remove_technique_conditions`. This ordering is critical: the treatment must fire
+while the wound condition is still present. A technique author who wants "cleanse
+a wound" (remove suffering + mend HP) adds both a `TechniqueRemovedCondition` and
+a `TechniqueTreatment` to the same technique — the treatment mends HP first, then
+the removal strips the condition.
+
+**Engagement gate bypass:** `perform_treatment` gains `skip_engagement_gate=False`
+(default). The technique-cast path passes `True` — magical treatment works in
+combat. The mundane `treat_condition` scene action is unchanged (engagement-gated).
+All other bounds (per-healer-once, never-to-full fraction, costs, check roll,
+`TreatmentAttempt` record) are preserved. See ADR-0157.
+
+**Budget builder:** `TreatmentSpec` (`types/technique_builder.py`) priced at flat
+`payload_base_cost` (same as removed conditions). `build_technique` creates
+`TechniqueTreatment` rows. Draft workbench: `TechniqueDraftTreatment` +
+`add_draft_treatment` / `remove_draft_treatment` / `draft_to_design` conversion.
+
 ### Effect Palette (#1584) [BUILT & PROVEN]
 
 Nine castable effects seeded idempotently by `ensure_effect_palette_content()`

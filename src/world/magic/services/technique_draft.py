@@ -21,6 +21,7 @@ from world.magic.models import (
     TechniqueDraftCapabilityGrant,
     TechniqueDraftDamageProfile,
     TechniqueDraftRemovedCondition,
+    TechniqueDraftTreatment,
 )
 from world.magic.services.technique_builder import get_technique_tier_budget
 from world.magic.types.technique_builder import (
@@ -29,6 +30,7 @@ from world.magic.types.technique_builder import (
     DamageProfileSpec,
     RemovedConditionSpec,
     TechniqueDesignInput,
+    TreatmentSpec,
 )
 
 # =============================================================================
@@ -199,6 +201,27 @@ def remove_draft_removed_condition(row_id: int) -> None:
     TechniqueDraftRemovedCondition.objects.filter(pk=row_id).delete()
 
 
+def add_draft_treatment(
+    draft: TechniqueDraft,
+    *,
+    treatment_template,
+    target_kind: str = "ally",
+    minimum_success_level: int = 1,
+) -> TechniqueDraftTreatment:
+    """Append a treatment payload row to the draft and return it."""
+    return TechniqueDraftTreatment.objects.create(
+        draft=draft,
+        treatment_template=treatment_template,
+        target_kind=target_kind,
+        minimum_success_level=minimum_success_level,
+    )
+
+
+def remove_draft_treatment(row_id: int) -> None:
+    """Delete a TechniqueDraftTreatment row by primary key."""
+    TechniqueDraftTreatment.objects.filter(pk=row_id).delete()
+
+
 # =============================================================================
 # draft → design conversion
 # =============================================================================
@@ -277,6 +300,14 @@ def draft_to_design(draft: TechniqueDraft) -> TechniqueDesignInput:
                 remove_all_stacks=row.remove_all_stacks,
             )
             for row in draft.removed_conditions.all()
+        ),
+        treatments=tuple(
+            TreatmentSpec(
+                treatment_template_id=row.treatment_template_id,
+                target_kind=row.target_kind,
+                minimum_success_level=row.minimum_success_level,
+            )
+            for row in draft.treatments.all()
         ),
         consequence_pool_id=draft.consequence_pool_id,
     )

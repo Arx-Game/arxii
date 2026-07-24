@@ -36,6 +36,7 @@ from world.magic.models.techniques import CharacterTechnique, ConditionTargetKin
 from world.magic.narration import render_cast_outcome_narration
 from world.magic.services.condition_application import (
     apply_technique_conditions,
+    apply_technique_treatments,
     remove_technique_conditions,
 )
 from world.magic.services.hostility import is_technique_hostile
@@ -374,6 +375,17 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         eff_intensity=eff_intensity,
         targets_by_kind=targets_by_kind,
         source_character=character,
+    )
+    # Technique treatment (#2668): perform bounded-mend treatments on resolved
+    # targets. Fires BEFORE remove_technique_conditions so the wound condition
+    # is still present when the treatment looks for it. No-op when the technique
+    # has no treatment rows.
+    apply_technique_treatments(
+        technique=technique,
+        success_level=success_level,
+        targets_by_kind=targets_by_kind,
+        source_character=character,
+        scene=scene,
     )
     # Dispel/cleanse sibling (#1585): strip technique-authored conditions from the
     # same resolved targets. Independent of the apply call — a technique may apply

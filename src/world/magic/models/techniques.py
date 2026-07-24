@@ -1155,6 +1155,59 @@ class TechniqueRemovedCondition(NaturalKeyMixin, AbstractAppliedCondition):
                 raise ValidationError({field_name: message})
 
 
+class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
+    """Authored row binding a Technique to a TreatmentTemplate it performs on cast.
+
+    When the technique is cast, each row whose minimum_success_level is met
+    attempts to perform the linked TreatmentTemplate on each resolved target
+    that carries the treatment's target condition. The treatment runs its own
+    internal check roll and enforces all bounded-mend gates (per-healer-once,
+    never-to-full fraction, costs, TreatmentAttempt record) via perform_treatment.
+
+    The engagement gate is skipped for technique-cast treatments (magical
+    treatment works in combat); the scene gate still applies.
+    """
+
+    technique = models.ForeignKey(
+        Technique,
+        on_delete=models.CASCADE,
+        related_name="treatments",
+    )
+    treatment_template = models.ForeignKey(
+        "conditions.TreatmentTemplate",
+        on_delete=models.PROTECT,
+        related_name="technique_payloads",
+    )
+    target_kind = models.CharField(
+        max_length=16,
+        choices=ConditionTargetKind.choices,
+        default=ConditionTargetKind.ALLY,
+    )
+    minimum_success_level = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum success level required to perform this treatment.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["technique", "treatment_template"]
+        dependencies = [_TECHNIQUE_MODEL, "conditions.TreatmentTemplate"]
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["technique", "treatment_template"],
+                name="unique_treatment_per_technique",
+            ),
+        ]
+        verbose_name = "Technique Treatment"
+        verbose_name_plural = "Technique Treatments"
+
+    def __str__(self) -> str:
+        return f"{self.technique.name} → treats {self.treatment_template.name} ({self.target_kind})"
+
+
 class TechniqueDamageProfile(NaturalKeyMixin, AbstractDamageProfile):
     """One damage component a technique deals when used in combat.
 
