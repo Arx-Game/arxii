@@ -8,6 +8,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.descriptors import ReverseOneToOneOrNone
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.areas.positioning.constants import PositionKind, RampartCrackState, RampartSignature
 
 _DAMAGE_TYPE_MODEL = "conditions.DamageType"
@@ -500,7 +501,7 @@ class BlueprintPositionShelter(SharedMemoryModel):
         )
 
 
-class RampartElementProfile(SharedMemoryModel):
+class RampartElementProfile(NaturalKeyMixin, SharedMemoryModel):
     """A reusable element (Stone/Wind/Fire/Thorn/...) a Rampart is raised from (#2209).
 
     Authored content: one row per element, shared across every Rampart cast from
@@ -511,6 +512,12 @@ class RampartElementProfile(SharedMemoryModel):
     condition). Per-damage-type resist/vulnerability lives on the related
     ``RampartElementResistance`` rows.
     """
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+        dependencies = ["conditions.DamageType", "conditions.ConditionTemplate"]
+
+    objects = NaturalKeyManager()
 
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
@@ -551,12 +558,18 @@ class RampartElementProfile(SharedMemoryModel):
         return self.name
 
 
-class RampartElementResistance(SharedMemoryModel):
+class RampartElementResistance(NaturalKeyMixin, SharedMemoryModel):
     """A per-damage-type resist/vulnerability row for a RampartElementProfile (#2209).
 
     ``value`` is signed: positive resists (shrinks incoming chip damage),
     negative is a vulnerability (grows it). Absent damage types resist 0.
     """
+
+    class NaturalKeyConfig:
+        fields = ["profile", "damage_type"]
+        dependencies = ["areas.RampartElementProfile", "conditions.DamageType"]
+
+    objects = NaturalKeyManager()
 
     profile = models.ForeignKey(
         RampartElementProfile, on_delete=models.CASCADE, related_name="resistances"

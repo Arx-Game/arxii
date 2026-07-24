@@ -12,6 +12,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.achievements.models import DiscoverableContent
 
 if TYPE_CHECKING:
@@ -253,8 +254,13 @@ class CombatEncounter(AbstractRound):
         ).exists()
 
 
-class ThreatPool(SharedMemoryModel):
+class ThreatPool(NaturalKeyMixin, SharedMemoryModel):
     """Named collection of NPC actions."""
+
+    class NaturalKeyConfig:
+        fields = ["pk"]
+
+    objects = NaturalKeyManager()
 
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
@@ -263,8 +269,14 @@ class ThreatPool(SharedMemoryModel):
         return self.name
 
 
-class ThreatPoolEntry(SharedMemoryModel):
+class ThreatPoolEntry(NaturalKeyMixin, SharedMemoryModel):
     """One possible action an NPC can take."""
+
+    class NaturalKeyConfig:
+        fields = ["pool", "name"]
+        dependencies = ["combat.ThreatPool"]
+
+    objects = NaturalKeyManager()
 
     pool = models.ForeignKey(
         ThreatPool,
