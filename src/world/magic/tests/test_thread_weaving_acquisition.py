@@ -121,7 +121,7 @@ class AcceptThreadWeavingUnlockTests(TestCase):
     ) -> object:
         """Build a ThreadWeavingTeachingOffer with the teacher having enough banked AP."""
         tenure = RosterTenureFactory()
-        ActionPointPoolFactory(character=tenure.character, current=0, maximum=200, banked=banked_ap)
+        ActionPointPoolFactory(character=tenure, current=0, maximum=200, banked=banked_ap)
         unlock = ThreadWeavingUnlockFactory(xp_cost=xp_cost)
         return ThreadWeavingTeachingOfferFactory(teacher=tenure, unlock=unlock, banked_ap=banked_ap)
 
@@ -157,7 +157,7 @@ class AcceptThreadWeavingUnlockTests(TestCase):
         unlock = ThreadWeavingUnlockFactory(xp_cost=100, out_of_path_multiplier=Decimal("2.0"))
         unlock.paths.add(whispers)
         tenure = RosterTenureFactory()
-        ActionPointPoolFactory(character=tenure.character, current=0, maximum=200, banked=5)
+        ActionPointPoolFactory(character=tenure, current=0, maximum=200, banked=5)
         offer = ThreadWeavingTeachingOfferFactory(teacher=tenure, unlock=unlock, banked_ap=5)
 
         learner = CharacterSheetFactory()
@@ -187,7 +187,7 @@ class AcceptThreadWeavingUnlockTests(TestCase):
 
         accept_thread_weaving_unlock(learner, offer)
 
-        pool = ActionPointPool.objects.get(character=offer.teacher.character)
+        pool = ActionPointPool.objects.get(character=offer.teacher)
         self.assertEqual(pool.banked, 0)
 
     def test_accept_deducts_xp_from_learner(self) -> None:
@@ -248,7 +248,7 @@ class AcceptThreadWeavingUnlockTests(TestCase):
         accept_thread_weaving_unlock(learner, offer)
 
         # Learner should have no AP pool touched
-        self.assertFalse(ActionPointPool.objects.filter(character=learner.character).exists())
+        self.assertFalse(ActionPointPool.objects.filter(character=learner).exists())
 
 
 # =============================================================================
@@ -264,7 +264,7 @@ class AcceptThreadWeavingUnlockGateTests(TestCase):
 
     def _make_offer_with_teacher_ap(self, *, banked_ap: int = 5, xp_cost: int = 100) -> object:
         tenure = RosterTenureFactory()
-        ActionPointPoolFactory(character=tenure.character, current=0, maximum=200, banked=banked_ap)
+        ActionPointPoolFactory(character=tenure, current=0, maximum=200, banked=banked_ap)
         unlock = ThreadWeavingUnlockFactory(xp_cost=xp_cost)
         return ThreadWeavingTeachingOfferFactory(teacher=tenure, unlock=unlock, banked_ap=banked_ap)
 

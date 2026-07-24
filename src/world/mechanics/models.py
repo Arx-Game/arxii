@@ -1274,7 +1274,7 @@ class CharacterChallengeRecord(SharedMemoryModel):
     """Records a character's resolution of a specific Challenge instance."""
 
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="challenge_records",
     )

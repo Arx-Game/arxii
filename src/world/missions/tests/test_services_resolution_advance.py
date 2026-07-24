@@ -15,7 +15,6 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
@@ -44,7 +43,8 @@ class ResolveOptionAdvanceFalseTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
         cls.template = MissionTemplateFactory(name="advance-tmpl", risk_tier=3)
@@ -56,7 +56,7 @@ class ResolveOptionAdvanceFalseTests(TestCase):
         )
         cls.actor = MissionParticipantFactory(
             instance=cls.instance,
-            character=cls.character,
+            character=cls.character.sheet_data,
             is_contract_holder=True,
         )
 

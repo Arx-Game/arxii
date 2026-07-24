@@ -168,7 +168,7 @@ class ChallengeTelnetDispatchE2ETests(TestCase):
 
         self.assertTrue(
             CharacterChallengeRecord.objects.filter(
-                character=self.character,
+                character=self.character.sheet_data,
                 challenge_instance=self.challenge_instance,
             ).exists(),
             "CharacterChallengeRecord must exist — proves resolve_challenge was reached "

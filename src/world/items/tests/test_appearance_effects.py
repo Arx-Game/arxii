@@ -87,7 +87,7 @@ class UseItemAppearanceEffectTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
         self.persona = self.sheet.primary_persona
-        self.form = CharacterFormFactory(character=self.character)
+        self.form = CharacterFormFactory(character=self.sheet)
         CharacterFormValueFactory(
             form=self.form,
             trait=self.trait,
@@ -270,7 +270,7 @@ class DescriptorFlavorTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
         self.persona = self.sheet.primary_persona
-        self.form = CharacterFormFactory(character=self.character)
+        self.form = CharacterFormFactory(character=self.sheet)
         CharacterFormValueFactory(form=self.form, trait=self.trait, option=self.black)
         self.item = ItemInstanceFactory(
             template=self.template,
@@ -319,7 +319,7 @@ class ChooseAtUseTests(TestCase):
         )
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
-        self.form = CharacterFormFactory(character=self.character)
+        self.form = CharacterFormFactory(character=self.sheet)
         CharacterFormValueFactory(form=self.form, trait=self.trait, option=self.loose)
         self.item = ItemInstanceFactory(
             template=self.kit,

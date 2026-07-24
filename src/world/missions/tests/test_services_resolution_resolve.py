@@ -62,7 +62,8 @@ class ResolveCheckOptionTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
         cls.template = MissionTemplateFactory(name="resolve-tmpl", risk_tier=4)
@@ -72,7 +73,7 @@ class ResolveCheckOptionTests(TestCase):
         cls.node_b = MissionNodeFactory(template=cls.template, key="b")
         cls.actor = MissionParticipantFactory(
             instance=cls.instance,
-            character=cls.character,
+            character=cls.character.sheet_data,
             is_contract_holder=True,
         )
 
@@ -280,7 +281,8 @@ class ResolveChallengeOptionTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.template = MissionTemplateFactory(name="ch-resolve-tmpl", risk_tier=4)
         cls.instance = MissionInstanceFactory(template=cls.template)
@@ -289,7 +291,7 @@ class ResolveChallengeOptionTests(TestCase):
         cls.node_b = MissionNodeFactory(template=cls.template, key="b")
         cls.actor = MissionParticipantFactory(
             instance=cls.instance,
-            character=cls.character,
+            character=cls.character.sheet_data,
             is_contract_holder=True,
         )
         cls.top = CheckOutcomeFactory(name="ChResolveCritical", success_level=5)
@@ -371,7 +373,7 @@ class ResolveChallengeOptionTests(TestCase):
         )
         inst_1 = MissionInstanceFactory(template=self.template, current_node=self.entry)
         actor_1 = MissionParticipantFactory(
-            instance=inst_1, character=self.character, is_contract_holder=True
+            instance=inst_1, character=self.character.sheet_data, is_contract_holder=True
         )
         char_2 = CharacterFactory()
         CharacterSheetFactory(character=char_2)
@@ -484,14 +486,15 @@ class TerminalCompletionTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.template = MissionTemplateFactory(name="terminal-tmpl", risk_tier=2)
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.actor = MissionParticipantFactory(
             instance=cls.instance,
-            character=cls.character,
+            character=cls.character.sheet_data,
             is_contract_holder=True,
         )
         cls.success = CheckOutcomeFactory(name="TermSuccess", success_level=3)
@@ -559,14 +562,15 @@ class TerminalRewardEmissionTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.template = MissionTemplateFactory(name="emit-int-tmpl", risk_tier=2)
         cls.instance = MissionInstanceFactory(template=cls.template)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.actor = MissionParticipantFactory(
             instance=cls.instance,
-            character=cls.character,
+            character=cls.character.sheet_data,
             is_contract_holder=True,
         )
         cls.success = CheckOutcomeFactory(name="EmitIntSuccess", success_level=3)

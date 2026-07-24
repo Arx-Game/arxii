@@ -23,7 +23,7 @@ class TestCharacterEngagement(TestCase):
         """Verify IntegrityError on duplicate character."""
         engagement = CharacterEngagementFactory()
         with self.assertRaises(IntegrityError):
-            CharacterEngagementFactory(character=engagement.character)
+            CharacterEngagementFactory(character=engagement)
 
     def test_delete_clears_process_state(self) -> None:
         """Verify delete removes the record, even with non-trivial state."""
@@ -65,7 +65,9 @@ class EngagementLifecycleServiceTests(TestCase):
         eng = begin_engagement(self.character, EngagementType.COMBAT, source=self.room)
         self.assertEqual(eng.engagement_type, EngagementType.COMBAT)
         self.assertEqual(eng.source, self.room)
-        self.assertEqual(CharacterEngagement.objects.filter(character=self.character).count(), 1)
+        self.assertEqual(
+            CharacterEngagement.objects.filter(character=self.character.sheet_data).count(), 1
+        )
 
     def test_begin_engagement_preserves_existing_noncombat_row(self):
         from world.mechanics.constants import EngagementType
@@ -73,7 +75,7 @@ class EngagementLifecycleServiceTests(TestCase):
         from world.mechanics.services import begin_engagement
 
         existing = CharacterEngagementFactory(
-            character=self.character, engagement_type=EngagementType.CHALLENGE
+            character=self.character.sheet_data, engagement_type=EngagementType.CHALLENGE
         )
         eng = begin_engagement(self.character, EngagementType.COMBAT, source=self.room)
         self.assertEqual(eng.pk, existing.pk)
@@ -94,7 +96,9 @@ class EngagementLifecycleServiceTests(TestCase):
 
         begin_engagement(self.character, EngagementType.COMBAT, source=self.room)
         end_engagement(self.character, EngagementType.COMBAT, source=self.room)
-        self.assertFalse(CharacterEngagement.objects.filter(character=self.character).exists())
+        self.assertFalse(
+            CharacterEngagement.objects.filter(character=self.character.sheet_data).exists()
+        )
 
     def test_end_engagement_noop_for_other_source(self):
         from evennia import create_object
@@ -106,7 +110,9 @@ class EngagementLifecycleServiceTests(TestCase):
         other = create_object("typeclasses.rooms.Room", key="other-room", nohome=True)
         begin_engagement(self.character, EngagementType.COMBAT, source=self.room)
         end_engagement(self.character, EngagementType.COMBAT, source=other)
-        self.assertTrue(CharacterEngagement.objects.filter(character=self.character).exists())
+        self.assertTrue(
+            CharacterEngagement.objects.filter(character=self.character.sheet_data).exists()
+        )
 
     def test_end_engagement_noop_for_other_type(self):
         from world.mechanics.constants import EngagementType
@@ -115,4 +121,6 @@ class EngagementLifecycleServiceTests(TestCase):
 
         begin_engagement(self.character, EngagementType.CHALLENGE, source=self.room)
         end_engagement(self.character, EngagementType.COMBAT, source=self.room)
-        self.assertTrue(CharacterEngagement.objects.filter(character=self.character).exists())
+        self.assertTrue(
+            CharacterEngagement.objects.filter(character=self.character.sheet_data).exists()
+        )

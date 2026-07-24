@@ -150,7 +150,7 @@ class RuntimeStatsEngagementTests(TestCase):
     def test_engagement_removes_social_safety(self) -> None:
         """When engaged, social safety bonus does NOT apply."""
         sheet = CharacterSheetFactory()
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterEngagementFactory(character=sheet)
 
         result = get_runtime_technique_stats(self.technique, character=sheet.character)
 
@@ -161,7 +161,7 @@ class RuntimeStatsEngagementTests(TestCase):
         """Engagement intensity_modifier adds to runtime intensity."""
         sheet = CharacterSheetFactory()
         CharacterEngagementFactory(
-            character=sheet.character,
+            character=sheet,
             intensity_modifier=4,
         )
 
@@ -173,7 +173,7 @@ class RuntimeStatsEngagementTests(TestCase):
         """Engagement control_modifier adds to runtime control."""
         sheet = CharacterSheetFactory()
         CharacterEngagementFactory(
-            character=sheet.character,
+            character=sheet,
             control_modifier=7,
         )
 
@@ -185,7 +185,7 @@ class RuntimeStatsEngagementTests(TestCase):
         """Both process modifiers from engagement apply."""
         sheet = CharacterSheetFactory()
         CharacterEngagementFactory(
-            character=sheet.character,
+            character=sheet,
             intensity_modifier=3,
             control_modifier=2,
         )
@@ -223,7 +223,7 @@ class RuntimeStatsIntensityTierTests(TestCase):
         """IntensityTier control_modifier is added to runtime control."""
         sheet = CharacterSheetFactory()
         # Engaged so social safety doesn't interfere
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterEngagementFactory(character=sheet)
 
         result = get_runtime_technique_stats(self.technique, character=sheet.character)
 
@@ -235,7 +235,7 @@ class RuntimeStatsIntensityTierTests(TestCase):
         """When intensity is below all thresholds, no tier modifier applies."""
         low_technique = TechniqueFactory(intensity=2, control=5)
         sheet = CharacterSheetFactory()
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterEngagementFactory(character=sheet)
 
         result = get_runtime_technique_stats(low_technique, character=sheet.character)
 
@@ -245,7 +245,7 @@ class RuntimeStatsIntensityTierTests(TestCase):
         """The highest tier whose threshold <= intensity is used."""
         high_technique = TechniqueFactory(intensity=25, control=10)
         sheet = CharacterSheetFactory()
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterEngagementFactory(character=sheet)
 
         result = get_runtime_technique_stats(high_technique, character=sheet.character)
 
@@ -267,7 +267,7 @@ class RuntimeStatsIntensityTierTests(TestCase):
         """Tier is calculated from final runtime intensity including identity."""
         # technique.intensity=12, identity adds 10 -> runtime=22 -> Major tier
         sheet = CharacterSheetFactory()
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterEngagementFactory(character=sheet)
         source = DistinctionModifierSourceFactory()
         CharacterModifierFactory(
             character=sheet,

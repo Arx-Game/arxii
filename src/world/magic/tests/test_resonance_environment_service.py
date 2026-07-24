@@ -109,11 +109,11 @@ class MagicalProfileTest(ResonanceCacheIsolationMixin, TestCase):
         super().setUp()
         # Create sheets AFTER super().setUp() per mixin docstring.
         self.sheet_with_aura = CharacterSheetFactory()
-        self.aura = CharacterAuraFactory(character=self.sheet_with_aura.character)
+        self.aura = CharacterAuraFactory(character=self.sheet_with_aura)
 
         self.sheet_without_aura = CharacterSheetFactory()
         # Explicitly ensure no CharacterAura exists for sheet_without_aura.
-        CharacterAura.objects.filter(character=self.sheet_without_aura.character).delete()
+        CharacterAura.objects.filter(character=self.sheet_without_aura).delete()
 
     def test_returns_aura_when_character_has_one(self) -> None:
         """A sheet whose character has a CharacterAura → returns that exact instance."""
@@ -149,7 +149,7 @@ class ResonanceCastResultInertTest(ResonanceCacheIsolationMixin, TestCase):
         # Sheet with aura for the "normal" case
         self.sheet = CharacterSheetFactory()
         CharacterAuraFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             celestial=Decimal("10.00"),
             primal=Decimal("20.00"),
             abyssal=Decimal("70.00"),
@@ -158,7 +158,7 @@ class ResonanceCastResultInertTest(ResonanceCacheIsolationMixin, TestCase):
     def test_no_aura_returns_inert(self) -> None:
         """Sheet with no CharacterAura → inert result, no ConditionInstance created."""
         sheet_no_aura = CharacterSheetFactory()
-        CharacterAura.objects.filter(character=sheet_no_aura.character).delete()
+        CharacterAura.objects.filter(character=sheet_no_aura).delete()
 
         AffinityInteractionFactory(
             source_affinity=self.abyssal,
@@ -252,7 +252,7 @@ class ResonanceCastResultInertTest(ResonanceCacheIsolationMixin, TestCase):
         # Celestial-caster in celestial room = ALIGNED
         sheet_aligned = CharacterSheetFactory()
         CharacterAuraFactory(
-            character=sheet_aligned.character,
+            character=sheet_aligned,
             celestial=Decimal("80.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("10.00"),
@@ -308,7 +308,7 @@ class ResonanceCastOpposedBackfireTest(ResonanceCacheIsolationMixin, TestCase):
         # Caster sheet with Abyssal-dominant aura
         self.sheet = CharacterSheetFactory()
         CharacterAuraFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             celestial=Decimal("10.00"),
             primal=Decimal("20.00"),
             abyssal=Decimal("70.00"),
@@ -419,7 +419,7 @@ class ResonanceCastOpposedBackfireTest(ResonanceCacheIsolationMixin, TestCase):
 
         sheet2 = CharacterSheetFactory()
         CharacterAuraFactory(
-            character=sheet2.character,
+            character=sheet2,
             celestial=Decimal("10.00"),
             primal=Decimal("70.00"),
             abyssal=Decimal("20.00"),
@@ -544,7 +544,7 @@ class AppliedNameParenthesisRegressionTest(ResonanceCacheIsolationMixin, TestCas
 
         self.sheet = CharacterSheetFactory()
         CharacterAuraFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             celestial=Decimal("10.00"),
             primal=Decimal("20.00"),
             abyssal=Decimal("70.00"),
@@ -678,7 +678,7 @@ class RefreshResonanceAlignmentTest(ResonanceCacheIsolationMixin, TestCase):
         # --- Character sheet with Celestial-dominant aura (dominant = "celestial") ---
         self.sheet = CharacterSheetFactory()
         CharacterAuraFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             celestial=Decimal("80.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("10.00"),
@@ -739,7 +739,7 @@ class RefreshResonanceAlignmentTest(ResonanceCacheIsolationMixin, TestCase):
     def test_no_aura_no_buff_no_error(self) -> None:
         """Character with no CharacterAura → no buff applied, no exception."""
         sheet_no_aura = CharacterSheetFactory()
-        CharacterAura.objects.filter(character=sheet_no_aura.character).delete()
+        CharacterAura.objects.filter(character=sheet_no_aura).delete()
         self._place_character_in_room(sheet_no_aura.character, self.low_room_profile)
 
         refresh_resonance_alignment(character_sheet=sheet_no_aura)
@@ -836,7 +836,7 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
         # --- Caster: CharacterSheet + CharacterAura + CharacterAnima ---
         self.anima = CharacterAnimaFactory(current=20, maximum=20)
         self.character = self.anima.character
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
         # Place character in the room
         self.character.db_location = self.room_obj
         self.character.save(update_fields=["db_location"])
@@ -844,7 +844,7 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
         # CharacterSheet linked to this character
         self.sheet = CharacterSheetFactory(character=self.character)
         CharacterAuraFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("20.00"),
             abyssal=Decimal("70.00"),
@@ -1032,7 +1032,7 @@ class ClearResonanceAlignmentQueryCountTest(ResonanceCacheIsolationMixin, TestCa
         # Character with Celestial-dominant aura — NOT in any aligned room
         self.sheet = CharacterSheetFactory()
         CharacterAuraFactory(
-            character=self.sheet.character,
+            character=self.sheet,
             celestial=Decimal("80.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("10.00"),

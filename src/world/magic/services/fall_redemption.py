@@ -111,7 +111,7 @@ def perform_fall(
 
     # Resolve current dominant affinity from CharacterAura
     try:
-        aura = CharacterAura.objects.get(character=character_sheet.character)
+        aura = CharacterAura.objects.get(character=character_sheet)
     except CharacterAura.DoesNotExist as exc:
         msg = "This character has no aura — they are not magically active."
         raise FallEligibilityError(msg) from exc

@@ -226,7 +226,7 @@ class CastScenarioMixin(TestCase):
 
         # Anima so use_technique can deduct costs without crashing.
         CharacterAnimaFactory(
-            character=cls.caster.character_sheet.character,
+            character=cls.caster.character_sheet,
             current=20,
             maximum=30,
         )

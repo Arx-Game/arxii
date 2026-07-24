@@ -68,7 +68,7 @@ class FashionPipelineTests(TestCase):
         # Character wearing the item.
         cls.character = CharacterFactory(db_key="PipelineChar")
         cls.equipped = EquippedItemFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             item_instance=cls.item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

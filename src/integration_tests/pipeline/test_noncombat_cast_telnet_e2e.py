@@ -87,7 +87,7 @@ class NoncombatCastTelnetE2ETests(TestCase):
             base_max_health=50,
         )
         self.anima = CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=20,
             maximum=30,
         )

@@ -24,7 +24,7 @@ class CombatParticipantStrainTests(TestCase):
         )
 
     def test_available_strain_reads_anima_current(self) -> None:
-        CharacterAnimaFactory(character=self.sheet.character, current=7, maximum=10)
+        CharacterAnimaFactory(character=self.sheet, current=7, maximum=10)
         # Invalidate any cached anima lookup on the typeclass instance.
         self.assertEqual(self.participant.available_strain, 7)
 
@@ -41,7 +41,7 @@ class ParticipantSerializerStrainTests(TestCase):
         self.participant = CombatParticipantFactory(
             encounter=self.encounter, character_sheet=self.sheet
         )
-        CharacterAnimaFactory(character=self.sheet.character, current=8, maximum=12)
+        CharacterAnimaFactory(character=self.sheet, current=8, maximum=12)
         # Make the encounter's participants_cached attribute available for the
         # vitals-permission check that walks it.
         self.encounter.participants_cached = [self.participant]

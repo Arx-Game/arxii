@@ -271,7 +271,7 @@ class CourtJourneyEndToEndTests(TestCase):
             resonance=self.resonance,
             balance=20,
         )
-        CharacterAnimaFactory(character=self.servant.character, current=10, maximum=20)
+        CharacterAnimaFactory(character=self.servant, current=10, maximum=20)
         # anima_per_thread=1 so a multi-thread pull actually debits anima
         # (cost = anima_per_thread × max(0, n_threads - 1); a lone thread is free).
         ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=1)
@@ -331,7 +331,7 @@ class CourtJourneyEndToEndTests(TestCase):
             character_sheet=self.servant,
             resonance=self.resonance,
         ).balance
-        anima_before = CharacterAnima.objects.get(character=self.servant.character).current
+        anima_before = CharacterAnima.objects.get(character=self.servant).current
 
         cast_pull = CastPullDeclaration(
             resonance=self.resonance,
@@ -350,7 +350,7 @@ class CourtJourneyEndToEndTests(TestCase):
             balance_before,
             "Committing the Court-role pull must debit resonance.",
         )
-        anima_after = CharacterAnima.objects.get(character=self.servant.character).current
+        anima_after = CharacterAnima.objects.get(character=self.servant).current
         self.assertLess(
             anima_after,
             anima_before,

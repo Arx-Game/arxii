@@ -988,7 +988,7 @@ class TestCastPullCourtRegardModulationE2E(CastScenarioMixin):
         so a strictly higher value proves the amplified pull reached the check.
         """
         servant = PersonaFactory()
-        CharacterAnimaFactory(character=servant.character_sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=servant.character_sheet, current=20, maximum=30)
         CharacterVitals.objects.create(
             character_sheet=servant.character_sheet,
             health=50,

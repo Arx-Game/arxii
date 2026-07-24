@@ -71,7 +71,7 @@ class TestAnimaRegenPipeline(TestCase):
         from world.magic.services.anima import anima_regen_tick
 
         sheet = CharacterSheetFactory()
-        anima = CharacterAnimaFactory(character=sheet.character, current=0, maximum=100)
+        anima = CharacterAnimaFactory(character=sheet, current=0, maximum=100)
 
         summary = anima_regen_tick()
 
@@ -97,7 +97,7 @@ class TestAnimaRegenPipeline(TestCase):
         from world.magic.services.anima import anima_regen_tick
 
         sheet = CharacterSheetFactory()
-        anima = CharacterAnimaFactory(character=sheet.character, current=0, maximum=100)
+        anima = CharacterAnimaFactory(character=sheet, current=0, maximum=100)
 
         # Soulfray instance at stage 2 (Tearing) — this stage carries the blocking property.
         tearing_stage = self.stages[1]
@@ -130,7 +130,7 @@ class TestAnimaRegenPipeline(TestCase):
         from world.magic.services.anima import anima_regen_tick
 
         sheet = CharacterSheetFactory()
-        anima = CharacterAnimaFactory(character=sheet.character, current=0, maximum=100)
+        anima = CharacterAnimaFactory(character=sheet, current=0, maximum=100)
 
         # Stage 1 (Fraying) — does NOT carry the blocking property.
         fraying_stage = self.stages[0]
@@ -166,8 +166,8 @@ class TestAnimaRegenPipeline(TestCase):
         from world.mechanics.factories import CharacterEngagementFactory
 
         sheet = CharacterSheetFactory()
-        anima = CharacterAnimaFactory(character=sheet.character, current=0, maximum=100)
-        CharacterEngagementFactory(character=sheet.character)
+        anima = CharacterAnimaFactory(character=sheet, current=0, maximum=100)
+        CharacterEngagementFactory(character=sheet)
 
         summary = anima_regen_tick()
 
@@ -190,7 +190,7 @@ class TestAnimaRegenPipeline(TestCase):
         from world.magic.services.anima import anima_regen_tick
 
         sheet = CharacterSheetFactory()
-        anima = CharacterAnimaFactory(character=sheet.character, current=100, maximum=100)
+        anima = CharacterAnimaFactory(character=sheet, current=100, maximum=100)
 
         anima_regen_tick()
 

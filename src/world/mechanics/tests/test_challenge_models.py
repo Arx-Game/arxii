@@ -279,7 +279,7 @@ class InstanceModelTests(TestCase):
 
     def test_character_challenge_record(self) -> None:
         record = CharacterChallengeRecord.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=self.challenge_instance,
             approach=self.approach,
         )
@@ -287,13 +287,13 @@ class InstanceModelTests(TestCase):
 
     def test_character_challenge_record_unique(self) -> None:
         CharacterChallengeRecord.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=self.challenge_instance,
             approach=self.approach,
         )
         with self.assertRaises(IntegrityError):
             CharacterChallengeRecord.objects.create(
-                character=self.character,
+                character=self.character.sheet_data,
                 challenge_instance=self.challenge_instance,
                 approach=self.approach,
             )

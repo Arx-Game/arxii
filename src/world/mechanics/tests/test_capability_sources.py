@@ -83,7 +83,8 @@ class TraitSourceTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterSheetFactory().character
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.capability = CapabilityTypeFactory(name="physical_force")
         cls.trait = Trait.objects.create(
             name="test_strength_src",

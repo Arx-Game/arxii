@@ -299,7 +299,7 @@ def apply_dramatic_surge(
 
     encounter_ct = ContentType.objects.get_for_model(_CombatEncounter)
     engagement = CharacterEngagement.objects.filter(
-        character=participant.character_sheet.character,
+        character=participant.character_sheet,
         engagement_type=EngagementType.COMBAT,
         source_content_type=encounter_ct,
         source_id=encounter.pk,

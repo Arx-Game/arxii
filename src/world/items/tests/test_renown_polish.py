@@ -75,7 +75,7 @@ class PlaceItemInRoomTests(TestCase):
         template = _make_decorative_template(polish_value=5, category=cat)
         instance = ItemInstanceFactory(template=template)
         EquippedItemFactory(
-            character=tenant.character_sheet.character,
+            character=tenant.character_sheet,
             item_instance=instance,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -144,13 +144,13 @@ class EquipItemPolishTests(TestCase):
         i1 = ItemInstanceFactory(template=t1)
         i2 = ItemInstanceFactory(template=t2)
         EquippedItemFactory(
-            character=persona.character_sheet.character,
+            character=persona.character_sheet,
             item_instance=i1,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
         EquippedItemFactory(
-            character=persona.character_sheet.character,
+            character=persona.character_sheet,
             item_instance=i2,
             body_region=BodyRegion.HEAD,
             equipment_layer=EquipmentLayer.BASE,
@@ -168,7 +168,7 @@ class EquipItemPolishTests(TestCase):
         functional_template = ItemTemplateFactory(polish_value=0)
         instance = ItemInstanceFactory(template=functional_template)
         EquippedItemFactory(
-            character=persona.character_sheet.character,
+            character=persona.character_sheet,
             item_instance=instance,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

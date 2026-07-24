@@ -72,7 +72,7 @@ class PreCastPowerReadBackTests(TestCase):
         self.room = _create_room("PreCastPowerRoom")
         self.anima = CharacterAnimaFactory(current=20, maximum=20)
         self.character = self.anima.character
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
         self.character.location = self.room
 
     def test_resolve_fn_receives_halved_power(self) -> None:
@@ -221,7 +221,7 @@ class UseTechniqueBasicTests(TestCase):
         self.anima = CharacterAnimaFactory(current=10, maximum=10)
         self.character = self.anima.character
         # Engage the character so social safety bonus doesn't apply
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
 
     def test_sufficient_anima_no_checkpoint(self) -> None:
         """Technique with enough anima resolves without confirmation."""
@@ -271,7 +271,7 @@ class UseTechniqueSoulfrayCheckpointTests(TestCase):
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(current=5, maximum=10)
         self.character = self.anima.character
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
 
     @patch("world.magic.services.techniques.get_soulfray_warning")
     def test_soulfray_warning_pauses_for_confirmation(
@@ -354,7 +354,7 @@ class UseTechniqueMishapTests(TestCase):
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(current=20, maximum=20)
         self.character = self.anima.character
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
 
     @patch("world.magic.services.techniques.select_mishap_pool")
     def test_mishap_fires_when_intensity_exceeds_control(
@@ -392,7 +392,7 @@ class UseTechniqueCheckResultExtractionTests(TestCase):
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(current=20, maximum=20)
         self.character = self.anima.character
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
 
     @patch("world.magic.services.techniques.select_mishap_pool")
     def test_use_technique_extracts_check_result_from_pending_resolution(
@@ -501,7 +501,7 @@ class PowerIntensityBonusTests(TestCase):
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(current=20, maximum=20)
         self.character = self.anima.character
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
 
     def _run(self, *, power_intensity_bonus: int = 0) -> "tuple[int, object]":
         """Return (captured_power, TechniqueUseResult) for one use_technique call."""

@@ -464,7 +464,7 @@ class AlterationFullPipelineTests(TestCase):
         """Set the character's anima to 0 so every technique use accumulates Soulfray."""
         from world.magic.models import CharacterAnima
 
-        CharacterAnima.objects.filter(character=self.character).update(current=0)
+        CharacterAnima.objects.filter(character=self.character.sheet_data).update(current=0)
 
     def _run_technique_with_mocked_outcome(self, outcome):
         """Run use_technique with the resilience check patched to return outcome."""

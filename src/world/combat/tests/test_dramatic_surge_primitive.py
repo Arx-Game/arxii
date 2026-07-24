@@ -26,7 +26,9 @@ class ApplyDramaticSurgeTests(TestCase):
         begin_engagement(self.character, EngagementType.COMBAT, source=self.encounter)
 
     def _intensity(self) -> int:
-        return CharacterEngagement.objects.get(character=self.character).intensity_modifier
+        return CharacterEngagement.objects.get(
+            character=self.character.sheet_data
+        ).intensity_modifier
 
     def test_writes_engagement_and_records_and_returns_beat(self):
         beat = apply_dramatic_surge(

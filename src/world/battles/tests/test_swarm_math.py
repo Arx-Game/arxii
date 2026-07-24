@@ -53,7 +53,7 @@ class SwarmStrikeBonusModifierStackTests(TestCase):
             action_template=ActionTemplateFactory(), damage_profile=False
         )
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.sheet, current=20, maximum=30)
 
         self.battle = create_battle(name="Swarm Bonus Stack Test")
         self.attacker = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
@@ -130,7 +130,7 @@ class SwarmMathRoundResolutionTests(TestCase):
             action_template=ActionTemplateFactory(), damage_profile=False
         )
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
-        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.sheet, current=20, maximum=30)
 
         self.battle_round = begin_battle_round(battle=self.battle)
 

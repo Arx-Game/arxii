@@ -122,7 +122,7 @@ def has_waiting_external_act(character_sheet: CharacterSheet, act: str) -> bool:
     pays the full ``satisfy_external_act`` cost when this returns True.
     """
     return MissionParticipant.objects.filter(
-        character=character_sheet.character,
+        character=character_sheet,
         instance__status=MissionStatus.ACTIVE,
         instance__current_node__options__option_kind=OptionKind.EXTERNAL_ACT,
         instance__current_node__options__required_act=act,

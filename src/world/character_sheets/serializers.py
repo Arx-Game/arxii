@@ -223,7 +223,7 @@ def _build_identity(
 _APPEARANCE_SELECT_RELATED: tuple[str, ...] = ("build",)
 _APPEARANCE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
-        "character__forms",
+        "forms",
         queryset=CharacterForm.objects.filter(form_type=FormType.TRUE).prefetch_related(
             Prefetch(
                 "values",
@@ -233,7 +233,7 @@ _APPEARANCE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
         ),
         to_attr="cached_true_forms",
     ),
-    "character__form_state__active_fake_overlay",
+    "form_state__active_fake_overlay",
 )
 
 
@@ -399,14 +399,12 @@ def _build_appearance(
     from world.forms.models import ConcealmentLevel  # noqa: PLC0415
     from world.forms.services import get_height_band  # noqa: PLC0415
 
-    character = sheet.character
-
     active = _resolve_active_persona(sheet)
     descriptors: dict[int, str] = (
         {d.trait_id: d.text for d in active.cached_trait_descriptors} if active is not None else {}
     )
 
-    true_forms: list[CharacterForm] = character.cached_true_forms
+    true_forms: list[CharacterForm] = sheet.cached_true_forms
     if true_forms:
         form_traits: list[FormTraitEntry] = [
             FormTraitEntry(
@@ -422,7 +420,7 @@ def _build_appearance(
     # the overlay's traits (not the real form's), filtered by the overlay's level.
     # Gated on ``privileged`` only — a disguise overlay can be active even when the
     # presented face is the primary persona (reveal_identity=True for a public face).
-    form_state = character.form_state_or_none
+    form_state = sheet.form_state_or_none
     if not privileged and form_state is not None and form_state.active_fake_overlay_id is not None:
         overlay = form_state.active_fake_overlay
         if overlay.concealment_level == ConcealmentLevel.FULL:
@@ -589,7 +587,7 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
     ]
 
 
-_MAGIC_SELECT_RELATED: tuple[str, ...] = ("character__aura",)
+_MAGIC_SELECT_RELATED: tuple[str, ...] = ("aura",)
 _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
         "character__db_account__authored_rituals",
@@ -631,7 +629,7 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
         to_attr="cached_resonances",
     ),
     Prefetch(
-        "character__aura__glimpse_tags",
+        "aura__glimpse_tags",
         queryset=CharacterGlimpseTag.objects.select_related("tag"),
         to_attr="cached_glimpse_tags",
     ),
@@ -728,7 +726,7 @@ def _build_magic_anima_ritual(sheet: CharacterSheet) -> AnimaRitualSection | Non
 
 
 def _build_magic_aura(character: ObjectDB, *, privileged: bool) -> AuraData | None:
-    """Build the aura sub-section (OneToOne to ObjectDB, not CharacterSheet).
+    """Build the aura sub-section (OneToOne on the sheet, read via the puppet).
 
     Returns ``None`` when the character has no aura. Glimpse tags share the
     prose's visibility (the whole section is already tier-gated); only the
@@ -736,7 +734,7 @@ def _build_magic_aura(character: ObjectDB, *, privileged: bool) -> AuraData | No
     """
     try:
         aura = character.aura
-    except CharacterAura.DoesNotExist:
+    except (CharacterAura.DoesNotExist, CharacterSheet.DoesNotExist):
         return None
 
     tag_rows: list[CharacterGlimpseTag] = getattr(
@@ -989,7 +987,7 @@ def _build_personas(
     ]
 
 
-_THEMING_SELECT_RELATED: tuple[str, ...] = ("character__aura",)
+_THEMING_SELECT_RELATED: tuple[str, ...] = ("aura",)
 _THEMING_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 
@@ -999,11 +997,9 @@ def _build_theming(sheet: CharacterSheet) -> ThemingSection:
     Realm and species are already available in the identity section;
     the frontend can derive CSS classes from those IDs/names directly.
     """
-    character = sheet.character
-
     aura_data: AuraThemingData | None = None
     try:
-        aura = character.aura
+        aura = sheet.aura
         aura_data = AuraThemingData(
             celestial=aura.celestial,
             primal=aura.primal,

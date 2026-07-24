@@ -157,7 +157,7 @@ class InterposeRedirectDispatchSeamTest(CombatManeuverActionTestBase):
         ensure_reflect_content()
         mirror_ward = Technique.objects.get(name=REFLECT_TECHNIQUE_NAME)
         CharacterTechnique.objects.create(character=self.sheet, technique=mirror_ward)
-        CharacterAnimaFactory(character=self.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=self.character.sheet_data, current=10, maximum=10)
         self.character.db_location = self.encounter.room
         self.character.save(update_fields=["db_location"])
 

@@ -614,7 +614,7 @@ class TestDispatchPlayerActionChallengeImmediate(django.test.TestCase):
         self.assertFalse(result.deferred, "Should be immediate, not deferred")
         self.assertTrue(
             CharacterChallengeRecord.objects.filter(
-                character=self.character,
+                character=self.character.sheet_data,
                 challenge_instance=self.challenge_instance,
             ).exists(),
             "CharacterChallengeRecord must exist after immediate challenge resolution",
@@ -823,7 +823,7 @@ class TestDispatchPlayerActionChallengeDeferred(django.test.TestCase):
         # resolve_challenge must NOT have run — no CharacterChallengeRecord
         self.assertFalse(
             CharacterChallengeRecord.objects.filter(
-                character=self.character,
+                character=self.character.sheet_data,
                 challenge_instance=self.challenge_instance,
             ).exists(),
             "CharacterChallengeRecord must NOT exist — challenge was deferred, not resolved",

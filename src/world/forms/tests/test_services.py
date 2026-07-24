@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import (
     ConditionCategoryFactory,
@@ -64,7 +63,8 @@ from world.species.factories import SpeciesFactory
 class GetApparentFormTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.hair_trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
         cls.black_hair = FormTraitOptionFactory(
             trait=cls.hair_trait, name="black", display_name="Black"
@@ -74,20 +74,20 @@ class GetApparentFormTest(TestCase):
         )
 
     def test_returns_base_form_values(self):
-        form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        form = CharacterFormFactory(character=self.sheet, form_type=FormType.TRUE)
         CharacterFormValueFactory(form=form, trait=self.hair_trait, option=self.black_hair)
-        CharacterFormStateFactory(character=self.character, active_form=form)
+        CharacterFormStateFactory(character=self.character.sheet_data, active_form=form)
 
         apparent = get_apparent_form(self.character)
 
         self.assertEqual(apparent[self.hair_trait], self.black_hair)
 
     def test_temporary_changes_override_base(self):
-        form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        form = CharacterFormFactory(character=self.sheet, form_type=FormType.TRUE)
         CharacterFormValueFactory(form=form, trait=self.hair_trait, option=self.black_hair)
-        CharacterFormStateFactory(character=self.character, active_form=form)
+        CharacterFormStateFactory(character=self.character.sheet_data, active_form=form)
         TemporaryFormChangeFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             trait=self.hair_trait,
             option=self.blonde_hair,
             duration_type=DurationType.UNTIL_REMOVED,
@@ -101,15 +101,18 @@ class GetApparentFormTest(TestCase):
 class SwitchFormTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
-        cls.other_character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
+        cls.other_character = CharacterSheetFactory().character
 
     def test_switch_form_updates_active_form(self):
-        true_form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        true_form = CharacterFormFactory(character=self.sheet, form_type=FormType.TRUE)
         alt_form = CharacterFormFactory(
-            character=self.character, name="Beast", form_type=FormType.ALTERNATE
+            character=self.sheet, name="Beast", form_type=FormType.ALTERNATE
         )
-        state = CharacterFormStateFactory(character=self.character, active_form=true_form)
+        state = CharacterFormStateFactory(
+            character=self.character.sheet_data, active_form=true_form
+        )
 
         switch_form(self.character, alt_form)
 
@@ -117,8 +120,10 @@ class SwitchFormTest(TestCase):
         self.assertEqual(state.active_form, alt_form)
 
     def test_switch_form_raises_for_wrong_character(self):
-        form = CharacterFormFactory(character=self.other_character, form_type=FormType.TRUE)
-        CharacterFormStateFactory(character=self.character, active_form=None)
+        form = CharacterFormFactory(
+            character=self.other_character.sheet_data, form_type=FormType.TRUE
+        )
+        CharacterFormStateFactory(character=self.character.sheet_data, active_form=None)
 
         with self.assertRaises(ValueError):
             switch_form(self.character, form)
@@ -127,12 +132,13 @@ class SwitchFormTest(TestCase):
 class RevertToTrueFormTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
     def test_revert_sets_true_form_active(self):
-        true_form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
-        alt_form = CharacterFormFactory(character=self.character, form_type=FormType.ALTERNATE)
-        state = CharacterFormStateFactory(character=self.character, active_form=alt_form)
+        true_form = CharacterFormFactory(character=self.sheet, form_type=FormType.TRUE)
+        alt_form = CharacterFormFactory(character=self.sheet, form_type=FormType.ALTERNATE)
+        state = CharacterFormStateFactory(character=self.character.sheet_data, active_form=alt_form)
 
         revert_to_true_form(self.character)
 
@@ -177,7 +183,8 @@ class GetCGFormOptionsTest(TestCase):
 class CreateTrueFormTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.hair_trait = FormTraitFactory(name="hair_color")
         cls.black = FormTraitOptionFactory(trait=cls.hair_trait, name="black")
         cls.eye_trait = FormTraitFactory(name="eye_color")
@@ -192,7 +199,7 @@ class CreateTrueFormTest(TestCase):
         form = create_true_form(self.character, selections)
 
         self.assertEqual(form.form_type, FormType.TRUE)
-        self.assertEqual(form.character, self.character)
+        self.assertEqual(form.character, self.sheet)
         self.assertEqual(form.values.count(), 2)
 
     def test_creates_form_state(self):
@@ -200,11 +207,11 @@ class CreateTrueFormTest(TestCase):
 
         form = create_true_form(self.character, selections)
 
-        state = CharacterFormState.objects.get(character=self.character)
+        state = CharacterFormState.objects.get(character=self.character.sheet_data)
         self.assertEqual(state.active_form, form)
 
     def test_raises_if_true_form_exists(self):
-        CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        CharacterFormFactory(character=self.sheet, form_type=FormType.TRUE)
 
         with self.assertRaises(ValueError):
             create_true_form(self.character, {})
@@ -303,7 +310,8 @@ class GetApparentHeightTest(TestCase):
         )
 
         # Create character with sheet
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
     def test_returns_base_height_without_modifiers(self):
@@ -322,9 +330,9 @@ class GetApparentHeightTest(TestCase):
         self.sheet.save()
 
         # Create form with curved horns
-        form = CharacterFormFactory(character=self.character)
+        form = CharacterFormFactory(character=self.sheet)
         CharacterFormValueFactory(form=form, trait=self.horn_trait, option=self.curved_horns)
-        CharacterFormStateFactory(character=self.character, active_form=form)
+        CharacterFormStateFactory(character=self.character.sheet_data, active_form=form)
 
         apparent, band = get_apparent_height(self.character)
 
@@ -335,9 +343,9 @@ class GetApparentHeightTest(TestCase):
         self.sheet.true_height_inches = 70
         self.sheet.save()
 
-        form = CharacterFormFactory(character=self.character)
+        form = CharacterFormFactory(character=self.sheet)
         CharacterFormValueFactory(form=form, trait=self.horn_trait, option=self.no_horns)
-        CharacterFormStateFactory(character=self.character, active_form=form)
+        CharacterFormStateFactory(character=self.character.sheet_data, active_form=form)
 
         apparent, _band = get_apparent_height(self.character)
 
@@ -360,7 +368,8 @@ class GetApparentBuildTest(TestCase):
             name="normal", min_inches=60, max_inches=80, hide_build=False
         )
 
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
     def test_returns_character_build(self):
@@ -418,7 +427,8 @@ class CGHelperFunctionsTest(TestCase):
 class ChangeAppearanceTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.persona = cls.sheet.primary_persona
         cls.hair = FormTraitFactory(name="hair_color", display_name="Hair Color", is_cosmetic=True)
@@ -428,7 +438,7 @@ class ChangeAppearanceTest(TestCase):
         cls.tall = FormTraitOptionFactory(trait=cls.height, name="tall", display_name="Tall")
 
     def setUp(self):
-        self.form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        self.form = CharacterFormFactory(character=self.sheet, form_type=FormType.TRUE)
         CharacterFormValueFactory(
             form=self.form, trait=self.hair, option=self.brown, natural_option=self.brown
         )
@@ -474,14 +484,15 @@ class ChangeAppearanceTest(TestCase):
 class GetPresentedAppearanceTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.persona = cls.sheet.primary_persona
         cls.hair = FormTraitFactory(name="hair_color", display_name="Hair Color", is_cosmetic=True)
         cls.red = FormTraitOptionFactory(trait=cls.hair, name="red", display_name="Red")
 
     def setUp(self):
-        self.form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        self.form = CharacterFormFactory(character=self.sheet, form_type=FormType.TRUE)
         CharacterFormValueFactory(form=self.form, trait=self.hair, option=self.red)
 
     def test_descriptor_overlays_normalized(self):
@@ -498,16 +509,16 @@ class GetPresentedAppearanceTest(TestCase):
 
 class AssumeAlternateSelfTests(TestCase):
     def setUp(self):
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.true_form = CharacterFormFactory(
-            character=self.character, name="True", form_type=FormType.TRUE
+            character=self.sheet, name="True", form_type=FormType.TRUE
         )
         self.alt_form = CharacterFormFactory(
-            character=self.character, name="Beast", form_type=FormType.ALTERNATE
+            character=self.sheet, name="Beast", form_type=FormType.ALTERNATE
         )
         self.form_state = CharacterFormStateFactory(
-            character=self.character, active_form=self.true_form
+            character=self.character.sheet_data, active_form=self.true_form
         )
         self.persona = PersonaFactory(character_sheet=self.sheet)
         self.profile = FormCombatProfileFactory(form=self.alt_form)
@@ -520,7 +531,7 @@ class AssumeAlternateSelfTests(TestCase):
 
         active = assume_alternate_self(self.sheet, alt_self)
 
-        state = CharacterFormState.objects.get(character=self.character)
+        state = CharacterFormState.objects.get(character=self.character.sheet_data)
         self.assertEqual(state.active_form, self.alt_form)
         self.assertEqual(active.return_form, self.true_form)
         self.assertEqual(active.alternate_self, alt_self)
@@ -625,16 +636,16 @@ class AssumeAlternateSelfTests(TestCase):
 
 class RevertAlternateSelfTests(TestCase):
     def setUp(self):
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.true_form = CharacterFormFactory(
-            character=self.character, name="True", form_type=FormType.TRUE
+            character=self.sheet, name="True", form_type=FormType.TRUE
         )
         self.alt_form = CharacterFormFactory(
-            character=self.character, name="Beast", form_type=FormType.ALTERNATE
+            character=self.sheet, name="Beast", form_type=FormType.ALTERNATE
         )
         self.form_state = CharacterFormStateFactory(
-            character=self.character, active_form=self.true_form
+            character=self.character.sheet_data, active_form=self.true_form
         )
         self.profile = FormCombatProfileFactory(form=self.alt_form)
         FormCombatProfileEffectFactory(profile=self.profile)
@@ -653,7 +664,7 @@ class RevertAlternateSelfTests(TestCase):
 
         revert_alternate_self(self.sheet)
 
-        state = CharacterFormState.objects.get(character=self.character)
+        state = CharacterFormState.objects.get(character=self.character.sheet_data)
         self.assertEqual(state.active_form, self.true_form)
         self.assertFalse(ModifierSource.objects.filter(form_combat_profile=self.profile).exists())
         self.assertFalse(self.sheet.character_techniques.filter(technique=self.technique).exists())
@@ -686,7 +697,7 @@ class RevertAlternateSelfTests(TestCase):
             with self.assertRaises(RevertBlockedError):
                 revert_alternate_self(self.sheet)
 
-        state = CharacterFormState.objects.get(character=self.character)
+        state = CharacterFormState.objects.get(character=self.character.sheet_data)
         self.assertEqual(state.active_form, self.alt_form)
 
     def test_assume_not_gated_by_in_control(self):
@@ -736,7 +747,7 @@ class RevertAlternateSelfTests(TestCase):
 
         revert_alternate_self(self.sheet)
 
-        state = CharacterFormState.objects.get(character=self.character)
+        state = CharacterFormState.objects.get(character=self.character.sheet_data)
         self.assertEqual(state.active_form, self.true_form)
         active = ActiveAlternateSelf.objects.get(character=self.sheet)
         self.assertIsNone(active.alternate_self)
@@ -746,13 +757,13 @@ class AssumeRevertAccessChangeTests(TestCase):
     """Tests that assume/revert fire the access-change announcement."""
 
     def setUp(self):
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.true_form = CharacterFormFactory(
-            character=self.character, name="True", form_type=FormType.TRUE
+            character=self.sheet, name="True", form_type=FormType.TRUE
         )
         self.form_state = CharacterFormStateFactory(
-            character=self.character, active_form=self.true_form
+            character=self.character.sheet_data, active_form=self.true_form
         )
         self.technique = TechniqueFactory(name="Flame Lash")
 

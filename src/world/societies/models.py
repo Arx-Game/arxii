@@ -1475,8 +1475,10 @@ class PersonaDeedKnowledge(SharedMemoryModel):
 class CharacterLegendSummary(SharedMemoryModel):
     """Read-only model backed by a PostgreSQL materialized view."""
 
+    # State-only retarget (#2608): unmanaged matview, PK-shared with the sheet —
+    # no SQL change.
     character = models.OneToOneField(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.DO_NOTHING,
         primary_key=True,
         related_name="+",

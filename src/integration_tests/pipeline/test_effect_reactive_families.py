@@ -99,7 +99,7 @@ class BlinkDodgeReactiveE2ETests(TestCase):
 
         # Anima: 20 current (blink costs 2)
         CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=20,
             maximum=20,
         )
@@ -172,7 +172,7 @@ class BlinkDodgeReactiveE2ETests(TestCase):
         # Drain anima below the cost (Phase Step costs 2)
         from world.magic.models.anima import CharacterAnima
 
-        anima = CharacterAnima.objects.get(character=self.character)
+        anima = CharacterAnima.objects.get(character=self.character.sheet_data)
         anima.current = 1  # below cost=2
         anima.save(update_fields=["current"])
 
@@ -235,7 +235,7 @@ class ReflectDamageReactiveE2ETests(TestCase):
 
         # Anima: 20 current (reflect costs 2)
         CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=20,
             maximum=20,
         )
@@ -329,7 +329,7 @@ class ForceFieldAbsorbReactiveE2ETests(TestCase):
 
         # Anima: 20 current (force-field costs 1 per activation)
         CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=20,
             maximum=20,
         )

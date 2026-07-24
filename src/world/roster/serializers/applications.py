@@ -57,7 +57,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
 
         policy_issues = RosterPolicyService.get_policy_issues(player_data, character)
 
-        attrs["character"] = character
+        attrs["character"] = character.sheet_data
         attrs["player_data"] = player_data
         attrs["policy_issues"] = policy_issues
 

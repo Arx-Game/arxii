@@ -22,11 +22,11 @@ class ShiftFormCapabilityGateTests(TestCase):
     def setUpTestData(cls):
         cls.sheet = CharacterSheetFactory()
         cls.character = cls.sheet.character
-        true_form = CharacterFormFactory(character=cls.character, form_type=FormType.TRUE)
+        true_form = CharacterFormFactory(character=cls.sheet, form_type=FormType.TRUE)
         cls.alt_form = CharacterFormFactory(
-            character=cls.character, name="Beast", form_type=FormType.ALTERNATE
+            character=cls.sheet, name="Beast", form_type=FormType.ALTERNATE
         )
-        CharacterFormStateFactory(character=cls.character, active_form=true_form)
+        CharacterFormStateFactory(character=cls.character.sheet_data, active_form=true_form)
         cls.alt_self = AlternateSelfFactory(
             character=cls.sheet, form=cls.alt_form, display_name="the Beast"
         )

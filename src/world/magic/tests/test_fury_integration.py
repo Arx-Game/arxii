@@ -102,7 +102,7 @@ def _setup_bonded_pair(*, tier_depth: int = 2, bond_tier_number: int = 2):
     initiator = PersonaFactory()
     anchor = PersonaFactory()
 
-    CharacterAnimaFactory(character=initiator.character_sheet.character, current=50, maximum=50)
+    CharacterAnimaFactory(character=initiator.character_sheet, current=50, maximum=50)
     for persona in (initiator, anchor):
         CharacterVitals.objects.get_or_create(
             character_sheet=persona.character_sheet,

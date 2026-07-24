@@ -135,11 +135,11 @@ class CombatClashTelnetE2ETests(TestCase):
         self.character = self.sheet.character
         # Give the character enough anima to commit strain=3 on top of technique cost.
         self.anima = CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=30,
             maximum=30,
         )
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
 
         # Place the character in a room so location-dependent queries don't fail.
         room = ObjectDBFactory(

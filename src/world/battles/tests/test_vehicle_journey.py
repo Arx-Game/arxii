@@ -64,7 +64,7 @@ class VehicleJourneyTests(TestCase):
         attacker_ship.unit.military_unit.commander = captain.character_sheet
         attacker_ship.unit.military_unit.save(update_fields=["commander"])
         CharacterTechniqueFactory(character=captain.character_sheet, technique=technique)
-        CharacterAnimaFactory(character=captain.character_sheet.character, current=30, maximum=30)
+        CharacterAnimaFactory(character=captain.character_sheet, current=30, maximum=30)
 
         gunner = BattleParticipantFactory(
             battle=battle,
@@ -72,7 +72,7 @@ class VehicleJourneyTests(TestCase):
             place=attacker_ship.place,
         )
         CharacterTechniqueFactory(character=gunner.character_sheet, technique=technique)
-        CharacterAnimaFactory(character=gunner.character_sheet.character, current=30, maximum=30)
+        CharacterAnimaFactory(character=gunner.character_sheet, current=30, maximum=30)
 
         non_swimmer = BattleParticipantFactory(
             battle=battle,

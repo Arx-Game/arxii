@@ -6,8 +6,8 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.action_points.factories import ActionPointPoolFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.items.crafting.constants import CraftingRecipeKind
@@ -70,8 +70,10 @@ class CutGemTests(TestCase):
         )
 
     def setUp(self):
-        self.character = CharacterFactory()
-        self.pool = ActionPointPoolFactory(character=self.character, current=200, maximum=200)
+        self.character = CharacterSheetFactory().character
+        self.pool = ActionPointPoolFactory(
+            character=self.character.sheet_data, current=200, maximum=200
+        )
         self.recipe = CraftingRecipeFactory(
             kind=CraftingRecipeKind.GEM_CUT,
             check_type=CheckTypeFactory(),

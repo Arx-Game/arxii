@@ -308,8 +308,8 @@ def _build_party(encounter: CombatEncounter, params: SimulationParams) -> list[C
             max_health=_PC_HEALTH,
             base_max_health=_PC_HEALTH,
         )
-        CharacterAnimaFactory(character=sheet.character, current=_PC_ANIMA, maximum=_PC_ANIMA)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=_PC_ANIMA, maximum=_PC_ANIMA)
+        CharacterEngagementFactory(character=sheet)
         participants.append(
             cast(
                 "CombatParticipant",

@@ -133,8 +133,8 @@ def _ensure_technique_action_template(technique: object, check_type: object) -> 
 def _make_participant(encounter: CombatEncounter) -> object:
     """Build a PC participant with anima + engagement + vitals."""
     sheet = CharacterSheetFactory()
-    CharacterAnimaFactory(character=sheet.character, current=100, maximum=100)
-    CharacterEngagementFactory(character=sheet.character)
+    CharacterAnimaFactory(character=sheet, current=100, maximum=100)
+    CharacterEngagementFactory(character=sheet)
     CharacterVitals.objects.create(character_sheet=sheet, health=100)
     return CombatParticipantFactory(
         encounter=encounter,
@@ -456,8 +456,8 @@ class SuppressFlowTests(TestCase):
 
         # Add a second participant for the 2-slot combo.
         sheet2 = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet2.character, current=50, maximum=50)
-        CharacterEngagementFactory(character=sheet2.character)
+        CharacterAnimaFactory(character=sheet2, current=50, maximum=50)
+        CharacterEngagementFactory(character=sheet2)
         CharacterVitals.objects.create(character_sheet=sheet2, health=100)
         participant2 = CombatParticipantFactory(
             encounter=self.encounter,
@@ -952,8 +952,8 @@ class AudereDuringClashTests(TestCase):
         # Build a PC with a SMALL anima pool so overburn occurs on every cast.
         # current=0, maximum=4: any technique with anima_cost > 0 is an overburn.
         self.sheet = CharacterSheetFactory()
-        self.anima = CharacterAnimaFactory(character=self.sheet.character, current=0, maximum=4)
-        CharacterEngagementFactory(character=self.sheet.character)
+        self.anima = CharacterAnimaFactory(character=self.sheet, current=0, maximum=4)
+        CharacterEngagementFactory(character=self.sheet)
         CharacterVitals.objects.create(character_sheet=self.sheet, health=100)
         self.participant = CombatParticipantFactory(
             encounter=self.encounter,
@@ -1022,7 +1022,7 @@ class AudereDuringClashTests(TestCase):
         """Force the PC's anima to 0 so the next cast overburns."""
         from world.magic.models import CharacterAnima
 
-        CharacterAnima.objects.filter(character=self.sheet.character).update(current=0)
+        CharacterAnima.objects.filter(character=self.sheet).update(current=0)
 
     def _mock_check_return(self, outcome: object) -> object:
         """Context manager: patch perform_check to return a deterministic outcome.

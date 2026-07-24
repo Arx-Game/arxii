@@ -39,7 +39,7 @@ class PowerDerivationTests(TestCase):
         self.global_target = ModifierTargetFactory(
             category=self.category, name="power", target_resonance=None
         )
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.technique = TechniqueFactory()
 
@@ -145,7 +145,7 @@ class LevelPowerTermTests(TestCase):
     """LevelPowerConfig drives how character and technique level feed into _derive_power (#637)."""
 
     def setUp(self):
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.technique = TechniqueFactory()
 
@@ -232,7 +232,7 @@ class ApplicableThreadsParameterTests(TestCase):
     """_derive_power accepts applicable_threads; thread provider is a stub returning 0 (#637)."""
 
     def setUp(self):
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.technique = TechniqueFactory()
 
@@ -281,7 +281,7 @@ class DamageTypePowerDerivationTests(TestCase):
             name="power_slashing",
             target_damage_type=self.slashing,
         )
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.technique = TechniqueFactory(damage_profile=False)
 
@@ -367,7 +367,7 @@ class PowerLedgerStructureTests(TestCase):
         self.global_target = ModifierTargetFactory(
             category=self.category, name="power", target_resonance=None
         )
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.technique = TechniqueFactory()
 
@@ -477,7 +477,7 @@ class EnvironmentPowerStageTests(TestCase):
     """The ENVIRONMENT power-shift stage (#639 Task 4): AMPLIFY-only, no double-count."""
 
     def setUp(self):
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.technique = TechniqueFactory()
 
@@ -639,7 +639,7 @@ class ImmunityBlockedFlatSourceTests(TestCase):
     """
 
     def setUp(self):
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         # Global power target (no scope gates — matches technique=None).
         self.power_target = GlobalPowerTargetFactory()
@@ -720,7 +720,7 @@ class AuraPowerTermTests(TestCase):
             TechniqueFactory,
         )
 
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.affinity = AffinityFactory(name="Celestial")
         self.resonance = ResonanceFactory(affinity=self.affinity)
@@ -728,7 +728,7 @@ class AuraPowerTermTests(TestCase):
         gift.resonances.add(self.resonance)
         self.technique = TechniqueFactory(gift=gift)
         CharacterAuraFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             celestial=Decimal("50.00"),
             primal=Decimal("30.00"),
             abyssal=Decimal("20.00"),
@@ -823,7 +823,7 @@ class ThreadPowerTermTests(TestCase):
     def setUp(self):
         from world.magic.factories import ResonanceFactory
 
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.resonance = ResonanceFactory()
 
@@ -933,7 +933,7 @@ class CovenantRoleBlendPowerTermTests(TestCase):
     """covenant_role_blend_power_term: always-on blend floor for engaged roles (#2529)."""
 
     def setUp(self):
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
 
     def _ctx(self, technique=None):
@@ -1044,7 +1044,7 @@ class CovenantRoleSpecialtyPowerTermTests(TestCase):
     """covenant_role_specialty_power_term: per-vow technique-specialty boost (#2443)."""
 
     def setUp(self):
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
 
     def _ctx(self, technique=None):
@@ -1249,7 +1249,7 @@ class TotalThreadLevelAcrossAllKindsTests(TestCase):
     """total_thread_level_across_all_kinds sums raw levels across thread kinds (#2529)."""
 
     def setUp(self):
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
 
     def test_sums_across_thread_kinds_and_ignores_retired(self):
@@ -1278,7 +1278,7 @@ class VowSituationalPowerTermTests(TestCase):
     """
 
     def setUp(self):
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
 
     def _ctx(self, technique=None, situation_ctx=None, target_sheet=None):

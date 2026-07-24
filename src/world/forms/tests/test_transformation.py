@@ -22,12 +22,12 @@ class TriggerTransformationVarianceTests(TestCase):
     def setUpTestData(cls):
         cls.sheet = CharacterSheetFactory()
         cls.true_form = CharacterFormFactory(
-            character=cls.sheet.character, name="True", form_type=FormType.TRUE
+            character=cls.sheet, name="True", form_type=FormType.TRUE
         )
         cls.alt_form = CharacterFormFactory(
-            character=cls.sheet.character, name="Beast", form_type=FormType.ALTERNATE
+            character=cls.sheet, name="Beast", form_type=FormType.ALTERNATE
         )
-        CharacterFormStateFactory(character=cls.sheet.character, active_form=cls.true_form)
+        CharacterFormStateFactory(character=cls.sheet, active_form=cls.true_form)
         PersonaFactory(character_sheet=cls.sheet)
         cls.profile = FormCombatProfileFactory(form=cls.alt_form)
         cls.target = ModifierTargetFactory()

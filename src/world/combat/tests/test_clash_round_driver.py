@@ -71,8 +71,8 @@ class RunClashRoundTests(TestCase):
     def _make_character(self, current: int = 20, maximum: int = 20) -> object:
         """Create a CharacterSheet with anima pool and engagement record."""
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=current, maximum=maximum)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=current, maximum=maximum)
+        CharacterEngagementFactory(character=sheet)
         return sheet
 
     def _make_technique(self, anima_cost: int = 3) -> object:
@@ -571,8 +571,8 @@ class RampartWardSyncTests(TestCase):
 
     def _make_character(self, current: int = 20, maximum: int = 20) -> object:
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=current, maximum=maximum)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=current, maximum=maximum)
+        CharacterEngagementFactory(character=sheet)
         return sheet
 
     def _make_technique(self, anima_cost: int = 3) -> object:

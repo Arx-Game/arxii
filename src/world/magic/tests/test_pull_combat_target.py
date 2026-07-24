@@ -104,7 +104,7 @@ class CommitCombatPullCourtRegardAmplificationTests(TestCase):
             target_trait=None,
         )
         CharacterResonanceFactory(character_sheet=servant, resonance=self.resonance, balance=20)
-        CharacterAnimaFactory(character=servant.character, current=10, maximum=20)
+        CharacterAnimaFactory(character=servant, current=10, maximum=20)
 
         encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         participant = CombatParticipantFactory(

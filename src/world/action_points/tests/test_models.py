@@ -88,12 +88,13 @@ class ActionPointPoolModelTests(ActionPointPoolTestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
     def test_str_representation(self):
         """ActionPointPool string shows character and values."""
         pool = ActionPointPoolFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=150,
             maximum=200,
             banked=25,
@@ -103,9 +104,9 @@ class ActionPointPoolModelTests(ActionPointPoolTestCase):
 
     def test_one_pool_per_character(self):
         """Each character can only have one pool."""
-        ActionPointPoolFactory(character=self.character)
+        ActionPointPoolFactory(character=self.character.sheet_data)
         with self.assertRaises(IntegrityError):
-            ActionPointPoolFactory(character=self.character)
+            ActionPointPoolFactory(character=self.character.sheet_data)
 
 
 class ActionPointPoolSpendTests(ActionPointPoolTestCase):
@@ -114,11 +115,12 @@ class ActionPointPoolSpendTests(ActionPointPoolTestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
     def test_spend_success(self):
         """spend deducts from current when sufficient."""
-        pool = ActionPointPoolFactory(character=self.character, current=100)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100)
 
         result = pool.spend(30)
 
@@ -128,7 +130,7 @@ class ActionPointPoolSpendTests(ActionPointPoolTestCase):
 
     def test_spend_insufficient_fails(self):
         """spend returns False when insufficient AP."""
-        pool = ActionPointPoolFactory(character=self.character, current=20)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=20)
 
         result = pool.spend(30)
 
@@ -138,7 +140,7 @@ class ActionPointPoolSpendTests(ActionPointPoolTestCase):
 
     def test_spend_exact_amount(self):
         """spend works when spending exact amount available."""
-        pool = ActionPointPoolFactory(character=self.character, current=50)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=50)
 
         result = pool.spend(50)
 
@@ -148,7 +150,7 @@ class ActionPointPoolSpendTests(ActionPointPoolTestCase):
 
     def test_spend_negative_fails(self):
         """spend returns False for negative amounts."""
-        pool = ActionPointPoolFactory(character=self.character, current=100)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100)
 
         result = pool.spend(-10)
 
@@ -163,11 +165,14 @@ class ActionPointPoolUnbankTests(ActionPointPoolTestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
     def test_unbank_full_restore(self):
         """unbank restores full amount when space available."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200, banked=50)
+        pool = ActionPointPoolFactory(
+            character=self.character.sheet_data, current=100, maximum=200, banked=50
+        )
 
         restored = pool.unbank(50)
 
@@ -178,7 +183,9 @@ class ActionPointPoolUnbankTests(ActionPointPoolTestCase):
 
     def test_unbank_capped_at_maximum(self):
         """unbank caps restoration at maximum, excess is lost."""
-        pool = ActionPointPoolFactory(character=self.character, current=180, maximum=200, banked=50)
+        pool = ActionPointPoolFactory(
+            character=self.character.sheet_data, current=180, maximum=200, banked=50
+        )
 
         restored = pool.unbank(50)
 
@@ -191,7 +198,9 @@ class ActionPointPoolUnbankTests(ActionPointPoolTestCase):
 
     def test_unbank_at_maximum_loses_all(self):
         """unbank loses all when already at maximum."""
-        pool = ActionPointPoolFactory(character=self.character, current=200, maximum=200, banked=50)
+        pool = ActionPointPoolFactory(
+            character=self.character.sheet_data, current=200, maximum=200, banked=50
+        )
 
         restored = pool.unbank(50)
 
@@ -202,7 +211,9 @@ class ActionPointPoolUnbankTests(ActionPointPoolTestCase):
 
     def test_unbank_partial_amount(self):
         """unbank can restore partial amount."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200, banked=50)
+        pool = ActionPointPoolFactory(
+            character=self.character.sheet_data, current=100, maximum=200, banked=50
+        )
 
         restored = pool.unbank(20)
 
@@ -213,7 +224,9 @@ class ActionPointPoolUnbankTests(ActionPointPoolTestCase):
 
     def test_unbank_more_than_banked(self):
         """unbank only unbanks what's actually banked."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200, banked=30)
+        pool = ActionPointPoolFactory(
+            character=self.character.sheet_data, current=100, maximum=200, banked=30
+        )
 
         restored = pool.unbank(50)
 
@@ -224,7 +237,9 @@ class ActionPointPoolUnbankTests(ActionPointPoolTestCase):
 
     def test_unbank_negative_returns_zero(self):
         """unbank returns 0 for negative amounts."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200, banked=50)
+        pool = ActionPointPoolFactory(
+            character=self.character.sheet_data, current=100, maximum=200, banked=50
+        )
 
         restored = pool.unbank(-10)
 
@@ -240,11 +255,12 @@ class ActionPointPoolConsumeBankedTests(ActionPointPoolTestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
     def test_consume_banked_success(self):
         """consume_banked removes from banked without affecting current."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, banked=50)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100, banked=50)
 
         result = pool.consume_banked(30)
 
@@ -255,7 +271,7 @@ class ActionPointPoolConsumeBankedTests(ActionPointPoolTestCase):
 
     def test_consume_banked_insufficient_fails(self):
         """consume_banked returns False when insufficient banked AP."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, banked=20)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100, banked=20)
 
         result = pool.consume_banked(30)
 
@@ -266,7 +282,7 @@ class ActionPointPoolConsumeBankedTests(ActionPointPoolTestCase):
 
     def test_consume_banked_exact_amount(self):
         """consume_banked works for exact banked amount."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, banked=50)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100, banked=50)
 
         result = pool.consume_banked(50)
 
@@ -276,7 +292,7 @@ class ActionPointPoolConsumeBankedTests(ActionPointPoolTestCase):
 
     def test_consume_banked_negative_fails(self):
         """consume_banked returns False for negative amounts."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, banked=50)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100, banked=50)
 
         result = pool.consume_banked(-10)
 
@@ -291,21 +307,22 @@ class ActionPointPoolHelperTests(ActionPointPoolTestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
     def test_can_afford_true(self):
         """can_afford returns True when sufficient AP."""
-        pool = ActionPointPoolFactory(character=self.character, current=100)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100)
         assert pool.can_afford(50) is True
 
     def test_can_afford_false(self):
         """can_afford returns False when insufficient AP."""
-        pool = ActionPointPoolFactory(character=self.character, current=30)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=30)
         assert pool.can_afford(50) is False
 
     def test_can_afford_exact(self):
         """can_afford returns True for exact amount."""
-        pool = ActionPointPoolFactory(character=self.character, current=50)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=50)
         assert pool.can_afford(50) is True
 
 
@@ -315,7 +332,8 @@ class ActionPointPoolGetOrCreateTests(ActionPointPoolTestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
 
     def test_creates_new_pool(self):
         """get_or_create_for_character creates pool if none exists."""
@@ -327,7 +345,9 @@ class ActionPointPoolGetOrCreateTests(ActionPointPoolTestCase):
 
     def test_returns_existing_pool(self):
         """get_or_create_for_character returns existing pool."""
-        existing = ActionPointPoolFactory(character=self.character, current=50, maximum=200)
+        existing = ActionPointPoolFactory(
+            character=self.character.sheet_data, current=50, maximum=200
+        )
 
         pool = ActionPointPool.get_or_create_for_character(self.character)
 
@@ -351,7 +371,8 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         """Set up test data with modifier infrastructure."""
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
         # Create AP modifier targets
@@ -385,21 +406,21 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
 
     def test_no_modifiers_returns_zero(self) -> None:
         """Without modifiers, _get_ap_modifier returns 0."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100, maximum=200)
 
         assert pool._get_ap_modifier("ap_daily_regen") == 0
 
     def test_positive_daily_modifier(self) -> None:
         """Positive modifier is reflected in _get_ap_modifier totals."""
         self._create_ap_modifier(self.daily_target, 3)
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100, maximum=200)
 
         assert pool._get_ap_modifier("ap_daily_regen") == 3
 
     def test_maximum_modifier_increases_effective_max(self) -> None:
         """AP maximum modifier increases effective maximum."""
         self._create_ap_modifier(self.max_target, 100)
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100, maximum=200)
 
         effective_max = pool.get_effective_maximum()
 
@@ -408,14 +429,14 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
     def test_weekly_modifier_applied(self) -> None:
         """Weekly modifier is reflected in _get_ap_modifier totals."""
         self._create_ap_modifier(self.weekly_target, 20)
-        pool = ActionPointPoolFactory(character=self.character, current=50, maximum=200)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=50, maximum=200)
 
         assert pool._get_ap_modifier("ap_weekly_regen") == 20
 
     def test_effective_maximum_minimum_is_one(self) -> None:
         """Effective maximum floors at 1 even with large negative modifier."""
         self._create_ap_modifier(self.max_target, -500)
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100, maximum=200)
 
         effective_max = pool.get_effective_maximum()
 
@@ -430,6 +451,6 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
 
     def test_unknown_target_returns_zero(self) -> None:
         """Unknown modifier target name returns 0."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=100, maximum=200)
 
         assert pool._get_ap_modifier("nonexistent_target") == 0

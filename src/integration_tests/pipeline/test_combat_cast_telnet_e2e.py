@@ -147,11 +147,11 @@ class CombatCastTelnetE2ETests(TestCase):
         # CharacterAnima.character FK → ObjectDB (the game object, not the sheet)
         self.character = self.sheet.character
         self.anima = CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=20,
             maximum=20,
         )
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
 
         # Place the character in a room so location-dependent queries don't fail.
         room = ObjectDBFactory(

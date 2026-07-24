@@ -118,7 +118,7 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
 
         # Anima: pull hard-requires a CharacterAnima row
         CharacterAnimaFactory(
-            character=cls.sheet.character,
+            character=cls.sheet,
             current=50,
             maximum=50,
         )
@@ -170,7 +170,7 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
         )
 
         # CharacterEngagement (required by some path-check helpers in the cast stack).
-        CharacterEngagementFactory(character=cls.sheet.character)
+        CharacterEngagementFactory(character=cls.sheet)
 
     def setUp(self) -> None:
         """Create ObjectDB-backed objects per test method (DbHolder deepcopy guard)."""

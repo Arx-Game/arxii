@@ -35,7 +35,7 @@ class EquipItemTests(TestCase):
 
     def tearDown(self) -> None:
         # Clean up any EquippedItem rows between tests so setUpTestData state is reusable.
-        EquippedItem.objects.filter(character=self.character).delete()
+        EquippedItem.objects.filter(character=self.character.sheet_data).delete()
         self.character.equipped_items.invalidate()
 
     def test_happy_path_creates_equipped_item(self) -> None:
@@ -132,7 +132,7 @@ class UnequipItemTests(TestCase):
         )
         cls.item = ItemInstanceFactory(template=template)
         cls.equipped = EquippedItemFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             item_instance=cls.item,
             body_region=BodyRegion.FEET,
             equipment_layer=EquipmentLayer.BASE,
@@ -149,7 +149,7 @@ class UnequipItemTests(TestCase):
 
         fresh_item = ItemInstanceFactory(template=self.item.template)
         equipped = EquippedItemFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=fresh_item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

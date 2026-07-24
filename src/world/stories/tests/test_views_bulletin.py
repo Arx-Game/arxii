@@ -109,7 +109,7 @@ class BulletinViewSetSetup(TestCase):
         participant_sheet = cls.participant_persona.character_sheet
         cls.story_participation = StoryParticipationFactory(
             story=cls.story,
-            character=participant_sheet.character,
+            character=participant_sheet,
         )
 
     def _client(self, user: object) -> APIClient:

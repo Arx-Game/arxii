@@ -33,7 +33,7 @@ class CharacterEquipmentHandlerTests(TestCase):
             attachment_quality_tier=cls.q,
         )
         cls.equipped = EquippedItemFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             item_instance=cls.instance,
         )
 
@@ -92,7 +92,7 @@ class CharacterEquipmentHandlerStyleTests(TestCase):
             attachment_quality_tier=cls.q,
         )
         cls.equipped = EquippedItemFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             item_instance=cls.instance,
         )
 

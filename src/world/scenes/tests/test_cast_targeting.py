@@ -226,7 +226,7 @@ class TestFilteredGroupBenignCast(CastScenarioMixin):
             base_max_health=50,
         )
         CharacterAnimaFactory(
-            character=cls.third_ally.character_sheet.character,
+            character=cls.third_ally.character_sheet,
             current=20,
             maximum=30,
         )

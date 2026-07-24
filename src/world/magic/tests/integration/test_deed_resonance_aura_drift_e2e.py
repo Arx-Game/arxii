@@ -39,7 +39,7 @@ from world.missions.services.rewards import apply_deed_rewards, emit_terminal_re
 class DeedResonanceAuraDriftE2ETest(TestCase):
     def test_full_deed_to_achievement_pipeline(self):
         sheet = CharacterSheetFactory()
-        CharacterAuraFactory(character=sheet.character)
+        CharacterAuraFactory(character=sheet)
         abyssal = AffinityFactory(name="Abyssal")
         cruelty = ResonanceFactory(name="Cruelty", affinity=abyssal)
         achievement = AchievementFactory(is_active=True)
@@ -61,7 +61,7 @@ class DeedResonanceAuraDriftE2ETest(TestCase):
         instance = MissionInstanceFactory(template=template)
         MissionParticipantFactory(
             instance=instance,
-            character=sheet.character,
+            character=sheet,
             is_contract_holder=True,
         )
         MissionOptionRouteRewardFactory(
@@ -74,7 +74,7 @@ class DeedResonanceAuraDriftE2ETest(TestCase):
         )
         deed = MissionDeedRecordFactory(
             instance=instance,
-            actor=sheet.character,
+            actor=sheet,
             node=node,
             option=option,
         )
@@ -87,7 +87,7 @@ class DeedResonanceAuraDriftE2ETest(TestCase):
         cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=cruelty)
         assert cr.lifetime_earned == 100
 
-        aura = CharacterAura.objects.get(character=sheet.character)
+        aura = CharacterAura.objects.get(character=sheet)
         assert float(aura.abyssal) == 100.0
 
         assert CharacterAchievement.objects.filter(

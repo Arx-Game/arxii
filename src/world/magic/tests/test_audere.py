@@ -208,9 +208,11 @@ class AudereLifecycleTests(TestCase):
 
     def setUp(self) -> None:
         self.character = ObjectDBFactory(db_key="lifecycle_char")
-        self.anima = CharacterAnimaFactory(character=self.character, current=10, maximum=50)
+        self.anima = CharacterAnimaFactory(
+            character=self.character.sheet_data, current=10, maximum=50
+        )
         self.engagement = CharacterEngagement.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             engagement_type=EngagementType.CHALLENGE,
             source_content_type=self.obj_ct,
             source_id=self.character.pk,

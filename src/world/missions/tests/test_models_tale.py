@@ -25,7 +25,7 @@ class MissionDeedRecordLegendEntriesTests(TestCase):
         participant = MissionParticipantFactory(instance=instance)
         deed = MissionDeedRecordFactory(
             instance=instance,
-            actor=participant.character,
+            actor=participant,
             node=node,
             option=option,
         )

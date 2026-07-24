@@ -87,7 +87,7 @@ class ChargeCastPullCourtRegardAmplificationTests(TestCase):
             target_trait=None,
         )
         CharacterResonanceFactory(character_sheet=servant, resonance=self.resonance, balance=20)
-        CharacterAnimaFactory(character=servant.character, current=10, maximum=20)
+        CharacterAnimaFactory(character=servant, current=10, maximum=20)
         cast_pull = CastPullDeclaration(resonance=self.resonance, tier=1, threads=(thread,))
 
         pull_flat_bonus, _effective_power, _resolved = _charge_cast_pull(

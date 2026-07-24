@@ -69,9 +69,9 @@ class RosterEntryQuerySet(models.QuerySet):
         from world.gm.constants import GMTableStatus  # noqa: PLC0415
 
         return self.filter(
-            character_sheet__character__story_participations__is_active=True,
-            character_sheet__character__story_participations__story__primary_table__isnull=False,
-            character_sheet__character__story_participations__story__primary_table__status=GMTableStatus.ACTIVE,
+            character_sheet__story_participations__is_active=True,
+            character_sheet__story_participations__story__primary_table__isnull=False,
+            character_sheet__story_participations__story__primary_table__status=GMTableStatus.ACTIVE,
         ).distinct()
 
     def character_ids(self) -> models.QuerySet:

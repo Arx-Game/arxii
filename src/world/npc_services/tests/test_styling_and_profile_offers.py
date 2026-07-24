@@ -42,7 +42,7 @@ class StylingOfferTests(TestCase):
         self.trait = FormTraitFactory(name="hair_color_npc", is_cosmetic=True)
         self.raven = FormTraitOptionFactory(trait=self.trait, name="raven")
         self.crimson = FormTraitOptionFactory(trait=self.trait, name="crimson")
-        form = CharacterFormFactory(character=self.sheet.character)
+        form = CharacterFormFactory(character=self.sheet)
         CharacterFormValueFactory(form=form, trait=self.trait, option=self.raven)
         self.form = form
         role = NPCRoleFactory(name="Silver Shears Stylist")

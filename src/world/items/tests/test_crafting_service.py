@@ -106,7 +106,9 @@ class RunCraftingRecipeTests(TestCase):
         pool = ActionPointPool.get_or_create_for_character(self.character)
         pool.current = 10
         pool.save()
-        anima = CharacterAnima.objects.create(character=self.character, current=10, maximum=10)
+        anima = CharacterAnima.objects.create(
+            character=self.character.sheet_data, current=10, maximum=10
+        )
 
         botch = CheckOutcomeFactory(name="SvcBotch", success_level=-2)
         # A FULL-band consequence for the botch tier.
@@ -148,7 +150,9 @@ class RunCraftingRecipeTests(TestCase):
         pool = ActionPointPool.get_or_create_for_character(self.character)
         pool.current = 10
         pool.save()
-        anima = CharacterAnima.objects.create(character=self.character, current=10, maximum=10)
+        anima = CharacterAnima.objects.create(
+            character=self.character.sheet_data, current=10, maximum=10
+        )
 
         near_miss = CheckOutcomeFactory(name="SvcNearMiss", success_level=0)
         from world.checks.factories import ConsequenceFactory

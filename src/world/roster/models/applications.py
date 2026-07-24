@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, ClassVar
 
 from django.db import models
 from django.utils import timezone
-from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.roster.managers import RosterApplicationManager
@@ -36,7 +35,7 @@ class RosterApplication(SharedMemoryModel):
         related_name="applications",
     )
     character = models.ForeignKey(
-        ObjectDB,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="applications",
     )
@@ -73,7 +72,7 @@ class RosterApplication(SharedMemoryModel):
         RosterTenure = apps.get_model("roster", "RosterTenure")
 
         # Create the tenure
-        player_number = self.character.sheet_data.roster_entry.tenures.count() + 1
+        player_number = self.character.roster_entry.tenures.count() + 1
         tenure = RosterTenure.objects.create(
             player_data=self.player_data,
             roster_entry=self.character.sheet_data.roster_entry,

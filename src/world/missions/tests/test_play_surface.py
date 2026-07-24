@@ -635,7 +635,7 @@ class MaybePauseMissionForDisconnectTests(TestCase):
 
         instance = MissionInstanceFactory()
         sheet = CharacterSheetFactory()
-        MissionParticipantFactory(instance=instance, character=sheet.character)
+        MissionParticipantFactory(instance=instance, character=sheet)
 
         maybe_pause_mission_for_disconnect(sheet)
 
@@ -654,7 +654,7 @@ class MaybePauseMissionForDisconnectTests(TestCase):
 
         instance = MissionInstanceFactory(status=MissionStatus.COMPLETE)
         sheet = CharacterSheetFactory()
-        MissionParticipantFactory(instance=instance, character=sheet.character)
+        MissionParticipantFactory(instance=instance, character=sheet)
 
         maybe_pause_mission_for_disconnect(sheet)
 
@@ -669,8 +669,8 @@ class MaybePauseMissionForDisconnectTests(TestCase):
         sheet = CharacterSheetFactory()
         instance_a = MissionInstanceFactory()
         instance_b = MissionInstanceFactory()
-        MissionParticipantFactory(instance=instance_a, character=sheet.character)
-        MissionParticipantFactory(instance=instance_b, character=sheet.character)
+        MissionParticipantFactory(instance=instance_a, character=sheet)
+        MissionParticipantFactory(instance=instance_b, character=sheet)
 
         maybe_pause_mission_for_disconnect(sheet)
 

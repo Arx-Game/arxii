@@ -1507,7 +1507,7 @@ class MissionParticipant(SharedMemoryModel):
         related_name="participants",
     )
     character = models.ForeignKey(
-        OBJECT_DB_MODEL,
+        "character_sheets.CharacterSheet",
         on_delete=models.PROTECT,
         related_name="+",
     )
@@ -1708,7 +1708,7 @@ class MissionDeedRecord(SharedMemoryModel):
         related_name="deeds",
     )
     actor = models.ForeignKey(
-        OBJECT_DB_MODEL,
+        "character_sheets.CharacterSheet",
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The acting participant's character — consequence follows the actor.",
@@ -2148,10 +2148,10 @@ class MissionGiverCooldown(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="cooldowns",
     )
-    # Character is an ObjectDB here to match MissionParticipant.character — the
-    # missions app keys runtime participation on the Evennia object, not a Persona.
+    # Keyed on the CharacterSheet to match MissionParticipant.character — the
+    # missions app keys runtime participation on the character, not a Persona.
     character = models.ForeignKey(
-        OBJECT_DB_MODEL,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="+",
     )
@@ -2187,7 +2187,7 @@ class MissionDeedRewardLine(SharedMemoryModel):
         related_name="reward_lines",
     )
     recipient = models.ForeignKey(
-        OBJECT_DB_MODEL,
+        "character_sheets.CharacterSheet",
         on_delete=models.PROTECT,
         related_name="+",
         help_text=(

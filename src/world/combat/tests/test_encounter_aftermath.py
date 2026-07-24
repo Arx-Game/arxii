@@ -461,8 +461,8 @@ class ResolveRoundCompletionTests(TestCase):
         sheet = CharacterSheetFactory()
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         room = ObjectDBFactory(
             db_key="AftermathCompletionRoom",
             db_typeclass_path="typeclasses.rooms.Room",

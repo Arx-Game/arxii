@@ -744,12 +744,12 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
 
         # Create a sheet with no aura — explicitly delete any that might exist.
         quiescent_sheet = CharacterSheetFactory()
-        CharacterAura.objects.filter(character=quiescent_sheet.character).delete()
+        CharacterAura.objects.filter(character=quiescent_sheet).delete()
         quiescent_sheet.character.location = self.low_room
         quiescent_sheet.character.save()
 
         # Build technique and anima so use_technique can proceed.
-        CharacterAnimaFactory(character=quiescent_sheet.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=quiescent_sheet, current=20, maximum=20)
 
         forced_outcome = CheckOutcome.objects.get(name="Success")
         with force_check_outcome(forced_outcome) as capture:
@@ -781,7 +781,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         from world.magic.models.aura import CharacterAura
 
         quiescent_sheet = CharacterSheetFactory()
-        CharacterAura.objects.filter(character=quiescent_sheet.character).delete()
+        CharacterAura.objects.filter(character=quiescent_sheet).delete()
 
         quiescent_sheet.character.db_location = self.aligned_room
         quiescent_sheet.character.save(update_fields=["db_location"])

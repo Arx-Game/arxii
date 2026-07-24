@@ -8,7 +8,6 @@ execution_kind=SCENE_ACTION and a RitualCheckConfig sidecar.
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 
@@ -21,7 +20,7 @@ class CharacterAnima(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        ObjectDB,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="anima",
         help_text="The character this anima belongs to.",

@@ -380,7 +380,7 @@ class TestRosterEntryApply(TestCase):
         assert response.status_code == 204
         application = RosterApplication.objects.get(
             player_data=self.player,
-            character=self.entry.character_sheet.character,
+            character=self.entry.character_sheet,
         )
         assert application.application_text == message
         assert application.status == "pending"
@@ -397,7 +397,7 @@ class TestRosterEntryApply(TestCase):
         assert (
             RosterApplication.objects.filter(
                 player_data=self.player,
-                character=self.entry.character_sheet.character,
+                character=self.entry.character_sheet,
             ).count()
             == 1
         )
@@ -409,7 +409,7 @@ class TestRosterEntryApply(TestCase):
         self.client.post(url, {"message": message}, format="json")
         application = RosterApplication.objects.get(
             player_data=self.player,
-            character=self.entry.character_sheet.character,
+            character=self.entry.character_sheet,
         )
         application.status = ApplicationStatus.DENIED
         application.save()
@@ -420,7 +420,7 @@ class TestRosterEntryApply(TestCase):
         assert (
             RosterApplication.objects.filter(
                 player_data=self.player,
-                character=self.entry.character_sheet.character,
+                character=self.entry.character_sheet,
             ).count()
             == 2
         )
@@ -432,7 +432,7 @@ class TestRosterEntryApply(TestCase):
         self.client.post(url, {"message": message}, format="json")
         application = RosterApplication.objects.get(
             player_data=self.player,
-            character=self.entry.character_sheet.character,
+            character=self.entry.character_sheet,
         )
         application.withdraw()
 
@@ -442,7 +442,7 @@ class TestRosterEntryApply(TestCase):
         assert (
             RosterApplication.objects.filter(
                 player_data=self.player,
-                character=self.entry.character_sheet.character,
+                character=self.entry.character_sheet,
             ).count()
             == 2
         )

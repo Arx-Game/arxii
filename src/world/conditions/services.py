@@ -2864,7 +2864,7 @@ def decay_all_conditions_tick() -> DecayTickSummary:
         if (
             cond.passive_decay_blocked_in_engagement
             and CharacterEngagement.objects.filter(
-                character=instance.target,
+                character_id=instance.target_id,
             ).exists()
         ):
             engagement_blocked += 1
@@ -3153,12 +3153,9 @@ def get_treatment_candidates(
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
     target_character = target_sheet.character
-    helper_character = helper_sheet.character
 
     # Engagement gate: neither helper nor target may be engaged.
-    if CharacterEngagement.objects.filter(
-        character__in=[helper_character, target_character]
-    ).exists():
+    if CharacterEngagement.objects.filter(character__in=[helper_sheet, target_sheet]).exists():
         return []
 
     candidate_threads = list(Thread.objects.filter(owner=helper_sheet, retired_at__isnull=True))
@@ -3287,7 +3284,7 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     # ------------------------------------------------------------------
     # Gate 5: engagement gate (both helper and target)
     # ------------------------------------------------------------------
-    if CharacterEngagement.objects.filter(character__in=[helper, target]).exists():
+    if CharacterEngagement.objects.filter(character_id__in=[helper.pk, target.pk]).exists():
         raise HelperEngagedForTreatment
 
     # ------------------------------------------------------------------
@@ -3300,7 +3297,7 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     # once_per_scene_per_helper=False).
     if treatment.once_per_wound_per_helper:
         if TreatmentAttempt.objects.filter(
-            helper=helper,
+            helper=helper_sheet,
             target_condition_instance=target_effect,
             once_per_wound_guard=True,
         ).exists():
@@ -3308,8 +3305,8 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     elif (
         treatment.once_per_scene_per_helper
         and TreatmentAttempt.objects.filter(
-            helper=helper,
-            target=target,
+            helper=helper_sheet,
+            target=target_sheet,
             scene=scene,
             treatment=treatment,
         ).exists()
@@ -3339,7 +3336,7 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     # ------------------------------------------------------------------
     anima_spent = 0
     if treatment.anima_cost > 0:
-        anima_row = CharacterAnima.objects.select_for_update().get(character=helper)
+        anima_row = CharacterAnima.objects.select_for_update().get(character=helper_sheet)
         if anima_row.current < treatment.anima_cost:
             raise TreatmentAnimaInsufficient
         anima_row.current -= treatment.anima_cost
@@ -3441,8 +3438,8 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     from psycopg.errors import UniqueViolation  # noqa: PLC0415
 
     attempt_kwargs: dict[str, Any] = {
-        "helper": helper,
-        "target": target,
+        "helper": helper_sheet,
+        "target": target_sheet,
         "scene": scene,
         "treatment": treatment,
         "thread_used": bond_thread,

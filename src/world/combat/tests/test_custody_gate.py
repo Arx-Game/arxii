@@ -112,7 +112,7 @@ class AddOpponentCustodyGateTests(EvenniaTestCase):
     def test_participant_gm_allowed(self):
         participant_sheet = CharacterSheetFactory()
         participant_account = _account_playing(participant_sheet)
-        StoryParticipationFactory(story=self.story, character=participant_sheet.character)
+        StoryParticipationFactory(story=self.story, character=participant_sheet)
 
         opp = self._add(acting_account=participant_account)
         self.assertIsNotNone(opp)

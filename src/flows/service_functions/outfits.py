@@ -129,7 +129,7 @@ def save_outfit(
             name=name,
             description=description,
         )
-        rows = EquippedItem.objects.filter(character=character_sheet.character)
+        rows = EquippedItem.objects.filter(character=character_sheet)
         OutfitSlot.objects.bulk_create(
             [
                 OutfitSlot(

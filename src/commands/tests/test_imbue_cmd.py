@@ -29,7 +29,7 @@ class CmdImbueTests(TestCase):
     def setUp(self) -> None:
         self.character = self.sheet.character
         self.character.msg = MagicMock()
-        CharacterAnimaFactory(character=self.character)
+        CharacterAnimaFactory(character=self.character.sheet_data)
         # Each test needs a fresh PendingRitualEffect since the action consumes it.
         PendingRitualEffect.objects.get_or_create(character=self.sheet, ritual=self.ritual)
 

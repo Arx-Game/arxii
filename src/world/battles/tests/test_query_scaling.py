@@ -91,7 +91,7 @@ class ResolveBattleRoundQueryScalingTests(TestCase):
             sheet = CharacterSheetFactory()
             CharacterVitalsFactory(character_sheet=sheet, health=100, max_health=100)
             CharacterTechniqueFactory(character=sheet, technique=technique)
-            CharacterAnimaFactory(character=sheet.character, current=50, maximum=50)
+            CharacterAnimaFactory(character=sheet, current=50, maximum=50)
             participant = enlist_participant(
                 battle=battle, character_sheet=sheet, side=attacker_side
             )
@@ -174,7 +174,7 @@ class ResolveBattleRoundQueryScalingTests(TestCase):
             sheet = CharacterSheetFactory()
             CharacterVitalsFactory(character_sheet=sheet, health=100, max_health=100)
             CharacterTechniqueFactory(character=sheet, technique=technique)
-            CharacterAnimaFactory(character=sheet.character, current=50, maximum=50)
+            CharacterAnimaFactory(character=sheet, current=50, maximum=50)
             participant = enlist_participant(
                 battle=battle, character_sheet=sheet, side=attacker_side
             )
@@ -216,7 +216,7 @@ class ResolveBattleRoundQueryScalingTests(TestCase):
             strike_sheet = CharacterSheetFactory()
             CharacterVitalsFactory(character_sheet=strike_sheet, health=100, max_health=100)
             CharacterTechniqueFactory(character=strike_sheet, technique=technique)
-            CharacterAnimaFactory(character=strike_sheet.character, current=50, maximum=50)
+            CharacterAnimaFactory(character=strike_sheet, current=50, maximum=50)
             striker = enlist_participant(
                 battle=battle,
                 character_sheet=strike_sheet,

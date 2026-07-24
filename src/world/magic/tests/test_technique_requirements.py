@@ -2,7 +2,6 @@
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import (
     CapabilityTypeFactory,
@@ -31,7 +30,7 @@ class TechniqueCapabilityRequirementModelTests(TestCase):
 class TechniquePerformableTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         CharacterSheetFactory(character=cls.character)
         cls.awareness = CapabilityTypeFactory(name="awareness", innate_baseline=1)
         cls.movement = CapabilityTypeFactory(name="movement", innate_baseline=1)
@@ -70,7 +69,7 @@ class TechniqueGrantSatisfiesRequirementTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         CharacterSheetFactory(character=cls.character)
         cls.granted_cap = CapabilityTypeFactory(name="tf-granted-capability", innate_baseline=0)
         cls.granting_technique = TechniqueFactory(name="Empower", intensity=1)

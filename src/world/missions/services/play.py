@@ -771,7 +771,7 @@ def maybe_pause_mission_for_disconnect(character_sheet: CharacterSheet) -> None:
     from world.missions.models import MissionInstance, MissionParticipant  # noqa: PLC0415
 
     instance_ids = MissionParticipant.objects.filter(
-        character=character_sheet.character,
+        character=character_sheet,
         instance__status=MissionStatus.ACTIVE,
     ).values_list("instance_id", flat=True)
     for instance in MissionInstance.objects.filter(pk__in=list(instance_ids)):

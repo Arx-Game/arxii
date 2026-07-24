@@ -87,7 +87,7 @@ class ChargeSocialPullTests(TestCase):
         cls.scene = SceneFactory()
         cls.initiator_sheet = CharacterSheetFactory()
         cls.target_sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=cls.initiator_sheet.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=cls.initiator_sheet, current=10, maximum=10)
         cls.resonance = ResonanceFactory()
         CharacterResonanceFactory(
             character_sheet=cls.initiator_sheet,
@@ -138,9 +138,9 @@ class ChargeSocialPullTests(TestCase):
         thread = _setup_pull_seed(sheet=self.initiator_sheet, resonance=self.resonance)
         request = self._make_request_with_pull(thread)
 
-        anima_before = CharacterAnima.objects.get(character=self.initiator_sheet.character).current
+        anima_before = CharacterAnima.objects.get(character=self.initiator_sheet).current
         _charge_social_pull(action_request=request, check_type=self.check_type)
-        anima_after = CharacterAnima.objects.get(character=self.initiator_sheet.character).current
+        anima_after = CharacterAnima.objects.get(character=self.initiator_sheet).current
         assert anima_before == anima_after  # unchanged — waived
 
     def test_no_declaration_returns_zero(self):
@@ -224,7 +224,7 @@ class DenyPathCleanupTests(TestCase):
         cls.scene = SceneFactory()
         cls.initiator_sheet = CharacterSheetFactory()
         cls.target_sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=cls.initiator_sheet.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=cls.initiator_sheet, current=10, maximum=10)
         cls.resonance = ResonanceFactory()
         CharacterResonanceFactory(
             character_sheet=cls.initiator_sheet,
@@ -266,7 +266,7 @@ class EndToEndSocialPullTests(TestCase):
         cls.scene = SceneFactory()
         cls.initiator_sheet = CharacterSheetFactory()
         cls.target_sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=cls.initiator_sheet.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=cls.initiator_sheet, current=10, maximum=10)
         cls.resonance = ResonanceFactory()
         CharacterResonanceFactory(
             character_sheet=cls.initiator_sheet,

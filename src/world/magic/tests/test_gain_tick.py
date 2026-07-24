@@ -234,7 +234,7 @@ class OutfitDailyTrickleTests(TestCase):
             facet=facet,
             attachment_quality_tier=attach_quality,
         )
-        EquippedItemFactory(character=sheet.character, item_instance=instance)
+        EquippedItemFactory(character=sheet, item_instance=instance)
         # Invalidate handler cache so it sees the newly equipped item.
         sheet.character.equipped_items.invalidate()
 
@@ -286,7 +286,7 @@ class OutfitDailyTrickleTests(TestCase):
         facet = FacetFactory()
         instance = ItemInstanceFactory()
         ItemFacetFactory(item_instance=instance, facet=facet)
-        EquippedItemFactory(character=sheet.character, item_instance=instance)
+        EquippedItemFactory(character=sheet, item_instance=instance)
         sheet.character.equipped_items.invalidate()
 
         grants_issued = outfit_daily_trickle_for_character(sheet)

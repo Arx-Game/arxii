@@ -87,7 +87,7 @@ class KudosTransactionAdmin(admin.ModelAdmin):
     list_filter = ["source_category", "claim_category", "transaction_date"]
     search_fields = ["account__username", "description", "awarded_by__username"]
     readonly_fields = ["transaction_date"]
-    raw_id_fields = ["account", "awarded_by", "character"]
+    raw_id_fields = ["account", "awarded_by"]
 
 
 @admin.register(KudosDifficultyWeight)

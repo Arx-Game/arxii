@@ -42,7 +42,7 @@ class TechniqueUseResultFieldTests(TestCase):
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(current=20, maximum=20)
         self.character = self.anima.character
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
 
     def test_use_technique_populates_technique_field(self) -> None:
         """result.technique is the technique passed to use_technique."""

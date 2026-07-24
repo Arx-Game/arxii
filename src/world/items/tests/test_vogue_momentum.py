@@ -70,7 +70,7 @@ class VogueMomentumAccrualTests(TestCase):
             attachment_quality_tier=cls.quality,
         )
         EquippedItemFactory(
-            character=cls.presenter.character,
+            character=cls.presenter,
             item_instance=cls.instance,
         )
 

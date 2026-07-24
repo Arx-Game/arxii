@@ -109,10 +109,10 @@ class MovementHookAlignmentTest(ResonanceCacheIsolationMixin, TestCase):
         self.neutral_room = self.neutral_room_profile.objectdb
 
         # --- Character with Celestial-dominant aura and sheet_data ---
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         CharacterAuraFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             celestial=Decimal("80.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("10.00"),

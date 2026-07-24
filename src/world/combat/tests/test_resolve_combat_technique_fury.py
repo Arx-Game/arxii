@@ -75,8 +75,8 @@ def _setup_combat_scenario():
     sheet = CharacterSheetFactory()
     participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
     CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
-    anima = CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-    CharacterEngagementFactory(character=sheet.character)
+    anima = CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+    CharacterEngagementFactory(character=sheet)
     room = ObjectDBFactory(
         db_key="TestRoom",
         db_typeclass_path="typeclasses.rooms.Room",

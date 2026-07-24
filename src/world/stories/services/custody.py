@@ -332,7 +332,7 @@ def is_death_prevented_by_story(
 
         is_participant = StoryParticipation.objects.filter(
             story=dep.story,
-            character=attacker,
+            character_id=attacker.pk,
             is_active=True,
         ).exists()
 

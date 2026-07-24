@@ -574,7 +574,7 @@ class ResolveStageAdvanceFromDbHappyPathTests(TestCase):
 
         # Seed Sineater anima (needed by TetherStrain apply_condition path).
         CharacterAnimaFactory(
-            character=cls.sineater_sheet.character,
+            character=cls.sineater_sheet,
             current=20,
             maximum=20,
         )

@@ -8,6 +8,7 @@ import logging
 from django.test import TestCase
 from django.utils import timezone
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import (
     CharacterFactory,
     PlayerDataFactory,
@@ -23,7 +24,7 @@ class CharacterSerializerCovenantTestCase(TestCase):
     """The covenant identity summary on CharacterSerializer (#1446)."""
 
     def setUp(self):
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
 
     def test_covenant_null_when_no_active_role(self):
         from world.character_sheets.factories import CharacterSheetFactory
@@ -112,7 +113,7 @@ class CharacterSerializerTestCase(TestCase):
         """Set up test data."""
         from world.species.models import Species
 
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         # Use existing species from data migration, or create a test-specific one
         self.species, _ = Species.objects.get_or_create(
             name="Human",
@@ -318,7 +319,7 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
         """Set up test data for each test"""
         self.player_data = PlayerDataFactory()
         self.staff_data = PlayerDataFactory(account__is_staff=True)
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.roster_entry = RosterEntryFactory(character_sheet__character=self.character)
 
     def test_create_valid_application(self):
@@ -384,7 +385,7 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
                 "name": "duplicate pending application",
                 "setup": lambda: RosterApplication.objects.create(
                     player_data=self.player_data,
-                    character=self.character,
+                    character=self.character.sheet_data,
                     application_text="First application",
                 ),
                 "character_attr": "character",

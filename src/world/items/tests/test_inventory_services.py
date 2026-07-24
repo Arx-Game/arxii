@@ -215,7 +215,7 @@ class DropTests(TestCase):
 
     def test_drop_auto_unequips_first(self) -> None:
         EquippedItem.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=self.item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -415,7 +415,9 @@ class EquipTests(TestCase):
     def test_equip_into_empty_slot_creates_row(self) -> None:
         equip(self.character_state, self.item_state)
         self.assertTrue(
-            EquippedItem.objects.filter(character=self.character, item_instance=self.item).exists()
+            EquippedItem.objects.filter(
+                character=self.character.sheet_data, item_instance=self.item
+            ).exists()
         )
 
     def test_equip_same_layer_swaps_existing(self) -> None:
@@ -436,7 +438,7 @@ class EquipTests(TestCase):
 
         equip(self.character_state, self.item_state)
 
-        equipped = EquippedItem.objects.filter(character=self.character)
+        equipped = EquippedItem.objects.filter(character=self.character.sheet_data)
         self.assertEqual(equipped.count(), 1)
         self.assertEqual(equipped.first().item_instance, self.item)
 
@@ -466,7 +468,7 @@ class EquipTests(TestCase):
         equip(self.character_state, self.item_state)
 
         self.assertEqual(
-            EquippedItem.objects.filter(character=self.character).count(),
+            EquippedItem.objects.filter(character=self.character.sheet_data).count(),
             2,
         )
 
@@ -490,7 +492,9 @@ class EquipTests(TestCase):
         equip(self.character_state, plate_state)
 
         self.assertEqual(
-            EquippedItem.objects.filter(character=self.character, item_instance=plate).count(),
+            EquippedItem.objects.filter(
+                character=self.character.sheet_data, item_instance=plate
+            ).count(),
             3,
         )
 
@@ -512,7 +516,9 @@ class EquipTests(TestCase):
         # Second equip should not raise and should leave exactly one row.
         equip(self.character_state, self.item_state)
         self.assertEqual(
-            EquippedItem.objects.filter(character=self.character, item_instance=self.item).count(),
+            EquippedItem.objects.filter(
+                character=self.character.sheet_data, item_instance=self.item
+            ).count(),
             1,
         )
 

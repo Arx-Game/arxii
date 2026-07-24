@@ -6,7 +6,6 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.action_points.factories import ActionPointPoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
@@ -41,8 +40,10 @@ def _gem(value=100):
 
 class PryAdornmentTests(TestCase):
     def setUp(self):
-        self.character = CharacterFactory()
-        self.pool = ActionPointPoolFactory(character=self.character, current=200, maximum=200)
+        self.character = CharacterSheetFactory().character
+        self.pool = ActionPointPoolFactory(
+            character=self.character.sheet_data, current=200, maximum=200
+        )
         self.sheet = CharacterSheetFactory(character=self.character)
         self.check_type = CheckTypeFactory()
         self.host = ItemInstanceFactory(

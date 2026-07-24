@@ -65,7 +65,7 @@ def _prefetch_facts(sheet: CharacterSheet) -> _Prefetched:
     # CharacterAnima.character is a FK to ObjectDB accessed via sheet.character.
     # Bare-factory CharacterSheets may not have an ObjectDB character attached yet.
     try:
-        anima_exists = CharacterAnima.objects.filter(character=sheet.character).exists()
+        anima_exists = CharacterAnima.objects.filter(character=sheet).exists()
     except AttributeError:
         anima_exists = False
 

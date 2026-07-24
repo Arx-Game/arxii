@@ -101,7 +101,9 @@ class BuildToClimaxTests(TestCase):
         self.character = self.sheet.character
         self.character.location = self.encounter.room
         self.technique = TechniqueFactory(intensity=10, control=4, anima_cost=3)
-        self.anima = CharacterAnimaFactory(character=self.character, current=5, maximum=50)
+        self.anima = CharacterAnimaFactory(
+            character=self.character.sheet_data, current=5, maximum=50
+        )
 
     def _seed_soulfray_severity_thresholds(self) -> None:
         """Author severity thresholds so real accumulation advances the stages.
@@ -120,7 +122,7 @@ class BuildToClimaxTests(TestCase):
         self.encounter.status = RoundStatus.BETWEEN_ROUNDS
         self.encounter.save(update_fields=["status"])
         begin_declaration_phase(self.encounter)
-        engagement = CharacterEngagement.objects.get(character=self.character)
+        engagement = CharacterEngagement.objects.get(character=self.character.sheet_data)
         engagement.refresh_from_db()
         self.assertEqual(engagement.intensity_modifier, modifier)
         stats = get_runtime_technique_stats(self.technique, self.character)
@@ -156,7 +158,7 @@ class BuildToClimaxTests(TestCase):
 
         # Real entry path: add_participant creates the COMBAT engagement.
         add_participant(self.encounter, self.sheet)
-        engagement = CharacterEngagement.objects.get(character=self.character)
+        engagement = CharacterEngagement.objects.get(character=self.character.sheet_data)
         self.assertEqual(engagement.engagement_type, EngagementType.COMBAT)
 
         # Entering combat strips the social-safety control bonus.

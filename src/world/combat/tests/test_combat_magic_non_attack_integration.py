@@ -60,8 +60,8 @@ def _setup_participant_with_technique(
         health=100,
         max_health=100,
     )
-    anima = CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-    CharacterEngagementFactory(character=sheet.character)
+    anima = CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+    CharacterEngagementFactory(character=sheet)
     sheet.character.location = room
     sheet.character.save()
 
@@ -210,7 +210,7 @@ class TechniqueAffectedFiringTests(EvenniaTestCase):
             encounter=encounter,
             character_sheet=ally_sheet,
         )
-        CharacterEngagementFactory(character=ally_sheet.character)
+        CharacterEngagementFactory(character=ally_sheet)
         ally_sheet.character.location = room
         ally_sheet.character.save()
 

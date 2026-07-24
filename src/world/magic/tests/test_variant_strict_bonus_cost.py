@@ -71,8 +71,8 @@ class VariantStrictBonusCostTests(TestCase):
     def _make_caster(self, *, with_variant: bool) -> tuple:
         """Return (character, anima) with or without the GIFT thread at level 3."""
         sheet = CharacterSheetFactory()
-        anima = CharacterAnimaFactory(character=sheet.character, current=50, maximum=50)
-        CharacterEngagementFactory(character=sheet.character)
+        anima = CharacterAnimaFactory(character=sheet, current=50, maximum=50)
+        CharacterEngagementFactory(character=sheet)
         if with_variant:
             provision_latent_gift_thread(sheet, self.gift, resonance=self.resonance)
             thread = next(

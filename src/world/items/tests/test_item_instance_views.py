@@ -302,7 +302,7 @@ class UseItemActionTests(TestCase):
         self.client.force_authenticate(user=self.user)
 
     def _pool_with_condition_effect(self):
-        """Build a ConsequencePool with one apply_condition effect (target=self).
+        """Build a ConsequencePool with one apply_condition effect on self.character.
 
         Mirrors test_usage_service.UseItemTests._pool_with_condition_effect so
         use_item finds a usable on-use pool.

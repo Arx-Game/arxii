@@ -98,8 +98,8 @@ class ResolveRoundBasicTests(TestCase):
             character_sheet=sheet,
         )
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         room = ObjectDBFactory(
             db_key="TestRoom",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -223,8 +223,8 @@ class ResolveRoundBasicTests(TestCase):
             character_sheet=sheet,
         )
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         room = ObjectDBFactory(
             db_key="TestRoomComplete",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -292,7 +292,7 @@ class ResolveRoundComboTests(TestCase):
             covenant_role=CovenantRoleFactory(speed_rank=5),
         )
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
         technique = TechniqueFactory(
             gift=self.gift,
             effect_type=EffectTypeFactory(name="Utility (Combo Test)", base_power=None),
@@ -361,8 +361,8 @@ class ResolveRoundDefenseCheckTests(TestCase):
             character_sheet=sheet,
         )
         CharacterVitals.objects.create(character_sheet=sheet, health=200, max_health=200)
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         room = ObjectDBFactory(
             db_key="TestRoomDefense",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -460,8 +460,8 @@ class ResolveRoundBossPhaseTests(TestCase):
             covenant_role=CovenantRoleFactory(speed_rank=1),
         )
         CharacterVitals.objects.create(character_sheet=sheet, health=500, max_health=500)
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         room = ObjectDBFactory(
             db_key="TestRoomBoss",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -535,8 +535,8 @@ class ResolveRoundOffenseCheckTests(TestCase):
             covenant_role=CovenantRoleFactory(speed_rank=1),
         )
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         room = ObjectDBFactory(
             db_key="TestRoomOffense",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -867,13 +867,13 @@ class ResolveDeclaredChallengesTests(TestCase):
         # Both characters resolved
         self.assertTrue(
             CharacterChallengeRecord.objects.filter(
-                character=participant1.character_sheet.character,
+                character=participant1.character_sheet,
             ).exists(),
             "Participant 1 challenge should be resolved",
         )
         self.assertTrue(
             CharacterChallengeRecord.objects.filter(
-                character=participant2.character_sheet.character,
+                character=participant2.character_sheet,
             ).exists(),
             "Participant 2 challenge should be resolved",
         )
@@ -915,8 +915,8 @@ class ResolveDeclaredChallengesTests(TestCase):
             status=ParticipantStatus.ACTIVE,
         )
         CharacterVitals.objects.create(character_sheet=sheet_combat, health=100, max_health=100)
-        CharacterAnimaFactory(character=sheet_combat.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet_combat.character)
+        CharacterAnimaFactory(character=sheet_combat, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet_combat)
         room = ObjectDBFactory(
             db_key="TestRoomChalPost",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -981,7 +981,7 @@ class ResolveDeclaredChallengesTests(TestCase):
         # Challenge post-pass resolved
         self.assertTrue(
             CharacterChallengeRecord.objects.filter(
-                character=participant_challenge.character_sheet.character,
+                character=participant_challenge.character_sheet,
                 challenge_instance=ci,
             ).exists(),
             "Challenge participant's resolution record should exist",
@@ -1097,14 +1097,14 @@ class ResolveDeclaredChallengesTests(TestCase):
         # Ineligible: no record
         self.assertFalse(
             CharacterChallengeRecord.objects.filter(
-                character=participant_ineligible.character_sheet.character,
+                character=participant_ineligible.character_sheet,
             ).exists(),
         )
 
         # Eligible: record exists
         self.assertTrue(
             CharacterChallengeRecord.objects.filter(
-                character=participant_eligible.character_sheet.character,
+                character=participant_eligible.character_sheet,
             ).exists(),
         )
 
@@ -1152,8 +1152,8 @@ class OffenseCheckSourceTests(TestCase):
             character_sheet=sheet,
         )
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         room = ObjectDBFactory(
             db_key="TestRoomOffenseCheckSource",
             db_typeclass_path="typeclasses.rooms.Room",

@@ -371,7 +371,7 @@ def _apply_disguise_kit_effects(
 
     # Build or reuse a DISGUISE form for this character.
     disguise_form, _ = CharacterForm.objects.get_or_create(
-        character=user,
+        character=user.sheet_data,
         form_type=FormType.DISGUISE,
         is_player_created=True,
     )
@@ -383,4 +383,4 @@ def _apply_disguise_kit_effects(
             concealment_level=effect.concealment_level,
             kit_instance=kit_instance,
         )
-    return CharacterFormState.objects.get(character=user)
+    return CharacterFormState.objects.get(character_id=user.pk)

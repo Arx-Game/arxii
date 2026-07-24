@@ -38,7 +38,7 @@ class RestViewTests(APITestCase):
     def test_rest_succeeds(self) -> None:
         """POST rest sets well_rested and rested_today, spends AP."""
         ActionPointPool.objects.create(
-            character=self.sheet.character,
+            character=self.sheet,
             current=200,
             maximum=200,
         )
@@ -52,7 +52,7 @@ class RestViewTests(APITestCase):
     def test_rest_spends_ap(self) -> None:
         """Resting should deduct the configured AP cost."""
         ap_pool = ActionPointPool.objects.create(
-            character=self.sheet.character,
+            character=self.sheet,
             current=200,
             maximum=200,
         )
@@ -63,7 +63,7 @@ class RestViewTests(APITestCase):
     def test_rest_fails_when_already_rested(self) -> None:
         """Cannot rest twice in one day."""
         ActionPointPool.objects.create(
-            character=self.sheet.character,
+            character=self.sheet,
             current=200,
             maximum=200,
         )
@@ -78,7 +78,7 @@ class RestViewTests(APITestCase):
     def test_rest_fails_with_insufficient_ap(self) -> None:
         """Cannot rest without enough AP."""
         ActionPointPool.objects.create(
-            character=self.sheet.character,
+            character=self.sheet,
             current=REST_AP_COST - 1,
             maximum=200,
         )

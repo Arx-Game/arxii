@@ -168,7 +168,7 @@ class GlobalScopeTests(EvenniaTestCase):
     def test_flips_when_any_participant_has_condition(self) -> None:
         sheet = CharacterSheetFactory()
         story = StoryFactory(scope=StoryScope.GLOBAL, character_sheet=None)
-        StoryParticipationFactory(story=story, character=sheet.character)
+        StoryParticipationFactory(story=story, character=sheet)
         episode = EpisodeFactory(chapter=ChapterFactory(story=story))
         progress = GlobalStoryProgressFactory(story=story, current_episode=episode)
 

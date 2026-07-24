@@ -34,8 +34,8 @@ class ClashStrainInteractionTests(TestCase):
     def _make_setup(self, anima_current: int = 20) -> tuple[object, object, object]:
         """Build the minimum CombatParticipant + technique + clash for a commit."""
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=anima_current, maximum=20)
-        CharacterEngagementFactory(character=sheet.character)
+        CharacterAnimaFactory(character=sheet, current=anima_current, maximum=20)
+        CharacterEngagementFactory(character=sheet)
         clash = ClashFactory()
         # The participant must live in the same encounter as the clash so
         # commit_to_clash's lookup resolves it.

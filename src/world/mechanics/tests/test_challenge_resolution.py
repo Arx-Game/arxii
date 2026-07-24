@@ -133,7 +133,7 @@ class ResolveValidationTests(TestCase):
         from world.mechanics.challenge_resolution import resolve_challenge
 
         CharacterChallengeRecord.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=self.challenge,
             approach=self.approach,
         )
@@ -142,7 +142,7 @@ class ResolveValidationTests(TestCase):
                 resolve_challenge(self.character, self.challenge, self.approach, self.source)
         finally:
             CharacterChallengeRecord.objects.filter(
-                character=self.character,
+                character=self.character.sheet_data,
                 challenge_instance=self.challenge,
             ).delete()
 
@@ -478,7 +478,7 @@ class ResolveFullTests(TestCase):
         assert challenge.is_active is False
 
         record = CharacterChallengeRecord.objects.get(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=challenge,
         )
         assert record.outcome == self.outcome_success
@@ -654,7 +654,7 @@ class ResolveFullTests(TestCase):
             result = resolve_challenge(self.character, challenge, self.approach, self.source)
             assert result.consequence is not None
             assert CharacterChallengeRecord.objects.filter(
-                character=self.character,
+                character=self.character.sheet_data,
                 challenge_instance=challenge,
             ).exists()
         finally:
@@ -817,7 +817,7 @@ class ResolveFullTests(TestCase):
         assert result.applied_effects == []
         # Record created with saved consequence
         record = CharacterChallengeRecord.objects.get(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=challenge,
         )
         assert record.consequence == override_consequence

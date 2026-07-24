@@ -193,7 +193,7 @@ class PvpFullRoundTripTests(TestCase):
         enc = create_pvp_duel(self.sheet_a, self.sheet_b, self.room)
         participant_a = enc.participants.get(character_sheet=self.sheet_a)
         _wire_vitals(self.sheet_a)
-        CharacterAnimaFactory(character=self.sheet_a.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=self.sheet_a, current=20, maximum=20)
         technique = _build_combat_technique()
         CharacterTechniqueFactory(character=self.sheet_a, technique=technique)
 
@@ -253,7 +253,7 @@ class PvpFullRoundTripTests(TestCase):
 
         participant_a = enc.participants.get(character_sheet=self.sheet_a)
         _wire_vitals(self.sheet_a)
-        CharacterAnimaFactory(character=self.sheet_a.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=self.sheet_a, current=20, maximum=20)
         # CharacterEngagement is already created by add_participant inside create_pvp_duel.
 
         technique = _build_combat_technique()
@@ -341,7 +341,7 @@ class PvpNonLethalCapFastTierTests(TestCase):
     def setUp(self):
         idmapper.models.flush_cache()
         # Exhaust anima so any lethal cast would create a deficit.
-        self.anima = CharacterAnimaFactory(character=self.sheet.character, current=0, maximum=10)
+        self.anima = CharacterAnimaFactory(character=self.sheet, current=0, maximum=10)
 
     def tearDown(self):
         # Clean up anima so setUpTestData sheet is reusable across tests.
@@ -449,8 +449,8 @@ class PvpNonLethalCapSoulfrayTests(TestCase):
 
         idmapper.models.flush_cache()
         self.sheet = CharacterSheetFactory()
-        self.anima = CharacterAnimaFactory(character=self.sheet.character, current=0, maximum=10)
-        CharacterEngagementFactory(character=self.sheet.character)
+        self.anima = CharacterAnimaFactory(character=self.sheet, current=0, maximum=10)
+        CharacterEngagementFactory(character=self.sheet)
 
     def _run_non_lethal(self):
         from world.magic.services import use_technique
@@ -567,7 +567,7 @@ class LethalNpcDuelTests(TestCase):
 
         participant = enc.participants.get()
         _wire_vitals(self.pc_sheet)
-        CharacterAnimaFactory(character=self.pc_sheet.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=self.pc_sheet, current=20, maximum=20)
         acknowledge_encounter_risk(enc, self.pc_sheet)
 
         ack_exists = EncounterRiskAcknowledgement.objects.filter(
@@ -606,7 +606,7 @@ class LethalNpcDuelTests(TestCase):
         Confirms that the death path is live: lethal=True means the soulfray /
         overburn machinery is fully armed (no cap in place).
         """
-        anima = CharacterAnimaFactory(character=self.pc_sheet.character, current=0, maximum=10)
+        anima = CharacterAnimaFactory(character=self.pc_sheet, current=0, maximum=10)
         try:
             deficit = deduct_anima(self.pc_sheet.character, 10, lethal=True)
             self.assertGreater(deficit, 0, "Lethal duel overburn deficit must be non-zero")
@@ -656,7 +656,7 @@ class DuelReachGatingTests(TestCase):
 
         self.participant_a = enc.participants.get(character_sheet=self.sheet_a)
         _wire_vitals(self.sheet_a)
-        CharacterAnimaFactory(character=self.sheet_a.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=self.sheet_a, current=20, maximum=20)
 
         # Move both characters into the room before placing in positions.
         attacker_od = self.sheet_a.character

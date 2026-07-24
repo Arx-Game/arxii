@@ -142,7 +142,7 @@ class CovenantRolePullRaisesTypedErrorTests(TestCase):
         CharacterResonanceFactory(
             character_sheet=sheet, resonance=resonance, balance=100, lifetime_earned=100
         )
-        CharacterAnimaFactory(character=sheet.character, current=100, maximum=100)
+        CharacterAnimaFactory(character=sheet, current=100, maximum=100)
         ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=1)
 
         thread = ThreadFactory(

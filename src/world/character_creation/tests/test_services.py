@@ -1327,7 +1327,7 @@ class FinalizeGiftAndTechniquesTests(TestCase):
 
         finalize_magic_data(draft, sheet)
 
-        aura = CharacterAura.objects.get(character=sheet.character)
+        aura = CharacterAura.objects.get(character=sheet)
         assert aura.celestial == Decimal("0.00")
         assert aura.primal == Decimal("80.00")
         assert aura.abyssal == Decimal("20.00")
@@ -1344,7 +1344,7 @@ class FinalizeGiftAndTechniquesTests(TestCase):
 
         finalize_magic_data(draft, sheet)
 
-        aura = CharacterAura.objects.get(character=sheet.character)
+        aura = CharacterAura.objects.get(character=sheet)
         assert aura.glimpse_story == "I first saw the threads at age twelve."
 
     def test_no_gift_selected_no_ops_gift_and_technique_linking(self) -> None:
@@ -1803,9 +1803,7 @@ class FinalizeGMCharacterTests(TestCase):
 
         draft = self._make_gm_draft()
         entry, story = finalize_gm_character(draft)
-        participation = StoryParticipation.objects.get(
-            story=story, character=entry.character_sheet.character
-        )
+        participation = StoryParticipation.objects.get(story=story, character=entry.character_sheet)
         assert participation.is_active is True
 
     def test_no_tenure_created(self) -> None:

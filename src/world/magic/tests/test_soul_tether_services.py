@@ -723,7 +723,7 @@ class ResolveSineatingHappyPathTests(TestCase):
 
         # Seed Sineater's anima so the deduction can proceed.
         cls.sineater_anima = CharacterAnimaFactory(
-            character=cls.sineater.character,
+            character=cls.sineater,
             current=20,
             maximum=20,
         )
@@ -768,7 +768,7 @@ class ResolveSineatingHappyPathTests(TestCase):
         offer = self._build_offer()
         resolve_sineating(offer, units_accepted=3)
 
-        anima = CharacterAnima.objects.get(character=self.sineater.character)
+        anima = CharacterAnima.objects.get(character=self.sineater)
         expected = initial_current - 3 * offer.anima_cost_per_unit
         self.assertEqual(anima.current, expected)
 
@@ -850,7 +850,7 @@ class ResolveSineatingDeclineTests(TestCase):
         cls.sinner, cls.sineater, cls.resonance, cls.relationship = _make_tethered_pair(track=track)
         # Seed Sineater's anima for deduction baseline.
         cls.sineater_anima = CharacterAnimaFactory(
-            character=cls.sineater.character,
+            character=cls.sineater,
             current=20,
             maximum=20,
         )
@@ -889,7 +889,7 @@ class ResolveSineatingDeclineTests(TestCase):
 
         offer = self._build_offer()
         resolve_sineating(offer, units_accepted=0)
-        anima = CharacterAnima.objects.get(character=self.sineater.character)
+        anima = CharacterAnima.objects.get(character=self.sineater)
         self.assertEqual(anima.current, 20)  # unchanged
 
     def test_decline_no_lifetime_helped_change(self) -> None:
@@ -1407,7 +1407,7 @@ class PerformSoulTetherRescueGateTests(TestCase):
         with_corruption_at_stage(sinner, self.resonance, stage=3)
 
         # Put Sineater in engagement.
-        CharacterEngagementFactory(character=sineater.character)
+        CharacterEngagementFactory(character=sineater)
 
         with (
             patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
@@ -1563,7 +1563,7 @@ class DissolveSoulTetherSingleTests(TestCase):
         CharacterRelationshipFactory(source=self.sineater, target=self.sinner, is_pending=False)
 
         # Seed Sineater anima for resolve_sineating.
-        CharacterAnimaFactory(character=self.sineater.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=self.sineater, current=20, maximum=20)
         CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
 
         self.capstone = accept_soul_tether(
@@ -1872,7 +1872,7 @@ class DissolveSoulTetherEmitTests(TestCase):
         CharacterRelationshipFactory(source=self.sinner, target=self.sineater, is_pending=False)
         CharacterRelationshipFactory(source=self.sineater, target=self.sinner, is_pending=False)
 
-        CharacterAnimaFactory(character=self.sineater.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=self.sineater, current=20, maximum=20)
         CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
 
         accept_soul_tether(

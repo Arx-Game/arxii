@@ -5,7 +5,6 @@ from __future__ import annotations
 from django.test import TestCase
 
 from actions.definitions.ritual import PerformRitualAction
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import ItemInstance
@@ -67,7 +66,7 @@ class PerformRitualActionAttunementIntegrationTests(TestCase):
     """
 
     def setUp(self) -> None:
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         self.character.sheet_data = self.sheet
         self.resonance = ResonanceFactory(name="Praedari")

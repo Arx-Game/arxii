@@ -149,7 +149,7 @@ class AudereCorruptionAdvisoryTests(TestCase):
             intensity_bonus=10,
             anima_pool_bonus=20,
         )
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=50)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=50)
         from django.contrib.contenttypes.models import ContentType
         from evennia.objects.models import ObjectDB
 
@@ -158,7 +158,7 @@ class AudereCorruptionAdvisoryTests(TestCase):
 
         obj_ct = ContentType.objects.get_for_model(ObjectDB)
         CharacterEngagement.objects.create(
-            character=sheet.character,
+            character=sheet,
             engagement_type=EngagementType.CHALLENGE,
             source_content_type=obj_ct,
             source_id=sheet.character.pk,

@@ -549,7 +549,7 @@ class DispatchActionViewChallengeTests(TestCase):
         mock_check.return_value = self._make_check_result()  # type: ignore[attr-defined]
 
         record_count_before = CharacterChallengeRecord.objects.filter(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=self.challenge_instance,
         ).count()
 
@@ -561,7 +561,7 @@ class DispatchActionViewChallengeTests(TestCase):
 
         # Real side effect: CharacterChallengeRecord was created
         record_count_after = CharacterChallengeRecord.objects.filter(
-            character=self.character,
+            character=self.character.sheet_data,
             challenge_instance=self.challenge_instance,
         ).count()
         assert record_count_after == record_count_before + 1

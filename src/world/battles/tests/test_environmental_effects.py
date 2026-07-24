@@ -384,7 +384,7 @@ class SetEnvironmentSuccessTests(TestCase):
             action_template=ActionTemplateFactory(), target_weather_type=self.weather_type
         )
         CharacterTechniqueFactory(character=self.character, technique=self.technique)
-        CharacterAnimaFactory(character=self.character.character)
+        CharacterAnimaFactory(character=self.character.sheet_data)
 
     def test_battle_scope_cast_sets_battle_weather_override(self) -> None:
         battle_round = begin_battle_round(battle=self.battle)
@@ -558,7 +558,7 @@ class RoundBoundaryExpiryTests(TestCase):
             (striker, strike_technique),
         ):
             CharacterTechniqueFactory(character=participant.character_sheet, technique=technique)
-            CharacterAnimaFactory(character=participant.character_sheet.character)
+            CharacterAnimaFactory(character=participant.character_sheet)
         battle_round = begin_battle_round(battle=self.battle)
         declare_battle_action(
             participant=striker,

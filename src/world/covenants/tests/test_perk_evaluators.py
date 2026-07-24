@@ -938,7 +938,7 @@ class AttackerAffinityEvaluatorTests(TestCase):
         CharacterAura's dominant axis; no threshold_percent authored."""
         persona = PersonaFactory()
         CharacterAuraFactory(
-            character=persona.character_sheet.character,
+            character=persona.character_sheet,
             celestial=Decimal("80.00"),
             primal=Decimal("10.00"),
             abyssal=Decimal("10.00"),
@@ -950,7 +950,7 @@ class AttackerAffinityEvaluatorTests(TestCase):
     def test_aura_axis_threshold_met(self) -> None:
         persona = PersonaFactory()
         CharacterAuraFactory(
-            character=persona.character_sheet.character,
+            character=persona.character_sheet,
             celestial=Decimal("30.00"),
             primal=Decimal("40.00"),
             abyssal=Decimal("30.00"),
@@ -962,7 +962,7 @@ class AttackerAffinityEvaluatorTests(TestCase):
     def test_aura_axis_threshold_not_met(self) -> None:
         persona = PersonaFactory()
         CharacterAuraFactory(
-            character=persona.character_sheet.character,
+            character=persona.character_sheet,
             celestial=Decimal("40.00"),
             primal=Decimal("20.00"),
             abyssal=Decimal("40.00"),

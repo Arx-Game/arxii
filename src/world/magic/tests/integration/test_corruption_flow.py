@@ -464,7 +464,7 @@ class FullCastPipelineCorruptionTests(TestCase):
         _make_simple_template(resonance)
 
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
 
         result = use_technique(
             character=sheet.character,
@@ -499,7 +499,7 @@ class FullCastPipelineCorruptionTests(TestCase):
         _make_simple_template(resonance)
 
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
 
         result = use_technique(
             character=sheet.character,
@@ -530,7 +530,7 @@ class FullCastPipelineCorruptionTests(TestCase):
         _make_simple_template(resonance)
 
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=50, maximum=50)
+        CharacterAnimaFactory(character=sheet, current=50, maximum=50)
 
         # Pre-load to 40 — below threshold=50 so no condition yet.
         # Direct DB write bypasses the service to avoid test duplication.
@@ -572,7 +572,7 @@ class FullCastPipelineCorruptionTests(TestCase):
         _make_simple_template(resonance)
 
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=50, maximum=50)
+        CharacterAnimaFactory(character=sheet, current=50, maximum=50)
 
         # Give the character a location so emit_event fires.
         room = _create_room()

@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.distinctions.factories import (
     CharacterDistinctionFactory,
@@ -64,7 +63,7 @@ class DistinctionResonancePotencyTests(TestCase):
             target=self.power_target,
             value_per_rank=6,
         )
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         char_distinction = CharacterDistinctionFactory(
             character=self.sheet,
@@ -84,7 +83,7 @@ class DistinctionResonancePotencyTests(TestCase):
 
     def test_thread_pull_is_boosted_by_resonance_scoped_distinction(self) -> None:
         """The gap: a standalone thread-pull on an R-thread must also carry the bonus."""
-        CharacterAnimaFactory(character=self.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=self.character.sheet_data, current=10, maximum=10)
         CharacterResonanceFactory(
             character_sheet=self.sheet,
             resonance=self.resonance,
@@ -132,7 +131,7 @@ class DistinctionResonancePotencyTests(TestCase):
     def test_thread_pull_on_a_different_resonance_is_not_boosted(self) -> None:
         """Gate check: the distinction bonus is resonance-scoped, not a blanket pull buff."""
         other_resonance = ResonanceFactory(name="Serene")
-        CharacterAnimaFactory(character=self.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=self.character.sheet_data, current=10, maximum=10)
         CharacterResonanceFactory(
             character_sheet=self.sheet,
             resonance=other_resonance,
@@ -175,7 +174,7 @@ class DistinctionResonancePotencyUnscopedTests(TestCase):
             target=self.power_target,
             value_per_rank=4,
         )
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.sheet = CharacterSheetFactory(character=self.character)
         char_distinction = CharacterDistinctionFactory(
             character=self.sheet,
@@ -186,7 +185,7 @@ class DistinctionResonancePotencyUnscopedTests(TestCase):
 
     def test_thread_pull_of_arbitrary_resonance_is_boosted_by_unscoped_distinction(self) -> None:
         """Parity with casts: an unscoped POWER effect boosts a pull of ANY resonance."""
-        CharacterAnimaFactory(character=self.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=self.character.sheet_data, current=10, maximum=10)
         CharacterResonanceFactory(
             character_sheet=self.sheet,
             resonance=self.resonance,

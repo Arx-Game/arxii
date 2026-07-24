@@ -44,9 +44,9 @@ class AltSelfResonanceShiftTests(TestCase):
         # CharacterSheetFactory already creates a PRIMARY persona.
         # assume_alternate_self / revert need a CharacterFormState.
         cls.true_form = CharacterFormFactory(
-            character=cls.sheet.character, name="True", form_type=FormType.TRUE
+            character=cls.sheet, name="True", form_type=FormType.TRUE
         )
-        CharacterFormStateFactory(character=cls.sheet.character, active_form=cls.true_form)
+        CharacterFormStateFactory(character=cls.sheet, active_form=cls.true_form)
 
         cls.gift = GiftFactory()
         # The character's "native" resonance (e.g. Celestial).

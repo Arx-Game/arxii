@@ -29,7 +29,7 @@ def recompute_aura(character_sheet: CharacterSheet) -> AuraDrift | None:
     no divide-by-zero flip to an even split).
     """
     try:
-        aura = CharacterAura.objects.get(character=character_sheet.character)
+        aura = CharacterAura.objects.get(character=character_sheet)
     except CharacterAura.DoesNotExist:
         return None
 

@@ -1484,12 +1484,12 @@ class TreatmentAttempt(SharedMemoryModel):
     """
 
     helper = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.PROTECT,
         related_name="treatment_attempts_as_helper",
     )
     target = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.PROTECT,
         related_name="treatment_attempts_as_target",
     )

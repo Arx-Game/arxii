@@ -2,8 +2,8 @@ from django.test import TestCase
 
 from evennia_extensions.factories import (
     AccountFactory,
-    CharacterFactory,
 )
+from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory
 from world.stories.constants import StoryScope
 from world.stories.factories import (
@@ -145,10 +145,10 @@ class StoryParticipationModelTestCase(TestCase):
     def setUpTestData(cls):
         """Create test data once for the entire test class"""
         cls.story = StoryFactory()
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         cls.participation = StoryParticipationFactory(
             story=cls.story,
-            character=cls.character,
+            character=cls.character.sheet_data,
         )
 
     def test_participation_defaults(self):

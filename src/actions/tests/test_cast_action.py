@@ -57,7 +57,7 @@ class CastTechniqueActionTests(TestCase):
             base_max_health=50,
         )
         self.anima = CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=20,
             maximum=30,
         )
@@ -364,7 +364,7 @@ class CastTechniqueActionPullTests(TestCase):
             base_max_health=50,
         )
         self.anima = CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=20,
             maximum=30,
         )

@@ -306,7 +306,7 @@ class ResolveSineatingFromDbHappyPathTests(TestCase):
 
         # Seed Sineater anima so the deduction step works.
         CharacterAnimaFactory(
-            character=cls.sineater_sheet.character,
+            character=cls.sineater_sheet,
             current=20,
             maximum=20,
         )

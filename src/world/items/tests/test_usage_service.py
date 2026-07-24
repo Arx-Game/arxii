@@ -99,7 +99,7 @@ class UseItemTests(TestCase):
 
     def _pool_with_condition_effect(self):
         """Build a ConsequencePool with one Consequence carrying an
-        apply_condition ConsequenceEffect (target=self)."""
+        apply_condition ConsequenceEffect (target=self.character.sheet_data)."""
         from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
         from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
         from world.conditions.factories import ConditionTemplateFactory

@@ -102,7 +102,7 @@ class ActionPointPool(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        ObjectDB,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="action_points",
         help_text="The character this pool belongs to.",
@@ -241,10 +241,7 @@ class ActionPointPool(SharedMemoryModel):
         from world.mechanics.models import ModifierTarget
         from world.mechanics.services import get_modifier_total
 
-        try:
-            sheet = self.character.sheet_data
-        except ObjectDB.sheet_data.RelatedObjectDoesNotExist:  # type: ignore[union-attr]
-            return 0
+        sheet = self.character
 
         try:
             target = ModifierTarget.objects.get(name=modifier_target_name)
@@ -267,14 +264,18 @@ class ActionPointPool(SharedMemoryModel):
         return max(1, self.maximum + modifier)
 
     @classmethod
-    def get_or_create_for_character(cls, character: ObjectDB) -> ActionPointPool:
+    def get_or_create_for_character(cls, character: ObjectDB) -> ActionPointPool | None:
         """
         Get or create an action point pool for a character.
 
-        Uses default maximum from active config.
+        Uses default maximum from active config. Returns None for sheet-less
+        actors (GM/staff puppets, companions) — they have no AP economy (#2608).
         """
+        sheet = character.character_sheet
+        if sheet is None:
+            return None
         pool, _ = cls.objects.get_or_create(
-            character=character,
+            character=sheet,
             defaults={
                 "maximum": ActionPointConfig.get_default_maximum(),
                 "current": ActionPointConfig.get_default_maximum(),

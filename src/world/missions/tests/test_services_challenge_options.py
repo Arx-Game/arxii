@@ -178,7 +178,7 @@ class ChallengeOptionsTechniqueGrantTests(TestCase):
             application=ApplicationFactory(name="tf-app-unlock", capability=cls.cap),
             display_name="Unlock arcanely",
         )
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
         CharacterSheetFactory(character=cls.character)
 
     def test_ineligible_for_bare_character(self) -> None:

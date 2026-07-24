@@ -5,7 +5,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.forms.factories import (
     ActiveAlternateSelfFactory,
     AlternateSelfFactory,
@@ -77,28 +77,30 @@ class SpeciesFormTraitModelTest(TestCase):
 class CharacterFormModelTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
 
     def test_str_with_name(self):
         form = CharacterFormFactory(
-            character=self.character, name="Beast Form", form_type=FormType.ALTERNATE
+            character=self.character.sheet_data, name="Beast Form", form_type=FormType.ALTERNATE
         )
         self.assertIn("Beast Form", str(form))
 
     def test_str_without_name(self):
-        form = CharacterFormFactory(character=self.character, name="", form_type=FormType.TRUE)
+        form = CharacterFormFactory(
+            character=self.character.sheet_data, name="", form_type=FormType.TRUE
+        )
         self.assertIn("True Form", str(form))
 
 
 class CharacterFormValueModelTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
 
     def test_str_format(self):
         trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
         option = FormTraitOptionFactory(trait=trait, name="black", display_name="Black")
-        form = CharacterFormFactory(character=self.character)
+        form = CharacterFormFactory(character=self.character.sheet_data)
         value = CharacterFormValueFactory(form=form, trait=trait, option=option)
         self.assertIn("Hair Color", str(value))
         self.assertIn("Black", str(value))
@@ -107,32 +109,32 @@ class CharacterFormValueModelTest(TestCase):
 class CharacterFormStateModelTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
 
     def test_str_with_active_form(self):
-        form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
-        state = CharacterFormStateFactory(character=self.character, active_form=form)
+        form = CharacterFormFactory(character=self.character.sheet_data, form_type=FormType.TRUE)
+        state = CharacterFormStateFactory(character=self.character.sheet_data, active_form=form)
         self.assertIn(self.character.key, str(state))
 
     def test_str_without_active_form(self):
-        state = CharacterFormStateFactory(character=self.character, active_form=None)
+        state = CharacterFormStateFactory(character=self.character.sheet_data, active_form=None)
         self.assertIn("No active form", str(state))
 
 
 class TemporaryFormChangeModelTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.character = CharacterSheetFactory().character
 
     def test_is_expired_until_removed_never_expires(self):
         change = TemporaryFormChangeFactory(
-            character=self.character, duration_type=DurationType.UNTIL_REMOVED
+            character=self.character.sheet_data, duration_type=DurationType.UNTIL_REMOVED
         )
         self.assertFalse(change.is_expired())
 
     def test_is_expired_real_time_not_expired(self):
         change = TemporaryFormChangeFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             duration_type=DurationType.REAL_TIME,
             expires_at=timezone.now() + timedelta(hours=1),
         )
@@ -140,7 +142,7 @@ class TemporaryFormChangeModelTest(TestCase):
 
     def test_is_expired_real_time_expired(self):
         change = TemporaryFormChangeFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             duration_type=DurationType.REAL_TIME,
             expires_at=timezone.now() - timedelta(hours=1),
         )
@@ -149,13 +151,13 @@ class TemporaryFormChangeModelTest(TestCase):
     def test_active_manager_excludes_expired(self):
         # Create an expired change
         TemporaryFormChangeFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             duration_type=DurationType.REAL_TIME,
             expires_at=timezone.now() - timedelta(hours=1),
         )
         # Create an active change
         active = TemporaryFormChangeFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             duration_type=DurationType.UNTIL_REMOVED,
         )
         active_changes = TemporaryFormChange.objects.active()

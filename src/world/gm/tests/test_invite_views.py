@@ -28,7 +28,7 @@ class GMInviteCreateTest(TestCase):
         story = StoryFactory(primary_table=cls.table)
         StoryParticipation.objects.create(
             story=story,
-            character=cls.entry.character_sheet.character,
+            character=cls.entry.character_sheet,
             is_active=True,
         )
         cls.other_gm_account = AccountFactory()
@@ -37,7 +37,7 @@ class GMInviteCreateTest(TestCase):
         other_story = StoryFactory(primary_table=GMTableFactory(gm=cls.other_gm))
         StoryParticipation.objects.create(
             story=other_story,
-            character=cls.other_entry.character_sheet.character,
+            character=cls.other_entry.character_sheet,
             is_active=True,
         )
 

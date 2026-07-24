@@ -96,7 +96,7 @@ class SceneMagicTestMixin:
             technique=cls.charm_technique,
         )
         CharacterAnimaFactory(
-            character=cls.initiator.character_sheet.character,
+            character=cls.initiator.character_sheet,
             current=20,
             maximum=30,
         )
@@ -184,7 +184,7 @@ class TestEnhancedActionFullPipeline(SceneMagicTestMixin, TestCase):
         assert result.technique_result.confirmed is True
         assert result.action_resolution is not None
 
-        anima = CharacterAnima.objects.get(character=self.initiator.character_sheet.character)
+        anima = CharacterAnima.objects.get(character=self.initiator.character_sheet)
         assert anima.current < 20
 
     def test_enhanced_action_resolves_with_passive_thread_present(self) -> None:
@@ -312,7 +312,7 @@ class TestEnhancedActionEdgeCases(SceneMagicTestMixin, TestCase):
         # Set anima very low so post-deduction ratio falls below soulfray threshold
         # Current=1, effective_cost=9: after deduction current=0 (deficit=8)
         # ratio = 0 / 30 = 0.0, below threshold 0.30 -> Soulfray accumulates
-        anima = CharacterAnima.objects.get(character=self.initiator.character_sheet.character)
+        anima = CharacterAnima.objects.get(character=self.initiator.character_sheet)
         anima.current = 1
         anima.save(update_fields=["current"])
 

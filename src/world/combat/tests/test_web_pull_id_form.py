@@ -95,7 +95,7 @@ def _make_web_pull_setup(
     )
 
     CharacterAnimaFactory(
-        character=sheet.character,
+        character=sheet,
         current=10,
         maximum=20,
     )

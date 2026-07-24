@@ -106,7 +106,7 @@ class AnimaRecoverySerializerFieldTests(TestCase):
         target_persona = PersonaFactory()
 
         ritual = _make_scene_action_ritual()
-        CharacterAnimaFactory(character=sheet.character, current=2, maximum=10)
+        CharacterAnimaFactory(character=sheet, current=2, maximum=10)
         ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         SoulfrayConfigFactory(
             ritual_severity_cost_per_point=1,

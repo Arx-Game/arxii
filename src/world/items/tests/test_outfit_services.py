@@ -143,7 +143,7 @@ class ApplyOutfitTests(TestCase):
         """All outfit slots become EquippedItem rows."""
         apply_outfit(self.character_state, self.outfit_state)
 
-        equipped = EquippedItem.objects.filter(character=self.character)
+        equipped = EquippedItem.objects.filter(character=self.character.sheet_data)
         self.assertEqual(equipped.count(), 2)
         self.assertTrue(equipped.filter(item_instance=self.shirt).exists())
         self.assertTrue(equipped.filter(item_instance=self.glove).exists())
@@ -172,7 +172,7 @@ class ApplyOutfitTests(TestCase):
 
         # Only the outfit's shirt is at TORSO/BASE — the old one was swapped out.
         torso_rows = EquippedItem.objects.filter(
-            character=self.character,
+            character=self.character.sheet_data,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
@@ -208,7 +208,7 @@ class ApplyOutfitTests(TestCase):
 
         self.assertTrue(
             EquippedItem.objects.filter(
-                character=self.character,
+                character=self.character.sheet_data,
                 item_instance=necklace,
             ).exists()
         )
@@ -224,7 +224,7 @@ class ApplyOutfitTests(TestCase):
 
         with self.assertRaises(NotReachable):
             apply_outfit(self.character_state, self.outfit_state)
-        self.assertFalse(EquippedItem.objects.filter(character=self.character).exists())
+        self.assertFalse(EquippedItem.objects.filter(character=self.character.sheet_data).exists())
 
     def test_apply_rejects_when_item_not_in_reach(self) -> None:
         """An outfit slot's item lives in another character's inventory → OutfitIncomplete.
@@ -244,7 +244,7 @@ class ApplyOutfitTests(TestCase):
         with self.assertRaises(OutfitIncomplete):
             apply_outfit(self.character_state, self.outfit_state)
         # Whole transaction rolls back — no rows created.
-        self.assertFalse(EquippedItem.objects.filter(character=self.character).exists())
+        self.assertFalse(EquippedItem.objects.filter(character=self.character.sheet_data).exists())
 
     def test_apply_collects_all_missing_slots_before_raising(self) -> None:
         """When multiple items are unreachable, OutfitIncomplete is raised once.
@@ -266,7 +266,7 @@ class ApplyOutfitTests(TestCase):
 
         with self.assertRaises(OutfitIncomplete):
             apply_outfit(self.character_state, self.outfit_state)
-        self.assertFalse(EquippedItem.objects.filter(character=self.character).exists())
+        self.assertFalse(EquippedItem.objects.filter(character=self.character.sheet_data).exists())
 
     def test_apply_rejects_outfit_belonging_to_different_character(self) -> None:
         """An outfit owned by another sheet → PermissionDenied."""
@@ -350,21 +350,21 @@ class UndressTests(TestCase):
         """Three equipped items → zero EquippedItem rows after undress."""
         self._equip_all()
         self.assertEqual(
-            EquippedItem.objects.filter(character=self.character).count(),
+            EquippedItem.objects.filter(character=self.character.sheet_data).count(),
             3,
         )
 
         undress(self.character_state)
 
         self.assertEqual(
-            EquippedItem.objects.filter(character=self.character).count(),
+            EquippedItem.objects.filter(character=self.character.sheet_data).count(),
             0,
         )
 
     def test_undress_idempotent_when_naked(self) -> None:
         """Naked character → undress is a no-op, no error raised."""
         self.assertEqual(
-            EquippedItem.objects.filter(character=self.character).count(),
+            EquippedItem.objects.filter(character=self.character.sheet_data).count(),
             0,
         )
 
@@ -372,7 +372,7 @@ class UndressTests(TestCase):
         undress(self.character_state)
 
         self.assertEqual(
-            EquippedItem.objects.filter(character=self.character).count(),
+            EquippedItem.objects.filter(character=self.character.sheet_data).count(),
             0,
         )
 

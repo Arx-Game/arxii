@@ -151,7 +151,7 @@ class ActivelyOverseenTest(TestCase):
         story = StoryFactory(primary_table=self.table)
         StoryParticipation.objects.create(
             story=story,
-            character=entry.character_sheet.character,
+            character=entry.character_sheet,
             is_active=True,
         )
         assert RosterEntry.objects.actively_overseen().filter(pk=entry.pk).exists()
@@ -168,7 +168,7 @@ class ActivelyOverseenTest(TestCase):
         story = StoryFactory(primary_table=None)
         StoryParticipation.objects.create(
             story=story,
-            character=entry.character_sheet.character,
+            character=entry.character_sheet,
             is_active=True,
         )
         assert not RosterEntry.objects.actively_overseen().filter(pk=entry.pk).exists()
@@ -184,7 +184,7 @@ class ActivelyOverseenTest(TestCase):
         story = StoryFactory(primary_table=archived_table)
         StoryParticipation.objects.create(
             story=story,
-            character=entry.character_sheet.character,
+            character=entry.character_sheet,
             is_active=True,
         )
         assert not RosterEntry.objects.actively_overseen().filter(pk=entry.pk).exists()
@@ -197,7 +197,7 @@ class ActivelyOverseenTest(TestCase):
         story = StoryFactory(primary_table=self.table)
         StoryParticipation.objects.create(
             story=story,
-            character=entry.character_sheet.character,
+            character=entry.character_sheet,
             is_active=False,
         )
         assert not RosterEntry.objects.actively_overseen().filter(pk=entry.pk).exists()

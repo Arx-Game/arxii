@@ -206,7 +206,7 @@ class ShipJourneyE2ETests(TestCase):
             place=covenant_vehicle.place,
         )
         CharacterTechniqueFactory(character=gunner.character_sheet, technique=technique)
-        CharacterAnimaFactory(character=gunner.character_sheet.character, current=30, maximum=30)
+        CharacterAnimaFactory(character=gunner.character_sheet, current=30, maximum=30)
 
         non_swimmer = BattleParticipantFactory(
             battle=battle,

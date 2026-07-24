@@ -98,7 +98,7 @@ def _setup_fury_fixture(*, tier_depth: int = 2, bond_tier_number: int = 2):
     initiator = PersonaFactory()
     anchor = PersonaFactory()
 
-    CharacterAnimaFactory(character=initiator.character_sheet.character, current=20, maximum=30)
+    CharacterAnimaFactory(character=initiator.character_sheet, current=20, maximum=30)
     for persona in (initiator, anchor):
         CharacterVitals.objects.get_or_create(
             character_sheet=persona.character_sheet,

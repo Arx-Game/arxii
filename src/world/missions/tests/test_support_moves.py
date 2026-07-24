@@ -77,7 +77,7 @@ class SupportMovesForTests(TestCase):
 
         from world.missions.factories import MissionParticipantFactory
 
-        MissionParticipantFactory(instance=instance, character=self.character)
+        MissionParticipantFactory(instance=instance, character=self.character.sheet_data)
 
         from world.missions.services.support import support_moves_for
 
@@ -113,7 +113,7 @@ class SupportMovesForTests(TestCase):
 
         from world.missions.factories import MissionParticipantFactory
 
-        MissionParticipantFactory(instance=instance, character=self.character)
+        MissionParticipantFactory(instance=instance, character=self.character.sheet_data)
 
         from world.missions.services.support import support_moves_for
 
@@ -148,7 +148,7 @@ class SupportMovesForTests(TestCase):
 
         from world.missions.factories import MissionParticipantFactory
 
-        MissionParticipantFactory(instance=instance, character=self.character)
+        MissionParticipantFactory(instance=instance, character=self.character.sheet_data)
 
         from world.missions.services.support import support_moves_for
 
@@ -177,7 +177,7 @@ class SupportMovesForTests(TestCase):
 
         from world.missions.factories import MissionParticipantFactory
 
-        MissionParticipantFactory(instance=instance, character=self.character)
+        MissionParticipantFactory(instance=instance, character=self.character.sheet_data)
 
         from world.missions.services.support import support_moves_for
 
@@ -221,7 +221,7 @@ class SupportMovesForTests(TestCase):
 
         from world.missions.factories import MissionParticipantFactory
 
-        MissionParticipantFactory(instance=instance, character=self.character)
+        MissionParticipantFactory(instance=instance, character=self.character.sheet_data)
 
         from world.missions.services.support import support_moves_for
 

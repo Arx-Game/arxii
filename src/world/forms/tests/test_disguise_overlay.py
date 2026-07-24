@@ -8,7 +8,6 @@ tests pin the substrate the contest writes into.
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.forms.factories import (
     CharacterFormFactory,
@@ -28,7 +27,8 @@ from world.forms.services import (
 class DisguiseOverlayTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.hair = FormTraitFactory(name="hair_color", display_name="Hair Color")
         cls.red = FormTraitOptionFactory(trait=cls.hair, name="red", display_name="Red")
@@ -36,12 +36,14 @@ class DisguiseOverlayTests(TestCase):
 
     def setUp(self):
         # Real (true) form: red hair, and it is the active real form.
-        self.true_form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        self.true_form = CharacterFormFactory(character=self.sheet, form_type=FormType.TRUE)
         CharacterFormValueFactory(form=self.true_form, trait=self.hair, option=self.red)
-        CharacterFormState.objects.create(character=self.character, active_form=self.true_form)
+        CharacterFormState.objects.create(
+            character=self.character.sheet_data, active_form=self.true_form
+        )
         # A disguise form: blonde hair.
         self.disguise = CharacterFormFactory(
-            character=self.character, form_type=FormType.DISGUISE, is_player_created=True
+            character=self.sheet, form_type=FormType.DISGUISE, is_player_created=True
         )
         CharacterFormValueFactory(form=self.disguise, trait=self.hair, option=self.blonde)
 
@@ -67,14 +69,14 @@ class DisguiseOverlayTests(TestCase):
 
     def test_apply_records_kind(self):
         apply_disguise(self.character, self.disguise, kind=DisguiseKind.MAGICAL)
-        state = CharacterFormState.objects.get(character=self.character)
+        state = CharacterFormState.objects.get(character=self.character.sheet_data)
         assert state.active_fake_overlay_id == self.disguise.id
         assert state.overlay_kind == DisguiseKind.MAGICAL
 
     def test_remove_disguise_restores_real_form(self):
         apply_disguise(self.character, self.disguise)
         remove_disguise(self.character)
-        state = CharacterFormState.objects.get(character=self.character)
+        state = CharacterFormState.objects.get(character=self.character.sheet_data)
         assert state.active_fake_overlay_id is None
         assert state.overlay_kind == ""
         assert self._hair() == "Red"
@@ -84,7 +86,7 @@ class DisguiseOverlayTests(TestCase):
         assert self._hair() == "Red"
 
     def test_apply_rejects_foreign_form(self):
-        other = CharacterFactory()
+        other = CharacterSheetFactory()
         foreign = CharacterFormFactory(character=other, form_type=FormType.DISGUISE)
         with self.assertRaises(ValueError):
             apply_disguise(self.character, foreign)
@@ -94,5 +96,5 @@ class DisguiseOverlayTests(TestCase):
             apply_disguise(self.character, self.true_form)
 
     def test_current_real_form_property_is_the_active_form(self):
-        state = CharacterFormState.objects.get(character=self.character)
+        state = CharacterFormState.objects.get(character=self.character.sheet_data)
         assert state.current_real_form == self.true_form

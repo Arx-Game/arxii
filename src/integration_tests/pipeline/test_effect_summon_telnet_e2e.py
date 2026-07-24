@@ -157,11 +157,11 @@ class SummonSpiritTelnetE2ETests(TestCase):
         # CharacterAnima.character FK → ObjectDB (the game object, not the sheet).
         self.character = self.sheet.character
         CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=20,
             maximum=20,
         )
-        CharacterEngagementFactory(character=self.character)
+        CharacterEngagementFactory(character=self.character.sheet_data)
 
         # Place the caster in the encounter's room.
         # summon_ally looks up the caster's CombatParticipant, finds the encounter,

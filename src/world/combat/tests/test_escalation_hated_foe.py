@@ -176,6 +176,6 @@ class HatedFoeSpikeTests(TestCase):
         del participant
 
         latecomer_intensity = CharacterEngagement.objects.get(
-            character=latecomer_sheet.character
+            character=latecomer_sheet
         ).intensity_modifier
         self.assertEqual(latecomer_intensity, self.curve.hated_foe_spike_intensity_amount)

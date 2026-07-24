@@ -4,6 +4,7 @@ Tests for roster services and business logic.
 
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import (
     CharacterFactory,
     PlayerDataFactory,
@@ -19,7 +20,7 @@ class PlayerDataServiceTestCase(TestCase):
     def setUp(self):
         """Set up test data for each test"""
         self.player_data = PlayerDataFactory()
-        self.character = CharacterFactory()
+        self.character = CharacterSheetFactory().character
         self.roster = RosterFactory(is_active=True)
         self.roster_entry = RosterEntryFactory(
             character_sheet__character=self.character,
@@ -94,7 +95,7 @@ class PlayerDataServiceTestCase(TestCase):
         # Create pending application
         app = RosterApplication.objects.create(
             player_data=self.player_data,
-            character=self.character,
+            character=self.character.sheet_data,
             application_text="Test application",
         )
 

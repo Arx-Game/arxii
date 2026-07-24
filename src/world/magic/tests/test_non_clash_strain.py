@@ -107,7 +107,7 @@ class StrainPushedNonClashCastTests(TestCase):
 
         # Fresh anima per test: 5 current vs. strain_commitment=8 → deficit=3.
         self.anima = CharacterAnimaFactory(
-            character=self.character,
+            character=self.character.sheet_data,
             current=5,
             maximum=10,
         )

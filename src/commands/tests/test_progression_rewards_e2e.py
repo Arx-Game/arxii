@@ -92,6 +92,8 @@ class ProgressionRewardsJourneyTest(TestCase):
         self.assertTrue(PathIntent.objects.filter(character_sheet=self.sheet).exists())
 
         # 5. Rest for Well Rested
-        ActionPointPool.objects.create(character=self.character, current=200, maximum=200)
+        ActionPointPool.objects.create(
+            character=self.character.sheet_data, current=200, maximum=200
+        )
         self._run(CmdRest)
         self.assertTrue(get_or_create_fatigue_pool(self.sheet).well_rested)

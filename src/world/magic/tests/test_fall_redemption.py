@@ -49,7 +49,7 @@ from world.magic.services.resonance import grant_resonance
 
 def _set_aura(sheet, celestial=80, primal=10, abyssal=10):
     """Create or update a CharacterAura with given percentages."""
-    aura, _ = CharacterAura.objects.get_or_create(character=sheet.character)
+    aura, _ = CharacterAura.objects.get_or_create(character=sheet)
     aura.celestial = Decimal(str(celestial))
     aura.primal = Decimal(str(primal))
     aura.abyssal = Decimal(str(abyssal))
@@ -108,7 +108,7 @@ class TestGrantCompromiseResonance(TestCase):
         self.assertEqual(result.lifetime_earned, 10)
 
         # Aura should have drifted toward Primal
-        aura = CharacterAura.objects.get(character=sheet.character)
+        aura = CharacterAura.objects.get(character=sheet)
         self.assertLess(aura.celestial, Decimal(80))
         self.assertGreater(aura.primal, Decimal(10))
 
@@ -302,7 +302,7 @@ class TestPerformFall(TestCase):
         perform_fall(sheet, target_affinity="primal")
 
         # Aura should now be Primal-dominant (after conversion)
-        aura = CharacterAura.objects.get(character=sheet.character)
+        aura = CharacterAura.objects.get(character=sheet)
         self.assertEqual(aura.dominant_affinity.value, "primal")
 
         # Second Fall from primal to primal is refused (same affinity)

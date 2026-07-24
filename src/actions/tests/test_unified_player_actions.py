@@ -70,7 +70,7 @@ class UnifiedPlayerActionsEndpointShapeTests(TestCase):
             source_type="technique",
             technique=cls.technique,
         )
-        CharacterAnimaFactory(character=cls.character, current=8, maximum=8)
+        CharacterAnimaFactory(character=cls.character.sheet_data, current=8, maximum=8)
 
     def setUp(self) -> None:
         self.client = APIClient()
@@ -162,7 +162,7 @@ class UnifiedPlayerActionsQueryBudgetTests(TestCase):
                 technique=tech,
             )
 
-        CharacterAnimaFactory(character=cls.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=cls.character.sheet_data, current=10, maximum=10)
 
     def setUp(self) -> None:
         self.client = APIClient()

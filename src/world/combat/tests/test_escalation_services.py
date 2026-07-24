@@ -51,7 +51,7 @@ class EscalationTickTests(TestCase):
         begin_engagement(self.character, EngagementType.COMBAT, source=self.encounter)
 
     def _engagement(self):
-        return CharacterEngagement.objects.get(character=self.character)
+        return CharacterEngagement.objects.get(character=self.character.sheet_data)
 
     def test_tick_bumps_intensity_and_level(self):
         results = apply_escalation_tick(self.encounter, check_fn=_fake_check(1))
@@ -117,7 +117,7 @@ class EscalationTickTests(TestCase):
         self.assertEqual(captured, [15, 20])
 
     def test_missing_engagement_recreated(self):
-        CharacterEngagement.objects.filter(character=self.character).delete()
+        CharacterEngagement.objects.filter(character=self.character.sheet_data).delete()
         results = apply_escalation_tick(self.encounter, check_fn=_fake_check(1))
         self.assertEqual(len(results), 1)
         self.assertEqual(self._engagement().escalation_level, 1)

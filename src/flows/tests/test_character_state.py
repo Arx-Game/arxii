@@ -45,7 +45,7 @@ class CharacterStateDisplayWornTests(TestCase):
         )
         item = ItemInstanceFactory(template=template, game_object=item_obj)
         EquippedItem.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=item,
             body_region=region,
             equipment_layer=layer,
@@ -193,7 +193,7 @@ class CharacterStateReturnAppearanceTests(TestCase):
         )
         item = ItemInstanceFactory(template=template, game_object=item_obj)
         EquippedItem.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=item,
             body_region=BodyRegion.SHOULDERS,
             equipment_layer=EquipmentLayer.OVER,

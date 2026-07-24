@@ -170,7 +170,7 @@ class EmitRenownCriminalTaggingTests(TestCase):
         theft = CrimeKindFactory(slug="theft", name="Theft")
         MissionDeedRewardLineFactory(
             deed=deed,
-            recipient=holder.character,
+            recipient=holder,
             kind=DeedRewardKind.PROPAGATION,
             sink=DeedRewardSink.CRIME_WATCH,
             ref="theft",

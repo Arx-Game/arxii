@@ -91,7 +91,7 @@ class ArmorSoakDamageWiringTests(TestCase):
     def _equip(self, template, durability, body_region):
         inst = ItemInstanceFactory(template=template, durability=durability)
         EquippedItem.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=inst,
             body_region=body_region,
             equipment_layer=EquipmentLayer.BASE,

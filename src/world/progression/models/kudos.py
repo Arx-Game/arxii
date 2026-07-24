@@ -231,15 +231,6 @@ class KudosTransaction(SharedMemoryModel):
         related_name="kudos_awarded",
         help_text="Account that awarded this kudos (if applicable)",
     )
-    # Link to character if relevant (e.g., death bonus)
-    character = models.ForeignKey(
-        "objects.ObjectDB",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="kudos_transactions",
-        help_text="Character involved (e.g., for death bonus)",
-    )
     transaction_date = models.DateTimeField(auto_now_add=True)
 
     def clean(self) -> None:

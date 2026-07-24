@@ -189,7 +189,7 @@ class Action:
             from world.action_points.models import ActionPointPool  # noqa: PLC0415
 
             pool = ActionPointPool.get_or_create_for_character(actor)
-            if not pool.spend(self.ap_cost):
+            if pool is None or not pool.spend(self.ap_cost):
                 return ActionResult(
                     success=False,
                     message="You don't have enough action points for that.",

@@ -44,9 +44,10 @@ class CharacterAuraModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.aura = CharacterAura.objects.create(
-            character=cls.character,
+            character=cls.character.sheet_data,
             celestial=Decimal("10.00"),
             primal=Decimal("75.00"),
             abyssal=Decimal("15.00"),
@@ -65,7 +66,7 @@ class CharacterAuraModelTests(TestCase):
         """Test that a character can only have one aura."""
         with self.assertRaises(ValidationError):
             CharacterAura.objects.create(
-                character=self.character,
+                character=self.character.sheet_data,
                 celestial=Decimal("33.33"),
                 primal=Decimal("33.34"),
                 abyssal=Decimal("33.33"),
@@ -187,7 +188,8 @@ class CharacterGiftModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.gift = Gift.objects.create(name="Shadow Majesty")
         cls.char_gift = CharacterGift.objects.create(
@@ -219,9 +221,10 @@ class CharacterAnimaModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
         cls.anima = CharacterAnima.objects.create(
-            character=cls.character,
+            character=cls.character.sheet_data,
             current=8,
             maximum=10,
         )
@@ -236,7 +239,7 @@ class CharacterAnimaModelTests(TestCase):
         """Test that a character can only have one anima record."""
         with self.assertRaises(ValidationError):
             CharacterAnima.objects.create(
-                character=self.character,
+                character=self.character.sheet_data,
                 current=5,
                 maximum=10,
             )

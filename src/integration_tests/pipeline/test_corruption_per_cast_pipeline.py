@@ -193,10 +193,10 @@ class TestCorruptionPerCastPipeline(TestCase):
         self._make_simple_corruption_template(res_audere)
 
         sheet_base = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet_base.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=sheet_base, current=20, maximum=20)
 
         sheet_audere = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet_audere.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=sheet_audere, current=20, maximum=20)
 
         # Put sheet_audere's character in Audere by creating the ConditionInstance directly.
         # _character_is_in_audere() checks for ConditionInstance where
@@ -279,7 +279,7 @@ class TestCorruptionPerCastPipeline(TestCase):
         self._make_simple_corruption_template(res_b)
 
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
 
         result = use_technique(
             character=sheet.character,
@@ -346,7 +346,7 @@ class TestCorruptionPerCastPipeline(TestCase):
 
         sheet = CharacterSheetFactory()
         # Low current anima ensures deficit: effective_cost=15 > current=2
-        CharacterAnimaFactory(character=sheet.character, current=2, maximum=50)
+        CharacterAnimaFactory(character=sheet, current=2, maximum=50)
 
         # Apply Audere ConditionInstance.
         # _character_is_in_audere() checks condition__name == AUDERE_CONDITION_NAME = "Audere".
@@ -403,7 +403,7 @@ class TestCorruptionPerCastPipeline(TestCase):
         self._make_simple_corruption_template(res)
 
         sheet = CharacterSheetFactory()
-        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
 
         # Give the character a location so emit_event fires (skipped when location is None).
         room = ObjectDBFactory(

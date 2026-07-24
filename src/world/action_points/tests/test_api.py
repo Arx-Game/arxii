@@ -35,7 +35,7 @@ class ActionPointsApiTests(TestCase):
         self.character = _played_character(account=self.account)
 
     def test_owner_reads_pool(self) -> None:
-        pool = ActionPointPoolFactory(character=self.character, current=140, banked=25)
+        pool = ActionPointPoolFactory(character=self.character.sheet_data, current=140, banked=25)
 
         response = self.client.get(AP_URL.format(pk=self.character.pk))
 

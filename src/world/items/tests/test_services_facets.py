@@ -41,7 +41,7 @@ class AttachFacetToItemTests(TestCase):
             equipment_layer=EquipmentLayer.BASE,
         )
         cls.equipped = EquippedItemFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             item_instance=cls.item_cap2,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
@@ -162,7 +162,7 @@ class RemoveFacetFromItemTests(TestCase):
             equipment_layer=EquipmentLayer.BASE,
         )
         cls.equipped = EquippedItemFactory(
-            character=cls.character,
+            character=cls.character.sheet_data,
             item_instance=cls.item,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,

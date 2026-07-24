@@ -67,10 +67,12 @@ class TestAudereOfferPipeline(APITestCase):
         cls.sheet = cls.tenure.roster_entry.character_sheet
         cls.character = cls.sheet.character
 
-        cls.anima = CharacterAnimaFactory(character=cls.character, current=50, maximum=50)
+        cls.anima = CharacterAnimaFactory(
+            character=cls.character.sheet_data, current=50, maximum=50
+        )
         obj_ct = ContentType.objects.get_for_model(ObjectDB)
         cls.engagement = CharacterEngagement.objects.create(
-            character=cls.character,
+            character=cls.character.sheet_data,
             engagement_type=EngagementType.CHALLENGE,
             source_content_type=obj_ct,
             source_id=cls.character.pk,

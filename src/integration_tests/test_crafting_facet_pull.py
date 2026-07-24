@@ -56,7 +56,7 @@ class CraftedFacetPowersFacetPullTest(TestCase):
         self.sheet = CharacterSheetFactory()
         self.sheet.character.location = self.room_profile.objectdb
         self.sheet.character.save()
-        CharacterAnimaFactory(character=self.sheet.character, current=10, maximum=10)
+        CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
         self.resonance = ResonanceFactory()
         CharacterResonanceFactory(
             character_sheet=self.sheet,
@@ -96,7 +96,7 @@ class CraftedFacetPowersFacetPullTest(TestCase):
         self.assertIsNotNone(result.quality_tier)
 
         # ── 2. WEAR ─────────────────────────────────────────────────────────────
-        EquippedItemFactory(character=self.sheet.character, item_instance=self.item)
+        EquippedItemFactory(character=self.sheet, item_instance=self.item)
         # Invalidate so the handler re-loads from DB (setUp may have touched the cache).
         self.sheet.character.equipped_items.invalidate()
 

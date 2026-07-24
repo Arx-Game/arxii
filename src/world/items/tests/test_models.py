@@ -12,7 +12,6 @@ from world.items.factories import (
     QualityTierFactory,
 )
 from world.items.models import (
-    CurrencyBalance,
     EquippedItem,
     ItemTemplateProperty,
     OwnershipEvent,
@@ -289,7 +288,7 @@ class EquippedItemTests(TestCase):
         """An item can be equipped at a region/layer."""
         instance = ItemInstanceFactory()
         equipped = EquippedItem.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=instance,
             body_region=BodyRegion.HEAD,
             equipment_layer=EquipmentLayer.OVER,
@@ -302,14 +301,14 @@ class EquippedItemTests(TestCase):
         instance1 = ItemInstanceFactory()
         instance2 = ItemInstanceFactory()
         EquippedItem.objects.create(
-            character=self.character,
+            character=self.character.sheet_data,
             item_instance=instance1,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
         with self.assertRaises(IntegrityError):
             EquippedItem.objects.create(
-                character=self.character,
+                character=self.character.sheet_data,
                 item_instance=instance2,
                 body_region=BodyRegion.TORSO,
                 equipment_layer=EquipmentLayer.BASE,
@@ -390,27 +389,6 @@ class ItemTemplateGearFieldsTests(TestCase):
         tpl = ItemTemplateFactory(facet_capacity=3, gear_archetype=GearArchetype.HEAVY_ARMOR)
         self.assertEqual(tpl.facet_capacity, 3)
         self.assertEqual(tpl.gear_archetype, GearArchetype.HEAVY_ARMOR)
-
-
-class CurrencyBalanceTests(TestCase):
-    """Tests for CurrencyBalance model."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import CharacterFactory
-
-        cls.character = CharacterFactory(db_key="RichChar")
-
-    def test_default_balance(self) -> None:
-        """New balance defaults to 0."""
-        balance = CurrencyBalance.objects.create(character=self.character)
-        self.assertEqual(balance.gold, 0)
-
-    def test_one_per_character(self) -> None:
-        """Only one balance per character."""
-        CurrencyBalance.objects.create(character=self.character)
-        with self.assertRaises(IntegrityError):
-            CurrencyBalance.objects.create(character=self.character)
 
 
 class ItemFacetTests(TestCase):

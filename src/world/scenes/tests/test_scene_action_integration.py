@@ -397,7 +397,7 @@ class TestEnhancedActionResolution(_BaseActionIntegrationTest):
             technique=cls.technique,
         )
         CharacterAnimaFactory(
-            character=cls.initiator.character_sheet.character,
+            character=cls.initiator.character_sheet,
             current=20,
             maximum=30,
         )
@@ -440,7 +440,7 @@ class TestEnhancedActionResolution(_BaseActionIntegrationTest):
         assert result.technique_result.confirmed is True
         assert result.technique_result.anima_cost is not None
 
-        anima = CharacterAnima.objects.get(character=self.initiator.character_sheet.character)
+        anima = CharacterAnima.objects.get(character=self.initiator.character_sheet)
         assert anima.current < 20
 
     def test_enhanced_action_includes_action_resolution(self) -> None:

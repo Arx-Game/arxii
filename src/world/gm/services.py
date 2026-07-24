@@ -401,7 +401,7 @@ def claim_invite(invite: GMRosterInvite, account: AccountDB) -> RosterApplicatio
     invite.save(update_fields=["claimed_at", "claimed_by"])
 
     player_data, _ = PlayerData.objects.get_or_create(account=account)
-    character = invite.roster_entry.character_sheet.character
+    character = invite.roster_entry.character_sheet
 
     # Use get_or_create to race-safely handle duplicate applications —
     # RosterApplication has unique_together on (player_data, character).

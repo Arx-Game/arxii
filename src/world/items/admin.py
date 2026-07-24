@@ -6,7 +6,6 @@ from world.items.models import (
     Adornment,
     AudacityTuning,
     CommonGemBucket,
-    CurrencyBalance,
     DisguiseKitEffect,
     EquippedItem,
     FashionStyle,
@@ -331,13 +330,6 @@ class OwnershipEventAdmin(admin.ModelAdmin):
         "to_persona_display",
     ]
     readonly_fields = ["created_at"]
-
-
-@admin.register(CurrencyBalance)
-class CurrencyBalanceAdmin(admin.ModelAdmin):
-    list_display = ["character", "gold"]
-    list_select_related = ["character"]
-    raw_id_fields = ["character"]
 
 
 class FashionStyleBonusInline(admin.TabularInline):

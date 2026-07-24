@@ -1,7 +1,6 @@
 from django.db import models
 from django.utils import timezone
 from django.utils.functional import cached_property
-from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
@@ -253,10 +252,9 @@ class CharacterForm(SharedMemoryModel):
     """A saved set of form trait values for a character."""
 
     character = models.ForeignKey(
-        ObjectDB,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="forms",
-        limit_choices_to={"db_typeclass_path__contains": "Character"},
     )
     name = models.CharField(max_length=100, blank=True, help_text="Optional form name")
     form_type = models.CharField(max_length=20, choices=FormType.choices, default=FormType.TRUE)
@@ -280,8 +278,8 @@ class CharacterForm(SharedMemoryModel):
 
     def __str__(self):
         if self.name:
-            return f"{self.character.db_key}: {self.name}"
-        return f"{self.character.db_key}: {self.get_form_type_display()}"
+            return f"{self.character}: {self.name}"
+        return f"{self.character}: {self.get_form_type_display()}"
 
     @cached_property
     def cached_values(self) -> list["CharacterFormValue"]:
@@ -341,10 +339,9 @@ class CharacterFormState(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        ObjectDB,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="form_state",
-        limit_choices_to={"db_typeclass_path__contains": "Character"},
     )
     active_form = models.ForeignKey(
         CharacterForm,
@@ -392,8 +389,8 @@ class CharacterFormState(SharedMemoryModel):
 
     def __str__(self):
         if self.active_form:
-            return f"{self.character.db_key}: {self.active_form}"
-        return f"{self.character.db_key}: No active form"
+            return f"{self.character}: {self.active_form}"
+        return f"{self.character}: No active form"
 
 
 class FormCombatProfile(SharedMemoryModel):
@@ -558,10 +555,9 @@ class TemporaryFormChange(SharedMemoryModel):
     """A temporary override applied on top of the active form."""
 
     character = models.ForeignKey(
-        ObjectDB,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="temporary_form_changes",
-        limit_choices_to={"db_typeclass_path__contains": "Character"},
     )
     trait = models.ForeignKey(FormTrait, on_delete=models.CASCADE, related_name="temporary_changes")
     option = models.ForeignKey(
@@ -586,7 +582,7 @@ class TemporaryFormChange(SharedMemoryModel):
 
     def __str__(self):
         return (
-            f"{self.character.db_key}: {self.trait.display_name}="
+            f"{self.character}: {self.trait.display_name}="
             f"{self.option.display_name} ({self.get_duration_type_display()})"
         )
 

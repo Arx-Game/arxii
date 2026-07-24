@@ -1223,7 +1223,7 @@ def make_court_with_mission(
     # MissionParticipant.character FKs to ObjectDB — use the servant's character.
     MissionParticipantFactory(
         instance=mission,
-        character=servant_sheet.character,
+        character=servant_sheet,
         is_contract_holder=True,
     )
 
