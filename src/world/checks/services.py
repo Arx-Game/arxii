@@ -862,10 +862,11 @@ def compute_resist_increment(
     :func:`preview_check_difficulty`'s docstring below).
 
     #2707 gap 1: this used to sum only weighted Composure trait points, silently
-    dropping specialization, aspect, capability, and perk points that a defender's
+    dropping the specialization, aspect, and capability points that a defender's
     Composure check would otherwise carry — a defender's Path, owned specializations,
     and capabilities were structurally inert here. Routing through
-    :func:`compute_check_rating` closes that gap; it also means the defender's level
+    :func:`compute_check_rating` closes that gap (perk points stay out, per the
+    paragraph above — routing does NOT close that part); it also means the defender's level
     points already ride this rating, so callers must use this OR :func:`level_opposition`,
     never both (see that function's docstring).
 
@@ -879,6 +880,16 @@ def compute_resist_increment(
     call site passes ``level_override=opponent.level`` so the opponent's morale is
     exactly as sturdy as its authored level says, matching how its offense already
     opposes checks (``level_opposition``/the three combat sites wired to it).
+
+    The ephemeral NPC is the case that was BROKEN, but the override is not scoped to
+    it: ``_social_combat_difficulty`` passes ``level_override`` for EVERY opponent, so
+    a persona-backed opponent's own ``CharacterClassLevel`` rows are inert on this path
+    too — ``CombatOpponent.level`` is the single authority for how sturdy an opponent
+    is, on offense and defense alike. That is deliberate, and today it is also
+    unobservable: the persona-backed constructors (``duels._make_mirror``,
+    ``cast_seed``) both stamp ``level=effective_combat_level(sheet)``, so the authored
+    level already equals the mirrored character's own. A future constructor that
+    stamped something else would diverge here by design, not by accident.
 
     Args:
         defender_character: The character resisting the social action.
