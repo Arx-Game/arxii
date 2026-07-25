@@ -238,18 +238,24 @@ def _seed_starter_unit_templates() -> list[BattleUnitTemplate]:
     ``get_or_create`` (defaults only apply at creation, so a staff-edited
     magnitude survives a rerun too).
 
-    ``conditions.CapabilityType`` is content-repo-owned (#2698) — looked up
-    rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A spec whose
-    capability isn't authored still gets its template + property; only the
+    ``conditions.CapabilityType`` and ``mechanics.Property``/``PropertyCategory``
+    are content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. A spec whose property/capability isn't
+    authored still gets its ``BattleUnitTemplate`` row (that model is not
+    content-repo-owned); only the missing property tag /
     ``BattleUnitTemplateCapability`` wiring is skipped for it.
     """
     from world.battles.factories import BattleUnitTemplateFactory  # noqa: PLC0415
     from world.battles.models import BattleUnitTemplateCapability  # noqa: PLC0415
     from world.conditions.models import CapabilityType  # noqa: PLC0415
-    from world.mechanics.factories import PropertyCategoryFactory, PropertyFactory  # noqa: PLC0415
+    from world.mechanics.models import Property, PropertyCategory  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    property_category = PropertyCategoryFactory(name="Battle Unit Traits")
+    property_category = authored_or_sample(
+        PropertyCategory,
+        {"description": "Property tags describing a battle unit's tactical traits."},
+        name="Battle Unit Traits",
+    )
 
     templates: list[BattleUnitTemplate] = []
     for spec in _UNIT_TEMPLATE_SPECS:
@@ -259,12 +265,14 @@ def _seed_starter_unit_templates() -> list[BattleUnitTemplate]:
             quality=spec.quality,
             strength=spec.strength,
         )
-        prop = PropertyFactory(
-            name=spec.property_name,
-            description=spec.property_description,
-            category=property_category,
-        )
-        template.properties.add(prop)
+        if property_category is not None:
+            prop = authored_or_sample(
+                Property,
+                {"description": spec.property_description, "category": property_category},
+                name=spec.property_name,
+            )
+            if prop is not None:
+                template.properties.add(prop)
 
         capability = authored_or_sample(
             CapabilityType,

@@ -51,12 +51,13 @@ class SoulfrayContent:
     ``template``/``stages`` are content-repo-owned (``conditions.ConditionTemplate``/
     ``conditions.ConditionStage``, #2698) — ``template`` is ``None`` and ``stages``
     is empty when the Soulfray condition isn't authored and ``SEED_SAMPLE_CONTENT``
-    is off.
+    is off. ``blocks_anima_regen`` (``mechanics.Property``, also #2698) is likewise
+    ``None`` when its Property/PropertyCategory aren't authored.
     """
 
     template: ConditionTemplate | None
     stages: tuple[ConditionStage, ...]
-    blocks_anima_regen: Property
+    blocks_anima_regen: Property | None
 
 
 @dataclass(frozen=True)

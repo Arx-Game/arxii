@@ -8,7 +8,7 @@ target_check_type), and idempotency of every wire function.
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.checks.models import CheckTypeTrait
 from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
@@ -76,8 +76,14 @@ class WirePenetrationCheckTypeTraitTests(TestCase):
         self.assertEqual(refreshed.weight, Decimal("1.00"))
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class WirePenetrationModifierTargetTests(TestCase):
-    """wire_penetration_modifier_target() seeds the check-scoped target (#767)."""
+    """wire_penetration_modifier_target() seeds the check-scoped target (#767).
+
+    mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    wire_penetration_modifier_target() only invents them under
+    SEED_SAMPLE_CONTENT — this test needs the real row, so it opts in.
+    """
 
     def setUp(self) -> None:
         from evennia.utils.idmapper import models as idmapper_models
@@ -100,8 +106,14 @@ class WirePenetrationModifierTargetTests(TestCase):
         self.assertEqual(ModifierTarget.objects.filter(name=PENETRATION_CHECK_TYPE_NAME).count(), 1)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PenetrationModifierContestTests(TestCase):
-    """A +penetration CharacterModifier feeds the contest end-to-end (#767)."""
+    """A +penetration CharacterModifier feeds the contest end-to-end (#767).
+
+    mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    wire_penetration_modifier_target() only invents them under
+    SEED_SAMPLE_CONTENT — this test needs the real row, so it opts in.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:

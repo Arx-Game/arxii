@@ -1,7 +1,7 @@
 """Tests for the ENCOUNTER_COMPLETED → beat auto-wiring (#1746)."""
 
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -113,8 +113,14 @@ class ClassifyBattleOutcomeTests(TestCase):
             classify_battle_outcome(encounter)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EncounterCompletedBeatWiringTests(EvenniaTestCase):
-    """Integration: ENCOUNTER_COMPLETED resolves a linked OUTCOME_TIER beat."""
+    """Integration: ENCOUNTER_COMPLETED resolves a linked OUTCOME_TIER beat.
+
+    flows.FlowDefinition/TriggerDefinition are content-repo-owned (#2698);
+    wire_encounter_beat_triggers() only invents them under SEED_SAMPLE_CONTENT —
+    this test drives the real reactive-trigger firing, so it opts in.
+    """
 
     def setUp(self) -> None:
         wire_encounter_beat_triggers()  # seed TriggerDefinition + FlowDefinition

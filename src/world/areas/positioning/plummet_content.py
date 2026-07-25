@@ -168,26 +168,28 @@ _CATCH_CAPABILITIES: tuple[tuple[str, str, str, str], ...] = (
 )
 
 
-def _ensure_catch_property() -> Property:
-    """Idempotently seed the shared 'catchable' target Property.
+def _ensure_catch_property() -> Property | None:
+    """Idempotently look up the shared 'catchable' target Property.
 
     Every catch Application addresses this single Property; the challenge
     template carries it too so its approaches surface in ``_match_approaches``
     (which gates an approach on the challenge holding the Application's target
-    property).
+    property). mechanics.Property/PropertyCategory are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
     """
-    category, _ = PropertyCategory.objects.get_or_create(
+    category = authored_or_sample(
+        PropertyCategory,
+        {"description": "Physical state of a target or environment."},
         name="Physical",
-        defaults={"description": "Physical state of a target or environment."},
     )
-    obj, _ = Property.objects.get_or_create(
-        name=CATCHABLE_PROPERTY_NAME,
-        defaults={
+    return authored_or_sample(
+        Property,
+        {
             "description": "A falling body that another character may attempt to catch.",
             "category": category,
         },
+        name=CATCHABLE_PROPERTY_NAME,
     )
-    return obj
 
 
 def _ensure_catch_check_type() -> CheckType:
@@ -266,17 +268,29 @@ def ensure_catch_content() -> None:
     Adding a new catch capability later is pure data: a new
     ``CapabilityType`` + ``Application(target_property=catch property)`` +
     ``ChallengeApproach`` row surfaces with no engine change.
+
+    ``mechanics.Property``/``PropertyCategory``/``ChallengeCategory``/
+    ``ChallengeTemplate``/``Application``/``ChallengeApproach`` are all
+    content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. The whole challenge is skipped when the
+    anchor Property or ChallengeCategory/ChallengeTemplate aren't authored —
+    there is nothing left to hang approaches on.
     """
     catch_property = _ensure_catch_property()
+    if catch_property is None:
+        return
     check_type = _ensure_catch_check_type()
 
-    challenge_category, _ = ChallengeCategory.objects.get_or_create(
+    challenge_category = authored_or_sample(
+        ChallengeCategory,
+        {"description": "Hazards arising from the surroundings."},
         name="Environmental",
-        defaults={"description": "Hazards arising from the surroundings."},
     )
-    template, _ = ChallengeTemplate.objects.get_or_create(
-        name=CATCH_THE_FALLER_NAME,
-        defaults={
+    if challenge_category is None:
+        return
+    template = authored_or_sample(
+        ChallengeTemplate,
+        {
             "description_template": (
                 "{faller} is plummeting — someone with the means may try to "
                 "catch them before they strike the ground."
@@ -286,7 +300,10 @@ def ensure_catch_content() -> None:
             "category": challenge_category,
             "challenge_type": ChallengeType.THREAT,
         },
+        name=CATCH_THE_FALLER_NAME,
     )
+    if template is None:
+        return
 
     # The challenge holds the catch property so its approaches surface in
     # _match_approaches (an approach is offered iff the challenge carries the
@@ -306,20 +323,24 @@ def ensure_catch_content() -> None:
         capability = authored_or_sample(CapabilityType, {}, name=capability_name)
         if capability is None:
             continue
-        application, _ = Application.objects.get_or_create(
-            name=application_name,
-            defaults={
+        application = authored_or_sample(
+            Application,
+            {
                 "capability": capability,
                 "target_property": catch_property,
                 "description": f"Catch a falling character using {capability_name}.",
             },
+            name=application_name,
         )
-        ChallengeApproach.objects.get_or_create(
-            challenge_template=template,
-            application=application,
-            defaults={
+        if application is None:
+            continue
+        authored_or_sample(
+            ChallengeApproach,
+            {
                 "check_type": check_type,
                 "display_name": display_name,
                 "custom_description": fiction,
             },
+            challenge_template=template,
+            application=application,
         )

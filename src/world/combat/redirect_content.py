@@ -28,7 +28,7 @@ _DETONATION_POOL_NAME: str = "Volatile Powder Detonation"
 _DETONATION_DAMAGE_AMOUNT: int = 15
 
 
-def ensure_redirect_content() -> Property:
+def ensure_redirect_content() -> Property | None:
     """Idempotently seed the "Volatile (Powder)" example volatile Property.
 
     Seeds a "Hazard" ``PropertyCategory``, the Property itself, a
@@ -36,25 +36,34 @@ def ensure_redirect_content() -> Property:
     ``Consequence``, and the ``PropertyDetonation`` sidecar linking them.
     Returns the seeded Property (the caller attaches an ``ObjectProperty`` to
     make a specific object volatile).
+
+    ``mechanics.Property``/``PropertyCategory`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT``
+    is on. The consequence/pool/detonation config below is skipped entirely
+    when the Property isn't authored — there's nothing to attach it to.
     """
     from actions.models.consequence_pools import (  # noqa: PLC0415
         ConsequencePool,
         ConsequencePoolEntry,
     )
 
-    category, _ = PropertyCategory.objects.get_or_create(
+    category = authored_or_sample(
+        PropertyCategory,
+        {"description": "Properties describing environmental hazards."},
         name="Hazard",
-        defaults={"description": "Properties describing environmental hazards."},
     )
-    volatile_property, _ = Property.objects.get_or_create(
-        name=VOLATILE_POWDER_PROPERTY_NAME,
-        defaults={
+    volatile_property = authored_or_sample(
+        Property,
+        {
             "description": (
                 "A cache of alchemical powder, primed to detonate if struck or ignited."
             ),
             "category": category,
         },
+        name=VOLATILE_POWDER_PROPERTY_NAME,
     )
+    if volatile_property is None:
+        return None
 
     outcome, _ = CheckOutcome.objects.get_or_create(
         name="Detonation",

@@ -311,26 +311,32 @@ def ensure_canonical_fallback_room() -> ObjectDB:
 
 
 def wire_starting_technique_picks_target():
-    """Seed the 'starting_technique_picks' ModifierTarget (#2426).
+    """Look up the 'starting_technique_picks' ModifierTarget (#2426).
 
     A character-creation-scoped flat bonus: distinctions granting extra CG
     magic-stage technique picks (e.g. Tradition Training) target this row.
     ``CharacterDraft.starting_technique_picks`` sums it via
     ``_get_distinction_bonus(STARTING_TECHNIQUE_PICKS_TARGET, CG_MODIFIER_CATEGORY)``.
-    Idempotent via get_or_create on (category, name) — mirrors
-    ``wire_elevation_advantage_modifier_target`` (world/combat/factories.py).
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on (mirrors ``wire_elevation_advantage_modifier_target``,
+    world/combat/factories.py). Returns ``None`` when the ModifierCategory
+    isn't authored; ``ensure_tradition_training_distinction`` skips wiring its
+    DistinctionEffect to a missing target.
     """
     from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = ModifierCategory.objects.get_or_create(name=CG_MODIFIER_CATEGORY)
-    target, _ = ModifierTarget.objects.get_or_create(
+    category = authored_or_sample(ModifierCategory, {}, name=CG_MODIFIER_CATEGORY)
+    if category is None:
+        return None
+    return authored_or_sample(
+        ModifierTarget,
+        {"description": "Extra CG magic-stage technique picks, beyond the base of 1."},
         name=STARTING_TECHNIQUE_PICKS_TARGET,
         category=category,
-        defaults={
-            "description": "Extra CG magic-stage technique picks, beyond the base of 1.",
-        },
     )
-    return target
 
 
 def ensure_tradition_training_distinction() -> None:
@@ -371,14 +377,17 @@ def ensure_tradition_training_distinction() -> None:
             "max_rank": 2,
         },
     )
-    DistinctionEffect.objects.update_or_create(
-        distinction=distinction,
-        target=target,
-        defaults={
-            "value_per_rank": 1,
-            "description": "+1 CG magic-stage technique pick per rank.",
-        },
-    )
+    # target (mechanics.ModifierTarget) is content-repo-owned (#2698) — skip
+    # wiring the effect when it isn't authored; there is nothing to target.
+    if target is not None:
+        DistinctionEffect.objects.update_or_create(
+            distinction=distinction,
+            target=target,
+            defaults={
+                "value_per_rank": 1,
+                "description": "+1 CG magic-stage technique pick per rank.",
+            },
+        )
 
 
 #: Canonical name: ``world.character_creation.constants.UNBOUND_TRADITION_NAME``
@@ -410,7 +419,7 @@ _METALLIC_ORDER_TRADITION_NAME = "Metallic Order"
 
 
 def wire_magic_learning_ap_cost_target():
-    """Seed the 'magic_learning_ap_cost' ModifierTarget (#2442).
+    """Look up the 'magic_learning_ap_cost' ModifierTarget (#2442).
 
     A live-play percent AP surcharge on magic-learning activities: the "Unbound"
     drawback distinction (``ensure_unbound_drawback_distinction`` below) authors a
@@ -420,27 +429,36 @@ def wire_magic_learning_ap_cost_target():
     ``CharacterModifier`` resolution path every other distinction-authored modifier
     uses, NOT the CG-draft ``CharacterDraft._get_distinction_bonus`` helper (that
     reads a draft's in-progress ``draft_data``, never a committed
-    ``CharacterDistinction``). Idempotent via get_or_create on (category, name) —
-    mirrors ``wire_starting_technique_picks_target`` above.
+    ``CharacterDistinction``).
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on (mirrors ``wire_starting_technique_picks_target`` above). Returns
+    ``None`` when the ModifierCategory isn't authored;
+    ``ensure_unbound_drawback_distinction`` skips wiring its DistinctionEffect
+    to a missing target.
     """
     from world.magic.constants import (  # noqa: PLC0415
         MAGIC_LEARNING_AP_COST_TARGET_NAME,
         MAGIC_MODIFIER_CATEGORY_NAME,
     )
     from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = ModifierCategory.objects.get_or_create(name=MAGIC_MODIFIER_CATEGORY_NAME)
-    target, _ = ModifierTarget.objects.get_or_create(
-        name=MAGIC_LEARNING_AP_COST_TARGET_NAME,
-        category=category,
-        defaults={
+    category = authored_or_sample(ModifierCategory, {}, name=MAGIC_MODIFIER_CATEGORY_NAME)
+    if category is None:
+        return None
+    return authored_or_sample(
+        ModifierTarget,
+        {
             "description": (
                 "Percent AP surcharge on magic-learning activities (technique "
                 "acquisition — teaching-offer accepts and #2440 TRAIN offers)."
             ),
         },
+        name=MAGIC_LEARNING_AP_COST_TARGET_NAME,
+        category=category,
     )
-    return target
 
 
 def ensure_unbound_drawback_distinction():
@@ -503,14 +521,17 @@ def ensure_unbound_drawback_distinction():
             "max_rank": 1,
         },
     )
-    DistinctionEffect.objects.update_or_create(
-        distinction=distinction,
-        target=target,
-        defaults={
-            "value_per_rank": 50,
-            "description": "+50% AP cost on magic-learning activities.",
-        },
-    )
+    # target (mechanics.ModifierTarget) is content-repo-owned (#2698) — skip
+    # wiring the effect when it isn't authored; there is nothing to target.
+    if target is not None:
+        DistinctionEffect.objects.update_or_create(
+            distinction=distinction,
+            target=target,
+            defaults={
+                "value_per_rank": 50,
+                "description": "+50% AP cost on magic-learning activities.",
+            },
+        )
     return distinction
 
 

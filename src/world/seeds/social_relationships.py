@@ -33,22 +33,37 @@ _ATTRACTION_CONDITIONS = [
 
 
 def ensure_allure_target():
-    """The ``allure`` ``ModifierTarget`` (a roll-modifier value the engine reads directionally)."""
-    from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
+    """Look up the ``allure`` ``ModifierTarget`` (a roll-modifier value the engine
+    reads directionally).
 
-    category, _ = ModifierCategory.objects.get_or_create(name=_ROLL_MODIFIER_CATEGORY)
-    target, _ = ModifierTarget.objects.get_or_create(
-        name=ALLURE_TARGET_NAME,
-        category=category,
-        defaults={
+    ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when either isn't authored; callers skip wiring the
+    attraction conditions / Attractive distinction's effect to a missing target.
+    """
+    from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    category = authored_or_sample(ModifierCategory, {}, name=_ROLL_MODIFIER_CATEGORY)
+    if category is None:
+        return None
+    return authored_or_sample(
+        ModifierTarget,
+        {
             "description": "Directed attractiveness — applies when a target is Attracted To you.",
         },
+        name=ALLURE_TARGET_NAME,
+        category=category,
     )
-    return target
 
 
 def ensure_attraction_conditions(allure_target) -> dict[str, object]:
-    """Seed Attracted To + Very Attracted, both gating the allure target."""
+    """Seed Attracted To + Very Attracted, both gating the allure target.
+
+    ``allure_target`` (``mechanics.ModifierTarget``) is content-repo-owned
+    (#2698) — the gate is skipped (but the condition row still seeds) when
+    it's ``None`` (not authored, ``SEED_SAMPLE_CONTENT`` off).
+    """
     from world.relationships.models import RelationshipCondition  # noqa: PLC0415
 
     conditions: dict[str, object] = {}
@@ -56,7 +71,8 @@ def ensure_attraction_conditions(allure_target) -> dict[str, object]:
         condition, _ = RelationshipCondition.objects.get_or_create(
             name=name, defaults={"description": description, "display_order": order}
         )
-        condition.gates_modifiers.add(allure_target)
+        if allure_target is not None:
+            condition.gates_modifiers.add(allure_target)
         conditions[name] = condition
     return conditions
 
@@ -93,14 +109,17 @@ def ensure_attractive_distinction(allure_target) -> None:
             "max_rank": 3,
         },
     )
-    DistinctionEffect.objects.update_or_create(
-        distinction=distinction,
-        target=allure_target,
-        defaults={
-            "value_per_rank": _ATTRACTIVE_ALLURE_PER_RANK,
-            "description": "Directed allure — applies when a target is Attracted To you.",
-        },
-    )
+    # allure_target (mechanics.ModifierTarget) is content-repo-owned (#2698) —
+    # skip wiring the effect when it isn't authored; there is nothing to target.
+    if allure_target is not None:
+        DistinctionEffect.objects.update_or_create(
+            distinction=distinction,
+            target=allure_target,
+            defaults={
+                "value_per_rank": _ATTRACTIVE_ALLURE_PER_RANK,
+                "description": "Directed allure — applies when a target is Attracted To you.",
+            },
+        )
 
 
 def seed_social_relationship_content() -> None:

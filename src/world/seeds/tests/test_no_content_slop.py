@@ -62,12 +62,17 @@ from world.seeds.tests.content_stub import stub_content_root
 #:
 #: Measured against the *stub* content root, which carries almost no content.
 #: Against a real content repo these seeders are near-total no-ops: their
-#: ``get_or_create`` calls find the authored row and add nothing. Only ~77 rows
-#: across 10 models are genuine invention (62 ``checks.checktypetrait``, 5
-#: ``character_creation.cgexplanation``, the "A Simple Job" demo mission,
-#: ``forms.formtraitoption`` "court_coils", ``mechanics.modifiertarget``
-#: "menace", and two singleton configs). The stub-relative number is the
-#: stricter, hermetic one, and it is what this ratchet drives to zero.
+#: ``get_or_create`` calls find the authored row and add nothing. The
+#: ``mechanics.*``/``flows.*`` slice (11 models: application, challengeapproach,
+#: challengecategory, challengetemplate, modifiercategory, modifiertarget,
+#: property, propertycategory, flowdefinition, flowstepdefinition,
+#: triggerdefinition) was cleared the same way in a follow-up #2698 pass —
+#: including the "menace" ``mechanics.modifiertarget`` row that was one of the
+#: genuine stub-relative inventions. What remains is genuine invention (62
+#: ``checks.checktypetrait``, 5 ``character_creation.cgexplanation``, the "A
+#: Simple Job" demo mission, ``forms.formtraitoption`` "court_coils", and two
+#: singleton configs). The stub-relative number is the stricter, hermetic one,
+#: and it is what this ratchet drives to zero.
 #:
 #: So this freezes today's state and guards the margin: a seeder that starts
 #: populating a *new* content model fails immediately, while the existing overlap
@@ -94,22 +99,11 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
         "distinctions.distinction",
         "distinctions.distinctioncategory",
         "distinctions.distinctioneffect",
-        "flows.flowdefinition",
-        "flows.flowstepdefinition",
-        "flows.triggerdefinition",
         "forms.build",
         "forms.formtrait",
         "forms.formtraitoption",
         "forms.heightband",
         "forms.speciesformtrait",
-        "mechanics.application",
-        "mechanics.challengeapproach",
-        "mechanics.challengecategory",
-        "mechanics.challengetemplate",
-        "mechanics.modifiercategory",
-        "mechanics.modifiertarget",
-        "mechanics.property",
-        "mechanics.propertycategory",
         "missions.missionnode",
         "missions.missionoption",
         "missions.missionoptionroute",

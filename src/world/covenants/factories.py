@@ -46,8 +46,9 @@ CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactor
 
 if TYPE_CHECKING:
     from world.checks.models import CheckType
-    from world.conditions.models import CapabilityType
+    from world.conditions.models import CapabilityType, ConditionTemplate
     from world.magic.models import Resonance, ThreadPullEffect
+    from world.mechanics.models import ModifierCategory
 
 
 class CovenantRoleFactory(factory_django.DjangoModelFactory):
@@ -493,6 +494,57 @@ def seed_resonance_subrole_slice(
     return subroles
 
 
+def _wire_stat_modifier_effect(
+    condition: "ConditionTemplate",
+    stat_cat: "ModifierCategory | None",
+    stat_name: str,
+    value: int,
+) -> None:
+    """Wire one stat-scoped ConditionModifierEffect onto *condition* (#753 Task 10).
+
+    Extracted from ``wire_covenant_rite_content`` to keep that function's
+    cyclomatic complexity under the C901 budget once the #2698 skip-on-missing
+    branches were added.
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` and
+    ``conditions.ConditionModifierEffect`` are content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    No-ops when the ``ModifierCategory`` (*stat_cat*) or the named stat's
+    ``ModifierTarget`` isn't authored — there's nothing to attach the effect to.
+    """
+    from world.conditions.models import ConditionModifierEffect
+    from world.mechanics.models import ModifierTarget
+    from world.seeds.sample_content import authored_or_sample
+    from world.traits.models import Trait
+
+    if stat_cat is None:
+        return
+    trait = Trait.get_by_name(stat_name)
+    target = authored_or_sample(
+        ModifierTarget,
+        {
+            "description": f"{stat_name.capitalize()} stat modifier target.",
+            "is_active": True,
+            "target_trait": trait,
+        },
+        category=stat_cat,
+        name=stat_name,
+    )
+    if target is None:
+        return
+    # Backfill linkage on a pre-existing orphan row (defaults only apply on create).
+    if target.target_trait_id is None and trait is not None:
+        target.target_trait = trait
+        target.save(update_fields=["target_trait"])
+    authored_or_sample(
+        ConditionModifierEffect,
+        {"value": value, "scales_with_severity": True},
+        condition=condition,
+        modifier_target=target,
+        stage=None,
+    )
+
+
 def wire_covenant_rite_content() -> CovenantRite | None:
     """Idempotent seed helper: create the Renew the Oath ritual + CovenantRite row.
 
@@ -559,12 +611,8 @@ def wire_covenant_rite_content() -> CovenantRite | None:
         return None
 
     from world.conditions.constants import DurationType
-    from world.conditions.models import (
-        ConditionCategory,
-        ConditionModifierEffect,
-        ConditionTemplate,
-    )
-    from world.mechanics.models import ModifierCategory, ModifierTarget
+    from world.conditions.models import ConditionCategory, ConditionTemplate
+    from world.mechanics.models import ModifierCategory
 
     # Shared category for the "Oathbound *" buff family (content-repo-owned, #2698).
     oath_category = authored_or_sample(
@@ -592,34 +640,17 @@ def wire_covenant_rite_content() -> CovenantRite | None:
         )
 
     # ------------------------------------------------------------------
-    # Ensure the 'stat' ModifierCategory and the named stat targets exist.
-    # All pattern: get_or_create keyed on (category, name) so repeated
-    # calls never produce duplicates.
+    # Look up the 'stat' ModifierCategory. mechanics.ModifierCategory/
+    # ModifierTarget are content-repo-owned (#2698) — looked up rather than
+    # invented unless SEED_SAMPLE_CONTENT is on. ``_wire_stat_modifier_effect``
+    # (module-level, extracted to keep this function's complexity down)
+    # no-ops when the category or a named stat's target isn't authored.
     # ------------------------------------------------------------------
-    stat_cat, _ = ModifierCategory.objects.get_or_create(
+    stat_cat = authored_or_sample(
+        ModifierCategory,
+        {"description": "Primary character statistics.", "display_order": 10},
         name="stat",
-        defaults={"description": "Primary character statistics.", "display_order": 10},
     )
-
-    from world.traits.models import Trait
-
-    def _stat(name: str) -> ModifierTarget:
-        trait = Trait.get_by_name(name)
-        target, _ = ModifierTarget.objects.get_or_create(
-            category=stat_cat,
-            name=name,
-            defaults={
-                "description": f"{name.capitalize()} stat modifier target.",
-                "is_active": True,
-                "target_trait": trait,
-            },
-        )
-        # Backfill linkage on a pre-existing orphan row (get_or_create only
-        # sets defaults on create).
-        if target.target_trait_id is None and trait is not None:
-            target.target_trait = trait
-            target.save(update_fields=["target_trait"])
-        return target
 
     # ------------------------------------------------------------------
     # Default condition ("Oathbound Resolve") + its modifier effects.
@@ -636,14 +667,7 @@ def wire_covenant_rite_content() -> CovenantRite | None:
         return None
 
     for stat_name in ("willpower", "composure", "stability"):
-        target = _stat(stat_name)
-        authored_or_sample(
-            ConditionModifierEffect,
-            {"value": 5, "scales_with_severity": True},
-            condition=default_condition,
-            modifier_target=target,
-            stage=None,
-        )
+        _wire_stat_modifier_effect(default_condition, stat_cat, stat_name, 5)
 
     # ------------------------------------------------------------------
     # CovenantRite row (keyed on ritual; idempotent).
@@ -715,13 +739,7 @@ def wire_covenant_rite_content() -> CovenantRite | None:
         if condition is None:
             return
         for stat_name in stat_names:
-            authored_or_sample(
-                ConditionModifierEffect,
-                {"value": modifier_value, "scales_with_severity": True},
-                condition=condition,
-                modifier_target=_stat(stat_name),
-                stage=None,
-            )
+            _wire_stat_modifier_effect(condition, stat_cat, stat_name, modifier_value)
         CovenantRiteRolePackage.objects.get_or_create(
             rite=rite,
             covenant_role=covenant_role,

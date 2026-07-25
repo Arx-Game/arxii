@@ -1641,11 +1641,26 @@ class _SoulfrayContentFactory:
 
     def __call__(self) -> SoulfrayContent:
         from world.conditions.models import ConditionCategory, ConditionStage, ConditionTemplate
-        from world.mechanics.factories import BlocksAnimaRegenPropertyFactory
+        from world.mechanics.models import Property, PropertyCategory
         from world.seeds.sample_content import authored_or_sample
 
-        # Ensure the blocks_anima_regen property exists
-        blocks_prop = BlocksAnimaRegenPropertyFactory()
+        # mechanics.Property/PropertyCategory are content-repo-owned (#2698) —
+        # looked up rather than invented unless SEED_SAMPLE_CONTENT is on.
+        # blocks_prop may come back None; the stage-wiring loop below already
+        # tolerates a missing property (it just skips the .properties.add()).
+        blocks_category = authored_or_sample(
+            PropertyCategory,
+            {"description": "Property tags describing condition mechanical effects."},
+            name="Condition Effect",
+        )
+        blocks_prop = authored_or_sample(
+            Property,
+            {
+                "description": "Blocks daily anima regeneration while this stage is active.",
+                "category": blocks_category,
+            },
+            name="blocks_anima_regen",
+        )
 
         # ``conditions.ConditionCategory``/``ConditionTemplate``/``ConditionStage``
         # are content-repo-owned (#2698) — looked up rather than invented unless
@@ -1694,9 +1709,11 @@ class _SoulfrayContentFactory:
             if stage is not None:
                 stages.append(stage)
 
-        # Wire blocks_anima_regen onto stages 2–5 (Tearing onward, per §8.4)
-        for stage in stages[1:]:
-            stage.properties.add(blocks_prop)
+        # Wire blocks_anima_regen onto stages 2–5 (Tearing onward, per §8.4). Skip
+        # entirely when the Property isn't authored (SEED_SAMPLE_CONTENT off).
+        if blocks_prop is not None:
+            for stage in stages[1:]:
+                stage.properties.add(blocks_prop)
 
         # Backfill passive_decay_max_severity = Tearing.severity_threshold - 1 = 5
         if len(stages) > 1:
@@ -2374,18 +2391,28 @@ def _build_soul_tether_redirect_flow() -> object:
 
     The step calls ``soul_tether_redirect_handler`` with the event payload.
     Uses the flows system's ``CALL_SERVICE_FUNCTION`` action (FlowActionChoices).
+
+    ``flows.FlowDefinition``/``FlowStepDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the FlowDefinition isn't authored.
     """
     from flows.consts import FlowActionChoices
-    from flows.factories import FlowStepDefinitionFactory
-    from flows.models import FlowDefinition
+    from flows.models import FlowDefinition, FlowStepDefinition
+    from world.seeds.sample_content import authored_or_sample
 
-    flow, _ = FlowDefinition.objects.get_or_create(name="soul_tether_redirect")
+    flow = authored_or_sample(FlowDefinition, {}, name="soul_tether_redirect")
+    if flow is None:
+        return None
     if not flow.steps.exists():
-        FlowStepDefinitionFactory(
+        authored_or_sample(
+            FlowStepDefinition,
+            {
+                "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                "parameters": {"payload": _PAYLOAD_PARAM},
+            },
             flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="world.magic.services.soul_tether.soul_tether_redirect_handler",
-            parameters={"payload": _PAYLOAD_PARAM},
+            parent=None,
         )
     return flow
 
@@ -2394,18 +2421,28 @@ def _build_soul_tether_stage_advance_prompt_flow() -> object:
     """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the stage-advance prompt.
 
     The step calls ``soul_tether_stage_advance_prompt`` with the event payload.
+
+    ``flows.FlowDefinition``/``FlowStepDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the FlowDefinition isn't authored.
     """
     from flows.consts import FlowActionChoices
-    from flows.factories import FlowStepDefinitionFactory
-    from flows.models import FlowDefinition
+    from flows.models import FlowDefinition, FlowStepDefinition
+    from world.seeds.sample_content import authored_or_sample
 
-    flow, _ = FlowDefinition.objects.get_or_create(name="soul_tether_stage_advance_prompt")
+    flow = authored_or_sample(FlowDefinition, {}, name="soul_tether_stage_advance_prompt")
+    if flow is None:
+        return None
     if not flow.steps.exists():
-        FlowStepDefinitionFactory(
+        authored_or_sample(
+            FlowStepDefinition,
+            {
+                "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                "parameters": {"payload": _PAYLOAD_PARAM},
+            },
             flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name=("world.magic.services.soul_tether.soul_tether_stage_advance_prompt"),
-            parameters={"payload": _PAYLOAD_PARAM},
+            parent=None,
         )
     return flow
 
@@ -2449,18 +2486,54 @@ class SoulTetherStageAdvancePromptTriggerDefinitionFactory(factory.django.Django
 
 
 def wire_soul_tether_active_template(_template: object) -> tuple:
-    """Create the two TriggerDefinition rows for Soul Tether subscribers.
+    """Look up the two TriggerDefinition rows for Soul Tether subscribers.
 
     Note: In this system, TriggerDefinitions are not M2M-linked to
     ConditionTemplate. They are installed as Trigger instances on characters
     when a ConditionInstance of SoulTetherActiveTemplate is applied (by
-    ``accept_soul_tether`` service). This function creates the canonical
-    TriggerDefinition rows so the service can reference them by name.
+    ``accept_soul_tether`` service, via ``_install_soul_tether_triggers`` —
+    which now tolerates either coming back ``None``, see that function's
+    docstring). This function looks up the canonical TriggerDefinition rows
+    so the service can reference them by name.
+
+    ``flows.FlowDefinition``/``FlowStepDefinition``/``TriggerDefinition`` are
+    all content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. Either element of the returned tuple may be
+    ``None`` when its FlowDefinition/TriggerDefinition isn't authored.
 
     Returns (redirect_trigger_def, stage_advance_trigger_def).
     """
-    redirect_def = SoulTetherRedirectTriggerDefinitionFactory()
-    stage_advance_def = SoulTetherStageAdvancePromptTriggerDefinitionFactory()
+    from flows.models import TriggerDefinition
+    from world.seeds.sample_content import authored_or_sample
+
+    redirect_def = None
+    redirect_flow = _build_soul_tether_redirect_flow()
+    if redirect_flow is not None:
+        redirect_def = authored_or_sample(
+            TriggerDefinition,
+            {
+                "event_name": "corruption_accruing",
+                "flow_definition": redirect_flow,
+                "priority": 100,
+                "base_filter_condition": None,
+            },
+            name="soul_tether_redirect",
+        )
+
+    stage_advance_def = None
+    stage_advance_flow = _build_soul_tether_stage_advance_prompt_flow()
+    if stage_advance_flow is not None:
+        stage_advance_def = authored_or_sample(
+            TriggerDefinition,
+            {
+                "event_name": "condition_stage_advance_check_about_to_fire",
+                "flow_definition": stage_advance_flow,
+                "priority": 100,
+                "base_filter_condition": None,
+            },
+            name="soul_tether_stage_advance_prompt",
+        )
+
     return redirect_def, stage_advance_def
 
 
@@ -2548,8 +2621,13 @@ def wire_soul_tether_content() -> object:
     looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on; when
     absent, ``strain_template``/``active_template`` come back ``None`` on the
     returned dataclass (the trigger definitions below don't read them, so
-    they still seed). Stat definitions and trigger definitions are out of
-    scope for #2698 and stay unconditional.
+    they still seed). The two ``TriggerDefinition`` rows (+ their backing
+    ``FlowDefinition``/``FlowStepDefinition``) are likewise content-repo-owned
+    and may come back ``None`` on the returned dataclass — see
+    ``wire_soul_tether_active_template()`` and
+    ``world.magic.services.soul_tether._install_soul_tether_triggers()``,
+    which now tolerates a missing definition rather than crashing tether
+    formation. Stat definitions stay unconditional (out of scope for #2698).
 
     Returns a ``SoulTetherContent`` dataclass with references to all created rows.
     Safe to call multiple times — does not create duplicates.

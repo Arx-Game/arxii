@@ -224,13 +224,31 @@ def install_encounter_beat_trigger(encounter: CombatEncounter) -> None:
 def wire_encounter_beat_triggers() -> None:
     """Seed the ENCOUNTER_COMPLETED → beat TriggerDefinition (idempotent).
 
-    Creates (get_or_create) the ``encounter_completed_beat_wiring`` FlowDefinition
-    (one CALL_SERVICE_FUNCTION step → encounter_completed_beat_handler) and its
+    Looks up the ``encounter_completed_beat_wiring`` FlowDefinition (one
+    CALL_SERVICE_FUNCTION step → encounter_completed_beat_handler) and its
     TriggerDefinition. Doubles as integration-test setup and staff seed content.
     Safe to call repeatedly.
-    """
-    from world.combat.factories import (  # noqa: PLC0415
-        EncounterBeatTriggerDefinitionFactory,
-    )
 
-    EncounterBeatTriggerDefinitionFactory()
+    ``flows.FlowDefinition``/``FlowStepDefinition``/``TriggerDefinition`` are
+    all content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. No-ops when the FlowDefinition isn't
+    authored — ``install_encounter_beat_trigger`` already tolerates a missing
+    TriggerDefinition.
+    """
+    from flows.models import TriggerDefinition  # noqa: PLC0415
+    from world.combat.factories import _build_encounter_beat_flow  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    flow = _build_encounter_beat_flow()
+    if flow is None:
+        return
+    authored_or_sample(
+        TriggerDefinition,
+        {
+            "event_name": "encounter_completed",
+            "flow_definition": flow,
+            "priority": 40,
+            "base_filter_condition": None,
+        },
+        name=ENCOUNTER_BEAT_TRIGGER_NAME,
+    )

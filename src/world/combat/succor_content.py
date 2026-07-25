@@ -63,19 +63,25 @@ _SUCCOR_CAPABILITIES: tuple[tuple[str, str, str, str], ...] = (
 )
 
 
-def _ensure_succorable_property() -> Property:
-    category, _ = PropertyCategory.objects.get_or_create(
+def _ensure_succorable_property() -> Property | None:
+    """Idempotently look up the shared 'succorable' target Property.
+
+    mechanics.Property/PropertyCategory are content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    """
+    category = authored_or_sample(
+        PropertyCategory,
+        {"description": "Physical state of a target or environment."},
         name="Physical",
-        defaults={"description": "Physical state of a target or environment."},
     )
-    obj, _ = Property.objects.get_or_create(
-        name=SUCCORABLE_PROPERTY_NAME,
-        defaults={
+    return authored_or_sample(
+        Property,
+        {
             "description": "A character sheltered from an environmental hazard by an ally.",
             "category": category,
         },
+        name=SUCCORABLE_PROPERTY_NAME,
     )
-    return obj
 
 
 def _ensure_succor_check_type() -> CheckType:
@@ -110,17 +116,29 @@ def _ensure_clean_succor_consequence(template: ChallengeTemplate) -> None:
 
 
 def ensure_succor_content() -> None:
-    """Idempotently seed the "Succor" challenge (#1744). Safe to call repeatedly."""
+    """Idempotently seed the "Succor" challenge (#1744). Safe to call repeatedly.
+
+    ``mechanics.Property``/``PropertyCategory``/``ChallengeCategory``/
+    ``ChallengeTemplate``/``Application``/``ChallengeApproach`` are all
+    content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. The whole challenge is skipped when the
+    anchor Property or ChallengeCategory/ChallengeTemplate aren't authored.
+    """
     succorable_property = _ensure_succorable_property()
+    if succorable_property is None:
+        return
     check_type = _ensure_succor_check_type()
 
-    challenge_category, _ = ChallengeCategory.objects.get_or_create(
+    challenge_category = authored_or_sample(
+        ChallengeCategory,
+        {"description": "Hazards arising from the surroundings."},
         name="Environmental",
-        defaults={"description": "Hazards arising from the surroundings."},
     )
-    template, _ = ChallengeTemplate.objects.get_or_create(
-        name=SUCCOR_CHALLENGE_NAME,
-        defaults={
+    if challenge_category is None:
+        return
+    template = authored_or_sample(
+        ChallengeTemplate,
+        {
             "description_template": (
                 "{succorer} moves to shelter {ally} — someone with the means may attempt "
                 "to turn the hazard aside."
@@ -130,7 +148,10 @@ def ensure_succor_content() -> None:
             "category": challenge_category,
             "challenge_type": ChallengeType.THREAT,
         },
+        name=SUCCOR_CHALLENGE_NAME,
     )
+    if template is None:
+        return
     ChallengeTemplateProperty.objects.get_or_create(
         challenge_template=template,
         property=succorable_property,
@@ -145,20 +166,24 @@ def ensure_succor_content() -> None:
         capability = authored_or_sample(CapabilityType, {}, name=capability_name)
         if capability is None:
             continue
-        application, _ = Application.objects.get_or_create(
-            name=application_name,
-            defaults={
+        application = authored_or_sample(
+            Application,
+            {
                 "capability": capability,
                 "target_property": succorable_property,
                 "description": f"Succor an ally against a hazard using {capability_name}.",
             },
+            name=application_name,
         )
-        ChallengeApproach.objects.get_or_create(
-            challenge_template=template,
-            application=application,
-            defaults={
+        if application is None:
+            continue
+        authored_or_sample(
+            ChallengeApproach,
+            {
                 "check_type": check_type,
                 "display_name": display_name,
                 "custom_description": fiction,
             },
+            challenge_template=template,
+            application=application,
         )

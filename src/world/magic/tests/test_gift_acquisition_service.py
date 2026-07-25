@@ -3,7 +3,7 @@
 import itertools
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import GiftKind
@@ -532,10 +532,16 @@ class ChargeAndLearnGoldCostTest(TestCase):
         self.assertEqual(self.purse.balance, 1000)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class UnboundMagicLearningApSurchargeTest(TestCase):
     """The Unbound magic-learning AP surcharge (#2442) on the PC-teaching-accept
     door (``accept_technique_offer``). TIME, not power — resonance is untouched;
-    only the AP charged at the shared ``charge_and_learn`` seam scales."""
+    only the AP charged at the shared ``charge_and_learn`` seam scales.
+
+    mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    the surcharge's target only invents under SEED_SAMPLE_CONTENT — this test
+    asserts on the real surcharge amount, so it opts in.
+    """
 
     def setUp(self):
         from evennia_extensions.factories import AccountFactory

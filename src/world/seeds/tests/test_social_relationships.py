@@ -1,6 +1,6 @@
 """Social-relationship seed — allure target + Attracted To / Very Attracted conditions (#1697)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.mechanics.models import ModifierTarget
 from world.relationships.models import RelationshipCondition
@@ -12,7 +12,12 @@ from world.seeds.social_relationships import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SocialRelationshipSeedTests(TestCase):
+    """mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    ensure_allure_target() only invents them under SEED_SAMPLE_CONTENT — this
+    test asserts on the real allure target, so it opts in."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         seed_social_relationship_content()

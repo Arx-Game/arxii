@@ -112,17 +112,46 @@ class TeamDamagePercentTargetFactory(ModifierTargetFactory):
     target_resonance = None
 
 
-def ensure_team_damage_percent_target() -> ModifierTarget:
-    """Idempotently ensure the bounded team-damage-percent lane's ModifierTarget row
-    exists (#2643). Mirrors ``world.magic.factories.wire_audere_power_multipliers``'s
-    ModifierTarget-ensure idiom for ``power_multiplier`` (factories-as-seed-data): the
-    row itself is mechanics config, not authored game content, so — unlike the
-    ConditionModifierEffect/ConditionTemplate rows that actually author a Uplift/
-    Undermine buff (lore-repo content) — it is safe and correct to seed directly.
-    Called from the magic dev seed (``world.seeds.game_content.magic.seed_magic_dev``)
-    and from test setup that needs the lane readable without authoring a full buff.
+def ensure_team_damage_percent_target() -> ModifierTarget | None:
+    """Idempotently look up the bounded team-damage-percent lane's ModifierTarget row
+    (#2643).
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. (The docstring this replaced argued the row was "mechanics config, not
+    authored game content" and therefore safe to seed directly — ADR-0164
+    settled that the ``CONTENT_MODELS`` registration is the sole line, no
+    per-model judgment calls, so that reasoning no longer holds.) Called from
+    the magic dev seed (``world.seeds.game_content.magic.seed_magic_dev``) and
+    from test setup that needs the lane readable without authoring a full buff.
     """
-    return TeamDamagePercentTargetFactory()
+    from world.mechanics.constants import POWER_CATEGORY_NAME
+    from world.seeds.sample_content import authored_or_sample
+
+    category = authored_or_sample(
+        ModifierCategory,
+        {
+            "description": (
+                "Power buffs that raise a technique's landed effect (derived, never stored)."
+            )
+        },
+        name=POWER_CATEGORY_NAME,
+    )
+    if category is None:
+        return None
+    return authored_or_sample(
+        ModifierTarget,
+        {
+            "description": (
+                "Uplift's team-wide %, priced per-target-level, vow-keyed-DR'd, and "
+                "clamped to TEAM_BUFF_LANE_CAP_PERCENT (#2643) — a bounded lane read "
+                "separately from the legacy unbounded power_multiplier target."
+            ),
+            "target_resonance": None,
+        },
+        name=TEAM_DAMAGE_PERCENT_TARGET_NAME,
+        category=category,
+    )
 
 
 class ModifierSourceFactory(DjangoModelFactory):

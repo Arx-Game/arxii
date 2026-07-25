@@ -356,8 +356,16 @@ class SoulTetherRescueRitualFactoryTests(TestCase):
         self.assertEqual(Ritual.objects.filter(name="soul_tether_rescue").count(), 1)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SoulTetherTriggerDefinitionFactoryTests(TestCase):
-    """Task 3.5: TriggerDefinition factories for the two Spec B subscribers."""
+    """Task 3.5: TriggerDefinition factories for the two Spec B subscribers.
+
+    flows.FlowDefinition/FlowStepDefinition are content-repo-owned (#2698); the
+    factories under test build their backing flow via ``_build_soul_tether_
+    redirect_flow``/``_build_soul_tether_stage_advance_prompt_flow``, which
+    return ``None`` unless SEED_SAMPLE_CONTENT is on — this class exercises
+    that sample path directly.
+    """
 
     def test_redirect_trigger_definition_created(self) -> None:
         from flows.models import TriggerDefinition

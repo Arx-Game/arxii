@@ -20,19 +20,29 @@ if TYPE_CHECKING:
 
 @dataclass
 class PenetrationContestResult:
-    """Returned by seed_penetration_contest()."""
+    """Returned by seed_penetration_contest().
+
+    ``modifier_target`` (``mechanics.ModifierTarget``) is content-repo-owned
+    (#2698) — ``None`` when its ``ModifierCategory`` isn't authored and
+    ``SEED_SAMPLE_CONTENT`` is off.
+    """
 
     check_type: CheckType
     factors: list[PenetrationOutcomeFactor]
-    modifier_target: ModifierTarget
+    modifier_target: ModifierTarget | None
 
 
 @dataclass
 class FleeSeedResult:
-    """Returned by seed_flee_check()."""
+    """Returned by seed_flee_check().
+
+    ``modifier_target`` (``mechanics.ModifierTarget``) is content-repo-owned
+    (#2698) — ``None`` when its ``ModifierCategory`` isn't authored and
+    ``SEED_SAMPLE_CONTENT`` is off.
+    """
 
     check_type: CheckType
-    modifier_target: ModifierTarget
+    modifier_target: ModifierTarget | None
     config: FleeConfig
 
 

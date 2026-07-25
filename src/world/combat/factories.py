@@ -1060,25 +1060,37 @@ def wire_penetration_check_type():
 
 
 def wire_penetration_modifier_target():
-    """Seed the check-scoped 'penetration' ModifierTarget (#767).
+    """Look up the check-scoped 'penetration' ModifierTarget (#767).
 
     Links the mechanics ModifierTarget to the penetration CheckType through
     the target_check_type OneToOne, so "+penetration vs warded foes" buffs
     are ordinary CharacterModifier rows picked up by the CHARACTER source in
-    collect_check_modifiers. Idempotent via django_get_or_create on
-    (category, name); the FK link lands on first create and is preserved
-    (never overwritten) on re-runs.
+    collect_check_modifiers.
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. The penetration ``CheckType`` itself is unaffected — always seeded —
+    since ``checks.CheckType`` is out of scope for this slice. Returns
+    ``None`` when the ModifierCategory isn't authored.
     """
     from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
     from world.mechanics.constants import CHECK_CATEGORY_NAME
-    from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+    from world.mechanics.models import ModifierCategory, ModifierTarget
+    from world.seeds.sample_content import authored_or_sample
 
-    return ModifierTargetFactory(
+    check_type = wire_penetration_check_type()
+    category = authored_or_sample(ModifierCategory, {}, name=CHECK_CATEGORY_NAME)
+    if category is None:
+        return None
+    return authored_or_sample(
+        ModifierTarget,
+        {
+            "description": "Caster-side bonus to the penetration check vs warded targets.",
+            "target_check_type": check_type,
+            "is_active": True,
+        },
+        category=category,
         name=PENETRATION_CHECK_TYPE_NAME,
-        category=ModifierCategoryFactory(name=CHECK_CATEGORY_NAME),
-        description="Caster-side bonus to the penetration check vs warded targets.",
-        target_check_type=wire_penetration_check_type(),
-        is_active=True,
     )
 
 
@@ -1127,25 +1139,37 @@ def wire_flee_check_type():
 
 
 def wire_flee_modifier_target():
-    """Seed the check-scoped 'flee' ModifierTarget (#878).
+    """Look up the check-scoped 'flee' ModifierTarget (#878).
 
     Links the mechanics ModifierTarget to the flee CheckType through
     the target_check_type OneToOne, so "+flee" buffs are ordinary
     CharacterModifier rows picked up by the CHARACTER source in
-    collect_check_modifiers. Idempotent via django_get_or_create on
-    (category, name); the FK link lands on first create and is preserved
-    (never overwritten) on re-runs.
+    collect_check_modifiers.
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. The flee ``CheckType`` itself is unaffected — always seeded — since
+    ``checks.CheckType`` is out of scope for this slice. Returns ``None`` when
+    the ModifierCategory isn't authored.
     """
     from world.combat.constants import FLEE_CHECK_TYPE_NAME
     from world.mechanics.constants import CHECK_CATEGORY_NAME
-    from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+    from world.mechanics.models import ModifierCategory, ModifierTarget
+    from world.seeds.sample_content import authored_or_sample
 
-    return ModifierTargetFactory(
+    check_type = wire_flee_check_type()
+    category = authored_or_sample(ModifierCategory, {}, name=CHECK_CATEGORY_NAME)
+    if category is None:
+        return None
+    return authored_or_sample(
+        ModifierTarget,
+        {
+            "description": "Character-side bonus to the flee check (cover, boons, conditions).",
+            "target_check_type": check_type,
+            "is_active": True,
+        },
+        category=category,
         name=FLEE_CHECK_TYPE_NAME,
-        category=ModifierCategoryFactory(name=CHECK_CATEGORY_NAME),
-        description="Character-side bonus to the flee check (cover, boons, conditions).",
-        target_check_type=wire_flee_check_type(),
-        is_active=True,
     )
 
 
@@ -1463,22 +1487,32 @@ _PAYLOAD_PARAM = "@payload"
 
 
 def _build_escalation_spike_flow() -> object:
-    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the spike handler.
+    """Look up the FlowDefinition with one CALL_SERVICE_FUNCTION step for the spike handler.
 
     The step calls ``relationship_spike_handler`` with the event payload.
     Shared by both escalation spike TriggerDefinitions (#872).
+
+    ``flows.FlowDefinition``/``FlowStepDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the FlowDefinition isn't authored.
     """
     from flows.consts import FlowActionChoices
-    from flows.factories import FlowStepDefinitionFactory
-    from flows.models import FlowDefinition
+    from flows.models import FlowDefinition, FlowStepDefinition
+    from world.seeds.sample_content import authored_or_sample
 
-    flow, _ = FlowDefinition.objects.get_or_create(name="escalation_relationship_spike")
+    flow = authored_or_sample(FlowDefinition, {}, name="escalation_relationship_spike")
+    if flow is None:
+        return None
     if not flow.steps.exists():
-        FlowStepDefinitionFactory(
+        authored_or_sample(
+            FlowStepDefinition,
+            {
+                "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                "parameters": {"payload": _PAYLOAD_PARAM},
+            },
             flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="world.combat.escalation.relationship_spike_handler",
-            parameters={"payload": _PAYLOAD_PARAM},
+            parent=None,
         )
     return flow
 
@@ -1516,18 +1550,29 @@ class EscalationSpikeOnKilledTriggerDefinitionFactory(factory_django.DjangoModel
 
 
 def _build_peril_spike_flow() -> object:
-    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the peril handler (#2013)."""
-    from flows.consts import FlowActionChoices
-    from flows.factories import FlowStepDefinitionFactory
-    from flows.models import FlowDefinition
+    """Look up the FlowDefinition with one CALL_SERVICE_FUNCTION step for the peril handler (#2013).
 
-    flow, _ = FlowDefinition.objects.get_or_create(name="escalation_peril_spike")
+    ``flows.FlowDefinition``/``FlowStepDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the FlowDefinition isn't authored.
+    """
+    from flows.consts import FlowActionChoices
+    from flows.models import FlowDefinition, FlowStepDefinition
+    from world.seeds.sample_content import authored_or_sample
+
+    flow = authored_or_sample(FlowDefinition, {}, name="escalation_peril_spike")
+    if flow is None:
+        return None
     if not flow.steps.exists():
-        FlowStepDefinitionFactory(
+        authored_or_sample(
+            FlowStepDefinition,
+            {
+                "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                "parameters": {"payload": _PAYLOAD_PARAM},
+            },
             flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="world.combat.escalation.peril_spike_handler",
-            parameters={"payload": _PAYLOAD_PARAM},
+            parent=None,
         )
     return flow
 
@@ -1552,23 +1597,33 @@ class EscalationSpikeOnMortalPerilTriggerDefinitionFactory(factory_django.Django
 
 
 def _build_encounter_beat_flow() -> object:
-    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the beat handler.
+    """Look up the FlowDefinition with one CALL_SERVICE_FUNCTION step for the beat handler.
 
     The step calls ``encounter_completed_beat_handler`` with the ENCOUNTER_COMPLETED
     payload. Drives the combat → story-beat auto-wire (#1746).
+
+    ``flows.FlowDefinition``/``FlowStepDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the FlowDefinition isn't authored.
     """
     from flows.consts import FlowActionChoices
-    from flows.factories import FlowStepDefinitionFactory
-    from flows.models import FlowDefinition
+    from flows.models import FlowDefinition, FlowStepDefinition
     from world.combat.beat_wiring import ENCOUNTER_BEAT_TRIGGER_NAME
+    from world.seeds.sample_content import authored_or_sample
 
-    flow, _ = FlowDefinition.objects.get_or_create(name=ENCOUNTER_BEAT_TRIGGER_NAME)
+    flow = authored_or_sample(FlowDefinition, {}, name=ENCOUNTER_BEAT_TRIGGER_NAME)
+    if flow is None:
+        return None
     if not flow.steps.exists():
-        FlowStepDefinitionFactory(
+        authored_or_sample(
+            FlowStepDefinition,
+            {
+                "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                "parameters": {"payload": _PAYLOAD_PARAM},
+            },
             flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="world.combat.beat_wiring.encounter_completed_beat_handler",
-            parameters={"payload": _PAYLOAD_PARAM},
+            parent=None,
         )
     return flow
 
@@ -1633,30 +1688,41 @@ def wire_armor_soak_modifier_target():
 
 
 def wire_elevation_advantage_modifier_target():
-    """Seed the 'elevation_advantage' ModifierTarget (#2011).
+    """Look up the 'elevation_advantage' ModifierTarget (#2011).
 
     A flat stat-category bonus read positionally at combat time: when an
     attacker is ELEVATED/AERIAL and the target is not, the bonus feeds into
     the combat check's extra_modifiers. Offensive-only — no penalty for
     firing up. Staff authors CharacterModifier rows against this target to
-    set the magnitude. Idempotent via django_get_or_create on (category, name).
+    set the magnitude.
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the ModifierCategory isn't authored.
     """
     from world.combat.constants import ELEVATION_ADVANTAGE_TARGET_NAME
     from world.mechanics.constants import STAT_CATEGORY_NAME
-    from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+    from world.mechanics.models import ModifierCategory, ModifierTarget
+    from world.seeds.sample_content import authored_or_sample
 
-    return ModifierTargetFactory(
+    category = authored_or_sample(ModifierCategory, {}, name=STAT_CATEGORY_NAME)
+    if category is None:
+        return None
+    return authored_or_sample(
+        ModifierTarget,
+        {
+            "description": "Offensive-only elevation bonus (ELEVATED/AERIAL attacker firing down).",
+            "is_active": True,
+        },
+        category=category,
         name=ELEVATION_ADVANTAGE_TARGET_NAME,
-        category=ModifierCategoryFactory(name=STAT_CATEGORY_NAME),
-        description="Offensive-only elevation bonus (ELEVATED/AERIAL attacker firing down).",
-        is_active=True,
     )
 
 
 def wire_escalation_content() -> None:
     """Seed the escalation spike trigger definitions (idempotent).
 
-    Creates (get_or_create):
+    Looks up:
     - "escalation_relationship_spike" FlowDefinition (one CALL_SERVICE_FUNCTION
       step -> world.combat.escalation.relationship_spike_handler)
     - "escalation_spike_on_incapacitated" TriggerDefinition
@@ -1664,12 +1730,55 @@ def wire_escalation_content() -> None:
     - "escalation_peril_spike" FlowDefinition + "escalation_spike_on_mortal_peril"
       TriggerDefinition (#2013)
 
+    ``flows.FlowDefinition``/``FlowStepDefinition``/``TriggerDefinition`` are
+    all content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. Each TriggerDefinition is skipped
+    individually when its backing FlowDefinition isn't authored — the reactive
+    subscriber it would install just doesn't exist for this deployment.
+    ``install_escalation_room_triggers`` already tolerates a missing
+    TriggerDefinition.
+
     Doubles as integration-test setup and staff seed content. Safe to call
     multiple times — does not create duplicates.
     """
-    EscalationSpikeOnIncapacitatedTriggerDefinitionFactory()
-    EscalationSpikeOnKilledTriggerDefinitionFactory()
-    EscalationSpikeOnMortalPerilTriggerDefinitionFactory()
+    from flows.models import TriggerDefinition
+    from world.seeds.sample_content import authored_or_sample
+
+    relationship_spike_flow = _build_escalation_spike_flow()
+    if relationship_spike_flow is not None:
+        authored_or_sample(
+            TriggerDefinition,
+            {
+                "event_name": "character_incapacitated",
+                "flow_definition": relationship_spike_flow,
+                "priority": 50,
+                "base_filter_condition": None,
+            },
+            name="escalation_spike_on_incapacitated",
+        )
+        authored_or_sample(
+            TriggerDefinition,
+            {
+                "event_name": "character_killed",
+                "flow_definition": relationship_spike_flow,
+                "priority": 50,
+                "base_filter_condition": None,
+            },
+            name="escalation_spike_on_killed",
+        )
+
+    peril_spike_flow = _build_peril_spike_flow()
+    if peril_spike_flow is not None:
+        authored_or_sample(
+            TriggerDefinition,
+            {
+                "event_name": "condition_applied",
+                "flow_definition": peril_spike_flow,
+                "priority": 50,
+                "base_filter_condition": None,
+            },
+            name="escalation_spike_on_mortal_peril",
+        )
 
 
 class ThreatRecordFactory(factory_django.DjangoModelFactory):

@@ -10,7 +10,7 @@ upon by _resolve_flee.
 
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.checks.models import CheckTypeTrait
 from world.combat.constants import (
@@ -74,8 +74,14 @@ class WireFleeCheckTypeTraitTests(TestCase):
         self.assertEqual(refreshed.weight, Decimal("1.00"))
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class WireFleeModifierTargetTests(TestCase):
-    """wire_flee_modifier_target() seeds the check-scoped target (#878)."""
+    """wire_flee_modifier_target() seeds the check-scoped target (#878).
+
+    mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    wire_flee_modifier_target() only invents them under SEED_SAMPLE_CONTENT —
+    this test needs the real row, so it opts in.
+    """
 
     def setUp(self) -> None:
         from evennia.utils.idmapper import models as idmapper_models
