@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -163,9 +163,11 @@ class CapabilityPowerConfig(SharedMemoryModel):
 
     power_per_doubling = models.PositiveIntegerField(
         default=10,
+        validators=[MinValueValidator(1)],
         help_text=(
             "Power required to double a capability's value. Lower = steeper curve. "
-            "At 10, a character at power 30 sits two tiers up the ADR-0164 ladder."
+            "At 10, a character at power 30 sits two tiers up the ADR-0164 ladder. "
+            "Must be at least 1 (0 would divide by zero)."
         ),
     )
 

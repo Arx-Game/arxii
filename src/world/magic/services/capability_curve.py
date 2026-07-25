@@ -32,13 +32,17 @@ def apply_capability_curve(base: int, *, power: int, sensitivity: Decimal) -> in
         value = round(base * 2 ** (sensitivity * power / power_per_doubling))
 
     Returns ``base`` unchanged when the curve is disabled (no config row), when
-    ``sensitivity`` is 0 (the authored default — a grant opts in to scaling), or when
-    ``power`` is non-positive. Never returns less than ``base``: power is an
-    empowerment axis, and impairment is the conditions layer's job (a negative
-    ``ConditionCapabilityEffect``), not this curve's.
+    ``sensitivity`` is 0 (the authored default — a grant opts in to scaling), when
+    ``power`` is non-positive, or when the config row's ``power_per_doubling`` is
+    non-positive (a `MinValueValidator(1)` blocks this on new writes, but a
+    pre-existing row or a path that bypasses `full_clean()` could still carry a
+    stale 0 — degrade to disabled rather than raising `DivisionByZero`). Never
+    returns less than ``base``: power is an empowerment axis, and impairment is
+    the conditions layer's job (a negative ``ConditionCapabilityEffect``), not
+    this curve's.
     """
     config = get_capability_power_config()
-    if config is None or sensitivity <= 0 or power <= 0:
+    if config is None or sensitivity <= 0 or power <= 0 or config.power_per_doubling <= 0:
         return base
     exponent = (sensitivity * Decimal(power)) / Decimal(config.power_per_doubling)
     return round(base * Decimal(2) ** exponent)

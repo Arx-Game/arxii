@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.magic.models import CapabilityPowerConfig
@@ -16,6 +17,32 @@ class CapabilityCurveDisabledTests(TestCase):
 
     def test_no_config_row_ignores_sensitivity(self) -> None:
         self.assertEqual(apply_capability_curve(9, power=30, sensitivity=Decimal("2.5")), 9)
+
+
+class CapabilityCurveZeroPowerPerDoublingTests(TestCase):
+    """A legal-but-degenerate power_per_doubling=0 row must degrade to disabled.
+
+    ``PositiveIntegerField`` only rejects negatives, so a row bypassing
+    ``full_clean()`` (or written before the validator existed) can still carry a
+    0. The helper's guard is the second line of defense against
+    ``decimal.DivisionByZero``.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        CapabilityPowerConfig.objects.create(pk=1, power_per_doubling=0)
+
+    def test_zero_power_per_doubling_returns_base(self) -> None:
+        self.assertEqual(apply_capability_curve(5, power=50, sensitivity=Decimal("1.0")), 5)
+
+
+class CapabilityPowerConfigValidationTests(TestCase):
+    """full_clean() rejects power_per_doubling=0 before it ever reaches the curve."""
+
+    def test_full_clean_rejects_zero_power_per_doubling(self) -> None:
+        config = CapabilityPowerConfig(pk=1, power_per_doubling=0)
+        with self.assertRaises(ValidationError):
+            config.full_clean()
 
 
 class CapabilityCurveTests(TestCase):
