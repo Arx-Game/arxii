@@ -798,3 +798,279 @@ class LoadEntriesM2MTest(TestCase):
         assert (created, updated) == (0, 0)
         assert len(result.skipped) == 1
         assert not Technique.objects.filter(name="M2M Trip").exists()
+
+
+GOOD_CODEX_ENTRY = """---
+name: "Understanding Resonance"
+subject: ["Magic", null, "Resonance"]
+summary: "What resonance is."
+---
+
+## Lore
+
+Resonance is the shape a working takes.
+
+## Mechanics
+
+Each thread carries one resonance.
+"""
+
+
+class MarkdownProseDomainTests(TestCase):
+    """#2688: the four prose domains, and the ``##``-section splitter."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def _codex_fields(self) -> dict:
+        result = build_all(self.root)
+        return result.fixtures["world/codex/fixtures/content_codex_entries.json"][0]["fields"]
+
+    def test_all_four_domains_build(self) -> None:
+        _write(self.root, "content/codex_entries/magic/resonance.md", GOOD_CODEX_ENTRY)
+        _write(
+            self.root,
+            "content/beginnings/caretaker.md",
+            '---\nname: Caretaker\nstarting_area: "The City of Arx"\n---\nYou tend the dead.\n',
+        )
+        _write(
+            self.root,
+            "content/starting_areas/arx.md",
+            '---\nname: "The City of Arx"\nrealm: Arx\n---\nThe central hub.\n',
+        )
+        _write(
+            self.root,
+            "content/traditions/the-vigil.md",
+            "---\nname: The Vigil\n---\nSolemn wardens.\n",
+        )
+        outputs = set(build_all(self.root).fixtures)
+        assert "world/codex/fixtures/content_codex_entries.json" in outputs
+        assert "world/character_creation/fixtures/content_beginnings.json" in outputs
+        assert "world/character_creation/fixtures/content_starting_areas.json" in outputs
+        assert "world/magic/fixtures/content_traditions.json" in outputs
+
+    def test_sections_map_to_prose_fields(self) -> None:
+        _write(self.root, "content/codex_entries/magic/resonance.md", GOOD_CODEX_ENTRY)
+        fields = self._codex_fields()
+        assert fields["lore_content"] == "Resonance is the shape a working takes."
+        assert fields["mechanics_content"] == "Each thread carries one resonance."
+        assert fields["subject"] == ["Magic", None, "Resonance"]
+
+    def test_one_section_is_enough(self) -> None:
+        """CodexEntry.clean() requires only ONE of the two prose fields.
+
+        25 of the 28 authored entries have no mechanics content, so requiring
+        every declared section would reject nearly the whole corpus.
+        """
+        _write(
+            self.root,
+            "content/codex_entries/magic/lore-only.md",
+            "---\nname: Lore Only\n"
+            'subject: ["Magic", null, "Resonance"]\n---\n\n## Lore\n\nJust lore.\n',
+        )
+        fields = self._codex_fields()
+        assert fields["lore_content"] == "Just lore."
+        assert "mechanics_content" not in fields
+
+    def test_unknown_heading_names_file_and_heading(self) -> None:
+        _write(
+            self.root,
+            "content/codex_entries/magic/bad.md",
+            '---\nname: Bad\nsubject: ["Magic", null, "Resonance"]\n---\n\n## Trivia\n\nNope.\n',
+        )
+        with self.assertRaises(ContentError) as ctx:
+            build_all(self.root)
+        message = str(ctx.exception)
+        assert "Trivia" in message
+        assert "bad.md" in message
+
+    def test_text_before_first_heading_is_an_error(self) -> None:
+        """Unassigned prose has nowhere to be written back to, so it must fail."""
+        _write(
+            self.root,
+            "content/codex_entries/magic/stray.md",
+            '---\nname: Stray\nsubject: ["Magic", null, "Resonance"]\n---\n\n'
+            "Orphan line.\n\n## Lore\n\nBody.\n",
+        )
+        with self.assertRaises(ContentError) as ctx:
+            build_all(self.root)
+        assert "before the first" in str(ctx.exception)
+
+    def test_no_sections_at_all_is_an_error(self) -> None:
+        _write(
+            self.root,
+            "content/codex_entries/magic/empty.md",
+            '---\nname: Empty\nsubject: ["Magic", null, "Resonance"]\n---\n',
+        )
+        with self.assertRaises(ContentError):
+            build_all(self.root)
+
+    def test_missing_required_natural_key_field_errors(self) -> None:
+        _write(
+            self.root,
+            "content/beginnings/orphan.md",
+            "---\nname: Orphan\n---\nNo starting area.\n",
+        )
+        with self.assertRaises(ContentError) as ctx:
+            build_all(self.root)
+        assert "starting_area" in str(ctx.exception)
+
+    def test_admin_owned_fields_are_never_emitted(self) -> None:
+        """The core guard: a load must not overwrite values tuned in the admin.
+
+        Omitting a key already means "leave this column alone" on upsert, so
+        emitting these would silently convert admin-owned tuning columns into
+        markdown-owned ones across the whole corpus.
+        """
+        _write(self.root, "content/codex_entries/magic/resonance.md", GOOD_CODEX_ENTRY)
+        fields = self._codex_fields()
+        for admin_owned in (
+            "share_cost",
+            "learn_cost",
+            "learn_difficulty",
+            "learn_threshold",
+            "display_order",
+            "is_public",
+            "is_featured",
+            "featured_order",
+            "prerequisites",
+            "modifier_target",
+            "art",
+        ):
+            assert admin_owned not in fields, f"{admin_owned} must stay admin-owned"
+
+    def test_scalar_and_list_natural_keys_both_accepted(self) -> None:
+        _write(
+            self.root,
+            "content/traditions/a.md",
+            "---\nname: A\n---\nbody\n",
+        )
+        _write(
+            self.root,
+            "content/beginnings/scalar.md",
+            '---\nname: Scalar\nstarting_area: "The City of Arx"\n---\nbody\n',
+        )
+        _write(
+            self.root,
+            "content/beginnings/listy.md",
+            '---\nname: Listy\nstarting_area: ["The City of Arx"]\n---\nbody\n',
+        )
+        built = build_all(self.root).fixtures[
+            "world/character_creation/fixtures/content_beginnings.json"
+        ]
+        for record in built:
+            assert record["fields"]["starting_area"] == ["The City of Arx"]
+
+    def test_existing_single_prose_domains_are_unaffected(self) -> None:
+        """The six pre-existing domains must keep whole-body-to-one-field behaviour."""
+        _write(self.root, "skills/performance.md", GOOD_SKILL)
+        fixtures = build_all(self.root).fixtures
+        skill = fixtures["world/traits/fixtures/content_skills.json"][0]["fields"]
+        assert skill["description"].startswith("PLACEHOLDER Captivating an audience")
+        assert "## " not in skill["description"]
+
+
+class MarkdownExportRoundTripTests(TestCase):
+    """#2688: DB -> markdown -> fixture round trip is lossless and field-scoped."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_rendered_markdown_parses_back_to_the_same_fields(self) -> None:
+        from core_management.content_fixtures import (
+            MARKDOWN_EXPORT_DOMAINS,
+            render_entry_markdown,
+        )
+
+        original = {
+            "name": "Understanding Resonance",
+            "subject": ["Magic", None, "Resonance"],
+            "summary": "What resonance is.",
+            "lore_content": "Resonance is the shape a working takes.",
+            "mechanics_content": "Each thread carries one resonance.",
+            # admin-owned; must not survive the render
+            "share_cost": 9,
+            "is_public": True,
+        }
+        spec = MARKDOWN_EXPORT_DOMAINS["codex.codexentry"]
+        rendered = render_entry_markdown(original, spec)
+        assert "share_cost" not in rendered
+        assert "is_public" not in rendered
+
+        _write(self.root, "content/codex_entries/magic/rt.md", rendered)
+        fields = build_all(self.root).fixtures["world/codex/fixtures/content_codex_entries.json"][
+            0
+        ]["fields"]
+        for key in ("name", "subject", "summary", "lore_content", "mechanics_content"):
+            assert fields[key] == original[key], key
+
+    def test_single_prose_domain_round_trips_without_headings(self) -> None:
+        from core_management.content_fixtures import (
+            MARKDOWN_EXPORT_DOMAINS,
+            render_entry_markdown,
+        )
+
+        spec = MARKDOWN_EXPORT_DOMAINS["magic.tradition"]
+        rendered = render_entry_markdown(
+            {"name": "The Vigil", "description": "Solemn wardens of the Tree of Souls."}, spec
+        )
+        assert "## " not in rendered
+        _write(self.root, "content/traditions/vigil.md", rendered)
+        fields = build_all(self.root).fixtures["world/magic/fixtures/content_traditions.json"][0][
+            "fields"
+        ]
+        assert fields["name"] == "The Vigil"
+        assert fields["description"] == "Solemn wardens of the Tree of Souls."
+
+    def test_export_of_a_minimal_row_still_builds(self) -> None:
+        """Export must never emit a file its own builder rejects.
+
+        Regression: ``realm`` was required by the starting_areas builder while
+        being ``null=True`` on the model. The canonical bootstrap area is
+        created without one, so ``export_to_content_repo`` wrote a file that
+        ``build_all`` then refused — breaking the fresh-load path
+        (``test_load_sequencing``). Any optional model field must stay optional
+        in the builder.
+        """
+        from core_management.content_fixtures import (
+            MARKDOWN_EXPORT_DOMAINS,
+            render_entry_markdown,
+        )
+
+        spec = MARKDOWN_EXPORT_DOMAINS["character_creation.startingarea"]
+        rendered = render_entry_markdown(
+            {"name": "Bootstrap City", "description": "The bootstrap starting area."}, spec
+        )
+        assert "realm" not in rendered
+        _write(self.root, "content/starting_areas/bootstrap.md", rendered)
+        fields = build_all(self.root).fixtures[
+            "world/character_creation/fixtures/content_starting_areas.json"
+        ][0]["fields"]
+        assert fields["name"] == "Bootstrap City"
+        assert "realm" not in fields
+
+    def test_default_starting_room_round_trips(self) -> None:
+        """Bootstrap wiring, not admin tuning — the fallback-room guarantee needs it."""
+        from core_management.content_fixtures import (
+            MARKDOWN_EXPORT_DOMAINS,
+            render_entry_markdown,
+        )
+
+        spec = MARKDOWN_EXPORT_DOMAINS["character_creation.startingarea"]
+        rendered = render_entry_markdown(
+            {
+                "name": "Bootstrap City",
+                "description": "Body.",
+                "default_starting_room": ["fallback-room-key"],
+            },
+            spec,
+        )
+        _write(self.root, "content/starting_areas/bootstrap.md", rendered)
+        fields = build_all(self.root).fixtures[
+            "world/character_creation/fixtures/content_starting_areas.json"
+        ][0]["fields"]
+        assert fields["default_starting_room"] == ["fallback-room-key"]
