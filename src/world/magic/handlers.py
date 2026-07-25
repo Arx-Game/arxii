@@ -17,12 +17,14 @@ from world.magic.constants import EffectKind, TargetKind
 from world.magic.models import CharacterResonance, Thread, ThreadPullEffect
 from world.magic.models.techniques import Technique
 from world.magic.services.pull_effects import get_pull_effects_for_thread
+from world.magic.services.resonance import _anchor_ambiently_active, resolve_involved_gift_ids
 from world.magic.services.threads import thread_level_multiplier
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
     from world.conditions.models import DamageType
     from world.magic.models import Facet, Resonance
+    from world.magic.types.pull import PullActionContext
 
 
 class CharacterThreadHandler:
@@ -387,6 +389,156 @@ class CharacterThreadHandler:
             applicable_threads=[],
         ).total
 
+    @cached_property
+    def _tier0_intensity_bumps(self) -> dict[int, int]:
+        """Thread pk -> its tier-0 INTENSITY_BUMP total, batched once per character (#2708).
+
+        One or two queries (non-GIFT threads batched by ``(target_kind, resonance_id)``;
+        GIFT threads batched separately so gift-specific rows can be preferred over the
+        null-``target_gift`` fallback, resolved in memory) covering every tier-0
+        INTENSITY_BUMP row that could possibly apply to any of the character's threads,
+        level-scaled the same way ``resolve_pull_effects`` scales an active pull
+        (``round(intensity_bump_amount * thread_level_multiplier(thread.level))``, gated
+        by ``min_thread_level <= thread.level``) — see
+        ``world/magic/services/resonance.py`` around lines 716-734. Memoizing here is what
+        keeps ``contextual_thread_power`` query-free per context, so the agency oracle's
+        technique sweep stays constant-query. Cleared by ``invalidate()``.
+
+        Does not replicate the FACET-kind worn-item quality-tier scaling
+        ``resolve_pull_effects`` applies on top of the level multiplier (it would require
+        a per-thread equipment query, defeating the point of this cache) — a tier-0
+        INTENSITY_BUMP row authored against a FACET thread would under-scale here relative
+        to an active pull of the same thread. No such content exists today; flagged for
+        whoever authors the first one.
+        """
+        threads = self._all
+        if not threads:
+            return {}
+
+        gift_threads = [t for t in threads if t.target_kind == TargetKind.GIFT]
+        non_gift_threads = [t for t in threads if t.target_kind != TargetKind.GIFT]
+
+        bumps: dict[int, int] = self._non_gift_tier0_intensity_bumps(non_gift_threads)
+        for pk, amount in self._gift_tier0_intensity_bumps(gift_threads).items():
+            bumps[pk] = bumps.get(pk, 0) + amount
+        return bumps
+
+    @staticmethod
+    def _non_gift_tier0_intensity_bumps(non_gift_threads: list[Thread]) -> dict[int, int]:
+        """Tier-0 INTENSITY_BUMP totals for non-GIFT threads (single batched query)."""
+        if not non_gift_threads:
+            return {}
+
+        from django.db.models import Q  # noqa: PLC0415
+
+        by_key: dict[tuple[str, int], list[Thread]] = {}
+        for t in non_gift_threads:
+            by_key.setdefault((t.target_kind, t.resonance_id), []).append(t)
+
+        q = Q()
+        for target_kind, resonance_id in by_key:
+            q |= Q(target_kind=target_kind, resonance_id=resonance_id)
+        rows = ThreadPullEffect.objects.filter(
+            q,
+            tier=0,
+            effect_kind=EffectKind.INTENSITY_BUMP,
+            target_gift__isnull=True,
+        ).exclude(intensity_bump_amount__isnull=True)
+
+        bumps: dict[int, int] = {}
+        for row in rows:
+            for t in by_key.get((row.target_kind, row.resonance_id), []):
+                if row.min_thread_level > t.level:
+                    continue
+                scaled = round(row.intensity_bump_amount * thread_level_multiplier(t.level))
+                bumps[t.pk] = bumps.get(t.pk, 0) + scaled
+        return bumps
+
+    @staticmethod
+    def _gift_tier0_intensity_bumps(gift_threads: list[Thread]) -> dict[int, int]:
+        """Tier-0 INTENSITY_BUMP totals for GIFT threads.
+
+        One batched query; gift-specific rows are preferred over the null-``target_gift``
+        fallback per thread, resolved in memory (mirrors ``get_pull_effects_for_thread``'s
+        per-thread preference without re-querying per thread).
+        """
+        if not gift_threads:
+            return {}
+
+        from django.db.models import Q  # noqa: PLC0415
+
+        gift_ids = {t.target_gift_id for t in gift_threads}
+        resonance_ids = {t.resonance_id for t in gift_threads}
+        rows = list(
+            ThreadPullEffect.objects.filter(
+                Q(target_gift_id__in=gift_ids) | Q(target_gift__isnull=True),
+                target_kind=TargetKind.GIFT,
+                resonance_id__in=resonance_ids,
+                tier=0,
+                effect_kind=EffectKind.INTENSITY_BUMP,
+            ).exclude(intensity_bump_amount__isnull=True)
+        )
+
+        by_resonance_gift: dict[tuple[int, int], list[ThreadPullEffect]] = {}
+        by_resonance_null: dict[int, list[ThreadPullEffect]] = {}
+        for row in rows:
+            if row.target_gift_id is not None:
+                by_resonance_gift.setdefault((row.resonance_id, row.target_gift_id), []).append(row)
+            else:
+                by_resonance_null.setdefault(row.resonance_id, []).append(row)
+
+        bumps: dict[int, int] = {}
+        for t in gift_threads:
+            candidates = by_resonance_gift.get((t.resonance_id, t.target_gift_id))
+            if candidates is None:
+                candidates = by_resonance_null.get(t.resonance_id, [])
+            total = 0
+            for row in candidates:
+                if row.min_thread_level > t.level:
+                    continue
+                total += round(row.intensity_bump_amount * thread_level_multiplier(t.level))
+            if total:
+                bumps[t.pk] = total
+        return bumps
+
+    def contextual_thread_power(self, ctx: PullActionContext) -> int:
+        """Tier-0 INTENSITY_BUMP from threads ambiently active for ``ctx`` (#2708).
+
+        The contextual sibling of ``context_free_power``: sums the batched, level-scaled
+        tier-0 INTENSITY_BUMP contribution (``_tier0_intensity_bumps``) of every owned
+        thread that ``_anchor_ambiently_active`` (Task 3's demonstrable-activation gate,
+        not the paid-pull ``_anchor_in_action`` predicate) confirms is genuinely engaged by
+        ``ctx`` right now — a pyromancer's fire-gift thread must not raise their ability to
+        climb a wall.
+
+        Pure in-memory over the already-cached ``self._all`` and the batched bump map — no
+        queries after the first call, so a sweep across many techniques (each its own
+        ``ctx``) stays constant-query. ``resolve_involved_gift_ids`` only queries when the
+        character owns a GIFT thread AND ``ctx.involved_techniques`` is non-empty — a
+        character with no GIFT thread stays query-free regardless of ``ctx`` (the result
+        would be unused: only the GIFT arm of ``_anchor_ambiently_active`` reads it). The
+        short-circuit on an empty bump map additionally skips the (possibly expensive —
+        equipment/location) anchor checks entirely when the character has no tier-0
+        INTENSITY_BUMP content at all.
+        """
+        bumps = self._tier0_intensity_bumps
+        if not bumps:
+            return 0
+        has_gift_thread = any(t.target_kind == TargetKind.GIFT for t in self._all)
+        involved_gift_ids = (
+            resolve_involved_gift_ids(ctx.involved_techniques) if has_gift_thread else frozenset()
+        )
+        total = 0
+        for thread in self._all:
+            bump = bumps.get(thread.pk)
+            if not bump:
+                continue
+            if _anchor_ambiently_active(
+                thread, ctx, character=self.character, involved_gift_ids=involved_gift_ids
+            ):
+                total += bump
+        return total
+
     def _gift_capability_grant_ids(self, gift_threads: list[Thread]) -> set[int]:
         """Return CapabilityType PKs from GIFT threads using gift-specific preference.
 
@@ -464,6 +616,7 @@ class CharacterThreadHandler:
         self.__dict__.pop("_passive_capability_grants_cache", None)
         self.__dict__.pop("_crossing_choices", None)
         self.__dict__.pop("context_free_power", None)
+        self.__dict__.pop("_tier0_intensity_bumps", None)
         # Clear the pull-side cached_property only if the combat_pulls handler is
         # already instantiated (avoids triggering an import cycle on cold access).
         combat_pulls_handler = self.character.__dict__.get("combat_pulls")
