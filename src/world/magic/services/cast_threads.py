@@ -15,7 +15,7 @@ from world.magic.services.power_terms import ApplicableThread
 from world.magic.services.resonance import (
     _anchor_ambiently_active,
     _anchor_in_action,
-    resolve_involved_gift_ids,
+    resolve_gift_ids_by_technique,
 )
 from world.magic.types.pull import PullActionContext
 
@@ -78,11 +78,13 @@ def build_applicable_threads(
     )
     # Resolved once per batch (not per thread) so a character with several GIFT threads
     # doesn't fire one Technique query per thread in the loop below (#2708 review).
-    involved_gift_ids = resolve_involved_gift_ids(ctx.involved_techniques) if ambient else None
+    gift_id_by_technique = (
+        resolve_gift_ids_by_technique(ctx.involved_techniques) if ambient else None
+    )
     for thread in threads:
         if ambient:
             is_applicable = _anchor_ambiently_active(
-                thread, ctx, character=sheet.character, involved_gift_ids=involved_gift_ids
+                thread, ctx, character=sheet.character, gift_id_by_technique=gift_id_by_technique
             )
         else:
             is_applicable = _anchor_in_action(thread, ctx)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from decimal import Decimal
 import logging
 import math
@@ -568,7 +568,7 @@ def _anchor_ambiently_active(  # noqa: PLR0911 — one arm per TargetKind, flat 
     ctx: PullActionContext,
     *,
     character: ObjectDB,  # noqa: OBJECTDB_PARAM — presence/equipment checks need the game object
-    involved_gift_ids: frozenset[int] | None = None,
+    gift_id_by_technique: Mapping[int, int] | None = None,
 ) -> bool:
     """Return True iff ``thread`` is DEMONSTRABLY active right now (#2708).
 
@@ -584,11 +584,18 @@ def _anchor_ambiently_active(  # noqa: PLR0911 — one arm per TargetKind, flat 
     shipping an arm that can never fire would be worse than omitting it. Tracked as a
     needs-design question off #2708.
 
-    ``involved_gift_ids`` lets a batch caller (``build_applicable_threads``, which invokes
-    this once per thread in a loop) resolve ``ctx.involved_techniques``'s gift ids ONCE
-    and pass the result through, instead of this function re-querying ``Technique`` for
-    every GIFT thread. A lone call (e.g. from tests) omits it and
-    :func:`_gift_in_action` computes it internally — single-call correctness is preserved.
+    ``gift_id_by_technique`` lets a batch caller (``build_applicable_threads``, which
+    invokes this once per thread in a loop, or a caller sweeping many technique-contexts
+    for one character) resolve a technique_id -> gift_id mapping ONCE — covering as many
+    techniques as the caller likes, even a whole sweep's worth spanning several
+    techniques/gifts — and pass it through, instead of this function re-querying
+    ``Technique`` for every GIFT thread. :func:`_gift_in_action` always narrows the
+    mapping down to THIS call's own ``ctx.involved_techniques`` before deciding, so a
+    wider mapping can never leak a thread active-on-one-technique's gift into a
+    different technique's evaluation (#2708 review — passing a pre-flattened gift-id
+    *set* instead of this mapping was the unsound shape that made that leak possible). A
+    lone call (e.g. from tests) omits the kwarg and :func:`_gift_in_action` computes the
+    mapping internally — single-call correctness is preserved.
     """
     if thread.target_kind == TargetKind.COVENANT_ROLE:
         # Identical to the pull predicate: engagement is already demonstrable.
@@ -596,7 +603,7 @@ def _anchor_ambiently_active(  # noqa: PLR0911 — one arm per TargetKind, flat 
     if thread.target_kind == TargetKind.TECHNIQUE:
         return thread.target_technique_id in ctx.involved_techniques
     if thread.target_kind == TargetKind.GIFT:
-        return _gift_in_action(thread, ctx, involved_gift_ids=involved_gift_ids)
+        return _gift_in_action(thread, ctx, gift_id_by_technique=gift_id_by_technique)
     if thread.target_kind == TargetKind.TRAIT:
         return thread.target_trait_id in ctx.involved_traits
     if thread.target_kind == TargetKind.SANCTUM:
@@ -621,37 +628,54 @@ def _gift_in_action(
     thread: Thread,
     ctx: PullActionContext,
     *,
-    involved_gift_ids: frozenset[int] | None = None,
+    gift_id_by_technique: Mapping[int, int] | None = None,
 ) -> bool:
     """True iff any technique the action involves belongs to this thread's gift.
 
-    ``involved_gift_ids``, when supplied, is trusted as the precomputed set of gift ids
-    for ``ctx.involved_techniques`` — no query is issued. When omitted (a standalone
-    call), it's computed here so single-call correctness is preserved.
+    ``gift_id_by_technique``, when supplied, is a technique_id -> gift_id mapping that
+    MAY cover more techniques than just ``ctx.involved_techniques`` (a batch caller may
+    pass one mapping covering an entire multi-technique sweep). This function ALWAYS
+    narrows the mapping down to ``ctx.involved_techniques`` before testing membership —
+    that narrowing is the whole point: it's what makes it safe to hand this call a
+    mapping built for a wider sweep without the extra entries changing the answer.
+    Never trust a pre-flattened gift-id set here — that shape can't be narrowed per call
+    and silently leaks an unrelated technique's gift into this thread's evaluation
+    (#2708 review Critical finding). When omitted (a standalone call), the mapping is
+    computed here so single-call correctness is preserved.
     """
     if not ctx.involved_techniques:
         return False
-    if involved_gift_ids is None:
-        involved_gift_ids = resolve_involved_gift_ids(ctx.involved_techniques)
+    if gift_id_by_technique is None:
+        gift_id_by_technique = resolve_gift_ids_by_technique(ctx.involved_techniques)
+    involved_gift_ids = {
+        gift_id_by_technique[tid] for tid in ctx.involved_techniques if tid in gift_id_by_technique
+    }
     return thread.target_gift_id in involved_gift_ids
 
 
-def resolve_involved_gift_ids(involved_techniques: tuple[int, ...]) -> frozenset[int]:
-    """Resolve the set of gift ids for ``involved_techniques`` in a single query.
+def resolve_gift_ids_by_technique(involved_techniques: tuple[int, ...]) -> dict[int, int]:
+    """Resolve technique_id -> gift_id for ``involved_techniques`` in a single query.
 
-    Batch callers (``build_applicable_threads``) compute this ONCE per evaluation and
-    thread it through ``_anchor_ambiently_active``'s ``involved_gift_ids`` kwarg, rather
-    than letting ``_gift_in_action`` re-query per GIFT thread in the predicate loop (#2708
+    Batch callers precompute this ONCE — optionally over the union of every technique in
+    a whole multi-call sweep, not just one call's ``ctx.involved_techniques`` — and thread
+    it through ``_anchor_ambiently_active``'s ``gift_id_by_technique`` kwarg, rather than
+    letting ``_gift_in_action`` re-query per GIFT thread in the predicate loop (#2708
     review — a character with several owned Gifts fired one ``Technique`` query per GIFT
     thread on every ambient evaluation).
+
+    Deliberately returns a technique_id -> gift_id MAPPING, not a flattened set of gift
+    ids: ``_gift_in_action`` narrows this mapping down to each call's own
+    ``ctx.involved_techniques`` before testing membership, so passing a mapping that
+    covers more techniques than one particular call needs is always safe. A pre-flattened
+    set has no way to be narrowed back down per call and was the unsound shape (#2708
+    review Critical finding) that let one technique's gift leak into a different
+    technique's ambient evaluation.
     """
     if not involved_techniques:
-        return frozenset()
+        return {}
     from world.magic.models import Technique  # noqa: PLC0415
 
-    return frozenset(
-        Technique.objects.filter(pk__in=involved_techniques).values_list("gift_id", flat=True)
-    )
+    return dict(Technique.objects.filter(pk__in=involved_techniques).values_list("pk", "gift_id"))
 
 
 def _relationship_target_present(

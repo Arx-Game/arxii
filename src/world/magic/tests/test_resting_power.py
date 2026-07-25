@@ -14,7 +14,7 @@ from world.magic.factories import (
 )
 from world.magic.handlers import CharacterThreadHandler
 from world.magic.models import LevelPowerConfig
-from world.magic.services.resonance import resolve_involved_gift_ids
+from world.magic.services.resonance import resolve_gift_ids_by_technique
 from world.magic.types.pull import PullActionContext
 
 
@@ -143,7 +143,7 @@ class GiftContextualThreadPowerTests(TestCase):
     """GIFT-thread coverage for ``contextual_thread_power`` (#2708 review Finding 2).
 
     None of the tests above exercise a GIFT-kind thread, which is why the
-    unmemoized ``resolve_involved_gift_ids`` call (Finding 1) went unnoticed: a
+    unmemoized ``resolve_gift_ids_by_technique`` call (Finding 1) went unnoticed: a
     Major-Gift GIFT thread is minted for essentially every provisioned caster, so
     this is the common case, not an edge case.
     """
@@ -224,7 +224,7 @@ class GiftContextualThreadPowerTests(TestCase):
     def test_repeated_calls_with_same_context_stay_query_free(self) -> None:
         """Regression guard for #2708 review Finding 1.
 
-        Pre-fix, ``resolve_involved_gift_ids`` was not memoized, so a GIFT-owning
+        Pre-fix, ``resolve_gift_ids_by_technique`` was not memoized, so a GIFT-owning
         character re-issued a ``Technique`` query on every single call to
         ``contextual_thread_power`` — even repeat calls with an unchanged context.
         This must now cost exactly one query, the first time.
@@ -251,7 +251,7 @@ class GiftContextualThreadPowerTests(TestCase):
         self,
     ) -> None:
         """Documents the shape a naive per-technique sweep gets when it does NOT use
-        ``involved_gift_ids=``: the memoization cache keys on the exact
+        ``gift_id_by_technique=``: the memoization cache keys on the exact
         ``involved_techniques`` tuple, so a genuinely distinct singleton per technique
         is not collapsed by the cache alone — one query per distinct context."""
         sheet = CharacterSheetFactory()
@@ -276,9 +276,9 @@ class GiftContextualThreadPowerTests(TestCase):
         self,
     ) -> None:
         """The shape a batch caller (e.g. Task 5's capability oracle) should use:
-        resolve gift ids for the WHOLE technique set ONCE via
-        ``resolve_involved_gift_ids``, then pass ``involved_gift_ids=`` on every call
-        — an N-technique sweep then costs zero additional queries, not N (#2708)."""
+        resolve the technique->gift mapping for the WHOLE technique set ONCE via
+        ``resolve_gift_ids_by_technique``, then pass ``gift_id_by_technique=`` on every
+        call — an N-technique sweep then costs zero additional queries, not N (#2708)."""
         sheet = CharacterSheetFactory()
         gift, _technique = self._gift_and_technique()
         thread = self._gift_thread(sheet, gift, level=20)
@@ -293,12 +293,12 @@ class GiftContextualThreadPowerTests(TestCase):
         techniques = [TechniqueFactory(gift=gift) for _ in range(5)]
         handler = CharacterThreadHandler(sheet.character)
         handler.contextual_thread_power(PullActionContext())  # warm _all / _tier0_intensity_bumps
-        involved_gift_ids = resolve_involved_gift_ids(tuple(t.pk for t in techniques))
+        gift_id_by_technique = resolve_gift_ids_by_technique(tuple(t.pk for t in techniques))
         with self.assertNumQueries(0):
             for t in techniques:
                 handler.contextual_thread_power(
                     PullActionContext(involved_techniques=(t.pk,)),
-                    involved_gift_ids=involved_gift_ids,
+                    gift_id_by_technique=gift_id_by_technique,
                 )
 
     def test_no_query_when_owned_gift_thread_has_no_bump_content(self) -> None:
@@ -322,6 +322,160 @@ class GiftContextualThreadPowerTests(TestCase):
         ctx = PullActionContext(involved_techniques=(technique.pk,))
         with self.assertNumQueries(0):
             handler.contextual_thread_power(ctx)
+
+
+class CrossGiftContextualThreadPowerTests(TestCase):
+    """Cross-gift regression coverage (#2708 review CRITICAL finding — batch-precompute
+    unsoundness).
+
+    Every test in ``GiftContextualThreadPowerTests`` above uses a single shared gift for
+    every technique in a sweep, which is exactly why a pre-flattened gift-id-set batch
+    parameter went unnoticed as unsound: species provisioning mints a MINOR gift thread
+    alongside the MAJOR one, so owning threads across two or more gifts is the normal
+    shape for a finalized character, not an edge case.
+    """
+
+    def test_batch_precompute_does_not_leak_other_gift_thread_into_technique(self) -> None:
+        """A gift-B thread must NOT contribute to a gift-A technique's evaluation, even
+        when the caller precomputes the technique->gift mapping across the UNION of both
+        techniques and passes that same mapping through on every call — the exact shape
+        Task 5's docstring recommends. This is the scenario the CRITICAL finding
+        describes: a pre-flattened gift-id *set* built the same way would leak gift B's
+        thread into gift A's evaluation; the mapping shape must not.
+        """
+        sheet = CharacterSheetFactory()
+        gift_a = GiftFactory()
+        gift_b = GiftFactory()
+        technique_a = TechniqueFactory(gift=gift_a)
+        technique_b = TechniqueFactory(gift=gift_b)
+
+        # Only gift B has an owned thread, and only it carries tier-0 bump content.
+        thread_b = ThreadFactory(
+            owner=sheet,
+            target_kind=TargetKind.GIFT,
+            target_gift=gift_b,
+            target_trait=None,
+            level=20,  # thread_level_multiplier == 2; intensity_bump_amount=3 => scaled 6.
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.GIFT,
+            resonance=thread_b.resonance,
+            target_gift=gift_b,
+            tier=0,
+            as_intensity_bump=True,
+            intensity_bump_amount=3,
+        )
+        handler = CharacterThreadHandler(sheet.character)
+        handler.contextual_thread_power(PullActionContext())  # warm _all / _tier0_intensity_bumps
+
+        gift_id_by_technique = resolve_gift_ids_by_technique((technique_a.pk, technique_b.pk))
+
+        ctx_a = PullActionContext(involved_techniques=(technique_a.pk,))
+        self.assertEqual(
+            handler.contextual_thread_power(ctx_a, gift_id_by_technique=gift_id_by_technique),
+            0,
+            "gift-B thread must not raise gift-A technique's ambient power",
+        )
+        ctx_b = PullActionContext(involved_techniques=(technique_b.pk,))
+        self.assertEqual(
+            handler.contextual_thread_power(ctx_b, gift_id_by_technique=gift_id_by_technique),
+            6,
+            "gift-B thread must still contribute to gift-B's own technique",
+        )
+
+    def test_batched_result_matches_unbatched_for_every_technique_in_multigift_sweep(
+        self,
+    ) -> None:
+        """Equivalence invariant: for any input, passing ``gift_id_by_technique=`` must
+        produce exactly the same decision as omitting it — the batch path is an
+        optimization, never a semantic variant."""
+        sheet = CharacterSheetFactory()
+        gift_a = GiftFactory()
+        gift_b = GiftFactory()
+        techniques_a = [TechniqueFactory(gift=gift_a) for _ in range(2)]
+        techniques_b = [TechniqueFactory(gift=gift_b) for _ in range(2)]
+
+        thread_a = ThreadFactory(
+            owner=sheet,
+            target_kind=TargetKind.GIFT,
+            target_gift=gift_a,
+            target_trait=None,
+            level=20,
+        )
+        thread_b = ThreadFactory(
+            owner=sheet,
+            target_kind=TargetKind.GIFT,
+            target_gift=gift_b,
+            target_trait=None,
+            level=10,
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.GIFT,
+            resonance=thread_a.resonance,
+            target_gift=gift_a,
+            tier=0,
+            as_intensity_bump=True,
+            intensity_bump_amount=3,
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.GIFT,
+            resonance=thread_b.resonance,
+            target_gift=gift_b,
+            tier=0,
+            as_intensity_bump=True,
+            intensity_bump_amount=5,
+        )
+        handler = CharacterThreadHandler(sheet.character)
+        handler.contextual_thread_power(PullActionContext())  # warm _all / _tier0_intensity_bumps
+
+        all_techniques = techniques_a + techniques_b
+        gift_id_by_technique = resolve_gift_ids_by_technique(tuple(t.pk for t in all_techniques))
+        for technique in all_techniques:
+            ctx = PullActionContext(involved_techniques=(technique.pk,))
+            unbatched = handler.contextual_thread_power(ctx)
+            batched = handler.contextual_thread_power(
+                ctx, gift_id_by_technique=gift_id_by_technique
+            )
+            self.assertEqual(
+                batched, unbatched, f"batch/unbatched mismatch for technique {technique.pk}"
+            )
+
+    def test_batch_path_stays_query_free_across_multigift_ten_technique_sweep(self) -> None:
+        """Query-count guarantee holds under a realistic multi-gift, 10-technique sweep:
+        one query to resolve the technique->gift mapping (already spent warming the
+        handler + resolving the mapping below), then zero further queries for the sweep
+        itself, regardless of how many distinct gifts are represented."""
+        sheet = CharacterSheetFactory()
+        gift_a = GiftFactory()
+        gift_b = GiftFactory()
+        techniques_a = [TechniqueFactory(gift=gift_a) for _ in range(5)]
+        techniques_b = [TechniqueFactory(gift=gift_b) for _ in range(5)]
+        thread_a = ThreadFactory(
+            owner=sheet,
+            target_kind=TargetKind.GIFT,
+            target_gift=gift_a,
+            target_trait=None,
+            level=20,
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.GIFT,
+            resonance=thread_a.resonance,
+            target_gift=gift_a,
+            tier=0,
+            as_intensity_bump=True,
+            intensity_bump_amount=3,
+        )
+        handler = CharacterThreadHandler(sheet.character)
+        handler.contextual_thread_power(PullActionContext())  # warm _all / _tier0_intensity_bumps
+
+        all_techniques = techniques_a + techniques_b
+        gift_id_by_technique = resolve_gift_ids_by_technique(tuple(t.pk for t in all_techniques))
+        with self.assertNumQueries(0):
+            for technique in all_techniques:
+                handler.contextual_thread_power(
+                    PullActionContext(involved_techniques=(technique.pk,)),
+                    gift_id_by_technique=gift_id_by_technique,
+                )
 
 
 class FacetIntensityBumpDivergenceTests(TestCase):

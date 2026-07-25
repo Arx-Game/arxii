@@ -18,10 +18,12 @@ from world.magic.constants import EffectKind, TargetKind
 from world.magic.models import CharacterResonance, Thread, ThreadPullEffect
 from world.magic.models.techniques import Technique
 from world.magic.services.pull_effects import get_pull_effects_for_thread
-from world.magic.services.resonance import _anchor_ambiently_active, resolve_involved_gift_ids
+from world.magic.services.resonance import _anchor_ambiently_active, resolve_gift_ids_by_technique
 from world.magic.services.threads import thread_level_multiplier
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from typeclasses.characters import Character
     from world.conditions.models import DamageType
     from world.magic.models import Facet, Resonance
@@ -529,8 +531,8 @@ class CharacterThreadHandler:
         return bumps
 
     @cached_property
-    def _involved_gift_ids_cache(self) -> dict[tuple[int, ...], frozenset[int]]:
-        """Memoizes ``resolve_involved_gift_ids`` per distinct ``involved_techniques`` (#2708).
+    def _gift_id_by_technique_cache(self) -> dict[tuple[int, ...], dict[int, int]]:
+        """Memoizes ``resolve_gift_ids_by_technique`` per distinct ``involved_techniques``.
 
         ``contextual_thread_power`` is swept once per technique by the capability oracle
         (Task 5), each call carrying a different ``ctx.involved_techniques`` singleton — so
@@ -539,24 +541,24 @@ class CharacterThreadHandler:
         who owns a GIFT thread. This dict caps that at one query per distinct
         ``involved_techniques`` value for the handler's lifetime (repeat calls with the
         same context: zero queries). It does NOT collapse an N-distinct-context sweep to
-        one query on its own — see ``contextual_thread_power``'s ``involved_gift_ids=``
+        one query on its own — see ``contextual_thread_power``'s ``gift_id_by_technique=``
         parameter for the shape that does. Cleared by ``invalidate()``.
         """
         return {}
 
-    def _resolve_involved_gift_ids_cached(
+    def _resolve_gift_id_by_technique_cached(
         self, involved_techniques: tuple[int, ...]
-    ) -> frozenset[int]:
-        """Return cached gift ids for ``involved_techniques``, resolving+caching on miss."""
-        cache = self._involved_gift_ids_cache
+    ) -> dict[int, int]:
+        """Return cached technique->gift mapping, resolving+caching on miss."""
+        cache = self._gift_id_by_technique_cache
         cached = cache.get(involved_techniques)
         if cached is None:
-            cached = resolve_involved_gift_ids(involved_techniques)
+            cached = resolve_gift_ids_by_technique(involved_techniques)
             cache[involved_techniques] = cached
         return cached
 
     def contextual_thread_power(
-        self, ctx: PullActionContext, *, involved_gift_ids: frozenset[int] | None = None
+        self, ctx: PullActionContext, *, gift_id_by_technique: Mapping[int, int] | None = None
     ) -> int:
         """Tier-0 INTENSITY_BUMP from threads ambiently active for ``ctx`` (#2708).
 
@@ -574,38 +576,54 @@ class CharacterThreadHandler:
         ``bumps``, not merely "owns any GIFT thread" — a GIFT thread with no bump content
         can never change the answer, so the query is skipped even then).
 
+        ``gift_id_by_technique`` is a technique_id -> gift_id mapping, NOT a flattened set
+        of gift ids — ``_anchor_ambiently_active``/``_gift_in_action`` always narrow it
+        down to THIS call's own ``ctx.involved_techniques`` before deciding. That
+        narrowing is what makes it safe to pass a mapping covering more techniques than
+        this one call needs — a GIFT-B thread can never read as active for a GIFT-A
+        technique's call just because the mapping also happens to know GIFT B's
+        technique. (A pre-flattened gift-id set has no way to be narrowed back down per
+        call and is exactly the shape #2708 review's Critical finding flagged as unsound —
+        a caller supplying the union of a whole sweep's gift ids on every call would leak
+        every owned GIFT thread's gift into every technique's evaluation.)
+
         Two ways this stays cheap under repeated/swept calls, in order of preference:
 
         - **Batch callers that sweep many techniques** (Task 5's capability oracle: one
           call per technique, each with its own singleton ``involved_techniques``) should
-          resolve gift ids for the WHOLE technique set ONCE via
-          ``resolve_involved_gift_ids`` and pass the result as ``involved_gift_ids=`` on
-          every call — this is what keeps an N-technique sweep at one query total instead
-          of N. When supplied, no cache lookup or query happens here at all.
-        - **Callers that don't precompute** fall back to ``_involved_gift_ids_cache``,
+          resolve the technique->gift mapping for the WHOLE technique set ONCE via
+          ``resolve_gift_ids_by_technique`` (pass the union of every technique in the
+          sweep) and pass the result as ``gift_id_by_technique=`` on every call — this is
+          what keeps an N-technique sweep at one query total instead of N. Per-call
+          narrowing (see above) makes this correct even though the mapping spans
+          techniques/gifts outside any one call's own context. When supplied, no cache
+          lookup or query happens here at all.
+        - **Callers that don't precompute** fall back to ``_gift_id_by_technique_cache``,
           which memoizes per distinct ``involved_techniques`` tuple — free for repeated
           calls with an unchanged context, but still one query per distinct tuple (a
           sweep with a genuinely distinct singleton per technique is NOT collapsed by this
-          path alone; use ``involved_gift_ids=`` for that case).
+          path alone; use ``gift_id_by_technique=`` for that case).
         """
         bumps = self._tier0_intensity_bumps
         if not bumps:
             return 0
-        if involved_gift_ids is None:
+        if gift_id_by_technique is None:
             has_active_gift_bump = any(
                 t.target_kind == TargetKind.GIFT and t.pk in bumps for t in self._all
             )
             if has_active_gift_bump and ctx.involved_techniques:
-                involved_gift_ids = self._resolve_involved_gift_ids_cached(ctx.involved_techniques)
+                gift_id_by_technique = self._resolve_gift_id_by_technique_cached(
+                    ctx.involved_techniques
+                )
             else:
-                involved_gift_ids = frozenset()
+                gift_id_by_technique = {}
         total = 0
         for thread in self._all:
             bump = bumps.get(thread.pk)
             if not bump:
                 continue
             if _anchor_ambiently_active(
-                thread, ctx, character=self.character, involved_gift_ids=involved_gift_ids
+                thread, ctx, character=self.character, gift_id_by_technique=gift_id_by_technique
             ):
                 total += bump
         return total
@@ -688,7 +706,7 @@ class CharacterThreadHandler:
         self.__dict__.pop("_crossing_choices", None)
         self.__dict__.pop("context_free_power", None)
         self.__dict__.pop("_tier0_intensity_bumps", None)
-        self.__dict__.pop("_involved_gift_ids_cache", None)
+        self.__dict__.pop("_gift_id_by_technique_cache", None)
         # Clear the pull-side cached_property only if the combat_pulls handler is
         # already instantiated (avoids triggering an import cycle on cold access).
         combat_pulls_handler = self.character.__dict__.get("combat_pulls")
