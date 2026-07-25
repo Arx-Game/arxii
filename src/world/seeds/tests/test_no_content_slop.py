@@ -48,91 +48,56 @@ from world.seeds.clusters import CLUSTER_SEEDERS
 from world.seeds.database import load_content_first
 from world.seeds.tests.content_stub import stub_content_root
 
-#: **A ratchet, not an allowlist. This set may only ever shrink.**
+#: **This is now a plain invariant, not a ratchet being paid down.**
 #:
-#: Every ``CONTENT_MODELS`` entry the cluster seeders still populate. The
-#: seeders build a parallel content set — condition templates, rituals,
-#: mission templates, distinctions — that the content repo already authors,
-#: usually with far more rows (48 condition templates against 183). The
-#: entire ``magic.*`` slice (15 models: affinity, gift, technique, ritual,
-#: resonance, etc.) was cleared in #2698 via ``authored_or_sample()`` — every
-#: magic seeder call site now looks content up and invents only under
-#: ``SEED_SAMPLE_CONTENT``. The entire ``conditions.*`` slice (10 models:
-#: capabilitytype, conditioncategory, conditiontemplate, conditionstage,
-#: damagetype, etc.) was cleared the same way in a follow-up #2698 pass.
+#: Seeders never write content, full stop. Every ``CONTENT_MODELS`` entry the
+#: cluster seeders used to populate directly — condition templates, rituals,
+#: mission templates, distinctions, and finally the character-creation family
+#: (species, gender, forms, distinctions) — has been converted via
+#: ``world.seeds.sample_content.authored_or_sample()``: every call site now
+#: looks content up first and invents a row only under
+#: ``SEED_SAMPLE_CONTENT`` (off by default). Measured against the *stub*
+#: content root, which carries almost no content, so the two tests below both
+#: hold with this set empty.
 #:
-#: Measured against the *stub* content root, which carries almost no content.
-#: Against a real content repo these seeders are near-total no-ops: their
-#: ``get_or_create`` calls find the authored row and add nothing. The
-#: ``mechanics.*``/``flows.*`` slice (11 models: application, challengeapproach,
-#: challengecategory, challengetemplate, modifiercategory, modifiertarget,
-#: property, propertycategory, flowdefinition, flowstepdefinition,
-#: triggerdefinition) was cleared the same way in a follow-up #2698 pass —
-#: including the "menace" ``mechanics.modifiertarget`` row that was one of the
-#: genuine stub-relative inventions. A further #2698 pass cleared 11 more
-#: (``achievements.statdefinition``; ``covenants.covenantrite``/
-#: ``covenantriterolepackage``/``covenantrole`` — ``covenants.mentorbondconfig``
-#: stays, a pk=1 tuning singleton under separate review; the entire
-#: ``missions.*`` demo/tutorial-chain quintet — missiontemplate/missionnode/
-#: missionoption/missionoptionroute/missionoptionroutereward, including the "A
-#: Simple Job" demo mission called out below; ``realms.realm``;
-#: ``relationships.relationshiptrack``, which also dropped an ``update_or_create``
-#: that silently re-applied PLACEHOLDER names over a staff edit on every reseed).
-#: A further #2698 pass cleared the entire ``checks.*``/``skills.skill``/
-#: ``classes.aspect``/``classes.pathaspect``/``traits.trait`` cluster (7
-#: models: checkcategory, checktype, checktypetrait, skill, aspect,
-#: pathaspect, trait — the 62 ``checks.checktypetrait`` rows were the single
-#: largest genuine invention on the ratchet). ``skills.specialization``/
-#: ``checks.checktypespecialization``/``checks.checktypeaspect`` are not in
-#: ``CONTENT_MODELS`` and keep seeding unconditionally. That pass also fixed a
-#: real bug in the same call sites: 15 sites across 8 files wiped and
-#: recreated a CheckType's ``CheckTypeTrait``/``CheckTypeSpecialization``
-#: composition on every Big Button press (an "authoritative rewrite" idiom
-#: pre-dating this ratchet) — since the lore repo authors identical
-#: (check, trait, weight) triples, every press silently reverted any staff
-#: tuning or lore edit to those weights. All 15 now converge via
-#: ``get_or_create``/``authored_or_sample`` instead. ``world.magic.seeds_cast``'s
-#: ``ensure_technique_cast_content()`` is the one deliberate exception: it is
-#: a config prerequisite ``world.seeds.database.load_content_first()`` runs
-#: BEFORE the content load (so lore-repo ``Technique`` fixtures can resolve
-#: the "Technique Cast" ``ActionTemplate`` by natural key on a database with
-#: nothing authored yet) and sits outside this test's measurement window
-#: entirely — gating it would permanently break content loading, and would
-#: not shrink this ratchet either. What remains is genuine invention (5
-#: ``character_creation.cgexplanation``, ``forms.formtraitoption``
-#: "court_coils", and two singleton configs). The stub-relative number is the
-#: stricter, hermetic one, and it is what this ratchet drives to zero.
+#: History (#2698): the ratchet started at 70 entries (the ADR-0164 audit) and
+#: was paid down in passes — magic.* (15 models), conditions.* (10),
+#: mechanics.*/flows.* (11), achievements/covenants/missions/realms/
+#: relationships (11), checks.*/skills.skill/classes.*/traits.trait (7, which
+#: also fixed a real bug: 15 call sites across 8 files were wiping and
+#: recreating a CheckType's composition on every press, silently reverting
+#: staff/lore edits — all 15 now converge via ``get_or_create``/
+#: ``authored_or_sample`` instead of delete-then-create) — down to the final
+#: 11: ``character_creation.cgexplanation``, ``character_sheets.gender``,
+#: ``distinctions.distinction``/``distinctioncategory``/``distinctioneffect``,
+#: ``forms.build``/``formtrait``/``formtraitoption``/``heightband``/
+#: ``speciesformtrait``, and ``species.species``. Two of those were genuine
+#: inventions with no authored counterpart (5 ``CGExplanation`` "_lore_intro"
+#: rows; the ``forms.formtraitoption`` "court_coils" row) — both now gated
+#: behind ``SEED_SAMPLE_CONTENT`` rather than authored, exactly like every
+#: other missing-content case. ``world.magic.seeds_cast``'s
+#: ``ensure_technique_cast_content()`` stays the one deliberate exception to
+#: the rule entirely: it is a config prerequisite
+#: ``world.seeds.database.load_content_first()`` runs BEFORE the content load
+#: (so lore-repo ``Technique`` fixtures can resolve the "Technique Cast"
+#: ``ActionTemplate`` by natural key on a database with nothing authored yet)
+#: and sits outside this test's measurement window entirely — gating it would
+#: permanently break content loading.
 #:
-#: So this freezes today's state and guards the margin: a seeder that starts
-#: populating a *new* content model fails immediately, while the existing overlap
-#: is paid down over time. Same shape as the grandfathered-noqa ratchet in
-#: ``.pre-commit-config.yaml``.
-#:
-#: **Never add an entry to make a failing test pass.** A new entry means a seeder
-#: began inventing content that belongs in the content repo — fix the seeder. The
-#: only legitimate edits are deletions, as each model stops being seeded.
-SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
-    {
-        "character_creation.cgexplanation",
-        "character_sheets.gender",
-        "distinctions.distinction",
-        "distinctions.distinctioncategory",
-        "distinctions.distinctioneffect",
-        "forms.build",
-        "forms.formtrait",
-        "forms.formtraitoption",
-        "forms.heightband",
-        "forms.speciesformtrait",
-        "species.species",
-    }
-)
+#: **Never add an entry here.** An addition would mean a seeder started
+#: writing content again — that is a regression, not a thing to grandfather.
+#: Fix the seeder (``authored_or_sample()``) instead.
+SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset()
 
 
 class SeedersDoNotCreateContentTests(TestCase):
     """The Big Button yields config, never authored content.
 
-    The ratchet in :data:`SEEDER_GRANDFATHERED_MODELS` may only shrink. When a
-    seeder stops populating a model, delete its entry so the guard tightens.
+    :data:`SEEDER_GRANDFATHERED_MODELS` is empty and stays empty — seeders
+    never write content, full stop (#2698). It is not a ratchet being paid
+    down anymore; do not add an entry to it to silence a failure here. A
+    seeder that starts populating a ``CONTENT_MODELS`` row is a regression —
+    fix the seeder with ``authored_or_sample()`` instead.
     """
 
     def _content_models(self) -> dict[str, type]:

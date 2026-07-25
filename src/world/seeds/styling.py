@@ -80,20 +80,26 @@ def _seed_exotic_style() -> None:
     menu offers it (having it done teaches it), after which the player can
     maintain it with their own Styling Kit. Name PLACEHOLDER pending
     ApostateCD's style-list batch.
+
+    ``forms.formtraitoption`` is content-repo-owned (#2698); "Court Coils" has
+    no authored counterpart today, so it's a genuine invention — looked up via
+    ``authored_or_sample`` and only invented under ``SEED_SAMPLE_CONTENT``.
     """
     from world.forms.models import FormTrait, FormTraitOption  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     trait = FormTrait.objects.filter(name="hair_style", is_cosmetic=True).first()
     if trait is None:
         return
-    FormTraitOption.objects.get_or_create(
-        trait=trait,
-        name="court_coils",
-        defaults={
+    authored_or_sample(
+        FormTraitOption,
+        {
             "display_name": "Court Coils",
             "sort_order": 90,
             "requires_teaching": True,
         },
+        trait=trait,
+        name="court_coils",
     )
 
 

@@ -85,20 +85,31 @@ def ensure_attractive_distinction(allure_target) -> None:
     materialization (``create_distinction_modifiers``); everyone else stays at
     0 — base allure is simply the sum of allure modifiers. PLACEHOLDER
     magnitude + prose.
+
+    ``distinctions.distinctioncategory``/``distinction``/``distinctioneffect``
+    are content-repo-owned (#2698) — each is looked up via
+    ``authored_or_sample`` and invented only under ``SEED_SAMPLE_CONTENT``.
+    Skips wiring the distinction (or its effect) once its own dependency
+    (category, then the distinction itself, then ``allure_target``) isn't
+    authored.
     """
     from world.distinctions.models import (  # noqa: PLC0415
         Distinction,
         DistinctionCategory,
         DistinctionEffect,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = DistinctionCategory.objects.get_or_create(
+    category = authored_or_sample(
+        DistinctionCategory,
+        {"name": "Social", "description": "Social presence and reputation."},
         slug="social",
-        defaults={"name": "Social", "description": "Social presence and reputation."},
     )
-    distinction, _ = Distinction.objects.get_or_create(
-        slug="attractive",
-        defaults={
+    if category is None:
+        return
+    distinction = authored_or_sample(
+        Distinction,
+        {
             "name": "Attractive",
             "category": category,
             "description": (
@@ -108,17 +119,19 @@ def ensure_attractive_distinction(allure_target) -> None:
             "cost_per_rank": 1,
             "max_rank": 3,
         },
+        slug="attractive",
     )
-    # allure_target (mechanics.ModifierTarget) is content-repo-owned (#2698) —
-    # skip wiring the effect when it isn't authored; there is nothing to target.
-    if allure_target is not None:
-        DistinctionEffect.objects.update_or_create(
-            distinction=distinction,
-            target=allure_target,
-            defaults={
+    # distinction/allure_target (distinctions.Distinction / mechanics.ModifierTarget)
+    # are content-repo-owned (#2698) — skip wiring the effect when either is missing.
+    if distinction is not None and allure_target is not None:
+        authored_or_sample(
+            DistinctionEffect,
+            {
                 "value_per_rank": _ATTRACTIVE_ALLURE_PER_RANK,
                 "description": "Directed allure — applies when a target is Attracted To you.",
             },
+            distinction=distinction,
+            target=allure_target,
         )
 
 
