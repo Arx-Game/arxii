@@ -7,6 +7,19 @@ BOTCH_SUCCESS_LEVEL_MAX = -2
 below this is a botch / critical failure. Single source for the boundary that
 world.magic.services.sanctum_install previously declared locally."""
 
+LEVEL_POINTS_PER_LEVEL = 5
+"""Points a character's class level contributes to EVERY check, on both sides (#2707).
+
+Level was previously only reachable through the aspect bonus, which is zero unless
+a CheckType has an authored CheckTypeAspect matching the character's Path — so on
+most checks level did nothing at all. This is the guaranteed floor; the aspect
+bonus still applies on top of it, never instead of it.
+
+Sized against the seeded rank ladder (rungs at 0/10/25/50/...): level 1 contributes
+5 points and level 5 contributes 25, two rungs apart on level alone. Tunable spine
+value, not engine logic.
+"""
+
 
 class EffectType(models.TextChoices):
     """Type of mechanical effect applied by a consequence."""

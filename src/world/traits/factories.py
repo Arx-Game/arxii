@@ -186,24 +186,27 @@ class CheckSystemSetupFactory:
             chart = ResultChartFactory(rank_difference=diff, name=f"Difficulty_{diff}")
             charts[diff] = chart
 
-            # Add outcomes to chart based on difficulty
-            if diff <= -1:  # Easy
+            # Add outcomes to chart based on difficulty. rank_difference is
+            # roller_rank - target_rank, so a negative diff means the roller is
+            # weaker and must get the hard bands; a positive diff means the
+            # roller is stronger and must get the easy bands (#2707).
+            if diff <= -1:  # Hard
                 ResultChartOutcomeFactory(
                     chart=chart,
                     outcome=outcomes["failure"],
                     min_roll=1,
-                    max_roll=20,
+                    max_roll=70,
+                )
+                ResultChartOutcomeFactory(
+                    chart=chart,
+                    outcome=outcomes["partial"],
+                    min_roll=71,
+                    max_roll=85,
                 )
                 ResultChartOutcomeFactory(
                     chart=chart,
                     outcome=outcomes["success"],
-                    min_roll=21,
-                    max_roll=90,
-                )
-                ResultChartOutcomeFactory(
-                    chart=chart,
-                    outcome=outcomes["critical"],
-                    min_roll=91,
+                    min_roll=86,
                     max_roll=100,
                 )
             elif diff == 0:  # Even
@@ -225,23 +228,23 @@ class CheckSystemSetupFactory:
                     min_roll=61,
                     max_roll=100,
                 )
-            else:  # Hard (diff >= 1)
+            else:  # Easy (diff >= 1)
                 ResultChartOutcomeFactory(
                     chart=chart,
                     outcome=outcomes["failure"],
                     min_roll=1,
-                    max_roll=70,
-                )
-                ResultChartOutcomeFactory(
-                    chart=chart,
-                    outcome=outcomes["partial"],
-                    min_roll=71,
-                    max_roll=85,
+                    max_roll=20,
                 )
                 ResultChartOutcomeFactory(
                     chart=chart,
                     outcome=outcomes["success"],
-                    min_roll=86,
+                    min_roll=21,
+                    max_roll=90,
+                )
+                ResultChartOutcomeFactory(
+                    chart=chart,
+                    outcome=outcomes["critical"],
+                    min_roll=91,
                     max_roll=100,
                 )
 

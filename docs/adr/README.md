@@ -77,10 +77,13 @@ treat those names as hints to confirm, not gospel.
 - [0098 — Houses are Organizations with kinship recognition](0098-houses-are-organizations-with-kinship-recognition.md)
 - [0101 — House aspects are catalog-only](0101-house-aspects-are-catalog-only.md)
 - [0107 — Solo darkness, not locked doors](0107-solo-darkness-not-locked-doors.md)
+- [0163 — Natural-key lookups are case-insensitive; a tuple→pk index removes the repeat query; whole-table warming is opt-in per model](0163-case-insensitive-natural-keys-and-opt-in-lookup-tables.md) (#2687; relates to ADR-0008)
 
 ### Resolution
 - [0019 — Unified resolution: one roll path, data-sourced difficulty, graded outcomes](0019-unified-resolution-one-roll-path.md)
 - [0145 — Capabilities reach checks only through authored CheckTypeCapabilityModifier rows](0145-capability-check-links-are-authored-only.md) (extends ADR-0019; related ADR-0110; #2505)
+- [0166 — Level is a guaranteed, additive term on both sides of every check](0166-level-is-a-two-sided-check-term.md) (#2707; relates to ADR-0165; extends ADR-0019/0145)
+- [0165 — rank_difference is roller minus target; positive means the roller is stronger and gets the easier chart](0165-result-chart-direction-convention.md) (#2707; relates to ADR-0166; extends ADR-0019)
 
 ### Process & workflow
 - [0020 — Feature specs live in the GitHub issue body, gated by labels](0020-feature-specs-live-in-the-issue-body.md)

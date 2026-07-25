@@ -171,6 +171,105 @@ class ResolveNpcAttackTests(TestCase):
         self.assertEqual(vitals.health, 200 - result.final_damage)
 
 
+class ResolveNpcAttackLevelOppositionTests(TestCase):
+    """#2707 Task 6 review finding: the defence-side ``target_difficulty`` line
+    had zero behavioural coverage. Every existing ``resolve_npc_attack`` test
+    either hands it a bare ``MagicMock`` (``ResolveNpcAttackTests`` above, which
+    ignores the difficulty argument entirely), forces the check outcome
+    (``ResolveNpcAttackSituationalPerkTests``, pinning the result regardless of
+    difficulty), or asserts on something else (``extra_modifiers`` in
+    ``test_wind_modifier.py``, the on-hit pool in ``test_knockback.py``) — none
+    observe ``target_difficulty``. A subtler inversion of the ``level=`` argument at
+    that call site (e.g. sourcing the defending PC's level instead of the attacking
+    NPC's) would pass the entire suite silently.
+
+    The PC defends here, so the difficulty must come from the ATTACKING NPC's
+    level, never the defending PC's. The defending PC is given its own class
+    level (11), distinct from BOTH attacker levels tested (2 and 20) below —
+    if the wiring were swapped to read the defender's level instead, both
+    calls would return the SAME (defender-derived) difficulty rather than one
+    that rises with the attacker's level, so the swap can't hide behind a
+    coincidental equality.
+
+    NOT covered here: a ``character=`` swap (sourcing the aspect-bonus lookup from
+    the wrong side while ``level=`` stays correct). ``_calculate_aspect_bonus``
+    returns 0 for a character with no ``CharacterPathHistory`` row, and neither
+    ``CombatOpponentFactory`` (ephemeral NPC, no sheet) nor ``CharacterSheetFactory``
+    (the defending PC, below) creates one — so ``aspect_bonus`` is 0 for both sides
+    in this fixture, and a ``character=``-only swap would produce an identical
+    number here. Catching that would need an attacker with an authored
+    ``CharacterPathHistory`` + matching ``CheckTypeAspect``, which this fixture
+    doesn't build.
+
+    Uses setUp (not setUpTestData) for the same DbHolder/CombatNPC-ObjectDB
+    reason as ``ResolveNpcAttackTests`` above.
+    """
+
+    def setUp(self) -> None:
+        self.check_type = CheckTypeFactory(name="NPC Defense Level Opposition")
+
+    def _resolve_and_capture_difficulty(
+        self, *, attacker_level: int, defender_class_level: int
+    ) -> tuple[int, object]:
+        """Resolve one NPC attack; return (captured target_difficulty, opponent)."""
+        from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
+
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
+        pool = ThreatPoolFactory()
+        entry = ThreatPoolEntryFactory(pool=pool, base_damage=100)
+        opponent = CombatOpponentFactory(
+            encounter=encounter,
+            threat_pool=pool,
+            level=attacker_level,
+        )
+        sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(
+            character=sheet,
+            character_class=CharacterClassFactory(),
+            level=defender_class_level,
+            is_primary=True,
+        )
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        CharacterVitals.objects.create(character_sheet=sheet, health=200, max_health=200)
+        npc_action = CombatOpponentAction.objects.create(
+            opponent=opponent,
+            round_number=1,
+            threat_entry=entry,
+        )
+        npc_action.targets.add(participant)
+
+        captured: list[int] = []
+
+        def spy(character, check_type, *args, **kwargs) -> MagicMock:
+            captured.append(kwargs.get("target_difficulty"))
+            result = MagicMock()
+            result.success_level = 0
+            return result
+
+        resolve_npc_attack(npc_action, participant, self.check_type, perform_check_fn=spy)
+        self.assertEqual(len(captured), 1, "expected exactly one defensive check to roll")
+        return captured[0], opponent
+
+    def test_difficulty_rises_with_attacking_opponents_level_not_defenders(self) -> None:
+        low, _ = self._resolve_and_capture_difficulty(attacker_level=2, defender_class_level=11)
+        high, _ = self._resolve_and_capture_difficulty(attacker_level=20, defender_class_level=11)
+        self.assertGreater(high, low)
+
+    def test_difficulty_matches_level_opposition_on_the_attacker(self) -> None:
+        """Pins the exact formula (not just the direction) via the real
+        ``level_opposition`` function, using the same attacker CombatOpponent
+        (level + objectdb) the call site should be reading from."""
+        from world.checks.services import level_opposition
+
+        difficulty, opponent = self._resolve_and_capture_difficulty(
+            attacker_level=7, defender_class_level=19
+        )
+        expected = level_opposition(
+            self.check_type, level=opponent.level, character=opponent.objectdb
+        )
+        self.assertEqual(difficulty, expected)
+
+
 class DefensiveFashionWiringTests(TestCase):
     """resolve_npc_attack routes the defensive check through collect_check_modifiers
     so a scene-derived fashion bonus reaches the defender's roll (#750).

@@ -64,7 +64,7 @@ from flows.events.payloads import (
     EncounterCompletedPayload,
 )
 from world.checks.constants import ModifierSourceKind
-from world.checks.services import collect_check_modifiers, perform_check
+from world.checks.services import collect_check_modifiers, level_opposition, perform_check
 from world.checks.types import ModifierContribution
 from world.combat.constants import (
     ABSORPTION_CAP_PER_MOMENT,
@@ -462,9 +462,26 @@ class CombatTechniqueResolver:
             target=_resolve_primary_target_sheet(self.action),
             resolution=CombatRoundContext(self.participant),
         )
+        # #2707: the first time an attack has been rolled against anything but
+        # zero. The focused opponent's level (and its aspect match on this
+        # offense check) sets the difficulty via level_opposition — a stab at
+        # a level 5 adept used to roll against a difficulty of 0 no matter who
+        # she was. No focused opponent (untargeted/ally-targeted technique)
+        # stays unopposed at 0.
+        focused = self.action.focused_opponent_target
+        target_difficulty = (
+            level_opposition(
+                self.offense_check_type,
+                level=focused.level,
+                character=focused.objectdb,
+            )
+            if focused is not None
+            else 0
+        )
         return check_fn(
             character,
             self.offense_check_type,
+            target_difficulty=target_difficulty,
             extra_modifiers=extra_modifiers,
             fatigue_penalty=penalty,
             situation_ctx=situation_ctx,
@@ -888,10 +905,14 @@ class CombatTechniqueResolver:
             target=_resolve_primary_target_sheet(self.action),
             resolution=CombatRoundContext(self.participant),
         )
+        # #2707 decision 6: additive on top of the authored ward -- the level
+        # term never replaces barrier_strength. A warded high-level mage is
+        # harder to penetrate than a warded low-level one with the identical ward.
         pen_result = perform_check(
             caster,
             pen_check_type,
-            target_difficulty=ward,
+            target_difficulty=ward
+            + level_opposition(pen_check_type, level=target.level, character=target.objectdb),
             extra_modifiers=pen_breakdown.total,
             situation_ctx=situation_ctx,
         )
@@ -2518,6 +2539,7 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     existing_objectdb: ObjectDB | None = None,
     acting_account: AccountDB | None = None,
     position: Position | None = None,
+    level: int | None = None,
 ) -> CombatOpponent:
     """Create a CombatOpponent. Three sources for the ObjectDB:
 
@@ -2548,6 +2570,13 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     cross-room ``position`` raises ``PositionError`` with no saved-but-unplaced
     opponent left behind. Omitted (default) leaves the opponent unplaced,
     matching legacy behavior.
+
+    ``level`` (#2707) resolves in this order: an explicit value always wins
+    (how a GM authors a deliberately under- or over-levelled boss); otherwise,
+    in auto-scaling mode, the encounter's average party level as already
+    resolved onto ``block.level`` by ``compute_opponent_stat_block``; otherwise
+    (manual mode, no block) falls back to 1. Level and tier are independent
+    axes — a level 3 boss and a level 20 mook are both coherent.
     """
     from world.combat.scaling import compute_opponent_stat_block  # noqa: PLC0415
 
@@ -2578,6 +2607,12 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     # defaults to 1 (the legacy behavior for hand-built opponents).
     resolved_actions_per_round: int = block.actions_per_round if block is not None else 1
 
+    # Level (#2707): explicit value always wins; otherwise auto-scaling mode
+    # takes the encounter's average party level already resolved onto the
+    # block; otherwise (manual mode) falls back to 1.
+    default_level: int = block.level if block is not None else 1
+    resolved_level: int = level if level is not None else default_level
+
     objectdb, is_ephemeral = _resolve_objectdb_for_opponent(
         encounter, name, persona, existing_objectdb
     )
@@ -2599,6 +2634,7 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         encounter=encounter,
         name=name,
         tier=tier,
+        level=resolved_level,
         max_health=resolved_max_health,
         health=resolved_max_health,
         threat_pool=threat_pool,
@@ -6243,9 +6279,18 @@ def resolve_npc_attack(
         resolution=CombatRoundContext(participant),
         attacker=opponent_action.opponent,
     )
+    # #2707: the PC defends here, so it's the ATTACKING NPC's level (and its
+    # aspect match on this defense check) that sets the difficulty -- the
+    # inverse of the offense/penetration sites, where the difficulty is
+    # sourced from the side being acted upon.
     result: CheckResult = perform_check_fn(
         character,
         check_type,
+        target_difficulty=level_opposition(
+            check_type,
+            level=opponent_action.opponent.level,
+            character=opponent_action.opponent.objectdb,
+        ),
         extra_modifiers=breakdown.total,
         situation_ctx=situation_ctx,
     )
@@ -6458,6 +6503,15 @@ def _social_combat_difficulty(
     now wired into combat for the first time). Mindless resistance: a mindless
     target adds ``MINDLESS_MORALE_RESISTANCE`` — a high resistance tier, not a
     wall. Returns 0 when there is no target (rally targets an ally).
+
+    Passes ``level_override=target.level`` (whole-branch-review fix, #2707):
+    ``compute_resist_increment`` otherwise resolves the defender's level from its
+    ``objectdb``'s ``CharacterClassLevel`` rows, which an ephemeral ``CombatOpponent``
+    has none of — it would silently floor at 1 regardless of the opponent's authored
+    ``level``, so a level 20 boss resisted Demoralize/Taunt/Parley as though it were
+    level 1 even though it opposed offense checks (via ``level_opposition``) at its
+    real level. The override SUBSTITUTES the authored level for the objectdb-resolved
+    one; it does not add a second level term.
     """
     if target is None:
         return 0
@@ -6468,7 +6522,9 @@ def _social_combat_difficulty(
 
     difficulty = 0
     if target.objectdb is not None:
-        difficulty = compute_resist_increment(target.objectdb, effort_level)
+        difficulty = compute_resist_increment(
+            target.objectdb, effort_level, level_override=target.level
+        )
     if not tier_has_morale(target):
         difficulty += MINDLESS_MORALE_RESISTANCE
     return difficulty

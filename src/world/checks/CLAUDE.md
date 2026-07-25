@@ -35,14 +35,22 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 
 1. Weighted trait points from CheckTypeTrait entries
 2. Aspect bonus from PathAspect weights * CheckTypeAspect weights * character level
-3. Capability points from authored CheckTypeCapabilityModifier rows (#2505) — curated gate,
+3. Level points (#2707, ADR-0166): `LEVEL_POINTS_PER_LEVEL * character level`, on EVERY check —
+   a guaranteed floor, additive with (not a replacement for) the aspect bonus above, which is
+   zero unless the CheckType has an authored CheckTypeAspect matching the character's Path.
+   `_compute_check_breakdown` reads the level from `world.progression.services
+   .skill_development.get_character_path_level` — the single source both this term and the
+   aspect bonus's level scaling use. A keyword-only `level_override` SUBSTITUTES for that
+   resolved level (never adds to it), so a `CombatOpponent`'s authored `level` can reach the
+   resist path; `None` (the default) is byte-identical to reading the character's own rows.
+4. Capability points from authored CheckTypeCapabilityModifier rows (#2505) — curated gate,
    0 with no authored rows (never calls the capability oracle) or no `sheet_data`. Scored as
    deviation from `innate_baseline`, not the raw value (#2704, D3) — an unimpaired character
    contributes exactly 0; impairment goes negative, superhuman capacity goes positive.
-4. Extra modifiers from caller (goals, magic, combat, conditions, `resolve_challenge`'s
+5. Extra modifiers from caller (goals, magic, combat, conditions, `resolve_challenge`'s
    `capability_source.value`)
-5. Total points -> CheckRank -> ResultChart -> roll 1-100 -> outcome
-6. Outcome guarantees (#2536 slice 2, ADR-0152): if a `situation_ctx` was passed, `TIER_FLOOR`/
+6. Total points -> CheckRank -> ResultChart -> roll 1-100 -> outcome
+7. Outcome guarantees (#2536 slice 2, ADR-0152): if a `situation_ctx` was passed, `TIER_FLOOR`/
    `BOTCH_IMMUNITY` covenant perks (`_apply_outcome_guarantees`) may raise the outcome to an
    authored floor — absolute, never thread-scaled; announces only when it actually altered the
    outcome. Applies identically to the test-rig forced-outcome path. `situation_ctx.attacker`
@@ -57,6 +65,47 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
    fired here if engaged, announces `"your vow lies dormant — {perk.name} would have answered
    here"` to the checker alone (never the room) — see `world.covenants.perks.services
    .dormant_perk_firings`/`announce_dormant_perks`.
+
+## Opposed checks — two mutually exclusive answers for the opposing side (#2707, ADR-0166)
+
+`compute_check_rating(character, check_type, extra_modifiers=0) -> int` is the one answer
+for "what does this character bring to this check, with no dice roll" — it reuses
+`_compute_check_breakdown` (the same pipeline `perform_check` uses) and returns
+`total_points`, so it already carries level points for whoever calls it.
+
+Two callers build opposed-check difficulty on top of it, and are **deliberately
+exclusive** — a call site uses one or the other, never both:
+
+- `compute_resist_increment(defender_character, resist_effort_level) -> int` — the
+  ACTIVE half: the defender's FULL `compute_check_rating` on the Composure `CheckType`
+  (trait, specialization, aspect, and capability points — NOT perk points; no
+  `situation_ctx` is threaded through, so `_situational_perk_check_bonus` short-circuits
+  before firing, deliberately, since it has the side effect of announcing perk firings
+  and a difficulty computation must never announce anything) plus the effort-level
+  modifier, clamped >= 0. Already contains the defender's level points internally.
+- `level_opposition(check_type, *, level, character=None) -> int` — the PASSIVE half:
+  `LEVEL_POINTS_PER_LEVEL * level` always, plus (when `character` is given) the acting
+  check's aspects scored against the DEFENDER's Path. `character=None` (an ephemeral
+  NPC with no sheet) contributes level alone.
+
+Combining both at one call site would double-count the defender's level — see ADR-0166
+for the full rationale, and its recorded clash exception (`world/combat/clash.py:310`
+deliberately stays at `target_difficulty=0`; a clash is a symmetric contest graded by
+comparing both sides' own rolls, not an opposed-difficulty check).
+
+**`level_override` (whole-branch-review fix, #2707)** — `compute_resist_increment` (and
+`compute_check_rating`/`_compute_check_breakdown` underneath it) take an optional
+keyword-only `level_override: int | None = None`. `None` (every pre-existing caller) is
+byte-identical to before — level comes from `get_character_path_level(character)`. When
+set, it **substitutes** for that resolved level in both places level is read inside the
+breakdown (the `level_points` term and the `_calculate_aspect_bonus` call) — it never
+adds to the character's own resolved level, which would double-count exactly like
+combining `compute_resist_increment` with `level_opposition` would. This exists because
+`_social_combat_difficulty` (`world/combat/services.py`, backing Demoralize/Taunt/Parley)
+opposes a `CombatOpponent`, whose authored `level` field isn't reachable through its
+`objectdb`'s `CharacterClassLevel` rows (an ephemeral NPC has none, so it floored at 1
+regardless of the opponent's real level) — it passes
+`compute_resist_increment(target.objectdb, effort_level, level_override=target.level)`.
 
 ## The modifier seam — `collect_check_modifiers(sheet, check_type, *, scene=None, ...)`
 
@@ -101,7 +150,10 @@ seeds the conditions.
 
 - **Traits app**: Uses PointConversionRange, CheckRank, ResultChart, CheckOutcome
 - **Classes app**: Uses Aspect and PathAspect for aspect bonuses
-- **Progression app**: Uses CharacterPathHistory for current path lookup
+- **Progression app**: Uses CharacterPathHistory for current path lookup;
+  `world.progression.services.skill_development.get_character_path_level` is the sole source of
+  a character's class level (#2707) -- both the level-points term and the aspect bonus's level
+  scaling read it
 - **Conditions app** (#2505): `get_effective_capability_value(sheet, capability)` is the sole
   agency-oracle source `_calculate_capability_points`/CAPABILITY contributions read; lazily
   imported (`world.conditions.services` already imports `world.checks.services` at module scope)

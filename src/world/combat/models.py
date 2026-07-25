@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
@@ -496,6 +497,19 @@ class CombatOpponent(SharedMemoryModel):
         related_name="opponents",
     )
     tier = models.CharField(max_length=20, choices=OpponentTier.choices)
+    level = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(30)],
+        help_text=(
+            "Power level on the same 1-30 scale as CharacterClassLevel (#2707). A "
+            "SEPARATE axis from tier: a level 3 boss and a level 20 mook are both "
+            "coherent. Opposes a PC's checks through "
+            "world.checks.services.level_opposition, and is public in the opponent "
+            "payload so a threat readout can be built on it. Auto-scaled spawns "
+            "default to the encounter's average party level; a GM setting it "
+            "deliberately low is how a soloable or upset-victory boss is authored."
+        ),
+    )
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     health = models.IntegerField()

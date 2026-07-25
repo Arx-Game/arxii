@@ -6,12 +6,17 @@ from typing import TYPE_CHECKING, NamedTuple, cast
 
 from django.core.exceptions import ObjectDoesNotExist
 
-from world.checks.constants import BOTCH_SUCCESS_LEVEL_MAX, ModifierSourceKind
+from world.checks.constants import (
+    BOTCH_SUCCESS_LEVEL_MAX,
+    LEVEL_POINTS_PER_LEVEL,
+    ModifierSourceKind,
+)
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.types import CheckResult, ModifierBreakdown, ModifierContribution
-from world.classes.models import CharacterClassLevel, PathAspect
+from world.classes.models import PathAspect
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER
 from world.progression.models import CharacterPathHistory
+from world.progression.services.skill_development import get_character_path_level
 from world.traits.models import (
     CheckOutcome,
     CheckRank,
@@ -50,13 +55,16 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     Main check resolution function.
 
     1. Calculate weighted trait points using TraitHandler
-    2. Calculate aspect bonus from path
-    3. Sum: trait_points + aspect_bonus + extra_modifiers + effort_modifier + fatigue_penalty
-    4. total_points -> CheckRank -> ResultChart (existing pipeline)
-    5. Roll 1-100
-    6. Apply rollmod: effective = max(1, min(100, roll + rollmod))
-    7. Look up outcome on chart using effective roll
-    8. Return CheckResult
+    2. Calculate aspect bonus from path (scaled by class level)
+    3. Calculate level points: LEVEL_POINTS_PER_LEVEL x class level (#2707) — a
+       guaranteed floor every check gets, on top of (not instead of) the aspect bonus
+    4. Sum: trait_points + aspect_bonus + level_points + extra_modifiers + effort_modifier
+       + fatigue_penalty
+    5. total_points -> CheckRank -> ResultChart (existing pipeline)
+    6. Roll 1-100
+    7. Apply rollmod: effective = max(1, min(100, roll + rollmod))
+    8. Look up outcome on chart using effective roll
+    9. Return CheckResult
 
     Args:
         character: The character performing the check.
@@ -165,6 +173,7 @@ class _CheckBreakdown(NamedTuple):
     trait_points: int
     specialization_points: int
     aspect_bonus: int
+    level_points: int
     capability_points: int
     total_points: int
     roller_rank: "CheckRank | None"
@@ -183,25 +192,42 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     fatigue_penalty: int,
     specialization: "Specialization | None",
     situation_ctx: "SituationContext | None" = None,
+    level_override: int | None = None,
 ) -> _CheckBreakdown:
-    """Compute stat + skill + specialization + aspect points, ranks, and chart (no dice roll).
+    """Compute stat + skill + specialization + aspect + level points, ranks, and chart
 
-    Shared by ``perform_check`` (which then rolls) and the forced-outcome test path (which
-    supplies the outcome directly) — the single source of the check's point math.
+    (no dice roll). Shared by ``perform_check`` (which then rolls) and the forced-outcome
+    test path (which supplies the outcome directly) — the single source of the check's
+    point math. Level contributes ``LEVEL_POINTS_PER_LEVEL`` points on its own (#2707) in
+    addition to scaling the aspect bonus below — a guaranteed floor, not a replacement for it.
+
+    ``level_override`` (#2707 whole-branch-review fix): when ``None`` (every existing
+    caller), behavior is byte-identical to before — ``level`` comes from
+    ``get_character_path_level(character)``. When set, it SUBSTITUTES for that resolved
+    level in both the ``level_points`` term and the ``_calculate_aspect_bonus`` call — it
+    never adds to the character's own level. This exists for opponents whose authored
+    level isn't reachable through ``character``'s own ``CharacterClassLevel`` rows, e.g. a
+    ``CombatOpponent`` (an ephemeral NPC with no class-level rows behind its objectdb,
+    which would otherwise floor at 1 regardless of its authored level).
     """
     handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
-    level = _get_character_level(character)
+    if level_override is not None:
+        level = level_override
+    else:
+        level = get_character_path_level(character)
     effort_modifier = EFFORT_CHECK_MODIFIER.get(effort_level, 0) if effort_level else 0
 
     trait_points = _calculate_trait_points(handler, check_type)
     specialization_points = _calculate_specialization_points(character, check_type, specialization)
     aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
+    level_points = LEVEL_POINTS_PER_LEVEL * level
     capability_points = _calculate_capability_points(character, check_type)
     perk_bonus = _situational_perk_check_bonus(character, check_type, situation_ctx)
     total_points = (
         trait_points
         + specialization_points
         + aspect_bonus
+        + level_points
         + capability_points
         + extra_modifiers
         + perk_bonus
@@ -220,6 +246,7 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
         trait_points=trait_points,
         specialization_points=specialization_points,
         aspect_bonus=aspect_bonus,
+        level_points=level_points,
         capability_points=capability_points,
         total_points=total_points,
         roller_rank=roller_rank,
@@ -526,6 +553,8 @@ def compute_check_rating(
     character: "ObjectDB",
     check_type: "CheckType",
     extra_modifiers: int = 0,
+    *,
+    level_override: int | None = None,
 ) -> int:
     """Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.
 
@@ -534,6 +563,11 @@ def compute_check_rating(
     needs to *compare* a character's standing in two ``CheckType``s (e.g. picking the
     better of two reaction approaches) does so deterministically. ADR-0019 keeps the one
     dice roll inside ``perform_check``/``resolve_challenge`` — this helper never rolls.
+
+    ``level_override`` (#2707 whole-branch-review fix): forwarded to
+    ``_compute_check_breakdown`` unchanged — ``None`` (the default, every pre-existing
+    caller) is byte-identical to today; a value SUBSTITUTES for ``character``'s resolved
+    level rather than adding to it. See that function's docstring.
     """
     breakdown = _compute_check_breakdown(
         character,
@@ -543,6 +577,7 @@ def compute_check_rating(
         effort_level=None,
         fatigue_penalty=0,
         specialization=None,
+        level_override=level_override,
     )
     return breakdown.total_points
 
@@ -563,6 +598,7 @@ def _check_result(
         total_points=breakdown.total_points,
         specialization_points=breakdown.specialization_points,
         capability_points=breakdown.capability_points,
+        level_points=breakdown.level_points,
     )
 
 
@@ -760,23 +796,6 @@ def _calculate_capability_points(character: "ObjectDB", check_type: "CheckType")
     return total
 
 
-def _get_character_level(character: "ObjectDB") -> int:
-    """
-    Get the character's primary class level, or highest level, or default to 1.
-    """
-    primary = CharacterClassLevel.objects.filter(character_id=character.pk, is_primary=True).first()
-    if primary:
-        return cast(int, primary.level)
-
-    highest = (
-        CharacterClassLevel.objects.filter(character_id=character.pk).order_by("-level").first()
-    )
-    if highest:
-        return cast(int, highest.level)
-
-    return 1
-
-
 def get_rollmod(character: "ObjectDB") -> int:
     """
     Sum character.sheet_data.rollmod + character.account.player_data.rollmod.
@@ -802,16 +821,91 @@ def get_rollmod(character: "ObjectDB") -> int:
     return total
 
 
-def compute_resist_increment(defender_character: "ObjectDB", resist_effort_level: str) -> int:
+def level_opposition(
+    check_type: "CheckType",
+    *,
+    level: int,
+    character: "ObjectDB | None" = None,  # noqa: OBJECTDB_PARAM
+) -> int:
+    """Difficulty an opposing entity of *level* adds to *check_type* (#2707).
+
+    The PASSIVE half of opposed checks — what a defender contributes when they
+    are not actively resisting with a defence check of their own. Two terms:
+
+    * ``LEVEL_POINTS_PER_LEVEL * level`` — always. This is what makes a level 1
+      attacker's swing at a level 5 defender land as it should, on checks with
+      no authored defensive content at all.
+    * ``_calculate_aspect_bonus(character, check_type, level)`` — the acting
+      check's aspects scored against the DEFENDER's Path, so what you are trying
+      to do to them is harder when it is their wheelhouse. Skipped entirely when
+      *character* is None (an ephemeral NPC with no sheet), which contributes
+      level alone rather than raising.
+
+    Deliberately EXCLUSIVE with :func:`compute_resist_increment`: an active
+    resistance rating already contains the defender's level points, so a call
+    site uses one or the other, never both. Callers ADD the result to any
+    authored difficulty (a lock's rating, a ward's barrier strength) rather than
+    replacing it.
+    """
+    total = LEVEL_POINTS_PER_LEVEL * max(0, level)
+    if character is not None:
+        total += _calculate_aspect_bonus(character, check_type, level)
+    return total
+
+
+def compute_resist_increment(
+    defender_character: "ObjectDB",
+    resist_effort_level: str,
+    *,
+    level_override: int | None = None,
+) -> int:
     """Compute how much a defender's active resistance raises difficulty.
 
-    Resolves the Composure CheckType by name (category-agnostic) and sums the
-    defender's weighted Composure trait points with the effort-level modifier.
-    Result is clamped to ≥ 0 — resistance never lowers the attacker's difficulty.
+    Resolves the Composure CheckType by name (category-agnostic) and returns the
+    defender's FULL pre-roll rating on it (trait, specialization, aspect, and
+    capability points) plus the effort-level modifier. Result is clamped to ≥ 0 —
+    resistance never lowers the attacker's difficulty.
+
+    Perk points remain 0 here: this function has no ``situation_ctx`` parameter, so
+    ``_situational_perk_check_bonus`` short-circuits before firing — deliberately,
+    since it has the side effect of announcing perk firings, and a difficulty
+    computation must never announce anything (mirrors
+    :func:`preview_check_difficulty`'s docstring below).
+
+    #2707 gap 1: this used to sum only weighted Composure trait points, silently
+    dropping the specialization, aspect, and capability points that a defender's
+    Composure check would otherwise carry — a defender's Path, owned specializations,
+    and capabilities were structurally inert here. Routing through
+    :func:`compute_check_rating` closes that gap (perk points stay out, per the
+    paragraph above — routing does NOT close that part); it also means the defender's level
+    points already ride this rating, so callers must use this OR :func:`level_opposition`,
+    never both (see that function's docstring).
+
+    ``level_override`` (whole-branch-review fix, #2707): forwarded to
+    :func:`compute_check_rating`/``_compute_check_breakdown`` unchanged. ``None`` (the
+    default) is byte-identical to before — level comes from ``defender_character``'s own
+    ``CharacterClassLevel`` rows. A value SUBSTITUTES for that resolved level rather than
+    adding to it. Exists for a ``CombatOpponent``: it carries its own authored ``level``
+    field, which is not reachable through its ``objectdb``'s class-level rows (an
+    ephemeral NPC has none, so without this override the level always floored at 1) — a
+    call site passes ``level_override=opponent.level`` so the opponent's morale is
+    exactly as sturdy as its authored level says, matching how its offense already
+    opposes checks (``level_opposition``/the three combat sites wired to it).
+
+    The ephemeral NPC is the case that was BROKEN, but the override is not scoped to
+    it: ``_social_combat_difficulty`` passes ``level_override`` for EVERY opponent, so
+    a persona-backed opponent's own ``CharacterClassLevel`` rows are inert on this path
+    too — ``CombatOpponent.level`` is the single authority for how sturdy an opponent
+    is, on offense and defense alike. That is deliberate, and today it is also
+    unobservable: the persona-backed constructors (``duels._make_mirror``,
+    ``cast_seed``) both stamp ``level=effective_combat_level(sheet)``, so the authored
+    level already equals the mirrored character's own. A future constructor that
+    stamped something else would diverge here by design, not by accident.
 
     Args:
         defender_character: The character resisting the social action.
         resist_effort_level: An EffortLevel string value (e.g. ``"high"``).
+        level_override: When set, substitutes for the defender's resolved level.
 
     Returns:
         Non-negative integer representing the difficulty increment from resistance.
@@ -822,10 +916,14 @@ def compute_resist_increment(defender_character: "ObjectDB", resist_effort_level
     if composure_check_type is None:
         return 0
 
-    handler: TraitHandler = defender_character.traits  # type: ignore[attr-defined]
-    points = _calculate_trait_points(handler, composure_check_type)
     modifier = EFFORT_CHECK_MODIFIER.get(resist_effort_level, 0)
-    return max(0, points + modifier)
+    rating = compute_check_rating(
+        defender_character,
+        composure_check_type,
+        extra_modifiers=modifier,
+        level_override=level_override,
+    )
+    return max(0, rating)
 
 
 def preview_check_difficulty(
@@ -838,21 +936,24 @@ def preview_check_difficulty(
     Preview the rank difference for a check without rolling.
 
     Returns the rank difference (positive = character is stronger, negative = weaker).
-    Uses the same calculation as perform_check steps 1-4.
+    Routes through :func:`_compute_check_breakdown`, the single source of the check's
+    point math (#2707) — this used to re-derive trait + aspect points only, silently
+    omitting specialization, capability, and (before #2707) level points. Those three
+    now arrive with everything else the breakdown computes. Perk points remain 0 here:
+    this function has no ``situation_ctx`` parameter, so ``_situational_perk_check_bonus``
+    short-circuits before firing — deliberately, since it has the side effect of
+    announcing perk firings and a preview must never announce anything.
     """
-    handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
-    level = _get_character_level(character)
-
-    trait_points = _calculate_trait_points(handler, check_type)
-    aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
-    total_points = trait_points + aspect_bonus + extra_modifiers
-
-    roller_rank = CheckRank.get_rank_for_points(total_points)
-    target_rank = CheckRank.get_rank_for_points(target_difficulty)
-
-    roller_rank_value = roller_rank.rank if roller_rank else 0
-    target_rank_value = target_rank.rank if target_rank else 0
-    return roller_rank_value - target_rank_value
+    breakdown = _compute_check_breakdown(
+        character,
+        check_type,
+        target_difficulty=target_difficulty,
+        extra_modifiers=extra_modifiers,
+        effort_level=None,
+        fatigue_penalty=0,
+        specialization=None,
+    )
+    return breakdown.rank_difference
 
 
 def chart_has_success_outcomes(rank_difference: int) -> bool:
