@@ -5,6 +5,7 @@ from __future__ import annotations
 from django.test import TestCase
 
 from core.natural_keys import (
+    _NK_WARMED,
     _index_key,
     flush_natural_key_indexes,
     index_owner,
@@ -33,6 +34,14 @@ class IndexKeyNormalizationTests(TestCase):
     def test_result_is_hashable(self) -> None:
         {_index_key(("Mammals", ["Creatures", None]))}  # must not raise
 
+    def test_tuple_and_list_spellings_normalize_identically(self) -> None:
+        """A nested value may arrive as a list (from JSON) or a tuple (from
+        natural_key()). If the two spellings diverged, a key stored via one
+        would never be found via the other."""
+        assert _index_key(("Wolf", ["Mammals", ["Creatures", None]])) == _index_key(
+            ("Wolf", ("Mammals", ("Creatures", None)))
+        )
+
 
 class IndexRegistryTests(TestCase):
     """The registry is per-model and flushable."""
@@ -43,7 +52,9 @@ class IndexRegistryTests(TestCase):
     def test_index_owner_is_the_shared_dbclass(self) -> None:
         assert index_owner(Species) is Species.__dbclass__
 
-    def test_flush_clears_entries(self) -> None:
+    def test_flush_clears_entries_and_warm_flags(self) -> None:
         natural_key_index(Species)[("marker",)] = 999
+        _NK_WARMED.add(index_owner(Species))
         flush_natural_key_indexes()
         assert natural_key_index(Species) == {}
+        assert index_owner(Species) not in _NK_WARMED

@@ -53,7 +53,7 @@ from django.db.models.fields.related import ForeignKey
 from core.managers import ArxSharedMemoryManager
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Sequence
 
 
 #: Per-model natural-key index: casefolded natural-key tuple -> pk.
@@ -80,8 +80,12 @@ def index_owner(model: type) -> type:
     mirror that here. Models using ``NaturalKeyManager`` without being a
     ``SharedMemoryModel`` have no ``__dbclass__`` and own their index directly.
     """
-    # Suppression justified: duck-typed check for Evennia's idmapper attribute.
-    return getattr(model, "__dbclass__", model)  # noqa: GETATTR_LITERAL
+    # try/except rather than getattr(): duck-typing an attribute this way needs
+    # no GETATTR_LITERAL suppression, matching the precedent in core/mixins.py.
+    try:
+        return model.__dbclass__
+    except AttributeError:
+        return model
 
 
 def natural_key_index(model: type) -> dict[tuple, int]:
@@ -89,7 +93,7 @@ def natural_key_index(model: type) -> dict[tuple, int]:
     return _NK_PK_INDEX.setdefault(index_owner(model), {})
 
 
-def _index_key(values: Any) -> tuple[Any, ...]:
+def _index_key(values: Iterable[Any]) -> tuple[Any, ...]:
     """Normalize a natural-key value sequence into a hashable, caseless key.
 
     Two normalizations, both required:
