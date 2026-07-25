@@ -61,7 +61,7 @@ class ConditionCapabilityEffectInline(admin.TabularInline):
 class ConditionCheckModifierInline(admin.TabularInline):
     model = ConditionCheckModifier
     extra = 0
-    autocomplete_fields = ["check_type", "stage"]
+    autocomplete_fields = ["check_type", "check_category", "stage"]
 
 
 class ConditionResistanceModifierInline(admin.TabularInline):

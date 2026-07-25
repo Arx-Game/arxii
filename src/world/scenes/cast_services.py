@@ -88,6 +88,8 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     character: ObjectDB,  # noqa: OBJECTDB_PARAM — mirrors _resolve_enhanced_action
     target: ObjectDB | None,  # noqa: OBJECTDB_PARAM
     difficulty: int,
+    scene: Scene | None = None,
+    character_sheet: CharacterSheet | None = None,
     strain_commitment: int = 0,
     fury_commitment: FuryTier | None = None,
     fury_anchor: CharacterSheet | None = None,
@@ -129,6 +131,19 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     # template's own check — the shared rule every cast path uses (ADR-0096).
     cast_check = resolve_cast_check_type(character, action_template)
 
+    # Fold condition / rollmod / scene / equipment / fashion modifiers into the
+    # cast's check roll through the shared seam — the same one combat
+    # (world/combat/services.py) and plain social actions
+    # (world/scenes/action_services.py) already use. Without this, conditions
+    # are structurally invisible to standalone casts (#2697).
+    from world.checks.services import collect_check_modifiers  # noqa: PLC0415
+
+    check_modifier_total = 0
+    if cast_check is not None and character_sheet is not None:
+        check_modifier_total = collect_check_modifiers(
+            character_sheet, cast_check, scene=scene
+        ).total
+
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
 
     applicable_threads = applicable_threads_for_cast(character, technique, cast_pull=cast_pull)
@@ -161,7 +176,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
             target_difficulty=difficulty,
             context=context,
             check_type=cast_check,
-            extra_modifiers=extra_modifiers,
+            extra_modifiers=extra_modifiers + check_modifier_total,
         )
 
     technique_result = use_technique(
@@ -313,6 +328,8 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         character=character,
         target=target,
         difficulty=difficulty,
+        scene=scene,
+        character_sheet=caster_persona.character_sheet,
         strain_commitment=strain_commitment,
         fury_commitment=fury_commitment,
         fury_anchor=fury_anchor,
