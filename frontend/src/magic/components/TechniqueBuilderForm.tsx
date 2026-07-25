@@ -54,11 +54,6 @@ interface GiftOption {
   name: string;
 }
 
-interface StyleOption {
-  id: number;
-  name: string;
-}
-
 interface EffectTypeOption {
   id: number;
   name: string;
@@ -82,7 +77,6 @@ export interface ConsequencePoolOption {
 export interface TechniqueBuilderFormProps {
   mode: 'staff' | 'player';
   gifts: GiftOption[];
-  styles: StyleOption[];
   effectTypes: EffectTypeOption[];
   capabilities: CapabilityType[];
   damageTypes: DamageType[];
@@ -175,7 +169,6 @@ function BudgetMeter({ breakdown, mode }: BudgetMeterProps) {
 export function TechniqueBuilderForm({
   mode,
   gifts,
-  styles,
   effectTypes,
   capabilities,
   damageTypes,
@@ -188,7 +181,6 @@ export function TechniqueBuilderForm({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [giftId, setGiftId] = useState<number | null>(gifts[0]?.id ?? null);
-  const [styleId, setStyleId] = useState<number | null>(styles[0]?.id ?? null);
   const [effectTypeId, setEffectTypeId] = useState<number | null>(effectTypes[0]?.id ?? null);
   const [actionCategory, setActionCategory] = useState<string>('physical');
   const [tier, setTier] = useState<number>(1);
@@ -215,8 +207,7 @@ export function TechniqueBuilderForm({
   // Live pricing — debounced on form field changes
   // ---------------------------------------------------------------------------
 
-  const canPrice =
-    name.trim() !== '' && giftId !== null && styleId !== null && effectTypeId !== null;
+  const canPrice = name.trim() !== '' && giftId !== null && effectTypeId !== null;
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -230,7 +221,6 @@ export function TechniqueBuilderForm({
           name: name.trim(),
           description,
           gift_id: giftId!,
-          style_id: styleId!,
           effect_type_id: effectTypeId!,
           action_category: actionCategory,
           tier,
@@ -275,7 +265,6 @@ export function TechniqueBuilderForm({
     name,
     description,
     giftId,
-    styleId,
     effectTypeId,
     actionCategory,
     tier,
@@ -297,14 +286,13 @@ export function TechniqueBuilderForm({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (submitDisabled || giftId === null || styleId === null || effectTypeId === null) return;
+    if (submitDisabled || giftId === null || effectTypeId === null) return;
 
     authorMutation.mutate(
       {
         name: name.trim(),
         description,
         gift_id: giftId,
-        style_id: styleId,
         effect_type_id: effectTypeId,
         action_category: actionCategory,
         tier,
@@ -380,27 +368,6 @@ export function TechniqueBuilderForm({
                 {gifts.map((g) => (
                   <SelectItem key={g.id} value={String(g.id)}>
                     {g.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Style */}
-          <div className="space-y-1.5">
-            <Label htmlFor="tech-style">Style *</Label>
-            <Select
-              value={styleId != null ? String(styleId) : ''}
-              onValueChange={(val) => setStyleId(Number(val))}
-              disabled={isPending}
-            >
-              <SelectTrigger id="tech-style">
-                <SelectValue placeholder="Select a style" />
-              </SelectTrigger>
-              <SelectContent>
-                {styles.map((s) => (
-                  <SelectItem key={s.id} value={String(s.id)}>
-                    {s.name}
                   </SelectItem>
                 ))}
               </SelectContent>

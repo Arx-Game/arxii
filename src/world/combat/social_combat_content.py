@@ -38,7 +38,6 @@ from world.magic.models.techniques import (
     EffectType,
     Technique,
     TechniqueAppliedCondition,
-    TechniqueStyle,
 )
 
 if TYPE_CHECKING:
@@ -190,10 +189,6 @@ def _ensure_charm_technique() -> Technique:
         name="Charm",
         defaults={"description": "Charm, compulsion, and social influence magic."},
     )
-    style, _ = TechniqueStyle.objects.get_or_create(
-        name="Subtle",
-        defaults={"description": "Magic that manifests without obvious display."},
-    )
     effect_type, _ = EffectType.objects.get_or_create(
         name="Compulsion",
         defaults={
@@ -210,7 +205,6 @@ def _ensure_charm_technique() -> Technique:
             "description": (
                 "A word of power that turns an enemy's loyalty, charming them to fight for you."
             ),
-            "style": style,
             "effect_type": effect_type,
             "action_category": ActionCategory.SOCIAL,
             "intensity": 4,

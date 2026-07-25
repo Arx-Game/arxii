@@ -18644,10 +18644,6 @@ paths:
         description: Number of results to return per page.
         schema:
           type: integer
-      - in: query
-        name: style
-        schema:
-          type: integer
       tags:
       - magic
       security:
@@ -56465,9 +56461,6 @@ components:
         gift:
           type: integer
           description: The gift this technique belongs to.
-        style:
-          type: integer
-          description: The style of this technique (restricted by Path).
         effect_type:
           type: integer
           description: The type of effect this technique produces.
@@ -65700,9 +65693,6 @@ components:
         gift:
           type: integer
           description: The gift this technique belongs to.
-        style:
-          type: integer
-          description: The style of this technique (restricted by Path).
         effect_type:
           type: integer
           description: The type of effect this technique produces.
@@ -65774,7 +65764,6 @@ components:
       - gift
       - id
       - name
-      - style
       - target_spec
       - target_type
       - tier
@@ -65841,9 +65830,6 @@ components:
         gift:
           type: integer
           description: The gift this technique belongs to.
-        style:
-          type: integer
-          description: The style of this technique (restricted by Path).
         effect_type:
           type: integer
           description: The type of effect this technique produces.
@@ -65896,7 +65882,6 @@ components:
       - effect_type
       - gift
       - name
-      - style
     TechniqueStyle:
       type: object
       description: Serializer for TechniqueStyle lookup records.

@@ -11,7 +11,8 @@ Submodules (see Scope 6 §4.4):
 - gifts: Gift, CharacterGift, Tradition, CharacterTradition
 - techniques: EffectType, TechniqueStyle, Restriction, IntensityTier, Technique,
   TechniqueAppliedCondition, TechniqueCapabilityGrant, TechniqueCapabilityRequirement,
-  TechniqueDamageProfile, TechniqueFunctionTag, CharacterTechnique, TechniqueOutcomeModifier
+  StyleCapabilityRequirement, TechniqueDamageProfile, TechniqueFunctionTag,
+  CharacterTechnique, TechniqueOutcomeModifier
 - technique_draft: TechniqueDraft, TechniqueDraftCapabilityGrant,
   TechniqueDraftDamageProfile, TechniqueDraftAppliedCondition
 - specialization: TechniqueVariant, TechniqueVariantCapabilityGrant,
@@ -210,6 +211,7 @@ from world.magic.models.techniques import (
     IntensityTier,
     Restriction,
     RestrictionManager,
+    StyleCapabilityRequirement,
     Technique,
     TechniqueAppliedCondition,
     TechniqueCapabilityGrant,
@@ -410,6 +412,8 @@ __all__ = [
     "SoulfrayConfig",
     # power config — per-level standing cap bands (#853)
     "StandingCapBand",
+    # caster-scoped style casting requirements (#2700)
+    "StyleCapabilityRequirement",
     # endorsement (Spec C style presentation — #1152)
     "StylePresentationEndorsement",
     "Technique",

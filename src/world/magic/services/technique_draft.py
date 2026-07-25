@@ -71,7 +71,7 @@ def discard_draft(character) -> None:
 def set_draft_fields(draft: TechniqueDraft, **fields) -> TechniqueDraft:
     """Update arbitrary scalar or FK knobs on the draft and save.
 
-    Callers pass resolved model instances for FK fields (gift=, style=, etc.).
+    Callers pass resolved model instances for FK fields (gift=, effect_type=, etc.).
     Returns the updated draft instance.
     """
     for key, value in fields.items():
@@ -242,8 +242,6 @@ def draft_to_design(draft: TechniqueDraft) -> TechniqueDesignInput:
         missing.append("name")
     if draft.gift_id is None:
         missing.append("gift")
-    if draft.style_id is None:
-        missing.append("style")
     if draft.effect_type_id is None:
         missing.append("effect_type")
     if not draft.action_category:
@@ -259,7 +257,6 @@ def draft_to_design(draft: TechniqueDraft) -> TechniqueDesignInput:
         name=draft.name,
         description=draft.description,
         gift_id=draft.gift_id,  # type: ignore[arg-type]
-        style_id=draft.style_id,  # type: ignore[arg-type]
         effect_type_id=draft.effect_type_id,  # type: ignore[arg-type]
         action_category=draft.action_category,
         tier=draft.tier,  # type: ignore[arg-type]

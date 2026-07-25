@@ -66,7 +66,6 @@ from world.magic.models.techniques import (
     EffectType,
     Technique,
     TechniqueAppliedCondition,
-    TechniqueStyle,
 )
 from world.magic.seeds_cast import get_standalone_cast_template
 
@@ -78,7 +77,6 @@ from world.magic.seeds_cast import get_standalone_cast_template
 PAYLOAD_PLACEHOLDER: str = "@payload"
 
 #: Shared TechniqueStyle name for the space-bending translocation techniques.
-TRANSLOCATION_STANCE_STYLE_NAME: str = "Translocation Stance"
 
 # --- Task 14a: Summon ---
 
@@ -158,15 +156,13 @@ _BLINK_DPA_TRIGGER_NAME: str = "blink_damage_pre_apply"
 # --- Absorb buffer size seeded by the CONDITION_APPLIED init handler ---
 _FORCE_FIELD_INIT_BUFFER: int = 20
 
-# --- Shared gift/style/effect-type/description literals (duplicated across bundles) ---
+# --- Shared gift/effect-type/description literals (duplicated across bundles) ---
 
 _WARDING_GIFT: str = "Warding"
-_WARDING_STANCE_STYLE: str = "Warding Stance"
 _FORCE_FIELD_EFFECT_TYPE: str = "Force Field"
 _BARRIER_DESCRIPTION: str = "Techniques that erect protective barriers."
 
 _EVASION_GIFT: str = "Evasion"
-_EVASION_STANCE_STYLE: str = "Evasion Stance"
 _BLINK_DODGE_EFFECT_TYPE: str = "Blink Dodge"
 _PHASE_STEP_DESCRIPTION: str = (
     "Techniques that attune the body to phase-step through incoming attacks."
@@ -224,7 +220,6 @@ _PLACEHOLDER_POSITION_ID: int = 0
 RAMPART_GIFT_NAME: str = "Wardcraft"
 
 #: TechniqueStyle shared by all four "Raise Rampart" techniques.
-RAMPART_STYLE_NAME: str = "Elemental Bulwark Stance"
 
 #: Name of the Thorn rampart's GRASPING signature_condition. Applied not through
 #: this bundle's own CONDITION_APPLIED trigger but at the shared forced-move
@@ -363,14 +358,10 @@ def ensure_summon_content() -> None:
     summoning_template.reactive_triggers.add(trigger_def)
 
     # 5. Summon Spirit Technique with a SELF TechniqueAppliedCondition.
-    #    Technique requires gift, style, and effect_type — seed minimal rows.
+    #    Technique requires gift and effect_type — seed minimal rows.
     summon_gift, _ = Gift.objects.get_or_create(
         name="Summoning",
         defaults={"description": "Techniques that call spirit allies into being."},
-    )
-    summon_style, _ = TechniqueStyle.objects.get_or_create(
-        name="Conjuration",
-        defaults={"description": "A magical style focused on summoning entities."},
     )
     summon_effect_type, _ = EffectType.objects.get_or_create(
         name="Summon",
@@ -386,7 +377,6 @@ def ensure_summon_content() -> None:
         gift=summon_gift,
         defaults={
             "description": ("Call a spirit ally into the encounter to fight alongside you."),
-            "style": summon_style,
             "effect_type": summon_effect_type,
             "action_category": ActionCategory.PHYSICAL,
             "intensity": 4,
@@ -486,7 +476,6 @@ def _seed_call_service_flow(
 def _seed_technique(  # noqa: PLR0913
     technique_name: str,
     gift_name: str,
-    style_name: str,
     effect_type_name: str,
     description: str,
     technique_description: str,
@@ -509,10 +498,6 @@ def _seed_technique(  # noqa: PLR0913
         name=gift_name,
         defaults={"description": description},
     )
-    style, _ = TechniqueStyle.objects.get_or_create(
-        name=style_name,
-        defaults={"description": f"A magical style for {style_name.lower()} techniques."},
-    )
     effect_type, _ = EffectType.objects.get_or_create(
         name=effect_type_name,
         defaults={
@@ -527,7 +512,6 @@ def _seed_technique(  # noqa: PLR0913
         gift=gift,
         defaults={
             "description": technique_description,
-            "style": style,
             "effect_type": effect_type,
             "action_category": ActionCategory.PHYSICAL,
             "intensity": 4,
@@ -630,7 +614,6 @@ def ensure_force_field_content() -> None:
     _seed_technique(
         FORCE_FIELD_TECHNIQUE_NAME,
         gift_name=_WARDING_GIFT,
-        style_name=_WARDING_STANCE_STYLE,
         effect_type_name=_FORCE_FIELD_EFFECT_TYPE,
         description=_BARRIER_DESCRIPTION,
         technique_description=(
@@ -646,7 +629,6 @@ def ensure_force_field_content() -> None:
     _seed_technique(
         FORCE_FIELD_ALLY_TECHNIQUE_NAME,
         gift_name=_WARDING_GIFT,
-        style_name=_WARDING_STANCE_STYLE,
         effect_type_name=_FORCE_FIELD_EFFECT_TYPE,
         description=_BARRIER_DESCRIPTION,
         technique_description=(
@@ -661,7 +643,6 @@ def ensure_force_field_content() -> None:
     _seed_technique(
         FORCE_FIELD_PARTY_TECHNIQUE_NAME,
         gift_name=_WARDING_GIFT,
-        style_name=_WARDING_STANCE_STYLE,
         effect_type_name=_FORCE_FIELD_EFFECT_TYPE,
         description=_BARRIER_DESCRIPTION,
         technique_description=(
@@ -731,7 +712,6 @@ def ensure_reflect_content() -> None:
     _seed_technique(
         REFLECT_TECHNIQUE_NAME,
         gift_name=_WARDING_GIFT,
-        style_name=_WARDING_STANCE_STYLE,
         effect_type_name=_DAMAGE_REFLECTION_EFFECT_TYPE,
         description=_BARRIER_DESCRIPTION,
         technique_description=(
@@ -747,7 +727,6 @@ def ensure_reflect_content() -> None:
     _seed_technique(
         REFLECT_ALLY_TECHNIQUE_NAME,
         gift_name=_WARDING_GIFT,
-        style_name=_WARDING_STANCE_STYLE,
         effect_type_name=_DAMAGE_REFLECTION_EFFECT_TYPE,
         description=_BARRIER_DESCRIPTION,
         technique_description=(
@@ -762,7 +741,6 @@ def ensure_reflect_content() -> None:
     _seed_technique(
         REFLECT_PARTY_TECHNIQUE_NAME,
         gift_name=_WARDING_GIFT,
-        style_name=_WARDING_STANCE_STYLE,
         effect_type_name=_DAMAGE_REFLECTION_EFFECT_TYPE,
         description=_BARRIER_DESCRIPTION,
         technique_description=(
@@ -831,7 +809,6 @@ def ensure_blink_content() -> None:
     _seed_technique(
         BLINK_TECHNIQUE_NAME,
         gift_name=_EVASION_GIFT,
-        style_name=_EVASION_STANCE_STYLE,
         effect_type_name=_BLINK_DODGE_EFFECT_TYPE,
         description=_PHASE_STEP_DESCRIPTION,
         technique_description=(
@@ -847,7 +824,6 @@ def ensure_blink_content() -> None:
     _seed_technique(
         BLINK_ALLY_TECHNIQUE_NAME,
         gift_name=_EVASION_GIFT,
-        style_name=_EVASION_STANCE_STYLE,
         effect_type_name=_BLINK_DODGE_EFFECT_TYPE,
         description=_PHASE_STEP_DESCRIPTION,
         technique_description=(
@@ -862,7 +838,6 @@ def ensure_blink_content() -> None:
     _seed_technique(
         BLINK_PARTY_TECHNIQUE_NAME,
         gift_name=_EVASION_GIFT,
-        style_name=_EVASION_STANCE_STYLE,
         effect_type_name=_BLINK_DODGE_EFFECT_TYPE,
         description=_PHASE_STEP_DESCRIPTION,
         technique_description=(
@@ -1021,7 +996,6 @@ def ensure_teleport_content() -> None:
     _seed_technique(
         TELEPORT_TECHNIQUE_NAME,
         gift_name="Translocation",
-        style_name=TRANSLOCATION_STANCE_STYLE_NAME,
         effect_type_name="Teleport",
         description="Techniques that bend space to move the caster instantly.",
         technique_description=(
@@ -1090,7 +1064,6 @@ def ensure_obstacle_content() -> None:
     _seed_technique(
         OBSTACLE_TECHNIQUE_NAME,
         gift_name="Translocation",
-        style_name=TRANSLOCATION_STANCE_STYLE_NAME,
         effect_type_name="Obstacle",
         description="Techniques that reshape the battlefield with barriers and blockades.",
         technique_description=(
@@ -1129,7 +1102,6 @@ def ensure_incorporeal_content() -> None:
     _seed_technique(
         INCORPOREAL_TECHNIQUE_NAME,
         gift_name="Translocation",
-        style_name=TRANSLOCATION_STANCE_STYLE_NAME,
         effect_type_name="Incorporeal Form",
         description="Techniques that phase the caster out of the physical plane.",
         technique_description=(
@@ -1168,7 +1140,6 @@ def ensure_sink_content() -> None:
     _seed_technique(
         SINK_TECHNIQUE_NAME,
         gift_name="Translocation",
-        style_name=TRANSLOCATION_STANCE_STYLE_NAME,
         effect_type_name="Earth Sink",
         description="Techniques that merge the caster with the earth for a fleeting moment.",
         technique_description=(
@@ -1235,7 +1206,6 @@ def ensure_telekinesis_content() -> None:
     _seed_technique(
         TELEKINESIS_TECHNIQUE_NAME,
         gift_name="Translocation",
-        style_name=TRANSLOCATION_STANCE_STYLE_NAME,
         effect_type_name="Telekinesis",
         description="Techniques that move objects and enemies with invisible force.",
         technique_description=(
@@ -1382,7 +1352,6 @@ def ensure_rampart_content() -> None:
         _seed_technique(
             f"Raise Rampart ({element_name})",
             gift_name=RAMPART_GIFT_NAME,
-            style_name=RAMPART_STYLE_NAME,
             effect_type_name="Fortification",
             description="Techniques that raise living barriers on the battlefield.",
             technique_description=(

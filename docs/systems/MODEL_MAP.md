@@ -117,6 +117,7 @@
 **Pointed to by:**
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
+  - style_requirements <- magic.StyleCapabilityRequirement
   - auderemajorafaithvariantcapabilitygrant_grants <- magic.AudereMajoraFaithVariantCapabilityGrant
   - techniquevariantcapabilitygrant_grants <- magic.TechniqueVariantCapabilityGrant
   - signaturemotifbonuscapabilitygrant_grants <- magic.SignatureMotifBonusCapabilityGrant
@@ -1854,6 +1855,7 @@
 
 ### Path
 **Foreign Keys:**
+  - style -> magic.TechniqueStyle [FK] (nullable)
   - parent_paths -> classes.Path [M2M]
 **Pointed to by:**
   - skill_suggestions <- skills.PathSkillSuggestion
@@ -1874,7 +1876,6 @@
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
   - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
-  - allowed_styles <- magic.TechniqueStyle
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - gift_unlocks <- magic.GiftUnlock
   - glimpse_trigger_tags <- magic.GlimpseTag
@@ -2574,6 +2575,7 @@
 **Pointed to by:**
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
+  - style_requirements <- magic.StyleCapabilityRequirement
   - auderemajorafaithvariantcapabilitygrant_grants <- magic.AudereMajoraFaithVariantCapabilityGrant
   - techniquevariantcapabilitygrant_grants <- magic.TechniqueVariantCapabilityGrant
   - signaturemotifbonuscapabilitygrant_grants <- magic.SignatureMotifBonusCapabilityGrant
@@ -4716,11 +4718,9 @@
   - combo_slots <- combat.ComboSlot
 
 ### TechniqueStyle
-**Foreign Keys:**
-  - allowed_paths -> classes.Path [M2M]
 **Pointed to by:**
-  - techniques <- magic.Technique
-  - technique_drafts <- magic.TechniqueDraft
+  - paths <- classes.Path
+  - capability_requirements <- magic.StyleCapabilityRequirement
 
 ### Restriction
 **Foreign Keys:**
@@ -4737,7 +4737,6 @@
 **Foreign Keys:**
   - discovery_achievement -> achievements.Achievement [FK] (nullable)
   - gift -> magic.Gift [FK]
-  - style -> magic.TechniqueStyle [FK]
   - effect_type -> magic.EffectType [FK]
   - enhances_effect_type -> magic.EffectType [FK] (nullable)
   - clash_resolution_pool -> actions.ConsequencePool [FK] (nullable)
@@ -4790,6 +4789,11 @@
 ### TechniqueCapabilityRequirement
 **Foreign Keys:**
   - technique -> magic.Technique [FK]
+  - capability -> conditions.CapabilityType [FK]
+
+### StyleCapabilityRequirement
+**Foreign Keys:**
+  - style -> magic.TechniqueStyle [FK]
   - capability -> conditions.CapabilityType [FK]
 
 ### CharacterTechnique
@@ -5473,7 +5477,6 @@
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [OneToOne]
   - gift -> magic.Gift [FK] (nullable)
-  - style -> magic.TechniqueStyle [FK] (nullable)
   - effect_type -> magic.EffectType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
   - restrictions -> magic.Restriction [M2M]

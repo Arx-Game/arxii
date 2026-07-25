@@ -1,8 +1,14 @@
 """Non-teaching technique acquisition service (#1732).
 
-learn_technique is the shared commit seam: it runs the path gate,
-gift-owned check, cap check, AP/XP spend, mints CharacterTechnique,
-and announces. Called by item on-use and ritual SERVICE dispatch.
+learn_technique is the shared commit seam: it runs the gift-owned check,
+cap check, AP/XP spend, mints CharacterTechnique, and announces. Called by
+item on-use and ritual SERVICE dispatch.
+
+Gift ownership is the whole path gate (#2700). The former per-technique
+path-style gate was removed: which techniques a path can reach is authored
+on ``PathGiftGrant``/``TraditionGiftGrant`` at technique granularity, and
+style now lives on the caster (``classes.Path.style``), where it gates
+*casting* rather than *learning*.
 """
 
 from __future__ import annotations
@@ -17,10 +23,8 @@ from world.action_points.models import ActionPointPool
 from world.magic.exceptions import (
     GiftNotOwned,
     TechniqueCapExceeded,
-    TechniqueStyleForbidden,
 )
 from world.magic.services.gift_acquisition import (
-    can_learn_technique,
     count_techniques_for_gift,
     get_technique_cap_for_gift,
 )
@@ -68,9 +72,8 @@ def learn_technique(  # noqa: PLR0913
 ) -> CharacterTechnique:
     """Learn a technique from an owned gift (non-teaching path).
 
-    Runs: gift-owned check -> path gate -> cap check -> AP/XP spend ->
-    mint -> announce. Never implicitly acquires the gift — that is the
-    teaching path's job.
+    Runs: gift-owned check -> cap check -> AP/XP spend -> mint -> announce.
+    Never implicitly acquires the gift — that is the teaching path's job.
 
     Args:
         learner: The character learning the technique.
@@ -87,7 +90,6 @@ def learn_technique(  # noqa: PLR0913
 
     Raises:
         GiftNotOwned: Learner doesn't own the technique's gift.
-        TechniqueStyleForbidden: Learner's path doesn't permit the style.
         TechniqueCapExceeded: At the cap for this gift at current thread level.
         ValueError: Learner already knows this technique.
     """
@@ -96,10 +98,6 @@ def learn_technique(  # noqa: PLR0913
     # 1. Gift-owned precondition.
     if not CharacterGift.objects.filter(character=learner, gift=technique.gift).exists():
         raise GiftNotOwned
-
-    # 2. Path-style gate.
-    if not can_learn_technique(learner, technique):
-        raise TechniqueStyleForbidden
 
     # 3. Duplicate check.
     if CharacterTechnique.objects.filter(character=learner, technique=technique).exists():

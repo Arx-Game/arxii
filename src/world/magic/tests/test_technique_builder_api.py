@@ -4,7 +4,7 @@ Covers:
 - POST /api/magic/techniques/price/  — dry-run pricing, no rows created
 - POST /api/magic/techniques/author/ — player path (enforced) + staff path (advisory)
 - POST /api/magic/techniques/        — base create locked to staff (non-staff → 403)
-- Referential validation (bad gift_id / bad style_id → 400)
+- Referential validation (bad gift_id → 400)
 - Player gift-ownership enforcement
 - Staff over-budget authoring returns 201 unbound with advisory breakdown
 - Server-resolved policy (non-staff cannot escalate via client-sent context)
@@ -82,7 +82,6 @@ class TechniqueBuilderAPITests(APITestCase):
             "name": "Spark",
             "description": "",
             "gift_id": self.gift.id,
-            "style_id": self.style.id,
             "effect_type_id": self.effect.id,
             "action_category": "physical",
             "tier": 1,
@@ -166,7 +165,6 @@ class TechniqueBuilderAPITests(APITestCase):
             "name": "StaffSpell",
             "description": "",
             "gift_id": self.staff_gift.id,
-            "style_id": self.style.id,
             "effect_type_id": self.effect.id,
             "action_category": "physical",
             "tier": 1,
@@ -197,7 +195,6 @@ class TechniqueBuilderAPITests(APITestCase):
         payload = {
             "name": "RawStaffTech",
             "gift": self.staff_gift.id,
-            "style": self.style.id,
             "effect_type": self.effect.id,
             "level": 1,
             "intensity": 1,
@@ -220,7 +217,6 @@ class TechniqueBuilderAPITests(APITestCase):
         payload = {
             "name": "RawStaffTechDup",
             "gift": self.staff_gift.id,
-            "style": self.style.id,
             "effect_type": self.effect.id,
             "level": 1,
             "intensity": 1,
@@ -243,11 +239,6 @@ class TechniqueBuilderAPITests(APITestCase):
     def test_bad_gift_id_returns_400(self):
         url = reverse("magic:technique-author")
         res = self.client.post(url, self._payload(gift_id=999999), format="json")
-        assert res.status_code == status.HTTP_400_BAD_REQUEST, res.data
-
-    def test_bad_style_id_returns_400(self):
-        url = reverse("magic:technique-author")
-        res = self.client.post(url, self._payload(style_id=999999), format="json")
         assert res.status_code == status.HTTP_400_BAD_REQUEST, res.data
 
     def test_player_unowned_gift_returns_400(self):
@@ -284,7 +275,6 @@ class TechniqueBuilderAPITests(APITestCase):
             "name": "StaffPriceCheck",
             "description": "",
             "gift_id": self.staff_gift.id,
-            "style_id": self.style.id,
             "effect_type_id": self.effect.id,
             "action_category": "physical",
             "tier": 1,
@@ -331,7 +321,6 @@ class TechniqueBuilderPayloadFKTests(APITestCase):
             "name": "Test",
             "description": "",
             "gift_id": self.gift.id,
-            "style_id": self.style.id,
             "effect_type_id": self.effect.id,
             "action_category": "physical",
             "tier": 1,
@@ -403,7 +392,6 @@ class ConsequencePoolChoiceAPITests(APITestCase):
             "name": "Flavored Technique",
             "description": "",
             "gift_id": self.gift.pk,
-            "style_id": self.style.pk,
             "effect_type_id": self.effect_type.pk,
             "action_category": "physical",
             "tier": 1,

@@ -15,7 +15,6 @@ from world.magic.factories import (
     CharacterGiftFactory,
     EffectTypeFactory,
     GiftFactory,
-    TechniqueStyleFactory,
 )
 from world.magic.models import (
     CharacterTechnique,
@@ -26,13 +25,12 @@ from world.magic.services.technique_builder import PlayerPolicy, get_technique_b
 from world.magic.types.technique_builder import TechniqueDesignInput
 
 
-def _design(gift_id: int, style_id: int, effect_type_id: int, **over) -> TechniqueDesignInput:
+def _design(gift_id: int, effect_type_id: int, **over) -> TechniqueDesignInput:
     """Build a minimal within-budget Tier-1 design."""
     base = {
         "name": "Test Spell",
         "description": "A test spell.",
         "gift_id": gift_id,
-        "style_id": style_id,
         "effect_type_id": effect_type_id,
         "action_category": "physical",
         "tier": 1,
@@ -52,7 +50,6 @@ class AuthorTechniqueActionSuccessTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
         cls.gift = GiftFactory()
-        cls.style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
         CharacterGiftFactory(character=cls.sheet, gift=cls.gift)
         # Ensure Tier-1 budget exists with a permissive cap.
@@ -71,12 +68,12 @@ class AuthorTechniqueActionSuccessTests(TestCase):
     # ------------------------------------------------------------------
 
     def test_success_returns_true(self) -> None:
-        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk)
+        design = _design(self.gift.pk, self.effect_type.pk)
         result = AuthorTechniqueAction().run(actor=self._actor(), design=design)
         self.assertTrue(result.success, result.message)
 
     def test_success_carries_technique_in_data(self) -> None:
-        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk, name="Ember")
+        design = _design(self.gift.pk, self.effect_type.pk, name="Ember")
         result = AuthorTechniqueAction().run(actor=self._actor(), design=design)
         self.assertTrue(result.success, result.message)
         technique = result.data.get("technique")
@@ -84,26 +81,26 @@ class AuthorTechniqueActionSuccessTests(TestCase):
         self.assertIsInstance(technique, Technique)
 
     def test_success_carries_breakdown_in_data(self) -> None:
-        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk)
+        design = _design(self.gift.pk, self.effect_type.pk)
         result = AuthorTechniqueAction().run(actor=self._actor(), design=design)
         self.assertTrue(result.success, result.message)
         self.assertIn("breakdown", result.data)
 
     def test_success_message_includes_technique_name(self) -> None:
-        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk, name="Inferno Surge")
+        design = _design(self.gift.pk, self.effect_type.pk, name="Inferno Surge")
         result = AuthorTechniqueAction().run(actor=self._actor(), design=design)
         self.assertTrue(result.success, result.message)
         self.assertIn("Inferno Surge", result.message)
 
     def test_technique_row_created(self) -> None:
-        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk)
+        design = _design(self.gift.pk, self.effect_type.pk)
         result = AuthorTechniqueAction().run(actor=self._actor(), design=design)
         self.assertTrue(result.success, result.message)
         tech = result.data["technique"]
         self.assertTrue(Technique.objects.filter(pk=tech.pk).exists())
 
     def test_character_technique_row_created(self) -> None:
-        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk)
+        design = _design(self.gift.pk, self.effect_type.pk)
         result = AuthorTechniqueAction().run(actor=self._actor(), design=design)
         self.assertTrue(result.success, result.message)
         tech = result.data["technique"]
@@ -122,7 +119,7 @@ class AuthorTechniqueActionSuccessTests(TestCase):
         TechniqueTierBudget.objects.update_or_create(
             tier=1, defaults={"power_budget": 1, "representative_level": 1, "label": "Tier 1"}
         )
-        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk, intensity=10, control=10)
+        design = _design(self.gift.pk, self.effect_type.pk, intensity=10, control=10)
         result = AuthorTechniqueAction().run(actor=self._actor(), design=design)
         # Restore before assertion so teardown is clean.
         TechniqueTierBudget.objects.update_or_create(
@@ -134,7 +131,7 @@ class AuthorTechniqueActionSuccessTests(TestCase):
         TechniqueTierBudget.objects.update_or_create(
             tier=1, defaults={"power_budget": 1, "representative_level": 1, "label": "Tier 1"}
         )
-        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk, intensity=10, control=10)
+        design = _design(self.gift.pk, self.effect_type.pk, intensity=10, control=10)
         before = Technique.objects.count()
         result = AuthorTechniqueAction().run(actor=self._actor(), design=design)
         TechniqueTierBudget.objects.update_or_create(
@@ -149,14 +146,14 @@ class AuthorTechniqueActionSuccessTests(TestCase):
 
     def test_gift_not_owned_returns_false(self) -> None:
         other_gift = GiftFactory()
-        design = _design(other_gift.pk, self.style.pk, self.effect_type.pk)
+        design = _design(other_gift.pk, self.effect_type.pk)
         result = AuthorTechniqueAction().run(actor=self._actor(), design=design)
         self.assertFalse(result.success)
         self.assertTrue(result.message)
 
     def test_gift_not_owned_creates_no_rows(self) -> None:
         other_gift = GiftFactory()
-        design = _design(other_gift.pk, self.style.pk, self.effect_type.pk)
+        design = _design(other_gift.pk, self.effect_type.pk)
         before = Technique.objects.count()
         AuthorTechniqueAction().run(actor=self._actor(), design=design)
         self.assertEqual(Technique.objects.count(), before)
@@ -169,7 +166,6 @@ class AuthorTechniqueActionStaffTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
         cls.gift = GiftFactory()
-        cls.style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
         # Deliberately do NOT add a CharacterGift — staff bypasses ownership.
         TechniqueTierBudget.objects.get_or_create(
@@ -182,12 +178,12 @@ class AuthorTechniqueActionStaffTests(TestCase):
         return self.sheet.character
 
     def test_staff_author_succeeds_without_gift_ownership(self) -> None:
-        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk)
+        design = _design(self.gift.pk, self.effect_type.pk)
         result = AuthorTechniqueAction().run(actor=self._actor(), design=design, as_staff=True)
         self.assertTrue(result.success, result.message)
 
     def test_staff_author_creates_technique_no_character_technique(self) -> None:
-        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk)
+        design = _design(self.gift.pk, self.effect_type.pk)
         result = AuthorTechniqueAction().run(actor=self._actor(), design=design, as_staff=True)
         self.assertTrue(result.success, result.message)
         tech = result.data["technique"]
@@ -208,7 +204,6 @@ class AuthorTechniqueActionNotPermittedTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
         cls.gift = GiftFactory()
-        cls.style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
         CharacterGiftFactory(character=cls.sheet, gift=cls.gift)
         TechniqueTierBudget.objects.get_or_create(
@@ -222,7 +217,7 @@ class AuthorTechniqueActionNotPermittedTests(TestCase):
 
     def test_not_permitted_carries_error_discriminator(self) -> None:
         """When the tier is disallowed, result.data["error"] == "not_permitted"."""
-        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk, tier=1)
+        design = _design(self.gift.pk, self.effect_type.pk, tier=1)
         # Patch allowed_tiers to disallow all tiers so TechniqueAuthoringNotPermitted fires.
         with patch.object(PlayerPolicy, "allowed_tiers", return_value=set()):
             result = AuthorTechniqueAction().run(actor=self._actor(), design=design)
@@ -232,7 +227,7 @@ class AuthorTechniqueActionNotPermittedTests(TestCase):
 
     def test_not_permitted_creates_no_rows(self) -> None:
         """TechniqueAuthoringNotPermitted must not create any Technique rows."""
-        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk, tier=1)
+        design = _design(self.gift.pk, self.effect_type.pk, tier=1)
         before = Technique.objects.count()
         with patch.object(PlayerPolicy, "allowed_tiers", return_value=set()):
             AuthorTechniqueAction().run(actor=self._actor(), design=design)

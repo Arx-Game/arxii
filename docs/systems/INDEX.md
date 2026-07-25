@@ -4402,7 +4402,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `world.covenants.perks.constants` — the `TARGET_DISTRACTED`/`TARGET_SWAYED_BY_ALLY`
     provenance mapping run in reverse; a situation absent from it demands nothing).
     `SphinxVerdict.shopping_list` — up to 3 learnable techniques per uncovered function
-    (`can_learn_technique` or tradition signature-pool membership). `audit_vow_coverage()
+    (gift-ownership — `learn_technique`'s own gate; #2700/ADR-0164). `audit_vow_coverage()
     -> list[SphinxCoverageRow]` — the staff instrument (built first per the spec): every
     active anchor role × every active Tradition, specialty-demand-only coverage
     (`"full"`/`"partial"`/`"none"`), rendered at the staff-only `_sphinx/` admin page

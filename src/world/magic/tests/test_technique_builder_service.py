@@ -8,7 +8,6 @@ from world.magic.factories import (
     EffectTypeFactory,
     GiftFactory,
     RestrictionFactory,
-    TechniqueStyleFactory,
 )
 from world.magic.models import (
     CharacterTechnique,
@@ -43,7 +42,6 @@ def _design(**over):
         "name": "X",
         "description": "",
         "gift_id": 1,
-        "style_id": 1,
         "effect_type_id": 1,
         "action_category": "physical",
         "tier": 1,
@@ -79,7 +77,6 @@ class CreateTechniqueHelperTests(TestCase):
             creator=sheet,
             name="Spark",
             gift=gift,
-            style=TechniqueStyleFactory(),
             effect_type=EffectTypeFactory(),
             intensity=3,
             control=2,
@@ -98,13 +95,11 @@ class CreateTechniqueHelperTests(TestCase):
         instead of hitting the unique_technique_name_per_gift IntegrityError (#2486)."""
         sheet = CharacterSheetFactory()
         gift = GiftFactory(creator=sheet)
-        style = TechniqueStyleFactory()
         effect_type = EffectTypeFactory()
         create_technique(
             creator=sheet,
             name="Spark",
             gift=gift,
-            style=style,
             effect_type=effect_type,
             intensity=3,
             control=2,
@@ -119,7 +114,6 @@ class CreateTechniqueHelperTests(TestCase):
                 creator=sheet,
                 name="Spark",
                 gift=gift,
-                style=style,
                 effect_type=effect_type,
                 intensity=3,
                 control=2,
@@ -185,7 +179,6 @@ class BuildTechniqueTests(TestCase):
         gift = GiftFactory(creator=sheet)
         d = _design(
             gift_id=gift.id,
-            style_id=TechniqueStyleFactory().id,
             effect_type_id=EffectTypeFactory().id,
             tier=1,
             level=1,
@@ -205,7 +198,6 @@ class BuildTechniqueTests(TestCase):
         cond = ConditionTemplateFactory(name="DispelBuildTarget")
         d = _design(
             gift_id=gift.id,
-            style_id=TechniqueStyleFactory().id,
             effect_type_id=EffectTypeFactory().id,
             tier=1,
             level=1,
@@ -233,7 +225,6 @@ class WrapperTests(TestCase):
         CharacterGiftFactory(character=sheet, gift=gift)
         d = _design(
             gift_id=gift.id,
-            style_id=TechniqueStyleFactory().id,
             effect_type_id=EffectTypeFactory().id,
             intensity=3,
             control=2,
@@ -247,7 +238,6 @@ class WrapperTests(TestCase):
         gift = GiftFactory(creator=sheet)
         d = _design(
             gift_id=gift.id,
-            style_id=TechniqueStyleFactory().id,
             effect_type_id=EffectTypeFactory().id,
             intensity=100,
             control=100,
@@ -262,7 +252,6 @@ class WrapperTests(TestCase):
         gift = GiftFactory(creator=sheet)
         d = _design(
             gift_id=gift.id,
-            style_id=TechniqueStyleFactory().id,
             effect_type_id=EffectTypeFactory().id,
             intensity=100,
             control=100,
@@ -439,7 +428,6 @@ class CreateTechniqueDefaultActionTemplateTests(TestCase):
             "creator": sheet,
             "name": "Test Technique",
             "gift": GiftFactory(creator=sheet),
-            "style": TechniqueStyleFactory(),
             "effect_type": EffectTypeFactory(),
             "intensity": 1,
             "control": 1,
@@ -632,7 +620,6 @@ class BuildTechniqueConsequencePoolTests(TestCase):
             "name": "Test Technique",
             "description": "",
             "gift_id": gift.pk,
-            "style_id": TechniqueStyleFactory().pk,
             "effect_type_id": EffectTypeFactory().pk,
             "action_category": "physical",
             "tier": 1,

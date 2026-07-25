@@ -17,6 +17,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.factories import CovenantRoleFactory, CovenantRoleTechniqueSpecialtyFactory
 from world.magic.constants import TechniqueFunction
 from world.magic.factories import (
+    CharacterGiftFactory,
     CharacterTechniqueFactory,
     TechniqueFactory,
     TechniqueFunctionTagFactory,
@@ -94,6 +95,10 @@ class SphinxVerdictRenderTests(TestCase):
         )
         learnable = TechniqueFactory(name="Ward of Black Quartz")
         TechniqueFunctionTagFactory(technique=learnable, function=TechniqueFunction.BARRIER)
+        # "Learnable" means the sheet owns the technique's gift (#2700) — that is
+        # learn_technique's own first gate, so the shopping list only offers what the
+        # character could actually go and learn.
+        CharacterGiftFactory(character=self.sheet, gift=learnable.gift)
 
         msgs = _run(CmdSphinx, self.char, "Unready Vow")
         combined = "\n".join(msgs)

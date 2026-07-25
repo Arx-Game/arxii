@@ -434,7 +434,6 @@ export interface TechniqueDesignRequest {
   name: string;
   description: string;
   gift_id: number;
-  style_id: number;
   effect_type_id: number;
   action_category: string;
   tier: number;

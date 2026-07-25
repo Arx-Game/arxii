@@ -28,7 +28,6 @@ from world.magic.factories import (
     EffectTypeFactory,
     GiftFactory,
     RestrictionFactory,
-    TechniqueStyleFactory,
 )
 from world.magic.models import (
     TechniqueDraft,
@@ -69,7 +68,6 @@ def _minimal_design(**override) -> TechniqueDesignInput:
         "name": "Test",
         "description": "",
         "gift_id": 1,
-        "style_id": 1,
         "effect_type_id": 1,
         "action_category": "physical",
         "tier": 1,
@@ -134,7 +132,6 @@ class SetDraftFieldsTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
         cls.gift = GiftFactory(creator=cls.sheet)
-        cls.style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
 
     def test_set_scalar_fields_persists(self) -> None:
@@ -148,10 +145,9 @@ class SetDraftFieldsTests(TestCase):
 
     def test_set_fk_fields_persists(self) -> None:
         draft = start_technique_draft(self.sheet, name="Base")
-        set_draft_fields(draft, gift=self.gift, style=self.style, effect_type=self.effect_type)
+        set_draft_fields(draft, gift=self.gift, effect_type=self.effect_type)
         draft.refresh_from_db()
         assert draft.gift_id == self.gift.pk
-        assert draft.style_id == self.style.pk
         assert draft.effect_type_id == self.effect_type.pk
 
 
@@ -235,7 +231,6 @@ class DraftToDesignTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
         cls.gift = GiftFactory(creator=cls.sheet)
-        cls.style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
 
     def _make_complete_draft(self) -> TechniqueDraft:
@@ -244,7 +239,6 @@ class DraftToDesignTests(TestCase):
             draft,
             description="A bolt of fire.",
             gift=self.gift,
-            style=self.style,
             effect_type=self.effect_type,
             action_category="physical",
             tier=1,
@@ -264,7 +258,6 @@ class DraftToDesignTests(TestCase):
         assert design.name == "Fire Bolt"
         assert design.description == "A bolt of fire."
         assert design.gift_id == self.gift.pk
-        assert design.style_id == self.style.pk
         assert design.effect_type_id == self.effect_type.pk
         assert design.tier == 1
         assert design.intensity == 3
@@ -319,7 +312,6 @@ class DraftToDesignTests(TestCase):
         exc = ctx.exception
         assert "name" in exc.missing_fields
         assert "gift" in exc.missing_fields
-        assert "style" in exc.missing_fields
         assert "effect_type" in exc.missing_fields
         assert "action_category" in exc.missing_fields
         assert "tier" in exc.missing_fields
@@ -348,7 +340,6 @@ class DraftToDesignPayloadTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
         cls.gift = GiftFactory(creator=cls.sheet)
-        cls.style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
         cls.restriction = RestrictionFactory()
         cls.cap = CapabilityTypeFactory()
@@ -361,7 +352,6 @@ class DraftToDesignPayloadTests(TestCase):
             draft,
             description="Test payload.",
             gift=self.gift,
-            style=self.style,
             effect_type=self.effect_type,
             action_category="physical",
             tier=1,
