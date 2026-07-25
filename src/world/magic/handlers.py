@@ -8,6 +8,7 @@ call ``.invalidate()`` after mutation.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.db.models import Prefetch
@@ -25,6 +26,8 @@ if TYPE_CHECKING:
     from world.conditions.models import DamageType
     from world.magic.models import Facet, Resonance
     from world.magic.types.pull import PullActionContext
+
+logger = logging.getLogger(__name__)
 
 
 class CharacterThreadHandler:
@@ -408,8 +411,11 @@ class CharacterThreadHandler:
         ``resolve_pull_effects`` applies on top of the level multiplier (it would require
         a per-thread equipment query, defeating the point of this cache) — a tier-0
         INTENSITY_BUMP row authored against a FACET thread would under-scale here relative
-        to an active pull of the same thread. No such content exists today; flagged for
-        whoever authors the first one.
+        to an active pull of the same thread. No such content exists today.
+        ``_non_gift_tier0_intensity_bumps`` guards against silently under-scaling one:
+        a FACET-kind row is skipped (with a ``logger.warning``) rather than folded into
+        the batch, so the day one is authored this surfaces loudly instead of quietly
+        disagreeing with an active pull of the same thread.
         """
         threads = self._all
         if not threads:
@@ -425,7 +431,17 @@ class CharacterThreadHandler:
 
     @staticmethod
     def _non_gift_tier0_intensity_bumps(non_gift_threads: list[Thread]) -> dict[int, int]:
-        """Tier-0 INTENSITY_BUMP totals for non-GIFT threads (single batched query)."""
+        """Tier-0 INTENSITY_BUMP totals for non-GIFT threads (single batched query).
+
+        FACET-kind rows are skipped loudly (``logger.warning``) rather than folded into
+        the generic batch: ``resolve_pull_effects`` scales a FACET pull by the worn-item
+        quality-tier aggregate (``resonance.py`` ~lines 749-776) on top of the level
+        multiplier this batch applies; replicating that here would need a per-thread
+        equipment query, defeating the point of this cache (see the docstring on
+        ``_tier0_intensity_bumps``). Silently computing an under-scaled value would let a
+        passive contribution and a paid pull of the same thread disagree with no error —
+        this makes that divergence impossible to miss instead.
+        """
         if not non_gift_threads:
             return {}
 
@@ -447,6 +463,17 @@ class CharacterThreadHandler:
 
         bumps: dict[int, int] = {}
         for row in rows:
+            if row.target_kind == TargetKind.FACET:
+                logger.warning(
+                    "ThreadPullEffect %s is a FACET-kind tier-0 INTENSITY_BUMP row. "
+                    "CharacterThreadHandler.contextual_thread_power does not replicate "
+                    "resolve_pull_effects' worn-item quality-tier scaling for FACET "
+                    "threads (world/magic/services/resonance.py, FACET branch of "
+                    "resolve_pull_effects), so this row is skipped here rather than "
+                    "silently under-scaled (#2708).",
+                    row.pk,
+                )
+                continue
             for t in by_key.get((row.target_kind, row.resonance_id), []):
                 if row.min_thread_level > t.level:
                     continue
@@ -501,7 +528,36 @@ class CharacterThreadHandler:
                 bumps[t.pk] = total
         return bumps
 
-    def contextual_thread_power(self, ctx: PullActionContext) -> int:
+    @cached_property
+    def _involved_gift_ids_cache(self) -> dict[tuple[int, ...], frozenset[int]]:
+        """Memoizes ``resolve_involved_gift_ids`` per distinct ``involved_techniques`` (#2708).
+
+        ``contextual_thread_power`` is swept once per technique by the capability oracle
+        (Task 5), each call carrying a different ``ctx.involved_techniques`` singleton — so
+        keying only on "have we resolved gift ids at all this request" (the pre-fix
+        behaviour) still re-issued a ``Technique`` query on *every* call for any character
+        who owns a GIFT thread. This dict caps that at one query per distinct
+        ``involved_techniques`` value for the handler's lifetime (repeat calls with the
+        same context: zero queries). It does NOT collapse an N-distinct-context sweep to
+        one query on its own — see ``contextual_thread_power``'s ``involved_gift_ids=``
+        parameter for the shape that does. Cleared by ``invalidate()``.
+        """
+        return {}
+
+    def _resolve_involved_gift_ids_cached(
+        self, involved_techniques: tuple[int, ...]
+    ) -> frozenset[int]:
+        """Return cached gift ids for ``involved_techniques``, resolving+caching on miss."""
+        cache = self._involved_gift_ids_cache
+        cached = cache.get(involved_techniques)
+        if cached is None:
+            cached = resolve_involved_gift_ids(involved_techniques)
+            cache[involved_techniques] = cached
+        return cached
+
+    def contextual_thread_power(
+        self, ctx: PullActionContext, *, involved_gift_ids: frozenset[int] | None = None
+    ) -> int:
         """Tier-0 INTENSITY_BUMP from threads ambiently active for ``ctx`` (#2708).
 
         The contextual sibling of ``context_free_power``: sums the batched, level-scaled
@@ -512,22 +568,37 @@ class CharacterThreadHandler:
         climb a wall.
 
         Pure in-memory over the already-cached ``self._all`` and the batched bump map — no
-        queries after the first call, so a sweep across many techniques (each its own
-        ``ctx``) stays constant-query. ``resolve_involved_gift_ids`` only queries when the
-        character owns a GIFT thread AND ``ctx.involved_techniques`` is non-empty — a
-        character with no GIFT thread stays query-free regardless of ``ctx`` (the result
-        would be unused: only the GIFT arm of ``_anchor_ambiently_active`` reads it). The
-        short-circuit on an empty bump map additionally skips the (possibly expensive —
-        equipment/location) anchor checks entirely when the character has no tier-0
-        INTENSITY_BUMP content at all.
+        queries after the first call, EXCEPT for resolving ``ctx.involved_techniques``'s
+        gift ids, which needs a real ``Technique`` query and is only skippable when the
+        character owns no GIFT thread carrying tier-0 bump content (checked against
+        ``bumps``, not merely "owns any GIFT thread" — a GIFT thread with no bump content
+        can never change the answer, so the query is skipped even then).
+
+        Two ways this stays cheap under repeated/swept calls, in order of preference:
+
+        - **Batch callers that sweep many techniques** (Task 5's capability oracle: one
+          call per technique, each with its own singleton ``involved_techniques``) should
+          resolve gift ids for the WHOLE technique set ONCE via
+          ``resolve_involved_gift_ids`` and pass the result as ``involved_gift_ids=`` on
+          every call — this is what keeps an N-technique sweep at one query total instead
+          of N. When supplied, no cache lookup or query happens here at all.
+        - **Callers that don't precompute** fall back to ``_involved_gift_ids_cache``,
+          which memoizes per distinct ``involved_techniques`` tuple — free for repeated
+          calls with an unchanged context, but still one query per distinct tuple (a
+          sweep with a genuinely distinct singleton per technique is NOT collapsed by this
+          path alone; use ``involved_gift_ids=`` for that case).
         """
         bumps = self._tier0_intensity_bumps
         if not bumps:
             return 0
-        has_gift_thread = any(t.target_kind == TargetKind.GIFT for t in self._all)
-        involved_gift_ids = (
-            resolve_involved_gift_ids(ctx.involved_techniques) if has_gift_thread else frozenset()
-        )
+        if involved_gift_ids is None:
+            has_active_gift_bump = any(
+                t.target_kind == TargetKind.GIFT and t.pk in bumps for t in self._all
+            )
+            if has_active_gift_bump and ctx.involved_techniques:
+                involved_gift_ids = self._resolve_involved_gift_ids_cached(ctx.involved_techniques)
+            else:
+                involved_gift_ids = frozenset()
         total = 0
         for thread in self._all:
             bump = bumps.get(thread.pk)
@@ -617,6 +688,7 @@ class CharacterThreadHandler:
         self.__dict__.pop("_crossing_choices", None)
         self.__dict__.pop("context_free_power", None)
         self.__dict__.pop("_tier0_intensity_bumps", None)
+        self.__dict__.pop("_involved_gift_ids_cache", None)
         # Clear the pull-side cached_property only if the combat_pulls handler is
         # already instantiated (avoids triggering an import cycle on cold access).
         combat_pulls_handler = self.character.__dict__.get("combat_pulls")
