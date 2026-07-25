@@ -890,7 +890,12 @@ class SeedCanonicalAffinitiesTests(TestCase):
 
 
 class SeedEndureHallowedGroundCheckTests(TestCase):
+    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_seeds_check_type(self):
+        """checks.CheckCategory/CheckType are content-repo-owned (#2698);
+        _seed_endure_hallowed_ground_check()'s Magic CheckCategory dependency
+        only invents under SEED_SAMPLE_CONTENT — this test asserts on the real
+        CheckType, so it opts in."""
         from integration_tests.game_content.magic import _seed_endure_hallowed_ground_check
         from world.checks.models import CheckType
 
