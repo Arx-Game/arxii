@@ -64,7 +64,7 @@ from flows.events.payloads import (
     EncounterCompletedPayload,
 )
 from world.checks.constants import ModifierSourceKind
-from world.checks.services import collect_check_modifiers, perform_check
+from world.checks.services import collect_check_modifiers, level_opposition, perform_check
 from world.checks.types import ModifierContribution
 from world.combat.constants import (
     ABSORPTION_CAP_PER_MOMENT,
@@ -462,9 +462,26 @@ class CombatTechniqueResolver:
             target=_resolve_primary_target_sheet(self.action),
             resolution=CombatRoundContext(self.participant),
         )
+        # #2707: the first time an attack has been rolled against anything but
+        # zero. The focused opponent's level (and its aspect match on this
+        # offense check) sets the difficulty via level_opposition — a stab at
+        # a level 5 adept used to roll against a difficulty of 0 no matter who
+        # she was. No focused opponent (untargeted/ally-targeted technique)
+        # stays unopposed at 0.
+        focused = self.action.focused_opponent_target
+        target_difficulty = (
+            level_opposition(
+                self.offense_check_type,
+                level=focused.level,
+                character=focused.objectdb,
+            )
+            if focused is not None
+            else 0
+        )
         return check_fn(
             character,
             self.offense_check_type,
+            target_difficulty=target_difficulty,
             extra_modifiers=extra_modifiers,
             fatigue_penalty=penalty,
             situation_ctx=situation_ctx,
@@ -888,10 +905,14 @@ class CombatTechniqueResolver:
             target=_resolve_primary_target_sheet(self.action),
             resolution=CombatRoundContext(self.participant),
         )
+        # #2707 decision 6: additive on top of the authored ward -- the level
+        # term never replaces barrier_strength. A warded high-level mage is
+        # harder to penetrate than a warded low-level one with the identical ward.
         pen_result = perform_check(
             caster,
             pen_check_type,
-            target_difficulty=ward,
+            target_difficulty=ward
+            + level_opposition(pen_check_type, level=target.level, character=target.objectdb),
             extra_modifiers=pen_breakdown.total,
             situation_ctx=situation_ctx,
         )
@@ -6258,9 +6279,18 @@ def resolve_npc_attack(
         resolution=CombatRoundContext(participant),
         attacker=opponent_action.opponent,
     )
+    # #2707: the PC defends here, so it's the ATTACKING NPC's level (and its
+    # aspect match on this defense check) that sets the difficulty -- the
+    # inverse of the offense/penetration sites, where the difficulty is
+    # sourced from the side being acted upon.
     result: CheckResult = perform_check_fn(
         character,
         check_type,
+        target_difficulty=level_opposition(
+            check_type,
+            level=opponent_action.opponent.level,
+            character=opponent_action.opponent.objectdb,
+        ),
         extra_modifiers=breakdown.total,
         situation_ctx=situation_ctx,
     )
