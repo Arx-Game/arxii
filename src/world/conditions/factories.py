@@ -207,7 +207,11 @@ class ConditionModifierEffectFactory(DjangoModelFactory):
 
 
 class ConditionCheckModifierFactory(DjangoModelFactory):
-    """Factory for ConditionCheckModifier."""
+    """Factory for ConditionCheckModifier.
+
+    By default creates an exact-FK row (check_type set, check_category null).
+    For a category-targeted row, pass check_type=None and check_category=<category>.
+    """
 
     class Meta:
         model = ConditionCheckModifier
@@ -215,6 +219,7 @@ class ConditionCheckModifierFactory(DjangoModelFactory):
     condition = factory.SubFactory(ConditionTemplateFactory)
     stage = None
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    check_category = None
     modifier_value = -10
     scales_with_severity = False
 
