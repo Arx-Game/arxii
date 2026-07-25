@@ -125,6 +125,10 @@ class OpponentStatBlock:
         barrier_strength: Ward barrier strength; None when not template-driven.
         phases: Tuple of PhaseSpecs for BOSS tier (boss_phase_count entries);
             empty for all other tiers.
+        level: Opponent power level on the character 1-30 scale (#2707),
+            resolved from the encounter's average party level. Independent
+            of tier — even the HERO_KILLER unscaled branch gets a real
+            level; only its other stats are left as sentinel values.
     """
 
     max_health: int
@@ -136,6 +140,7 @@ class OpponentStatBlock:
     barrier_strength: int | None
     phases: tuple[PhaseSpec, ...]
     actions_per_round: int = 1
+    level: int = 1
 
 
 def get_encounter_scaling_config() -> EncounterScalingConfig:
@@ -336,6 +341,8 @@ def compute_opponent_stat_block(
         probing_threshold = round(tpl.base_probing_threshold * risk_mult) if not None
         swarm_count = round(tpl.base_swarm_count * party_mult) if not None
         barrier_strength = round(tpl.barrier_strength * risk_mult) if not None
+        level = max(1, round(avg_level)) -- independent of tier/risk scaling; applies
+            even to the HERO_KILLER unscaled branch (#2707).
         body_toughness / bodies_per_attack pass through unchanged.
 
     HERO_KILLER guard: HERO_KILLER base stats are intentionally set to "unbeatable"
@@ -368,6 +375,11 @@ def compute_opponent_stat_block(
     # Fetch authored template — DoesNotExist is a programmer/seed error; propagate.
     tpl: OpponentTierTemplate = OpponentTierTemplate.objects.get(tier=tier)
 
+    # Level is a SEPARATE axis from tier-scaled stats (#2707) — even the
+    # HERO_KILLER "unbeatable sentinel stats" branch below gets a real level;
+    # only its other stats stay unscaled.
+    resolved_level = max(1, round(resolved_avg_level))
+
     # HERO_KILLER guard: return template base values unscaled (sentinel stats must not
     # be multiplied — doing so produces nonsense health/soak budgets).
     if tier == OpponentTier.HERO_KILLER:
@@ -381,6 +393,7 @@ def compute_opponent_stat_block(
             barrier_strength=tpl.barrier_strength,
             actions_per_round=tpl.base_actions_per_round,
             phases=(),
+            level=resolved_level,
         )
 
     # Risk multiplier — fall back to 1.0 if the authored row is missing.
@@ -408,4 +421,5 @@ def compute_opponent_stat_block(
         barrier_strength=barrier_strength,
         actions_per_round=tpl.base_actions_per_round,
         phases=_build_boss_phases(tier, tpl.boss_phase_count, soak_value, probing_threshold),
+        level=resolved_level,
     )

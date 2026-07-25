@@ -2518,6 +2518,7 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     existing_objectdb: ObjectDB | None = None,
     acting_account: AccountDB | None = None,
     position: Position | None = None,
+    level: int | None = None,
 ) -> CombatOpponent:
     """Create a CombatOpponent. Three sources for the ObjectDB:
 
@@ -2548,6 +2549,13 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     cross-room ``position`` raises ``PositionError`` with no saved-but-unplaced
     opponent left behind. Omitted (default) leaves the opponent unplaced,
     matching legacy behavior.
+
+    ``level`` (#2707) resolves in this order: an explicit value always wins
+    (how a GM authors a deliberately under- or over-levelled boss); otherwise,
+    in auto-scaling mode, the encounter's average party level as already
+    resolved onto ``block.level`` by ``compute_opponent_stat_block``; otherwise
+    (manual mode, no block) falls back to 1. Level and tier are independent
+    axes — a level 3 boss and a level 20 mook are both coherent.
     """
     from world.combat.scaling import compute_opponent_stat_block  # noqa: PLC0415
 
@@ -2578,6 +2586,12 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     # defaults to 1 (the legacy behavior for hand-built opponents).
     resolved_actions_per_round: int = block.actions_per_round if block is not None else 1
 
+    # Level (#2707): explicit value always wins; otherwise auto-scaling mode
+    # takes the encounter's average party level already resolved onto the
+    # block; otherwise (manual mode) falls back to 1.
+    default_level: int = block.level if block is not None else 1
+    resolved_level: int = level if level is not None else default_level
+
     objectdb, is_ephemeral = _resolve_objectdb_for_opponent(
         encounter, name, persona, existing_objectdb
     )
@@ -2599,6 +2613,7 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         encounter=encounter,
         name=name,
         tier=tier,
+        level=resolved_level,
         max_health=resolved_max_health,
         health=resolved_max_health,
         threat_pool=threat_pool,

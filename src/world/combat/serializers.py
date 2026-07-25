@@ -105,6 +105,12 @@ class OpponentSerializer(serializers.ModelSerializer):
 
     Soak value and probing threshold are GM-only — players discover
     these through gameplay (probing attacks, combo availability).
+
+    ``level`` (#2707) is the opposite: a plain model field, deliberately
+    PUBLIC and ungated. Threat assessment is the point -- players are meant
+    to be able to look at an opponent and gauge whether they're punching up
+    or down, so unlike soak_value/probing_threshold this is not wrapped in a
+    SerializerMethodField behind ``_is_gm_or_staff``.
     """
 
     soak_value = serializers.SerializerMethodField()
@@ -133,6 +139,7 @@ class OpponentSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "tier",
+            "level",
             "health",
             "max_health",
             "soak_value",
@@ -1371,6 +1378,7 @@ class AddOpponentSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=200)
     tier = serializers.ChoiceField(choices=OpponentTier.choices)
     max_health = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    level = serializers.IntegerField(min_value=1, max_value=30, required=False, allow_null=True)
     threat_pool_id = serializers.IntegerField()
     description = serializers.CharField(required=False, default="")
     soak_value = serializers.IntegerField(required=False, default=0)
