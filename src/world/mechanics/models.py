@@ -168,12 +168,13 @@ class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
     # See TECH_DEBT.md §"Future Target FKs" for full tracking list.
     objects = ModifierTargetManager()
 
-    # Class-level cache mapping target_trait_id -> ModifierTarget, mirroring
-    # Trait._name_to_trait_map. The stat-modifier hot path (TraitHandler.
-    # _get_stat_modifier) resolves a ModifierTarget by its target_trait FK
-    # per stat read; that lookup is keyed by a non-PK field, so it misses the
-    # SharedMemoryModel identity map and re-queries each call. This cache
-    # serves it from memory after the first build (#552).
+    # Class-level cache mapping target_trait_id -> ModifierTarget, the same
+    # whole-table-once idea Trait's natural-key lookup_table uses (#2687). The
+    # stat-modifier hot path (TraitHandler._get_stat_modifier) resolves a
+    # ModifierTarget by its target_trait FK per stat read; that lookup is keyed
+    # by a non-PK field, so it misses the SharedMemoryModel identity map and
+    # re-queries each call. This cache serves it from memory after the first
+    # build (#552).
     _trait_cache_built = False
     _trait_to_target_map: dict[int, "ModifierTarget"] = {}
 
