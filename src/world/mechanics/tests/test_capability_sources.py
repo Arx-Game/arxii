@@ -183,3 +183,75 @@ class MultipleSameCapabilityTests(TestCase):
         source_types = {s.source_type for s in multi_sources}
         assert CapabilitySourceType.TECHNIQUE in source_types
         assert CapabilitySourceType.TRAIT in source_types
+
+
+class TechniqueSourceQueryCountTests(TestCase):
+    """Query-count regression for the availability oracle's technique-power wiring
+    (#2708). Mirrors ``world.conditions.tests.test_technique_capability_values_power``
+    for the sibling oracle — both must resolve the technique->gift mapping ONCE for
+    the whole sweep, never per technique (the N+1 Task 4's review caught twice)."""
+
+    def _character_with_technique_sweep(self, technique_count: int):
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ThreadFactory, ThreadPullEffectFactory
+        from world.magic.types.pull import PullActionContext
+
+        sheet = CharacterSheetFactory()
+        gift = GiftFactory()
+        capability = CapabilityTypeFactory(name=f"avail_sweep_cap_{technique_count}")
+        thread = ThreadFactory(
+            owner=sheet,
+            target_kind=TargetKind.GIFT,
+            target_gift=gift,
+            target_trait=None,
+            level=20,
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.GIFT,
+            resonance=thread.resonance,
+            target_gift=gift,
+            tier=0,
+            as_intensity_bump=True,
+            intensity_bump_amount=3,
+        )
+        for _ in range(technique_count):
+            technique = TechniqueFactory(gift=gift, intensity=1)
+            TechniqueCapabilityGrantFactory(
+                technique=technique,
+                capability=capability,
+                base_value=1,
+                intensity_multiplier=Decimal(0),
+            )
+            CharacterTechnique.objects.create(character=sheet, technique=technique)
+        handler = sheet.character.threads
+        _ = handler.context_free_power
+        handler.contextual_thread_power(PullActionContext())
+        return sheet.character
+
+    def test_gift_id_mapping_does_not_scale_with_technique_count(self) -> None:
+        """Growing the sweep from 3 to 10 techniques must add exactly 7 queries — one
+        per added grant's own ``CapabilityPowerConfig`` check (Task 1, orthogonal to
+        this fix) — never an extra query per technique from a re-resolved
+        ``Technique`` gift lookup."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        small_character = self._character_with_technique_sweep(3)
+        large_character = self._character_with_technique_sweep(10)
+
+        with CaptureQueriesContext(connection) as small_ctx:
+            small_sources = get_capability_sources_for_character(small_character)
+        with CaptureQueriesContext(connection) as large_ctx:
+            large_sources = get_capability_sources_for_character(large_character)
+
+        assert small_sources
+        assert large_sources
+
+        small_queries = len(small_ctx.captured_queries)
+        large_queries = len(large_ctx.captured_queries)
+        self.assertEqual(
+            large_queries - small_queries,
+            7,
+            f"expected exactly +7 queries (10-3 grants' own config checks) growing "
+            f"from 3 to 10 techniques; got {small_queries} -> {large_queries}.",
+        )

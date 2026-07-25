@@ -656,7 +656,11 @@ class AbstractCapabilityGrant(SharedMemoryModel):
         max_digits=5,
         decimal_places=2,
         default=0,
-        help_text="Multiplied by the Technique's current intensity.",
+        help_text=(
+            "Sensitivity of this grant to the caster's power (#2708). 0 (default) is a "
+            "flat, rock-steady grant; higher values curve the value harder as power "
+            "rises. Inert (no curve at all) until a CapabilityPowerConfig row exists."
+        ),
     )
 
     class Meta:
@@ -880,14 +884,34 @@ class TechniqueCapabilityGrant(NaturalKeyMixin, AbstractCapabilityGrant):
         *,
         effective_power: int | None = None,
     ) -> int:
-        """Calculate effective Capability value.
+        """Calculate effective Capability value on the ADR-0164 ladder.
 
-        effective_power: when provided (e.g., from combat where pull bumps
-        may apply), uses that aggregate. When None (out-of-combat challenges
-        or no combat context), falls back to self.technique.intensity.
+        With a CapabilityPowerConfig row (#2708):
+
+            base_value * 2 ** (intensity_multiplier * power / power_per_doubling)
+
+        ``intensity_multiplier`` is the grant's **sensitivity** — how responsive this
+        capability is to the caster's power. 0 (the authored default) means a flat,
+        rock-steady grant; higher values curve harder. The pre-#2708 additive shape
+        (``base + multiplier * power``) is RETIRED, not merely bypassed — see the ADR.
+
+        Without a config row the curve is disabled and the additive shape is returned
+        unchanged, so this lands inert and is turned on by tuning.
+
+        ``effective_power``: when provided, used as the aggregate. When None, falls back
+        to ``self.technique.intensity`` — the oracles supply the real figure.
         """
+        from world.magic.services.capability_curve import (  # noqa: PLC0415
+            apply_capability_curve,
+            get_capability_power_config,
+        )
+
         power = effective_power if effective_power is not None else self.technique.intensity
-        return int(self.base_value + (self.intensity_multiplier * Decimal(power)))
+        if get_capability_power_config() is None:
+            return int(self.base_value + (self.intensity_multiplier * Decimal(power)))
+        return apply_capability_curve(
+            self.base_value, power=power, sensitivity=self.intensity_multiplier
+        )
 
 
 class TechniqueCapabilityRequirement(NaturalKeyMixin, SharedMemoryModel):

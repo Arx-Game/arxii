@@ -1160,9 +1160,23 @@ def get_capability_sources_for_character(
     return sources
 
 
-def _get_technique_sources(character: ObjectDB) -> list[CapabilitySource]:
-    """Get Capability sources from character's known Techniques."""
-    grants = (
+def _get_technique_sources(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM — pre-existing signature (world.mechanics
+    # is not yet in the objectdb-param lint scope); `.threads` is reached directly off
+    # the ObjectDB the same way `_passive_capability_grants` reaches it off a CharacterSheet.
+) -> list[CapabilitySource]:
+    """Get Capability sources from character's known Techniques.
+
+    #2708: each grant's value is computed against the SAME real power figure
+    ``_technique_capability_values`` (``world.conditions.services``, the agency oracle)
+    uses — ``technique.intensity + context_free_power + contextual_thread_power(...)`` —
+    so both oracles agree on a character's capability standing (spec decision 9:
+    combat's ``eff_intensity`` pull bumps are deliberately NOT threaded in here either,
+    so availability doesn't flicker based on whether combat is running). The
+    technique->gift mapping ``contextual_thread_power`` needs is resolved ONCE for
+    every technique in this sweep, never per grant, to keep the sweep constant-query.
+    """
+    grants = list(
         TechniqueCapabilityGrant.objects.filter(
             technique__character_grants__character__character=character,
         )
@@ -1187,10 +1201,37 @@ def _get_technique_sources(character: ObjectDB) -> list[CapabilitySource]:
             ),
         )
     )
+    if not grants:
+        return []
 
+    from world.magic.services.resonance import resolve_gift_ids_by_technique  # noqa: PLC0415
+    from world.magic.types.pull import PullActionContext  # noqa: PLC0415
+
+    try:
+        handler = character.threads
+    except AttributeError:
+        from world.magic.handlers import CharacterThreadHandler  # noqa: PLC0415
+
+        handler = CharacterThreadHandler(character)
+
+    gift_id_by_technique = resolve_gift_ids_by_technique(
+        tuple({grant.technique_id for grant in grants})
+    )
+
+    power_by_technique: dict[int, int] = {}
     sources: list[CapabilitySource] = []
     for grant in grants:
-        value = grant.calculate_value()
+        technique_id = grant.technique_id
+        power = power_by_technique.get(technique_id)
+        if power is None:
+            ctx = PullActionContext(involved_techniques=(technique_id,))
+            power = (
+                grant.technique.intensity
+                + handler.context_free_power
+                + handler.contextual_thread_power(ctx, gift_id_by_technique=gift_id_by_technique)
+            )
+            power_by_technique[technique_id] = power
+        value = grant.calculate_value(effective_power=power)
         if value <= 0:
             continue
 

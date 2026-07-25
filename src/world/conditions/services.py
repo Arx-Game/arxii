@@ -1607,6 +1607,18 @@ def _technique_capability_values(character_sheet: "CharacterSheet") -> dict[int,
     unrelated capability. Magic is imported locally to avoid a circular import at
     module load, mirroring ``_passive_capability_grants`` above.
 
+    #2708: each grant's value is now computed against the SAME real power figure the
+    character would cast with — ``technique.intensity + context_free_power +
+    contextual_thread_power(...)`` — rather than relying on ``calculate_value()``'s bare
+    ``technique.intensity`` fallback. Deliberately excludes combat's ``eff_intensity``
+    pull bumps (spec decision 9): a character's capability standing must not flicker
+    based on whether combat happens to be running right now. The thread handler is
+    reused via the character's memoized ``.threads`` (mirrors ``_passive_capability_grants``
+    above, including its bare-ObjectDB ``AttributeError`` fallback), and the
+    technique->gift mapping needed by ``contextual_thread_power`` is resolved ONCE for
+    every technique in this sweep — never per grant — to keep the sweep constant-query
+    (Task 4's review caught this N+1 twice; see ``resolve_gift_ids_by_technique``).
+
     Args:
         character_sheet: The character's CharacterSheet.
 
@@ -1614,15 +1626,44 @@ def _technique_capability_values(character_sheet: "CharacterSheet") -> dict[int,
         Dict mapping CapabilityType PK to the best positive technique-granted value.
     """
     from world.magic.models.techniques import TechniqueCapabilityGrant  # noqa: PLC0415
+    from world.magic.services.resonance import resolve_gift_ids_by_technique  # noqa: PLC0415
+    from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
-    grants = TechniqueCapabilityGrant.objects.filter(
-        technique__character_grants__character=character_sheet,
-        prerequisite__isnull=True,
-    ).select_related("technique")
+    grants = list(
+        TechniqueCapabilityGrant.objects.filter(
+            technique__character_grants__character=character_sheet,
+            prerequisite__isnull=True,
+        ).select_related("technique")
+    )
+    if not grants:
+        return {}
 
+    character = character_sheet.character
+    try:
+        handler = character.threads
+    except AttributeError:
+        from world.magic.handlers import CharacterThreadHandler  # noqa: PLC0415
+
+        handler = CharacterThreadHandler(character)
+
+    gift_id_by_technique = resolve_gift_ids_by_technique(
+        tuple({grant.technique_id for grant in grants})
+    )
+
+    power_by_technique: dict[int, int] = {}
     totals: dict[int, int] = {}
     for grant in grants:
-        value = grant.calculate_value()
+        technique_id = grant.technique_id
+        power = power_by_technique.get(technique_id)
+        if power is None:
+            ctx = PullActionContext(involved_techniques=(technique_id,))
+            power = (
+                grant.technique.intensity
+                + handler.context_free_power
+                + handler.contextual_thread_power(ctx, gift_id_by_technique=gift_id_by_technique)
+            )
+            power_by_technique[technique_id] = power
+        value = grant.calculate_value(effective_power=power)
         if value <= 0:
             continue
         cap_id = grant.capability_id
