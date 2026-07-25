@@ -13,11 +13,22 @@ But the same seeders also create *named* rows a player reads as world content �
 content repo indistinguishable from authored work. That is how "Commoner",
 "Noble", "Arx City" and "Luxen Port" got there.
 
-The ratified rule (TehomCD, 2026-07-25): **if it has a name, it is content.**
-Config is the mechanical spine and nothing else.
+The settled rule (TehomCD, 2026-07-25; ADR-0164) — **the registration is the
+line, not the shape of the table**:
+
+    If a model is in ``CONTENT_MODELS``, the content repo owns it and no
+    seeder may create rows in it. If it is not, the seeder owns it.
+
+An earlier draft of this guard used "if it has a name, it is content", which
+argued itself into a corner — ``CheckType`` has the name "Melee Attack" and is
+plainly mechanical. The audit that replaced it found all 70 content models the
+seeders still populated were *already authored* in the content repo, usually
+with far more rows, and that the genuine config the Big Button must provide is
+never in ``CONTENT_MODELS`` at all. Hence: one registration, two consumers
+(export and this guard), no per-model judgement calls, and a target of zero.
 
 This test is the standing guard. It seeds against a stub content root and fails
-naming any model outside :data:`SEEDER_CONFIG_MODELS` that gained rows — so a
+naming any ``CONTENT_MODELS`` entry outside the ratchet that gained rows — so a
 seeder that invents content fails CI instead of quietly polluting the corpus on
 the next export.
 

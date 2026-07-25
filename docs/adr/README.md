@@ -92,6 +92,7 @@ treat those names as hints to confirm, not gospel.
 - [0137 — CI shards balanced by measured runtime; oversized apps split via generated module labels](0137-ci-shards-balanced-by-measured-runtime-with-generated-splits.md) (extends ADR-0083's CI pipeline)
 - [0138 — Paginate list endpoints by default; opt out explicitly](0138-paginate-list-endpoints-by-default-with-explicit-opt-out.md)
 - [0142 — The Big Button loads all real content from arx2-lore; arxii seeds keep only non-lore config/lookup tables](0142-content-vs-config-boundary-in-the-dev-seed.md) (extends ADR-0140's content pipeline; #2474)
+- [0164 — CONTENT_MODELS registration *is* the seed/content boundary; seeders look content up and invent only under SEED_SAMPLE_CONTENT](0164-content-models-registration-is-the-seed-boundary.md) (sharpens ADR-0142; #2698)
 
 ### Game-design tenets
 - [0023 — PvP is structurally non-lethal](0023-pvp-is-structurally-non-lethal.md)
