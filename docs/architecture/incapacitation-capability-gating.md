@@ -76,11 +76,36 @@ Foundational capacities — `awareness`, `movement`, `limb_use`, … (extensible
 from multiple sources**, not a single innate constant:
 
 `get_effective_capability_value(character, capability) -> int` =
-`innate_baseline + CharacterModifier(target_capability) + condition_modifiers`,
-floored at 0.
+`innate_baseline + CharacterModifier(target_capability) + condition_modifiers +
+grant_floor + technique_value`, floored at 0.
+(**[BUILT & WIRED], updated 2026-07-25**: the original three-term formula this
+section described predates the #2504 one-oracle merge, which folded in a passive
+thread-grant floor and the best/MAX known-technique-grant contribution — see
+`world.conditions.services.get_effective_capability_value`. The three original
+terms are unchanged; the two additions are additive, not a rewrite of this
+section's design.)
+
+Every character's baseline now sits on **one shared ladder** (#2704, ADR-0164
+D1): 0 = blocked, 1-3 = impaired, 5 = unimpaired mortal, 8-12 = gifted, 25+ =
+greater supernatural, 100+ = mythic — deliberately uncapped above, so a high
+enough value lets a being do what is flatly impossible for a mortal. Blocking a
+foundational capability is **emergent arithmetic, not a flag** (D2): a
+`ConditionCapabilityEffect` sized to the tier it must beat — mundane (`-20`,
+stops mortal/gifted, a greater supernatural walks through), potent (`-100`,
+beats everything below mythic), absolute (`-1000`, reserved for
+mythic-defeating effects) — drives the sum toward (and the `max(0, …)` floor
+catches it at) 0, which this section's original "immobilized-but-conscious
+mage" framing already assumed without naming the magnitudes. See ADR-0164 for
+the full ladder and the check-bridge deviation-scoring decision (D3) — D3 only
+changes how `CheckTypeCapabilityModifier` (`world.checks`, #2505) reads this
+value for a check roll (deviation from `innate_baseline`, so an unimpaired
+character contributes 0 to every check it's authored onto); it does not change
+`get_effective_capability_value` itself or the `TechniqueCapabilityRequirement.
+minimum_value` gate below, which still compares against the raw floored value.
 
 - **Innate baseline** — the default every character has (primitive/default-
-  backed, per "so basic they may be enums").
+  backed, per "so basic they may be enums"); on the ladder above, 5 for a
+  standard unimpaired mortal foundational capability (ADR-0164).
 - **`CharacterModifier` on a capability-typed `ModifierTarget`** — this is how
   **distinctions** (e.g. "Crippled" → negative `movement`) and, later,
   **species** (winged → grants `flight`; aquatic → `swim`; extra limbs →
@@ -114,9 +139,10 @@ future extension; v1 is technique-level.)
 
 `technique_performable(character, technique) -> bool` = `not is_dead(character)`
 **and** every `TechniqueCapabilityRequirement` met against
-`get_effective_capability_value`. Per-technique — the immobilized-but-conscious
-mage keeps `awareness`, so consciousness-only techniques stay available while
-movement techniques drop.
+`get_effective_capability_value` (raw floored value vs. `minimum_value`, unaffected
+by the check-bridge's deviation scoring — see the D3 note above). Per-technique —
+the immobilized-but-conscious mage keeps `awareness`, so consciousness-only
+techniques stay available while movement techniques drop.
 
 ### 3. Combat uses capabilities for eligibility
 
@@ -177,7 +203,7 @@ swaps the binary/ad-hoc internals for the consequence-pool pipeline.
 | `CapabilityType`, `TechniqueCapabilityGrant` (pattern) | REUSE |
 | `CharacterModifier` + `ModifierTarget.target_capability`, `create_distinction_modifiers` | REUSE + WIRE (distinctions/species impair/enhance foundational capabilities; link exists, now read into values) |
 | `TechniqueCapabilityRequirement` (technique → capability + min_value) | NEW |
-| `get_effective_capability_value` (innate + CharacterModifier + conditions) | NEW |
+| `get_effective_capability_value` (innate + CharacterModifier + conditions + passive-grant floor + technique-grant MAX, floored at 0) | NEW |
 | foundational capability baselines (innate defaults, composable) | NEW |
 | `technique_performable` + combat eligibility refactor | NEW |
 | `CharacterVitals.life_state` (ALIVE/DEAD) replacing `status` | NEW (slim) |
