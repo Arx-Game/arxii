@@ -70,7 +70,6 @@ from world.magic.models import (
     TechniqueGrant,
     TechniqueOutcomeModifier,
     TechniqueProgress,
-    TechniqueProgressWeekly,
     TechniqueRemovedCondition,
     TechniqueStyle,
     TechniqueTeachingOffer,
@@ -1290,15 +1289,6 @@ class AudereMajoraFaithVariantAdmin(admin.ModelAdmin):
     inlines = [FaithVariantCapabilityGrantInline, FaithVariantAppliedConditionInline]
 
 
-class TechniqueProgressWeeklyInline(admin.TabularInline):
-    """Per-week cap tracker inline for TechniqueProgress."""
-
-    model = TechniqueProgressWeekly
-    extra = 0
-    readonly_fields = ["game_week", "points_contributed"]
-    can_delete = False
-
-
 @admin.register(TechniqueProgress)
 class TechniqueProgressAdmin(admin.ModelAdmin):
     """Read-only admin for technique progress meters (#2711).
@@ -1316,6 +1306,7 @@ class TechniqueProgressAdmin(admin.ModelAdmin):
         "teacher_tenure",
     ]
     list_filter = ["is_cross_path", "source"]
+    autocomplete_fields = ["character_sheet", "technique", "teacher_tenure"]
     readonly_fields = [
         "character_sheet",
         "technique",
@@ -1327,7 +1318,6 @@ class TechniqueProgressAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     ]
-    inlines = [TechniqueProgressWeeklyInline]
 
     def has_add_permission(self, request):  # noqa: ARG002
         return False
