@@ -969,6 +969,32 @@ def _case_insensitive_lookup(model, lookup: dict) -> dict:
     return result
 
 
+def _get_or_create_case_insensitive(model, lookup: dict, fields: dict) -> tuple:
+    """Match an existing row by natural key case-insensitively, or create one.
+
+    Returns ``(instance, created)``. A hand-rolled get/create instead of
+    ``update_or_create`` (#2687): Django's ``update_or_create`` can't take an
+    ``__iexact`` lookup — it drops ``LOOKUP_SEP`` keys when building the
+    create-path params, so the row would be created with that field unset.
+
+    Split out of ``_upsert_fixture_object`` (#2687 review) both to keep the
+    ``try`` scoped to ONLY the lookup — a ``model.DoesNotExist`` raised from
+    inside a custom ``save()`` override on the update path must not be
+    misclassified as "row not found" and silently retried as a create — and to
+    keep ``_upsert_fixture_object``'s own branch count (ruff PLR0912) at parity
+    with the single ``update_or_create`` call it replaces.
+    """
+    try:
+        instance = model.objects.get(**_case_insensitive_lookup(model, lookup))
+    except model.DoesNotExist:
+        return model.objects.create(**lookup, **fields), True
+
+    for field_name, value in fields.items():
+        setattr(instance, field_name, value)
+    instance.save()
+    return instance, False
+
+
 def _coerce_scalar_fields(model, fields: dict) -> None:
     """Normalize JSON-native scalar values into the types their model fields expect.
 
@@ -1071,19 +1097,10 @@ def _upsert_fixture_object(  # noqa: C901 — one branch per distinct skip reaso
         resolved_m2m = _resolve_m2m_fields(model, m2m_fields, source_path)
         _coerce_scalar_fields(model, fields)
         # Case-insensitive upsert (#2687): match an existing row regardless of
-        # casing, but write a NEW row with the fixture's own casing.
-        # update_or_create can't do this — Django drops LOOKUP_SEP keys when
-        # building create params, so an "__iexact" lookup would create a row
-        # with that field unset.
-        try:
-            instance = model.objects.get(**_case_insensitive_lookup(model, lookup))
-            for field_name, value in fields.items():
-                setattr(instance, field_name, value)
-            instance.save()
-            created = False
-        except model.DoesNotExist:
-            instance = model.objects.create(**lookup, **fields)
-            created = True
+        # casing, but write a NEW row with the fixture's own casing. See
+        # _get_or_create_case_insensitive's docstring for why this can't be a
+        # plain update_or_create call.
+        instance, created = _get_or_create_case_insensitive(model, lookup, fields)
     except UnresolvedNaturalKeyError as exc:
         # Must be caught before the broader ContentError clause below (it's a
         # subclass) — this is the ONLY failure mode ever deferred.
