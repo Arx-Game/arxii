@@ -133,6 +133,22 @@ def flush_natural_key_indexes() -> None:
     _NK_WARMED.clear()
 
 
+def is_lookup_table(model: type) -> bool:
+    """Whether *model* declares ``NaturalKeyConfig.lookup_table = True``.
+
+    Lookup-table status is a per-model judgement about that table's size and
+    access pattern — a small set used everywhere (``Trait``,
+    ``ConditionTemplate``) versus a table that must never be bulk-loaded. It is
+    opt-in and deliberately NOT the default (#2687).
+    """
+    # try/except rather than getattr(): matches the index_owner() precedent
+    # above and the noqa-avoidance precedent in core/mixins.py.
+    try:
+        return bool(model.NaturalKeyConfig.lookup_table)
+    except AttributeError:
+        return False
+
+
 class NaturalKeyConfigError(ValueError):
     """Raised when NaturalKeyConfig is missing or invalid."""
 
@@ -172,6 +188,9 @@ class NaturalKeyManager(ArxSharedMemoryManager, models.Manager["NaturalKeyMixin"
 
         key = _index_key(args)
         index = natural_key_index(self.model)
+
+        if is_lookup_table(self.model):
+            return self._get_from_lookup_table(key)
 
         cached_pk = index.get(key)
         if cached_pk is not None:
@@ -218,6 +237,79 @@ class NaturalKeyManager(ArxSharedMemoryManager, models.Manager["NaturalKeyMixin"
             raise NaturalKeyConfigError(msg)
 
         return lookup
+
+    def warm_lookup_table(self) -> None:
+        """Load the whole table once and index every row by natural key.
+
+        Only legal for FK-free natural keys: building the index calls
+        ``natural_key()`` per row, which traverses FK descriptors and would cost
+        a query per row on an FK-bearing key.
+
+        Deliberately does its own ``self.all()`` pass rather than reusing
+        ``cached_all()``: ``cached_all()`` returns ``__instance_cache__.values()``,
+        so it goes empty if the identity map is flushed while its ``_all_loaded``
+        flag survives. Storing pks keeps this index valid across an identity-map
+        flush. The pass still primes the identity map as a side effect.
+
+        Raises ``NaturalKeyConfigError`` if two rows casefold to the same key —
+        a case-variant duplicate is a content bug, and this is where it surfaces.
+        """
+        owner = index_owner(self.model)
+        if owner in _NK_WARMED:
+            return
+
+        self._assert_natural_key_is_fk_free()
+
+        index = natural_key_index(self.model)
+        for instance in self.all():
+            key = _index_key(instance.natural_key())
+            existing = index.get(key)
+            if existing is not None and existing != instance.pk:
+                msg = (
+                    f"{self.model.__name__} has two rows whose natural keys differ only "
+                    f"by case: {key!r} matches pk {existing} and pk {instance.pk}. "
+                    "Natural keys are case-insensitive — rename or merge one row."
+                )
+                raise NaturalKeyConfigError(msg)
+            index[key] = instance.pk
+            if isinstance(instance, NaturalKeyMixin):
+                instance._nk_index_key = key  # noqa: SLF001
+        _NK_WARMED.add(owner)
+
+    def _assert_natural_key_is_fk_free(self) -> None:
+        """Raise if this model's natural key contains a ForeignKey component."""
+        for field_name in self.model.NaturalKeyConfig.fields:
+            field = self.model._meta.get_field(field_name)  # noqa: SLF001
+            if isinstance(field, ForeignKey):
+                msg = (
+                    f"{self.model.__name__} cannot be a lookup_table: its natural key "
+                    f"field {field_name!r} is a ForeignKey. Warming would traverse FK "
+                    "descriptors and cost a query per row."
+                )
+                raise NaturalKeyConfigError(msg)
+
+    def _get_from_lookup_table(self, key: tuple) -> NaturalKeyMixin:
+        """Resolve *key* purely from the warmed index — never issues an iexact.
+
+        A dead pk (poisoned entry, or a row deleted since the warm) invalidates
+        the warm and re-warms exactly once, which is one extra query and cannot
+        recurse.
+        """
+        self.warm_lookup_table()
+        index = natural_key_index(self.model)
+        pk = index.get(key)
+        if pk is not None:
+            try:
+                return self.get(pk=pk)
+            except self.model.DoesNotExist:
+                _NK_WARMED.discard(index_owner(self.model))
+                index.clear()
+                self.warm_lookup_table()
+                pk = index.get(key)
+                if pk is not None:
+                    return self.get(pk=pk)
+        msg = f"{self.model.__name__} matching natural key {key!r} does not exist."
+        raise self.model.DoesNotExist(msg)
 
 
 def _text_lookup_key(field: Any, field_name: str, value: Any) -> str:
@@ -336,10 +428,19 @@ class NaturalKeyMixin:
         already has — ``.update()`` does not refresh cached instances either.
         """
         super().save(*args, **kwargs)
-        key = self._nk_index_key
-        if key is not None:
-            natural_key_index(type(self)).pop(key, None)
+        model = type(self)
+        index = natural_key_index(model)
+        old_key = self._nk_index_key
+        if old_key is not None:
+            index.pop(old_key, None)
             self._nk_index_key = None
+        if is_lookup_table(model) and index_owner(model) in _NK_WARMED:
+            # Keep a warmed table complete: newly created and renamed rows must
+            # be findable without a re-warm. FK-free by construction, so this is
+            # pure attribute reads — no query.
+            new_key = _index_key(self.natural_key())
+            index[new_key] = self.pk
+            self._nk_index_key = new_key
 
     def natural_key(self) -> tuple[Any, ...]:
         """Return natural key tuple for this object.

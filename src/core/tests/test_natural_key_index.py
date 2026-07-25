@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from core.natural_keys import (
     _NK_WARMED,
+    NaturalKeyConfigError,
     _index_key,
     flush_natural_key_indexes,
     index_owner,
+    is_lookup_table,
     natural_key_index,
 )
 from world.species.factories import SpeciesFactory
@@ -183,3 +187,112 @@ class RenameInvalidationTests(TestCase):
         species.description = "changed"
         species.save()
         assert Species.objects.get_by_natural_key("Never Looked Up") == species
+
+    def test_rename_removes_the_old_key_from_the_index_dict(self) -> None:
+        """Assert the dict itself, not just lookup behaviour — the SQLite fast
+        tier has already been shown to let a behavioural assertion pass against a
+        deliberately broken implementation."""
+        species = SpeciesFactory(name="Dict Checked Elf")
+        Species.objects.get_by_natural_key("Dict Checked Elf")
+        assert ("dict checked elf",) in natural_key_index(Species)
+        species.name = "Dict Checked Renamed"
+        species.save()
+        assert ("dict checked elf",) not in natural_key_index(Species)
+
+
+def as_lookup_table(model: type):
+    """Context manager opting *model* into lookup-table behaviour for one test.
+
+    Task 5 builds the machinery; ConditionTemplate and Trait don't opt in until
+    Tasks 6-7. Patching lets these tests exercise the warm without depending on
+    a later task, so this task ends green on its own.
+    """
+    return patch.object(model.NaturalKeyConfig, "lookup_table", True, create=True)
+
+
+class LookupTableTests(TestCase):
+    """Opted-in models load whole and resolve from memory, never via iexact."""
+
+    def test_opt_in_is_off_by_default(self) -> None:
+        assert not is_lookup_table(Species)
+
+    def test_warm_happens_once_then_lookups_are_free(self) -> None:
+        SpeciesFactory(name="Warm One")
+        SpeciesFactory(name="Warm Two")
+        with as_lookup_table(Species):
+            Species.objects.get_by_natural_key("Warm One")  # warms
+            with self.assertNumQueries(0):
+                Species.objects.get_by_natural_key("Warm One")
+                Species.objects.get_by_natural_key("warm two")
+
+    def test_miss_raises_without_falling_back_to_sql(self) -> None:
+        SpeciesFactory(name="Present Elf")
+        with as_lookup_table(Species):
+            Species.objects.get_by_natural_key("Present Elf")  # warms
+            with self.assertNumQueries(0), self.assertRaises(Species.DoesNotExist):
+                Species.objects.get_by_natural_key("Absent Elf")
+
+    def test_row_created_after_the_warm_is_findable(self) -> None:
+        SpeciesFactory(name="Before Warm")
+        with as_lookup_table(Species):
+            Species.objects.get_by_natural_key("Before Warm")  # warms
+            later = SpeciesFactory(name="After Warm")
+            assert Species.objects.get_by_natural_key("after warm") == later
+
+    def test_warm_raises_on_a_casefold_collision(self) -> None:
+        """Two rows differing only in case are a content bug — fail loudly
+        rather than letting one silently win the dict slot."""
+        SpeciesFactory(name="Duplicate Elf")
+        SpeciesFactory(name="duplicate elf")
+        with as_lookup_table(Species):
+            with self.assertRaises(NaturalKeyConfigError) as ctx:
+                Species.objects.get_by_natural_key("Duplicate Elf")
+        assert "duplicate elf" in str(ctx.exception).casefold()
+
+    def test_stale_pk_triggers_one_rewarm(self) -> None:
+        species = SpeciesFactory(name="Rewarm Me")
+        with as_lookup_table(Species):
+            Species.objects.get_by_natural_key("Rewarm Me")  # warms
+            natural_key_index(Species)[("rewarm me",)] = 999_999
+            assert Species.objects.get_by_natural_key("Rewarm Me") == species
+
+    def test_fk_bearing_natural_key_is_rejected(self) -> None:
+        """Warming calls natural_key() per row, which traverses FK descriptors —
+        a query per row. Opting such a model in must fail loudly."""
+        SpeciesStatBonus.objects.create(
+            species=SpeciesFactory(name="FK Elf"), stat="strength", value=1
+        )
+        with as_lookup_table(SpeciesStatBonus):
+            with self.assertRaises(NaturalKeyConfigError) as ctx:
+                SpeciesStatBonus.objects.get_by_natural_key("FK Elf", "strength")
+        message = str(ctx.exception)
+        assert "lookup_table" in message
+        assert "species" in message
+
+
+class MroInvariantTests(TestCase):
+    """Every NaturalKeyMixin model must reach NaturalKeyMixin.save() first."""
+
+    def test_mixin_precedes_sharedmemorymodel_in_every_model_mro(self) -> None:
+        from evennia.utils.idmapper.models import SharedMemoryModel
+
+        from core.natural_keys import NaturalKeyMixin
+
+        offenders = []
+        stack = [NaturalKeyMixin]
+        seen = set()
+        while stack:
+            cls = stack.pop()
+            if cls in seen:
+                continue
+            seen.add(cls)
+            stack.extend(cls.__subclasses__())
+            mro = cls.__mro__
+            if NaturalKeyMixin not in mro or SharedMemoryModel not in mro:
+                continue
+            if mro.index(NaturalKeyMixin) > mro.index(SharedMemoryModel):
+                offenders.append(cls.__name__)
+        assert not offenders, (
+            "NaturalKeyMixin must precede SharedMemoryModel in the MRO or its "
+            f"save() invalidation never runs. Offenders: {offenders}"
+        )
