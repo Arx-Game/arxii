@@ -240,11 +240,13 @@ All models registered with appropriate admin interfaces:
 - **Traits app**: Uses `PointConversionRange`, `CheckRank`, `ResultChart`, `CheckOutcome` for the resolution pipeline
 - **Classes app**: Uses `Aspect` and `PathAspect` for aspect bonus calculation, `CharacterClassLevel` for character level
 - **Progression app**: Uses `CharacterPathHistory` for current path lookup
-- **Conditions app** (#2505): `get_effective_capability_value(sheet, capability)` (the agency oracle — innate
-  baseline + CharacterModifier + condition contributions + passive grants) is the sole source
-  `_capability_point_allocation` reads on behalf of both `_calculate_capability_points` (roll path) and
-  `collect_check_modifiers`'s CAPABILITY contributions (provenance path); lazily imported to avoid a module
-  cycle (`world.conditions.services` already imports `world.checks.services` at module scope)
+- **Conditions app** (#2505): `get_effective_capability_value(sheet, capability)` (the agency oracle —
+  innate baseline + CharacterModifier total + condition contributions + passive-grant floor + best
+  (MAX) technique-grant value, floored at 0) is the sole source `_capability_point_allocation` reads
+  on behalf of both `_calculate_capability_points` (roll path) and `collect_check_modifiers`'s
+  CAPABILITY contributions (provenance path) — so a technique-granted capability reaches the check
+  bridge the same as an innate/condition-derived one; lazily imported to avoid a module cycle
+  (`world.conditions.services` already imports `world.checks.services` at module scope)
 - **Attempts app**: Calls `perform_check()` for resolution; provides roulette display content via `ConsequenceDisplay`
 - **Callers** (goals, magic, combat, conditions, GM adjudication): Compute `extra_modifiers` before calling `perform_check()`
 - **Mechanics app**: `resolve_challenge()` folds its `capability_source.value` (a `CapabilitySource`, e.g. from a
