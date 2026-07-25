@@ -1061,6 +1061,10 @@ class GiftAcquisitionConfigAdmin(admin.ModelAdmin):
         "techniques_per_thread_level",
         "first_technique_ap_multiplier",
         "major_gift_ap_multiplier",
+        "imbue_ap_cost",
+        "cross_path_cost_multiplier",
+        "weekly_training_cap",
+        "cross_path_cap_divisor",
     ]
 
 
