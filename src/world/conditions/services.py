@@ -2853,20 +2853,36 @@ def decay_all_conditions_tick() -> DecayTickSummary:
     engagement_blocked = 0
     severity_gated = 0
 
-    qs = ConditionInstance.objects.filter(
-        resolved_at__isnull=True,
-        condition__passive_decay_per_day__gt=0,
-    ).select_related("condition", "current_stage", "target")
+    instances = list(
+        ConditionInstance.objects.filter(
+            resolved_at__isnull=True,
+            condition__passive_decay_per_day__gt=0,
+        ).select_related("condition", "current_stage", "target")
+    )
 
-    for instance in qs:
+    # Resolve the engagement check in ONE query instead of one per instance —
+    # the same hoist `_apply_ap_regen` does for its locked_character_ids set.
+    # Only conditions that opt into the block need it, so the lookup is scoped
+    # to those targets rather than every engaged character.
+    blocked_target_ids = {
+        instance.target_id
+        for instance in instances
+        if instance.condition.passive_decay_blocked_in_engagement
+    }
+    engaged_character_ids: set[int] = (
+        set(
+            CharacterEngagement.objects.filter(
+                character_id__in=blocked_target_ids,
+            ).values_list("character_id", flat=True)
+        )
+        if blocked_target_ids
+        else set()
+    )
+
+    for instance in instances:
         examined += 1
         cond = instance.condition
-        if (
-            cond.passive_decay_blocked_in_engagement
-            and CharacterEngagement.objects.filter(
-                character_id=instance.target_id,
-            ).exists()
-        ):
+        if cond.passive_decay_blocked_in_engagement and instance.target_id in engaged_character_ids:
             engagement_blocked += 1
             continue
         if (
