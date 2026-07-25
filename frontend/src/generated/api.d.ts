@@ -32241,8 +32241,6 @@ export interface components {
       name?: string;
       /** @description The gift this technique belongs to. */
       gift?: number;
-      /** @description The style of this technique (restricted by Path). */
-      style?: number;
       /** @description The type of effect this technique produces. */
       effect_type?: number;
       restriction_ids?: number[];
@@ -36773,8 +36771,6 @@ export interface components {
       name: string;
       /** @description The gift this technique belongs to. */
       gift: number;
-      /** @description The style of this technique (restricted by Path). */
-      style: number;
       /** @description The type of effect this technique produces. */
       effect_type: number;
       restriction_ids?: number[];
@@ -36840,8 +36836,6 @@ export interface components {
       name: string;
       /** @description The gift this technique belongs to. */
       gift: number;
-      /** @description The style of this technique (restricted by Path). */
-      style: number;
       /** @description The type of effect this technique produces. */
       effect_type: number;
       restriction_ids?: number[];
@@ -54038,7 +54032,6 @@ export interface operations {
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
-        style?: number;
       };
       header?: never;
       path?: never;
