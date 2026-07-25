@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from world.checks.constants import EffectType, ModifierSourceKind
@@ -38,6 +38,7 @@ from world.vitals.services import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
 class SurvivabilityCheckSeedingTests(TestCase):
     def test_endurance_check_seeded_idempotently(self) -> None:
         c1 = _ensure_endurance_check_type()
@@ -176,6 +177,7 @@ class ResolveVitalsConsequenceTests(TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
 class ProcessDamageConsequencesPoolTests(TestCase):
     """Tests for process_damage_consequences resolved through consequence pools."""
 
@@ -456,6 +458,7 @@ class ProcessDamageConsequencesPoolTests(TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
 class ProcessDamageConsequencesRecordingTests(TestCase):
     """process_damage_consequences persists a ConsequenceOutcome when a combat_interaction
     is threaded in, and skips recording when none is available."""
