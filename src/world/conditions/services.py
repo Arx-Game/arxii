@@ -2017,7 +2017,11 @@ def get_check_modifier(
         query = Q(condition=instance.condition)
         if instance.current_stage:
             query |= Q(stage=instance.current_stage)
-        modifiers = ConditionCheckModifier.objects.filter(query, check_type=ctype)
+        modifiers = (
+            ConditionCheckModifier.objects.filter(query)
+            .filter(Q(check_type=ctype) | Q(check_category=ctype.category, check_type__isnull=True))
+            .select_related("check_category")
+        )
 
         for mod in modifiers:
             modifier_value = mod.modifier_value

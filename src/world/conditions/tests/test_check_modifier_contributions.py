@@ -13,7 +13,7 @@ from django.test import TestCase
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import ModifierSourceKind
-from world.checks.factories import CheckTypeFactory
+from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.conditions.factories import (
     ConditionCheckModifierFactory,
     ConditionInstanceFactory,
@@ -152,3 +152,67 @@ class ConditionContributionsWithStageTest(TestCase):
 
         assert len(contributions) == 1
         assert contributions[0].source_label == "paralytic-poison-contrib"
+
+
+class CategoryTargetingGetCheckModifierTest(TestCase):
+    """get_check_modifier matches category-targeted rows (#2697).
+
+    A ConditionCheckModifier with check_category set (check_type null) matches
+    any CheckType in that category — including per-character magic checks.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.target = ObjectDBFactory(db_key="CategoryTarget")
+        CharacterSheetFactory(character=cls.target)
+        cls.magic_category = CheckCategoryFactory(name="Magic")
+        cls.combat_category = CheckCategoryFactory(name="Combat")
+        cls.magic_check = CheckTypeFactory(name="magic-check-cat", category=cls.magic_category)
+        cls.combat_check = CheckTypeFactory(name="combat-check-cat", category=cls.combat_category)
+
+        cls.blinded = ConditionTemplateFactory(name="blinded-cat")
+        cls.focused = ConditionTemplateFactory(name="focused-cat")
+
+        # Blinded: -15 to ALL Magic-category checks (category-targeted)
+        ConditionCheckModifierFactory(
+            condition=cls.blinded,
+            check_type=None,
+            check_category=cls.magic_category,
+            modifier_value=-15,
+        )
+        # Focused: +10 to the specific magic_check (exact-FK, for stacking test)
+        ConditionCheckModifierFactory(
+            condition=cls.focused,
+            check_type=cls.magic_check,
+            check_category=None,
+            modifier_value=10,
+        )
+
+    def test_category_targeted_modifier_matches_check_in_category(self):
+        """A check_category row matches a CheckType in that category."""
+        ConditionInstanceFactory(target=self.target, condition=self.blinded)
+
+        result = get_check_modifier(self.target.sheet_data, self.magic_check)
+        assert result.total_modifier == -15
+
+    def test_category_targeted_modifier_does_not_match_other_category(self):
+        """A check_category row does NOT match a CheckType in a different category."""
+        ConditionInstanceFactory(target=self.target, condition=self.blinded)
+
+        result = get_check_modifier(self.target.sheet_data, self.combat_check)
+        assert result.total_modifier == 0
+
+    def test_exact_fk_match_still_works(self):
+        """An exact check_type row still matches by FK (regression)."""
+        ConditionInstanceFactory(target=self.target, condition=self.focused)
+
+        result = get_check_modifier(self.target.sheet_data, self.magic_check)
+        assert result.total_modifier == 10
+
+    def test_both_exact_and_category_rows_stack(self):
+        """When both an exact-FK and a category row exist, both modifiers apply."""
+        ConditionInstanceFactory(target=self.target, condition=self.blinded)
+        ConditionInstanceFactory(target=self.target, condition=self.focused)
+
+        result = get_check_modifier(self.target.sheet_data, self.magic_check)
+        assert result.total_modifier == -15 + 10  # -5
