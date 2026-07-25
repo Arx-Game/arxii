@@ -73,7 +73,7 @@ Effects use mutually exclusive FKs: `condition` (all stages) OR `stage` (stage-s
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `ConditionCapabilityEffect` | How a condition affects a capability | `capability`, `value` (additive integer; negative reduces, positive enhances) |
-| `ConditionCheckModifier` | How a condition modifies checks | `check_type`, `modifier_value`, `scales_with_severity` |
+| `ConditionCheckModifier` | How a condition modifies checks | `check_type` OR `check_category` (exactly one; category targets all checks in a category, including per-character magic checks — #2697), `modifier_value`, `scales_with_severity` |
 | `ConditionResistanceModifier` | How a condition modifies damage resistance | `damage_type` (null = ALL), `modifier_value` |
 | `ConditionDamageOverTime` | Periodic damage from a condition | `damage_type`, `base_damage`, `scales_with_severity`, `scales_with_stacks`, `tick_timing` |
 
