@@ -65,6 +65,25 @@ the whole `seed_dev_database()` call — hence `load_content_first()` being spli
 Measuring across the whole call scores the content loader's own writes as seeder
 growth, which put four models on the ratchet that no seeder touches at all.
 
+**Config never goes in `CONTENT_MODELS`, and a wrong registration is fixed by
+de-registering — never by authoring** (TehomCD, 2026-07-25). The rule above says
+what to do *given* a registration; it does not make every registration correct.
+Because the same set now drives both the export and the seeder guard, a
+mechanical table registered by mistake does more than bloat the corpus: it tells
+the seeder to stop producing something the game needs.
+
+Three pk-keyed tuning singletons were de-registered on that basis:
+`magic.fallredemptionconfig`, `covenants.mentorbondconfig`,
+`magic.soultetherconfig`. Each declares `NaturalKeyConfig.fields = ["pk"]`, and
+the export writes no `pk` — so `load_entries` can never resolve their identity.
+Two of them had shipped fixtures sitting in the lore repo carrying real tuned
+values (`celestial_to_abyssal_multiplier: 1.50`, `band_width: 2`) that loaded
+**zero rows**; the seeder then wrote its own defaults over the top, and
+`MentorBondConfig`'s seeder uses `update_or_create`, so those authored numbers
+never once reached a database. A "pk" natural key carries no content identity,
+and a table whose entire payload is tuning multipliers with model-level defaults
+is config.
+
 ## What this rejects
 
 **A curated `SEEDER_ALLOWED_CONTENT_MODELS` allowlist.** Earlier drafts proposed one,

@@ -99,7 +99,6 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
         "checks.checktypetrait",
         "classes.aspect",
         "classes.pathaspect",
-        "covenants.mentorbondconfig",
         "distinctions.distinction",
         "distinctions.distinctioncategory",
         "distinctions.distinctioneffect",

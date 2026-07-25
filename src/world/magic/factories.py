@@ -3086,8 +3086,12 @@ def wire_fall_redemption_content() -> object:
     )
     from world.seeds.sample_content import authored_or_sample
 
-    # Singleton config — content-repo-owned (#2698) despite the pk=1 shape.
-    config = authored_or_sample(FallRedemptionConfig, {}, pk=1)
+    # Pure config: a pk=1 singleton of tuning multipliers, seeder-owned. It was
+    # briefly gated behind SEED_SAMPLE_CONTENT while it sat in CONTENT_MODELS;
+    # #2698 de-registered it (a "pk" natural key carries no content identity, so
+    # its exported fixture could never load back), so it seeds unconditionally
+    # again — a flag-off press must leave the game with Fall/Redemption tuning.
+    config, _ = FallRedemptionConfig.objects.get_or_create(pk=1)
 
     # The Fall/Redemption ritual — content-repo-owned (#2698).
     fall_ritual = authored_or_sample(
