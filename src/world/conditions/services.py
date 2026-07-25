@@ -2902,16 +2902,27 @@ def decay_all_conditions_tick() -> DecayTickSummary:
     )
 
 
-def _compute_chronic_damage(instance: "ConditionInstance") -> int:
+def _compute_chronic_damage(
+    instance: "ConditionInstance",
+    long_term_rows: "list[ConditionDamageOverTime] | None" = None,
+) -> int:
     """Sum long-term DoT damage for one condition instance.
 
     Applies per-row severity and stacks scaling; rows that resolve to ≤0 are ignored.
+
+    ``long_term_rows`` lets a batch caller pass rows it already fetched. They are
+    keyed on the condition *template*, which many instances share, so re-querying
+    per instance re-reads the same handful of rows once per afflicted character.
+    Omitted, the rows are fetched for this instance alone (the single-instance path).
     """
     total = 0
-    long_term_rows = ConditionDamageOverTime.objects.filter(
-        condition=instance.condition,
-        is_long_term=True,
-    )
+    if long_term_rows is None:
+        long_term_rows = list(
+            ConditionDamageOverTime.objects.filter(
+                condition=instance.condition,
+                is_long_term=True,
+            )
+        )
     for dot in long_term_rows:
         damage = dot.base_damage
         if dot.scales_with_severity:
@@ -2966,6 +2977,17 @@ def batch_chronic_effect_tick() -> ChronicTickSummary:
         .select_related("condition", "current_stage", "target")
         .distinct()
     )
+    instances = list(instances)
+
+    # DoT rows hang off the condition *template*, which afflicted characters
+    # share — fetching them per instance re-reads the same handful of rows once
+    # per sufferer. Group them once and hand each instance its template's rows.
+    rows_by_condition: dict[int, list[ConditionDamageOverTime]] = {}
+    for dot in ConditionDamageOverTime.objects.filter(
+        condition_id__in={instance.condition_id for instance in instances},
+        is_long_term=True,
+    ):
+        rows_by_condition.setdefault(dot.condition_id, []).append(dot)
 
     for instance in instances:
         summary.examined += 1
@@ -2975,7 +2997,7 @@ def batch_chronic_effect_tick() -> ChronicTickSummary:
             summary.active_round_skipped += 1
             continue
 
-        total = _compute_chronic_damage(instance)
+        total = _compute_chronic_damage(instance, rows_by_condition.get(instance.condition_id, []))
         if total > 0 and sheet is not None:
             removed = apply_clamped_chronic_damage(sheet, total)
             if removed > 0:
