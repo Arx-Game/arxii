@@ -67,7 +67,7 @@ class SceneRoomSpinUpTests(TestCase):
 
         msgs = _run(CmdSceneRoom, "Ambush Site = A dank trap.", gm)
 
-        instance = InstancedRoom.objects.get(room__db_key="Ambush Site")
+        instance = InstancedRoom.objects.get(room__objectdb__db_key="Ambush Site")
         assert instance.status == InstanceStatus.ACTIVE
         assert instance.gm_owner_id == profile.pk
         assert any("spun up" in m for m in msgs)
@@ -87,7 +87,7 @@ class SceneRoomSpinUpTests(TestCase):
 
         msgs = _run(CmdSceneRoom, "Should Not Exist = nope", caller)
 
-        assert not InstancedRoom.objects.filter(room__db_key="Should Not Exist").exists()
+        assert not InstancedRoom.objects.filter(room__objectdb__db_key="Should Not Exist").exists()
         assert any("GM trust required." in m for m in msgs)
 
 
@@ -99,15 +99,15 @@ class SceneRoomCloseTests(TestCase):
         player = _make_player_character("joiner", origin_room)
 
         _run(CmdSceneRoom, "Trap Room = A snare.", gm)
-        instance = InstancedRoom.objects.get(room__db_key="Trap Room")
+        instance = InstancedRoom.objects.get(room__objectdb__db_key="Trap Room")
         StoryRoomGrantFactory(
-            room=RoomProfileFactory(objectdb=instance.room),
+            room=instance.room,
             character=player.sheet_data,
             granted_by=profile,
         )
 
         join_msgs = _run(CmdJoinRoom, str(instance.room_id), player)
-        assert player.location == instance.room, join_msgs
+        assert player.location == instance.room.objectdb, join_msgs
 
         close_msgs = _run(CmdSceneRoom, f"close #{instance.room_id}", gm)
 

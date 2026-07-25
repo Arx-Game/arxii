@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
+from evennia_extensions.factories import RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.constants import DurationType
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
@@ -81,7 +82,7 @@ class SceneRoundServiceTests(TestCase):
     def test_danger_round_ends_when_no_bleedout_remains(self):
         # Under #1466, a danger round is STRICT and auto-ends inside resolve_scene_round
         # once no ACTIVE participant carries an acute danger condition.
-        from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
+        from evennia_extensions.factories import ObjectDBFactory
 
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         rnd = SceneRoundFactory(

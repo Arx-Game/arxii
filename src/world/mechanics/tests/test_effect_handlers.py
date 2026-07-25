@@ -512,7 +512,7 @@ class CaptureBrigRoutingTests(TestCase):
         for i in range(2):
             c = CharacterFactory(db_key=f"filler_{i}")
             s = CharacterSheetFactory(character=c)
-            capture_character(captive=s, holding_room=brig_room)
+            capture_character(captive=s, holding_room=brig_room.room_profile)
 
         # Now try to capture a third.
         captor_room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")

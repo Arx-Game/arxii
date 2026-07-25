@@ -733,7 +733,7 @@ class SpinUpCloseSceneRoomActionTests(TestCase):
 
         join_result = JoinStoryRoomAction().run(self.player, room_id=instance.room_id)
         assert join_result.success, join_result.message
-        assert self.player.location == instance.room
+        assert self.player.location == instance.room.objectdb
 
         close_result = CloseSceneRoomAction().run(self.gm_actor, room_id=instance.room_id)
         assert close_result.success, close_result.message

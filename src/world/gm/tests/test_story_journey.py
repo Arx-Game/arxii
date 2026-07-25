@@ -136,7 +136,9 @@ class StoryRoomJourneyTests(TestCase):
         # 8. The GM spins up a temp scene room.
         spin_result = SpinUpSceneRoomAction().run(self.gm_actor, name="Ambush Site")
         assert spin_result.success, spin_result.message
-        instance = InstancedRoom.objects.get(gm_owner=self.gm_profile, room__db_key="Ambush Site")
+        instance = InstancedRoom.objects.get(
+            gm_owner=self.gm_profile, room__objectdb__db_key="Ambush Site"
+        )
 
         # 9. Grant + join the temp room.
         grant_temp = GrantStoryRoomAccessAction().run(
@@ -145,7 +147,7 @@ class StoryRoomJourneyTests(TestCase):
         assert grant_temp.success, grant_temp.message
         join_temp = JoinStoryRoomAction().run(self.player, room_id=instance.room_id)
         assert join_temp.success, join_temp.message
-        assert self.player.location == instance.room
+        assert self.player.location == instance.room.objectdb
 
         # 10. The GM closes it — the player is returned.
         close_result = CloseSceneRoomAction().run(self.gm_actor, room_id=instance.room_id)
