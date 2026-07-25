@@ -292,6 +292,29 @@ class CalculateCapabilityPointsTests(TestCase):
         assert sum(c.value for c in contribs) == roll_total
 
 
+class BlindedSightBridgeTests(TestCase):
+    """#2704 end-to-end: a sense-blocking condition moves a sense-weighted check."""
+
+    def test_blocked_sense_penalizes_a_sight_weighted_check(self):
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
+
+        character = CharacterFactory()
+        sheet = CharacterSheetFactory(character=character)
+        check_type = CheckTypeFactory(name="test_2704_sight_check")
+        sight = CapabilityTypeFactory(name="test_2704_sight", innate_baseline=5)
+        CheckTypeCapabilityModifierFactory(
+            check_type=check_type, capability=sight, weight=Decimal("6.0")
+        )
+
+        # Unimpaired: contributes nothing.
+        assert _calculate_capability_points(character, check_type) == 0
+
+        # A potent block drives the effective value to 0 -> deviation -5 -> -30.
+        target = ModifierTargetFactory(target_capability=sight)
+        CharacterModifierFactory(character=sheet, target=target, value=-100)
+        assert _calculate_capability_points(character, check_type) == -30
+
+
 class PerformCheckTests(TestCase):
     """Test the full check resolution pipeline."""
 
