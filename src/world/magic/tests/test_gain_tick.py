@@ -113,6 +113,31 @@ class OutfitTrickleTickNoItemsTests(TestCase):
         CharacterSheetFactory()
         self.assertEqual(outfit_trickle_tick(), 0)
 
+    def test_outfit_tick_cost_does_not_grow_with_thread_less_sheets(self) -> None:
+        """The tick must scale with facet-thread owners, not with the playerbase.
+
+        It used to iterate every CharacterSheet and pay per-sheet queries to
+        discover that most characters own no FACET thread and can never earn a
+        trickle. Adding characters who cannot possibly earn one must not make
+        the tick more expensive — that is the whole point of the narrowing.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.services.gain import outfit_trickle_tick
+
+        with CaptureQueriesContext(connection) as baseline:
+            self.assertEqual(outfit_trickle_tick(), 0)
+
+        for _ in range(25):
+            CharacterSheetFactory()
+
+        with CaptureQueriesContext(connection) as with_sheets:
+            self.assertEqual(outfit_trickle_tick(), 0)
+
+        self.assertEqual(len(with_sheets), len(baseline))
+
 
 class ResonanceDailyTickTests(TestCase):
     def test_runs_with_no_sheets(self) -> None:
