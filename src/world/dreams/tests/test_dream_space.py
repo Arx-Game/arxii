@@ -31,12 +31,12 @@ class GetDreamSpaceTests(TestCase):
             waking_room=RoomProfileFactory(objectdb=waking), dream_room=dream
         )
         result = get_dream_space(room=waking)
-        assert result == dream
+        assert result == dream.objectdb
 
     def test_falls_back_to_liminal_when_no_reflection(self):
         room = ObjectDBFactory(db_key="No Reflection")
         result = get_dream_space(room=room)
-        assert result.objectdb == get_dream_room()
+        assert result == get_dream_room()
 
     def test_falls_back_to_none_when_unseeded(self):
         room = ObjectDBFactory(db_key="Unseeded Room")
