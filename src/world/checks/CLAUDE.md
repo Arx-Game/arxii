@@ -35,12 +35,18 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 
 1. Weighted trait points from CheckTypeTrait entries
 2. Aspect bonus from PathAspect weights * CheckTypeAspect weights * character level
-3. Capability points from authored CheckTypeCapabilityModifier rows (#2505) — curated gate,
+3. Level points (#2707): `LEVEL_POINTS_PER_LEVEL * character level`, on EVERY check — a
+   guaranteed floor, additive with (not a replacement for) the aspect bonus above, which is
+   zero unless the CheckType has an authored CheckTypeAspect matching the character's Path.
+   `_compute_check_breakdown` reads the level from `world.progression.services
+   .skill_development.get_character_path_level` — the single source both this term and the
+   aspect bonus's level scaling use.
+4. Capability points from authored CheckTypeCapabilityModifier rows (#2505) — curated gate,
    0 with no authored rows (never calls the capability oracle) or no `sheet_data`
-4. Extra modifiers from caller (goals, magic, combat, conditions, `resolve_challenge`'s
+5. Extra modifiers from caller (goals, magic, combat, conditions, `resolve_challenge`'s
    `capability_source.value`)
-5. Total points -> CheckRank -> ResultChart -> roll 1-100 -> outcome
-6. Outcome guarantees (#2536 slice 2, ADR-0152): if a `situation_ctx` was passed, `TIER_FLOOR`/
+6. Total points -> CheckRank -> ResultChart -> roll 1-100 -> outcome
+7. Outcome guarantees (#2536 slice 2, ADR-0152): if a `situation_ctx` was passed, `TIER_FLOOR`/
    `BOTCH_IMMUNITY` covenant perks (`_apply_outcome_guarantees`) may raise the outcome to an
    authored floor — absolute, never thread-scaled; announces only when it actually altered the
    outcome. Applies identically to the test-rig forced-outcome path. `situation_ctx.attacker`

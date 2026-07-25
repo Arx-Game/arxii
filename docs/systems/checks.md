@@ -108,6 +108,7 @@ result.outcome_name    # "Success", "Catastrophic Failure", etc.
 result.success_level   # -10 to +10
 result.trait_points    # Points from character's traits
 result.aspect_bonus    # Bonus from path aspects
+result.level_points    # LEVEL_POINTS_PER_LEVEL x class level, on every check (#2707)
 result.total_points    # Final total
 ```
 
@@ -137,6 +138,12 @@ rollmod = get_rollmod(character)
    For each CheckTypeAspect with matching PathAspect:
      bonus += int(check_aspect_weight * path_aspect_weight * character_level)
 
+2.4. Level points (#2707): LEVEL_POINTS_PER_LEVEL x character_level, on EVERY check.
+   Level was previously only reachable through the aspect bonus above, which is zero
+   unless the CheckType has an authored CheckTypeAspect matching the character's Path
+   -- so on most checks level did nothing. This is a guaranteed floor, additive with
+   (not a replacement for) the aspect bonus.
+
 2.5. Capability points from authored CheckTypeCapabilityModifier rows (#2505)
    No authored rows on check_type -> 0, capability oracle never called (curated gate).
    character.sheet_data missing -> 0, never raises.
@@ -149,7 +156,8 @@ rollmod = get_rollmod(character)
    # allocates the same truncated total back across rows by largest remainder,
    # so recorded contributions always sum to exactly capability_points (#2505 fix).
 
-3. Total = trait_points + specialization_points + aspect_bonus + capability_points + extra_modifiers
+3. Total = trait_points + specialization_points + aspect_bonus + level_points + capability_points
+   + extra_modifiers
 
 4. Total points -> CheckRank.get_rank_for_points()
    Target difficulty -> CheckRank.get_rank_for_points()
@@ -189,8 +197,9 @@ _calculate_capability_points(character, check_type) -> int
 # path, in collect_check_modifiers) computes this, so the two paths cannot drift.
 _capability_point_allocation(character_sheet, capability_modifiers) -> tuple[int, list[int]]
 
-# Get character's primary class level (or highest, or default 1)
-_get_character_level(character) -> int
+# Get character's primary class level (or highest, or default 1) — shared with
+# progression (#2707); world.checks.services no longer declares its own copy
+world.progression.services.skill_development.get_character_path_level(character) -> int
 
 # Look up ResultChartOutcome for a roll value on a chart
 _get_outcome_for_roll(chart, roll) -> CheckOutcome | None
@@ -220,7 +229,9 @@ All models registered with appropriate admin interfaces:
 
 - **Traits app**: Uses `PointConversionRange`, `CheckRank`, `ResultChart`, `CheckOutcome` for the resolution pipeline
 - **Classes app**: Uses `Aspect` and `PathAspect` for aspect bonus calculation, `CharacterClassLevel` for character level
-- **Progression app**: Uses `CharacterPathHistory` for current path lookup
+- **Progression app**: Uses `CharacterPathHistory` for current path lookup; `get_character_path_level`
+  (`world.progression.services.skill_development`) is the sole source of a character's class level (#2707)
+  -- both the level-points term and the aspect bonus's level scaling read it
 - **Conditions app** (#2505): `get_effective_capability_value(sheet, capability)` (the agency oracle — innate
   baseline + CharacterModifier + condition contributions + passive grants) is the sole source
   `_capability_point_allocation` reads on behalf of both `_calculate_capability_points` (roll path) and

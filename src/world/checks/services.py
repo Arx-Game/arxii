@@ -6,12 +6,17 @@ from typing import TYPE_CHECKING, NamedTuple, cast
 
 from django.core.exceptions import ObjectDoesNotExist
 
-from world.checks.constants import BOTCH_SUCCESS_LEVEL_MAX, ModifierSourceKind
+from world.checks.constants import (
+    BOTCH_SUCCESS_LEVEL_MAX,
+    LEVEL_POINTS_PER_LEVEL,
+    ModifierSourceKind,
+)
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.types import CheckResult, ModifierBreakdown, ModifierContribution
-from world.classes.models import CharacterClassLevel, PathAspect
+from world.classes.models import PathAspect
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER
 from world.progression.models import CharacterPathHistory
+from world.progression.services.skill_development import get_character_path_level
 from world.traits.models import (
     CheckOutcome,
     CheckRank,
@@ -50,13 +55,16 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     Main check resolution function.
 
     1. Calculate weighted trait points using TraitHandler
-    2. Calculate aspect bonus from path
-    3. Sum: trait_points + aspect_bonus + extra_modifiers + effort_modifier + fatigue_penalty
-    4. total_points -> CheckRank -> ResultChart (existing pipeline)
-    5. Roll 1-100
-    6. Apply rollmod: effective = max(1, min(100, roll + rollmod))
-    7. Look up outcome on chart using effective roll
-    8. Return CheckResult
+    2. Calculate aspect bonus from path (scaled by class level)
+    3. Calculate level points: LEVEL_POINTS_PER_LEVEL x class level (#2707) — a
+       guaranteed floor every check gets, on top of (not instead of) the aspect bonus
+    4. Sum: trait_points + aspect_bonus + level_points + extra_modifiers + effort_modifier
+       + fatigue_penalty
+    5. total_points -> CheckRank -> ResultChart (existing pipeline)
+    6. Roll 1-100
+    7. Apply rollmod: effective = max(1, min(100, roll + rollmod))
+    8. Look up outcome on chart using effective roll
+    9. Return CheckResult
 
     Args:
         character: The character performing the check.
@@ -165,6 +173,7 @@ class _CheckBreakdown(NamedTuple):
     trait_points: int
     specialization_points: int
     aspect_bonus: int
+    level_points: int
     capability_points: int
     total_points: int
     roller_rank: "CheckRank | None"
@@ -184,24 +193,28 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     specialization: "Specialization | None",
     situation_ctx: "SituationContext | None" = None,
 ) -> _CheckBreakdown:
-    """Compute stat + skill + specialization + aspect points, ranks, and chart (no dice roll).
+    """Compute stat + skill + specialization + aspect + level points, ranks, and chart
 
-    Shared by ``perform_check`` (which then rolls) and the forced-outcome test path (which
-    supplies the outcome directly) — the single source of the check's point math.
+    (no dice roll). Shared by ``perform_check`` (which then rolls) and the forced-outcome
+    test path (which supplies the outcome directly) — the single source of the check's
+    point math. Level contributes ``LEVEL_POINTS_PER_LEVEL`` points on its own (#2707) in
+    addition to scaling the aspect bonus below — a guaranteed floor, not a replacement for it.
     """
     handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
-    level = _get_character_level(character)
+    level = get_character_path_level(character)
     effort_modifier = EFFORT_CHECK_MODIFIER.get(effort_level, 0) if effort_level else 0
 
     trait_points = _calculate_trait_points(handler, check_type)
     specialization_points = _calculate_specialization_points(character, check_type, specialization)
     aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
+    level_points = LEVEL_POINTS_PER_LEVEL * level
     capability_points = _calculate_capability_points(character, check_type)
     perk_bonus = _situational_perk_check_bonus(character, check_type, situation_ctx)
     total_points = (
         trait_points
         + specialization_points
         + aspect_bonus
+        + level_points
         + capability_points
         + extra_modifiers
         + perk_bonus
@@ -220,6 +233,7 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
         trait_points=trait_points,
         specialization_points=specialization_points,
         aspect_bonus=aspect_bonus,
+        level_points=level_points,
         capability_points=capability_points,
         total_points=total_points,
         roller_rank=roller_rank,
@@ -563,6 +577,7 @@ def _check_result(
         total_points=breakdown.total_points,
         specialization_points=breakdown.specialization_points,
         capability_points=breakdown.capability_points,
+        level_points=breakdown.level_points,
     )
 
 
@@ -749,23 +764,6 @@ def _calculate_capability_points(character: "ObjectDB", check_type: "CheckType")
     return total
 
 
-def _get_character_level(character: "ObjectDB") -> int:
-    """
-    Get the character's primary class level, or highest level, or default to 1.
-    """
-    primary = CharacterClassLevel.objects.filter(character_id=character.pk, is_primary=True).first()
-    if primary:
-        return cast(int, primary.level)
-
-    highest = (
-        CharacterClassLevel.objects.filter(character_id=character.pk).order_by("-level").first()
-    )
-    if highest:
-        return cast(int, highest.level)
-
-    return 1
-
-
 def get_rollmod(character: "ObjectDB") -> int:
     """
     Sum character.sheet_data.rollmod + character.account.player_data.rollmod.
@@ -827,21 +825,20 @@ def preview_check_difficulty(
     Preview the rank difference for a check without rolling.
 
     Returns the rank difference (positive = character is stronger, negative = weaker).
-    Uses the same calculation as perform_check steps 1-4.
+    Routes through :func:`_compute_check_breakdown`, the single source of the check's
+    point math (#2707) — this used to re-derive trait + aspect points only, silently
+    omitting specialization, capability, perk, and (before #2707) level points.
     """
-    handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
-    level = _get_character_level(character)
-
-    trait_points = _calculate_trait_points(handler, check_type)
-    aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
-    total_points = trait_points + aspect_bonus + extra_modifiers
-
-    roller_rank = CheckRank.get_rank_for_points(total_points)
-    target_rank = CheckRank.get_rank_for_points(target_difficulty)
-
-    roller_rank_value = roller_rank.rank if roller_rank else 0
-    target_rank_value = target_rank.rank if target_rank else 0
-    return roller_rank_value - target_rank_value
+    breakdown = _compute_check_breakdown(
+        character,
+        check_type,
+        target_difficulty=target_difficulty,
+        extra_modifiers=extra_modifiers,
+        effort_level=None,
+        fatigue_penalty=0,
+        specialization=None,
+    )
+    return breakdown.rank_difference
 
 
 def chart_has_success_outcomes(rank_difference: int) -> bool:

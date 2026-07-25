@@ -42,6 +42,7 @@ class CheckResult:
     total_points: int
     specialization_points: int = 0  # #1688 — points from owned specializations (stat+skill+spec)
     capability_points: int = 0  # #2505 — weighted authored CheckTypeCapabilityModifier points
+    level_points: int = 0  # #2707 — LEVEL_POINTS_PER_LEVEL x class level, on every check
 
     @property
     def outcome_name(self) -> str:

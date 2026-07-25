@@ -7,6 +7,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.constants import LEVEL_POINTS_PER_LEVEL
 from world.checks.factories import (
     CheckCategoryFactory,
     CheckTypeAspectFactory,
@@ -179,7 +180,9 @@ class CalculateCapabilityPointsTests(TestCase):
             specialization=None,
         )
         assert breakdown.capability_points == 10
-        assert breakdown.total_points == 10
+        # total = capability_points(10) + level_points(LEVEL_POINTS_PER_LEVEL * 1, the
+        # default level for a character with no CharacterClassLevel row) (#2707)
+        assert breakdown.total_points == 10 + LEVEL_POINTS_PER_LEVEL
 
 
 class PerformCheckTests(TestCase):
