@@ -210,13 +210,30 @@ class NaturalKeyManager(ArxSharedMemoryManager, models.Manager["NaturalKeyMixin"
             if isinstance(field, ForeignKey):
                 _resolve_fk_arg(self.model, field, field_name, args_list, lookup)
             else:
-                lookup[field_name] = args_list.pop(0)
+                value = args_list.pop(0)
+                lookup[_text_lookup_key(field, field_name, value)] = value
 
         if args_list:
             msg = f"Too many natural key values for {self.model.__name__}: {len(args)} given"
             raise NaturalKeyConfigError(msg)
 
         return lookup
+
+
+def _text_lookup_key(field: Any, field_name: str, value: Any) -> str:
+    """Return the queryset lookup key for a non-FK natural-key component.
+
+    Natural-key lookups are case-insensitive (#2687), so text components match
+    with ``__iexact``. Numeric and boolean components keep exact matching — a
+    natural key is a mix of text (``name``, ``stat_key``), integers
+    (``min_roll``, ``rank_difference``) and FKs.
+
+    Note: ``"<field>__iexact"`` does not collide with Evennia's
+    ``SharedMemoryManager.get()``, which strips a trailing ``"__exact"`` only.
+    """
+    if isinstance(value, str) and isinstance(field, (models.CharField, models.TextField)):
+        return f"{field_name}__iexact"
+    return field_name
 
 
 def _resolve_fk_arg(

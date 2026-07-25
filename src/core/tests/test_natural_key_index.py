@@ -113,3 +113,27 @@ class IndexIsolationTests(TestCase):
 
     def test_b_starts_clean(self) -> None:
         assert ("isolation marker species",) not in natural_key_index(Species)
+
+
+class CaseInsensitiveLookupTests(TestCase):
+    """Natural-key text components match regardless of case (#2687)."""
+
+    def test_differently_cased_lookup_finds_the_row(self) -> None:
+        species = SpeciesFactory(name="Fire Elf")
+        assert Species.objects.get_by_natural_key("fire elf") == species
+        assert Species.objects.get_by_natural_key("FIRE ELF") == species
+
+    def test_case_variants_share_one_index_entry(self) -> None:
+        SpeciesFactory(name="Shared Entry Elf")
+        Species.objects.get_by_natural_key("SHARED ENTRY ELF")
+        with self.assertNumQueries(0):
+            Species.objects.get_by_natural_key("shared entry elf")
+        assert list(natural_key_index(Species)) == [("shared entry elf",)]
+
+    def test_numeric_component_still_matches_exactly(self) -> None:
+        """__iexact applies only to text fields — an int component must not be
+        coerced into a string comparison."""
+        species = SpeciesFactory(name="Numeric Elf")
+        bonus = SpeciesStatBonus.objects.create(species=species, stat="strength", value=2)
+        found = SpeciesStatBonus.objects.get_by_natural_key("NUMERIC ELF", "STRENGTH")
+        assert found == bonus
