@@ -149,6 +149,7 @@ from world.magic.models.motifs import (
 from world.magic.models.portals import PortalAnchor, PortalAnchorKind
 from world.magic.models.power_config import (
     AuraPowerConfig,
+    CapabilityPowerConfig,
     CovenantRoleBlendConfig,
     LevelPowerConfig,
     StandingCapBand,
@@ -270,6 +271,8 @@ __all__ = [
     "AuraPowerConfig",
     # knowledge layer grants (Anima Ritual UI spec §Decision 6)
     "BeginningsRitualGrant",
+    # geometric capability power curve config (#2708)
+    "CapabilityPowerConfig",
     "CharacterAnima",
     "CharacterAura",
     # gifts

@@ -115,6 +115,14 @@ class ThreadPullEffect(SharedMemoryModel):
     )
     tier = models.PositiveSmallIntegerField()  # 0..3
     min_thread_level = models.PositiveSmallIntegerField(default=0)
+    capability_grant_value = models.PositiveIntegerField(
+        default=1,
+        help_text=(
+            "Base ladder value this CAPABILITY_GRANT confers before the power curve "
+            "(#2708). Only read for CAPABILITY_GRANT rows; ignored for every other "
+            "effect_kind. Default 1 reproduces the pre-#2708 flat grant floor."
+        ),
+    )
     effect_kind = models.CharField(max_length=32, choices=EffectKind.choices)
 
     flat_bonus_amount = models.SmallIntegerField(null=True, blank=True)
