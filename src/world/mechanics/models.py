@@ -477,9 +477,9 @@ class Prerequisite(NaturalKeyMixin, SharedMemoryModel):
 
     def evaluate(
         self,
-        character: "ObjectDB",
-        target_object: "ObjectDB",
-        location: "ObjectDB",
+        character: "ObjectDB",  # noqa: OBJECTDB_PARAM — prerequisites read any actor
+        target_object: "ObjectDB",  # noqa: OBJECTDB_PARAM — the prop, per ChallengeInstance
+        location: "ObjectDB",  # noqa: OBJECTDB_PARAM — may be a bare object, per the field
     ) -> "PrerequisiteEvaluation":
         """Evaluate this prerequisite against the current game state."""
         from world.mechanics.types import PrerequisiteEvaluation  # noqa: PLC0415
@@ -593,6 +593,9 @@ class ChallengeTemplateProperty(SharedMemoryModel):
 class ObjectProperty(SharedMemoryModel):
     """Runtime property attachment on any game object."""
 
+    # ObjectDB by design (#2608)  noqa: OBJECTDB_FIELD
+    # Affordances (flammable, volatile, aerial) attach to any physical object —
+    # that breadth is the model's whole point.
     object = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.CASCADE,
@@ -1209,6 +1212,12 @@ class SituationInstance(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="instances",
     )
+    # ObjectDB by design (#2608)  noqa: OBJECTDB_FIELD
+    # A Situation may be placed at any object, not only a profiled Room.
+    # `instantiate_situation` requires a RoomProfile ONLY
+    # when the template carries trap links (Trap.room_profile needs one); a
+    # challenge-only situation at a bare object is supported and test-pinned
+    # (test_location_without_room_profile_is_fine_when_only_challenges).
     location = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.CASCADE,
@@ -1251,11 +1260,17 @@ class ChallengeInstance(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="instances",
     )
+    # ObjectDB by design (#2608)  noqa: OBJECTDB_FIELD
+    # Sibling of SituationInstance.location — a
+    # ChallengeInstance explicitly does NOT require a RoomProfile (see
+    # `instantiate_situation`'s docstring), so it can sit at a bare object.
     location = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.CASCADE,
         related_name="challenge_instances",
     )
+    # ObjectDB by design (#2608)  noqa: OBJECTDB_FIELD
+    # The authored prop embodying the challenge — a door, a rope, a rockfall.
     target_object = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.CASCADE,

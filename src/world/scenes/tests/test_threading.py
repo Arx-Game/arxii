@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import (
@@ -89,7 +89,7 @@ class TestPushPayloadNewFields(TestCase):
         self.identity_a = CharacterSheetFactory(character=self.char_a)
 
     def test_payload_includes_new_fields(self) -> None:
-        place = PlaceFactory(name="Corner Booth", room=self.room)
+        place = PlaceFactory(name="Corner Booth", room=RoomProfileFactory(objectdb=self.room))
         target_persona = PersonaFactory()
         interaction = InteractionFactory(
             persona=self.identity_a.primary_persona,
@@ -178,7 +178,7 @@ class TestPoseActionWithTargets(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         CharacterSheetFactory(character=char_a)
-        place = PlaceFactory(name="The Bar", room=room)
+        place = PlaceFactory(name="The Bar", room=RoomProfileFactory(objectdb=room))
 
         action = PoseAction()
         result = action.run(actor=char_a, text="sits at the bar.", place=place)
@@ -207,7 +207,7 @@ class TestTabletalkCommand(TestCase):
         )
         char = CharacterFactory(db_key="Alice", location=room)
         identity = CharacterSheetFactory(character=char)
-        place = PlaceFactory(name="Corner Booth", room=room)
+        place = PlaceFactory(name="Corner Booth", room=RoomProfileFactory(objectdb=room))
         PlacePresenceFactory(place=place, persona=identity.primary_persona)
 
         cmd = CmdTabletalk()

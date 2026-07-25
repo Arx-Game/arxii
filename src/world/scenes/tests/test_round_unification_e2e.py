@@ -257,7 +257,7 @@ class CombatEndHandOffTest(TestCase):
         complete_encounter(self.encounter, outcome=EncounterOutcome.ABANDONED)
 
         # --- Assertion 1: a STRICT DANGER scene round now exists in the room. ---
-        rnd = SceneRound.objects.filter(room=self.room, status=RoundStatus.DECLARING).first()
+        rnd = SceneRound.objects.filter(room_id=self.room.pk, status=RoundStatus.DECLARING).first()
         assert rnd is not None, "Expected a DECLARING scene round after combat end, found none."
         assert rnd.mode == SceneRoundMode.STRICT, f"Expected STRICT mode, got {rnd.mode!r}"
         assert rnd.start_reason == SceneRoundStartReason.DANGER, (

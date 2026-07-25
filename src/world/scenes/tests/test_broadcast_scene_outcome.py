@@ -65,7 +65,7 @@ class BroadcastSceneOutcomeTests(TestCase):
 
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         self.rnd = SceneRoundFactory(
-            room=self.room,
+            room=self.room.room_profile,
             status=RoundStatus.DECLARING,
             start_reason=SceneRoundStartReason.OPT_IN,
         )
@@ -92,7 +92,7 @@ class BroadcastSceneOutcomeTests(TestCase):
             broadcast_scene_outcome(scene_round=self.rnd, narration="Kira succeeds.")
         mock_broadcast.assert_called_once()
         room_arg = mock_broadcast.call_args[0][0]
-        assert room_arg == self.rnd.room
+        assert room_arg == self.rnd.room.objectdb
 
     def test_interaction_mode_is_outcome(self):
         result = broadcast_scene_outcome(scene_round=self.rnd, narration="Kira succeeds.")

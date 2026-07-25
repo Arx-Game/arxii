@@ -106,7 +106,7 @@ class TestChallengeDispatchTicksSceneRound(TestCase):
         # Create an ACTIVE scene round the character participates in.
         # Factory creates BETWEEN_ROUNDS; advance_scene_round_for_action expects that.
         cls.scene_round = SceneRoundFactory(
-            room=cls.room,
+            room=cls.room.room_profile,
             status=RoundStatus.BETWEEN_ROUNDS,
             round_number=0,
         )
@@ -162,7 +162,7 @@ class TestRegistryDispatchDoesNotTickSceneRound(TestCase):
         cls.character = _set_character_location(cls.sheet.character, cls.room)
 
         cls.scene_round = SceneRoundFactory(
-            room=cls.room,
+            room=cls.room.room_profile,
             status=RoundStatus.BETWEEN_ROUNDS,
             round_number=0,
         )

@@ -12,6 +12,7 @@ from django.db import transaction
 from django.db.models import QuerySet
 from django.utils import timezone
 
+from evennia_extensions.models import RoomProfile
 from world.scenes.speaker_queue_models import SpeakerQueue, SpeakerQueueEntry
 
 if TYPE_CHECKING:
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 
 _QUEUE_ALREADY_OPEN = "A speaker queue is already open here."
 _ALREADY_IN_LINE = "You are already in line."
+_QUEUE_ROOM_UNPROFILED = "A speaker queue can only be opened in a room."
 
 
 class SpeakerQueueError(Exception):
@@ -34,8 +36,9 @@ class SpeakerQueueError(Exception):
 
 def get_active_queue(room: ObjectDB) -> SpeakerQueue | None:
     """Return the active speaker queue for a room, or None."""
+    # RoomProfile shares ObjectDB's pk (#2608) — filter by id, no profile fetch.
     return (
-        SpeakerQueue.objects.filter(room=room, is_active=True)
+        SpeakerQueue.objects.filter(room_id=room.pk, is_active=True)
         .select_related("opened_by", "scene")
         .first()
     )
@@ -65,8 +68,12 @@ def open_queue(room: ObjectDB, persona: Persona) -> SpeakerQueue:
     if existing is not None:
         raise SpeakerQueueError(_QUEUE_ALREADY_OPEN)
 
+    room_profile = RoomProfile.objects.filter(objectdb=room).first()
+    if room_profile is None:
+        raise SpeakerQueueError(_QUEUE_ROOM_UNPROFILED)
+
     scene = Scene.objects.active_for_room(room).first()
-    return SpeakerQueue.objects.create(room=room, opened_by=persona, scene=scene)
+    return SpeakerQueue.objects.create(room=room_profile, opened_by=persona, scene=scene)
 
 
 def close_queue(queue: SpeakerQueue) -> None:

@@ -15,7 +15,7 @@ class SpeakerQueue(SharedMemoryModel):
     """
 
     room = models.ForeignKey(
-        "objects.ObjectDB",
+        "evennia_extensions.RoomProfile",
         on_delete=models.PROTECT,
         related_name="speaker_queues",
         help_text="Room the queue belongs to.",

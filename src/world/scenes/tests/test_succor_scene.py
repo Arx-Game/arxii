@@ -79,7 +79,7 @@ class ResolveSceneRoundWithPendingSuccorTests(TestCase):
 
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         scene_round = SceneRoundFactory(
-            room=room,
+            room=room.room_profile,
             status=RoundStatus.DECLARING,
             round_number=1,
             mode=SceneRoundMode.STRICT,

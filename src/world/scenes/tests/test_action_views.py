@@ -9,7 +9,12 @@ from rest_framework.test import APITestCase
 from actions.constants import ResolutionPhase
 from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult, TargetType
-from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
     BinaryEffectTypeFactory,
@@ -528,22 +533,22 @@ class PlaceViewSetTestCase(APITestCase):
         self.client.force_authenticate(user=self.account)
 
     def test_list_places(self) -> None:
-        PlaceFactory(room=self.room, name="Bar")
-        PlaceFactory(room=self.room, name="Corner")
+        PlaceFactory(room=RoomProfileFactory(objectdb=self.room), name="Bar")
+        PlaceFactory(room=RoomProfileFactory(objectdb=self.room), name="Corner")
         url = reverse("place-list")
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 2
 
     def test_join_place(self) -> None:
-        place = PlaceFactory(room=self.room, name="Bar")
+        place = PlaceFactory(room=RoomProfileFactory(objectdb=self.room), name="Bar")
         url = reverse("place-join", kwargs={"pk": place.pk})
         response = self.client.post(url)
         assert response.status_code == status.HTTP_200_OK
         assert response.data["persona"] == self.persona.pk
 
     def test_leave_place(self) -> None:
-        place = PlaceFactory(room=self.room, name="Bar")
+        place = PlaceFactory(room=RoomProfileFactory(objectdb=self.room), name="Bar")
         # Join first
         join_url = reverse("place-join", kwargs={"pk": place.pk})
         self.client.post(join_url)
@@ -557,8 +562,8 @@ class PlaceViewSetTestCase(APITestCase):
             db_key="Inn",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        PlaceFactory(room=self.room, name="Bar")
-        PlaceFactory(room=other_room, name="Lobby")
+        PlaceFactory(room=RoomProfileFactory(objectdb=self.room), name="Bar")
+        PlaceFactory(room=RoomProfileFactory(objectdb=other_room), name="Lobby")
         url = reverse("place-list")
         response = self.client.get(url, {"room": self.room.pk})
         assert response.status_code == status.HTTP_200_OK

@@ -28,7 +28,8 @@ class InstancedRoom(SharedMemoryModel):
         related_name="owned_instances",
         help_text="GM who spun this instance up (story scene rooms, #2450).",
     )
-    # ObjectDB by design (#2608): the captivity path passes a raw, unvalidated
+    # ObjectDB by design (#2608)  noqa: OBJECTDB_FIELD
+    # The captivity path passes a raw, unvalidated
     # `character.location` (world/mechanics/effect_handlers.py:861) — no Room
     # typeclass guarantee, so no RoomProfile to point at. `clean()` below asserts
     # Room-ness but is NOT enforced on ORM writes (no full_clean() in save()), so

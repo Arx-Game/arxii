@@ -37,7 +37,7 @@ class StartRoundActionTests(TestCase):
         result = get_action("start_round").run(self.actor)
 
         self.assertTrue(result.success)
-        rnd = SceneRound.objects.get(room=self.room)
+        rnd = SceneRound.objects.get(room_id=self.room.pk)
         self.assertEqual(rnd.status, RoundStatus.DECLARING)
         self.assertTrue(
             SceneRoundParticipant.objects.filter(
@@ -63,7 +63,7 @@ class StartRoundActionTests(TestCase):
         self.assertTrue(result.success)
         existing.refresh_from_db()
         self.assertEqual(existing.status, RoundStatus.DECLARING)
-        self.assertEqual(SceneRound.objects.filter(room=self.room).count(), 1)
+        self.assertEqual(SceneRound.objects.filter(room_id=self.room.pk).count(), 1)
 
     def test_start_round_no_location_returns_failure(self) -> None:
         """Actor with no location gets a graceful failure."""

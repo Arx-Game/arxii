@@ -4,7 +4,12 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import PlaceFactory, PlacePresenceFactory
@@ -42,7 +47,7 @@ class PlaceViewerIsPresentTests(APITestCase):
         self.url = reverse("place-list")
 
     def test_viewer_is_present_true_when_persona_has_presence(self) -> None:
-        place = PlaceFactory(room=self.room, name="Bar")
+        place = PlaceFactory(room=RoomProfileFactory(objectdb=self.room), name="Bar")
         PlacePresenceFactory(place=place, persona=self.persona)
 
         response = self.client.get(self.url, {"room": self.room.pk})
@@ -53,7 +58,7 @@ class PlaceViewerIsPresentTests(APITestCase):
         assert results[0]["viewer_is_present"] is True
 
     def test_viewer_is_present_false_when_no_presence(self) -> None:
-        PlaceFactory(room=self.room, name="Corner")
+        PlaceFactory(room=RoomProfileFactory(objectdb=self.room), name="Corner")
 
         response = self.client.get(self.url, {"room": self.room.pk})
 
@@ -64,7 +69,7 @@ class PlaceViewerIsPresentTests(APITestCase):
 
     def test_unauthenticated_request_is_rejected(self) -> None:
         self.client.force_authenticate(user=None)
-        PlaceFactory(room=self.room, name="Bar")
+        PlaceFactory(room=RoomProfileFactory(objectdb=self.room), name="Bar")
 
         response = self.client.get(self.url, {"room": self.room.pk})
 
@@ -95,7 +100,7 @@ class PlaceViewerIsPresentTests(APITestCase):
         16-18. SAVEPOINT / session UPDATE / RELEASE SAVEPOINT (session-teardown bookkeeping)
         """
         for name in ("Bar", "Corner", "Hearth"):
-            PlaceFactory(room=self.room, name=name)
+            PlaceFactory(room=RoomProfileFactory(objectdb=self.room), name=name)
 
         with self.assertNumQueries(18):
             response = self.client.get(self.url, {"room": self.room.pk})

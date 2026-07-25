@@ -85,7 +85,7 @@ class SceneRoundServiceTests(TestCase):
 
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         rnd = SceneRoundFactory(
-            room=room,
+            room=room.room_profile,
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.DANGER,
@@ -105,7 +105,7 @@ class SceneRoundServiceTests(TestCase):
 
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         rnd = SceneRoundFactory(
-            room=room,
+            room=room.room_profile,
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.DANGER,
@@ -130,7 +130,7 @@ class SceneRoundResolutionTests(TestCase):
 
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         self.rnd = SceneRoundFactory(
-            room=self.room,
+            room=self.room.room_profile,
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,
@@ -512,7 +512,7 @@ class SceneRoundAbandonmentTests(TestCase):
 
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         self.rnd = SceneRoundFactory(
-            room=self.room,
+            room=self.room.room_profile,
             status=RoundStatus.DECLARING,
             round_number=1,
             mode=SceneRoundMode.STRICT,
@@ -758,7 +758,7 @@ class SceneRoundOutcomeBroadcastTests(TestCase):
 
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         self.rnd = SceneRoundFactory(
-            room=self.room,
+            room=self.room.room_profile,
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,

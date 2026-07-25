@@ -125,7 +125,7 @@ class TestSocialRoundAutoResolvesOnLastDeclaration(TestCase):
 
         # STRICT (social) round in DECLARING; both participants ACTIVE and present.
         self.scene_round = SceneRoundFactory(
-            room=self.room,
+            room=self.room.room_profile,
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,

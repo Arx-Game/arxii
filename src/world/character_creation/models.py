@@ -882,7 +882,7 @@ class CharacterDraft(SharedMemoryModel):
         expiry_threshold = timezone.now() - timedelta(days=60)
         return self.updated_at < expiry_threshold
 
-    def get_starting_room(self) -> ObjectDB | None:
+    def get_starting_room(self) -> ObjectDB | None:  # noqa: OBJECTDB_PARAM — a room object
         """
         Determine the starting room for this character.
 

@@ -146,7 +146,7 @@ class SocialRoundIntegrationBase(TestCase):
         """Create a STRICT OPT_IN DECLARING round with the given participants/initiative."""
         kwargs.setdefault("mode", SceneRoundMode.STRICT)
         return SceneRoundFactory(
-            room=self.room,
+            room=self.room.room_profile,
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,

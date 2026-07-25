@@ -45,7 +45,9 @@ def ensure_succor_challenges_for_round(scene_round: SceneRound) -> None:
         )
         return
 
-    room = scene_round.room
+    # SceneRound.room is a RoomProfile (#2608); ChallengeInstance.location
+    # stays ObjectDB (it may sit at a bare object), so hand it the room object.
+    room = scene_round.room.objectdb
     for decl in declarations:
         ally_char = decl.succor_target.character_sheet.character
         ChallengeInstance.objects.get_or_create(
