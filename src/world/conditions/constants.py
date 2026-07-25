@@ -75,8 +75,9 @@ TARGET_EFFECT_ALTERATION: str = "alteration"
 # Foundational capability name constants.
 # These are plain string constants (not Django choices) because they are
 # capability identifiers, not an enumerated selection set.
-# Each has innate_baseline >= 1 on its CapabilityType row, meaning every
-# character possesses them by default before any condition modifier is applied.
+# Each has innate_baseline = 5 on its CapabilityType row (the capability ladder's
+# unimpaired-mortal anchor, ADR-0164), meaning every character possesses them by
+# default before any condition modifier is applied.
 # Condition name constants for the core incapacitation conditions.
 # These are plain strings (not TextChoices) — they are identity keys,
 # not an enumerated selection set. Factories use them to seed the
@@ -128,9 +129,13 @@ class FoundationalCapability:
     """String constants for capabilities every character has innately.
 
     The default value (baseline) each character has for these capabilities
-    lives on CapabilityType.innate_baseline. Conditions that zero out these
-    capabilities (e.g., unconscious zeroes AWARENESS, rooted zeroes MOVEMENT)
-    use a sufficiently large negative ConditionCapabilityEffect.
+    lives on CapabilityType.innate_baseline, on the capability ladder (ADR-0164):
+    5 = an unimpaired mortal. Conditions that zero out these capabilities (e.g.,
+    unconscious zeroes AWARENESS, rooted zeroes MOVEMENT) use a block sized to
+    the tier it must beat: a mundane block (-20) stops mortal and gifted but
+    lets a greater supernatural through; a potent block (-100) beats everything
+    below mythic; an absolute block (-1000) is reserved for mythic-defeating
+    effects.
     """
 
     AWARENESS = "awareness"  # required by ~all techniques; unconscious zeroes it

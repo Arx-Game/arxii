@@ -734,9 +734,11 @@ def _calculate_capability_points(character: "ObjectDB", check_type: "CheckType")
     on a check_type with no authored row for it. When there are no authored rows this
     returns 0 without ever calling the capability oracle (no pointless queries).
 
-    Per row: weight x get_effective_capability_value(sheet, capability) — the agency
-    oracle (innate baseline + CharacterModifier + condition contributions + passive
-    grants). Summed across rows, then truncated toward zero ONCE via
+    Per row: weight x (get_effective_capability_value(sheet, capability) -
+    capability.innate_baseline) — scoring deviation from the innate baseline
+    (#2704, D3), not the raw agency-oracle value (innate baseline + CharacterModifier
+    + condition contributions + passive grants), so an unimpaired character
+    contributes exactly 0. Summed across rows, then truncated toward zero ONCE via
     ``_capability_point_allocation`` (matches CheckTypeCapabilityModifier.weight's
     help_text), analogous to how trait/aspect points truncate.
 
