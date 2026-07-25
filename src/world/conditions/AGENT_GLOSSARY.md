@@ -77,7 +77,7 @@ The shared 0-to-open-ended scale every `CapabilityType.innate_baseline` and `Con
 _Avoid_: capability percentage, capability boolean (there is no percentage scale and no blocks flag — magnitude on the ladder is the only mechanism)
 
 **awareness** (CapabilityType):
-The foundational passive sense-gate every character has (`FoundationalCapability.AWARENESS`, `world/conditions/constants.py`) — `innate_baseline=5` (the capability ladder's unimpaired-mortal anchor, ADR-0164), required by ~all techniques, zeroed by Unconscious via a potent-block `ConditionCapabilityEffect`. Distinct from **perception** (below): awareness is "can you sense anything at all," not "how well." See ADR-0143 for the canonical capability vocabulary this belongs to.
+The foundational passive sense-gate every character has (`FoundationalCapability.AWARENESS`, `world/conditions/constants.py`) — required by ~all techniques, zeroed by Unconscious via a potent-block `ConditionCapabilityEffect`. Its `innate_baseline` is authored content, not a code constant: ADR-0164 intends 5 (the capability ladder's unimpaired-mortal anchor) once the content row is rescaled, but most environments still carry the pre-rescale `innate_baseline=1` — see `docs/systems/conditions.md`'s "Capability value ladder" section. Distinct from **perception** (below): awareness is "can you sense anything at all," not "how well." See ADR-0143 for the canonical capability vocabulary this belongs to.
 _Avoid_: using "awareness" and "perception" interchangeably — they are separate `CapabilityType` rows with different baselines and different roles.
 
 **perception** (CapabilityType):
