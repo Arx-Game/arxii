@@ -258,11 +258,15 @@ repo, not a code constant), and its current state varies by environment:
   seeds a *freshly created* row at 5, but for a pre-existing row only ever
   *raises* it when it's below 1 (to 1, never to 5) — a safety net against an
   unset baseline incapacitating everyone, not a normalizer onto the ladder.
-- `sight` and `hearing` are **not** existing `FoundationalCapability` constants
-  and nothing in `src/` references them today — they are new `CapabilityType`
-  rows being authored as content alongside this change (content-repo fixture,
-  not this codebase), not existing foundational capacities on par with the
-  three above.
+- `sight` and `hearing` are **not** existing `FoundationalCapability` constants,
+  and no code *logic* reads them — they are new `CapabilityType` rows being
+  authored as content alongside this change (content-repo fixture, not this
+  codebase), not existing foundational capacities on par with the three above.
+  The only mention of either name anywhere in `src/` is the authoring guidance
+  in `CapabilityType.innate_baseline`'s `help_text` (`world/conditions/models.py`,
+  copied verbatim into migration `0025_alter_capabilitytype_innate_baseline_and_more`)
+  — an instruction telling a content author what value to use when the rows are
+  authored, not an assertion that the rows already exist.
 - Granted/specialty capabilities (magic-adjacent, techniques-only — e.g.
   `perception`, `at_will_shifting`) default `innate_baseline` to 0, per the
   model field's own default (`world/conditions/models.py`).
