@@ -128,6 +128,18 @@ _Avoid_: stage, form, tier (tier is the opponent's power class)
 **OpponentTier**:
 The power class of an NPC opponent (`OpponentTier`: SWARM, MOOK, ELITE, BOSS, HERO_KILLER), seeding its baseline stat budget. SWARM uses count/body-toughness mechanics; HERO_KILLER is the unbeatable presence.
 
+**Opponent level** (`CombatOpponent.level`, #2707, ADR-0164):
+A `CombatOpponent`'s power level on the same 1-30 scale as a PC's class level — a
+SEPARATE axis from `OpponentTier`: a level 3 BOSS and a level 20 MOOK are both coherent
+(tier is the opponent's *role/budget class*; level is where it sits on the same
+power-scaling axis a PC uses). Opposes a PC's checks through `world.checks.services
+.level_opposition` at every combat call site (offense, penetration, and NPC-attack
+defense) and is public in the opponent payload, so a threat readout can be built on it.
+Auto-scaled spawns default to the encounter's average party level; a GM setting it
+deliberately low is how a soloable or upset-victory boss is authored.
+_Avoid_: tier (that's `OpponentTier`, a different axis — see above), rank, difficulty
+(for the NPC's class), CR/challenge rating
+
 **Lieutenant** (#2642):
 An NPC opponent whose `reinforces` self-FK points at a BOSS-tier opponent. While active
 (ACTIVE status, morale not BREAK, no behavior-altering condition, not pinned in an ACTIVE
@@ -147,7 +159,6 @@ distinct (actor, kind) pair this round, doubled for a (kind, effect_type) pair's
 occurrence in the encounter — replacing the retired flat per-actor chip (ADR-0160).
 _Avoid_: break-bar chip/tick (the old flat mechanism's name — don't reuse for the new per-row
 audit record)
-_Avoid_: rank, level, difficulty (for the NPC's class)
 
 **Party Profile**:
 An immutable level-only snapshot of the active party (`PartyProfile`: party_size + avg_level) feeding the encounter-scaling formula. Difficulty scales on party size and average level only — never on threads, relationships, or other narrative richness.

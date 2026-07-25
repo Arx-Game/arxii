@@ -28,6 +28,39 @@ _Avoid_: willpower check, resolve, resistance (for the named CheckType)
 A flat per-character roll modifier summed from the character sheet's and the controlling account's `rollmod` values, added to the d100 before clamping to 1–100. A staff/debug lever, returning zero when the relations are absent.
 _Avoid_: luck, roll bonus, fudge
 
+**Level points** (#2707, ADR-0164):
+`LEVEL_POINTS_PER_LEVEL * character level` (5 points/level) — a guaranteed term summed
+into every `perform_check`'s `total_points`, sourced from
+`get_character_path_level`. Additive to the aspect bonus, never a replacement for it: a
+character whose Path matches the check's authored aspects still gets both. Unlike the
+aspect bonus, it never depends on an authored `CheckTypeAspect` existing.
+_Avoid_: level bonus, level modifier (both imply optional; level points are unconditional)
+
+**Level opposition** (#2707, ADR-0164):
+The PASSIVE half of an opposed check's difficulty, via `level_opposition(check_type, *,
+level, character=None)`: `LEVEL_POINTS_PER_LEVEL * level` always, plus — when a
+`character` is given — the acting check's aspects scored against the *defender's* Path.
+Used when the defender is not spending a check of their own (an authored lock, a ward, a
+combat attack against a `CombatOpponent`). Deliberately exclusive with resist increment
+(below) — a call site uses one or the other, never both, since resist increment already
+carries the defender's level points internally.
+_Avoid_: opposed difficulty (too generic — this names the specific level-plus-aspect
+helper), passive resistance (that's the general concept; "level opposition" is this
+function specifically)
+
+**Resist increment** (#2707, ADR-0164 — updated: now a full rating, not trait points):
+The ACTIVE half of an opposed check's difficulty, via `compute_resist_increment
+(defender_character, resist_effort_level)`: the defender's full pre-roll rating on the
+Composure `CheckType` (trait, specialization, aspect, capability, and perk points — the
+same breakdown `perform_check` uses, via `compute_check_rating`) plus the effort-level
+modifier, clamped >= 0. Before #2707 this summed only weighted Composure trait points,
+silently dropping specialization/aspect/capability/perk points and the defender's level.
+Used when the defender IS actively resisting with a check of their own (e.g. a social
+action). Deliberately exclusive with level opposition (above).
+_Avoid_: resistance rating (use "resist increment" for this specific helper's return
+value), Composure score (the CheckType is Composure; the increment is its rating plus
+effort, not a raw trait value)
+
 **CheckTypeCapabilityModifier** (#2505):
 A curated, staff-authored `(check_type, capability, weight)` row — the only path by which a
 character's `conditions.CapabilityType` value reaches a check's point total. No row means the

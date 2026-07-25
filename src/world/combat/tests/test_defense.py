@@ -179,9 +179,9 @@ class ResolveNpcAttackLevelOppositionTests(TestCase):
     (``ResolveNpcAttackSituationalPerkTests``, pinning the result regardless of
     difficulty), or asserts on something else (``extra_modifiers`` in
     ``test_wind_modifier.py``, the on-hit pool in ``test_knockback.py``) — none
-    observe ``target_difficulty``. A subtler inversion at that call site (e.g.
-    sourcing ``character=`` from the defender while keeping the attacker's
-    ``level=``, or the reverse) would pass the entire suite silently.
+    observe ``target_difficulty``. A subtler inversion of the ``level=`` argument at
+    that call site (e.g. sourcing the defending PC's level instead of the attacking
+    NPC's) would pass the entire suite silently.
 
     The PC defends here, so the difficulty must come from the ATTACKING NPC's
     level, never the defending PC's. The defending PC is given its own class
@@ -190,6 +190,16 @@ class ResolveNpcAttackLevelOppositionTests(TestCase):
     calls would return the SAME (defender-derived) difficulty rather than one
     that rises with the attacker's level, so the swap can't hide behind a
     coincidental equality.
+
+    NOT covered here: a ``character=`` swap (sourcing the aspect-bonus lookup from
+    the wrong side while ``level=`` stays correct). ``_calculate_aspect_bonus``
+    returns 0 for a character with no ``CharacterPathHistory`` row, and neither
+    ``CombatOpponentFactory`` (ephemeral NPC, no sheet) nor ``CharacterSheetFactory``
+    (the defending PC, below) creates one — so ``aspect_bonus`` is 0 for both sides
+    in this fixture, and a ``character=``-only swap would produce an identical
+    number here. Catching that would need an attacker with an authored
+    ``CharacterPathHistory`` + matching ``CheckTypeAspect``, which this fixture
+    doesn't build.
 
     Uses setUp (not setUpTestData) for the same DbHolder/CombatNPC-ObjectDB
     reason as ``ResolveNpcAttackTests`` above.

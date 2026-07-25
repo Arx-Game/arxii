@@ -122,7 +122,7 @@ from world.checks.services import get_rollmod
 rollmod = get_rollmod(character)
 ```
 
-### Opposed checks — two mutually exclusive answers for the opposing side (#2707)
+### Opposed checks — two mutually exclusive answers for the opposing side (#2707, ADR-0164)
 
 `compute_check_rating(character, check_type, extra_modifiers=0) -> int` is the one
 answer for "what does this character bring to this check, with no dice roll" — it
@@ -154,6 +154,18 @@ difficulty = level_opposition(check_type, level=defender_level, character=defend
 `target_difficulty` — replacing an earlier version that rolled a throwaway
 `perform_check` and discarded the outcome, which had the side effect of
 silently burning the target's rollmod.
+
+Combat wires `level_opposition` at three call sites — offense (`focused_opponent_target
+.level`), penetration (`target.level`, additive on top of the authored `barrier_strength`,
+never replacing it), and NPC-attack defense (`opponent_action.opponent.level`, the
+inverse direction: the attacking NPC's level sets the defending PC's difficulty). See
+`docs/systems/COMBAT_DEFENSES.md`.
+
+**Clash is the deliberate exception.** `world/combat/clash.py`'s clash-contribution roll
+still passes `target_difficulty=0` — a clash is a symmetric contest (both sides roll their
+own check and the results are compared, the same shape as `_resolve_joust_pass`'s
+`success_level` gap), so each side's level already rides its own roll and an opposition
+term would double-count it. See ADR-0164.
 
 ---
 
@@ -261,7 +273,7 @@ All models registered with appropriate admin interfaces:
 ## Integration Points
 
 - **Traits app**: Uses `PointConversionRange`, `CheckRank`, `ResultChart`, `CheckOutcome` for the resolution pipeline
-- **Classes app**: Uses `Aspect` and `PathAspect` for aspect bonus calculation, `CharacterClassLevel` for character level
+- **Classes app**: Uses `Aspect` and `PathAspect` for aspect bonus calculation
 - **Progression app**: Uses `CharacterPathHistory` for current path lookup; `get_character_path_level`
   (`world.progression.services.skill_development`) is the sole source of a character's class level (#2707)
   -- both the level-points term and the aspect bonus's level scaling read it

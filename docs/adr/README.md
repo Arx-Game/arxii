@@ -81,6 +81,8 @@ treat those names as hints to confirm, not gospel.
 ### Resolution
 - [0019 — Unified resolution: one roll path, data-sourced difficulty, graded outcomes](0019-unified-resolution-one-roll-path.md)
 - [0145 — Capabilities reach checks only through authored CheckTypeCapabilityModifier rows](0145-capability-check-links-are-authored-only.md) (extends ADR-0019; related ADR-0110; #2505)
+- [0164 — Level is a guaranteed, additive term on both sides of every check](0164-level-is-a-two-sided-check-term.md) (#2707; relates to ADR-0165; extends ADR-0019/0145)
+- [0165 — rank_difference is roller minus target; positive means the roller is stronger and gets the easier chart](0165-result-chart-direction-convention.md) (#2707; relates to ADR-0164; extends ADR-0019)
 
 ### Process & workflow
 - [0020 — Feature specs live in the GitHub issue body, gated by labels](0020-feature-specs-live-in-the-issue-body.md)
