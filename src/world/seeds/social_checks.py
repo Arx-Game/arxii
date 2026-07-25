@@ -1,5 +1,14 @@
 """Social check content seed (#1688 slice 2) — stat + skill + specialization.
 
+``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``, and
+``traits.trait`` are content-repo-owned (#2698) — looked up via
+``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+on. ``skills.specialization``/``checks.checktypespecialization`` stay outside
+``CONTENT_MODELS`` and keep seeding unconditionally, but no longer wipe and
+rewrite the composition on each run (#2698 Part 1 — that reverted authored/
+staff-tuned weights on every Big Button press); ``get_or_create`` converges
+instead.
+
 Retrofits the auto-scaffolded **stat+stat** social ``CheckType``s to the design's
 **stat + skill (+ specialization)** shape (see ``docs/roadmap/design-tenets.md`` — checks
 default to stat + skill (+ spec); stat+stat is the rare exception). Mirrors the code-seed
@@ -61,49 +70,71 @@ _SOCIAL_CHECK_COMPOSITION: dict[str, tuple[str, str, str | None]] = {
 
 
 def _ensure_social_category():
+    """Look up (or sample) the Social CheckCategory — content-repo-owned (#2698)."""
     from world.checks.models import CheckCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = CheckCategory.objects.get_or_create(
-        name="Social",
-        defaults={
+    return authored_or_sample(
+        CheckCategory,
+        {
             "description": "Checks involving social interaction, persuasion, and presence.",
             "display_order": 10,
         },
+        name="Social",
     )
-    return category
 
 
 def ensure_social_skills() -> dict[str, object]:
-    """Seed the Persuasion + Performance Skill rows (+ their backing SKILL Traits)."""
+    """Look up (or sample) the Persuasion + Performance Skill rows + backing Traits.
+
+    ``skills.Skill``/``traits.Trait`` are content-repo-owned (#2698). A skill
+    whose Trait or Skill row isn't authored is omitted from the returned dict —
+    callers must handle a missing key by skipping the composition that needs it.
+    """
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
     skills: dict[str, object] = {}
     for order, (name, tooltip) in enumerate(_SOCIAL_SKILLS):
-        trait, _ = Trait.objects.get_or_create(
-            name=name,
-            defaults={
+        trait = authored_or_sample(
+            Trait,
+            {
                 "trait_type": TraitType.SKILL,
                 "category": TraitCategory.SOCIAL,
                 "is_public": True,
             },
+            name=name,
         )
-        skill, _ = Skill.objects.get_or_create(
+        if trait is None:
+            continue
+        skill = authored_or_sample(
+            Skill,
+            {"tooltip": tooltip, "display_order": order, "is_active": True},
             trait=trait,
-            defaults={"tooltip": tooltip, "display_order": order, "is_active": True},
         )
+        if skill is None:
+            continue
         skills[name] = skill
     return skills
 
 
 def ensure_social_specializations(skills: dict[str, object]) -> dict[str, object]:
-    """Seed the specialization rows under their parent social skills."""
+    """Seed the specialization rows under their parent social skills.
+
+    ``skills.Specialization`` is not content-repo-owned — stays unconditional.
+    A specialization whose parent skill is missing (unauthored Skill/Trait) is
+    skipped — its ``parent_skill`` FK is required.
+    """
     from world.skills.models import Specialization  # noqa: PLC0415
 
     specs: dict[str, object] = {}
     for order, (name, parent_name) in enumerate(_SOCIAL_SPECIALIZATIONS):
+        parent_skill = skills.get(parent_name)
+        if parent_skill is None:
+            continue
         spec, _ = Specialization.objects.get_or_create(
-            parent_skill=skills[parent_name],
+            parent_skill=parent_skill,
             name=name,
             defaults={"display_order": order, "is_active": True},
         )
@@ -112,24 +143,26 @@ def ensure_social_specializations(skills: dict[str, object]) -> dict[str, object
 
 
 def _ensure_stat_trait(name: str):
+    """Look up (or sample) a SOCIAL stat Trait — content-repo-owned (#2698)."""
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    trait, _ = Trait.objects.get_or_create(
-        name=name,
-        defaults={
+    return authored_or_sample(
+        Trait,
+        {
             "trait_type": TraitType.STAT,
             "category": TraitCategory.SOCIAL,
             "is_public": True,
         },
+        name=name,
     )
-    return trait
 
 
 def _rename_legacy_deception() -> None:
     """One-way data rename: the charm-era "Deception" CheckType becomes "Deceive".
 
     In-place rename (pk stable) so the Deceive social ActionTemplate's FK
-    survives; the authoritative composition rewrite below then re-stats it to
+    survives; ``ensure_social_check_compositions`` below then re-stats it to
     presence, and "Con" arrives as the charm row. Idempotent: no-ops once
     renamed or on fresh databases.
     """
@@ -144,34 +177,50 @@ def _rename_legacy_deception() -> None:
 def ensure_social_check_compositions(
     skills: dict[str, object], specs: dict[str, object]
 ) -> dict[str, object]:
-    """Set each social CheckType's exact stat + skill (+ spec) composition (authoritative)."""
+    """Set each social CheckType's stat + skill (+ spec) composition.
+
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    No longer wipes and rewrites the composition on each run (#2698 Part 1 — that
+    reverted authored/staff-tuned weights on every Big Button press);
+    ``get_or_create``/``authored_or_sample`` converge instead. A CheckType whose
+    category or row isn't authored is skipped entirely for that entry;
+    ``CheckTypeSpecialization`` stays outside ``CONTENT_MODELS`` and keeps
+    seeding unconditionally.
+    """
     from world.checks.models import (  # noqa: PLC0415
         CheckType,
         CheckTypeSpecialization,
         CheckTypeTrait,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     category = _ensure_social_category()
     weight = Decimal("1.0")  # PLACEHOLDER magnitudes
     check_types: dict[str, object] = {}
+    if category is None:
+        return check_types
 
     for ct_name, (stat_name, skill_name, spec_name) in _SOCIAL_CHECK_COMPOSITION.items():
-        check_type, _ = CheckType.objects.get_or_create(
-            name=ct_name, category=category, defaults={"is_active": True}
+        check_type = authored_or_sample(
+            CheckType, {"is_active": True}, name=ct_name, category=category
         )
-        # Authoritative: wipe the prior (placeholder) composition, then rewrite it.
-        CheckTypeTrait.objects.filter(check_type=check_type).delete()
-        CheckTypeSpecialization.objects.filter(check_type=check_type).delete()
+        if check_type is None:
+            continue
 
-        CheckTypeTrait.objects.create(
-            check_type=check_type, trait=_ensure_stat_trait(stat_name), weight=weight
-        )
-        CheckTypeTrait.objects.create(
-            check_type=check_type, trait=skills[skill_name].trait, weight=weight
-        )
-        if spec_name is not None:
-            CheckTypeSpecialization.objects.create(
-                check_type=check_type, specialization=specs[spec_name], weight=weight
+        stat_trait = _ensure_stat_trait(stat_name)
+        if stat_trait is not None:
+            authored_or_sample(
+                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=stat_trait
+            )
+        skill = skills.get(skill_name)
+        if skill is not None:
+            authored_or_sample(
+                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill.trait
+            )
+        if spec_name is not None and specs.get(spec_name) is not None:
+            CheckTypeSpecialization.objects.get_or_create(
+                check_type=check_type, specialization=specs[spec_name], defaults={"weight": weight}
             )
         check_types[ct_name] = check_type
     return check_types

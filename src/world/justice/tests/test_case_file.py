@@ -8,7 +8,7 @@ nothing automated examines evidence. Unless someone contests the frame, it stand
 the framer's roll.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
@@ -40,6 +40,7 @@ from world.societies.factories import (
 from world.traits.factories import CheckOutcomeFactory
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_security_check_content gates on #2698
 class CaseFileFixture(TestCase):
     @classmethod
     def setUpTestData(cls):

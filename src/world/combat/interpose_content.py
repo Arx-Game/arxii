@@ -125,22 +125,28 @@ def _ensure_interpose_property() -> Property | None:
     )
 
 
-def _ensure_interpose_check_type() -> CheckType:
-    """Idempotently seed the Reflexes CheckType reused by every interpose approach.
+def _ensure_interpose_check_type() -> CheckType | None:
+    """Look up (or sample) the Reflexes CheckType reused by every interpose approach.
 
     Reuses the same CheckType row as the catch challenge (CATCH_CHECK_TYPE_NAME ==
     'Reflexes'). A split-second reaction is the shared mechanical fiction whether
     you're catching a faller or stepping in front of a blow.
+
+    ``checks.CheckCategory``/``CheckType`` are content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    Returns ``None`` when either isn't authored; the Reflexes-flavor approach
+    is skipped for every capability, mirroring how a missing Melee Defense
+    CheckType already skips its own twin approach below.
     """
-    category, _ = CheckCategory.objects.get_or_create(name="Exploration")
-    obj, _ = CheckType.objects.get_or_create(
+    category = authored_or_sample(CheckCategory, {}, name="Exploration")
+    if category is None:
+        return None
+    return authored_or_sample(
+        CheckType,
+        {"description": "A split-second reaction to arrest a falling body."},
         name=CATCH_CHECK_TYPE_NAME,
         category=category,
-        defaults={
-            "description": "A split-second reaction to arrest a falling body.",
-        },
     )
-    return obj
 
 
 def _get_melee_defense_check_type() -> CheckType | None:
@@ -217,11 +223,13 @@ def ensure_interpose_content() -> None:
     ``ChallengeApproach`` row surfaces with no engine change.
 
     ``mechanics.Property``/``PropertyCategory``/``ChallengeCategory``/
-    ``ChallengeTemplate``/``Application``/``ChallengeApproach`` are all
-    content-repo-owned (#2698) — looked up rather than invented unless
-    ``SEED_SAMPLE_CONTENT`` is on. The whole challenge is skipped when the
-    anchor Property or ChallengeCategory/ChallengeTemplate aren't authored —
-    there is nothing left to hang approaches on.
+    ``ChallengeTemplate``/``Application``/``ChallengeApproach`` and
+    ``checks.CheckCategory``/``CheckType`` are all content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. The
+    whole challenge is skipped when the anchor Property or ChallengeCategory/
+    ChallengeTemplate aren't authored — there is nothing left to hang
+    approaches on. A missing Reflexes CheckType only skips that one flavor's
+    approach per capability (the Melee-Defense twin is independent).
     """
     interpose_property = _ensure_interpose_property()
     if interpose_property is None:
@@ -288,16 +296,19 @@ def ensure_interpose_content() -> None:
         )
         if application is None:
             continue
-        authored_or_sample(
-            ChallengeApproach,
-            {
-                "check_type": check_type,
-                "display_name": display_name,
-                "custom_description": fiction,
-            },
-            challenge_template=template,
-            application=application,
-        )
+        # The Reflexes CheckType may not be authored either — skip just this
+        # flavor's approach (the Melee-Defense twin below is independent).
+        if check_type is not None:
+            authored_or_sample(
+                ChallengeApproach,
+                {
+                    "check_type": check_type,
+                    "display_name": display_name,
+                    "custom_description": fiction,
+                },
+                challenge_template=template,
+                application=application,
+            )
 
         if melee_defense_check_type is None:
             continue

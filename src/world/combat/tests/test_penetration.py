@@ -14,7 +14,7 @@ Distinguishing the two perform_check calls inside __call__:
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
@@ -31,6 +31,7 @@ from world.magic.constants import PowerStage
 from world.traits.factories import CheckOutcomeFactory
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # wire_penetration_check_type gates on #2698
 class PenetrationContestTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
@@ -197,6 +198,7 @@ class PenetrationContestTests(TestCase):
         self.assertEqual(single.damage_dealt, observed)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # wire_penetration_check_type gates on #2698
 class PenetrationEndToEndTests(TestCase):
     """End-to-end penetration test: real perform_check pipeline, no mocking.
 
@@ -301,6 +303,7 @@ class PenetrationEndToEndTests(TestCase):
         self.assertGreater(result.scaled_damage, 0)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # wire_penetration_check_type gates on #2698
 class PenetrationModifierSeamTests(TestCase):
     """Penetration check honors the shared modifier seam (#767)."""
 

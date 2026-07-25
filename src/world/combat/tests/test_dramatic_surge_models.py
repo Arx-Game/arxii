@@ -2,7 +2,7 @@
 new EscalationCurve fields, and StakesEscalationModifier."""
 
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import StakesLevel, SurgeTriggerKind
@@ -99,6 +99,7 @@ class DramaticSurgeRecordDedupTests(TestCase):
         self.assertEqual(DramaticSurgeRecord.objects.count(), 2)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class EscalationCurveNewFieldsTests(TestCase):
     def test_new_fields_have_documented_defaults(self):
         curve = EscalationCurveFactory()

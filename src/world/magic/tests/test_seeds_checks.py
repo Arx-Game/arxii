@@ -22,6 +22,7 @@ from world.skills.models import Skill
 from world.traits.models import Trait, TraitCategory, TraitType
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_magic_skills gates on #2698
 class EnsureMagicSkillsTests(TestCase):
     def test_creates_three_skills_with_backing_traits(self):
         skills = ensure_magic_skills()
@@ -42,6 +43,7 @@ class EnsureMagicSkillsTests(TestCase):
         self.assertEqual(Trait.objects.filter(name="ritualism").count(), 1)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_magic_check_types gates on #2698
 class EnsureMagicCheckTypesTests(TestCase):
     def test_creates_five_composed_check_types(self):
         check_types = ensure_magic_check_types()

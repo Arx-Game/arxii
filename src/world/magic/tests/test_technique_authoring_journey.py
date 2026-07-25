@@ -29,7 +29,7 @@ from __future__ import annotations
 from typing import Any, cast
 from unittest.mock import MagicMock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from commands.technique import CmdTechnique
 from world.character_sheets.factories import CharacterSheetFactory
@@ -283,6 +283,7 @@ class TechniqueAuthoringJourneyTests(TestCase):
         assert technique.action_template_id == chosen.pk
         assert technique.action_template.consequence_pool_id == chosen.consequence_pool_id
 
+    @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_combat_offense_catalog_content gates
     def test_combat_catalog_pool_choice_flows_through_to_standalone_cast(self):
         """set consequence_pool=<combat catalog id> with action_category=physical
         -> author -> the technique's standalone cast resolves through the

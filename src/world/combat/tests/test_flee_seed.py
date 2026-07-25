@@ -28,6 +28,7 @@ from world.mechanics.constants import CHECK_CATEGORY_NAME
 from world.mechanics.models import ModifierTarget
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # wire_flee_check_type gates on #2698
 class WireFleeCheckTypeTraitTests(TestCase):
     """wire_flee_check_type() authors trait composition (#878)."""
 
@@ -53,16 +54,15 @@ class WireFleeCheckTypeTraitTests(TestCase):
         check_type = wire_flee_check_type()
         self.assertEqual(check_type.category.name, "Combat")
 
-    def test_authoritative_rewrite_resets_staff_edits(self) -> None:
-        """#1706 — penetration/flee use an authoritative delete+rewrite (mirrors
-        social_checks.py) to correct the prior stat+stat composition. A re-seed
-        resets staff weight edits and converges on the authored three-trait set."""
+    def test_reseed_preserves_a_staff_tuned_weight(self) -> None:
+        """#2698 Part 1 — wire_flee_check_type() no longer wipes and rewrites
+        the composition on each run (that reverted authored/staff-tuned
+        weights on every Big Button press); get_or_create/authored_or_sample
+        converge instead, so a staff-edited weight survives a reseed."""
         from world.seeds.combat_checks import ensure_melee_combat_skill
 
         ensure_melee_combat_skill()
         check_type = wire_flee_check_type()
-        # Staff retunes a weight; re-running the seed resets it (authoritative
-        # delete+rewrite — the row is replaced, so re-query by trait name).
         row = CheckTypeTrait.objects.get(check_type=check_type, trait__name="agility")
         row.weight = Decimal("2.00")
         row.save()
@@ -71,7 +71,7 @@ class WireFleeCheckTypeTraitTests(TestCase):
 
         self.assertEqual(CheckTypeTrait.objects.filter(check_type=check_type).count(), 3)
         refreshed = CheckTypeTrait.objects.get(check_type=check_type, trait__name="agility")
-        self.assertEqual(refreshed.weight, Decimal("1.00"))
+        self.assertEqual(refreshed.weight, Decimal("2.00"))
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
@@ -104,6 +104,7 @@ class WireFleeModifierTargetTests(TestCase):
         self.assertEqual(ModifierTarget.objects.filter(name=FLEE_CHECK_TYPE_NAME).count(), 1)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # wire_flee_check_type gates on #2698
 class WireFleeConfigTests(TestCase):
     """wire_flee_config() seeds FleeConfig, tier modifiers, and starter pool (#878)."""
 

@@ -14,6 +14,7 @@ from world.seeds.database import seed_dev_database
 from world.seeds.tests.content_stub import stub_content_root
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # combat check-content seeds gate on #2698
 class TestPlayableSlice(TestCase):
     @stub_content_root()
     def test_resolution_tables_seeded(self) -> None:

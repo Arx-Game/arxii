@@ -77,10 +77,30 @@ from world.seeds.tests.content_stub import stub_content_root
 #: Simple Job" demo mission called out below; ``realms.realm``;
 #: ``relationships.relationshiptrack``, which also dropped an ``update_or_create``
 #: that silently re-applied PLACEHOLDER names over a staff edit on every reseed).
-#: What remains is genuine invention (62 ``checks.checktypetrait``, 5
-#: ``character_creation.cgexplanation``, ``forms.formtraitoption`` "court_coils",
-#: and two singleton configs). The stub-relative number is the stricter,
-#: hermetic one, and it is what this ratchet drives to zero.
+#: A further #2698 pass cleared the entire ``checks.*``/``skills.skill``/
+#: ``classes.aspect``/``classes.pathaspect``/``traits.trait`` cluster (7
+#: models: checkcategory, checktype, checktypetrait, skill, aspect,
+#: pathaspect, trait — the 62 ``checks.checktypetrait`` rows were the single
+#: largest genuine invention on the ratchet). ``skills.specialization``/
+#: ``checks.checktypespecialization``/``checks.checktypeaspect`` are not in
+#: ``CONTENT_MODELS`` and keep seeding unconditionally. That pass also fixed a
+#: real bug in the same call sites: 15 sites across 8 files wiped and
+#: recreated a CheckType's ``CheckTypeTrait``/``CheckTypeSpecialization``
+#: composition on every Big Button press (an "authoritative rewrite" idiom
+#: pre-dating this ratchet) — since the lore repo authors identical
+#: (check, trait, weight) triples, every press silently reverted any staff
+#: tuning or lore edit to those weights. All 15 now converge via
+#: ``get_or_create``/``authored_or_sample`` instead. ``world.magic.seeds_cast``'s
+#: ``ensure_technique_cast_content()`` is the one deliberate exception: it is
+#: a config prerequisite ``world.seeds.database.load_content_first()`` runs
+#: BEFORE the content load (so lore-repo ``Technique`` fixtures can resolve
+#: the "Technique Cast" ``ActionTemplate`` by natural key on a database with
+#: nothing authored yet) and sits outside this test's measurement window
+#: entirely — gating it would permanently break content loading, and would
+#: not shrink this ratchet either. What remains is genuine invention (5
+#: ``character_creation.cgexplanation``, ``forms.formtraitoption``
+#: "court_coils", and two singleton configs). The stub-relative number is the
+#: stricter, hermetic one, and it is what this ratchet drives to zero.
 #:
 #: So this freezes today's state and guards the margin: a seeder that starts
 #: populating a *new* content model fails immediately, while the existing overlap
@@ -94,11 +114,6 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
     {
         "character_creation.cgexplanation",
         "character_sheets.gender",
-        "checks.checkcategory",
-        "checks.checktype",
-        "checks.checktypetrait",
-        "classes.aspect",
-        "classes.pathaspect",
         "distinctions.distinction",
         "distinctions.distinctioncategory",
         "distinctions.distinctioneffect",
@@ -107,9 +122,7 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
         "forms.formtraitoption",
         "forms.heightband",
         "forms.speciesformtrait",
-        "skills.skill",
         "species.species",
-        "traits.trait",
     }
 )
 

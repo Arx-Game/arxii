@@ -7,7 +7,7 @@ from deed-knowledge spread is dampened) or pervert it through a frame-job projec
 (``world.justice.frame_jobs``). All magnitudes PLACEHOLDER.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
@@ -66,6 +66,7 @@ class EvidenceGenerationTests(TestCase):
         assert not CrimeEvidence.objects.filter(deed=deed).exists()
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_security_check_content gates on #2698
 class EvidenceCheckFixture(TestCase):
     """Shared setup: a seeded check pipeline, a room, and a character standing in it."""
 

@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from actions.factories import ActionTemplateFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -567,6 +567,7 @@ class ConsequencePoolCatalogResolutionTests(TestCase):
         self.assertNotEqual(template.name, TECHNIQUE_CAST_TEMPLATE_NAME)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_combat_offense_catalog_content gates on #2698
 class ConsequencePoolCatalogCombatSplitTests(TestCase):
     """#1995 — PHYSICAL techniques validate against the combat 'Combat: Melee
     Offense' catalog; every other category still validates against the magic

@@ -1000,10 +1000,18 @@ def seed_character_creation_dev() -> None:
     _seed_form_traits(species_khati)
     _seed_heritages()
     _seed_pronouns()
+    # traits.trait is content-repo-owned (#2698) — looked up rather than
+    # invented unless SEED_SAMPLE_CONTENT is on. These are the base stat
+    # Traits every other check-composing seeder in this repo looks up by
+    # name; a real content repo authors them (the ADR-0164 audit found
+    # checks.checktype alone at 42 seeded vs. 72 authored rows).
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
     for stat_name in DEFAULT_STAT_NAMES:
-        Trait.objects.get_or_create(
+        authored_or_sample(
+            Trait,
+            {"trait_type": TraitType.STAT, "description": stat_name},
             name=stat_name,
-            defaults={"trait_type": TraitType.STAT, "description": stat_name},
         )
     Roster.objects.get_or_create(name="Available Characters")
     Roster.objects.get_or_create(name="Active Characters")

@@ -6,7 +6,7 @@ from datetime import timedelta
 from unittest import mock
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
@@ -556,6 +556,7 @@ class MothballTests(TestCase):
         self.assertIsNone(building.mothballed_at)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_governance_check_content gates on #2698
 class PreparationSeedTests(TestCase):
     def test_ensure_preparation_contribution_method(self) -> None:
         from world.buildings.seeds import (

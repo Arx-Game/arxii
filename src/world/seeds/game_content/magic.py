@@ -1805,18 +1805,25 @@ def seed_magic_config() -> MagicConfigResult:
         ensure_magic_check_types,
     )
 
-    resilience_check_type = ensure_magic_check_types()[MAGICAL_ENDURANCE_CHECK_TYPE_NAME]
-    soulfray_config, _ = SoulfrayConfig.objects.get_or_create(
-        pk=1,
-        defaults={
-            "soulfray_threshold_ratio": Decimal("0.30"),
-            "severity_scale": 10,
-            "deficit_scale": 5,
-            "resilience_check_type": resilience_check_type,
-            "base_check_difficulty": 15,
-            "ritual_severity_cost_per_point": 1,
-        },
-    )
+    # checks.CheckType is content-repo-owned (#2698) — ensure_magic_check_types()
+    # omits an entry whose category/row isn't authored. resilience_check_type is
+    # a required FK on SoulfrayConfig (a pk=1 singleton), so the singleton itself
+    # is skipped entirely (never created with a null FK) when the Magical
+    # Endurance CheckType isn't authored and SoulfrayConfig doesn't already exist.
+    resilience_check_type = ensure_magic_check_types().get(MAGICAL_ENDURANCE_CHECK_TYPE_NAME)
+    soulfray_config = SoulfrayConfig.objects.filter(pk=1).first()
+    if soulfray_config is None and resilience_check_type is not None:
+        soulfray_config, _ = SoulfrayConfig.objects.get_or_create(
+            pk=1,
+            defaults={
+                "soulfray_threshold_ratio": Decimal("0.30"),
+                "severity_scale": 10,
+                "deficit_scale": 5,
+                "resilience_check_type": resilience_check_type,
+                "base_check_difficulty": 15,
+                "ritual_severity_cost_per_point": 1,
+            },
+        )
 
     # --- AnimaRitualBudgetAward: one authored row per canonical CheckOutcome tier ---
     # Replaces the old SoulfrayConfig.ritual_budget_critical_success/_success/_partial/

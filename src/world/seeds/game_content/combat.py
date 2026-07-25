@@ -22,12 +22,13 @@ if TYPE_CHECKING:
 class PenetrationContestResult:
     """Returned by seed_penetration_contest().
 
-    ``modifier_target`` (``mechanics.ModifierTarget``) is content-repo-owned
-    (#2698) — ``None`` when its ``ModifierCategory`` isn't authored and
-    ``SEED_SAMPLE_CONTENT`` is off.
+    ``check_type`` (``checks.CheckType``) and ``modifier_target``
+    (``mechanics.ModifierTarget``) are content-repo-owned (#2698) — each is
+    ``None`` when its category/row isn't authored and ``SEED_SAMPLE_CONTENT``
+    is off. ``factors`` doesn't depend on ``check_type`` and always seeds.
     """
 
-    check_type: CheckType
+    check_type: CheckType | None
     factors: list[PenetrationOutcomeFactor]
     modifier_target: ModifierTarget | None
 
@@ -36,14 +37,16 @@ class PenetrationContestResult:
 class FleeSeedResult:
     """Returned by seed_flee_check().
 
-    ``modifier_target`` (``mechanics.ModifierTarget``) is content-repo-owned
-    (#2698) — ``None`` when its ``ModifierCategory`` isn't authored and
-    ``SEED_SAMPLE_CONTENT`` is off.
+    ``check_type`` (``checks.CheckType``) and ``modifier_target``
+    (``mechanics.ModifierTarget``) are content-repo-owned (#2698) — each is
+    ``None`` when its category/row isn't authored and ``SEED_SAMPLE_CONTENT``
+    is off. ``config`` (the ``FleeConfig`` singleton) is ``None`` too in that
+    case, since its ``check_type`` FK is required.
     """
 
-    check_type: CheckType
+    check_type: CheckType | None
     modifier_target: ModifierTarget | None
-    config: FleeConfig
+    config: FleeConfig | None
 
 
 def seed_penetration_contest() -> PenetrationContestResult:
@@ -175,21 +178,27 @@ def seed_dramatic_surge_content() -> None:
         name="Enemies",
     )
 
+    # checks.CheckType is content-repo-owned (#2698); pace_check_type is a
+    # required FK on EscalationCurve, so the curve is skipped entirely (curve
+    # stays None — StakesEscalationModifier.default_curve is nullable) when
+    # the "Escalation Pace" CheckType isn't authored.
     pace_check_type = ensure_escalation_pace_check_type()
-    curve, _ = EscalationCurve.objects.get_or_create(
-        name="Standard Dramatic Escalation",
-        defaults={
-            "description": "Default escalating ramp for stakes-driven encounters.",
-            "start_round": 2,
-            "intensity_step": 1,
-            "pace_check_type": pace_check_type,
-            "spike_intensity_amount": 3,
-            "spike_minimum_track_points": 5,
-            "peril_spike_intensity_amount": 4,
-            "hated_foe_spike_intensity_amount": 4,
-            "surge_narration": "{character}'s power surges with sudden, dramatic force.",
-        },
-    )
+    curve = None
+    if pace_check_type is not None:
+        curve, _ = EscalationCurve.objects.get_or_create(
+            name="Standard Dramatic Escalation",
+            defaults={
+                "description": "Default escalating ramp for stakes-driven encounters.",
+                "start_round": 2,
+                "intensity_step": 1,
+                "pace_check_type": pace_check_type,
+                "spike_intensity_amount": 3,
+                "spike_minimum_track_points": 5,
+                "peril_spike_intensity_amount": 4,
+                "hated_foe_spike_intensity_amount": 4,
+                "surge_narration": "{character}'s power surges with sudden, dramatic force.",
+            },
+        )
 
     StakesEscalationModifier.objects.get_or_create(
         stakes_level=StakesLevel.LOCAL,

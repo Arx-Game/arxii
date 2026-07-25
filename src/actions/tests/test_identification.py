@@ -8,7 +8,7 @@ REST-dispatch ``target_persona_id`` resolution shape (the #2163 gotcha).
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from actions.constants import TargetKind
 from actions.definitions.identification import IdentifyAction
@@ -27,6 +27,7 @@ from world.seeds.investigation_checks import seed_investigation_check_content
 from world.traits.factories import CheckOutcomeFactory
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_investigation_check_content gates on #2698
 class IdentifyActionTestCase(TestCase):
     def setUp(self) -> None:
         seed_check_resolution_tables()

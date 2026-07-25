@@ -7,7 +7,7 @@ the rebuttal (one attempt per refuter). No consent gate — defending the accuse
 only turning it back on the *author* (denounce) is consent-gated (the Tom/Bob/Fred rule).
 """
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.secrets.constants import SecretProvenance
@@ -73,6 +73,7 @@ class ReverseSecretExposureTests(TestCase):
 
 
 @tag("postgres")  # hub/region resolution walks the AreaClosure materialized view
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_social_check_content gates on #2698
 class RefuteAccusationTests(TestCase):
     @classmethod
     def setUpTestData(cls):

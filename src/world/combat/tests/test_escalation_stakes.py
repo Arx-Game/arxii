@@ -3,7 +3,7 @@ and default-curve assignment at encounter creation."""
 
 from unittest.mock import MagicMock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.combat.constants import ParticipantStatus, StakesLevel, SurgeTriggerKind
 from world.combat.escalation import apply_escalation_tick, assign_default_escalation_curve
@@ -24,6 +24,7 @@ def _fake_check_fn(*_args, **_kwargs):
     return result
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class StakesStepBonusTests(TestCase):
     def test_step_bonus_added_to_intensity_step(self):
         StakesEscalationModifier.objects.create(
@@ -57,6 +58,7 @@ class StakesStepBonusTests(TestCase):
         self.assertEqual(engagement.intensity_modifier, 1)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class InitialStakesSurgeTests(TestCase):
     def test_initial_surge_fires_once_across_two_ticks(self):
         StakesEscalationModifier.objects.create(stakes_level=StakesLevel.WORLD, initial_surge=4)
@@ -81,6 +83,7 @@ class InitialStakesSurgeTests(TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class AssignDefaultEscalationCurveTests(TestCase):
     def test_assigns_when_curve_is_null_and_row_has_default(self):
         curve = EscalationCurveFactory()

@@ -84,14 +84,24 @@ def _ensure_succorable_property() -> Property | None:
     )
 
 
-def _ensure_succor_check_type() -> CheckType:
-    category, _ = CheckCategory.objects.get_or_create(name="Exploration")
-    obj, _ = CheckType.objects.get_or_create(
+def _ensure_succor_check_type() -> CheckType | None:
+    """Look up (or sample) the shared Reflexes CheckType (#2698).
+
+    ``checks.CheckCategory``/``CheckType`` are content-repo-owned — looked up
+    rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. Shares the same
+    row as ``world.combat.interpose_content``/``world.areas.positioning.
+    plummet_content`` (all look this row up by name). Returns ``None`` when
+    the category or the check type itself isn't authored.
+    """
+    category = authored_or_sample(CheckCategory, {}, name="Exploration")
+    if category is None:
+        return None
+    return authored_or_sample(
+        CheckType,
+        {"description": "A split-second reaction to shelter someone from harm."},
         name=CATCH_CHECK_TYPE_NAME,
         category=category,
-        defaults={"description": "A split-second reaction to shelter someone from harm."},
     )
-    return obj
 
 
 def _ensure_clean_succor_consequence(template: ChallengeTemplate) -> None:
@@ -119,10 +129,12 @@ def ensure_succor_content() -> None:
     """Idempotently seed the "Succor" challenge (#1744). Safe to call repeatedly.
 
     ``mechanics.Property``/``PropertyCategory``/``ChallengeCategory``/
-    ``ChallengeTemplate``/``Application``/``ChallengeApproach`` are all
-    content-repo-owned (#2698) — looked up rather than invented unless
-    ``SEED_SAMPLE_CONTENT`` is on. The whole challenge is skipped when the
-    anchor Property or ChallengeCategory/ChallengeTemplate aren't authored.
+    ``ChallengeTemplate``/``Application``/``ChallengeApproach`` and
+    ``checks.CheckCategory``/``CheckType`` are all content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. The
+    whole challenge is skipped when the anchor Property or ChallengeCategory/
+    ChallengeTemplate aren't authored; a missing Reflexes CheckType only skips
+    the per-capability approach (mirrors interpose_content.py).
     """
     succorable_property = _ensure_succorable_property()
     if succorable_property is None:
@@ -175,7 +187,7 @@ def ensure_succor_content() -> None:
             },
             name=application_name,
         )
-        if application is None:
+        if application is None or check_type is None:
             continue
         authored_or_sample(
             ChallengeApproach,

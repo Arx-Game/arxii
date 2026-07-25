@@ -632,6 +632,11 @@ def ensure_wound_treatment_content() -> None:
 
     lingering_ache, crippling_wound, bleeding_wound = ensure_wound_conditions()
     check_type = _ensure_endurance_check_type()
+    if check_type is None:
+        # checks.CheckType is content-repo-owned (#2698); check_type is a
+        # required FK on TreatmentTemplate, so every treatment template is
+        # skipped entirely when the Endurance CheckType isn't authored.
+        return
 
     specs = [
         ("treat_lingering_ache", "Tend Lingering Ache", lingering_ache),

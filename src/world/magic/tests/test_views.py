@@ -1,5 +1,6 @@
 """Tests for magic system API ViewSets."""
 
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -429,6 +430,7 @@ class FacetViewSetTest(APITestCase):
         self.assertIn("children", response.data[0])
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_combat_offense_catalog_content gates on #2698
 class ConsequencePoolCatalogViewSetTests(APITestCase):
     def setUp(self):
         self.account = AccountFactory(is_staff=True)

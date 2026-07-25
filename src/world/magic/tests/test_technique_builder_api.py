@@ -14,6 +14,7 @@ Covers:
 
 from __future__ import annotations
 
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -378,6 +379,7 @@ class TechniqueBuilderPayloadFKTests(APITestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # combat offense catalog / Melee Attack gate on #2698
 class ConsequencePoolChoiceAPITests(APITestCase):
     """author/price accept an optional consequence_pool_id, validated server-side."""
 

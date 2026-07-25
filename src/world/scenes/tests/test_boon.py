@@ -339,6 +339,7 @@ class BoonResolverE2ETests(TestCase):
         self.assertIsNone(boon.fulfilled_at)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_social_check_content gates on #2698
 class BoonSeedTests(TestCase):
     """The Boon template + consent category seed and wire together."""
 

@@ -192,35 +192,44 @@ def _ensure_catch_property() -> Property | None:
     )
 
 
-def _ensure_catch_check_type() -> CheckType:
-    """Idempotently seed the Reflexes CheckType reused by every catch approach.
+def _ensure_catch_check_type() -> CheckType | None:
+    """Look up (or sample) the Reflexes CheckType reused by every catch approach.
 
     A single shared check type — the fiction differs per capability, but the
     mechanical roll (split-second reaction) is the same, so no per-capability
     CheckType is authored. The single ``wits`` stat leg is the tenet-permitted
-    resist composition (#1706); idempotent ``get_or_create`` preserves any
-    existing staff weight edit. Shared by plummet-catch and interpose (both
-    ``get_or_create`` this row).
+    resist composition (#1706). Shared by plummet-catch and interpose (both
+    look this row up by name).
+
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` and
+    ``traits.Trait`` are content-repo-owned (#2698) — looked up rather than
+    invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` when the
+    category or the check type itself isn't authored.
     """
     from decimal import Decimal  # noqa: PLC0415
 
     from world.checks.models import CheckTypeTrait  # noqa: PLC0415
-    from world.traits.factories import StatTraitFactory  # noqa: PLC0415
-    from world.traits.models import TraitCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    category, _ = CheckCategory.objects.get_or_create(name="Exploration")
-    obj, _ = CheckType.objects.get_or_create(
+    category = authored_or_sample(CheckCategory, {}, name="Exploration")
+    if category is None:
+        return None
+    obj = authored_or_sample(
+        CheckType,
+        {"description": "A split-second reaction to arrest a falling body."},
         name=CATCH_CHECK_TYPE_NAME,
         category=category,
-        defaults={
-            "description": "A split-second reaction to arrest a falling body.",
-        },
     )
-    CheckTypeTrait.objects.get_or_create(
-        check_type=obj,
-        trait=StatTraitFactory(name="wits", category=TraitCategory.MENTAL),
-        defaults={"weight": Decimal("1.00")},
+    if obj is None:
+        return None
+    wits = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.MENTAL, "is_public": True},
+        name="wits",
     )
+    if wits is not None:
+        authored_or_sample(CheckTypeTrait, {"weight": Decimal("1.00")}, check_type=obj, trait=wits)
     return obj
 
 
@@ -332,7 +341,7 @@ def ensure_catch_content() -> None:
             },
             name=application_name,
         )
-        if application is None:
+        if application is None or check_type is None:
             continue
         authored_or_sample(
             ChallengeApproach,

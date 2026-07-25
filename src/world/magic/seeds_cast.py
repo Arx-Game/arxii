@@ -1,4 +1,31 @@
-"""Idempotent seed for the shared standalone technique-cast scaffolding (#1306)."""
+"""Idempotent seed for the shared standalone technique-cast scaffolding (#1306).
+
+``_ensure_fallback_check_type``/``ensure_technique_cast_content`` are
+deliberately NOT gated by ``authored_or_sample()`` despite creating
+``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` and
+``classes.Aspect``/``traits.Trait`` rows (#2698 investigated this site and
+found gating it wrong, not merely unconverted): ``ensure_technique_cast_content()``
+is the "config prerequisite" ``world.seeds.database.load_content_first()`` calls
+BEFORE ``load_world_content()`` runs, specifically so lore-repo ``Technique``
+fixtures can FK the "Technique Cast" ``ActionTemplate`` by natural key on a
+database with NO content loaded yet. At that call site nothing is authored —
+gating on "does an authored row already exist" would always answer no and
+permanently break the content load's natural-key resolution (an IntegrityError
+on the required, non-nullable ``CheckType.category``/``CheckTypeAspect.aspect``
+FKs, since ``authored_or_sample`` returns ``None`` with nothing to hand back),
+in every environment, not just a bare test DB. It also sits entirely outside
+``world.seeds.tests.test_no_content_slop``'s measurement window (the ratchet
+snapshots row counts *between* the content load and the cluster loop; this
+runs before both), so gating it would not shrink the ratchet either. For that
+reason this module deliberately does NOT import the (correctly) gated
+``ensure_magic_check_category``/``ensure_magic_skills``/``_ensure_arcana_aspect``
+from ``world.magic.seeds_checks`` — it keeps its own small unconditional
+"Magic" category / "occult" skill / "Arcana" aspect helpers, so a later,
+properly-gated call from the cluster loop finds the same by-name rows and
+never re-invents them. Everything downstream that reads authored magic
+content — ``ensure_magic_check_content()`` and friends in
+``world.magic.seeds_checks`` — stays gated as normal.
+"""
 
 from __future__ import annotations
 
@@ -46,18 +73,66 @@ _CATALOG_POOLS = [
 ]
 
 
-def _ensure_fallback_check_type():
-    from world.checks.models import CheckType, CheckTypeAspect, CheckTypeTrait  # noqa: PLC0415
-    from world.magic.seeds_checks import (  # noqa: PLC0415
-        _ensure_arcana_aspect,
-        ensure_magic_check_category,
-        ensure_magic_skills,
+def _ensure_prerequisite_magic_category():
+    """Unconditionally get-or-create the "Magic" CheckCategory (see module docstring).
+
+    Deliberately NOT ``world.magic.seeds_checks.ensure_magic_check_category`` —
+    that helper is content-gated (#2698) and this runs before any content
+    exists. Same name, so the gated helper finds this row later and never
+    re-invents it.
+    """
+    from world.checks.models import CheckCategory  # noqa: PLC0415
+    from world.magic.seeds_checks import MAGIC_CHECK_CATEGORY_NAME  # noqa: PLC0415
+
+    category, _ = CheckCategory.objects.get_or_create(
+        name=MAGIC_CHECK_CATEGORY_NAME,
+        defaults={"description": "Checks of magical practice, lore, and endurance."},
     )
+    return category
+
+
+def _ensure_prerequisite_occult_trait():
+    """Unconditionally get-or-create the "occult" SKILL Trait (see module docstring).
+
+    Only the Trait, not a backing ``skills.Skill`` row — that row is
+    content-repo-owned (#2698) and this runs before any content exists;
+    nothing in this prerequisite path requires the Skill row itself, only the
+    Trait (a required FK on the fallback CheckType's ``CheckTypeTrait``).
+    """
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+
+    trait, _ = Trait.objects.get_or_create(
+        name="occult",
+        defaults={
+            "trait_type": TraitType.SKILL,
+            "category": TraitCategory.MAGIC,
+            "description": "Hidden lore and the mechanics of magic — the theory.",
+            "is_public": True,
+        },
+    )
+    return trait
+
+
+def _ensure_prerequisite_arcana_aspect():
+    """Unconditionally get-or-create the "Arcana" Aspect (see module docstring)."""
+    from world.classes.models import Aspect  # noqa: PLC0415
+    from world.magic.seeds_checks import ARCANA_ASPECT_NAME  # noqa: PLC0415
+
+    aspect, _ = Aspect.objects.get_or_create(
+        name=ARCANA_ASPECT_NAME,
+        defaults={"description": "The magical aspect for path-based checks."},
+    )
+    return aspect
+
+
+def _ensure_fallback_check_type():
+    """Seed (unconditionally — see module docstring) the standalone-cast CheckType."""
+    from world.checks.models import CheckType, CheckTypeAspect, CheckTypeTrait  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
-    ensure_magic_skills()  # ensures occult Trait/Skill exist
-    category = ensure_magic_check_category()
-    arcana = _ensure_arcana_aspect()
+    _ensure_prerequisite_occult_trait()  # ensures occult Trait/Skill exist
+    category = _ensure_prerequisite_magic_category()
+    arcana = _ensure_prerequisite_arcana_aspect()
     check_type, _ = CheckType.objects.get_or_create(
         name=TECHNIQUE_CAST_CHECK_TYPE_NAME,
         category=category,

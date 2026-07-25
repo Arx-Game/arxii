@@ -34,6 +34,7 @@ from world.mechanics.factories import (
 from world.mechanics.models import ModifierTarget
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # wire_penetration_check_type gates on #2698
 class WirePenetrationCheckTypeTraitTests(TestCase):
     """wire_penetration_check_type() authors trait composition (#767)."""
 
@@ -55,16 +56,16 @@ class WirePenetrationCheckTypeTraitTests(TestCase):
         self.assertEqual(weights["intellect"], Decimal("0.50"))
         self.assertEqual(weights["Melee Combat"], Decimal("0.50"))
 
-    def test_authoritative_rewrite_resets_staff_edits(self) -> None:
-        """#1706 — penetration/flee use an authoritative delete+rewrite (mirrors
-        social_checks.py) to correct the prior stat+stat composition. A re-seed
-        resets staff weight edits and converges on the authored three-trait set."""
+    def test_reseed_preserves_a_staff_tuned_weight(self) -> None:
+        """#2698 Part 1 — wire_penetration_check_type() no longer wipes and
+        rewrites the composition on each run (that reverted authored/staff-
+        tuned weights on every Big Button press); get_or_create/
+        authored_or_sample converge instead, so a staff-edited weight
+        survives a reseed."""
         from world.seeds.combat_checks import ensure_melee_combat_skill
 
         ensure_melee_combat_skill()
         check_type = wire_penetration_check_type()
-        # Staff retunes a weight; re-running the seed resets it (authoritative
-        # delete+rewrite — the row is replaced, so re-query by trait name).
         row = CheckTypeTrait.objects.get(check_type=check_type, trait__name="willpower")
         row.weight = Decimal("2.00")
         row.save()
@@ -73,7 +74,7 @@ class WirePenetrationCheckTypeTraitTests(TestCase):
 
         self.assertEqual(CheckTypeTrait.objects.filter(check_type=check_type).count(), 3)
         refreshed = CheckTypeTrait.objects.get(check_type=check_type, trait__name="willpower")
-        self.assertEqual(refreshed.weight, Decimal("1.00"))
+        self.assertEqual(refreshed.weight, Decimal("2.00"))
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)

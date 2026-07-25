@@ -109,24 +109,40 @@ class MissionsSeedResult:
     templates: list[MissionTemplate]
 
 
-def _ensure_fieldwork_check_type() -> CheckType:
-    """Get-or-create a plain stat-only CheckType for the starter missions.
+def _ensure_fieldwork_check_type() -> CheckType | None:
+    """Look up (or sample) a plain stat-only CheckType for the starter missions.
 
     Self-contained (does not assume any other check-composing cluster ran
     first) — mirrors the touchstone content seed's "self-contained" rationale
-    (world/magic/CLAUDE.md). Authoritative composition: rewrites the trait
-    weighting on every run, same as seed_investigation_check_content.
+    (world/magic/CLAUDE.md). ``checks.CheckCategory``/``CheckType``/
+    ``CheckTypeTrait`` and ``traits.Trait`` are content-repo-owned (#2698) —
+    looked up via ``authored_or_sample()`` rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. No longer wipes and rewrites the
+    composition on each run (#2698 Part 1); ``authored_or_sample`` converges
+    instead. Returns ``None`` when the category or the check type itself
+    isn't authored.
     """
     from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
-    from world.traits.models import Trait  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    category, _ = CheckCategory.objects.get_or_create(name=_CHECK_CATEGORY_NAME)
-    check_type, _ = CheckType.objects.get_or_create(
-        name=_CHECK_TYPE_NAME, category=category, defaults={"is_active": True}
+    category = authored_or_sample(CheckCategory, {}, name=_CHECK_CATEGORY_NAME)
+    if category is None:
+        return None
+    check_type = authored_or_sample(
+        CheckType, {"is_active": True}, name=_CHECK_TYPE_NAME, category=category
     )
-    stat_trait = Trait.objects.get(name=_CHECK_STAT_NAME)
-    CheckTypeTrait.objects.filter(check_type=check_type).delete()
-    CheckTypeTrait.objects.create(check_type=check_type, trait=stat_trait, weight=Decimal("1.0"))
+    if check_type is None:
+        return None
+    stat_trait = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.MENTAL, "is_public": True},
+        name=_CHECK_STAT_NAME,
+    )
+    if stat_trait is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": Decimal("1.0")}, check_type=check_type, trait=stat_trait
+        )
     return check_type
 
 

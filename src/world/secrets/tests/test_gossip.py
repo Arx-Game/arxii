@@ -1,6 +1,6 @@
 """Gossip — the regional Level-1-secret spread mechanic (#1572)."""
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
@@ -48,6 +48,7 @@ class GossipDecayTests(TestCase):
 
 
 @tag("postgres")  # region resolution walks the AreaClosure materialized view (PG-only)
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_social/security_check_content gate on #2698
 class GossipActionTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -137,6 +138,7 @@ class GossipActionTests(TestCase):
 
 
 @tag("postgres")  # hub/region resolution walks the AreaClosure materialized view (PG-only)
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_social/security_check_content gate on #2698
 class SmearGossipTests(TestCase):
     """gossip smear (#1825) — mint an L1 accusation and seed its heat in one move."""
 

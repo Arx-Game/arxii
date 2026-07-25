@@ -8,7 +8,14 @@ surfaces (burglary, infiltration, the act-time declaration moment) roll it;
 the witness-reduction wiring itself is a later surface — the declaration
 moment doesn't exist at deed birth yet.
 
-Mirrors the authoritative pattern of ``social_checks.py``. Weights PLACEHOLDER.
+Weights PLACEHOLDER.
+
+``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``, and
+``traits.trait`` are content-repo-owned (#2698) — looked up via
+``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+on. No longer wipes and rewrites the composition on each run (#2698 Part 1 —
+that reverted authored/staff-tuned weights on every Big Button press);
+``get_or_create``/``authored_or_sample`` converge instead.
 """
 
 from __future__ import annotations
@@ -23,45 +30,55 @@ def seed_stealth_check_content() -> None:
         CheckType,
         CheckTypeTrait,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    trait, _ = Trait.objects.get_or_create(
-        name="Stealth",
-        defaults={
+    trait = authored_or_sample(
+        Trait,
+        {
             "trait_type": TraitType.SKILL,
             "category": TraitCategory.PHYSICAL,
             "is_public": True,
         },
+        name="Stealth",
     )
-    Skill.objects.get_or_create(
-        trait=trait,
-        defaults={
-            "tooltip": "Moving unseen and unheard — the act-time half of concealment.",
-            "display_order": 30,
-            "is_active": True,
-        },
-    )
-    stat, _ = Trait.objects.get_or_create(
-        name="agility",
-        defaults={
+    if trait is not None:
+        authored_or_sample(
+            Skill,
+            {
+                "tooltip": "Moving unseen and unheard — the act-time half of concealment.",
+                "display_order": 30,
+                "is_active": True,
+            },
+            trait=trait,
+        )
+    stat = authored_or_sample(
+        Trait,
+        {
             "trait_type": TraitType.STAT,
             "category": TraitCategory.PHYSICAL,
             "is_public": True,
         },
+        name="agility",
     )
-    category, _ = CheckCategory.objects.get_or_create(
-        name="Physical",
-        defaults={
+    category = authored_or_sample(
+        CheckCategory,
+        {
             "description": "Checks of body, movement, and physical craft.",
             "display_order": 20,
         },
+        name="Physical",
     )
-    check_type, _ = CheckType.objects.get_or_create(
-        name="Stealth", category=category, defaults={"is_active": True}
+    if category is None:
+        return
+    check_type = authored_or_sample(
+        CheckType, {"is_active": True}, name="Stealth", category=category
     )
-    # Authoritative: wipe and rewrite the composition.
-    CheckTypeTrait.objects.filter(check_type=check_type).delete()
+    if check_type is None:
+        return
     weight = Decimal("1.0")  # PLACEHOLDER magnitudes
-    CheckTypeTrait.objects.create(check_type=check_type, trait=stat, weight=weight)
-    CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=weight)
+    if stat is not None:
+        authored_or_sample(CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=stat)
+    if trait is not None:
+        authored_or_sample(CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=trait)

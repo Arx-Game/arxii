@@ -1,7 +1,7 @@
 """Tests for the EngagementLock model — foil pairing lifecycle (#2020)."""
 
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.combat.constants import EngagementLockStatus, LockBreakReason, LockInitiator
 from world.combat.factories import (
@@ -68,6 +68,7 @@ class CombatOpponentFoilFieldsTests(TestCase):
         self.assertFalse(opp.has_foil_behavior)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class EscalationCurveInterferenceFieldTests(TestCase):
     """EscalationCurve gains interference_spike_intensity_amount."""
 

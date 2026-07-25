@@ -5,8 +5,10 @@ Idempotently seeds the content the four social/mental combat verbs need:
 * Four ``CheckType`` rows (Rally/Demoralize/Taunt/Parley) with stat + skill
   (+ specialization) compositions, reusing the social skills/specializations
   seeded by ``world.seeds.social_checks`` (``ensure_social_skills`` /
-  ``ensure_social_specializations``). Mirrors the authoritative wipe-and-rewrite
-  pattern in ``social_checks.ensure_social_check_compositions``.
+  ``ensure_social_specializations``). ``checks.CheckCategory``/``CheckType``/
+  ``CheckTypeTrait`` are content-repo-owned (#2698) — looked up via
+  ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT``
+  is on; a reseed no longer wipes and rewrites the composition (#2698 Part 1).
 * An ``Inspired`` ``ConditionTemplate`` (``alters_behavior=False``) — the
   short-lived benefit ``RALLY`` applies to an ally, consumed by the ally's
   next resolved action this round. Mirrors ``conditions/charm_content.py``.
@@ -17,8 +19,8 @@ Idempotently seeds the content the four social/mental combat verbs need:
   seed pattern in ``combat/defend_content.py``.
 
 ``ensure_social_combat_content`` is idempotent (all writes via ``get_or_create``
-or the authoritative wipe-and-rewrite) and doubles as integration-test setup
-and staff seed data. Safe to call repeatedly.
+or ``authored_or_sample``) and doubles as integration-test setup and staff
+seed data. Safe to call repeatedly.
 """
 
 from __future__ import annotations
@@ -61,31 +63,35 @@ _SOCIAL_COMBAT_COMPOSITION: tuple[tuple[str, str, str, str | None], ...] = (
 )
 
 
-def _ensure_social_category() -> CheckCategory:
+def _ensure_social_category() -> CheckCategory | None:
+    """Look up (or sample) the Social CheckCategory — content-repo-owned (#2698)."""
     from world.checks.models import CheckCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = CheckCategory.objects.get_or_create(
-        name="Social",
-        defaults={
+    return authored_or_sample(
+        CheckCategory,
+        {
             "description": "Checks involving social interaction, persuasion, and presence.",
             "display_order": 10,
         },
+        name="Social",
     )
-    return category
 
 
-def _ensure_stat_trait(name: str) -> Trait:
+def _ensure_stat_trait(name: str) -> Trait | None:
+    """Look up (or sample) a SOCIAL stat Trait — content-repo-owned (#2698)."""
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    trait, _ = Trait.objects.get_or_create(
-        name=name,
-        defaults={
+    return authored_or_sample(
+        Trait,
+        {
             "trait_type": TraitType.STAT,
             "category": TraitCategory.SOCIAL,
             "is_public": True,
         },
+        name=name,
     )
-    return trait
 
 
 def _ensure_social_skills_and_specs() -> tuple[dict[str, object], dict[str, object]]:
@@ -109,37 +115,48 @@ def _ensure_social_combat_check_types(
 ) -> dict[str, object]:
     """Seed the 4 social-combat CheckTypes with stat + skill (+ spec) composition.
 
-    Authoritative wipe-and-rewrite (mirrors
-    ``social_checks.ensure_social_check_compositions``): clears the type's
-    existing ``CheckTypeTrait`` / ``CheckTypeSpecialization`` rows and rewrites
-    them, so re-running converges. Weights are PLACEHOLDER (1.0).
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    No longer wipes and rewrites the composition on each run (#2698 Part 1 — that
+    reverted any authored/staff-tuned weight on every Big Button press);
+    ``get_or_create``/``authored_or_sample`` converge instead, preserving edits.
+    ``CheckTypeSpecialization`` stays outside ``CONTENT_MODELS`` and keeps
+    seeding unconditionally. A CheckType whose category or row isn't authored is
+    skipped entirely for that entry.
     """
     from world.checks.models import (  # noqa: PLC0415
         CheckType,
         CheckTypeSpecialization,
         CheckTypeTrait,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     category = _ensure_social_category()
     weight = Decimal("1.0")  # PLACEHOLDER magnitudes
     check_types: dict[str, object] = {}
+    if category is None:
+        return check_types
 
     for ct_name, stat_name, skill_name, spec_name in _SOCIAL_COMBAT_COMPOSITION:
-        check_type, _ = CheckType.objects.get_or_create(
-            name=ct_name, category=category, defaults={"is_active": True}
+        check_type = authored_or_sample(
+            CheckType, {"is_active": True}, name=ct_name, category=category
         )
-        CheckTypeTrait.objects.filter(check_type=check_type).delete()
-        CheckTypeSpecialization.objects.filter(check_type=check_type).delete()
+        if check_type is None:
+            continue
 
-        CheckTypeTrait.objects.create(
-            check_type=check_type, trait=_ensure_stat_trait(stat_name), weight=weight
-        )
-        CheckTypeTrait.objects.create(
-            check_type=check_type, trait=skills[skill_name].trait, weight=weight
-        )
-        if spec_name is not None:
-            CheckTypeSpecialization.objects.create(
-                check_type=check_type, specialization=specs[spec_name], weight=weight
+        stat_trait = _ensure_stat_trait(stat_name)
+        if stat_trait is not None:
+            authored_or_sample(
+                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=stat_trait
+            )
+        skill = skills.get(skill_name)
+        if skill is not None:
+            authored_or_sample(
+                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill.trait
+            )
+        if spec_name is not None and specs.get(spec_name) is not None:
+            CheckTypeSpecialization.objects.get_or_create(
+                check_type=check_type, specialization=specs[spec_name], defaults={"weight": weight}
             )
         check_types[ct_name] = check_type
     return check_types
@@ -267,7 +284,7 @@ def ensure_social_combat_content() -> None:
     Seeds the 4 CheckTypes (Rally/Demoralize/Taunt/Parley) with stat + skill
     (+ spec) compositions, the ``Inspired`` condition, and the ``Charming Word``
     charm technique. Safe to call repeatedly — every write goes through
-    ``get_or_create`` or the authoritative wipe-and-rewrite.
+    ``get_or_create`` or ``authored_or_sample``.
     """
     skills, specs = _ensure_social_skills_and_specs()
     _ensure_social_combat_check_types(skills, specs)

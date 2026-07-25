@@ -1,6 +1,6 @@
 """Governance seed — Scholarship/Economics + Organization/Stewardship + checks (#930)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.checks.models import CheckType, CheckTypeSpecialization, CheckTypeTrait
 from world.seeds.checks import seed_check_resolution_tables
@@ -9,6 +9,7 @@ from world.skills.models import Skill, Specialization
 from world.traits.models import Trait, TraitType
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_governance_check_content gates on #2698
 class GovernanceCheckSeedTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
