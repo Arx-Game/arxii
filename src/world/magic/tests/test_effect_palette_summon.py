@@ -13,11 +13,14 @@ from django.test import TestCase
 from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.models.flows import FlowStepDefinition
+from world.areas.positioning.factories import RampartElementProfileFactory
+from world.areas.positioning.models import RampartElementProfile
 from world.combat.constants import CombatAllegiance, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    ThreatPoolFactory,
 )
 from world.combat.models import CombatOpponent, ThreatPool
 from world.conditions.constants import SUMMONING_CONDITION_NAME
@@ -121,3 +124,28 @@ class SummonAllyOnConditionAdapterTests(TestCase):
         self.assertEqual(summon.summoned_by, participant.character_sheet)
         self.assertEqual(summon.threat_pool_id, pool.pk)
         self.assertEqual(summon.bond_expires_round, encounter.round_number + 5)
+
+
+class ThreatPoolNaturalKeyIndexTests(TestCase):
+    """#2679: summon_ally's pool lookup must go through get_by_natural_key so the
+    natural-key index applies — a plain objects.get(name=...) bypasses it."""
+
+    def test_threat_pool_lookup_is_served_from_the_natural_key_index(self) -> None:
+        pool = ThreatPoolFactory(name="Indexed Pool")
+        ThreatPool.objects.get_by_natural_key("Indexed Pool")  # prime the index
+        with self.assertNumQueries(0):
+            self.assertEqual(ThreatPool.objects.get_by_natural_key("indexed pool"), pool)
+
+
+class RampartElementProfileNaturalKeyIndexTests(TestCase):
+    """#2679: raise_rampart's element-profile lookup must go through
+    get_by_natural_key so the natural-key index applies — a plain
+    objects.get(name=...) bypasses it."""
+
+    def test_element_profile_lookup_is_served_from_the_natural_key_index(self) -> None:
+        profile = RampartElementProfileFactory(name="Indexed Element")
+        RampartElementProfile.objects.get_by_natural_key("Indexed Element")  # prime
+        with self.assertNumQueries(0):
+            self.assertEqual(
+                RampartElementProfile.objects.get_by_natural_key("indexed element"), profile
+            )

@@ -67,10 +67,12 @@ from world.traits.models import Trait
 
 # Case-insensitive cached lookup (returns Trait or None)
 trait = Trait.get_by_name("strength")
-
-# Clear name cache when traits are modified (auto-called on save)
-Trait.clear_name_cache()
 ```
+
+`get_by_name` delegates to the generic natural-key index (`core/natural_keys.py`,
+#2687): `Trait.NaturalKeyConfig.lookup_table = True` loads the whole table once and
+serves every subsequent lookup from memory. The index is kept fresh automatically
+by `NaturalKeyMixin.save()` — there is no manual cache to clear.
 
 ### PointConversionRange (trait value to points)
 

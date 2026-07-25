@@ -1074,3 +1074,34 @@ class MarkdownExportRoundTripTests(TestCase):
             "world/character_creation/fixtures/content_starting_areas.json"
         ][0]["fields"]
         assert fields["default_starting_room"] == ["fallback-room-key"]
+
+
+class LoadEntriesCaseInsensitiveUpsertTest(TestCase):
+    """Upsert matches an existing row by natural key regardless of casing (#2687)."""
+
+    def _result_with(self, objects: list[dict]) -> BuildResult:
+        key = "fixtures/conditions/condition_template.json"
+        path = Path(key)
+        result = BuildResult()
+        result.fixtures[key] = objects
+        result.source_paths[key] = [path] * len(objects)
+        return result
+
+    def test_upsert_matches_existing_row_case_insensitively(self) -> None:
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.conditions.models import ConditionTemplate
+
+        existing = ConditionTemplateFactory(name="Fire Ward", description="old")
+        result = self._result_with(
+            [
+                {
+                    "model": "conditions.conditiontemplate",
+                    "fields": {"name": "fire ward", "description": "new"},
+                }
+            ]
+        )
+        created, updated, _ = load_entries(result)
+        assert (created, updated) == (0, 1), result.skipped
+        existing.refresh_from_db()
+        assert existing.description == "new"
+        assert ConditionTemplate.objects.filter(name__iexact="fire ward").count() == 1
