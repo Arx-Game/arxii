@@ -269,7 +269,6 @@ class FacetArmTests(TestCase):
         thread, sheet, character, facet = self._make_facet_thread()
         item_instance = ItemInstanceFactory()
         ItemFacetFactory(item_instance=item_instance, facet=facet)
-        # EquippedItem.character FKs to CharacterSheet (not ObjectDB) — pass the sheet.
         EquippedItemFactory(character=sheet, item_instance=item_instance)
         ctx = PullActionContext()
         self.assertTrue(_anchor_ambiently_active(thread, ctx, character=character))
@@ -296,7 +295,6 @@ class MantleArmTests(TestCase):
 
     def test_ambient_accepts_worn_mantle(self) -> None:
         thread, sheet, character, mantle = self._make_mantle_thread()
-        # EquippedItem.character FKs to CharacterSheet (not ObjectDB) — pass the sheet.
         EquippedItemFactory(character=sheet, item_instance=mantle.item_instance)
         ctx = PullActionContext()
         self.assertTrue(_anchor_ambiently_active(thread, ctx, character=character))

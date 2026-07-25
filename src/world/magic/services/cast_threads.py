@@ -12,7 +12,11 @@ from typing import TYPE_CHECKING
 
 from world.magic.models import Thread
 from world.magic.services.power_terms import ApplicableThread
-from world.magic.services.resonance import _anchor_ambiently_active, _anchor_in_action
+from world.magic.services.resonance import (
+    _anchor_ambiently_active,
+    _anchor_in_action,
+    resolve_involved_gift_ids,
+)
 from world.magic.types.pull import PullActionContext
 
 if TYPE_CHECKING:
@@ -72,9 +76,14 @@ def build_applicable_threads(
             "target_capstone__relationship",
         )
     )
+    # Resolved once per batch (not per thread) so a character with several GIFT threads
+    # doesn't fire one Technique query per thread in the loop below (#2708 review).
+    involved_gift_ids = resolve_involved_gift_ids(ctx.involved_techniques) if ambient else None
     for thread in threads:
         if ambient:
-            is_applicable = _anchor_ambiently_active(thread, ctx, character=sheet.character)
+            is_applicable = _anchor_ambiently_active(
+                thread, ctx, character=sheet.character, involved_gift_ids=involved_gift_ids
+            )
         else:
             is_applicable = _anchor_in_action(thread, ctx)
         if is_applicable:

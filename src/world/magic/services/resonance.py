@@ -568,6 +568,7 @@ def _anchor_ambiently_active(  # noqa: PLR0911 — one arm per TargetKind, flat 
     ctx: PullActionContext,
     *,
     character: ObjectDB,  # noqa: OBJECTDB_PARAM — presence/equipment checks need the game object
+    involved_gift_ids: frozenset[int] | None = None,
 ) -> bool:
     """Return True iff ``thread`` is DEMONSTRABLY active right now (#2708).
 
@@ -582,6 +583,12 @@ def _anchor_ambiently_active(  # noqa: PLR0911 — one arm per TargetKind, flat 
     activities", ratified 2026-07-25) needs a marker ``PullActionContext`` does not carry;
     shipping an arm that can never fire would be worse than omitting it. Tracked as a
     needs-design question off #2708.
+
+    ``involved_gift_ids`` lets a batch caller (``build_applicable_threads``, which invokes
+    this once per thread in a loop) resolve ``ctx.involved_techniques``'s gift ids ONCE
+    and pass the result through, instead of this function re-querying ``Technique`` for
+    every GIFT thread. A lone call (e.g. from tests) omits it and
+    :func:`_gift_in_action` computes it internally — single-call correctness is preserved.
     """
     if thread.target_kind == TargetKind.COVENANT_ROLE:
         # Identical to the pull predicate: engagement is already demonstrable.
@@ -589,7 +596,7 @@ def _anchor_ambiently_active(  # noqa: PLR0911 — one arm per TargetKind, flat 
     if thread.target_kind == TargetKind.TECHNIQUE:
         return thread.target_technique_id in ctx.involved_techniques
     if thread.target_kind == TargetKind.GIFT:
-        return _gift_in_action(thread, ctx)
+        return _gift_in_action(thread, ctx, involved_gift_ids=involved_gift_ids)
     if thread.target_kind == TargetKind.TRAIT:
         return thread.target_trait_id in ctx.involved_traits
     if thread.target_kind == TargetKind.SANCTUM:
@@ -610,15 +617,41 @@ def _anchor_ambiently_active(  # noqa: PLR0911 — one arm per TargetKind, flat 
     return False
 
 
-def _gift_in_action(thread: Thread, ctx: PullActionContext) -> bool:
-    """True iff any technique the action involves belongs to this thread's gift."""
+def _gift_in_action(
+    thread: Thread,
+    ctx: PullActionContext,
+    *,
+    involved_gift_ids: frozenset[int] | None = None,
+) -> bool:
+    """True iff any technique the action involves belongs to this thread's gift.
+
+    ``involved_gift_ids``, when supplied, is trusted as the precomputed set of gift ids
+    for ``ctx.involved_techniques`` — no query is issued. When omitted (a standalone
+    call), it's computed here so single-call correctness is preserved.
+    """
     if not ctx.involved_techniques:
         return False
+    if involved_gift_ids is None:
+        involved_gift_ids = resolve_involved_gift_ids(ctx.involved_techniques)
+    return thread.target_gift_id in involved_gift_ids
+
+
+def resolve_involved_gift_ids(involved_techniques: tuple[int, ...]) -> frozenset[int]:
+    """Resolve the set of gift ids for ``involved_techniques`` in a single query.
+
+    Batch callers (``build_applicable_threads``) compute this ONCE per evaluation and
+    thread it through ``_anchor_ambiently_active``'s ``involved_gift_ids`` kwarg, rather
+    than letting ``_gift_in_action`` re-query per GIFT thread in the predicate loop (#2708
+    review — a character with several owned Gifts fired one ``Technique`` query per GIFT
+    thread on every ambient evaluation).
+    """
+    if not involved_techniques:
+        return frozenset()
     from world.magic.models import Technique  # noqa: PLC0415
 
-    return Technique.objects.filter(
-        pk__in=ctx.involved_techniques, gift_id=thread.target_gift_id
-    ).exists()
+    return frozenset(
+        Technique.objects.filter(pk__in=involved_techniques).values_list("gift_id", flat=True)
+    )
 
 
 def _relationship_target_present(
