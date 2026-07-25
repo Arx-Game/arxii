@@ -19,9 +19,9 @@ Built in setUp (not setUpTestData): factories create Evennia ObjectDB instances
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
-from evennia_extensions.factories import RoomProfileFactory, tag
+from evennia_extensions.factories import RoomProfileFactory
 from world.areas.positioning.constants import (
     FALL_DAMAGE_TYPE_NAME,
     PLUMMETING_CONDITION_NAME,

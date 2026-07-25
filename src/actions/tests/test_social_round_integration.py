@@ -27,6 +27,7 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from actions.constants import ActionBackend
+from evennia_extensions.factories import RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.constants import DifficultyIndicator
 from world.mechanics.factories import (

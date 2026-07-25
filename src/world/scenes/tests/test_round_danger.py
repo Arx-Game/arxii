@@ -1,5 +1,6 @@
 from django.test import TestCase
 
+from evennia_extensions.factories import RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import (
     RoundStatus,
