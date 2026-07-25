@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 from django.test import TestCase
 from django.utils import timezone
 
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import (
     InteractionMode,
@@ -496,7 +496,7 @@ class TestRecordInteraction(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         identity_a = CharacterSheetFactory(character=char_a)
-        place = PlaceFactory(room=room)
+        place = PlaceFactory(room=RoomProfileFactory(objectdb=room))
         PlacePresenceFactory(place=place, persona=identity_a.primary_persona)
 
         result = record_interaction(
@@ -1008,7 +1008,7 @@ class TestPushInteractionWhisperPrivacy(TestCase):
             _identity_c,
         ) = self._make_room_with_characters()
 
-        place = PlaceFactory(room=room)
+        place = PlaceFactory(room=RoomProfileFactory(objectdb=room))
         interaction = InteractionFactory(
             persona=identity_a.primary_persona,
             content="speaks at the bar.",

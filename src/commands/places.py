@@ -55,7 +55,9 @@ class CmdPlaces(ArxCommand):
         if room is None:
             self.msg("You aren't anywhere.")
             return
-        places = list(Place.objects.filter(room=room, status=PlaceStatus.ACTIVE).order_by("name"))
+        places = list(
+            Place.objects.filter(room_id=room.pk, status=PlaceStatus.ACTIVE).order_by("name")
+        )
         if not places:
             self.msg("There are no places here.")
             return
@@ -72,7 +74,7 @@ class CmdPlaces(ArxCommand):
             raise CommandError(msg)
         room = self.caller.location
         place = Place.objects.filter(
-            room=room, status=PlaceStatus.ACTIVE, name__iexact=name
+            room_id=room.pk, status=PlaceStatus.ACTIVE, name__iexact=name
         ).first()
         if place is None:
             msg = f"No such place here: '{name}'."

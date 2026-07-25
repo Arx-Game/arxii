@@ -927,7 +927,7 @@ def broadcast_scene_outcome(
         scene=scene_round.scene,
     )
 
-    room = scene_round.room
+    room = scene_round.room.objectdb
     payload = _build_interaction_payload(
         interaction_id=interaction.pk,
         persona=narrator,

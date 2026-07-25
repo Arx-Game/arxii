@@ -167,7 +167,7 @@ class CaptiveStatusInCellDescTests(TestCase):
         captivity = _held_captivity()
         project = demand_ransom_project(captivity, amount=10_000)
 
-        rendered = _maybe_render_captivity_status(captivity.cell.room)
+        rendered = _maybe_render_captivity_status(captivity.cell.room.objectdb)
 
         assert rendered is not None
         assert "held captive here" in rendered
@@ -175,7 +175,7 @@ class CaptiveStatusInCellDescTests(TestCase):
         assert f"project/donate {project.pk}" in rendered
 
     def test_a_room_with_no_captive_renders_nothing(self) -> None:
-        empty_room = InstancedRoomFactory().room
+        empty_room = InstancedRoomFactory().room.objectdb
         assert _maybe_render_captivity_status(empty_room) is None
 
 

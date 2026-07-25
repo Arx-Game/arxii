@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from django.test import TestCase, tag
 
+from evennia_extensions.factories import RoomProfileFactory
 from world.areas.positioning.constants import (
     PLUMMETING_CONDITION_NAME,
     PositionKind,
@@ -104,7 +105,7 @@ class UnattendedPlummetTests(TestCase):
         begin_plummet(self.faller, self.top_chasm)
 
         plummet_round = SceneRound.objects.filter(
-            room=self.room, start_reason=SceneRoundStartReason.DANGER
+            room=RoomProfileFactory(objectdb=self.room), start_reason=SceneRoundStartReason.DANGER
         ).first()
         if plummet_round is not None:
             self.assertFalse(

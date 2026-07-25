@@ -20,7 +20,7 @@ class Place(SharedMemoryModel):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     room = models.ForeignKey(
-        "objects.ObjectDB",
+        "evennia_extensions.RoomProfile",
         on_delete=models.CASCADE,
         null=True,
         blank=True,

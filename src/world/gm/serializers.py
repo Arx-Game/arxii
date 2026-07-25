@@ -623,7 +623,7 @@ class StoryInstanceSerializer(serializers.ModelSerializer):
     """A GM-owned temp scene room row for the story-builder dashboard (#2450)."""
 
     room_id = serializers.IntegerField(source="room.pk", read_only=True)
-    name = serializers.CharField(source="room.db_key", read_only=True)
+    name = serializers.CharField(source="room.objectdb.db_key", read_only=True)
     grants = serializers.SerializerMethodField()
 
     class Meta:

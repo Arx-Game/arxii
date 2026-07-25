@@ -61,11 +61,11 @@ class RenderChallengeOutcomeNarrationTests(SimpleTestCase):
 
 class BroadcastSceneOutcomeTests(TestCase):
     def setUp(self):
-        from evennia_extensions.factories import ObjectDBFactory
+        from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         self.rnd = SceneRoundFactory(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             start_reason=SceneRoundStartReason.OPT_IN,
         )
@@ -92,7 +92,7 @@ class BroadcastSceneOutcomeTests(TestCase):
             broadcast_scene_outcome(scene_round=self.rnd, narration="Kira succeeds.")
         mock_broadcast.assert_called_once()
         room_arg = mock_broadcast.call_args[0][0]
-        assert room_arg == self.rnd.room
+        assert room_arg == self.rnd.room.objectdb
 
     def test_interaction_mode_is_outcome(self):
         result = broadcast_scene_outcome(scene_round=self.rnd, narration="Kira succeeds.")

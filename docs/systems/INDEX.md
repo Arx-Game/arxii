@@ -1893,7 +1893,9 @@ action consent flow, and a three-mode non-combat round framework.
 
 - **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneActionRequest`, `SceneActionTarget`,
   `SceneCastPullDeclaration`,
-  **Round framework (#1351):** `SceneRound` (room-anchored non-combat round; fields: `mode`
+  **Round framework (#1351):** `SceneRound` (room-anchored non-combat round — `room` FKs
+  `evennia_extensions.RoomProfile` since #2608, as do `Place.room` and `SpeakerQueue.room`;
+  fields: `mode`
   (`SceneRoundMode`), `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`;
   `mode`/`start_reason` orthogonal — danger rounds are STRICT, ensured via
   `ensure_round_for_acute_condition`, #1466), `SceneRoundDefaultsConfig` (singleton pk=1 — staff-tunable

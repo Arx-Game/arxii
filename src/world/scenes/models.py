@@ -1367,7 +1367,7 @@ class SceneRound(AbstractRound):
     """
 
     room = models.ForeignKey(
-        "objects.ObjectDB",
+        "evennia_extensions.RoomProfile",
         on_delete=models.PROTECT,
         related_name="scene_rounds",
         help_text="Room the round takes place in (mirrors CombatEncounter.room).",

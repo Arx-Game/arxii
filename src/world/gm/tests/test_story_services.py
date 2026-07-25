@@ -155,7 +155,7 @@ class JoinStoryRoomTests(TestCase):
         assert destination == room_profile.objectdb
         assert char.location == room_profile.objectdb
         grant = StoryRoomGrant.objects.get(room=room_profile, character=sheet)
-        assert grant.return_location == origin_room
+        assert grant.return_location == origin_room.room_profile
 
     def test_blocked_move_raises_and_does_not_persist_return_location(self) -> None:
         gm = GMProfileFactory()
@@ -233,7 +233,7 @@ class LeaveStoryRoomTests(TestCase):
 
         assert char.location == room_profile.objectdb
         grant = StoryRoomGrant.objects.get(room=room_profile, character=sheet)
-        assert grant.return_location == origin_room
+        assert grant.return_location == origin_room.room_profile
 
 
 class RevokeStoryRoomTests(TestCase):
@@ -303,7 +303,7 @@ class CloseSceneRoomTests(TestCase):
         char.move_to(home_room, quiet=True)
         StoryRoomGrantFactory(room=room_profile, character=sheet, granted_by=gm)
         join_story_room(sheet=sheet, room_profile=room_profile)
-        assert char.location == instance.room
+        assert char.location == instance.room.objectdb
 
         close_scene_room(instance=instance)
 
@@ -328,13 +328,13 @@ class CloseSceneRoomTests(TestCase):
         char.move_to(home_room, quiet=True)
         grant = StoryRoomGrantFactory(room=room_profile, character=sheet, granted_by=gm)
         join_story_room(sheet=sheet, room_profile=room_profile)
-        assert char.location == instance.room
+        assert char.location == instance.room.objectdb
 
         with patch.object(type(char), "move_to", return_value=False):
             with self.assertRaises(StoryServiceError):
                 close_scene_room(instance=instance)
 
-        assert char.location == instance.room
+        assert char.location == instance.room.objectdb
         assert StoryRoomGrant.objects.filter(pk=grant.pk).exists()
         instance.refresh_from_db()
         assert instance.status == InstanceStatus.ACTIVE

@@ -139,4 +139,4 @@ class CombatPrecedenceNoDangerRoundTest(TestCase):
         _maybe_danger_round_on_bleed_out(sheet)
 
         # Combat drives the tick; no SceneRound should be created for this room.
-        assert not SceneRound.objects.filter(room=self.room).exists()
+        assert not SceneRound.objects.filter(room_id=self.room.pk).exists()

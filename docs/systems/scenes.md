@@ -24,7 +24,7 @@ from world.scenes.constants import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Scene` | Primary scene entity (SharedMemoryModel, cached) | `name`, `description`, `location` (FK ObjectDB), `date_started`, `date_finished`, `is_active`, `is_public` |
+| `Scene` | Primary scene entity (SharedMemoryModel, cached) | `name`, `description`, `location` (FK ObjectDB — the last room-shaped ObjectDB FK still pending retarget to `RoomProfile`; see #2608), `date_started`, `date_finished`, `is_active`, `is_public` |
 | `SceneParticipation` | Links accounts to scenes with roles | `scene` (FK), `account` (FK AccountDB), `is_gm`, `is_owner`, `joined_at`, `left_at` |
 | `Persona` | Identity a participant uses within a scene | `participation` (FK), `name`, `is_fake_name`, `description`, `thumbnail_url`, `character` (FK ObjectDB) |
 

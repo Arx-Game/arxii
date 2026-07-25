@@ -562,7 +562,7 @@ class GrantStoryRoomAccessActionTests(TestCase):
         )
         assert result.success, result.message
         assert StoryRoomGrant.objects.filter(
-            room=instance.room.room_profile, character=self.target.sheet_data
+            room=RoomProfileFactory(objectdb=instance.room), character=self.target.sheet_data
         ).exists()
 
     def test_grant_on_foreign_gm_room_fails(self) -> None:
@@ -733,7 +733,7 @@ class SpinUpCloseSceneRoomActionTests(TestCase):
 
         join_result = JoinStoryRoomAction().run(self.player, room_id=instance.room_id)
         assert join_result.success, join_result.message
-        assert self.player.location == instance.room
+        assert self.player.location == instance.room.objectdb
 
         close_result = CloseSceneRoomAction().run(self.gm_actor, room_id=instance.room_id)
         assert close_result.success, close_result.message

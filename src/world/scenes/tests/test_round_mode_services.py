@@ -2,7 +2,7 @@
 
 from django.test import TestCase
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from world.scenes.constants import RoundStatus, SceneRoundMode, SceneRoundStartReason
 from world.scenes.factories import SceneRoundFactory, SceneRoundParticipantFactory
 from world.scenes.models import SceneActionDeclaration, SceneRound
@@ -137,7 +137,7 @@ class SetSceneRoundModeTests(TestCase):
 
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         rnd = SceneRoundFactory(
-            room=room,
+            room=RoomProfileFactory(objectdb=room),
             status=RoundStatus.DECLARING,
             round_number=1,
             mode=SceneRoundMode.STRICT,
@@ -175,14 +175,18 @@ class SetSceneRoundModeTests(TestCase):
 class ActiveRoundForRoomTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.room = ObjectDBFactory()
+        cls.room = RoomProfileFactory().objectdb
 
     def test_active_round_for_room_returns_active_round(self):
-        rnd = SceneRound.objects.create(room=self.room, start_reason=SceneRoundStartReason.OPT_IN)
+        rnd = SceneRound.objects.create(
+            room=RoomProfileFactory(objectdb=self.room), start_reason=SceneRoundStartReason.OPT_IN
+        )
         self.assertEqual(active_round_for_room(self.room), rnd)
 
     def test_active_round_for_room_none_when_only_completed(self):
         SceneRound.objects.create(
-            room=self.room, start_reason=SceneRoundStartReason.OPT_IN, status=RoundStatus.COMPLETED
+            room=RoomProfileFactory(objectdb=self.room),
+            start_reason=SceneRoundStartReason.OPT_IN,
+            status=RoundStatus.COMPLETED,
         )
         self.assertIsNone(active_round_for_room(self.room))

@@ -3,7 +3,7 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from world.scenes.constants import PlaceStatus
 from world.scenes.factories import (
     InteractionFactory,
@@ -23,23 +23,23 @@ class TestPlace(TestCase):
         )
 
     def test_create_place(self) -> None:
-        place = PlaceFactory(room=self.room, name="The Bar")
+        place = PlaceFactory(room=RoomProfileFactory(objectdb=self.room), name="The Bar")
         assert place.name == "The Bar"
-        assert place.room == self.room
+        assert place.room.objectdb == self.room
         assert place.status == PlaceStatus.ACTIVE
 
     def test_unique_name_per_room(self) -> None:
-        PlaceFactory(room=self.room, name="Corner Booth")
+        PlaceFactory(room=RoomProfileFactory(objectdb=self.room), name="Corner Booth")
         with self.assertRaises(IntegrityError):
-            PlaceFactory(room=self.room, name="Corner Booth")
+            PlaceFactory(room=RoomProfileFactory(objectdb=self.room), name="Corner Booth")
 
     def test_duplicate_names_allowed_across_rooms(self) -> None:
         other_room = ObjectDBFactory(
             db_key="Inn",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        PlaceFactory(room=self.room, name="Hearth")
-        place2 = PlaceFactory(room=other_room, name="Hearth")
+        PlaceFactory(room=RoomProfileFactory(objectdb=self.room), name="Hearth")
+        place2 = PlaceFactory(room=RoomProfileFactory(objectdb=other_room), name="Hearth")
         assert place2.pk is not None
 
     def test_str(self) -> None:

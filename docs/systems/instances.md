@@ -19,7 +19,7 @@ from world.instances.constants import InstanceStatus
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `InstancedRoom` | Lifecycle tracker for a temporary room | `room` (OneToOne to ObjectDB), `owner` (FK to `character_sheets.CharacterSheet`, nullable), `return_location` (FK to ObjectDB, nullable), `source_key` (placeholder for future mission FK), `status` (InstanceStatus), `created_at`, `completed_at` |
+| `InstancedRoom` | Lifecycle tracker for a temporary room | `room` (OneToOne to `evennia_extensions.RoomProfile`, #2608), `owner` (FK to `character_sheets.CharacterSheet`, nullable), `return_location` (FK to ObjectDB, nullable — a **deliberate keeper**: the captivity path stamps a raw, unvalidated `character.location` with no Room guarantee), `source_key` (placeholder for future mission FK), `status` (InstanceStatus), `created_at`, `completed_at` |
 
 ---
 

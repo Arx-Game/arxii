@@ -2,7 +2,7 @@
 
 from django.test import TestCase
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import PersonaFactory, PlaceFactory, PlacePresenceFactory
 from world.scenes.place_models import PlacePresence
@@ -106,8 +106,8 @@ class TestJoinPlace(TestCase):
             db_key="Tavern",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        place1 = PlaceFactory(room=room, name="Bar")
-        place2 = PlaceFactory(room=room, name="Corner")
+        place1 = PlaceFactory(room=RoomProfileFactory(objectdb=room), name="Bar")
+        place2 = PlaceFactory(room=RoomProfileFactory(objectdb=room), name="Corner")
         persona = PersonaFactory()
 
         join_place(place=place1, persona=persona)
