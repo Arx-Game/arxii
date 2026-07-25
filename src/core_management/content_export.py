@@ -17,9 +17,15 @@ standalone). All Django imports are deferred.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 import logging
 from pathlib import Path
 
+from core_management.content_fixtures import (
+    MARKDOWN_EXPORT_DOMAINS,
+    content_slug,
+    render_entry_markdown,
+)
 from core_management.content_repo import resolve_content_root
 
 logger = logging.getLogger(__name__)
@@ -196,6 +202,31 @@ CONTENT_MODELS: frozenset[str] = frozenset(
 )
 
 
+def _write_markdown_entries(root: Path, spec: dict, serialized: str) -> list[Path]:
+    """Write one markdown file per record for a prose domain (#2688).
+
+    Existing files are overwritten; files with no corresponding row are left
+    alone rather than deleted. Deleting is how an export destroys authored
+    content when the database is a subset of the repo (see the content repo's
+    own README), so removing an entry stays a deliberate manual act.
+    """
+    domain_dir = root / spec["domain"]
+    written: list[Path] = []
+    for record in json.loads(serialized):
+        fields = record["fields"]
+        out_dir = domain_dir
+        subdir_key = spec.get("subdir_from")
+        if subdir_key:
+            value = fields.get(subdir_key)
+            if isinstance(value, list) and value:
+                out_dir = domain_dir / content_slug(str(value[-1]))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"{content_slug(fields['name'])}.md"
+        out_path.write_text(render_entry_markdown(fields, spec), encoding="utf-8")
+        written.append(out_path)
+    return written
+
+
 @dataclass
 class ExportResult:
     """Outcome of an export pass."""
@@ -256,6 +287,14 @@ def export_to_content_repo(content_root: Path | None = None) -> ExportResult:
             )
         except (TypeError, ValueError, AttributeError) as exc:
             result.errors.append(f"{model_label}: serialization failed: {exc}")
+            continue
+
+        spec = MARKDOWN_EXPORT_DOMAINS.get(model_label)
+        if spec is not None:
+            # Prose domain (#2688): write per-entry markdown and emit NO JSON,
+            # so the generated file cannot compete with the markdown source.
+            result.written.extend(_write_markdown_entries(root, spec, data))
+            result.total_records += count
             continue
 
         out_dir = fixtures_dir / app_label

@@ -5906,6 +5906,24 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `skills` → `traits.Trait` (#944); `npc_roles` → `npc_services.NPCRole`, `items` →
   `items.ItemTemplate`, `building_kinds` → `buildings.BuildingKind`, `decoration_kinds` →
   `buildings.DecorationKind` (#2266) — every domain upserts by a DB-unique `name`.
+  **#2688 adds four prose domains** whose content is authored as per-entry markdown
+  instead of fixture JSON, keyed under `content/` because build-domain and
+  reference-canon directory names share one namespace in the content repo:
+  `content/codex_entries` → `codex.CodexEntry`, `content/beginnings` →
+  `character_creation.Beginnings`, `content/starting_areas` →
+  `character_creation.StartingArea`, `content/traditions` → `magic.Tradition`.
+  `codex.CodexEntry` is the only multi-prose domain: `## Lore` → `lore_content`
+  and `## Mechanics` → `mechanics_content`, with **at least one** required rather
+  than all (`CodexEntry.clean()` needs only one, and 25 of 28 authored entries have
+  no mechanics content). Every single-prose domain keeps the whole-body-to-one-field
+  rule unchanged. `export_to_content_repo` writes these four back **as markdown and
+  emits no JSON for them** (`MARKDOWN_EXPORT_DOMAINS`), so each model keeps exactly
+  one home — and the export is **field-scoped**: only author-owned fields are
+  written, so admin-tuned columns (`share_cost`, `learn_*`, `display_order`,
+  `is_public`/`is_featured`) are never round-tripped into frontmatter. An optional
+  model field must stay optional in its builder, or export can emit a file the
+  builder then rejects (regression-tested: `StartingArea.realm` is nullable, and
+  `default_starting_room` round-trips because the fallback-room bootstrap needs it).
   `CONTENT_MODELS` (`core_management/content_export.py`) additionally covers
   `character_creation.startingarea`, `evennia_extensions.roomsizetier`, and
   `weather.climate` (#2436/#2448) now that all three carry `NaturalKeyMixin`, plus

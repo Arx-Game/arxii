@@ -91,7 +91,9 @@ from dataclasses import dataclass, field
 from functools import partial
 import json
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING
+import unicodedata
 
 import yaml
 
@@ -127,6 +129,18 @@ FIELD_DEFAULT_RAPPORT_STARTING_VALUE = "default_rapport_starting_value"
 FIELD_DEFAULT_DESCRIPTION_TEMPLATE = "default_description_template"
 FIELD_VALUE = "value"
 FIELD_WEIGHT = "weight"
+
+# Prose fields for the multi-section domains (#2688). A domain whose model
+# carries more than one long-form text field maps ``## Heading`` sections in
+# the markdown body onto these, instead of the whole-body-to-one-field rule
+# every single-prose domain uses.
+FIELD_DESCRIPTION = "description"
+FIELD_LORE_CONTENT = "lore_content"
+FIELD_MECHANICS_CONTENT = "mechanics_content"
+FIELD_SUMMARY = "summary"
+FIELD_SUBJECT = "subject"
+
+HEADING_DELIMITER = "## "
 
 # _upsert_fixture_object()/load_entries()/load_world_content() outcome tokens
 # (#2448) — module constants for the same reason as the FIELD_* group above:
@@ -230,6 +244,70 @@ def _require_name_and_body(entry: ContentEntry) -> str:
         msg = f"{entry.path}: description body is required (PLACEHOLDER is fine)."
         raise ContentError(msg)
     return name
+
+
+def _prose_sections(entry: ContentEntry, field_by_heading: dict[str, str]) -> dict[str, str]:
+    """Split a markdown body into prose fields keyed by ``##`` heading (#2688).
+
+    Only for domains whose model carries more than one long-form text field.
+    Every single-prose domain keeps the existing whole-body-to-one-field rule
+    via ``_require_name_and_body`` — this function is not involved there, so
+    those domains are unaffected.
+
+    Headings match case-insensitively. Rules, each chosen so the round trip
+    (markdown -> fixture -> DB -> markdown) cannot silently lose prose:
+
+    - Body text before the first ``##`` is an error rather than being assigned
+      to some default field, because there is no way to write it back out.
+    - An unrecognised ``##`` heading is an error naming the file and the
+      heading, mirroring how an invalid ``category`` is reported.
+    - At least one declared section must carry text. Individual sections stay
+      optional: ``CodexEntry.clean()`` requires only ONE of ``lore_content`` /
+      ``mechanics_content``, and 25 of the 28 authored entries have no
+      mechanics content, so requiring all declared sections would reject
+      nearly the whole corpus.
+
+    Returns only the sections actually present, so absent optional fields are
+    omitted from ``fields`` entirely — which the loader already reads as
+    "leave this column alone" (see the module docstring on optional fields).
+    """
+    lookup = {heading.casefold(): field for heading, field in field_by_heading.items()}
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
+
+    for line in entry.body.splitlines():
+        if line.startswith(HEADING_DELIMITER):
+            heading = line[len(HEADING_DELIMITER) :].strip()
+            field = lookup.get(heading.casefold())
+            if field is None:
+                msg = (
+                    f"{entry.path}: unknown section heading '{heading}'. "
+                    f"Expected one of: {', '.join(sorted(field_by_heading))}."
+                )
+                raise ContentError(msg)
+            current = field
+            sections.setdefault(current, [])
+            continue
+        if current is None:
+            if line.strip():
+                msg = (
+                    f"{entry.path}: body text appears before the first '## ' heading. "
+                    f"Every line must sit under a section: "
+                    f"{', '.join(sorted(field_by_heading))}."
+                )
+                raise ContentError(msg)
+            continue
+        sections[current].append(line)
+
+    prose = {field: "\n".join(lines).strip() for field, lines in sections.items()}
+    prose = {field: text for field, text in prose.items() if text}
+    if not prose:
+        msg = (
+            f"{entry.path}: needs at least one non-empty section "
+            f"({', '.join(sorted(field_by_heading))}). PLACEHOLDER text is fine."
+        )
+        raise ContentError(msg)
+    return prose
 
 
 def _build_trait_fixture(entry: ContentEntry, *, trait_type: str) -> dict:
@@ -370,6 +448,121 @@ def _build_decoration_kind_fixture(entry: ContentEntry) -> dict:
 
 
 # domain dir -> {builder callable, output fixture path relative to src/}
+def _require_meta_natural_key(entry: ContentEntry, key: str) -> list:
+    """Return a frontmatter FK value as Django's natural-key list form.
+
+    Accepts either a plain scalar (``starting_area: The City of Arx``), which
+    is what authors should write for a single-field natural key, or an explicit
+    list for multi-field keys (``subject: [Magic, null, Resonance]``).
+    ``_resolve_natural_key_fields`` resolves either at upsert time.
+    """
+    value = _optional_meta_natural_key(entry, key)
+    if value is None:
+        msg = f"{entry.path}: '{key}' is required."
+        raise ContentError(msg)
+    return value
+
+
+def _optional_meta_natural_key(entry: ContentEntry, key: str) -> list | None:
+    """Same as ``_require_meta_natural_key`` but returns None when unset.
+
+    Used for FK columns the model allows to be null. Returning None means the
+    key is omitted from ``fields`` entirely, which the loader already reads as
+    "leave this column alone" rather than "set it to null".
+    """
+    value = entry.meta.get(key)
+    if value is None or value == "":
+        return None
+    return list(value) if isinstance(value, list) else [value]
+
+
+def _build_codex_entry_fixture(entry: ContentEntry) -> dict:
+    """Map a codex_entries/ entry to a codex.CodexEntry fixture object (#2688).
+
+    The only multi-prose domain: ``## Lore`` -> ``lore_content`` and
+    ``## Mechanics`` -> ``mechanics_content``, at least one required.
+
+    Deliberately carries ONLY author-owned fields. Every tuning and
+    publication column (``share_cost``, ``learn_cost``, ``learn_difficulty``,
+    ``learn_threshold``, ``display_order``, ``is_public``, ``is_featured``,
+    ``featured_order``) plus ``prerequisites``, ``modifier_target`` and ``art``
+    is admin-owned and omitted, so a load never overwrites values tuned in the
+    admin. Omission already means "leave this column alone" — see the module
+    docstring on optional-field semantics.
+    """
+    name = entry.meta.get("name")
+    if not name or not isinstance(name, str):
+        msg = f"{entry.path}: 'name' (string) is required."
+        raise ContentError(msg)
+    fields: dict = {
+        "name": name,
+        FIELD_SUBJECT: _require_meta_natural_key(entry, FIELD_SUBJECT),
+    }
+    summary = entry.meta.get(FIELD_SUMMARY)
+    if summary:
+        fields[FIELD_SUMMARY] = summary
+    fields.update(
+        _prose_sections(
+            entry,
+            {"Lore": FIELD_LORE_CONTENT, "Mechanics": FIELD_MECHANICS_CONTENT},
+        )
+    )
+    return {"model": "codex.codexentry", "fields": fields}
+
+
+def _build_beginnings_fixture(entry: ContentEntry) -> dict:
+    """Map a beginnings/ entry to a character_creation.Beginnings object (#2688).
+
+    Natural key is (starting_area, name), so ``starting_area`` is required.
+    Body is the ``description`` — these run past 1,000 characters, which is
+    the whole reason this domain moves out of JSON string literals.
+    """
+    name = _require_name_and_body(entry)
+    return {
+        "model": "character_creation.beginnings",
+        "fields": {
+            "name": name,
+            "starting_area": _require_meta_natural_key(entry, "starting_area"),
+            FIELD_DESCRIPTION: entry.body,
+        },
+    }
+
+
+def _build_starting_area_fixture(entry: ContentEntry) -> dict:
+    """Map a starting_areas/ entry to character_creation.StartingArea (#2688).
+
+    ``realm`` and ``default_starting_room`` are both OPTIONAL, matching the
+    model (both are ``null=True``). Neither may be required here:
+
+    - The canonical bootstrap area is created without a realm, so requiring it
+      would make ``export_to_content_repo`` emit a file that this builder then
+      rejects — the round trip must not be able to produce unreadable output.
+    - ``default_starting_room`` is structural bootstrap wiring rather than
+      admin tuning, and ``load_world_content`` deliberately defers it until the
+      grid bundles have loaded. Dropping it would break the fallback-room
+      guarantee, so it round-trips even though it is a FK.
+
+    Genuinely admin-owned placement columns (``sort_order``, ``access_level``,
+    ``minimum_trust``, ``grants_residence_tenancy``, ``is_active``) stay out.
+    """
+    name = _require_name_and_body(entry)
+    fields: dict = {"name": name, FIELD_DESCRIPTION: entry.body}
+    for key in ("realm", "default_starting_room"):
+        value = _optional_meta_natural_key(entry, key)
+        if value is not None:
+            fields[key] = value
+    return {"model": "character_creation.startingarea", "fields": fields}
+
+
+def _build_tradition_fixture(entry: ContentEntry) -> dict:
+    """Map a traditions/ entry to a magic.Tradition fixture object (#2688)."""
+    name = _require_name_and_body(entry)
+    return {
+        "model": "magic.tradition",
+        "fields": {"name": name, FIELD_DESCRIPTION: entry.body},
+    }
+
+
 DOMAIN_BUILDERS = {
     "stats": {
         "builder": partial(_build_trait_fixture, trait_type="stat"),
@@ -395,7 +588,107 @@ DOMAIN_BUILDERS = {
         "builder": _build_decoration_kind_fixture,
         "output": "world/buildings/fixtures/content_decoration_kinds.json",
     },
+    # Prose-bearing domains (#2688). Nested under ``content/`` because build
+    # domains and reference-canon directories share one namespace in the
+    # content repo, and several of these names already exist there as prose
+    # directories — registering them flat would make ``build_all`` try to
+    # parse world-bible documents as entries. ``build_all`` computes
+    # ``content_root / domain``, so a separator in the key resolves through
+    # pathlib with no code change.
+    "content/codex_entries": {
+        "builder": _build_codex_entry_fixture,
+        "output": "world/codex/fixtures/content_codex_entries.json",
+    },
+    "content/beginnings": {
+        "builder": _build_beginnings_fixture,
+        "output": "world/character_creation/fixtures/content_beginnings.json",
+    },
+    "content/starting_areas": {
+        "builder": _build_starting_area_fixture,
+        "output": "world/character_creation/fixtures/content_starting_areas.json",
+    },
+    "content/traditions": {
+        "builder": _build_tradition_fixture,
+        "output": "world/magic/fixtures/content_traditions.json",
+    },
 }
+
+
+#: Models whose content lives as per-entry markdown rather than fixture JSON
+#: (#2688). ``export_to_content_repo`` writes these back as markdown and MUST
+#: NOT emit ``fixtures/<app>/<model>.json`` for them, or the generated JSON
+#: would compete with the markdown source and reintroduce two homes per model.
+#:
+#: ``meta`` lists the ONLY fields written to frontmatter and ``prose`` the only
+#: body sections. Everything absent is admin-owned and is deliberately never
+#: round-tripped — omitting a key already means "leave this column alone" on
+#: load, so a full-field export would silently convert admin-owned tuning
+#: columns (costs, difficulty, display order, publication flags) into
+#: markdown-owned ones across the whole corpus.
+MARKDOWN_EXPORT_DOMAINS: dict[str, dict] = {
+    "codex.codexentry": {
+        "domain": "content/codex_entries",
+        "meta": ["name", FIELD_SUBJECT, FIELD_SUMMARY],
+        "prose": [("Lore", FIELD_LORE_CONTENT), ("Mechanics", FIELD_MECHANICS_CONTENT)],
+        # Nest by the entry's own subject so the tree stays navigable as this
+        # domain grows; ``build_all`` uses rglob, so depth costs nothing.
+        "subdir_from": FIELD_SUBJECT,
+    },
+    "character_creation.beginnings": {
+        "domain": "content/beginnings",
+        "meta": ["name", "starting_area"],
+        "prose": [(None, FIELD_DESCRIPTION)],
+    },
+    "character_creation.startingarea": {
+        "domain": "content/starting_areas",
+        # default_starting_room is bootstrap wiring, not admin tuning — the
+        # fallback-room guarantee depends on it surviving the round trip.
+        "meta": ["name", "realm", "default_starting_room"],
+        "prose": [(None, FIELD_DESCRIPTION)],
+    },
+    "magic.tradition": {
+        "domain": "content/traditions",
+        "meta": ["name"],
+        "prose": [(None, FIELD_DESCRIPTION)],
+    },
+}
+
+
+def content_slug(value: str) -> str:
+    """Filename/directory slug for an exported entry. ASCII, lowercase, hyphens."""
+    text = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
+    text = re.sub(r"[^\w\s-]", "", text).strip().lower()
+    return re.sub(r"[-\s]+", "-", text) or "entry"
+
+
+def render_entry_markdown(fields: dict, spec: dict) -> str:
+    """Render one record's author-owned fields as frontmatter + markdown body.
+
+    Inverse of the domain's builder. Only ``spec["meta"]`` and ``spec["prose"]``
+    are emitted; every other column stays admin-owned (see
+    ``MARKDOWN_EXPORT_DOMAINS``).
+    """
+    head: list[str] = []
+    for key in spec["meta"]:
+        value = fields.get(key)
+        if value is None or value == "":
+            continue
+        # Collapse a one-element natural key to a plain scalar — nicer to author,
+        # and ``_require_meta_natural_key`` accepts either form back.
+        if isinstance(value, list) and len(value) == 1 and isinstance(value[0], str):
+            value = value[0]
+        head.append(f"{key}: {json.dumps(value, ensure_ascii=False)}")
+
+    body: list[str] = []
+    for heading, prose_field in spec["prose"]:
+        text = (fields.get(prose_field) or "").strip()
+        if not text:
+            continue
+        if heading:
+            body.extend([f"{HEADING_DELIMITER}{heading}", ""])
+        body.extend([text, ""])
+
+    return "---\n" + "\n".join(head) + "\n---\n\n" + "\n".join(body).rstrip() + "\n"
 
 
 def build_fixture_json(content_root: Path, result: BuildResult) -> None:
