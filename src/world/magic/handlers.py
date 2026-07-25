@@ -363,6 +363,14 @@ class CharacterThreadHandler:
         modifiers, and nothing technique- or thread-contextual. Gift-scoped aura and
         touchstone terms return 0 without a technique by construction.
 
+        ``applicable_threads=[]`` is passed explicitly but is not load-bearing:
+        ``_derive_power`` normalizes ``None`` to ``[]`` internally
+        (``applicable_threads or []``), so ``None``, ``[]``, and omitting the kwarg are
+        byte-identical here. The thread term below is zero because nothing populates the
+        list, not because ``[]`` suppresses any resolution — no layer anywhere resolves a
+        character's real threads on its own. A later contextual thread term must actively
+        resolve and pass a populated list; nothing here is primed to switch on.
+
         Memoized here rather than recomputed per grant: ``_derive_power`` costs roughly a
         dozen queries, and the agency oracle sweeps every known technique. One derivation
         per character per request keeps that sweep constant-query. Cleared by
