@@ -192,6 +192,7 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     fatigue_penalty: int,
     specialization: "Specialization | None",
     situation_ctx: "SituationContext | None" = None,
+    level_override: int | None = None,
 ) -> _CheckBreakdown:
     """Compute stat + skill + specialization + aspect + level points, ranks, and chart
 
@@ -199,9 +200,21 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     test path (which supplies the outcome directly) — the single source of the check's
     point math. Level contributes ``LEVEL_POINTS_PER_LEVEL`` points on its own (#2707) in
     addition to scaling the aspect bonus below — a guaranteed floor, not a replacement for it.
+
+    ``level_override`` (#2707 whole-branch-review fix): when ``None`` (every existing
+    caller), behavior is byte-identical to before — ``level`` comes from
+    ``get_character_path_level(character)``. When set, it SUBSTITUTES for that resolved
+    level in both the ``level_points`` term and the ``_calculate_aspect_bonus`` call — it
+    never adds to the character's own level. This exists for opponents whose authored
+    level isn't reachable through ``character``'s own ``CharacterClassLevel`` rows, e.g. a
+    ``CombatOpponent`` (an ephemeral NPC with no class-level rows behind its objectdb,
+    which would otherwise floor at 1 regardless of its authored level).
     """
     handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
-    level = get_character_path_level(character)
+    if level_override is not None:
+        level = level_override
+    else:
+        level = get_character_path_level(character)
     effort_modifier = EFFORT_CHECK_MODIFIER.get(effort_level, 0) if effort_level else 0
 
     trait_points = _calculate_trait_points(handler, check_type)
@@ -540,6 +553,8 @@ def compute_check_rating(
     character: "ObjectDB",
     check_type: "CheckType",
     extra_modifiers: int = 0,
+    *,
+    level_override: int | None = None,
 ) -> int:
     """Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.
 
@@ -548,6 +563,11 @@ def compute_check_rating(
     needs to *compare* a character's standing in two ``CheckType``s (e.g. picking the
     better of two reaction approaches) does so deterministically. ADR-0019 keeps the one
     dice roll inside ``perform_check``/``resolve_challenge`` — this helper never rolls.
+
+    ``level_override`` (#2707 whole-branch-review fix): forwarded to
+    ``_compute_check_breakdown`` unchanged — ``None`` (the default, every pre-existing
+    caller) is byte-identical to today; a value SUBSTITUTES for ``character``'s resolved
+    level rather than adding to it. See that function's docstring.
     """
     breakdown = _compute_check_breakdown(
         character,
@@ -557,6 +577,7 @@ def compute_check_rating(
         effort_level=None,
         fatigue_penalty=0,
         specialization=None,
+        level_override=level_override,
     )
     return breakdown.total_points
 
@@ -821,7 +842,12 @@ def level_opposition(
     return total
 
 
-def compute_resist_increment(defender_character: "ObjectDB", resist_effort_level: str) -> int:
+def compute_resist_increment(
+    defender_character: "ObjectDB",
+    resist_effort_level: str,
+    *,
+    level_override: int | None = None,
+) -> int:
     """Compute how much a defender's active resistance raises difficulty.
 
     Resolves the Composure CheckType by name (category-agnostic) and returns the
@@ -843,9 +869,21 @@ def compute_resist_increment(defender_character: "ObjectDB", resist_effort_level
     points already ride this rating, so callers must use this OR :func:`level_opposition`,
     never both (see that function's docstring).
 
+    ``level_override`` (whole-branch-review fix, #2707): forwarded to
+    :func:`compute_check_rating`/``_compute_check_breakdown`` unchanged. ``None`` (the
+    default) is byte-identical to before — level comes from ``defender_character``'s own
+    ``CharacterClassLevel`` rows. A value SUBSTITUTES for that resolved level rather than
+    adding to it. Exists for a ``CombatOpponent``: it carries its own authored ``level``
+    field, which is not reachable through its ``objectdb``'s class-level rows (an
+    ephemeral NPC has none, so without this override the level always floored at 1) — a
+    call site passes ``level_override=opponent.level`` so the opponent's morale is
+    exactly as sturdy as its authored level says, matching how its offense already
+    opposes checks (``level_opposition``/the three combat sites wired to it).
+
     Args:
         defender_character: The character resisting the social action.
         resist_effort_level: An EffortLevel string value (e.g. ``"high"``).
+        level_override: When set, substitutes for the defender's resolved level.
 
     Returns:
         Non-negative integer representing the difficulty increment from resistance.
@@ -858,7 +896,10 @@ def compute_resist_increment(defender_character: "ObjectDB", resist_effort_level
 
     modifier = EFFORT_CHECK_MODIFIER.get(resist_effort_level, 0)
     rating = compute_check_rating(
-        defender_character, composure_check_type, extra_modifiers=modifier
+        defender_character,
+        composure_check_type,
+        extra_modifiers=modifier,
+        level_override=level_override,
     )
     return max(0, rating)
 

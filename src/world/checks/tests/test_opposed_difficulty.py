@@ -26,7 +26,13 @@ from world.checks.factories import (
     create_resistance_check_types,
 )
 from world.checks.services import compute_check_rating, compute_resist_increment, level_opposition
-from world.classes.factories import AspectFactory, PathAspectFactory, PathFactory
+from world.classes.factories import (
+    AspectFactory,
+    CharacterClassFactory,
+    CharacterClassLevelFactory,
+    PathAspectFactory,
+    PathFactory,
+)
 from world.conditions.factories import CapabilityTypeFactory
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER
 from world.progression.factories import CharacterPathHistoryFactory
@@ -113,6 +119,37 @@ class OpposedDifficultyTests(TestCase):
             weight=Decimal("1.0"),
         )
 
+        # --- level_override fixtures (#2707 whole-branch-review finding 4) ---
+        # Two defenders sharing traits, path, and aspect match -- the ONLY difference
+        # is their real authored level (3 vs 10) -- so level_override=10 on the level-3
+        # defender can be pinned against the level-10 defender's ACTUAL rating: if the
+        # override merely substituted, the two must match exactly; if it instead added
+        # on top of the level-3 defender's own level, they would not.
+        override_class = CharacterClassFactory()
+        cls.override_low = CharacterSheetFactory().character
+        CharacterTraitValue.objects.create(
+            character=cls.override_low.sheet_data, trait=cls.willpower_trait, value=10
+        )
+        CharacterPathHistoryFactory(character=cls.override_low.sheet_data, path=decorated_path)
+        CharacterClassLevelFactory(
+            character=cls.override_low.sheet_data,
+            character_class=override_class,
+            level=3,
+            is_primary=True,
+        )
+
+        cls.override_high = CharacterSheetFactory().character
+        CharacterTraitValue.objects.create(
+            character=cls.override_high.sheet_data, trait=cls.willpower_trait, value=10
+        )
+        CharacterPathHistoryFactory(character=cls.override_high.sheet_data, path=decorated_path)
+        CharacterClassLevelFactory(
+            character=cls.override_high.sheet_data,
+            character_class=override_class,
+            level=10,
+            is_primary=True,
+        )
+
     def setUp(self):
         Trait.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
@@ -154,3 +191,48 @@ class OpposedDifficultyTests(TestCase):
         active = compute_resist_increment(self.plain_defender, "medium")
         rating = compute_check_rating(self.plain_defender, self.composure_check_type)
         self.assertEqual(active, max(0, rating + EFFORT_CHECK_MODIFIER["medium"]))
+
+    def test_level_override_none_is_byte_identical_to_omitting_it(self):
+        """Whole-branch-review finding 4: level_override=None must change nothing.
+
+        Pinned against BOTH the plain defender (no CharacterClassLevel rows, floors
+        at 1) and the decorated defender (a real authored level via
+        CharacterPathHistory/aspect scaling), since the override threads through both
+        the level_points term and the aspect-bonus level scaling.
+        """
+        for defender in (self.plain_defender, self.decorated_defender):
+            omitted = compute_resist_increment(defender, "medium")
+            explicit_none = compute_resist_increment(defender, "medium", level_override=None)
+            self.assertEqual(omitted, explicit_none)
+
+    def test_level_override_matches_a_real_character_actually_being_that_level(self):
+        """The override reproduces exactly what a real level-10 defender rates.
+
+        override_low and override_high share every term (traits, path, aspect match)
+        and differ ONLY in their real authored level (3 vs 10). If level_override
+        genuinely substitutes, overriding the level-3 defender's level to 10 must
+        equal the level-10 defender's own (un-overridden) rating exactly.
+        """
+        overridden = compute_resist_increment(self.override_low, "medium", level_override=10)
+        actually_level_ten = compute_resist_increment(self.override_high, "medium")
+        self.assertEqual(overridden, actually_level_ten)
+
+    def test_level_override_substitutes_rather_than_adds(self):
+        """The double-count guard: overriding to 10 must NOT equal own-level-3 result
+        plus a level-10 contribution stacked on top.
+
+        If a future change accidentally combined the override additively with the
+        character's own resolved level (3), the overridden result would land far
+        above the true level-10 rating -- this pins that it does not.
+        """
+        own_level_three = compute_resist_increment(self.override_low, "medium")
+        overridden = compute_resist_increment(self.override_low, "medium", level_override=10)
+        actually_level_ten = compute_resist_increment(self.override_high, "medium")
+
+        self.assertEqual(overridden, actually_level_ten)
+        double_counted = own_level_three + (actually_level_ten - own_level_three) * 2
+        self.assertNotEqual(overridden, double_counted)
+        # A concrete additive failure mode: own rating (level 3) plus a bare
+        # LEVEL_POINTS_PER_LEVEL * 10 term stacked on top (as if level_override fed
+        # an ADDED level_opposition-style term rather than substituting).
+        self.assertNotEqual(overridden, own_level_three + LEVEL_POINTS_PER_LEVEL * 10)

@@ -144,12 +144,29 @@ from world.checks.services import compute_resist_increment, level_opposition
 # announcement side effect) — plus the effort-level modifier. Clamped >= 0.
 increment = compute_resist_increment(defender_character, resist_effort_level="high")
 
+# level_override (whole-branch-review fix, #2707): compute_check_rating /
+# compute_resist_increment resolve level from the defender's own objectdb by
+# default (get_character_path_level's CharacterClassLevel rows) -- a gap for an
+# ephemeral CombatOpponent, which has none. level_override SUBSTITUTES for that
+# resolved level (never adds to it) in both the level_points term and the
+# aspect-bonus level scaling. None (the default) is byte-identical to before.
+increment = compute_resist_increment(
+    target.objectdb, effort_level, level_override=target.level
+)
+
 # PASSIVE: the defender contributes nothing beyond existing. LEVEL_POINTS_PER_LEVEL
 # * level always; plus, when a character is given, the acting check's aspects
 # scored against the DEFENDER's Path (their wheelhouse protects them). A
 # character=None (an ephemeral NPC with no sheet) contributes level alone.
 difficulty = level_opposition(check_type, level=defender_level, character=defender_character)
 ```
+
+`_social_combat_difficulty` (`world/combat/services.py`, backing the Demoralize/Taunt/
+Parley combat verbs) is the one caller of `compute_resist_increment` that passes
+`level_override` — it opposes a `CombatOpponent`, whose authored `level` field isn't
+reachable through its `objectdb`'s class-level rows (an ephemeral NPC has none). Without
+the override, a boss's morale defense always floored at level 1 even though the same
+opponent's offense already opposed PC checks at its real level via `level_opposition`.
 
 `resolve_target_difficulty` (`actions/effects/base.py`) also uses
 `compute_check_rating` directly to get a target's resistance rating for

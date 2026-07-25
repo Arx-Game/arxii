@@ -89,6 +89,20 @@ for the full rationale, and its recorded clash exception (`world/combat/clash.py
 deliberately stays at `target_difficulty=0`; a clash is a symmetric contest graded by
 comparing both sides' own rolls, not an opposed-difficulty check).
 
+**`level_override` (whole-branch-review fix, #2707)** — `compute_resist_increment` (and
+`compute_check_rating`/`_compute_check_breakdown` underneath it) take an optional
+keyword-only `level_override: int | None = None`. `None` (every pre-existing caller) is
+byte-identical to before — level comes from `get_character_path_level(character)`. When
+set, it **substitutes** for that resolved level in both places level is read inside the
+breakdown (the `level_points` term and the `_calculate_aspect_bonus` call) — it never
+adds to the character's own resolved level, which would double-count exactly like
+combining `compute_resist_increment` with `level_opposition` would. This exists because
+`_social_combat_difficulty` (`world/combat/services.py`, backing Demoralize/Taunt/Parley)
+opposes a `CombatOpponent`, whose authored `level` field isn't reachable through its
+`objectdb`'s `CharacterClassLevel` rows (an ephemeral NPC has none, so it floored at 1
+regardless of the opponent's real level) — it passes
+`compute_resist_increment(target.objectdb, effort_level, level_override=target.level)`.
+
 ## The modifier seam — `collect_check_modifiers(sheet, check_type, *, scene=None, ...)`
 
 Central aggregator (`services.py`) that gathers condition / rollmod / scene /

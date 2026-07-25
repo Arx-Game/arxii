@@ -1833,8 +1833,8 @@
 ### Service Functions
 - `chart_has_success_outcomes(rank_difference: int) -> bool — Check if the ResultChart for this rank difference has any success outcomes.`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None) -> world.checks.types.ModifierBreakdown — Aggregate all modifier contributions for a check into a ModifierBreakdown.`
-- `compute_check_rating(character: 'ObjectDB', check_type: 'CheckType', extra_modifiers: int = 0) -> int — Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.`
-- `compute_resist_increment(defender_character: 'ObjectDB', resist_effort_level: str) -> int — Compute how much a defender's active resistance raises difficulty.`
+- `compute_check_rating(character: 'ObjectDB', check_type: 'CheckType', extra_modifiers: int = 0, *, level_override: int | None = None) -> int — Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.`
+- `compute_resist_increment(defender_character: 'ObjectDB', resist_effort_level: str, *, level_override: int | None = None) -> int — Compute how much a defender's active resistance raises difficulty.`
 - `get_character_path_level(character: 'ObjectDB') -> 'int' — Return the character's primary class level (or highest, or 1).`
 - `get_rollmod(character: 'ObjectDB') -> int — Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
 - `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int — Difficulty an opposing entity of *level* adds to *check_type* (#2707).`

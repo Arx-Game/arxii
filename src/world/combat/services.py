@@ -6503,6 +6503,15 @@ def _social_combat_difficulty(
     now wired into combat for the first time). Mindless resistance: a mindless
     target adds ``MINDLESS_MORALE_RESISTANCE`` — a high resistance tier, not a
     wall. Returns 0 when there is no target (rally targets an ally).
+
+    Passes ``level_override=target.level`` (whole-branch-review fix, #2707):
+    ``compute_resist_increment`` otherwise resolves the defender's level from its
+    ``objectdb``'s ``CharacterClassLevel`` rows, which an ephemeral ``CombatOpponent``
+    has none of — it would silently floor at 1 regardless of the opponent's authored
+    ``level``, so a level 20 boss resisted Demoralize/Taunt/Parley as though it were
+    level 1 even though it opposed offense checks (via ``level_opposition``) at its
+    real level. The override SUBSTITUTES the authored level for the objectdb-resolved
+    one; it does not add a second level term.
     """
     if target is None:
         return 0
@@ -6513,7 +6522,9 @@ def _social_combat_difficulty(
 
     difficulty = 0
     if target.objectdb is not None:
-        difficulty = compute_resist_increment(target.objectdb, effort_level)
+        difficulty = compute_resist_increment(
+            target.objectdb, effort_level, level_override=target.level
+        )
     if not tier_has_morale(target):
         difficulty += MINDLESS_MORALE_RESISTANCE
     return difficulty

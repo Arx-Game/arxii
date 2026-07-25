@@ -67,6 +67,34 @@ attack all read the *other* party's `CombatOpponent.level`); `compute_resist_inc
 is the social-resistance path (scenes' active-resistance actions), where the defender
 rolls their own Composure check instead of standing on authored difficulty.
 
+**`compute_resist_increment` resolves level from the defender's own `objectdb` by
+default — that's a gap for an ephemeral `CombatOpponent`, closed by an explicit
+`level_override`.** Whole-branch-review finding 4 caught it: `_social_combat_difficulty`
+(backing Demoralize/Taunt/Parley, `world/combat/services.py`) calls
+`compute_resist_increment(target.objectdb, effort_level)` to get a `CombatOpponent`'s
+morale defense. That routes to `_compute_check_breakdown`, which resolves level via
+`get_character_path_level(character)` — reading `CharacterClassLevel` rows off the
+*objectdb*. An ephemeral `CombatOpponent` (the common case — a fresh CombatNPC objectdb,
+not a persona-backed character) has none, so the level always floored at 1 regardless of
+`CombatOpponent.level`, the authored 1-30 field the SAME opponent's offense already
+opposes PC checks at (through `level_opposition`). A level 20 boss opposed a stab at its
+real level but resisted a Demoralize as though it were level 1.
+
+The fix is an optional `level_override: int | None = None` threaded keyword-only through
+`_compute_check_breakdown` -> `compute_check_rating` -> `compute_resist_increment`.
+`None` (every pre-existing caller) is byte-identical to before. When set, it
+**substitutes** for the resolved level in both places level appears inside the
+breakdown — the `level_points` term AND the `_calculate_aspect_bonus` call — never adds
+on top of the character's own resolved level. `_social_combat_difficulty` passes
+`compute_resist_increment(target.objectdb, effort_level, level_override=target.level)`.
+This is deliberately a substitution, not a second term: `compute_resist_increment`
+already contains a level_points component internally (per the mutual-exclusivity rule
+above), so adding `target.level` as an extra addend alongside it would double-count
+exactly the way combining `compute_resist_increment` with `level_opposition` at one call
+site would. Threading an override into the one place level is read, rather than adding a
+term at the call site, is what keeps the fix inside the substitution rule instead of
+re-creating the double-count bug the mutual-exclusivity rule exists to prevent.
+
 **Clash stays unopposed — `target_difficulty=0` there is deliberate, not an
 oversight.** `world/combat/clash.py:310` still passes `target_difficulty=0` and must NOT
 be wired to either opposing-side helper. A clash is a *symmetric contest*: both
