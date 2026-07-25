@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
@@ -30,12 +30,14 @@ class ColoredAreaPathTests(TestCase):
         cls.profile = RoomProfileFactory(area=cls.building)
         cls.room = cls.profile.objectdb
 
+    @tag("postgres")  # colored_area_path queries areas_areaclosure materialized view (PG-only)
     def test_colours_inherit_down_and_can_be_overridden(self) -> None:
         path = colored_area_path(self.room)
         assert "|yUmbros|n" in path
         assert "|yBlackgate Ward|n" in path  # inherited
         assert "|rSable Hold|n" in path  # override
 
+    @tag("postgres")  # colored_area_path queries areas_areaclosure materialized view (PG-only)
     def test_segments_are_outermost_first(self) -> None:
         path = colored_area_path(self.room)
         assert path.index("Umbros") < path.index("Blackgate Ward") < path.index("Sable Hold")

@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -157,10 +157,12 @@ class AreaGridCoordinateTests(TestCase):
         assert area.grid_x is None
         assert area.grid_y is None
 
+    @tag("postgres")  # area_grid_path queries areas_areaclosure materialized view (PG-only)
     def test_area_grid_path_root_only(self):
         root = AreaFactory(name="Root Plane", level=AreaLevel.PLANE, grid_x=1, grid_y=2)
         assert area_grid_path(root) == [(1, 2)]
 
+    @tag("postgres")  # area_grid_path queries areas_areaclosure materialized view (PG-only)
     def test_area_grid_path_three_level_mixed_set_unset(self):
         """Root has coordinates set, middle is unset, leaf is set again."""
         root = AreaFactory(name="Root Region", level=AreaLevel.REGION, grid_x=10, grid_y=20)
@@ -173,6 +175,7 @@ class AreaGridCoordinateTests(TestCase):
 
         assert area_grid_path(leaf) == [(10, 20), (None, None), (4, 7)]
 
+    @tag("postgres")  # area_grid_path queries areas_areaclosure materialized view (PG-only)
     def test_area_grid_path_all_unset(self):
         root = AreaFactory(name="Unset Root", level=AreaLevel.REGION)
         middle = AreaFactory(name="Unset Middle", level=AreaLevel.CITY, parent=root)
@@ -217,10 +220,12 @@ class AreaQueryHelperTests(TestCase):
             name="The Gilded Stag", level=AreaLevel.BUILDING, parent=cls.ward
         )
 
+    @tag("postgres")  # get_ancestry queries areas_areaclosure materialized view (PG-only)
     def test_get_ancestry_root(self):
         result = get_ancestry(self.plane)
         assert result == [self.plane]
 
+    @tag("postgres")  # get_ancestry queries areas_areaclosure materialized view (PG-only)
     def test_get_ancestry_deep(self):
         result = get_ancestry(self.building)
         assert result == [
@@ -232,14 +237,17 @@ class AreaQueryHelperTests(TestCase):
             self.building,
         ]
 
+    @tag("postgres")  # get_ancestor_at_level walks ancestry via areas_areaclosure (PG-only)
     def test_get_ancestor_at_level_found(self):
         result = get_ancestor_at_level(self.building, AreaLevel.CITY)
         assert result == self.city
 
+    @tag("postgres")  # get_ancestor_at_level walks ancestry via areas_areaclosure (PG-only)
     def test_get_ancestor_at_level_not_found(self):
         result = get_ancestor_at_level(self.building, AreaLevel.REGION)
         assert result is None
 
+    @tag("postgres")  # get_ancestor_at_level walks ancestry via areas_areaclosure (PG-only)
     def test_get_ancestor_at_level_self(self):
         result = get_ancestor_at_level(self.city, AreaLevel.CITY)
         assert result == self.city
@@ -322,6 +330,7 @@ class RoomProfileTests(TestCase):
         assert profile.area is None
 
 
+@tag("postgres")  # get_descendant_areas/get_rooms_in_area query areas_areaclosure (PG-only)
 class SubtreeQueryTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -405,6 +414,7 @@ class ReparentingTests(TestCase):
 
         assert city.parent == region_b
 
+    @tag("postgres")  # get_ancestry queries areas_areaclosure materialized view (PG-only)
     def test_reparent_descendants_follow_parent(self):
         """Descendants inherit ancestry from parent FK chain, no manual updates needed."""
         region_a = AreaFactory(name="Region A", level=AreaLevel.REGION)
@@ -427,6 +437,7 @@ class ReparentingTests(TestCase):
         with self.assertRaises(ValidationError):
             reparent_area(city, building)
 
+    @tag("postgres")  # get_ancestry queries areas_areaclosure materialized view (PG-only)
     def test_reparent_to_none(self):
         region = AreaFactory(name="Region", level=AreaLevel.REGION)
         city = AreaFactory(name="City", level=AreaLevel.CITY, parent=region)
@@ -441,6 +452,7 @@ class ReparentingTests(TestCase):
         assert ancestry == [city, ward]
 
 
+@tag("postgres")  # get_ancestry queries areas_areaclosure materialized view (PG-only)
 class RoomStateAncestryTests(TestCase):
     """Test that ancestry data is available for room state serialization."""
 
@@ -509,6 +521,7 @@ class GetRoomProfileTests(TestCase):
         assert profile.area == building
 
 
+@tag("postgres")  # ancestry lookup queries areas_areaclosure materialized view (PG-only)
 class PayloadIntegrationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
