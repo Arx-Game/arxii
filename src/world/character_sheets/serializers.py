@@ -114,7 +114,9 @@ def _id_name_or_null(obj: Model | None, name_field: str = "name") -> IdNameRef |
 
 _SHARED_PATH_HISTORY_PREFETCH = Prefetch(
     "path_history",
-    queryset=CharacterPathHistory.objects.select_related("path").order_by("-selected_at"),
+    queryset=CharacterPathHistory.objects.select_related("path", "path__style").order_by(
+        "-selected_at"
+    ),
     to_attr="cached_path_history",
 )
 
@@ -589,6 +591,8 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
 
 _MAGIC_SELECT_RELATED: tuple[str, ...] = ("aura",)
 _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    # Style is caster-derived (#2700) — the magic section reads the current path's style.
+    _SHARED_PATH_HISTORY_PREFETCH,
     Prefetch(
         "character__db_account__authored_rituals",
         queryset=Ritual.objects.filter(
@@ -609,7 +613,7 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     ),
     Prefetch(
         "character_techniques",
-        queryset=CharacterTechnique.objects.select_related("technique__gift", "technique__style"),
+        queryset=CharacterTechnique.objects.select_related("technique__gift"),
         to_attr="cached_character_techniques",
     ),
     Prefetch(
@@ -643,10 +647,15 @@ def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
     """
     # Style is caster-derived (#2700): every technique this character knows is worked
     # in their own path's style, so it is resolved once here rather than per technique.
-    from world.progression.selectors import current_path_for_character  # noqa: PLC0415
-
-    path = current_path_for_character(sheet.character)
-    style_name = path.style.name if path is not None and path.style_id is not None else ""
+    # Read from the already-prefetched path history (ordered -selected_at) rather than
+    # re-querying — this section is covered by a zero-extra-query guarantee.
+    path_history: list = sheet.cached_path_history
+    current_path = path_history[0].path if path_history else None
+    style_name = (
+        current_path.style.name
+        if current_path is not None and current_path.style_id is not None
+        else ""
+    )
 
     # Build a lookup of techniques by gift_id from prefetched character_techniques
     techniques_by_gift: dict[int, list[TechniqueEntry]] = {}
