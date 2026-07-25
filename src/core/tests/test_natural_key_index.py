@@ -271,28 +271,32 @@ class LookupTableTests(TestCase):
 
 
 class MroInvariantTests(TestCase):
-    """Every NaturalKeyMixin model must reach NaturalKeyMixin.save() first."""
+    """Every NaturalKeyMixin model must reach NaturalKeyMixin.save() first.
+
+    Uses Django's app registry rather than __subclasses__(): the registry is
+    complete by construction, whereas __subclasses__() only sees classes Python
+    has already imported, so a model could silently escape this check purely
+    because no test in the run happened to import it.
+    """
 
     def test_mixin_precedes_sharedmemorymodel_in_every_model_mro(self) -> None:
+        from django.apps import apps
         from evennia.utils.idmapper.models import SharedMemoryModel
 
         from core.natural_keys import NaturalKeyMixin
 
+        checked = 0
         offenders = []
-        stack = [NaturalKeyMixin]
-        seen = set()
-        while stack:
-            cls = stack.pop()
-            if cls in seen:
-                continue
-            seen.add(cls)
-            stack.extend(cls.__subclasses__())
-            mro = cls.__mro__
+        for model in apps.get_models():
+            mro = model.__mro__
             if NaturalKeyMixin not in mro or SharedMemoryModel not in mro:
                 continue
+            checked += 1
             if mro.index(NaturalKeyMixin) > mro.index(SharedMemoryModel):
-                offenders.append(cls.__name__)
+                offenders.append(model.__name__)
         assert not offenders, (
             "NaturalKeyMixin must precede SharedMemoryModel in the MRO or its "
             f"save() invalidation never runs. Offenders: {offenders}"
         )
+        # Guard against the guard silently checking nothing.
+        assert checked > 150, f"expected ~181 NaturalKeyMixin models, checked {checked}"

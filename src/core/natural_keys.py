@@ -137,14 +137,19 @@ def is_lookup_table(model: type) -> bool:
     """Whether *model* declares ``NaturalKeyConfig.lookup_table = True``.
 
     Lookup-table status is a per-model judgement about that table's size and
-    access pattern — a small set used everywhere (``Trait``,
-    ``ConditionTemplate``) versus a table that must never be bulk-loaded. It is
-    opt-in and deliberately NOT the default (#2687).
+    access pattern — a small set used everywhere versus a table that must never
+    be bulk-loaded. Opt-in, deliberately NOT the default (#2687).
+
+    ``lookup_table`` is expected to be a plain class attribute. Each access is
+    guarded separately so a missing attribute reads as False without also
+    swallowing an error raised from inside a descriptor.
     """
-    # try/except rather than getattr(): matches the index_owner() precedent
-    # above and the noqa-avoidance precedent in core/mixins.py.
     try:
-        return bool(model.NaturalKeyConfig.lookup_table)
+        config = model.NaturalKeyConfig
+    except AttributeError:
+        return False
+    try:
+        return bool(config.lookup_table)
     except AttributeError:
         return False
 
