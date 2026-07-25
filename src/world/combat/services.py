@@ -252,9 +252,9 @@ def has_persistent_identity_references(objectdb: ObjectDB) -> bool:
 
     if CharacterSheet.objects.filter(character=objectdb).exists():
         return True
-    if Persona.objects.filter(character_sheet__character=objectdb).exists():
+    if Persona.objects.filter(character_sheet_id=objectdb.pk).exists():
         return True
-    if RosterEntry.objects.filter(character_sheet__character=objectdb).exists():
+    if RosterEntry.objects.filter(character_sheet_id=objectdb.pk).exists():
         return True
     return False
 
