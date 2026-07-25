@@ -69,6 +69,8 @@ from world.magic.models import (
     TechniqueFunctionTag,
     TechniqueGrant,
     TechniqueOutcomeModifier,
+    TechniqueProgress,
+    TechniqueProgressWeekly,
     TechniqueRemovedCondition,
     TechniqueStyle,
     TechniqueTeachingOffer,
@@ -1286,3 +1288,49 @@ class AudereMajoraFaithVariantAdmin(admin.ModelAdmin):
     list_display = ("threshold", "being", "resonance_pool_cost", "favor_threshold", "is_active")
     list_filter = ("is_active",)
     inlines = [FaithVariantCapabilityGrantInline, FaithVariantAppliedConditionInline]
+
+
+class TechniqueProgressWeeklyInline(admin.TabularInline):
+    """Per-week cap tracker inline for TechniqueProgress."""
+
+    model = TechniqueProgressWeekly
+    extra = 0
+    readonly_fields = ["game_week", "points_contributed"]
+    can_delete = False
+
+
+@admin.register(TechniqueProgress)
+class TechniqueProgressAdmin(admin.ModelAdmin):
+    """Read-only admin for technique progress meters (#2711).
+
+    Meters are created by the service layer, not hand-edited.
+    """
+
+    list_display = [
+        "character_sheet",
+        "technique",
+        "points_accumulated",
+        "total_required",
+        "is_cross_path",
+        "source",
+        "teacher_tenure",
+    ]
+    list_filter = ["is_cross_path", "source"]
+    readonly_fields = [
+        "character_sheet",
+        "technique",
+        "points_accumulated",
+        "total_required",
+        "teacher_tenure",
+        "source",
+        "is_cross_path",
+        "created_at",
+        "updated_at",
+    ]
+    inlines = [TechniqueProgressWeeklyInline]
+
+    def has_add_permission(self, request):  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None):  # noqa: ARG002
+        return False
