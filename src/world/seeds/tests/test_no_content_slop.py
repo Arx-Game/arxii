@@ -54,10 +54,7 @@ from world.seeds.tests.content_stub import stub_content_root
 SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
     {
         "achievements.statdefinition",
-        "character_creation.beginnings",
-        "character_creation.beginningtradition",
         "character_creation.cgexplanation",
-        "character_creation.startingarea",
         "character_sheets.gender",
         "checks.checkcategory",
         "checks.checktype",
@@ -65,9 +62,6 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
         "classes.aspect",
         "classes.path",
         "classes.pathaspect",
-        "codex.codexcategory",
-        "codex.codexentry",
-        "codex.codexsubject",
         "conditions.capabilitytype",
         "conditions.conditioncapabilityeffect",
         "conditions.conditioncategory",
@@ -119,7 +113,6 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
         "mechanics.modifiertarget",
         "mechanics.property",
         "mechanics.propertycategory",
-        "missions.missioncategory",
         "missions.missionnode",
         "missions.missionoption",
         "missions.missionoptionroute",
@@ -129,7 +122,6 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
         "relationships.relationshiptrack",
         "skills.skill",
         "species.species",
-        "tarot.tarotcard",
         "traits.trait",
     }
 )

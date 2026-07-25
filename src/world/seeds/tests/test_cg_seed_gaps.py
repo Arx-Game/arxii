@@ -1,6 +1,6 @@
 """Tests for the character-creation seed data (FormTrait, Heritage, Pronouns, Family)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.models import Gender, Heritage, Pronouns
 from world.forms.models import FormTrait, FormTraitOption, SpeciesFormTrait
@@ -55,6 +55,7 @@ class FormTraitSeedTests(TestCase):
             )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class RealmAndAreaSeedTests(TestCase):
     """Tests for realm, starting area, beginnings, and species seeding."""
 
@@ -192,6 +193,7 @@ class PronounsSeedTests(TestCase):
         self.assertEqual(Pronouns.objects.filter(key="he_him").count(), 1)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class CommonerFamilySeedTests(TestCase):
     """Tests for commoner Family seeding."""
 

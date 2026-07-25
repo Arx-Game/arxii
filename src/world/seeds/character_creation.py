@@ -23,6 +23,8 @@ from decimal import Decimal
 import logging
 from typing import TYPE_CHECKING
 
+from django.conf import settings
+
 from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
     FALLBACK_STARTING_ROOM_FIXTURE_KEY,
@@ -813,11 +815,18 @@ def seed_metallic_order_tradition():
     return tradition
 
 
-def seed_character_creation_dev() -> None:
-    """Seed the CG-world content a fresh DB needs to run character creation.
+def _seed_sample_cg_world(species: Species, species_khati: Species) -> None:
+    """Sample realms/areas/beginnings for a clone with no content repo (#2698).
 
-    Idempotent: every write is ``get_or_create`` (or idempotent M2M ``add``);
-    safe to re-run; never overwrites an edited row.
+    Gated behind ``settings.SEED_SAMPLE_CONTENT`` (default OFF). These are
+    open-ended world content, not config: maintainers author realms, starting
+    areas and beginnings in the content repo, and seeding invented ones here is
+    what put "Commoner", "Noble", "Arx City" and "Luxen Port" into that repo via
+    ``export_to_content_repo``.
+
+    Kept rather than deleted because a fresh clone without a content repo still
+    needs *a* playable starting point, and because the Khati/Human split below
+    is what exercises the CG species-filtering UI.
     """
     realm, _ = Realm.objects.get_or_create(
         name="Arx",
@@ -861,17 +870,6 @@ def seed_character_creation_dev() -> None:
     if area_luxen.default_starting_room_id is None:
         area_luxen.default_starting_room = ensure_canonical_fallback_room().room_profile
         area_luxen.save(update_fields=["default_starting_room"])
-    species, _ = Species.objects.get_or_create(
-        name="Human",
-        defaults={"description": "The default species.", "sort_order": 0},
-    )
-    species_khati, _ = Species.objects.get_or_create(
-        name="Khati",
-        defaults={
-            "description": "A feline species known for agility and perception.",
-            "sort_order": 1,
-        },
-    )
     beginnings, _ = Beginnings.objects.get_or_create(
         name="Commoner",
         defaults={
@@ -912,6 +910,36 @@ def seed_character_creation_dev() -> None:
     beginnings_noble.allowed_species.add(species)
     beginnings_luxen.allowed_species.add(species)
     beginnings_luxen.allowed_species.add(species_khati)
+    _seed_commoner_families(realm)
+
+
+def seed_character_creation_dev() -> None:
+    """Seed the CG config a fresh DB needs to run character creation.
+
+    Idempotent: every write is ``get_or_create`` (or idempotent M2M ``add``);
+    safe to re-run; never overwrites an edited row.
+
+    Config only. Open-ended world content — realms, starting areas, beginnings,
+    the onboarding codex, the Academy, the orientation mission — lives behind
+    ``settings.SEED_SAMPLE_CONTENT`` (default OFF), because maintainers author
+    those in the content repo and seeded copies leak into it on export (#2698).
+    """
+    # Species is a closed vocabulary the CG form traits below key off, so it
+    # stays config. Realms/areas/beginnings are open-ended world content and
+    # move behind the sample-content flag (#2698).
+    species, _ = Species.objects.get_or_create(
+        name="Human",
+        defaults={"description": "The default species.", "sort_order": 0},
+    )
+    species_khati, _ = Species.objects.get_or_create(
+        name="Khati",
+        defaults={
+            "description": "A feline species known for agility and perception.",
+            "sort_order": 1,
+        },
+    )
+    if settings.SEED_SAMPLE_CONTENT:
+        _seed_sample_cg_world(species, species_khati)
     Gender.objects.get_or_create(
         key="male",
         defaults={"display_name": "Male", "is_default": False},
@@ -927,14 +955,6 @@ def seed_character_creation_dev() -> None:
     Gender.objects.get_or_create(
         key="unspecified",
         defaults={"display_name": "Unspecified", "is_default": True},
-    )
-    TarotCard.objects.get_or_create(
-        name="The Fool",
-        defaults={
-            "arcana_type": ArcanaType.MAJOR,
-            "rank": 0,
-            "latin_name": "Fatui",
-        },
     )
     HeightBand.objects.get_or_create(
         name="average_band",
@@ -959,7 +979,6 @@ def seed_character_creation_dev() -> None:
     _seed_form_traits(species_khati)
     _seed_heritages()
     _seed_pronouns()
-    _seed_commoner_families(realm)
     for stat_name in DEFAULT_STAT_NAMES:
         Trait.objects.get_or_create(
             name=stat_name,
@@ -967,6 +986,21 @@ def seed_character_creation_dev() -> None:
         )
     Roster.objects.get_or_create(name="Available Characters")
     Roster.objects.get_or_create(name="Active Characters")
+    _seed_cg_explanations()
+    ensure_tradition_training_distinction()
+    ensure_somehow_always_broke_distinction()
+    if not settings.SEED_SAMPLE_CONTENT:
+        return
+    # Named world content — authored in the content repo by maintainers, so
+    # only invented here for a clone that has none (#2698).
+    TarotCard.objects.get_or_create(
+        name="The Fool",
+        defaults={
+            "arcana_type": ArcanaType.MAJOR,
+            "rank": 0,
+            "latin_name": "Fatui",
+        },
+    )
     Path.objects.get_or_create(
         name="The Wanderer",
         defaults={
@@ -976,15 +1010,12 @@ def seed_character_creation_dev() -> None:
             "is_active": True,
         },
     )
-    _seed_cg_explanations()
     seed_onboarding_codex()
-    ensure_tradition_training_distinction()
     seed_beginning_traditions()
     ensure_shroudwatch_academy()
     ensure_durance_registration_ritual()
     ensure_orientation_mission()
     seed_metallic_order_tradition()
-    ensure_somehow_always_broke_distinction()
 
 
 def ensure_somehow_always_broke_distinction():

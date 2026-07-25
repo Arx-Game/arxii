@@ -1,5 +1,5 @@
 from django.db.models import Model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.seeds.clusters import CLUSTER_SEEDERS, seeded_models
 from world.seeds.tests.content_stub import stub_content_root
@@ -137,6 +137,7 @@ class TestClusterRegistry(TestCase):
         seed_character_creation_dev()
         self.assertNotEqual(CGExplanation.objects.get(key="origin_heading").text, "stale")
 
+    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_every_active_beginning_has_a_seeded_tradition(self) -> None:
         """Seed-integrity regression net (#2426 whole-branch-review finding).
 
