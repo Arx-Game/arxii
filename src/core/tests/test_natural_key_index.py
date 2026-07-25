@@ -299,4 +299,23 @@ class MroInvariantTests(TestCase):
             f"save() invalidation never runs. Offenders: {offenders}"
         )
         # Guard against the guard silently checking nothing.
-        assert checked > 150, f"expected ~181 NaturalKeyMixin models, checked {checked}"
+        assert checked > 150, (
+            f"expected ~173 NaturalKeyMixin+SharedMemoryModel models, checked {checked}"
+        )
+
+
+class FixtureLoadJourneyTests(TestCase):
+    """The journey #2687 is actually about: many FK references to one row."""
+
+    def test_repeated_fk_resolution_queries_the_row_once(self) -> None:
+        species = SpeciesFactory(name="Referenced Elf")
+        for stat in ("strength", "dexterity", "stamina"):
+            SpeciesStatBonus.objects.create(species=species, stat=stat, value=1)
+        # Prime: the first resolution of the FK's natural key queries once.
+        SpeciesStatBonus.objects.get_by_natural_key("Referenced Elf", "strength")
+        # Every later row referencing the same species resolves it for free;
+        # only the SpeciesStatBonus row itself is queried.
+        with self.assertNumQueries(1):
+            SpeciesStatBonus.objects.get_by_natural_key("Referenced Elf", "dexterity")
+        with self.assertNumQueries(1):
+            SpeciesStatBonus.objects.get_by_natural_key("Referenced Elf", "stamina")

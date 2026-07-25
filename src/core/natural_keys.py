@@ -36,6 +36,27 @@ Usage:
     #   -> looks up Category by natural_key("electronics") first
     #   -> then looks up Item with name="widget", category=<Category instance>
 
+    # Text (CharField/TextField) components match case-insensitively
+    # (__iexact); numeric and boolean components match exactly. Two rows whose
+    # natural keys differ only by case are a content bug: on a lazy model this
+    # surfaces as MultipleObjectsReturned from get_by_natural_key(), and on a
+    # lookup_table model warm_lookup_table() catches it earlier, at warm time.
+
+    # A repeat get_by_natural_key() call for the same key is free (#2687): the
+    # first call queries and then caches key -> pk in a process-level index,
+    # and every later call resolves through that index plus the identity map
+    # (SharedMemoryModel) or a pk lookup (non-SharedMemoryModel) instead of
+    # re-running the natural-key query.
+
+    # class NaturalKeyConfig:
+    #     fields = [...]
+    #     lookup_table = True  # opt in only for a small, always-used table
+    # A lookup_table model's whole table is warmed into the index on first
+    # lookup and never issues an `iexact` query again. Opt-in, not automatic:
+    # some natural-key tables are large and must never be bulk-loaded. The
+    # natural key must also be FK-free — warming calls natural_key() per row,
+    # which would cost a query per row if any component were a ForeignKey.
+
 Self-referential FKs (ForeignKey("self")) are handled specially:
     # Instead of flattening (which would require infinite args for variable
     # tree depth), self-referential FK values are nested as a single arg:
@@ -195,6 +216,7 @@ class NaturalKeyManager(ArxSharedMemoryManager, models.Manager["NaturalKeyMixin"
         index = natural_key_index(self.model)
 
         if is_lookup_table(self.model):
+            self._assert_lookup_table_arg_count(args)
             return self._get_from_lookup_table(key)
 
         cached_pk = index.get(key)
@@ -280,6 +302,24 @@ class NaturalKeyManager(ArxSharedMemoryManager, models.Manager["NaturalKeyMixin"
             if isinstance(instance, NaturalKeyMixin):
                 instance._nk_index_key = key  # noqa: SLF001
         _NK_WARMED.add(owner)
+
+    def _assert_lookup_table_arg_count(self, args: tuple[Any, ...]) -> None:
+        """Validate arg count against ``NaturalKeyConfig.fields`` for a lookup_table.
+
+        A lookup_table's natural key is FK-free by construction (enforced by
+        ``_assert_natural_key_is_fk_free``), so the expected arg count is exactly
+        ``len(fields)`` — no FK expansion to account for. ``_get_from_lookup_table``
+        itself only does a dict lookup and can't tell "wrong arg count" apart from
+        "no matching row", so without this check a caller mistake surfaces as a
+        misleading ``DoesNotExist`` instead of a loud ``NaturalKeyConfigError``.
+        """
+        fields = self.model.NaturalKeyConfig.fields
+        if len(args) < len(fields):
+            msg = f"Not enough natural key values provided for {self.model.__name__}"
+            raise NaturalKeyConfigError(msg)
+        if len(args) > len(fields):
+            msg = f"Too many natural key values for {self.model.__name__}: {len(args)} given"
+            raise NaturalKeyConfigError(msg)
 
     def _assert_natural_key_is_fk_free(self) -> None:
         """Raise if this model's natural key contains a ForeignKey component."""
