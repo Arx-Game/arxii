@@ -122,7 +122,12 @@ class TestClusterRegistry(TestCase):
         flat = seeded_models()
         self.assertTrue(all(issubclass(m, Model) for m in flat))
 
+    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_cg_explanations_seeded_and_nonempty(self) -> None:
+        """character_creation.cgexplanation is content-repo-owned (#2698) —
+        each key is looked up via authored_or_sample and invented only under
+        SEED_SAMPLE_CONTENT, which this test opts into so every key gets a row
+        against the (contentless) fast-tier DB."""
         from world.character_creation.models import CGExplanation
         from world.seeds.character_creation import (
             CG_EXPLANATION_COPY,
@@ -133,10 +138,12 @@ class TestClusterRegistry(TestCase):
         for key in CG_EXPLANATION_COPY:
             row = CGExplanation.objects.get(key=key)
             self.assertTrue(row.text.strip(), f"blank copy for {key}")
-        # idempotent + updates edited copy
-        CGExplanation.objects.filter(key="origin_heading").update(text="stale")
+        # idempotent, and a staff edit survives a re-seed (get_or_create, not
+        # update_or_create — the #2698 second guard forbids resyncing a
+        # content row on every press).
+        CGExplanation.objects.filter(key="origin_heading").update(text="staff-edited")
         seed_character_creation_dev()
-        self.assertNotEqual(CGExplanation.objects.get(key="origin_heading").text, "stale")
+        self.assertEqual(CGExplanation.objects.get(key="origin_heading").text, "staff-edited")
 
     @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_every_active_beginning_has_a_seeded_tradition(self) -> None:

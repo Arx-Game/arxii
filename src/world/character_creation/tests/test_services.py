@@ -7,7 +7,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.db import connection
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from evennia.accounts.models import AccountDB
 
@@ -1404,6 +1404,7 @@ class FinalizeGiftAndTechniquesTests(TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase):
     """The Unbound magic-learning AP surcharge (#2442), proven end-to-end through the
     REAL CG flow (review-requested — the "Important" test): a draft built via the same
@@ -1418,6 +1419,12 @@ class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase
     finalize_character -> ``_create_distinction_modifiers_bulk`` ->
     ``world.mechanics.services.get_modifier_total`` -> ``charge_and_learn``'s surcharge
     read.
+
+    distinctions.distinction/distinctioncategory/distinctioneffect and
+    mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    ``seed_beginning_traditions()`` -> ``ensure_unbound_drawback_distinction()``
+    only invents the "Unbound" drawback (and its AP-surcharge target) under
+    SEED_SAMPLE_CONTENT — this test asserts on the real surcharge, so it opts in.
     """
 
     def setUp(self):
@@ -1923,8 +1930,15 @@ class FinalizeRitualKnowledgeTests(FinalizationTestMixin, TestCase):
         assert ritual is not None, "Expected a SCENE_ACTION Ritual authored by the player account"
         assert "RitualKTest" in ritual.name
 
+    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_finalize_creates_ritual_check_config(self) -> None:
-        """finalize_character creates RitualCheckConfig pointing at the per-character CheckType."""
+        """finalize_character creates RitualCheckConfig pointing at the per-character CheckType.
+
+        checks.CheckCategory/CheckType are content-repo-owned (#2698);
+        ensure_character_magic_check_type()'s own Magic CheckCategory dependency
+        only invents under SEED_SAMPLE_CONTENT — this test asserts on the real
+        wired CheckType, so it opts in.
+        """
         from world.magic.constants import RitualExecutionKind
         from world.magic.models.ritual_check_config import RitualCheckConfig
         from world.magic.models.rituals import Ritual

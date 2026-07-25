@@ -1,5 +1,26 @@
 # Character Creation & Identity
 
+## Built (2026-07-25, #2698 — character-creation family stops inventing content; ratchet at zero)
+
+The last 11 `CONTENT_MODELS` entries the seeder guard (`world.seeds.tests
+.test_no_content_slop.SEEDER_GRANDFATHERED_MODELS`) still tracked were all in this
+app's cluster: `character_creation.CGExplanation`, `character_sheets.Gender`,
+`distinctions.Distinction`/`DistinctionCategory`/`DistinctionEffect`,
+`forms.Build`/`FormTrait`/`FormTraitOption`/`HeightBand`/`SpeciesFormTrait`, and
+`species.Species`. Every call site in `world/seeds/character_creation.py`,
+`world/seeds/social_relationships.py` (`ensure_attractive_distinction`), and
+`world/seeds/styling.py` (`_seed_exotic_style`) now goes through
+`world.seeds.sample_content.authored_or_sample()` — look the row up, invent a
+sample only under `SEED_SAMPLE_CONTENT`. Two were genuine inventions with no
+authored counterpart (the 5 `CGExplanation` `*_lore_intro` rows; the
+`forms.FormTraitOption` "court_coils" row) and are now gated the same way rather
+than authored. `_seed_cg_explanations()` also dropped its `update_or_create`
+resync — a staff edit to a seeded `CGExplanation` row now survives a re-seed,
+matching every other content row. `SEEDER_GRANDFATHERED_MODELS` is now an empty
+frozenset: the guard is a plain invariant (seeders never write content) rather
+than a ratchet being paid down. See `docs/systems/character_creation.md`'s
+"Seeded content + Game Setup hub" section and ADR-0164.
+
 ## Built (2026-07-18, #2474 — CG magic catalog is lore-repo content, not seed data)
 
 The Gift-stage catalog CG's magic funnel picks from (Path → Tradition → Gift →

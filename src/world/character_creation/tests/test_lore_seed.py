@@ -1,6 +1,6 @@
 """Tests for the lore onboarding seed (#2430)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_creation.models import CGExplanation
 from world.codex.models import CodexEntry
@@ -43,8 +43,11 @@ class TestLoreOnboardingSeed(TestCase):
         count_second = CodexEntry.objects.filter(is_featured=True).count()
         assert count_first == count_second
 
-    def test_lore_keys_upserted_by_seed_cg_explanations(self):
-        """_seed_cg_explanations upserts the lore keys."""
+    @override_settings(SEED_SAMPLE_CONTENT=True)
+    def test_lore_keys_seeded_by_seed_cg_explanations(self):
+        """character_creation.cgexplanation is content-repo-owned (#2698); the
+        "_lore_intro" keys have no authored counterpart today, so
+        _seed_cg_explanations only creates them under SEED_SAMPLE_CONTENT."""
         _seed_cg_explanations()
         assert CGExplanation.objects.filter(key="origin_lore_intro").exists()
         assert CGExplanation.objects.filter(key="roster_lore_intro").exists()

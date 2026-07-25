@@ -357,6 +357,16 @@ def ensure_character_magic_check_type(character_sheet, *, stat, skill):
 
     The character's signature check: rolled by their Anima Ritual AND their
     technique casts. Idempotent; weights are tuning placeholders (staff-tunable).
+
+    Not part of the #2698 gating itself (see module docstring) — but its own
+    dependencies, the Magic ``CheckCategory`` (``ensure_magic_check_category``)
+    and the Arcana ``Aspect`` (``_ensure_arcana_aspect``), are content-repo-owned
+    and can return ``None`` when neither is authored and ``SEED_SAMPLE_CONTENT``
+    is off. ``checks.CheckType.category`` is NOT NULL, so this returns ``None``
+    rather than attempting the insert when the category is missing; callers
+    (``world.magic.services.anima.provision_player_anima_ritual``) already treat
+    a ``None`` check_type as "skip wiring" (``RitualCheckConfig.check_type`` is
+    nullable). The Arcana aspect wiring is skipped independently when missing.
     """
     from decimal import Decimal  # noqa: PLC0415
 
@@ -367,6 +377,8 @@ def ensure_character_magic_check_type(character_sheet, *, stat, skill):
     )
 
     category = ensure_magic_check_category()
+    if category is None:
+        return None
     arcana = _ensure_arcana_aspect()
     name = character_magic_check_type_name(character_sheet)
     check_type, _ = CheckType.objects.get_or_create(
@@ -383,9 +395,10 @@ def ensure_character_magic_check_type(character_sheet, *, stat, skill):
     CheckTypeTrait.objects.get_or_create(
         check_type=check_type, trait=skill.trait, defaults={"weight": Decimal("1.00")}
     )
-    CheckTypeAspect.objects.get_or_create(
-        check_type=check_type, aspect=arcana, defaults={"weight": Decimal("1.00")}
-    )
+    if arcana is not None:
+        CheckTypeAspect.objects.get_or_create(
+            check_type=check_type, aspect=arcana, defaults={"weight": Decimal("1.00")}
+        )
     return check_type
 
 
