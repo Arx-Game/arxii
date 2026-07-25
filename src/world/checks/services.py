@@ -789,12 +789,54 @@ def get_rollmod(character: "ObjectDB") -> int:
     return total
 
 
+def level_opposition(
+    check_type: "CheckType",
+    *,
+    level: int,
+    character: "ObjectDB | None" = None,  # noqa: OBJECTDB_PARAM
+) -> int:
+    """Difficulty an opposing entity of *level* adds to *check_type* (#2707).
+
+    The PASSIVE half of opposed checks — what a defender contributes when they
+    are not actively resisting with a defence check of their own. Two terms:
+
+    * ``LEVEL_POINTS_PER_LEVEL * level`` — always. This is what makes a level 1
+      attacker's swing at a level 5 defender land as it should, on checks with
+      no authored defensive content at all.
+    * ``_calculate_aspect_bonus(character, check_type, level)`` — the acting
+      check's aspects scored against the DEFENDER's Path, so what you are trying
+      to do to them is harder when it is their wheelhouse. Skipped entirely when
+      *character* is None (an ephemeral NPC with no sheet), which contributes
+      level alone rather than raising.
+
+    Deliberately EXCLUSIVE with :func:`compute_resist_increment`: an active
+    resistance rating already contains the defender's level points, so a call
+    site uses one or the other, never both. Callers ADD the result to any
+    authored difficulty (a lock's rating, a ward's barrier strength) rather than
+    replacing it.
+    """
+    total = LEVEL_POINTS_PER_LEVEL * max(0, level)
+    if character is not None:
+        total += _calculate_aspect_bonus(character, check_type, level)
+    return total
+
+
 def compute_resist_increment(defender_character: "ObjectDB", resist_effort_level: str) -> int:
     """Compute how much a defender's active resistance raises difficulty.
 
-    Resolves the Composure CheckType by name (category-agnostic) and sums the
-    defender's weighted Composure trait points with the effort-level modifier.
-    Result is clamped to ≥ 0 — resistance never lowers the attacker's difficulty.
+    Resolves the Composure CheckType by name (category-agnostic) and returns the
+    defender's FULL pre-roll rating on it (trait, specialization, aspect, capability,
+    and perk points — the same breakdown ``perform_check`` uses) plus the effort-level
+    modifier. Result is clamped to ≥ 0 — resistance never lowers the attacker's
+    difficulty.
+
+    #2707 gap 1: this used to sum only weighted Composure trait points, silently
+    dropping specialization, aspect, capability, and perk points that a defender's
+    Composure check would otherwise carry — a defender's Path, owned specializations,
+    and capabilities were structurally inert here. Routing through
+    :func:`compute_check_rating` closes that gap; it also means the defender's level
+    points already ride this rating, so callers must use this OR :func:`level_opposition`,
+    never both (see that function's docstring).
 
     Args:
         defender_character: The character resisting the social action.
@@ -809,10 +851,11 @@ def compute_resist_increment(defender_character: "ObjectDB", resist_effort_level
     if composure_check_type is None:
         return 0
 
-    handler: TraitHandler = defender_character.traits  # type: ignore[attr-defined]
-    points = _calculate_trait_points(handler, composure_check_type)
     modifier = EFFORT_CHECK_MODIFIER.get(resist_effort_level, 0)
-    return max(0, points + modifier)
+    rating = compute_check_rating(
+        defender_character, composure_check_type, extra_modifiers=modifier
+    )
+    return max(0, rating)
 
 
 def preview_check_difficulty(
@@ -827,7 +870,11 @@ def preview_check_difficulty(
     Returns the rank difference (positive = character is stronger, negative = weaker).
     Routes through :func:`_compute_check_breakdown`, the single source of the check's
     point math (#2707) — this used to re-derive trait + aspect points only, silently
-    omitting specialization, capability, perk, and (before #2707) level points.
+    omitting specialization, capability, and (before #2707) level points. Those three
+    now arrive with everything else the breakdown computes. Perk points remain 0 here:
+    this function has no ``situation_ctx`` parameter, so ``_situational_perk_check_bonus``
+    short-circuits before firing — deliberately, since it has the side effect of
+    announcing perk firings and a preview must never announce anything.
     """
     breakdown = _compute_check_breakdown(
         character,

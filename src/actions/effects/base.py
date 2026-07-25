@@ -34,17 +34,23 @@ def resolve_target_difficulty(
 ) -> int:
     """Compute the target's resistance as a point total for target_difficulty.
 
-    Uses perform_check with difficulty=0 to get the target's raw points if
+    Uses compute_check_rating to get the target's raw points if
     resistance_check_type is set. Falls back to a fixed value for synthetic
     NPCs or mission contexts.
+
+    #2707: this used to call perform_check with target_difficulty=0 and read
+    total_points, which rolls a die whose outcome is discarded and — worse —
+    burns the target's rollmod (a secret staff story lever) as an invisible
+    side effect. compute_check_rating computes the same pre-roll point total
+    with no roll at all.
     """
     if resistance_check_type is not None:
         try:
-            from world.checks.services import perform_check  # noqa: PLC0415
+            from world.checks.services import compute_check_rating  # noqa: PLC0415
 
-            result = perform_check(target, resistance_check_type, target_difficulty=0)
-            if result.total_points > 0:
-                return result.total_points
+            total_points = compute_check_rating(target, resistance_check_type)
+            if total_points > 0:
+                return total_points
         except (AttributeError, TypeError):
             pass  # Target has no traits -- fall through to fallback
 

@@ -122,6 +122,39 @@ from world.checks.services import get_rollmod
 rollmod = get_rollmod(character)
 ```
 
+### Opposed checks — two mutually exclusive answers for the opposing side (#2707)
+
+`compute_check_rating(character, check_type, extra_modifiers=0) -> int` is the one
+answer for "what does this character bring to this check, with no dice roll" — it
+wraps `_compute_check_breakdown` (the same pipeline `perform_check` uses) and
+returns `total_points`.
+
+Two callers build opposed-check difficulty on top of it, and are deliberately
+**exclusive** — a call site uses one or the other, never both, because an active
+resistance rating already contains the defender's level points:
+
+```python
+from world.checks.services import compute_resist_increment, level_opposition
+
+# ACTIVE: the defender spends a defence check of their own (e.g. Composure).
+# Routes through compute_check_rating, so it carries the defender's full
+# rating — trait, specialization, aspect, capability, and perk points —
+# plus the effort-level modifier. Clamped >= 0.
+increment = compute_resist_increment(defender_character, resist_effort_level="high")
+
+# PASSIVE: the defender contributes nothing beyond existing. LEVEL_POINTS_PER_LEVEL
+# * level always; plus, when a character is given, the acting check's aspects
+# scored against the DEFENDER's Path (their wheelhouse protects them). A
+# character=None (an ephemeral NPC with no sheet) contributes level alone.
+difficulty = level_opposition(check_type, level=defender_level, character=defender_character)
+```
+
+`resolve_target_difficulty` (`actions/effects/base.py`) also uses
+`compute_check_rating` directly to get a target's resistance rating for
+`target_difficulty` — replacing an earlier version that rolled a throwaway
+`perform_check` and discarded the outcome, which had the side effect of
+silently burning the target's rollmod.
+
 ---
 
 ## Resolution Pipeline
