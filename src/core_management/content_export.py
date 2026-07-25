@@ -147,6 +147,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.resonanceconversion",
         "magic.ritual",
         "magic.soultetherconfig",
+        "magic.stylecapabilityrequirement",
         "magic.technique",
         "magic.techniqueappliedcondition",
         "magic.techniquecapabilitygrant",

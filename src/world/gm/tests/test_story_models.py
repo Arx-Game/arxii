@@ -30,11 +30,19 @@ class StoryRoomGrantTests(TestCase):
             StoryRoomGrantFactory(room=grant.room, character=grant.character)
 
     def test_return_location_must_be_room(self) -> None:
+        """Non-Room origins are rejected by the FK type itself (#2608).
+
+        ``return_location`` points at ``RoomProfile``, which only exists for
+        Room-typeclass objects, so the old ``clean()`` Room-typeclass guard is
+        now structural — assigning anything else fails at assignment time
+        rather than on ``save()``. ``join_story_room`` never reaches this: it
+        resolves the profile with a filter and records ``None`` for a non-Room
+        origin, falling back to the character's home on return.
+        """
         grant = StoryRoomGrantFactory()
         not_a_room = ObjectDBFactory(db_key="sword", db_typeclass_path="typeclasses.objects.Object")
-        grant.return_location = not_a_room
-        with self.assertRaises(ValidationError):
-            grant.save()
+        with self.assertRaises(ValueError):
+            grant.return_location = not_a_room
 
 
 class GMLevelCapKnobTests(TestCase):

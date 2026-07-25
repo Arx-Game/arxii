@@ -86,6 +86,18 @@ seam — nothing here is enforced by a DB constraint; it is a review-time author
 rule. This is independent of, and does not change, the existing `CheckType`
 `(name, category)` natural-key uniqueness rule.
 
+### Weight calibration (#2704, ADR-0164 D4)
+
+`CheckTypeCapabilityModifier` is **authored content** — every row is a deliberate,
+curated (check_type, capability) pairing, never auto-derived. `weight` is calibrated
+from the intended full-impairment penalty, not picked freely: `weight = intended
+full-impairment penalty ÷ 5`, because 5 is the unimpaired-mortal rung on the
+capability ladder (ADR-0164 D1) and the contribution is scored as deviation from
+`innate_baseline` (D3) — a fully-impaired capability (value 0, baseline 5) deviates
+by −5, so `weight × -5` must equal the intended penalty. E.g. a row meant to cost a
+character −30 points on `Melee Attack` when `movement`-style impairment zeroes out a
+baseline-5 capability is authored with `weight = 6` (`30 ÷ 5`).
+
 ---
 
 ## Key Methods
@@ -122,7 +134,7 @@ from world.checks.services import get_rollmod
 rollmod = get_rollmod(character)
 ```
 
-### Opposed checks — two mutually exclusive answers for the opposing side (#2707, ADR-0164)
+### Opposed checks — two mutually exclusive answers for the opposing side (#2707, ADR-0166)
 
 `compute_check_rating(character, check_type, extra_modifiers=0) -> int` is the one
 answer for "what does this character bring to this check, with no dice roll" — it
@@ -184,7 +196,7 @@ inverse direction: the attacking NPC's level sets the defending PC's difficulty)
 still passes `target_difficulty=0` — a clash is a symmetric contest (both sides roll their
 own check and the results are compared, the same shape as `_resolve_joust_pass`'s
 `success_level` gap), so each side's level already rides its own roll and an opposition
-term would double-count it. See ADR-0164.
+term would double-count it. See ADR-0166.
 
 ---
 
@@ -212,13 +224,19 @@ term would double-count it. See ADR-0164.
    No authored rows on check_type -> 0, capability oracle never called (curated gate).
    character.sheet_data missing -> 0, never raises.
    capability_points = int(sum(
-       row.weight * get_effective_capability_value(sheet, row.capability)
+       row.weight * (get_effective_capability_value(sheet, row.capability) - row.capability.innate_baseline)
        for row in check_type.capability_modifiers.all()
    ))  # truncated toward zero ONCE, after summing every row -- never per-row
+   # Scored as DEVIATION from innate_baseline (#2704, ADR-0164 D3), not the raw
+   # value -- an unimpaired character (effective value == baseline) contributes
+   # exactly 0 to every check that reads the capability, so authoring a
+   # capability across many checks never inflates them. Arithmetically a no-op
+   # for capabilities whose innate_baseline is 0 (most of them).
    # `_capability_point_allocation` is the ONE place this arithmetic is computed;
    # collect_check_modifiers's CAPABILITY provenance calls the same helper and
-   # allocates the same truncated total back across rows by largest remainder,
-   # so recorded contributions always sum to exactly capability_points (#2505 fix).
+   # allocates the same truncated total back across rows by largest remainder
+   # (now handling mixed-sign rows), so recorded contributions always sum to
+   # exactly capability_points (#2505 fix).
 
 3. Total = trait_points + specialization_points + aspect_bonus + level_points + capability_points
    + extra_modifiers
@@ -255,10 +273,11 @@ _calculate_aspect_bonus(character, check_type, level) -> int
 # 0 with no authored rows (curated gate, never calls the capability oracle) or no sheet_data
 _calculate_capability_points(character, check_type) -> int
 
-# Shared arithmetic (#2505): raw per-row weight x value products, truncated-toward-zero
-# total, and largest-remainder allocation of that total back across rows. The ONE place
-# either _calculate_capability_points (roll path) or _capability_contributions (provenance
-# path, in collect_check_modifiers) computes this, so the two paths cannot drift.
+# Shared arithmetic (#2505): raw per-row `weight * (value - innate_baseline)` products
+# (#2704, ADR-0164 D3 -- deviation from baseline, not the raw value), truncated-toward-zero
+# total, and largest-remainder allocation of that total back across rows (mixed-sign safe).
+# The ONE place either _calculate_capability_points (roll path) or _capability_contributions
+# (provenance path, in collect_check_modifiers) computes this, so the two paths cannot drift.
 _capability_point_allocation(character_sheet, capability_modifiers) -> tuple[int, list[int]]
 
 # Get character's primary class level (or highest, or default 1) — shared with
@@ -296,11 +315,18 @@ All models registered with appropriate admin interfaces:
 - **Progression app**: Uses `CharacterPathHistory` for current path lookup; `get_character_path_level`
   (`world.progression.services.skill_development`) is the sole source of a character's class level (#2707)
   -- both the level-points term and the aspect bonus's level scaling read it
-- **Conditions app** (#2505): `get_effective_capability_value(sheet, capability)` (the agency oracle — innate
-  baseline + CharacterModifier + condition contributions + passive grants) is the sole source
-  `_capability_point_allocation` reads on behalf of both `_calculate_capability_points` (roll path) and
-  `collect_check_modifiers`'s CAPABILITY contributions (provenance path); lazily imported to avoid a module
-  cycle (`world.conditions.services` already imports `world.checks.services` at module scope)
+- **Combat app** (#2707): `CombatOpponent.level` is the authority for how sturdy an opponent is on BOTH
+  sides — read directly by `level_opposition` at the offense/penetration/NPC-attack-defense sites, and
+  passed as `compute_resist_increment(..., level_override=opponent.level)` for the social verbs, so an
+  ephemeral NPC (which has no `CharacterClassLevel` rows behind its `objectdb`) no longer resists at
+  level 1 while opposing a stab at its authored level
+- **Conditions app** (#2505): `get_effective_capability_value(sheet, capability)` (the agency oracle —
+  innate baseline + CharacterModifier total + condition contributions + passive-grant floor + best
+  (MAX) technique-grant value, floored at 0) is the sole source `_capability_point_allocation` reads
+  on behalf of both `_calculate_capability_points` (roll path) and `collect_check_modifiers`'s
+  CAPABILITY contributions (provenance path) — so a technique-granted capability reaches the check
+  bridge the same as an innate/condition-derived one; lazily imported to avoid a module cycle
+  (`world.conditions.services` already imports `world.checks.services` at module scope)
 - **Attempts app**: Calls `perform_check()` for resolution; provides roulette display content via `ConsequenceDisplay`
 - **Callers** (goals, magic, combat, conditions, GM adjudication): Compute `extra_modifiers` before calling `perform_check()`
 - **Mechanics app**: `resolve_challenge()` folds its `capability_source.value` (a `CapabilitySource`, e.g. from a

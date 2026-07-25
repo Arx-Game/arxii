@@ -3,7 +3,7 @@
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from world.captivity.constants import CaptivityStatus
 from world.captivity.exceptions import AlreadyCapturedError, NotHeldError
 from world.captivity.models import Captivity, CaptivityConfig
@@ -42,7 +42,7 @@ class CaptureCharacterTests(TestCase):
         assert captive.lifecycle_state == LifecycleState.CAPTURED
         assert captive.lifecycle_state_at is not None
         # The body is inside the spawned cell, and the cell knows where to return them.
-        assert captive.character.location == captivity.cell.room
+        assert captive.character.location == captivity.cell.room.objectdb
         assert captivity.cell.return_location == self.return_room
         assert captivity.cell.status == InstanceStatus.ACTIVE
 
@@ -74,7 +74,7 @@ class CapturePartyTests(TestCase):
             assert captivity.status == CaptivityStatus.HELD
             captive.refresh_from_db()
             assert captive.lifecycle_state == LifecycleState.CAPTURED
-            assert captive.character.location == captivity.cell.room
+            assert captive.character.location == captivity.cell.room.objectdb
 
     def test_empty_party_is_noop(self) -> None:
         assert capture_party(captives=[]) == []
@@ -126,7 +126,7 @@ class ResolveCaptivityTests(TestCase):
         # A scene in the cell keeps the room from being torn down so we can
         # assert the instance was completed rather than deleted.
         cell = captivity.cell
-        SceneFactory(location=cell.room)
+        SceneFactory(location=cell.room.objectdb)
 
         resolve_captivity(captivity, status=CaptivityStatus.ESCAPED)
 
@@ -165,7 +165,7 @@ class ResolveCaptivityTests(TestCase):
         # survive that teardown — cell is SET_NULL, not CASCADE.
         captive = CharacterSheetFactory()
         captivity = capture_character(captive=captive, return_location=self.return_room)
-        cell_room = captivity.cell.room
+        cell_room = captivity.cell.room.objectdb
 
         resolve_captivity(captivity, status=CaptivityStatus.RANSOMED)
 
@@ -302,9 +302,11 @@ class BrigHoldingRoomCaptureTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.brig_room = ObjectDBFactory(
-            db_key="Ship Brig",
-            db_typeclass_path="typeclasses.rooms.Room",
+        cls.brig_room = RoomProfileFactory(
+            objectdb=ObjectDBFactory(
+                db_key="Ship Brig",
+                db_typeclass_path="typeclasses.rooms.Room",
+            )
         )
         cls.return_room = ObjectDBFactory(
             db_key="Capture Site",
@@ -326,7 +328,7 @@ class BrigHoldingRoomCaptureTests(TestCase):
         assert captivity.return_location == self.return_room
         captive.refresh_from_db()
         assert captive.lifecycle_state == LifecycleState.CAPTURED
-        assert captive.character.location == self.brig_room
+        assert captive.character.location == self.brig_room.objectdb
         assert not InstancedRoom.objects.exists()
 
     def test_resolve_captivity_from_holding_room_relocates_to_return_location(self) -> None:
@@ -398,7 +400,7 @@ class BrigHoldingRoomCaptureTests(TestCase):
             holding_room=self.brig_room,
             return_location=self.return_room,
         )
-        result = _maybe_render_captivity_status(self.brig_room)
+        result = _maybe_render_captivity_status(self.brig_room.objectdb)
         assert result is not None
         assert "held captive here" in result
 
@@ -406,5 +408,5 @@ class BrigHoldingRoomCaptureTests(TestCase):
         """A Brig room with no captives renders nothing."""
         from typeclasses.mixins import _maybe_render_captivity_status
 
-        result = _maybe_render_captivity_status(self.brig_room)
+        result = _maybe_render_captivity_status(self.brig_room.objectdb)
         assert result is None

@@ -62,7 +62,7 @@ repos:
         pass_filenames: true
         types: [python]
       - id: objectdb-param
-        name: Reject ObjectDB-typed args in service-layer functions
+        name: Reject ObjectDB-typed args and model FKs
         entry: uv run python tools/lint_objectdb_param.py
         language: system
         pass_filenames: true
@@ -75,12 +75,25 @@ repos:
         # time as their service modules are triaged. See CLAUDE.md "Avoid
         # direct FKs to ObjectDB" for the OBJECTDB_PARAM noqa token and
         # rollout policy.
+        #
+        # #2608 tranche 3: the linter now also flags model relation fields
+        # pointing at ObjectDB (OBJECTDB_FIELD). The models.py files below are
+        # the ones whose relation fields are fully triaged — every remaining
+        # ObjectDB field in them carries a `noqa: OBJECTDB_FIELD` rationale, so
+        # they cannot regress. Add an app's models.py here as its fields are
+        # triaged; scenes/models.py joins once Scene.location is retargeted.
         files: |
           (?x)^src/world/(
             vitals/services\.py
             |magic/services/capability_requirements\.py
             |conditions/services\.py
             |npc_services/services\.py
+            |dreams/models\.py
+            |instances/models\.py
+            |captivity/models\.py
+            |gm/models\.py
+            |character_creation/models\.py
+            |mechanics/models\.py
           )$
       - id: check-migrations
         name: Check Django migrations

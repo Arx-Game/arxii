@@ -183,7 +183,7 @@ class OpposedDifficultyTests(TestCase):
         active-half result must equal compute_check_rating(defender, Composure) plus
         the effort-level modifier, clamped to >= 0, with nothing else folded in. This
         is what makes compute_resist_increment and level_opposition mutually
-        exclusive (#2707, ADR-0164) -- if compute_resist_increment carried an extra
+        exclusive (#2707, ADR-0166) -- if compute_resist_increment carried an extra
         term beyond the rating, a call site combining it with level_opposition
         wouldn't obviously double-count the defender's level, since the rating
         already contains it.

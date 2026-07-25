@@ -33,7 +33,7 @@ class SpeakerQueueServiceTests(TestCase):
     def test_open_queue_creates_active_queue(self):
         queue = open_queue(self.room, self.persona_a)
         self.assertTrue(queue.is_active)
-        self.assertEqual(queue.room, self.room)
+        self.assertEqual(queue.room.objectdb, self.room)
         self.assertEqual(queue.opened_by, self.persona_a)
         self.assertIsNone(queue.closed_at)
 

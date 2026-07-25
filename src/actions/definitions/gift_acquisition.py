@@ -27,7 +27,7 @@ _MSG_NO_CHARACTER_SHEET = "You have no character sheet."
 
 # Exceptions the gift/technique/thread-weaving acquisition services raise:
 # MagicError covers XPInsufficient / GiftUnlockMissing / TechniqueCapExceeded /
-# TechniqueStyleForbidden / WeavingUnlockMissing (all subclass it);
+# WeavingUnlockMissing (all subclass it);
 # AlterationGateError is the Mage Scar advancement gate; ProtagonismLockedError
 # is the protagonism-lock gate (enforce_advancement_gate checks it first);
 # ValueError is raised for "already knows this technique".

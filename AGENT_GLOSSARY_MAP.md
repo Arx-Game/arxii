@@ -155,7 +155,7 @@ outcome and never leaks raw roll numbers. _Avoid_: roll, dice check.
 A **CheckType** is the database-defined kind of check (weighted traits + aspects); a
 **CheckRank** is a banded tier of capability; a **ResultChart** maps the rank difference
 and points to a graded **CheckOutcome**. Level rides both sides of every check (#2707,
-ADR-0164): a guaranteed level-points term on the roller's side, and one of two mutually
+ADR-0166): a guaranteed level-points term on the roller's side, and one of two mutually
 exclusive helpers (level opposition / resist increment — see [checks
 AGENT_GLOSSARY](src/world/checks/AGENT_GLOSSARY.md)) on the opposing side. Combat's own
 per-opponent level axis (distinct from tier) has its full entry in [combat

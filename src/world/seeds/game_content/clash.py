@@ -114,7 +114,6 @@ class ClashContent:
             EffectType,
             Technique,
             TechniqueAppliedCondition,
-            TechniqueStyle,
         )
         from world.traits.models import CheckOutcome  # noqa: PLC0415
 
@@ -382,13 +381,9 @@ class ClashContent:
         # ------------------------------------------------------------------ #
         # 6. PC-side techniques                                               #
         # ------------------------------------------------------------------ #
-        # Shared gift + style + effect_type for the clash techniques.
+        # Shared gift + effect_type for the clash techniques.
         gift = GiftFactory(name="Clash Arts (Clash Test)")
 
-        style, _ = TechniqueStyle.objects.get_or_create(
-            name="Clash (Test)",
-            defaults={"description": "Magic expressed through direct clash engagement."},
-        )
         clash_effect_type, _ = EffectType.objects.get_or_create(
             name="Clash Attack (Test)",
             defaults={
@@ -404,7 +399,6 @@ class ClashContent:
             name="Resonant Strike (Clash Test)",
             defaults={
                 "gift": gift,
-                "style": style,
                 "effect_type": clash_effect_type,
                 "intensity": 3,
                 "control": 3,
@@ -422,7 +416,6 @@ class ClashContent:
             name="Binding Seal (Clash Test)",
             defaults={
                 "gift": gift,
-                "style": style,
                 "effect_type": clash_effect_type,
                 "intensity": 3,
                 "control": 3,

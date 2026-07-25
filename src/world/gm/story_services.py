@@ -126,8 +126,15 @@ def join_story_room(*, sheet: CharacterSheet, room_profile: RoomProfile) -> Obje
     if grant is None:
         msg = "You have no invitation to that room."
         raise StoryServiceError(msg)
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
     char = sheet.character
-    origin = char.location
+    # `return_location` is a RoomProfile (#2608). A character standing somewhere
+    # that isn't a profiled Room simply records no origin — `_return_character`
+    # already falls back to `char.home`. Previously the non-Room case raised a
+    # ValidationError out of the model's clean(); degrading to the home fallback
+    # is strictly friendlier and needs no guarantee the join path can't give.
+    origin = RoomProfile.objects.filter(objectdb=char.location).first()
     moved = char.move_to(room_profile.objectdb, quiet=True)
     if not moved:
         msg = "Something blocked the move — you haven't joined. Try again or ask your GM."
@@ -148,7 +155,8 @@ def leave_story_room(*, sheet: CharacterSheet, room_profile: RoomProfile) -> Obj
 
 def _return_character(grant: StoryRoomGrant) -> ObjectDB:
     char = grant.character.character
-    destination = grant.return_location or char.home
+    origin = grant.return_location
+    destination = (origin.objectdb if origin is not None else None) or char.home
     if destination is None:
         msg = "Nowhere to return you to — ask staff."
         raise StoryServiceError(msg)
@@ -173,7 +181,7 @@ def spin_up_scene_room(*, gm: GMProfile, name: str, description: str) -> Instanc
         source_key=f"gm:{gm.pk}",
         gm_owner=gm,
     )
-    return room.instance_data
+    return room.room_profile.instance_data
 
 
 def close_scene_room(*, instance: InstancedRoom) -> None:
@@ -190,13 +198,13 @@ def close_scene_room(*, instance: InstancedRoom) -> None:
     """
     from world.instances.services import complete_instanced_room  # noqa: PLC0415
 
-    grants = StoryRoomGrant.objects.filter(room__objectdb=instance.room).select_related(
-        "character", "room"
-    )
+    # Both sides are RoomProfile now (#2608) — the objectdb hop is gone.
+    grants = StoryRoomGrant.objects.filter(room=instance.room).select_related("character", "room")
+    room_object = instance.room.objectdb
     failures: list[str] = []
     for grant in grants:
         char = grant.character.character
-        if char is None or char.location != instance.room:
+        if char is None or char.location != room_object:
             continue
         try:
             _return_character(grant)
@@ -209,4 +217,4 @@ def close_scene_room(*, instance: InstancedRoom) -> None:
         raise StoryServiceError(msg)
 
     grants.delete()
-    complete_instanced_room(instance.room)
+    complete_instanced_room(room_object)

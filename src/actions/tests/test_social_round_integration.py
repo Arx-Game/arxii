@@ -27,6 +27,7 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from actions.constants import ActionBackend
+from evennia_extensions.factories import RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.constants import DifficultyIndicator
 from world.mechanics.factories import (
@@ -146,7 +147,7 @@ class SocialRoundIntegrationBase(TestCase):
         """Create a STRICT OPT_IN DECLARING round with the given participants/initiative."""
         kwargs.setdefault("mode", SceneRoundMode.STRICT)
         return SceneRoundFactory(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,

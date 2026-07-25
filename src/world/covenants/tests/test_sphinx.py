@@ -22,6 +22,7 @@ from world.covenants.perks.constants import PerkBeneficiary, Situation
 from world.covenants.sphinx import audit_vow_coverage, judge_vow
 from world.magic.constants import TechniqueFunction
 from world.magic.factories import (
+    CharacterGiftFactory,
     CharacterTechniqueFactory,
     TechniqueFactory,
     TechniqueFunctionTagFactory,
@@ -101,9 +102,12 @@ class JudgeVowNoCoverageTests(TestCase):
             covenant_role=role, function=TechniqueFunction.BARRIER
         )
 
-        # A learnable technique the character doesn't yet know, carrying the demanded tag.
+        # A learnable technique the character doesn't yet know, carrying the demanded
+        # tag. "Learnable" means the sheet owns its gift (#2700) — learn_technique's
+        # own first gate — so the gift is granted here.
         learnable = TechniqueFactory(name="Ward of Black Quartz")
         TechniqueFunctionTagFactory(technique=learnable, function=TechniqueFunction.BARRIER)
+        CharacterGiftFactory(character=sheet, gift=learnable.gift)
 
         verdict = judge_vow(sheet, role)
 
@@ -114,6 +118,28 @@ class JudgeVowNoCoverageTests(TestCase):
         self.assertIn("Ward of Black Quartz", shopping_names)
         for item in verdict.shopping_list:
             self.assertEqual(item.function, TechniqueFunction.BARRIER)
+
+    def test_shopping_list_excludes_techniques_from_unowned_gifts(self) -> None:
+        """The list never recommends what learn_technique would reject (#2700).
+
+        Before the gift-ownership gate the shopping list happily recommended a
+        technique from a gift the character did not own — learn_technique raises
+        GiftNotOwned on exactly that. The old path-style filter masked the bug.
+        """
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        CovenantRoleTechniqueSpecialtyFactory(
+            covenant_role=role, function=TechniqueFunction.BARRIER
+        )
+
+        unreachable = TechniqueFactory(name="Ward of Unowned Gift")
+        TechniqueFunctionTagFactory(technique=unreachable, function=TechniqueFunction.BARRIER)
+        # Deliberately NO CharacterGiftFactory for unreachable.gift.
+
+        verdict = judge_vow(sheet, role)
+
+        self.assertEqual(verdict.tier, SphinxTier.NOT_YET)
+        self.assertEqual(verdict.shopping_list, [])
 
 
 class JudgeVowSituationDemandTests(TestCase):

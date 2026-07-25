@@ -2,7 +2,7 @@ from django.utils import timezone
 import factory
 import factory.django as factory_django
 
-from evennia_extensions.factories import AccountFactory, ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
@@ -239,7 +239,7 @@ class SceneRoundFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = SceneRound
 
-    room = factory.SubFactory(ObjectDBFactory)
+    room = factory.SubFactory(RoomProfileFactory)
     status = RoundStatus.BETWEEN_ROUNDS
     round_number = 0
     mode = SceneRoundMode.POSE_ORDER

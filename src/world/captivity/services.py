@@ -30,6 +30,7 @@ from world.instances.services import complete_instanced_room, spawn_instanced_ro
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from evennia_extensions.models import RoomProfile
     from world.character_sheets.models import CharacterSheet
     from world.missions.models import MissionTemplate
     from world.societies.models import Organization
@@ -52,7 +53,7 @@ def capture_character(  # noqa: PLR0913 — keyword-only; each arg is a distinct
     group_key: str | None = None,
     cell_name: str | None = None,
     cell_description: str | None = None,
-    holding_room: ObjectDB | None = None,
+    holding_room: RoomProfile | None = None,
 ) -> Captivity:
     """Take one character into a cell and record the captivity.
 
@@ -90,7 +91,7 @@ def capture_character(  # noqa: PLR0913 — keyword-only; each arg is a distinct
 
             character = captive.character
             if character is not None:
-                character.move_to(holding_room, quiet=True)
+                character.move_to(holding_room.objectdb, quiet=True)
             return captivity
 
         if cell is None and group_key is not None:
@@ -103,7 +104,7 @@ def capture_character(  # noqa: PLR0913 — keyword-only; each arg is a distinct
                 return_location=return_location,
                 source_key=group_key or f"capture:{captive.pk}",
             )
-            cell = room.instance_data
+            cell = room.room_profile.instance_data
 
         captive.lifecycle_state = LifecycleState.CAPTURED
         captive.lifecycle_state_at = timezone.now()
@@ -124,7 +125,7 @@ def capture_character(  # noqa: PLR0913 — keyword-only; each arg is a distinct
 
     character = captive.character
     if character is not None:
-        character.move_to(cell.room, quiet=True)
+        character.move_to(cell.room.objectdb, quiet=True)
     return captivity
 
 
@@ -153,7 +154,7 @@ def capture_party(  # noqa: PLR0913 — keyword-only; each arg is a distinct cap
         return_location=return_location,
         source_key=f"capture:party:{captives[0].pk}",
     )
-    cell = room.instance_data
+    cell = room.room_profile.instance_data
 
     return [
         capture_character(
@@ -219,7 +220,7 @@ def resolve_captivity(captivity: Captivity, *, status: str) -> None:
         return
     # Last one out: detach any remaining (already-resolved) captivities from
     # the cell, then tear the now-empty cell down.
-    room = cell.room
+    room = cell.room.objectdb
     Captivity.objects.filter(cell=cell).update(cell=None)
     complete_instanced_room(room)
 

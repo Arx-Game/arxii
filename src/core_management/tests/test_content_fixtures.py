@@ -716,7 +716,6 @@ class LoadEntriesM2MTest(TestCase):
             "fields": {
                 "name": "M2M Trip",
                 "gift": ["M2M Gift"],
-                "style": [self.style.name],
                 "effect_type": [self.effect.name],
                 "anima_cost": 5,
                 "restrictions": restrictions,
@@ -728,11 +727,9 @@ class LoadEntriesM2MTest(TestCase):
             EffectTypeFactory,
             GiftFactory,
             RestrictionFactory,
-            TechniqueStyleFactory,
         )
 
         GiftFactory(name="M2M Gift")
-        self.style = TechniqueStyleFactory()
         self.effect = EffectTypeFactory()
         restriction = RestrictionFactory(name="Touch Range")
         result = self._result_with([self._technique_obj(restrictions=[[restriction.name]])])
@@ -749,12 +746,10 @@ class LoadEntriesM2MTest(TestCase):
             EffectTypeFactory,
             GiftFactory,
             RestrictionFactory,
-            TechniqueStyleFactory,
         )
         from world.magic.models import Technique
 
         GiftFactory(name="M2M Gift")
-        self.style = TechniqueStyleFactory()
         self.effect = EffectTypeFactory()
         restriction_a = RestrictionFactory(name="Restriction A")
         restriction_b = RestrictionFactory(name="Restriction B")
@@ -772,11 +767,10 @@ class LoadEntriesM2MTest(TestCase):
         assert list(technique.restrictions.all()) == [restriction_b]
 
     def test_missing_m2m_target_defers_and_writes_nothing(self) -> None:
-        from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueStyleFactory
+        from world.magic.factories import EffectTypeFactory, GiftFactory
         from world.magic.models import Technique
 
         GiftFactory(name="M2M Gift")
-        self.style = TechniqueStyleFactory()
         self.effect = EffectTypeFactory()
         result = self._result_with([self._technique_obj(restrictions=[["No Such Restriction"]])])
         created, updated, deferred = load_entries(result, defer_unresolved=True)
@@ -787,11 +781,10 @@ class LoadEntriesM2MTest(TestCase):
         assert not Technique.objects.filter(name="M2M Trip").exists()
 
     def test_missing_m2m_target_skips_when_not_deferring(self) -> None:
-        from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueStyleFactory
+        from world.magic.factories import EffectTypeFactory, GiftFactory
         from world.magic.models import Technique
 
         GiftFactory(name="M2M Gift")
-        self.style = TechniqueStyleFactory()
         self.effect = EffectTypeFactory()
         result = self._result_with([self._technique_obj(restrictions=[["No Such Restriction"]])])
         created, updated, _ = load_entries(result)

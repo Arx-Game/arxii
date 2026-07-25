@@ -53,11 +53,11 @@ inversion the way the original seed did.
 
 ## Facts for future readers
 
-- This fix necessarily precedes #2707's level-points work (ADR-0164): level points add
+- This fix necessarily precedes #2707's level-points work (ADR-0166): level points add
   onto `total_points`, which feeds `rank_difference` — adding a floor on top of an
   inverted ladder would have made a higher-level character's guaranteed level points
   actively hurt them.
 
 > Status: accepted · Source: issue #2707 (level both sides of check) · relates to
-> ADR-0164 (level as a two-sided check term; landed alongside this); extends ADR-0019;
+> ADR-0166 (level as a two-sided check term; landed alongside this); extends ADR-0019;
 > supersedes nothing.

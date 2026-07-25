@@ -134,7 +134,8 @@ def _resolve_owned_story_or_temp_room(
         return room_profile, None
     instance, inst_error = _resolve_owned_instance(actor, room_id)
     if instance is not None:
-        return instance.room.room_profile, None
+        # InstancedRoom.room is already the RoomProfile (#2608).
+        return instance.room, None
     return None, error or inst_error
 
 
@@ -685,7 +686,8 @@ class SpinUpSceneRoomAction(_StoryBuilderAction):
         return ActionResult(
             success=True,
             message=(
-                f"{instance.room.db_key} spun up (#{instance.room.pk}) — grant characters access."
+                f"{instance.room.objectdb.db_key} spun up (#{instance.room.pk})"
+                " — grant characters access."
             ),
         )
 

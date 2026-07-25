@@ -5,7 +5,12 @@ from __future__ import annotations
 from django.test import TestCase
 
 from actions.definitions.rounds import SetRoundModeAction, StartRoundAction
-from evennia_extensions.factories import CharacterFactory, GMCharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import (
+    CharacterFactory,
+    GMCharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus, SceneRoundMode, SceneRoundStartReason
@@ -38,7 +43,7 @@ def _make_room():
 
 def _make_active_round(room, mode=SceneRoundMode.POSE_ORDER, scene=None):
     rnd = SceneRound.objects.create(
-        room=room,
+        room=RoomProfileFactory(objectdb=room),
         status=RoundStatus.DECLARING,
         round_number=1,
         start_reason=SceneRoundStartReason.OPT_IN,
@@ -153,7 +158,7 @@ class SetRoundModeActionRefusalTests(TestCase):
         scene = SceneFactory(location=room, is_active=True)
         SceneOwnerParticipationFactory(scene=scene, account=account)
         rnd = SceneRound.objects.create(
-            room=room,
+            room=RoomProfileFactory(objectdb=room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.DANGER,
@@ -203,7 +208,7 @@ class StartRoundActionModeOverrideTests(TestCase):
         action = StartRoundAction()
         result = action.run(char)
         self.assertTrue(result.success)
-        rnd = SceneRound.objects.get(room=self.room)
+        rnd = SceneRound.objects.get(room_id=self.room.pk)
         self.assertEqual(rnd.status, RoundStatus.DECLARING)
         self.assertIsNone(rnd.scene_id)
 
@@ -232,7 +237,7 @@ class StartRoundActionModeOverrideTests(TestCase):
         action = StartRoundAction()
         result = action.run(char, mode=SceneRoundMode.STRICT, advance_quorum_pct=80)
         self.assertTrue(result.success)
-        rnd = SceneRound.objects.get(room=self.room)
+        rnd = SceneRound.objects.get(room_id=self.room.pk)
         self.assertEqual(rnd.mode, SceneRoundMode.STRICT)
         self.assertEqual(rnd.advance_quorum_pct, 80)
         self.assertEqual(rnd.scene_id, scene.pk)
@@ -246,7 +251,7 @@ class StartRoundActionModeOverrideTests(TestCase):
         action = StartRoundAction()
         result = action.run(char, mode=SceneRoundMode.OPEN)
         self.assertTrue(result.success)
-        rnd = SceneRound.objects.get(room=self.room)
+        rnd = SceneRound.objects.get(room_id=self.room.pk)
         self.assertEqual(rnd.mode, SceneRoundMode.OPEN)
         self.assertEqual(rnd.scene_id, scene.pk)
 
@@ -258,7 +263,7 @@ class StartRoundActionModeOverrideTests(TestCase):
         cfg = get_scene_round_defaults_config()
         action = StartRoundAction()
         action.run(char)
-        rnd = SceneRound.objects.get(room=self.room)
+        rnd = SceneRound.objects.get(room_id=self.room.pk)
         self.assertEqual(rnd.mode, cfg.default_mode)
         self.assertEqual(rnd.advance_quorum_pct, cfg.advance_quorum_pct)
         self.assertEqual(rnd.max_actions_per_round, cfg.max_actions_per_round)

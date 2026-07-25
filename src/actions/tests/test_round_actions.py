@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import RoundStatus, SceneRoundParticipantStatus
 from world.scenes.models import (
@@ -37,7 +37,7 @@ class StartRoundActionTests(TestCase):
         result = get_action("start_round").run(self.actor)
 
         self.assertTrue(result.success)
-        rnd = SceneRound.objects.get(room=self.room)
+        rnd = SceneRound.objects.get(room_id=self.room.pk)
         self.assertEqual(rnd.status, RoundStatus.DECLARING)
         self.assertTrue(
             SceneRoundParticipant.objects.filter(
@@ -52,7 +52,7 @@ class StartRoundActionTests(TestCase):
         from world.scenes.constants import SceneRoundStartReason
 
         existing = SceneRound.objects.create(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.BETWEEN_ROUNDS,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,
@@ -63,7 +63,7 @@ class StartRoundActionTests(TestCase):
         self.assertTrue(result.success)
         existing.refresh_from_db()
         self.assertEqual(existing.status, RoundStatus.DECLARING)
-        self.assertEqual(SceneRound.objects.filter(room=self.room).count(), 1)
+        self.assertEqual(SceneRound.objects.filter(room_id=self.room.pk).count(), 1)
 
     def test_start_round_no_location_returns_failure(self) -> None:
         """Actor with no location gets a graceful failure."""
@@ -83,7 +83,7 @@ class JoinRoundActionTests(TestCase):
         from world.scenes.constants import SceneRoundStartReason
 
         self.round = SceneRound.objects.create(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,
@@ -122,7 +122,7 @@ class LeaveRoundActionTests(TestCase):
         from world.scenes.constants import SceneRoundStartReason
 
         self.round = SceneRound.objects.create(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,
@@ -161,7 +161,7 @@ class EndRoundActionTests(TestCase):
         from world.scenes.constants import SceneRoundStartReason
 
         self.round = SceneRound.objects.create(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,
@@ -196,7 +196,7 @@ class PassRoundActionTests(TestCase):
         from world.scenes.constants import SceneRoundStartReason
 
         self.round = SceneRound.objects.create(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,
@@ -309,7 +309,7 @@ class InterposeSceneActionTests(TestCase):
         self.ally_sheet = CharacterSheetFactory(character=self.ally_actor)
 
         self.round = SceneRound.objects.create(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,
@@ -379,7 +379,7 @@ class ForceResolveRoundActionTests(TestCase):
             character=CharacterFactory(db_key="RoundForcerOther", location=self.room)
         )
         self.round = SceneRound.objects.create(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,

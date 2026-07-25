@@ -128,7 +128,7 @@ _Avoid_: stage, form, tier (tier is the opponent's power class)
 **OpponentTier**:
 The power class of an NPC opponent (`OpponentTier`: SWARM, MOOK, ELITE, BOSS, HERO_KILLER), seeding its baseline stat budget. SWARM uses count/body-toughness mechanics; HERO_KILLER is the unbeatable presence.
 
-**Opponent level** (`CombatOpponent.level`, #2707, ADR-0164):
+**Opponent level** (`CombatOpponent.level`, #2707, ADR-0166):
 A `CombatOpponent`'s power level on the same 1-30 scale as a PC's class level — a
 SEPARATE axis from `OpponentTier`: a level 3 BOSS and a level 20 MOOK are both coherent
 (tier is the opponent's *role/budget class*; level is where it sits on the same

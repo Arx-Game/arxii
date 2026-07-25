@@ -286,9 +286,11 @@ def _maybe_render_captivity_status(obj) -> str | None:
     from world.captivity.constants import CaptivityStatus
     from world.captivity.models import Captivity
 
+    # Both room FKs are RoomProfile now (#2608); RoomProfile shares ObjectDB's pk,
+    # so the room's own pk is the profile id — no join needed to look it up.
     held = list(
         Captivity.objects.filter(
-            Q(cell__room=obj) | Q(holding_room=obj),
+            Q(cell__room_id=obj.pk) | Q(holding_room_id=obj.pk),
             status=CaptivityStatus.HELD,
         ).select_related("captive", "ransom_project")
     )

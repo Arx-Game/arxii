@@ -387,7 +387,6 @@ class TechniqueIntensityControlTest(TestCase):
         technique = Technique.objects.create(
             name="Flame Blade",
             gift=self.gift,
-            style=self.style,
             effect_type=self.effect_type,
             level=1,
             intensity=1,
@@ -402,7 +401,6 @@ class TechniqueIntensityControlTest(TestCase):
         technique = Technique.objects.create(
             name="Default Spell",
             gift=self.gift,
-            style=self.style,
             effect_type=self.effect_type,
             level=1,
             anima_cost=5,
@@ -415,7 +413,6 @@ class TechniqueIntensityControlTest(TestCase):
         technique = Technique.objects.create(
             name="Greater Flame",
             gift=self.gift,
-            style=self.style,
             effect_type=self.effect_type,
             level=6,
             intensity=10,

@@ -76,6 +76,7 @@ from world.magic.models import (
     RitualLiturgy,
     SoulfrayConfig,
     StandingCapBand,
+    StyleCapabilityRequirement,
     Technique,
     TechniqueAppliedCondition,
     TechniqueBudgetConfig,
@@ -155,14 +156,17 @@ class TechniqueStyleFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Technique Style {n}")
     description = factory.LazyAttribute(lambda o: f"Description for {o.name}.")
 
-    @factory.post_generation
-    def allowed_paths(self, create, extracted, **kwargs):
-        """Add allowed paths to the technique style."""
-        if not create:
-            return
-        if extracted:
-            for path in extracted:
-                self.allowed_paths.add(path)
+
+class StyleCapabilityRequirementFactory(factory.django.DjangoModelFactory):
+    """Factory for StyleCapabilityRequirement (#2700)."""
+
+    class Meta:
+        model = StyleCapabilityRequirement
+        django_get_or_create = ("style", "capability")
+
+    style = factory.SubFactory(TechniqueStyleFactory)
+    capability = factory.SubFactory(_CAPABILITY_TYPE_FACTORY)
+    minimum_value = 1
 
 
 class RestrictionFactory(factory.django.DjangoModelFactory):
@@ -319,7 +323,6 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Technique {n}")
     gift = factory.SubFactory(GiftFactory)
-    style = factory.SubFactory(TechniqueStyleFactory)
     effect_type = factory.SubFactory(EffectTypeFactory)
     level = 1
     intensity = 1

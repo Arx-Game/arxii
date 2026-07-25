@@ -5,7 +5,6 @@
  *
  * Loads all lookup lists required by TechniqueBuilderForm:
  *   - gifts: reused from character-creation's getTechniqueGifts (GET /api/magic/gifts/)
- *   - styles: reused from useTechniqueStyles (GET /api/magic/styles/)
  *   - effectTypes: reused from useEffectTypes (GET /api/magic/effect-types/)
  *   - capabilities: GET /api/conditions/capabilities/
  *   - damageTypes: GET /api/conditions/damage-types/
@@ -22,11 +21,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
 import { useAccount } from '@/store/hooks';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  useTechniqueStyles,
-  useEffectTypes,
-  useConsequencePoolCatalog,
-} from '@/character-creation/queries';
+import { useEffectTypes, useConsequencePoolCatalog } from '@/character-creation/queries';
 import { getGifts } from '@/character-creation/api';
 import type { components } from '@/generated/api';
 import { useDamageTypes } from '@/conditions/queries';
@@ -76,7 +71,6 @@ export function TechniqueBuilderPage() {
     queryKey: ['magic', 'gifts', 'list'],
     queryFn: () => getGifts(),
   });
-  const { data: stylesData = [], isLoading: stylesLoading } = useTechniqueStyles();
   const { data: effectTypesData = [], isLoading: effectTypesLoading } = useEffectTypes();
   const { data: capabilitiesData = [], isLoading: capabilitiesLoading } = useQuery({
     queryKey: ['conditions', 'capabilities'],
@@ -94,7 +88,6 @@ export function TechniqueBuilderPage() {
 
   const isLoading =
     giftsLoading ||
-    stylesLoading ||
     effectTypesLoading ||
     capabilitiesLoading ||
     damageTypesLoading ||
@@ -115,7 +108,6 @@ export function TechniqueBuilderPage() {
   // Map gifts to minimal {id, name} shape (gift_detail.id = gift id in CharacterGift,
   // but here getTechniqueGifts returns Gift directly with id + name).
   const gifts = giftsData.map((g) => ({ id: g.id, name: g.name }));
-  const styles = stylesData.map((s) => ({ id: s.id, name: s.name }));
   const effectTypes = effectTypesData.map((et) => ({ id: et.id, name: et.name }));
   const conditions = conditionsData.map((c) => ({ id: c.id, name: c.name }));
 
@@ -139,7 +131,6 @@ export function TechniqueBuilderPage() {
       <TechniqueBuilderForm
         mode={isStaff ? 'staff' : 'player'}
         gifts={gifts}
-        styles={styles}
         effectTypes={effectTypes}
         capabilities={capabilitiesData}
         damageTypes={damageTypesData}

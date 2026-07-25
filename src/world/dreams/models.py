@@ -6,7 +6,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.managers import CachedAllMixin
 
 # App-qualified model path repeated across FK references; centralized for dedup.
-_OBJECT_DB_MODEL = "objects.ObjectDB"
+_ROOM_PROFILE_MODEL = "evennia_extensions.RoomProfile"
 
 
 class DreamReflectionManager(CachedAllMixin, models.Manager):
@@ -16,15 +16,20 @@ class DreamReflectionManager(CachedAllMixin, models.Manager):
         """Return the active DreamReflection for a waking room, or None.
 
         Args:
-            room: An ObjectDB room instance (the physical waking room).
+            room: An ObjectDB room instance (the physical waking room), or
+                None for a character with no location. RoomProfile shares
+                ObjectDB's pk (#2608), so the room's own pk is the profile
+                id — no profile lookup needed here.
 
         Returns:
             The active DreamReflection for this room, or None if no
             active reflection exists.
         """
+        if room is None:
+            return None
         return (
-            self.filter(waking_room=room, is_active=True)
-            .select_related("dream_room", "descent_target")
+            self.filter(waking_room_id=room.pk, is_active=True)
+            .select_related("dream_room__objectdb", "descent_target__objectdb")
             .first()
         )
 
@@ -42,17 +47,17 @@ class DreamReflection(SharedMemoryModel):
     """
 
     waking_room = models.OneToOneField(
-        _OBJECT_DB_MODEL,
+        _ROOM_PROFILE_MODEL,
         on_delete=models.CASCADE,
         related_name="dream_reflection",
     )
     dream_room = models.OneToOneField(
-        _OBJECT_DB_MODEL,
+        _ROOM_PROFILE_MODEL,
         on_delete=models.PROTECT,
         related_name="reflection_of",
     )
     descent_target = models.ForeignKey(
-        _OBJECT_DB_MODEL,
+        _ROOM_PROFILE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

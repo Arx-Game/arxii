@@ -23,7 +23,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.interpose_content import ensure_interpose_content
 from world.conditions.factories import DamageTypeFactory
@@ -164,7 +164,7 @@ class ResolvePendingInterposeHarmTests(TestCase):
     def setUp(self) -> None:
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         self.rnd = SceneRoundFactory(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,

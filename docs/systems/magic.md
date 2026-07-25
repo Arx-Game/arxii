@@ -57,7 +57,8 @@ and the 5-axis Thread model no longer exist.
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `EffectType` | Types of magical effects (Attack, Defense, Movement) | `name`, `description`, `base_power`, `base_anima_cost`, `has_power_scaling` |
-| `TechniqueStyle` | How magic manifests (Manifestation, Subtle, Prayer) | `name`, `description`, `allowed_paths` (M2M to `classes.Path`) |
+| `TechniqueStyle` | How a **practitioner** works magic (Manifestation, Subtle, Prayer). A property of the caster's Path, not of the technique (#2700, ADR-0164) — the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Reverse of `classes.Path.style` via `related_name="paths"`. | `name`, `description` |
+| `StyleCapabilityRequirement` | A capability the **caster** needs to work magic in this style (#2700) — e.g. Incantation requires `speech >= 1`. Caster-scoped sibling of `TechniqueCapabilityRequirement`; both are evaluated by `technique_performable` against `get_effective_capability_value`. | `style` FK, `capability` FK (`conditions.CapabilityType`), `minimum_value`. Natural key `(style, capability)` |
 | `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
 | `Restriction` | Limitations that grant power bonuses | `name`, `description`, `power_bonus` |
 | `Facet` | Hierarchical imagery/symbolism (Category > Subcategory > Specific) | `name`, `parent` (self-FK), `description` |
@@ -111,7 +112,7 @@ still live for non-distinction sources (facet/mantle/motif-coherence passive bon
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `intensity`, `control`, `anima_cost`, `creator`, `target_type`, `reach`, `archetype_alignment` (#2529 — `RoleArchetype` choices, default CROWN, migration-seeded from `effect_type.category`: attack→sword, defense→shield, else→crown; which SWORD/SHIELD/CROWN blend axis of an engaged covenant role boosts this technique's cast). Natural key `(gift, name)`, backed by `unique_technique_gift_name` (#2474 — `name` alone is not globally unique; lore reuse or a player-crafted technique can share a name across gifts). Unique per `(gift, name)` |
+| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `intensity`, `control`, `anima_cost`, `creator`, `target_type`, `reach`, `archetype_alignment` (#2529 — `RoleArchetype` choices, default CROWN, migration-seeded from `effect_type.category`: attack→sword, defense→shield, else→crown; which SWORD/SHIELD/CROWN blend axis of an engaged covenant role boosts this technique's cast). Natural key `(gift, name)`, backed by `unique_technique_gift_name` (#2474 — `name` alone is not globally unique; lore reuse or a player-crafted technique can share a name across gifts). Unique per `(gift, name)` |
 
 Key fields: `intensity` (base power), `control` (base safety/precision), `level` (progression
 gate, derives tier), `target_type` (per-technique cardinality — see below).
@@ -155,7 +156,7 @@ so that web case calls `author_staff_technique()` directly.)
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `TechniqueDraft` | One-per-CharacterSheet in-progress design workbench | `character_sheet` FK (unique, `related_name="technique_draft"`), `name`, `description`, `gift` FK, `style` FK, `effect_type` FK, `intensity`, `control`, `anima_cost`, `level`, `target_type`, `reach`, `restrictions` M2M |
+| `TechniqueDraft` | One-per-CharacterSheet in-progress design workbench | `character_sheet` FK (unique, `related_name="technique_draft"`), `name`, `description`, `gift` FK, `effect_type` FK, `intensity`, `control`, `anima_cost`, `level`, `target_type`, `reach`, `restrictions` M2M |
 | `TechniqueDraftCapabilityGrant` | Draft payload — capability grant row (inherits `AbstractCapabilityGrant`) | `draft` FK |
 | `TechniqueDraftDamageProfile` | Draft payload — damage profile row (inherits `AbstractDamageProfile`) | `draft` FK |
 | `TechniqueDraftAppliedCondition` | Draft payload — applied condition row (inherits `AbstractAppliedCondition`) | `draft` FK |
@@ -163,7 +164,7 @@ so that web case calls `author_staff_technique()` directly.)
 **Draft services** (`services/technique_draft.py`):
 - `get_or_start_draft(character) -> TechniqueDraft` — creates or returns the active draft.
 - `discard_draft(character)` — deletes draft and all payload children.
-- `set_draft_fields(draft, **fields)` — typed field updates (name, description, gift, style,
+- `set_draft_fields(draft, **fields)` — typed field updates (name, description, gift,
   effect_type, level, intensity, control, anima_cost, target_type, reach).
 - `add_draft_restriction` / `remove_draft_restriction` — restriction M2M management.
 - `add_draft_capability_grant` / `add_draft_damage_profile` / `add_draft_applied_condition`
@@ -1939,7 +1940,8 @@ The full magic catalog is lore-repo-authorable content, not admin-only data: `Af
 `Resonance`, `Facet`, `Gift`, `Tradition`, `IntensityTier`, `Technique` + its payload rows
 (`TechniqueCapabilityGrant`/`TechniqueCapabilityRequirement`/`TechniqueDamageProfile`/
 `TechniqueOutcomeModifier`/`TechniqueAppliedCondition`/`TechniqueRemovedCondition`/
-`TechniqueFunctionTag`), `TechniqueStyle`, `Restriction`, `EffectType`, `PortalAnchorKind`,
+`TechniqueFunctionTag`), `TechniqueStyle`, `StyleCapabilityRequirement`, `Restriction`,
+`EffectType`, `PortalAnchorKind`,
 `PathGiftGrant`, `TraditionGiftGrant`, plus `species.SpeciesGiftGrant` — all listed in
 `CONTENT_MODELS`
 (`core_management/content_export.py`) and exported/imported by the shared
@@ -2248,7 +2250,7 @@ All endpoints require authentication. Base URL: `/api/magic/`
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/styles/` | GET | List technique styles |
+| `/styles/` | GET | List technique styles (the catalog a `Path` points at) |
 | `/effect-types/` | GET | List effect types |
 | `/restrictions/` | GET | List restrictions |
 | `/facets/` | GET | List facets (hierarchical) |

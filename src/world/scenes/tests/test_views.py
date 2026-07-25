@@ -4,7 +4,12 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
-from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import (
@@ -293,7 +298,7 @@ class SetRoundModeViewTestCase(APITestCase):
         self.scene = SceneFactory(location=self.room, is_active=True)
         SceneOwnerParticipationFactory(scene=self.scene, account=self.account)
         self.round = SceneRoundFactory(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             scene=self.scene,
             status=RoundStatus.DECLARING,
             round_number=1,
@@ -333,7 +338,7 @@ class SetRoundModeViewTestCase(APITestCase):
         # Replace the existing round with a DANGER round (STRICT, like a real acute round).
         self.round.delete()
         rnd = SceneRound.objects.create(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             scene=self.scene,
             status=RoundStatus.DECLARING,
             round_number=1,
@@ -370,7 +375,7 @@ class SetRoundModeViewTestCase(APITestCase):
     def test_scene_detail_active_round_payload(self):
         self.round.delete()
         rnd = SceneRound.objects.create(
-            room=self.scene.location,
+            room=RoomProfileFactory(objectdb=self.scene.location),
             scene=self.scene,
             mode=SceneRoundMode.STRICT,
             advance_quorum_pct=50,
@@ -391,7 +396,7 @@ class SetRoundModeViewTestCase(APITestCase):
     def test_scene_detail_active_round_is_danger(self):
         self.round.delete()
         SceneRound.objects.create(
-            room=self.scene.location,
+            room=RoomProfileFactory(objectdb=self.scene.location),
             scene=self.scene,
             start_reason=SceneRoundStartReason.DANGER,
         )

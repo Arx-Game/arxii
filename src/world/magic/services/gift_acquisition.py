@@ -27,7 +27,6 @@ from world.magic.models import (
 from world.magic.services.alterations import enforce_advancement_gate
 from world.magic.services.threads import thread_level_multiplier
 from world.progression.models import XPTransaction
-from world.progression.selectors import current_path_for_character
 from world.progression.services.awards import get_or_create_xp_tracker
 from world.progression.types import ProgressionReason
 
@@ -51,54 +50,6 @@ def get_gift_acquisition_config() -> GiftAcquisitionConfig:
     if config is None:
         config, _ = GiftAcquisitionConfig.objects.get_or_create(pk=1)
     return config
-
-
-def can_learn_technique(learner: CharacterSheet, technique: Technique) -> bool:
-    """True if the learner's current path permits this technique's style.
-
-    Checks ``technique.style.allowed_paths`` (M2M, blank = all paths)
-    against the learner's current path. A character with no path
-    history (pre-awakening / NPCs) is unrestricted.
-
-    Cross-path learning (#2538): if the learner's current path is NOT in
-    ``allowed_paths``, checks whether the learner meets the TraitRequirements
-    of any path that IS in ``allowed_paths``. If so, the technique is
-    learnable — the character has qualified via stat/skill investment even
-    without taking that path. Derive-on-read (ADR-0014).
-
-    Args:
-        learner: The character sheet wanting to learn the technique.
-        technique: The technique being learned.
-
-    Returns:
-        True if the technique's style is permitted for the learner's path.
-    """
-    path = current_path_for_character(learner.character)
-    if path is None:
-        return True
-    allowed = technique.style.cached_allowed_paths
-    if not allowed:
-        return True
-    if path in allowed:
-        return True
-    # Cross-path learning: check if the character meets any allowed path's
-    # TraitRequirements (#2538). Reuses the same requirement rows authored
-    # for hybrid path entry gating. Only applies when the allowed path has
-    # authored requirements — a path with no requirements is NOT open to
-    # cross-learning (its allowed_paths restriction stands as-is).
-    from world.progression.models import TraitRequirement  # noqa: PLC0415
-    from world.progression.services.spends import check_requirements_for_path  # noqa: PLC0415
-
-    for allowed_path in allowed:
-        if allowed_path.pk == path.pk:
-            continue
-        # Only cross-learn via paths that have authored requirements
-        if not TraitRequirement.objects.filter(path=allowed_path, is_active=True).exists():
-            continue
-        met, _ = check_requirements_for_path(learner.character, allowed_path)
-        if met:
-            return True
-    return False
 
 
 # ---------------------------------------------------------------------------
@@ -299,7 +250,7 @@ def magic_learning_ap_cost_surcharge_percent(learner: CharacterSheet) -> int:
 
 
 @transaction.atomic
-def charge_and_learn(  # noqa: C901, PLR0913 - shared core for two front doors; params co-equal
+def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params co-equal
     learner: CharacterSheet,
     technique: Technique,
     *,
@@ -351,7 +302,6 @@ def charge_and_learn(  # noqa: C901, PLR0913 - shared core for two front doors; 
     Raises:
         GiftUnlockMissing: First technique from a gift with no receipt.
         TechniqueCapExceeded: At the cap for this gift at current thread level.
-        TechniqueStyleForbidden: Learner's path doesn't permit the style.
         MagicError: Insufficient action points.
         ValueError: Learner already knows this technique.
     """
@@ -360,7 +310,6 @@ def charge_and_learn(  # noqa: C901, PLR0913 - shared core for two front doors; 
         GiftUnlockMissing,
         MagicError,
         TechniqueCapExceeded,
-        TechniqueStyleForbidden,
     )
     from world.magic.models import (  # noqa: PLC0415
         CharacterGift,
@@ -383,10 +332,6 @@ def charge_and_learn(  # noqa: C901, PLR0913 - shared core for two front doors; 
     if CharacterTechnique.objects.filter(character=sheet, technique=technique).exists():
         msg = f"{sheet} already knows {technique.name}."
         raise ValueError(msg)
-
-    # 1b. Check path-style restriction (shared gate).
-    if not can_learn_technique(sheet, technique):
-        raise TechniqueStyleForbidden
 
     # 2. Check if learner has the gift.
     has_gift = CharacterGift.objects.filter(character=sheet, gift=gift).exists()

@@ -110,16 +110,20 @@ class CalculateCapabilityPointsTests(TestCase):
         cls.check_type = CheckTypeFactory(name="test_svc_capability_check")
         cls.capability = CapabilityTypeFactory(name="test_svc_fire_control", innate_baseline=5)
 
-    def test_authored_row_shifts_points_by_weighted_value(self):
-        """An authored row contributes int(weight * effective_capability_value)."""
+    def test_authored_row_shifts_points_by_weighted_deviation(self):
+        """An authored row contributes int(weight * (value - innate_baseline))."""
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
+
         character = CharacterFactory()
-        CharacterSheetFactory(character=character)
+        sheet = CharacterSheetFactory(character=character)
+        target = ModifierTargetFactory(target_capability=self.capability)
+        CharacterModifierFactory(character=sheet, target=target, value=5)
         CheckTypeCapabilityModifierFactory(
             check_type=self.check_type,
             capability=self.capability,
             weight=Decimal("2.0"),
         )
-        # innate_baseline=5, weight=2.0 -> int(5 * 2.0) == 10
+        # baseline 5, effective 10 -> deviation 5, weight 2.0 -> 10
         points = _calculate_capability_points(character, self.check_type)
         assert points == 10
 
@@ -137,9 +141,14 @@ class CalculateCapabilityPointsTests(TestCase):
 
     def test_weight_rounding_truncates_toward_zero(self):
         """weight=0.5 truncates the product toward zero."""
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
+
         character = CharacterFactory()
-        CharacterSheetFactory(character=character)
-        odd_capability = CapabilityTypeFactory(name="test_svc_odd_capability", innate_baseline=3)
+        sheet = CharacterSheetFactory(character=character)
+        # baseline 0 -> deviation equals the raw value.
+        odd_capability = CapabilityTypeFactory(name="test_svc_odd_capability", innate_baseline=0)
+        target = ModifierTargetFactory(target_capability=odd_capability)
+        CharacterModifierFactory(character=sheet, target=target, value=3)
         CheckTypeCapabilityModifierFactory(
             check_type=self.check_type,
             capability=odd_capability,
@@ -163,8 +172,12 @@ class CalculateCapabilityPointsTests(TestCase):
 
     def test_folds_into_compute_check_breakdown_total_points(self):
         """capability_points is folded into total_points exactly like trait_points."""
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
+
         character = CharacterFactory()
-        CharacterSheetFactory(character=character)
+        sheet = CharacterSheetFactory(character=character)
+        target = ModifierTargetFactory(target_capability=self.capability)
+        CharacterModifierFactory(character=sheet, target=target, value=5)
         CheckTypeCapabilityModifierFactory(
             check_type=self.check_type,
             capability=self.capability,
@@ -183,6 +196,126 @@ class CalculateCapabilityPointsTests(TestCase):
         # total = capability_points(10) + level_points(LEVEL_POINTS_PER_LEVEL * 1, the
         # default level for a character with no CharacterClassLevel row) (#2707)
         assert breakdown.total_points == 10 + LEVEL_POINTS_PER_LEVEL
+
+    def test_unimpaired_character_contributes_zero(self):
+        """D3: value == innate_baseline contributes exactly 0 — no inflation."""
+        character = CharacterFactory()
+        CharacterSheetFactory(character=character)
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type,
+            capability=self.capability,
+            weight=Decimal("2.0"),
+        )
+        # innate_baseline=5, effective value 5 -> deviation 0 -> 2.0 * 0 == 0
+        points = _calculate_capability_points(character, self.check_type)
+        assert points == 0
+
+    def test_impaired_character_contributes_negative(self):
+        """D3: a condition-free character with a negative CharacterModifier goes negative."""
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
+
+        character = CharacterFactory()
+        sheet = CharacterSheetFactory(character=character)
+        impaired = CapabilityTypeFactory(name="test_svc_impaired_sense", innate_baseline=5)
+        target = ModifierTargetFactory(target_capability=impaired)
+        CharacterModifierFactory(character=sheet, target=target, value=-5)
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type,
+            capability=impaired,
+            weight=Decimal("2.0"),
+        )
+        # effective value max(0, 5 - 5) == 0 -> deviation -5 -> 2.0 * -5 == -10
+        points = _calculate_capability_points(character, self.check_type)
+        assert points == -10
+
+    def test_superhuman_capability_contributes_large_positive(self):
+        """D1: an uncapped ladder means a huge value produces a huge bonus."""
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
+
+        character = CharacterFactory()
+        sheet = CharacterSheetFactory(character=character)
+        mythic = CapabilityTypeFactory(name="test_svc_mythic_endurance", innate_baseline=5)
+        target = ModifierTargetFactory(target_capability=mythic)
+        CharacterModifierFactory(character=sheet, target=target, value=195)
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type,
+            capability=mythic,
+            weight=Decimal("1.0"),
+        )
+        # effective value 200 -> deviation 195 -> 1.0 * 195 == 195
+        points = _calculate_capability_points(character, self.check_type)
+        assert points == 195
+
+    def test_baseline_zero_capability_math_is_unchanged(self):
+        """D3 is a no-op for the 30 baseline-0 capabilities: deviation == value."""
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
+
+        character = CharacterFactory()
+        sheet = CharacterSheetFactory(character=character)
+        granted = CapabilityTypeFactory(name="test_svc_granted_only", innate_baseline=0)
+        target = ModifierTargetFactory(target_capability=granted)
+        CharacterModifierFactory(character=sheet, target=target, value=5)
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type,
+            capability=granted,
+            weight=Decimal("2.0"),
+        )
+        # baseline 0 -> deviation == effective value == 5 -> 2.0 * 5 == 10
+        points = _calculate_capability_points(character, self.check_type)
+        assert points == 10
+
+    def test_mixed_sign_rows_allocation_sums_to_total(self):
+        """Provenance rows must sum EXACTLY to the roll total when signs are mixed."""
+        from world.checks.constants import ModifierSourceKind
+        from world.checks.services import collect_check_modifiers
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
+
+        character = CharacterFactory()
+        sheet = CharacterSheetFactory(character=character)
+        up = CapabilityTypeFactory(name="test_svc_mixed_up", innate_baseline=5)
+        down = CapabilityTypeFactory(name="test_svc_mixed_down", innate_baseline=5)
+        up_target = ModifierTargetFactory(target_capability=up)
+        down_target = ModifierTargetFactory(target_capability=down)
+        CharacterModifierFactory(character=sheet, target=up_target, value=3)
+        CharacterModifierFactory(character=sheet, target=down_target, value=-2)
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type, capability=up, weight=Decimal("0.5")
+        )
+        CheckTypeCapabilityModifierFactory(
+            check_type=self.check_type, capability=down, weight=Decimal("0.5")
+        )
+
+        roll_total = _calculate_capability_points(character, self.check_type)
+        breakdown = collect_check_modifiers(sheet, self.check_type)
+        contribs = [
+            c for c in breakdown.contributions if c.source_kind == ModifierSourceKind.CAPABILITY
+        ]
+        # up: 0.5 * (8-5) = 1.5 ; down: 0.5 * (3-5) = -1.0 ; sum 0.5 -> truncates to 0
+        assert roll_total == 0
+        assert sum(c.value for c in contribs) == roll_total
+
+
+class BlindedSightBridgeTests(TestCase):
+    """#2704 end-to-end: a sense-blocking condition moves a sense-weighted check."""
+
+    def test_blocked_sense_penalizes_a_sight_weighted_check(self):
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
+
+        character = CharacterFactory()
+        sheet = CharacterSheetFactory(character=character)
+        check_type = CheckTypeFactory(name="test_2704_sight_check")
+        sight = CapabilityTypeFactory(name="test_2704_sight", innate_baseline=5)
+        CheckTypeCapabilityModifierFactory(
+            check_type=check_type, capability=sight, weight=Decimal("6.0")
+        )
+
+        # Unimpaired: contributes nothing.
+        assert _calculate_capability_points(character, check_type) == 0
+
+        # A potent block drives the effective value to 0 -> deviation -5 -> -30.
+        target = ModifierTargetFactory(target_capability=sight)
+        CharacterModifierFactory(character=sheet, target=target, value=-100)
+        assert _calculate_capability_points(character, check_type) == -30
 
 
 class PerformCheckTests(TestCase):

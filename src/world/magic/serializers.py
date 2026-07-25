@@ -189,7 +189,6 @@ class TechniqueSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "gift",
-            "style",
             "effect_type",
             "restriction_ids",
             "level",
@@ -3237,7 +3236,6 @@ class TechniqueDesignSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=200)
     description = serializers.CharField(allow_blank=True, default="")
     gift_id = serializers.IntegerField()
-    style_id = serializers.PrimaryKeyRelatedField(queryset=TechniqueStyle.objects.all())
     effect_type_id = serializers.PrimaryKeyRelatedField(queryset=EffectType.objects.all())
     action_category = serializers.CharField(max_length=10)
     tier = serializers.IntegerField(min_value=1, max_value=5)
@@ -3305,7 +3303,6 @@ class TechniqueDesignSerializer(serializers.Serializer):
             name=attrs["name"],
             description=attrs["description"],
             gift_id=attrs["gift_id"],
-            style_id=attrs["style_id"].id,
             effect_type_id=attrs["effect_type_id"].id,
             action_category=attrs["action_category"],
             tier=tier,

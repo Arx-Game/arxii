@@ -9,13 +9,11 @@ from world.magic.constants import GiftKind, TargetKind
 from world.magic.exceptions import (
     GiftNotOwned,
     TechniqueCapExceeded,
-    TechniqueStyleForbidden,
 )
 from world.magic.factories import (
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
-    TechniqueStyleFactory,
 )
 from world.magic.models import CharacterGift, Thread
 from world.magic.services.technique_acquisition import learn_technique
@@ -60,21 +58,31 @@ class LearnTechniqueTest(TestCase):
                 source=AccessChangeSource.TECHNIQUE_GRANT,
             )
 
-    def test_path_style_forbidden_raises(self):
+    def test_path_does_not_gate_learning(self):
+        """A learner's path never blocks a technique from an OWNED gift (#2700).
+
+        Gift ownership plus PathGiftGrant/TraditionGiftGrant curation is the gate;
+        the old path-style gate contradicted 71% of authored starter grants and was
+        bypassed entirely by grant_path_magic. Style now gates casting, not learning
+        (see StyleGatedCastingTests). ADR-0164.
+        """
         from world.classes.factories import PathFactory
+        from world.magic.factories import TechniqueStyleFactory
         from world.progression.factories import CharacterPathHistoryFactory
 
-        allowed = PathFactory()
-        other = PathFactory()
-        CharacterPathHistoryFactory(character=self.sheet, path=other)
-        style = TechniqueStyleFactory(allowed_paths=[allowed])
-        forbidden_tech = TechniqueFactory(gift=self.gift, style=style)
-        with self.assertRaises(TechniqueStyleForbidden):
-            learn_technique(
-                self.sheet,
-                forbidden_tech,
-                source=AccessChangeSource.TECHNIQUE_GRANT,
-            )
+        # A path whose style is nothing like the technique's origin.
+        subtle = TechniqueStyleFactory(name="Subtle")
+        CharacterPathHistoryFactory(
+            character=self.sheet, path=PathFactory(name="Path of Whispers", style=subtle)
+        )
+        technique = TechniqueFactory(gift=self.gift)
+
+        learned = learn_technique(
+            self.sheet,
+            technique,
+            source=AccessChangeSource.TECHNIQUE_GRANT,
+        )
+        self.assertEqual(learned.technique, technique)
 
     def test_cap_exceeded_raises(self):
         # Fill the cap (3 techniques for a level-0 thread)

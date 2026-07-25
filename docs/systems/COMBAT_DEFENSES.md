@@ -42,7 +42,7 @@ The PC rolls a defense check; the success level scales incoming damage.
 - **Modifier seam:** `resolve_npc_attack` routes the defense check through
   `collect_check_modifiers` — fashion, covenant-role, equipment, and condition
   modifiers all apply to defense, exactly as they do for offense.
-- **Opposed difficulty (#2707, ADR-0164):** the defense check now carries a real
+- **Opposed difficulty (#2707, ADR-0166):** the defense check now carries a real
   `target_difficulty` instead of a flat 0 — `world.checks.services.level_opposition`
   scores the attacking `CombatOpponent.level` (and its aspect match against the
   defending PC's Path) against the roll, so a level-20 opponent's attack is

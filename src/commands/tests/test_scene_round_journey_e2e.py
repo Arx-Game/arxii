@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from commands.scene import CmdScene
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus, SceneRoundMode
@@ -152,7 +152,8 @@ class SceneRoundJourneyTest(TestCase):
         self.assertTrue(result.success, f"StartRoundAction failed: {result.message}")
 
         rnd = SceneRound.objects.filter(
-            room=self.room, status__in=[RoundStatus.DECLARING, RoundStatus.BETWEEN_ROUNDS]
+            room=RoomProfileFactory(objectdb=self.room),
+            status__in=[RoundStatus.DECLARING, RoundStatus.BETWEEN_ROUNDS],
         ).first()
         self.assertIsNotNone(rnd, "An active SceneRound should exist after StartRoundAction")
 

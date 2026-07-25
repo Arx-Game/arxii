@@ -51,7 +51,7 @@ class Captivity(SharedMemoryModel):
         ),
     )
     holding_room = models.ForeignKey(
-        "objects.ObjectDB",
+        "evennia_extensions.RoomProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -61,8 +61,9 @@ class Captivity(SharedMemoryModel):
             " Null for instanced-cell captures — set when cell is null."
         ),
     )
-    # ObjectDB by design (#2608): raw capture-time `character.location` — no Room
-    # typeclass guarantee, so no RoomProfile to point at.
+    # ObjectDB by design (#2608)  noqa: OBJECTDB_FIELD
+    # Raw capture-time `character.location` — no Room typeclass guarantee, so
+    # there is no RoomProfile to point at.
     return_location = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.SET_NULL,

@@ -117,6 +117,7 @@
 **Pointed to by:**
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
+  - style_requirements <- magic.StyleCapabilityRequirement
   - auderemajorafaithvariantcapabilitygrant_grants <- magic.AudereMajoraFaithVariantCapabilityGrant
   - techniquevariantcapabilitygrant_grants <- magic.TechniqueVariantCapabilityGrant
   - signaturemotifbonuscapabilitygrant_grants <- magic.SignatureMotifBonusCapabilityGrant
@@ -409,9 +410,13 @@
 **Pointed to by:**
   - residents <- character_sheets.CharacterSheet
   - starting_area_default <- character_creation.StartingArea
+  - beginnings_start <- character_creation.Beginnings
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - portal_anchors <- magic.PortalAnchor
+  - scene_rounds <- scenes.SceneRound
+  - places <- scenes.Place
+  - speaker_queues <- scenes.SpeakerQueue
   - hidden_clues <- clues.RoomClue
   - clue_triggers <- clues.ClueTrigger
   - crime_evidence <- justice.CrimeEvidence
@@ -419,9 +424,14 @@
   - stat_modifiers <- locations.LocationValueModifier
   - ownership_records <- locations.LocationOwnership
   - tenancy_records <- locations.LocationTenancy
+  - instance_data <- instances.InstancedRoom
+  - held_captivities <- captivity.Captivity
   - placed_items <- items.RoomItem
   - crafting_service_offers <- items.CraftingServiceOffer
   - events <- events.Event
+  - dream_reflection <- dreams.DreamReflection
+  - reflection_of <- dreams.DreamReflection
+  - descent_source <- dreams.DreamReflection
   - ceremonies <- ceremonies.Ceremony
   - story_grants <- gm.StoryRoomGrant
   - ambient_emote_lines <- narrative.AmbientEmoteLine
@@ -1287,7 +1297,7 @@
 **Foreign Keys:**
   - captive -> character_sheets.CharacterSheet [FK]
   - cell -> instances.InstancedRoom [FK] (nullable)
-  - holding_room -> objects.ObjectDB [FK] (nullable)
+  - holding_room -> evennia_extensions.RoomProfile [FK] (nullable)
   - return_location -> objects.ObjectDB [FK] (nullable)
   - captor_organization -> societies.Organization [FK] (nullable)
   - ransom_project -> projects.Project [FK] (nullable)
@@ -1302,7 +1312,7 @@
   - rescue_template -> missions.MissionTemplate [FK] (nullable)
 
 ### Service Functions
-- `capture_character(*, captive: 'CharacterSheet', captor_organization: 'Organization | None' = None, return_location: 'ObjectDB | None' = None, offscreen_loss_allowed: 'bool' = False, cell: 'InstancedRoom | None' = None, group_key: 'str | None' = None, cell_name: 'str | None' = None, cell_description: 'str | None' = None, holding_room: 'ObjectDB | None' = None) -> 'Captivity' — Take one character into a cell and record the captivity.`
+- `capture_character(*, captive: 'CharacterSheet', captor_organization: 'Organization | None' = None, return_location: 'ObjectDB | None' = None, offscreen_loss_allowed: 'bool' = False, cell: 'InstancedRoom | None' = None, group_key: 'str | None' = None, cell_name: 'str | None' = None, cell_description: 'str | None' = None, holding_room: 'RoomProfile | None' = None) -> 'Captivity' — Take one character into a cell and record the captivity.`
 - `capture_party(*, captives: 'Iterable[CharacterSheet]', captor_organization: 'Organization | None' = None, return_location: 'ObjectDB | None' = None, offscreen_loss_allowed: 'bool' = False, cell_name: 'str | None' = None, cell_description: 'str | None' = None) -> 'list[Captivity]' — Capture several characters into one shared cell (the default).`
 - `complete_instanced_room(room: evennia.objects.models.ObjectDB) -> None — Mark room completed, relocate occupants, delete if no history.`
 - `escape_captivity(captive: 'CharacterSheet') -> 'bool' — Free a captive by their own hand (#931 Phase 4) — the escape loop's verb.`
@@ -1390,7 +1400,7 @@
   - art -> evennia_extensions.Media [FK] (nullable)
   - starting_area -> character_creation.StartingArea [FK]
   - heritage -> character_sheets.Heritage [FK] (nullable)
-  - starting_room_override -> objects.ObjectDB [FK] (nullable)
+  - starting_room_override -> evennia_extensions.RoomProfile [FK] (nullable)
   - property_grant_profile -> buildings.PropertyGrantProfile [FK] (nullable)
   - prelude_mission -> missions.MissionTemplate [FK] (nullable)
   - allowed_species -> species.Species [M2M]
@@ -1847,6 +1857,7 @@
 
 ### Path
 **Foreign Keys:**
+  - style -> magic.TechniqueStyle [FK] (nullable)
   - parent_paths -> classes.Path [M2M]
 **Pointed to by:**
   - skill_suggestions <- skills.PathSkillSuggestion
@@ -1867,7 +1878,6 @@
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
   - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
-  - allowed_styles <- magic.TechniqueStyle
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - gift_unlocks <- magic.GiftUnlock
   - glimpse_trigger_tags <- magic.GlimpseTag
@@ -2568,6 +2578,7 @@
 **Pointed to by:**
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
+  - style_requirements <- magic.StyleCapabilityRequirement
   - auderemajorafaithvariantcapabilitygrant_grants <- magic.AudereMajoraFaithVariantCapabilityGrant
   - techniquevariantcapabilitygrant_grants <- magic.TechniqueVariantCapabilityGrant
   - signaturemotifbonuscapabilitygrant_grants <- magic.SignatureMotifBonusCapabilityGrant
@@ -3388,16 +3399,16 @@
 
 ### DreamReflection
 **Foreign Keys:**
-  - waking_room -> objects.ObjectDB [OneToOne]
-  - dream_room -> objects.ObjectDB [OneToOne]
-  - descent_target -> objects.ObjectDB [FK] (nullable)
+  - waking_room -> evennia_extensions.RoomProfile [OneToOne]
+  - dream_room -> evennia_extensions.RoomProfile [OneToOne]
+  - descent_target -> evennia_extensions.RoomProfile [FK] (nullable)
 
 ### DreamPerilConfig
 **Foreign Keys:**
   - resist_check_type -> checks.CheckType [FK] (nullable)
 
 ### Service Functions
-- `get_dream_space(*, room: 'ObjectDB') -> 'ObjectDB | None' — Return the dream room for a physical waking room.`
+- `get_dream_space(*, room: 'ObjectDB') -> 'RoomProfile | None' — Return the dream room for a physical waking room.`
 
 
 ## world.estates
@@ -3807,7 +3818,7 @@
   - room -> evennia_extensions.RoomProfile [FK]
   - character -> character_sheets.CharacterSheet [FK]
   - granted_by -> gm.GMProfile [FK]
-  - return_location -> objects.ObjectDB [FK] (nullable)
+  - return_location -> evennia_extensions.RoomProfile [FK] (nullable)
 
 ### SituationKind
 **Pointed to by:**
@@ -3933,7 +3944,7 @@
 
 ### InstancedRoom
 **Foreign Keys:**
-  - room -> objects.ObjectDB [OneToOne]
+  - room -> evennia_extensions.RoomProfile [OneToOne]
   - owner -> character_sheets.CharacterSheet [FK] (nullable)
   - gm_owner -> gm.GMProfile [FK] (nullable)
   - return_location -> objects.ObjectDB [FK] (nullable)
@@ -4710,11 +4721,9 @@
   - combo_slots <- combat.ComboSlot
 
 ### TechniqueStyle
-**Foreign Keys:**
-  - allowed_paths -> classes.Path [M2M]
 **Pointed to by:**
-  - techniques <- magic.Technique
-  - technique_drafts <- magic.TechniqueDraft
+  - paths <- classes.Path
+  - capability_requirements <- magic.StyleCapabilityRequirement
 
 ### Restriction
 **Foreign Keys:**
@@ -4731,7 +4740,6 @@
 **Foreign Keys:**
   - discovery_achievement -> achievements.Achievement [FK] (nullable)
   - gift -> magic.Gift [FK]
-  - style -> magic.TechniqueStyle [FK]
   - effect_type -> magic.EffectType [FK]
   - enhances_effect_type -> magic.EffectType [FK] (nullable)
   - clash_resolution_pool -> actions.ConsequencePool [FK] (nullable)
@@ -4784,6 +4792,11 @@
 ### TechniqueCapabilityRequirement
 **Foreign Keys:**
   - technique -> magic.Technique [FK]
+  - capability -> conditions.CapabilityType [FK]
+
+### StyleCapabilityRequirement
+**Foreign Keys:**
+  - style -> magic.TechniqueStyle [FK]
   - capability -> conditions.CapabilityType [FK]
 
 ### CharacterTechnique
@@ -5467,7 +5480,6 @@
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [OneToOne]
   - gift -> magic.Gift [FK] (nullable)
-  - style -> magic.TechniqueStyle [FK] (nullable)
   - effect_type -> magic.EffectType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
   - restrictions -> magic.Restriction [M2M]
@@ -7586,7 +7598,7 @@
 
 ### SceneRound
 **Foreign Keys:**
-  - room -> objects.ObjectDB [FK]
+  - room -> evennia_extensions.RoomProfile [FK]
   - scene -> scenes.Scene [FK] (nullable)
 **Pointed to by:**
   - participants <- scenes.SceneRoundParticipant
@@ -7679,7 +7691,7 @@
 
 ### Place
 **Foreign Keys:**
-  - room -> objects.ObjectDB [FK] (nullable)
+  - room -> evennia_extensions.RoomProfile [FK] (nullable)
 **Pointed to by:**
   - interactions <- scenes.Interaction
   - presences <- scenes.PlacePresence
@@ -7710,7 +7722,7 @@
 
 ### SpeakerQueue
 **Foreign Keys:**
-  - room -> objects.ObjectDB [FK]
+  - room -> evennia_extensions.RoomProfile [FK]
   - scene -> scenes.Scene [FK] (nullable)
   - opened_by -> scenes.Persona [FK] (nullable)
 **Pointed to by:**

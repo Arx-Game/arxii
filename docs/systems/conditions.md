@@ -48,7 +48,7 @@ from world.conditions.types import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `ConditionCategory` | High-level groupings (damage-over-time, buff, debuff, etc.) | `name`, `description`, `display_order`, `is_negative`, `alters_behavior` |
-| `CapabilityType` | Actions that conditions can restrict/enhance | `name`, `description` |
+| `CapabilityType` | Actions that conditions can restrict/enhance | `name`, `description`, `innate_baseline` (int, default 0 — the ladder position every character starts from before modifiers/conditions; #2704, ADR-0164) |
 | `CheckType` | Check types that receive bonuses/penalties | `name`, `description` |
 | `DamageType` | Damage types for dealing/resisting | `name`, `description`, `resonance` (OneToOne to `mechanics.ModifierTarget`), `color_hex`, `icon` |
 
@@ -225,6 +225,72 @@ TEAM_BUFF_LANE_CAP_PERCENT)`. `target_level` resolves generically — a PC targe
 `world.magic.services.condition_application.apply_technique_conditions` seam — see
 `docs/systems/magic.md`'s "The Damage Identity" section for the full lane composition
 (vow-keyed stacking, the clamp, the execute ramp) and ADR-0158.
+
+### Capability value ladder (#2704, ADR-0164)
+
+Every `CapabilityType.innate_baseline` and every effective capability value share
+**one deliberately uncapped ladder**:
+
+| Value | Meaning |
+|-------|---------|
+| 0 | Blocked |
+| 1-3 | Impaired |
+| 5 | Unimpaired mortal |
+| 8-12 | Gifted |
+| 25+ | Greater supernatural |
+| 100+ | Mythic |
+
+Uncapped above 100 on purpose — a high enough value must let a being do what is
+flatly impossible for a mortal; an upper cap would foreclose that on principle.
+**The ladder itself is a code-independent design ruling (ADR-0164 D1)** — it is
+true regardless of what any given `CapabilityType` row currently holds. The
+*baseline value* for a specific capability, by contrast, is **authored content**
+(a `CapabilityType.innate_baseline` row maintained as a fixture in the content
+repo, not a code constant), and its current state varies by environment:
+
+- The three capacities code actually references —
+  `FoundationalCapability.AWARENESS`/`MOVEMENT`/`LIMB_USE`
+  (`world/conditions/constants.py`) — are *intended* to sit at 5 (the ladder's
+  unimpaired-mortal anchor) once their content rows are rescaled, but as of this
+  change most environments still carry `innate_baseline = 1` for them: the
+  rescale to 5 is a separate content-repo fixture commit, not something this
+  arxii change performs. `world.vitals.seeds.ensure_foundational_capabilities()`
+  seeds a *freshly created* row at 5, but for a pre-existing row only ever
+  *raises* it when it's below 1 (to 1, never to 5) — a safety net against an
+  unset baseline incapacitating everyone, not a normalizer onto the ladder.
+- `sight` and `hearing` are **not** existing `FoundationalCapability` constants,
+  and no code *logic* reads them — they are new `CapabilityType` rows being
+  authored as content alongside this change (content-repo fixture, not this
+  codebase), not existing foundational capacities on par with the three above.
+  The only mention of either name anywhere in `src/` is the authoring guidance
+  in `CapabilityType.innate_baseline`'s `help_text` (`world/conditions/models.py`,
+  copied verbatim into migration `0025_alter_capabilitytype_innate_baseline_and_more`)
+  — an instruction telling a content author what value to use when the rows are
+  authored, not an assertion that the rows already exist.
+- Granted/specialty capabilities (magic-adjacent, techniques-only — e.g.
+  `perception`, `at_will_shifting`) default `innate_baseline` to 0, per the
+  model field's own default (`world/conditions/models.py`).
+
+**Blocking a capability is emergent arithmetic, never a boolean flag (D2).** A
+`ConditionCapabilityEffect.value` sized to the tier it must beat drives the sum
+toward (and `get_effective_capability_value`'s `max(0, …)` floor catches it at) 0:
+
+| Tier | Magnitude | Beats |
+|------|-----------|-------|
+| Mundane | `-20` | Mortal and gifted (a greater supernatural walks out of it) |
+| Potent | `-100` | Everything below mythic |
+| Absolute | `-1000` (reserved) | Mythic-defeating effects only |
+
+E.g. Grappled (mundane, `-20`) stops a mortal or gifted character but not a
+greater-supernatural one; Frozen/Unconscious (potent, `-100`) stops everything
+short of mythic. See `docs/adr/0164-capability-value-ladder-and-emergent-blocking.md`
+for the full rationale and the rejected alternatives (a `blocks` boolean column;
+rescaling to a 0-100 percentage).
+
+The `world.checks` app's `CheckTypeCapabilityModifier` reads this ladder through a
+different lens for check-roll contribution — see `docs/systems/checks.md`'s
+"Authoring guardrail" and "Weight calibration" sections for the deviation-from-
+baseline scoring (D3) and the weight-calibration rule (D4).
 
 ### Querying Modifiers
 
