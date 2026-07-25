@@ -83,7 +83,14 @@ _DREAM_ROOM_DESC = (
 
 
 def ensure_foundational_capabilities() -> None:
-    """Ensure the foundational CapabilityType rows exist with baseline >= 1.
+    """Ensure the foundational CapabilityType rows exist.
+
+    A newly created row is seeded at the capability ladder's unimpaired-mortal
+    anchor (5, ADR-0164). This does NOT guarantee every row sits at 5: a
+    pre-existing row is only ever raised, and only when it is below 1 (to 1,
+    not to 5) — a row seeded before this change, sitting anywhere in 1-4, is
+    left untouched. The guard is a safety net against a zero baseline
+    incapacitating everyone, not a normalizer to the ladder anchor.
 
     ``can_act`` treats a missing awareness CapabilityType as "capability
     system unseeded" and returns True for everyone — so this row is what
@@ -107,12 +114,15 @@ def ensure_foundational_capabilities() -> None:
     for name, description in specs:
         capability = authored_or_sample(
             CapabilityType,
-            {"innate_baseline": 1, "description": description},
+            # 5 = the capability ladder's unimpaired-mortal anchor (ADR-0164).
+            {"innate_baseline": 5, "description": description},
             name=name,
         )
         if capability is not None and capability.innate_baseline < 1:
             # Foundational rows are code-owned: a zero baseline here means every
             # character is permanently incapacitated, so correct it on re-seed.
+            # This guard only ever raises a too-low baseline, so it never fights
+            # authored content that legitimately sets a value above 1.
             capability.innate_baseline = 1
             capability.save(update_fields=["innate_baseline"])
 

@@ -10,7 +10,12 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from evennia_extensions.models import RoomProfile
 from world.areas.constants import AreaLevel, GridOrigin
 from world.character_sheets.factories import CharacterSheetFactory
@@ -181,7 +186,9 @@ class StoryInstancesTests(StoryBuilderApiBase):
 
     def test_instance_row_shape(self) -> None:
         room = ObjectDBFactory(db_key="Goblin Cave", db_typeclass_path="typeclasses.rooms.Room")
-        instance = InstancedRoomFactory(gm_owner=self.gm, status=InstanceStatus.ACTIVE, room=room)
+        instance = InstancedRoomFactory(
+            gm_owner=self.gm, status=InstanceStatus.ACTIVE, room=RoomProfileFactory(objectdb=room)
+        )
         response = self._get(self._url(), self.gm_account)
         row = next(r for r in response.data if r["id"] == instance.pk)
         self.assertEqual(row["room_id"], instance.room_id)
@@ -192,7 +199,9 @@ class StoryInstancesTests(StoryBuilderApiBase):
     def test_instance_row_includes_grants_for_granted_room(self) -> None:
         room = ObjectDBFactory(db_key="Goblin Cave", db_typeclass_path="typeclasses.rooms.Room")
         profile, _created = RoomProfile.objects.get_or_create(objectdb=room)
-        instance = InstancedRoomFactory(gm_owner=self.gm, status=InstanceStatus.ACTIVE, room=room)
+        instance = InstancedRoomFactory(
+            gm_owner=self.gm, status=InstanceStatus.ACTIVE, room=RoomProfileFactory(objectdb=room)
+        )
         sheet = CharacterSheetFactory(character=ObjectDBFactory(db_key="Grantee"))
         StoryRoomGrantFactory(room=profile, character=sheet, granted_by=self.gm)
 
@@ -203,13 +212,19 @@ class StoryInstancesTests(StoryBuilderApiBase):
     def test_instance_row_does_not_leak_grants_from_other_rooms(self) -> None:
         """A grant on another GM's instance room never bleeds into an unrelated row's list."""
         room = ObjectDBFactory(db_key="Goblin Cave", db_typeclass_path="typeclasses.rooms.Room")
-        instance = InstancedRoomFactory(gm_owner=self.gm, status=InstanceStatus.ACTIVE, room=room)
+        instance = InstancedRoomFactory(
+            gm_owner=self.gm, status=InstanceStatus.ACTIVE, room=RoomProfileFactory(objectdb=room)
+        )
 
         other_room = ObjectDBFactory(
             db_key="Other Cave", db_typeclass_path="typeclasses.rooms.Room"
         )
         other_profile, _created = RoomProfile.objects.get_or_create(objectdb=other_room)
-        InstancedRoomFactory(gm_owner=self.other_gm, status=InstanceStatus.ACTIVE, room=other_room)
+        InstancedRoomFactory(
+            gm_owner=self.other_gm,
+            status=InstanceStatus.ACTIVE,
+            room=RoomProfileFactory(objectdb=other_room),
+        )
         sheet = CharacterSheetFactory(character=ObjectDBFactory(db_key="Elsewhere"))
         StoryRoomGrantFactory(room=other_profile, character=sheet, granted_by=self.other_gm)
 

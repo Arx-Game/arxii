@@ -59,6 +59,20 @@ class Path(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="Action arena this path specializes in (drives CG technique category).",
     )
+    style = models.ForeignKey(
+        "magic.TechniqueStyle",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="paths",
+        help_text=(
+            "How this path's practitioners work magic (#2700). Style is a property of "
+            "the caster, not of the technique: the same catalog Technique is an "
+            "Incantation cast by a Path of Tomes character and a Manifestation cast by "
+            "a Path of Steel one. Drives the style's StyleCapabilityRequirement rows at "
+            "cast time. Null = the path imposes no style (pathless/NPC casters likewise)."
+        ),
+    )
 
     # Evolution hierarchy - which lower-stage paths can evolve into this
     parent_paths = models.ManyToManyField(

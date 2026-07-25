@@ -59,14 +59,6 @@ class TechniqueDraft(SharedMemoryModel):
         related_name="technique_drafts",
         help_text="Gift this technique will belong to.",
     )
-    style = models.ForeignKey(
-        "magic.TechniqueStyle",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="technique_drafts",
-        help_text="Technique style (restricted by Path).",
-    )
     effect_type = models.ForeignKey(
         "magic.EffectType",
         on_delete=models.SET_NULL,

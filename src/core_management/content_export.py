@@ -42,7 +42,7 @@ class ContentExportError(Exception):
 #: Every model here must have ``NaturalKeyMixin`` so the exported fixtures
 #: are identity-stable (no pk churn) and round-trip through ``load_entries``.
 #:
-#: **Config never belongs here** (TehomCD, 2026-07-25; ADR-0164). This set is
+#: **Config never belongs here** (TehomCD, 2026-07-25; ADR-0168). This set is
 #: also what #2698's seeder guard reads: whatever is registered here, the
 #: content repo owns and no seeder may create. So a mechanical tuning table
 #: registered by mistake doesn't just bloat the corpus — it tells the seeder to
@@ -159,6 +159,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.restriction",
         "magic.resonanceconversion",
         "magic.ritual",
+        "magic.stylecapabilityrequirement",
         "magic.technique",
         "magic.techniqueappliedcondition",
         "magic.techniquecapabilitygrant",

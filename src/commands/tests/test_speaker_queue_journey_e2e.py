@@ -19,7 +19,7 @@ from actions.definitions.speaker_queue import (
     OpenSpeakerQueueAction,
     SkipSpeakerAction,
 )
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.speaker_queue_models import SpeakerQueue
@@ -87,7 +87,7 @@ class SpeakerQueueJourneyE2E(TestCase):
         result = CloseSpeakerQueueAction().run(actor=self.alice)
         self.assertTrue(result.success)
 
-        queue = SpeakerQueue.objects.get(room=self.room)
+        queue = SpeakerQueue.objects.get(room=RoomProfileFactory(objectdb=self.room))
         self.assertFalse(queue.is_active)
 
     def test_advance_by_non_current_non_opener_fails(self):

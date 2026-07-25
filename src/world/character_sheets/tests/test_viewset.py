@@ -1079,11 +1079,14 @@ class TestMagicSectionFull(TestCase):
         cls.gift = GiftFactory(name="Iron Will", description="Unyielding magical will.")
         cls.gift.resonances.add(cls.resonance_resolve, cls.resonance_metal)
 
+        # Style is caster-derived (#2700): it comes from the sheet's Path, not the
+        # technique, so the sheet gets a Path of Steel whose style is Manifestation.
         cls.style = TechniqueStyleFactory(name="Manifestation")
+        cls.path = PathFactory(name="Path of Steel", style=cls.style)
+        CharacterPathHistoryFactory(character=cls.sheet, path=cls.path)
         cls.technique = TechniqueFactory(
             name="Steel Skin",
             gift=cls.gift,
-            style=cls.style,
             level=3,
             description="Hardens skin to steel.",
         )
@@ -1197,7 +1200,7 @@ class TestMagicSectionFull(TestCase):
         assert set(gift["resonances"]) == {"Resolve", "Metal"}
 
     def test_gift_techniques(self) -> None:
-        """Gift entry contains techniques with name, level, style, description."""
+        """Gift entry techniques carry name, level, the CASTER's style, description."""
         magic = self._get_magic()
         gift = magic["gifts"][0]
         assert len(gift["techniques"]) == 1
@@ -2003,8 +2006,7 @@ class TestCharacterSheetQueryCount(TestCase):
         resonance = ResonanceFactory(name="QCResolve")
         gift = GiftFactory(name="QCIronWill")
         gift.resonances.add(resonance)
-        style = TechniqueStyleFactory(name="QCManifestation")
-        technique = TechniqueFactory(name="QCSteelSkin", gift=gift, style=style, level=2)
+        technique = TechniqueFactory(name="QCSteelSkin", gift=gift, level=2)
         CharacterGiftFactory(character=cls.sheet, gift=gift)
         CharacterTechniqueFactory(character=cls.sheet, technique=technique)
 
@@ -2219,8 +2221,7 @@ class TestPrefetchCompleteness(TestCase):
         resonance = ResonanceFactory(name="PFResolve")
         gift = GiftFactory(name="PFGift")
         gift.resonances.add(resonance)
-        style = TechniqueStyleFactory(name="PFStyle")
-        technique = TechniqueFactory(name="PFTech", gift=gift, style=style, level=1)
+        technique = TechniqueFactory(name="PFTech", gift=gift, level=1)
         CharacterGiftFactory(character=cls.sheet, gift=gift)
         CharacterTechniqueFactory(character=cls.sheet, technique=technique)
 

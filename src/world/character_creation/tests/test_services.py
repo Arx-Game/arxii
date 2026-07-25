@@ -24,7 +24,6 @@ from world.magic.factories import (
     PathGiftGrantFactory,
     ResonanceFactory,
     TechniqueFactory,
-    TechniqueStyleFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
@@ -69,7 +68,7 @@ class FinalizationTestMixin:
         """Create common CG prerequisites on target (cls or self).
 
         Sets: realm, area, species, gender, tarot_card, beginnings,
-        height_band, build, path, technique_style, effect_type, resonance, tradition.
+        height_band, build, path, effect_type, resonance, tradition.
         """
         slug = prefix.lower().replace(" ", "_")
 
@@ -121,7 +120,6 @@ class FinalizationTestMixin:
             )
         Roster.objects.get_or_create(name="Available Characters")
         target.path = PathFactory(name=f"{prefix} Path", stage=PathStage.PROSPECT, minimum_level=1)
-        target.technique_style = TechniqueStyleFactory()
         target.effect_type = EffectTypeFactory()
         target.resonance = ResonanceFactory()
         target.tradition = TraditionFactory()
@@ -130,9 +128,7 @@ class FinalizationTestMixin:
         # with a pool technique, plus a Skill for the anima check.
         target.gift = GiftFactory(name=f"{prefix} Gift")
         path_grant = PathGiftGrantFactory(path=target.path, gift=target.gift)
-        target.technique = TechniqueFactory(
-            gift=target.gift, style=target.technique_style, effect_type=target.effect_type
-        )
+        target.technique = TechniqueFactory(gift=target.gift, effect_type=target.effect_type)
         path_grant.starter_techniques.set([target.technique])
         TraditionGiftGrantFactory(tradition=target.tradition, gift=target.gift)
         target.skill = SkillFactory()

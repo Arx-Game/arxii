@@ -19,7 +19,7 @@ resync — a staff edit to a seeded `CGExplanation` row now survives a re-seed,
 matching every other content row. `SEEDER_GRANDFATHERED_MODELS` is now an empty
 frozenset: the guard is a plain invariant (seeders never write content) rather
 than a ratchet being paid down. See `docs/systems/character_creation.md`'s
-"Seeded content + Game Setup hub" section and ADR-0164.
+"Seeded content + Game Setup hub" section and ADR-0168.
 
 ## Built (2026-07-18, #2474 — CG magic catalog is lore-repo content, not seed data)
 

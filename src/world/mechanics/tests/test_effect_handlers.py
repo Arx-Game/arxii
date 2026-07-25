@@ -288,7 +288,7 @@ class CaptureHandlerTests(TestCase):
 
         assert result.applied
         captivity = Captivity.objects.get(captive=sheet)
-        assert captivity.cell.room.db_key == "The Blood Crypt"
+        assert captivity.cell.room.objectdb.db_key == "The Blood Crypt"
 
     def test_capture_plants_a_rescue_clue_at_the_capture_site(self) -> None:
         from evennia_extensions.factories import RoomProfileFactory
@@ -481,7 +481,7 @@ class CaptureBrigRoutingTests(TestCase):
         assert sheet.lifecycle_state == LifecycleState.CAPTURED
         captivity = Captivity.objects.get(captive=sheet)
         assert captivity.cell is None
-        assert captivity.holding_room == brig_room
+        assert captivity.holding_room == brig_room.room_profile
         assert character.location == brig_room
 
     def test_capture_falls_back_to_instanced_cell_when_no_brig(self) -> None:
@@ -513,7 +513,7 @@ class CaptureBrigRoutingTests(TestCase):
         for i in range(2):
             c = CharacterFactory(db_key=f"filler_{i}")
             s = CharacterSheetFactory(character=c)
-            capture_character(captive=s, holding_room=brig_room)
+            capture_character(captive=s, holding_room=brig_room.room_profile)
 
         # Now try to capture a third.
         captor_room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")

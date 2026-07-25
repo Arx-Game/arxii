@@ -102,14 +102,13 @@ class Trait(NaturalKeyMixin, SharedMemoryModel):
         help_text="Whether this trait should display by default in character sheets",
     )
 
-    # Caching for case-insensitive lookups
-    _name_cache_built = False
-    _name_to_trait_map: dict[str, "Trait"] = {}
-
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
         fields = ["name"]
+        # Small set of stats/skills read by name from handlers and predicates
+        # everywhere — load it whole once (#2687).
+        lookup_table = True
 
     class Meta:
         ordering = ["trait_type", "category", "name"]
@@ -131,51 +130,21 @@ class Trait(NaturalKeyMixin, SharedMemoryModel):
 
     @classmethod
     def get_by_name(cls, name: str) -> Optional["Trait"]:
+        """Get a trait by name (case-insensitive), or None if absent.
+
+        Delegates to the generic natural-key index (#2687). ``Trait`` is a
+        ``lookup_table``: a small set used everywhere, so the whole table loads
+        once and every lookup after resolves from memory — the same
+        one-query-then-free behaviour the hand-rolled ``_build_name_cache``
+        provided, minus the bespoke cache.
+
+        Returns None rather than raising, because callers branch on it
+        (``world/traits/handlers.py``, ``world/predicates/predicates.py``).
         """
-        Get a trait by name with case-insensitive lookup and caching.
-
-        Args:
-            name: Trait name to look up (case-insensitive)
-
-        Returns:
-            Trait instance or None if not found
-        """
-        if not cls._name_cache_built:
-            cls._build_name_cache()
-
-        return cls._name_to_trait_map.get(name.lower())
-
-    @classmethod
-    def _build_name_cache(cls) -> None:
-        """Build the name-to-trait mapping cache from the database.
-
-        Queries every row once on first use; subsequent ``get_by_name`` calls
-        return from the cache without further queries. The query also primes
-        SharedMemoryModel's identity map as a side effect, so ``objects.get(pk=X)``
-        calls in the same process hit the cache too.
-
-        Previously iterated ``get_all_cached_instances()`` which depends on the
-        identity map being pre-populated — a fragile assumption that fails in
-        tests where the runner flushes the identity map between methods (the
-        cache would rebuild empty, and ``get_by_name`` would return None for
-        every lookup). Querying the DB directly makes this independent of
-        identity-map state.
-        """
-        cls._name_to_trait_map = {}
-        for trait in cls.objects.all():
-            cls._name_to_trait_map[trait.name.lower()] = trait
-        cls._name_cache_built = True
-
-    @classmethod
-    def clear_name_cache(cls) -> None:
-        """Clear the name cache (call when traits are modified)."""
-        cls._name_cache_built = False
-        cls._name_to_trait_map = {}
-
-    def save(self, *args: Any, **kwargs: Any) -> None:
-        """Override save to clear name cache when traits are modified."""
-        super().save(*args, **kwargs)
-        self.__class__.clear_name_cache()
+        try:
+            return cast("Trait", cls.objects.get_by_natural_key(name))
+        except cls.DoesNotExist:
+            return None
 
 
 class TraitRankDescription(NaturalKeyMixin, SharedMemoryModel):

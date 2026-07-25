@@ -7,7 +7,6 @@ from world.magic.factories import (
     GiftFactory,
     RestrictionFactory,
     TechniqueFactory,
-    TechniqueStyleFactory,
 )
 from world.magic.models import Technique
 
@@ -19,7 +18,6 @@ class TechniqueModelTests(TestCase):
     def setUpTestData(cls):
         """Set up test data for all test methods."""
         cls.gift = GiftFactory(name="Shadow Majesty")
-        cls.style = TechniqueStyleFactory(name="Test Manifestation")
         cls.effect_type = EffectTypeFactory(name="Test Attack", base_power=10)
         cls.restriction1 = RestrictionFactory(name="Test Touch Range", power_bonus=10)
         cls.restriction2 = RestrictionFactory(name="Test Line of Sight", power_bonus=5)
@@ -27,7 +25,6 @@ class TechniqueModelTests(TestCase):
         cls.technique = Technique.objects.create(
             name="Shadow Bolt",
             gift=cls.gift,
-            style=cls.style,
             effect_type=cls.effect_type,
             level=5,
             anima_cost=3,
@@ -45,7 +42,6 @@ class TechniqueModelTests(TestCase):
         """Test creation of a technique with all relationships."""
         self.assertEqual(self.technique.name, "Shadow Bolt")
         self.assertEqual(self.technique.gift, self.gift)
-        self.assertEqual(self.technique.style, self.style)
         self.assertEqual(self.technique.effect_type, self.effect_type)
         self.assertEqual(self.technique.level, 5)
         self.assertEqual(self.technique.anima_cost, 3)
@@ -126,7 +122,6 @@ class TechniqueModelTests(TestCase):
         technique = Technique.objects.create(
             name="Default Level",
             gift=self.gift,
-            style=self.style,
             effect_type=self.effect_type,
             anima_cost=1,
         )
@@ -138,7 +133,6 @@ class TechniqueModelTests(TestCase):
         technique2 = Technique.objects.create(
             name="Shadow Bolt",  # Same name as existing
             gift=gift2,
-            style=self.style,
             effect_type=self.effect_type,
             level=1,
             anima_cost=2,
@@ -152,13 +146,6 @@ class TechniqueModelTests(TestCase):
         self.gift.delete()
         self.assertFalse(Technique.objects.filter(pk=technique_pk).exists())
 
-    def test_style_protect_delete(self):
-        """Test that style is protected from deletion if techniques exist."""
-        from django.db.models import ProtectedError
-
-        with self.assertRaises(ProtectedError):
-            self.style.delete()
-
     def test_effect_type_protect_delete(self):
         """Test that effect_type is protected from deletion if techniques exist."""
         from django.db.models import ProtectedError
@@ -169,10 +156,6 @@ class TechniqueModelTests(TestCase):
     def test_gift_related_name(self):
         """Test that Gift has techniques related name."""
         self.assertIn(self.technique, self.gift.techniques.all())
-
-    def test_style_related_name(self):
-        """Test that TechniqueStyle has techniques related name."""
-        self.assertIn(self.technique, self.style.techniques.all())
 
     def test_effect_type_related_name(self):
         """Test that EffectType has techniques related name."""
@@ -192,7 +175,6 @@ class TechniqueFactoryTests(TestCase):
         self.assertIsInstance(technique, Technique)
         self.assertTrue(technique.name)
         self.assertIsNotNone(technique.gift)
-        self.assertIsNotNone(technique.style)
         self.assertIsNotNone(technique.effect_type)
 
     def test_factory_with_restrictions(self):
@@ -215,12 +197,6 @@ class TechniqueFactoryTests(TestCase):
         gift = GiftFactory(name="Custom Gift")
         technique = TechniqueFactory(gift=gift)
         self.assertEqual(technique.gift, gift)
-
-    def test_factory_with_custom_style(self):
-        """Test factory accepts custom style."""
-        style = TechniqueStyleFactory(name="Custom Style")
-        technique = TechniqueFactory(style=style)
-        self.assertEqual(technique.style, style)
 
     def test_factory_with_custom_effect_type(self):
         """Test factory accepts custom effect type."""

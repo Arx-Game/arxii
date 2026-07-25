@@ -58,14 +58,17 @@ class PathAdmin(admin.ModelAdmin):
     list_display = [
         "name",
         "stage",
+        "style",
         "minimum_level",
         "is_active",
         "parent_count",
         "aspect_summary",
     ]
-    list_filter = ["stage", "is_active"]
+    list_filter = ["stage", "is_active", "style"]
     search_fields = ["name", "description"]
     filter_horizontal = ["parent_paths"]
+    autocomplete_fields = ["style"]
+    list_select_related = ["style"]
     inlines = [
         PathAspectInline,
         PathCodexGrantInline,

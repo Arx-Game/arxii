@@ -88,6 +88,49 @@ against alphabetical load order, `load_world_content`'s retry step is a **fixpoi
 loop** (`_retry_deferred`) — repeated deferral-on passes until one resolves nothing
 new — not the single one-shot retry pass described above for the content/grid case.
 
+### Natural-key lookup index and case-insensitivity (#2687, ADR-0163)
+
+`get_by_natural_key` is backed by a process-level `tuple -> pk` index
+(`core.natural_keys._NK_PK_INDEX`), invisible to callers — no code needs to know
+it exists. The first lookup for a given key queries; every later lookup for that
+same key resolves through the index plus the identity map (zero queries for a
+`SharedMemoryModel`; a pk `SELECT` for the 7 `NaturalKeyMixin` models that aren't
+one). This matters most for fixture loads and FK-heavy natural keys: a species
+referenced by a dozen stat-bonus/grant rows used to pay a full lookup query per
+reference and now pays one.
+
+**Natural-key text matching is case-insensitive** — `name="Fire Bolt"` and
+`name="fire bolt"` resolve to the same row via `__iexact` (numeric/boolean
+components still match exactly). A pair of rows whose natural keys differ only by
+case is a content bug, not a supported state: on a lazy model it now surfaces
+loudly as `MultipleObjectsReturned` from `get_by_natural_key`; on a model that
+opts into `lookup_table = True` (below), `warm_lookup_table()` catches it earlier
+and more precisely, naming both offending pks, at warm time.
+
+**`NaturalKeyConfig.lookup_table = True` opts a model into whole-table warming**
+— the first lookup loads and indexes the entire table, and every later lookup
+for that model never issues an `iexact` query at all. Opt-in, not automatic,
+because some natural-key tables are large and must never be bulk-loaded on what
+a caller expects to be a cheap single-row lookup; whether a table qualifies is a
+per-model judgement about its size and access pattern (a small always-used
+catalog like `ConditionTemplate` or `Trait`, versus growable authored content
+like `ThreatPool`). The natural key must also be FK-free to opt in — warming
+calls `natural_key()` per row, which would cost a query per row if any
+component were a ForeignKey.
+
+**Gap:** `queryset.update(name=...)` bypasses `save()`, so it leaves a stale
+index entry pointing the old key at the renamed row — the invalidation lives in
+`NaturalKeyMixin.save()`, which a bulk `.update()` never calls. This is the same
+class of hazard the identity map already has (`.update()` doesn't refresh cached
+instances either); use `save()` on individual instances, not a bulk `.update()`,
+when renaming a natural-key field.
+
+**Testing note:** SQLite's `LIKE` is already ASCII-case-insensitive and
+text-converts numeric operands, so a behavioural case-insensitivity assertion
+can pass on the fast SQLite tier even when the underlying `__iexact` wiring is
+broken — CI's PostgreSQL parity run is the real gate for this behaviour. See
+`docs/adr/0163-case-insensitive-natural-keys-and-opt-in-lookup-tables.md`.
+
 ### Migration-number collisions on sync-with-main
 
 When `sync-with-main.sh` conflicts on `migrations/max_migration.txt` for an app, both branches added an independent field-add migration at the same sequence number. Resolve by keeping HEAD's stable and renumbering main's:

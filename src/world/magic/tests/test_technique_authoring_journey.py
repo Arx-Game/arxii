@@ -42,7 +42,6 @@ from world.magic.factories import (
     EffectTypeFactory,
     GiftFactory,
     RestrictionFactory,
-    TechniqueStyleFactory,
 )
 from world.magic.models import (
     Technique,
@@ -65,7 +64,6 @@ class TechniqueAuthoringJourneyTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
         cls.gift = GiftFactory(creator=cls.sheet)
-        cls.style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
         cls.restriction = RestrictionFactory(power_bonus=10)
         cls.capability = CapabilityTypeFactory()
@@ -140,7 +138,6 @@ class TechniqueAuthoringJourneyTests(TestCase):
         self.character.msg.reset_mock()
         self._run(
             f"set gift={self.gift.pk}"
-            f" style={self.style.pk}"
             f" effect_type={self.effect_type.pk}"
             f" action_category=physical"
             f" tier=1"
@@ -150,7 +147,6 @@ class TechniqueAuthoringJourneyTests(TestCase):
         )
         draft = TechniqueDraft.objects.get(character=self.sheet)
         assert draft.gift_id == self.gift.pk
-        assert draft.style_id == self.style.pk
         assert draft.effect_type_id == self.effect_type.pk
         assert draft.action_category == "physical"
         assert draft.tier == 1
@@ -270,7 +266,7 @@ class TechniqueAuthoringJourneyTests(TestCase):
 
         self._run("draft Flavored Cast")
         self._run(
-            f"set gift={self.gift.pk} style={self.style.pk} effect_type={self.effect_type.pk} "
+            f"set gift={self.gift.pk} effect_type={self.effect_type.pk} "
             "action_category=mental tier=1 intensity=1 control=1 anima_cost=1"
         )
         self._run(f"set consequence_pool={chosen.consequence_pool_id}")
@@ -295,7 +291,7 @@ class TechniqueAuthoringJourneyTests(TestCase):
 
         self._run("draft Brutal Strike")
         self._run(
-            f"set gift={self.gift.pk} style={self.style.pk} effect_type={self.effect_type.pk} "
+            f"set gift={self.gift.pk} effect_type={self.effect_type.pk} "
             "action_category=physical tier=1 intensity=1 control=1 anima_cost=1"
         )
         self._run(f"set consequence_pool={chosen.consequence_pool_id}")
@@ -338,7 +334,6 @@ class TechniqueAuthoringJourneyTests(TestCase):
         self._run("draft Budget Breaker")
         self._run(
             f"set gift={self.gift.pk}"
-            f" style={self.style.pk}"
             f" effect_type={self.effect_type.pk}"
             f" action_category=physical"
             f" tier=1"

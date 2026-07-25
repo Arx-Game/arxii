@@ -5,7 +5,12 @@ from __future__ import annotations
 from django.test import TestCase
 
 from actions.definitions.places import JoinPlaceAction, LeavePlaceAction
-from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.factories import PersonaFactory, PlaceFactory
 from world.scenes.place_models import PlacePresence
@@ -22,7 +27,7 @@ class JoinPlaceActionTests(TestCase):
         persona = PersonaFactory(character_sheet=sheet)
         sheet.active_persona = persona
         sheet.save(update_fields=["active_persona"])
-        place = PlaceFactory(room=room, name="The Bar")
+        place = PlaceFactory(room=RoomProfileFactory(objectdb=room), name="The Bar")
 
         result = JoinPlaceAction().run(actor=actor, place=place)
         assert result.success
@@ -53,7 +58,7 @@ class LeavePlaceActionTests(TestCase):
         persona = PersonaFactory(character_sheet=sheet)
         sheet.active_persona = persona
         sheet.save(update_fields=["active_persona"])
-        place = PlaceFactory(room=room, name="The Bar")
+        place = PlaceFactory(room=RoomProfileFactory(objectdb=room), name="The Bar")
         PlacePresence.objects.create(place=place, persona=persona)
 
         result = LeavePlaceAction().run(actor=actor, place=place)
@@ -70,7 +75,7 @@ class LeavePlaceActionTests(TestCase):
         actor.save()
         sheet = CharacterSheetFactory(character=actor)
         PersonaFactory(character_sheet=sheet)
-        place = PlaceFactory(room=room, name="The Hearth")
+        place = PlaceFactory(room=RoomProfileFactory(objectdb=room), name="The Hearth")
 
         result = LeavePlaceAction().run(actor=actor, place=place)
         assert not result.success

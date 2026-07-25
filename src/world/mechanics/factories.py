@@ -119,7 +119,7 @@ def ensure_team_damage_percent_target() -> ModifierTarget | None:
     ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
     (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
     on. (The docstring this replaced argued the row was "mechanics config, not
-    authored game content" and therefore safe to seed directly — ADR-0164
+    authored game content" and therefore safe to seed directly — ADR-0168
     settled that the ``CONTENT_MODELS`` registration is the sole line, no
     per-model judgment calls, so that reasoning no longer holds.) Called from
     the magic dev seed (``world.seeds.game_content.magic.seed_magic_dev``) and

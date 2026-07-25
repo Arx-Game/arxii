@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from django.test import TestCase, override_settings, tag
 
+from evennia_extensions.factories import RoomProfileFactory
 from world.areas.positioning.constants import (
     FALL_DAMAGE_TYPE_NAME,
     PLUMMETING_CONDITION_NAME,
@@ -184,7 +185,7 @@ class PlummetDescentTests(TestCase):
     def test_danger_round_persists_while_plummeting(self) -> None:
         self._start_plummet_at(self.top_chasm)
         rnd = SceneRound.objects.filter(
-            room=self.room, start_reason=SceneRoundStartReason.DANGER
+            room=RoomProfileFactory(objectdb=self.room), start_reason=SceneRoundStartReason.DANGER
         ).first()
         self.assertIsNotNone(rnd)
         self.assertTrue(_danger_persists(rnd))

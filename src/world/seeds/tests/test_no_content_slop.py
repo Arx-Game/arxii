@@ -13,7 +13,7 @@ But the same seeders also create *named* rows a player reads as world content �
 content repo indistinguishable from authored work. That is how "Commoner",
 "Noble", "Arx City" and "Luxen Port" got there.
 
-The settled rule (TehomCD, 2026-07-25; ADR-0164) — **the registration is the
+The settled rule (TehomCD, 2026-07-25; ADR-0168) — **the registration is the
 line, not the shape of the table**:
 
     If a model is in ``CONTENT_MODELS``, the content repo owns it and no
@@ -60,7 +60,7 @@ from world.seeds.tests.content_stub import stub_content_root
 #: content root, which carries almost no content, so the two tests below both
 #: hold with this set empty.
 #:
-#: History (#2698): the ratchet started at 70 entries (the ADR-0164 audit) and
+#: History (#2698): the ratchet started at 70 entries (the ADR-0168 audit) and
 #: was paid down in passes — magic.* (15 models), conditions.* (10),
 #: mechanics.*/flows.* (11), achievements/covenants/missions/realms/
 #: relationships (11), checks.*/skills.skill/classes.*/traits.trait (7, which

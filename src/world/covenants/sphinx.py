@@ -40,24 +40,18 @@ from world.covenants.models import (
 )
 from world.covenants.perks.constants import SITUATION_CREATOR_FUNCTIONS, PerkBeneficiary
 from world.magic.models import (
+    CharacterGift,
     CharacterTechnique,
-    CharacterTradition,
     Technique,
     TechniqueFunctionTag,
     Tradition,
-    TraditionGiftGrant,
 )
-from world.magic.services.gift_acquisition import can_learn_technique
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
 
 #: Shopping-list cap per uncovered function (spec: "up to 3 Technique rows").
 _SHOPPING_LIST_PER_FUNCTION = 3
-#: Candidate pool cap per function before the learnability check — bounds the
-#: per-candidate ``can_learn_technique`` calls to a small, predictable number.
-_SHOPPING_CANDIDATE_POOL = 20
-
 #: The label used for demand rows sourced from a role's technique-specialty
 #: table, distinguishing them from perk-sourced (situation) demand rows whose
 #: ``source`` is the perk's own authored name.
@@ -290,28 +284,6 @@ def _uncovered_target_functions(demands: list[SphinxDemand]) -> set[str]:
     return targets
 
 
-def _special_technique_ids(sheet: CharacterSheet) -> set[int]:
-    """PKs of Techniques in the sheet's active tradition's special techniques pool.
-
-    One row lookup (the active ``CharacterTradition``) + one bulk
-    ``values_list`` — no per-candidate query later.
-    """
-    active_row = (
-        CharacterTradition.objects.filter(character=sheet, left_at__isnull=True)
-        .select_related("tradition")
-        .first()
-    )
-    if active_row is None:
-        return set()
-    ids = set(
-        TraditionGiftGrant.objects.filter(tradition=active_row.tradition).values_list(
-            "special_techniques", flat=True
-        )
-    )
-    ids.discard(None)
-    return ids
-
-
 def _shopping_list(
     sheet: CharacterSheet,
     demands: list[SphinxDemand],
@@ -319,38 +291,48 @@ def _shopping_list(
 ) -> list[SphinxShoppingItem]:
     """Up to ``_SHOPPING_LIST_PER_FUNCTION`` learnable techniques per uncovered function.
 
-    "Learnable" = ``can_learn_technique`` passes OR the technique is in the
-    sheet's tradition's signature pool. Bounded: one query per uncovered
-    function (typically a handful), each capped to a small candidate pool
-    before the per-candidate learnability check.
+    "Learnable" = the sheet already owns the technique's gift (#2700). That is
+    ``learn_technique``'s own first gate (``GiftNotOwned``), so every row here is
+    something the character can actually go and learn. The previous path-style
+    filter both under- and over-reported: it recommended techniques from gifts the
+    character did not own (which ``learn_technique`` would reject) while hiding
+    ones their own path had already granted them, since 71% of authored
+    ``PathGiftGrant`` starter techniques carried a style the granting path's own
+    ``allowed_paths`` excluded.
+
+    Bounded: one query per uncovered function (typically a handful), each capped
+    in SQL — no per-candidate Python check.
     """
     target_functions = _uncovered_target_functions(demands)
     if not target_functions:
         return []
-    special_ids = _special_technique_ids(sheet)
+
+    owned_gift_ids = set(
+        CharacterGift.objects.filter(character=sheet).values_list("gift_id", flat=True)
+    )
+    if not owned_gift_ids:
+        return []
 
     shopping_list: list[SphinxShoppingItem] = []
     for function in sorted(target_functions):
         candidates = (
-            Technique.objects.filter(function_tags__function=function)
+            Technique.objects.filter(
+                function_tags__function=function,
+                gift_id__in=owned_gift_ids,
+            )
             .exclude(pk__in=known_technique_ids)
-            .select_related("gift", "style")
+            .select_related("gift")
             .distinct()
-            .order_by("name")[:_SHOPPING_CANDIDATE_POOL]
+            .order_by("name")[:_SHOPPING_LIST_PER_FUNCTION]
         )
-        found = 0
-        for technique in candidates:
-            if found >= _SHOPPING_LIST_PER_FUNCTION:
-                break
-            if technique.pk in special_ids or can_learn_technique(sheet, technique):
-                shopping_list.append(
-                    SphinxShoppingItem(
-                        technique_name=technique.name,
-                        gift_name=technique.gift.name,
-                        function=function,
-                    )
-                )
-                found += 1
+        shopping_list.extend(
+            SphinxShoppingItem(
+                technique_name=technique.name,
+                gift_name=technique.gift.name,
+                function=function,
+            )
+            for technique in candidates
+        )
     return shopping_list
 
 

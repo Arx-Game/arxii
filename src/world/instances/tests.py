@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from evennia_extensions.models import ObjectDisplayData, RoomProfile
 from world.character_sheets.factories import CharacterSheetFactory
 from world.instances.constants import InstanceStatus
@@ -21,9 +21,11 @@ class InstancedRoomModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.room = ObjectDBFactory(
-            db_key="Instance Room",
-            db_typeclass_path="typeclasses.rooms.Room",
+        cls.room = RoomProfileFactory(
+            objectdb=ObjectDBFactory(
+                db_key="Instance Room",
+                db_typeclass_path="typeclasses.rooms.Room",
+            )
         )
         cls.return_room = ObjectDBFactory(
             db_key="Town Square",
@@ -61,9 +63,11 @@ class InstancedRoomValidationTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.room = ObjectDBFactory(
-            db_key="Validation Room",
-            db_typeclass_path="typeclasses.rooms.Room",
+        cls.room = RoomProfileFactory(
+            objectdb=ObjectDBFactory(
+                db_key="Validation Room",
+                db_typeclass_path="typeclasses.rooms.Room",
+            )
         )
         cls.valid_return = ObjectDBFactory(
             db_key="Valid Return",
@@ -105,7 +109,7 @@ class InstancedRoomCascadeTests(TestCase):
             db_key="Temp Room",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        InstancedRoom.objects.create(room=room)
+        InstancedRoom.objects.create(room=RoomProfileFactory(objectdb=room))
         instance_pk = room.pk
 
         room.delete()
@@ -114,9 +118,11 @@ class InstancedRoomCascadeTests(TestCase):
 
     def test_set_null_on_owner_delete(self):
         """Deleting the CharacterSheet sets owner to null."""
-        room = ObjectDBFactory(
-            db_key="Owner Test Room",
-            db_typeclass_path="typeclasses.rooms.Room",
+        room = RoomProfileFactory(
+            objectdb=ObjectDBFactory(
+                db_key="Owner Test Room",
+                db_typeclass_path="typeclasses.rooms.Room",
+            )
         )
         sheet = CharacterSheetFactory()
         instance = InstancedRoom.objects.create(room=room, owner=sheet)
@@ -130,9 +136,11 @@ class InstancedRoomCascadeTests(TestCase):
 
     def test_set_null_on_return_location_delete(self):
         """Deleting the return_location ObjectDB sets it to null."""
-        room = ObjectDBFactory(
-            db_key="Return Test Room",
-            db_typeclass_path="typeclasses.rooms.Room",
+        room = RoomProfileFactory(
+            objectdb=ObjectDBFactory(
+                db_key="Return Test Room",
+                db_typeclass_path="typeclasses.rooms.Room",
+            )
         )
         return_loc = ObjectDBFactory(
             db_key="Return Loc",
@@ -172,7 +180,7 @@ class SpawnInstancedRoomTests(TestCase):
         assert room.db_key == "Goblin Cave"
         assert room.display_data.permanent_description == "A dank cave."
 
-        instance = room.instance_data
+        instance = room.room_profile.instance_data
         assert instance.owner == self.sheet
         assert instance.return_location == self.return_room
         assert instance.source_key == "mission.goblin_cave"
@@ -232,7 +240,7 @@ class SpawnInstancedRoomTests(TestCase):
             gm_owner=gm,
         )
         assert room.room_profile is not None
-        instance = room.instance_data
+        instance = room.room_profile.instance_data
         assert instance.gm_owner == gm
         assert instance.owner is None
         assert gm.owned_instances.get() == instance
@@ -276,7 +284,7 @@ class CompleteInstancedRoomTests(TestCase):
 
         complete_instanced_room(room)
 
-        instance = InstancedRoom.objects.get(room=room)
+        instance = InstancedRoom.objects.get(room_id=room.pk)
         assert instance.status == InstanceStatus.COMPLETED
         assert instance.completed_at is not None
         assert ObjectDB.objects.filter(pk=room.pk).exists()
@@ -326,11 +334,11 @@ class CompleteInstancedRoomTests(TestCase):
         SceneFactory(name="Preserve Scene", location=room)
 
         complete_instanced_room(room)
-        first_completed_at = InstancedRoom.objects.get(room=room).completed_at
+        first_completed_at = InstancedRoom.objects.get(room_id=room.pk).completed_at
 
         # Completing again should return early without changing anything
         complete_instanced_room(room)
-        instance = InstancedRoom.objects.get(room=room)
+        instance = InstancedRoom.objects.get(room_id=room.pk)
         assert instance.status == InstanceStatus.COMPLETED
         assert instance.completed_at == first_completed_at
 
@@ -363,14 +371,15 @@ class InstancedRoomReverseLookupTests(TestCase):
         """CharacterSheet.owned_instances returns all instances owned by the character."""
         room1 = ObjectDBFactory(db_key="Room A", db_typeclass_path="typeclasses.rooms.Room")
         room2 = ObjectDBFactory(db_key="Room B", db_typeclass_path="typeclasses.rooms.Room")
-        InstancedRoom.objects.create(room=room1, owner=self.sheet)
-        InstancedRoom.objects.create(room=room2, owner=self.sheet)
+        InstancedRoom.objects.create(room=RoomProfileFactory(objectdb=room1), owner=self.sheet)
+        InstancedRoom.objects.create(room=RoomProfileFactory(objectdb=room2), owner=self.sheet)
 
         assert self.sheet.owned_instances.count() == 2
 
     def test_instance_data_reverse_lookup(self):
-        """ObjectDB.instance_data returns the linked InstancedRoom."""
+        """RoomProfile.instance_data returns the linked InstancedRoom (#2608)."""
         room = ObjectDBFactory(db_key="Reverse Room", db_typeclass_path="typeclasses.rooms.Room")
-        instance = InstancedRoom.objects.create(room=room, source_key="test.reverse")
+        profile = RoomProfileFactory(objectdb=room)
+        instance = InstancedRoom.objects.create(room=profile, source_key="test.reverse")
 
-        assert room.instance_data == instance
+        assert profile.instance_data == instance

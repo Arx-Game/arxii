@@ -117,6 +117,7 @@
 **Pointed to by:**
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
+  - style_requirements <- magic.StyleCapabilityRequirement
   - auderemajorafaithvariantcapabilitygrant_grants <- magic.AudereMajoraFaithVariantCapabilityGrant
   - techniquevariantcapabilitygrant_grants <- magic.TechniqueVariantCapabilityGrant
   - signaturemotifbonuscapabilitygrant_grants <- magic.SignatureMotifBonusCapabilityGrant
@@ -215,6 +216,7 @@
   - stat_rules_for <- achievements.ConditionStatRule
   - rampart_signature_profiles <- areas.RampartElementProfile
   - insight_entries <- covenants.InsightTableEntry
+  - weakness_pool_entries <- covenants.WeaknessPoolEntry
   - miracleappliedcondition_applied <- worship.MiracleAppliedCondition
   - threat_pool_entries <- combat.ThreatPoolEntry
   - ward_reactions <- room_features.RoomWardDetails
@@ -312,13 +314,15 @@
   - check_type -> checks.CheckType [FK]
   - backlash_target_condition -> conditions.ConditionTemplate [FK] (nullable)
 **Pointed to by:**
+  - technique_payloads <- magic.TechniqueTreatment
+  - draft_technique_payloads <- magic.TechniqueDraftTreatment
   - action_requests <- scenes.SceneActionRequest
   - attempts <- conditions.TreatmentAttempt
 
 ### TreatmentAttempt
 **Foreign Keys:**
-  - helper -> objects.ObjectDB [FK]
-  - target -> objects.ObjectDB [FK]
+  - helper -> character_sheets.CharacterSheet [FK]
+  - target -> character_sheets.CharacterSheet [FK]
   - scene -> scenes.Scene [FK]
   - treatment -> conditions.TreatmentTemplate [FK]
   - thread_used -> magic.Thread [FK] (nullable)
@@ -406,9 +410,13 @@
 **Pointed to by:**
   - residents <- character_sheets.CharacterSheet
   - starting_area_default <- character_creation.StartingArea
+  - beginnings_start <- character_creation.Beginnings
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - portal_anchors <- magic.PortalAnchor
+  - scene_rounds <- scenes.SceneRound
+  - places <- scenes.Place
+  - speaker_queues <- scenes.SpeakerQueue
   - hidden_clues <- clues.RoomClue
   - clue_triggers <- clues.ClueTrigger
   - crime_evidence <- justice.CrimeEvidence
@@ -416,9 +424,14 @@
   - stat_modifiers <- locations.LocationValueModifier
   - ownership_records <- locations.LocationOwnership
   - tenancy_records <- locations.LocationTenancy
+  - instance_data <- instances.InstancedRoom
+  - held_captivities <- captivity.Captivity
   - placed_items <- items.RoomItem
   - crafting_service_offers <- items.CraftingServiceOffer
   - events <- events.Event
+  - dream_reflection <- dreams.DreamReflection
+  - reflection_of <- dreams.DreamReflection
+  - descent_source <- dreams.DreamReflection
   - ceremonies <- ceremonies.Ceremony
   - story_grants <- gm.StoryRoomGrant
   - ambient_emote_lines <- narrative.AmbientEmoteLine
@@ -580,7 +593,7 @@
 
 ### ActionPointPool
 **Foreign Keys:**
-  - character -> objects.ObjectDB [OneToOne]
+  - character -> character_sheets.CharacterSheet [OneToOne]
 
 
 ## world.agriculture
@@ -1284,7 +1297,7 @@
 **Foreign Keys:**
   - captive -> character_sheets.CharacterSheet [FK]
   - cell -> instances.InstancedRoom [FK] (nullable)
-  - holding_room -> objects.ObjectDB [FK] (nullable)
+  - holding_room -> evennia_extensions.RoomProfile [FK] (nullable)
   - return_location -> objects.ObjectDB [FK] (nullable)
   - captor_organization -> societies.Organization [FK] (nullable)
   - ransom_project -> projects.Project [FK] (nullable)
@@ -1299,7 +1312,7 @@
   - rescue_template -> missions.MissionTemplate [FK] (nullable)
 
 ### Service Functions
-- `capture_character(*, captive: 'CharacterSheet', captor_organization: 'Organization | None' = None, return_location: 'ObjectDB | None' = None, offscreen_loss_allowed: 'bool' = False, cell: 'InstancedRoom | None' = None, group_key: 'str | None' = None, cell_name: 'str | None' = None, cell_description: 'str | None' = None, holding_room: 'ObjectDB | None' = None) -> 'Captivity' — Take one character into a cell and record the captivity.`
+- `capture_character(*, captive: 'CharacterSheet', captor_organization: 'Organization | None' = None, return_location: 'ObjectDB | None' = None, offscreen_loss_allowed: 'bool' = False, cell: 'InstancedRoom | None' = None, group_key: 'str | None' = None, cell_name: 'str | None' = None, cell_description: 'str | None' = None, holding_room: 'RoomProfile | None' = None) -> 'Captivity' — Take one character into a cell and record the captivity.`
 - `capture_party(*, captives: 'Iterable[CharacterSheet]', captor_organization: 'Organization | None' = None, return_location: 'ObjectDB | None' = None, offscreen_loss_allowed: 'bool' = False, cell_name: 'str | None' = None, cell_description: 'str | None' = None) -> 'list[Captivity]' — Capture several characters into one shared cell (the default).`
 - `complete_instanced_room(room: evennia.objects.models.ObjectDB) -> None — Mark room completed, relocate occupants, delete if no history.`
 - `escape_captivity(captive: 'CharacterSheet') -> 'bool' — Free a captive by their own hand (#931 Phase 4) — the escape loop's verb.`
@@ -1387,7 +1400,7 @@
   - art -> evennia_extensions.Media [FK] (nullable)
   - starting_area -> character_creation.StartingArea [FK]
   - heritage -> character_sheets.Heritage [FK] (nullable)
-  - starting_room_override -> objects.ObjectDB [FK] (nullable)
+  - starting_room_override -> evennia_extensions.RoomProfile [FK] (nullable)
   - property_grant_profile -> buildings.PropertyGrantProfile [FK] (nullable)
   - prelude_mission -> missions.MissionTemplate [FK] (nullable)
   - allowed_species -> species.Species [M2M]
@@ -1523,17 +1536,30 @@
   - created_by -> accounts.AccountDB [FK] (nullable)
   - durance_cohort -> progression.DuranceCohort [FK] (nullable)
 **Pointed to by:**
+  - applications <- roster.RosterApplication
   - kinsperson <- roster.Kinsperson
   - deferred_kin <- roster.Kinsperson
   - roster_entry <- roster.RosterEntry
+  - trait_values <- traits.CharacterTraitValue
+  - skill_values <- skills.CharacterSkillValue
+  - specialization_values <- skills.CharacterSpecializationValue
+  - training_allocations <- skills.TrainingAllocation
   - origin_slots <- character_creation.CharacterOriginSlot
+  - character_class_levels <- classes.CharacterClassLevel
+  - petitions_about <- player_submissions.Petition
   - class_level_advancements <- progression.ClassLevelAdvancement
   - officiated_advancements <- progression.ClassLevelAdvancement
   - durance_training_roles <- progression.DuranceTrainingSite
+  - character_xp <- progression.CharacterXP
+  - character_xp_transactions <- progression.CharacterXPTransaction
+  - kudos_transactions <- progression.KudosTransaction
   - path_intent <- progression.PathIntent
+  - path_history <- progression.CharacterPathHistory
+  - xptransaction_set <- progression.XPTransaction
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
   - weekly_skill_usage <- progression.WeeklySkillUsage
+  - unlocks <- progression.CharacterUnlock
   - audere_offers <- magic.PendingAudereOffer
   - created_gifts <- magic.Gift
   - character_gifts <- magic.CharacterGift
@@ -1545,7 +1571,9 @@
   - entry_flourish_offers <- magic.PendingEntryFlourishOffer
   - pending_alterations <- magic.PendingAlteration
   - alteration_events <- magic.MagicalAlterationEvent
+  - anima <- magic.CharacterAnima
   - anima_ritual_participations <- magic.AnimaRitualPerformance
+  - aura <- magic.CharacterAura
   - resonances <- magic.CharacterResonance
   - dramatic_moment_tags <- magic.DramaticMomentTag
   - dramatic_moment_suggestions <- magic.DramaticMomentSuggestion
@@ -1586,19 +1614,28 @@
   - scene_round_participations <- scenes.SceneRoundParticipant
   - pending_sudden_harm <- scenes.PendingSuddenHarm
   - character_stories <- stories.Story
+  - story_participations <- stories.StoryParticipation
   - aggregate_contributions <- stories.AggregateBeatContribution
   - beat_completions <- stories.BeatCompletion
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.StoryProgress
+  - forms <- forms.CharacterForm
+  - form_state <- forms.CharacterFormState
   - alternate_selves <- forms.AlternateSelf
   - active_alternate_self <- forms.ActiveAlternateSelf
+  - temporary_form_changes <- forms.TemporaryFormChange
+  - known_styles <- forms.CharacterKnownStyle
   - distinctions <- distinctions.CharacterDistinction
   - distinction_other_entries <- distinctions.CharacterDistinctionOther
   - sheet_update_requests <- distinctions.SheetUpdateRequest
+  - goals <- goals.CharacterGoal
+  - goal_journals <- goals.GoalJournal
+  - goal_revision <- goals.GoalRevision
   - org_obligations <- societies.OrganizationObligation
   - purse <- currency.CharacterPurse
   - employments <- currency.CharacterEmployment
   - purse_drain_weeks <- currency.PurseDrainWeek
+  - action_points <- action_points.ActionPointPool
   - treasured_by <- boundaries.TreasuredSubject
   - companions <- companions.Companion
   - ridden_companion <- companions.Companion
@@ -1608,7 +1645,11 @@
   - leverage_against <- secrets.Leverage
   - accusation_rebuttals <- secrets.AccusationRebuttal
   - detected_concealments <- conditions.ConditionInstance
+  - treatment_attempts_as_helper <- conditions.TreatmentAttempt
+  - treatment_attempts_as_target <- conditions.TreatmentAttempt
   - modifiers <- mechanics.CharacterModifier
+  - challenge_records <- mechanics.CharacterChallengeRecord
+  - engagement <- mechanics.CharacterEngagement
   - consequence_outcomes <- checks.ConsequenceOutcome
   - relationships_as_source <- relationships.CharacterRelationship
   - relationships_as_target <- relationships.CharacterRelationship
@@ -1631,6 +1672,7 @@
   - crafted_items <- items.ItemInstance
   - attuned_touchstones <- items.ItemInstance
   - designed_items <- items.ItemInstance
+  - equipped_items <- items.EquippedItem
   - items_given_away <- items.OwnershipEvent
   - items_received <- items.OwnershipEvent
   - outfits <- items.Outfit
@@ -1801,9 +1843,11 @@
 ### Service Functions
 - `chart_has_success_outcomes(rank_difference: int) -> bool — Check if the ResultChart for this rank difference has any success outcomes.`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None) -> world.checks.types.ModifierBreakdown — Aggregate all modifier contributions for a check into a ModifierBreakdown.`
-- `compute_check_rating(character: 'ObjectDB', check_type: 'CheckType', extra_modifiers: int = 0) -> int — Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.`
-- `compute_resist_increment(defender_character: 'ObjectDB', resist_effort_level: str) -> int — Compute how much a defender's active resistance raises difficulty.`
+- `compute_check_rating(character: 'ObjectDB', check_type: 'CheckType', extra_modifiers: int = 0, *, level_override: int | None = None) -> int — Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.`
+- `compute_resist_increment(defender_character: 'ObjectDB', resist_effort_level: str, *, level_override: int | None = None) -> int — Compute how much a defender's active resistance raises difficulty.`
+- `get_character_path_level(character: 'ObjectDB') -> 'int' — Return the character's primary class level (or highest, or 1).`
 - `get_rollmod(character: 'ObjectDB') -> int — Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
+- `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int — Difficulty an opposing entity of *level* adds to *check_type* (#2707).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
 - `record_consequence_outcome(character_sheet: 'CharacterSheet', check_type: 'CheckType', pool, selected_consequence: 'Consequence | None', breakdown: world.checks.types.ModifierBreakdown, *, combat_interaction: 'Interaction | None' = None, challenge_record: 'CharacterChallengeRecord | None' = None, summary: str = '') -> world.checks.outcome_models.ConsequenceOutcome — Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.`
@@ -1813,6 +1857,7 @@
 
 ### Path
 **Foreign Keys:**
+  - style -> magic.TechniqueStyle [FK] (nullable)
   - parent_paths -> classes.Path [M2M]
 **Pointed to by:**
   - skill_suggestions <- skills.PathSkillSuggestion
@@ -1833,7 +1878,6 @@
   - itemrequirement_requirements <- progression.ItemRequirement
   - majorgifttechniquerequirement_requirements <- progression.MajorGiftTechniqueRequirement
   - codexknowledgerequirement_requirements <- progression.CodexKnowledgeRequirement
-  - allowed_styles <- magic.TechniqueStyle
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - gift_unlocks <- magic.GiftUnlock
   - glimpse_trigger_tags <- magic.GlimpseTag
@@ -1858,7 +1902,7 @@
 
 ### CharacterClassLevel
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - character_class -> classes.CharacterClass [FK]
 
 ### ClassStageHealthRate
@@ -2046,6 +2090,8 @@
   - duel_challenge <- combat.DuelChallenge
   - threat_records <- combat.ThreatRecord
   - engagement_locks <- combat.EngagementLock
+  - pending_selections <- combat.PendingSelection
+  - marks <- combat.CombatMark
   - battle_places <- battles.BattlePlace
 
 ### ThreatPool
@@ -2071,6 +2117,7 @@
 **Foreign Keys:**
   - encounter -> combat.CombatEncounter [FK]
   - threat_pool -> combat.ThreatPool [FK] (nullable)
+  - creature_template -> combat.CreatureTemplate [FK] (nullable)
   - persona -> scenes.Persona [FK] (nullable)
   - portrait -> evennia_extensions.Media [FK] (nullable)
   - objectdb -> objects.ObjectDB [FK] (nullable)
@@ -2091,6 +2138,8 @@
   - break_contributions <- combat.BreakBarContribution
   - threat_records <- combat.ThreatRecord
   - engagement_locks <- combat.EngagementLock
+  - pending_selections <- combat.PendingSelection
+  - marks <- combat.CombatMark
 
 ### BossPhase
 **Foreign Keys:**
@@ -2141,6 +2190,8 @@
   - dramatic_surges <- combat.DramaticSurgeRecord
   - threat_records <- combat.ThreatRecord
   - engagement_locks <- combat.EngagementLock
+  - pending_selections <- combat.PendingSelection
+  - marks <- combat.CombatMark
 
 ### CombatRoundAction
 **Foreign Keys:**
@@ -2240,6 +2291,8 @@
 **Foreign Keys:**
   - threat_pool -> combat.ThreatPool [FK] (nullable)
 **Pointed to by:**
+  - weakness_pool_entries <- covenants.WeaknessPoolEntry
+  - spawned_opponents <- combat.CombatOpponent
   - bossphase_set <- combat.BossPhase
   - creaturephasetemplate_set <- combat.CreaturePhaseTemplate
   - phase_templates <- combat.CreaturePhaseTemplate
@@ -2349,20 +2402,24 @@
   - clash -> combat.Clash [FK] (nullable)
   - break_in_consequence_pool -> actions.ConsequencePool [FK] (nullable)
 
+### PendingSelection
+**Foreign Keys:**
+  - participant -> combat.CombatParticipant [FK]
+  - encounter -> combat.CombatEncounter [FK]
+  - source_content_type -> contenttypes.ContentType [FK] (nullable)
+  - target_opponent -> combat.CombatOpponent [FK] (nullable)
+
 ### CombatMark
-**Fields:** encounter, participant, opponent, round_number, source_technique (nullable)
 **Foreign Keys:**
   - encounter -> combat.CombatEncounter [FK]
   - participant -> combat.CombatParticipant [FK]
   - opponent -> combat.CombatOpponent [FK]
-  - source_technique -> magic.Technique [FK] (nullable, provenance)
-**Constraints:** unique per (participant, round_number)
+  - source_technique -> magic.Technique [FK] (nullable)
 
 ### Service Functions
-- `declare_mark(participant: 'CombatParticipant', opponent: 'CombatOpponent', *, technique: 'Technique | None' = None) -> 'CombatMark' — Declare a directed, round-scoped combatant reference (the Fulmination mark, #2664). Validates encounter DECLARING status, participant ACTIVE, opponent ACTIVE and same-encounter. Idempotent per round.`
 - `accumulate_threat(encounter: 'CombatEncounter', opponent: 'CombatOpponent', participant: 'CombatParticipant', amount: 'int') -> 'None' — Increment the threat value for an (opponent, participant) pairing (#2020).`
 - `acknowledge_encounter_risk(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet') -> 'EncounterRiskAcknowledgement' — Idempotently record that a character acknowledged the encounter's risk (#777).`
-- `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None) -> 'CombatOpponent' — Create a CombatOpponent. Three sources for the ObjectDB:`
+- `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None, level: 'int | None' = None) -> 'CombatOpponent' — Create a CombatOpponent. Three sources for the ObjectDB:`
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' — Create a CombatParticipant linking a PC to an encounter.`
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'OpponentDamageResult' — Apply damage to an NPC opponent, accounting for soak, probing,`
 - `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'ParticipantDamageResult' — Apply damage to a PC via their CharacterVitals.`
@@ -2388,6 +2445,7 @@
 - `declare_flee(participant: 'CombatParticipant') -> 'CombatRoundAction' — Declare intent to flee -- passives-only maneuver, auto-ready.`
 - `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None' = None, technique: 'Technique | None' = None, redirect_opponent_target: 'CombatOpponent | None' = None, redirect_object_target: 'ObjectDB | None' = None) -> 'CombatRoundAction' — Declare an interposing maneuver — passives-only, auto-ready.`
 - `declare_joust(participant: 'CombatParticipant', technique: 'Technique') -> 'CombatRoundAction' — Declare a joust — a mounted, lance-armed opposed pass (#1843).`
+- `declare_mark(participant: 'CombatParticipant', opponent: 'CombatOpponent', *, technique: 'Technique | None' = None) -> 'CombatMark' — Declare a mark — a directed, round-scoped combatant reference (#2664).`
 - `declare_parley(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' — Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).`
 - `declare_rally(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a rallying maneuver — inspire an ally, auto-ready (#2015).`
 - `declare_succor(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' — Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.`
@@ -2415,6 +2473,7 @@
 - `is_combat_npc_typeclass(objectdb: 'ObjectDB') -> 'bool' — Return True iff the ObjectDB's typeclass is the CombatNPC class.`
 - `join_encounter(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' — Allow a PC to join an active combat encounter.`
 - `leave_encounter(participant: 'CombatParticipant') -> 'None' — Allow a participant to voluntarily leave an Open Encounter between rounds.`
+- `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int — Difficulty an opposing entity of *level* adds to *check_type* (#2707).`
 - `maybe_pause_encounter_for_disconnect(character_sheet: 'CharacterSheet') -> 'None' — Pause the character's live CombatEncounter, if any, on disconnect (#1899).`
 - `maybe_resolve_on_ready(encounter: 'CombatEncounter') -> 'RoundResolutionResult | None' — Resolve the round early when every ACTIVE participant is ready (#2120).`
 - `minimum_break_bar_threshold() -> 'int' — Pacing floor for a boss's break-bar threshold (#2642, batch-3 F-7a).`
@@ -2451,7 +2510,12 @@
   - conditions_applied -> conditions.ConditionTemplate [M2M]
   - effect_properties -> mechanics.Property [M2M]
 **Pointed to by:**
+  - function_tags <- companions.CompanionAbilityFunctionTag
   - orders <- companions.CompanionOrder
+
+### CompanionAbilityFunctionTag
+**Foreign Keys:**
+  - ability -> companions.CompanionAbility [FK]
 
 ### Companion
 **Foreign Keys:**
@@ -2514,6 +2578,7 @@
 **Pointed to by:**
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
+  - style_requirements <- magic.StyleCapabilityRequirement
   - auderemajorafaithvariantcapabilitygrant_grants <- magic.AudereMajoraFaithVariantCapabilityGrant
   - techniquevariantcapabilitygrant_grants <- magic.TechniqueVariantCapabilityGrant
   - signaturemotifbonuscapabilitygrant_grants <- magic.SignatureMotifBonusCapabilityGrant
@@ -2612,6 +2677,7 @@
   - stat_rules_for <- achievements.ConditionStatRule
   - rampart_signature_profiles <- areas.RampartElementProfile
   - insight_entries <- covenants.InsightTableEntry
+  - weakness_pool_entries <- covenants.WeaknessPoolEntry
   - miracleappliedcondition_applied <- worship.MiracleAppliedCondition
   - threat_pool_entries <- combat.ThreatPoolEntry
   - ward_reactions <- room_features.RoomWardDetails
@@ -2709,13 +2775,15 @@
   - check_type -> checks.CheckType [FK]
   - backlash_target_condition -> conditions.ConditionTemplate [FK] (nullable)
 **Pointed to by:**
+  - technique_payloads <- magic.TechniqueTreatment
+  - draft_technique_payloads <- magic.TechniqueDraftTreatment
   - action_requests <- scenes.SceneActionRequest
   - attempts <- conditions.TreatmentAttempt
 
 ### TreatmentAttempt
 **Foreign Keys:**
-  - helper -> objects.ObjectDB [FK]
-  - target -> objects.ObjectDB [FK]
+  - helper -> character_sheets.CharacterSheet [FK]
+  - target -> character_sheets.CharacterSheet [FK]
   - scene -> scenes.Scene [FK]
   - treatment -> conditions.TreatmentTemplate [FK]
   - thread_used -> magic.Thread [FK] (nullable)
@@ -2770,7 +2838,7 @@
 - `is_concealed(target: 'ObjectDB') -> bool — True if *target* holds any active perception-concealing condition.`
 - `is_untargetable(target: 'ObjectDB') -> bool — True if *target* holds any active intangibility condition.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
-- `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None) -> world.conditions.types.TreatmentOutcome — Resolve a TreatmentTemplate against an effect instance.`
+- `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None, skip_engagement_gate: bool = False) -> world.conditions.types.TreatmentOutcome — Resolve a TreatmentTemplate against an effect instance.`
 - `priced_percent_severity(*, eff_intensity: int, target: 'ObjectDB') -> int — Apply-time percent severity for the bounded team-damage-percent lane (#2643).`
 - `process_action_tick(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process on-action damage for conditions (when target takes an action).`
 - `process_damage_interactions(target: 'ObjectDB', damage_type: world.conditions.models.DamageType) -> world.conditions.types.DamageInteractionResult — Process condition interactions when target takes damage.`
@@ -3027,6 +3095,11 @@
 
 ### InsightTableEntry
 **Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
+
+### WeaknessPoolEntry
+**Foreign Keys:**
+  - creature_template -> combat.CreatureTemplate [FK]
   - condition -> conditions.ConditionTemplate [FK]
 
 ### Service Functions
@@ -3326,16 +3399,16 @@
 
 ### DreamReflection
 **Foreign Keys:**
-  - waking_room -> objects.ObjectDB [OneToOne]
-  - dream_room -> objects.ObjectDB [OneToOne]
-  - descent_target -> objects.ObjectDB [FK] (nullable)
+  - waking_room -> evennia_extensions.RoomProfile [OneToOne]
+  - dream_room -> evennia_extensions.RoomProfile [OneToOne]
+  - descent_target -> evennia_extensions.RoomProfile [FK] (nullable)
 
 ### DreamPerilConfig
 **Foreign Keys:**
   - resist_check_type -> checks.CheckType [FK] (nullable)
 
 ### Service Functions
-- `get_dream_space(*, room: 'ObjectDB') -> 'ObjectDB | None' — Return the dream room for a physical waking room.`
+- `get_dream_space(*, room: 'ObjectDB') -> 'RoomProfile | None' — Return the dream room for a physical waking room.`
 
 
 ## world.estates
@@ -3476,6 +3549,8 @@
   - drafts <- character_creation.CharacterDraft
 
 ### FormTrait
+**Foreign Keys:**
+  - composite_option -> forms.FormTraitOption [FK] (nullable)
 **Pointed to by:**
   - options <- forms.FormTraitOption
   - species_links <- forms.SpeciesFormTrait
@@ -3490,10 +3565,13 @@
 **Foreign Keys:**
   - trait -> forms.FormTrait [FK]
 **Pointed to by:**
+  - composite_for_traits <- forms.FormTrait
   - species_restrictions <- forms.SpeciesFormTrait
   - character_values <- forms.CharacterFormValue
   - natural_for_values <- forms.CharacterFormValue
   - temporary_changes <- forms.TemporaryFormChange
+  - component_of_values <- forms.FormValueComponent
+  - knowers <- forms.CharacterKnownStyle
   - item_template_effects <- items.ItemTemplateAppearanceEffect
   - styling_offers <- npc_services.StylingOfferDetails
 
@@ -3505,7 +3583,7 @@
 
 ### CharacterForm
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
 **Pointed to by:**
   - pull_effect_targets <- magic.ThreadPullEffect
   - values <- forms.CharacterFormValue
@@ -3522,10 +3600,12 @@
   - trait -> forms.FormTrait [FK]
   - option -> forms.FormTraitOption [FK]
   - natural_option -> forms.FormTraitOption [FK] (nullable)
+**Pointed to by:**
+  - components <- forms.FormValueComponent
 
 ### CharacterFormState
 **Foreign Keys:**
-  - character -> objects.ObjectDB [OneToOne]
+  - character -> character_sheets.CharacterSheet [OneToOne]
   - active_form -> forms.CharacterForm [FK] (nullable)
   - active_fake_overlay -> forms.CharacterForm [FK] (nullable)
   - applied_kit_instance -> items.ItemInstance [FK] (nullable)
@@ -3564,7 +3644,7 @@
 
 ### TemporaryFormChange
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - trait -> forms.FormTrait [FK]
   - option -> forms.FormTraitOption [FK]
 
@@ -3582,11 +3662,21 @@
   - to_option -> forms.FormTraitOption [FK] (nullable)
   - actor_persona -> scenes.Persona [FK] (nullable)
 
+### FormValueComponent
+**Foreign Keys:**
+  - value -> forms.CharacterFormValue [FK]
+  - option -> forms.FormTraitOption [FK]
+
+### CharacterKnownStyle
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - option -> forms.FormTraitOption [FK]
+
 ### Service Functions
 - `apply_disguise(character, disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE, concealment_level: 'ConcealmentLevel' = ConcealmentLevel.NONE, kit_instance=None) -> 'CharacterFormState' — Paint a fake overlay over the character's real form (#1110).`
 - `assume_alternate_self(sheet: 'CharacterSheet', alt: 'AlternateSelf', instance_value: 'float' = 1.0) -> 'ActiveAlternateSelf' — Assume an alternate self — swap in form/persona facets, create the`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' — Calculate weight in pounds from height and build.`
-- `change_appearance(character, trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None) -> 'CharacterFormValue' — Cosmetically edit one trait of the character's real form (hair dye, restyle).`
+- `change_appearance(character, trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None, blend: 'bool' = False) -> 'CharacterFormValue' — Cosmetically edit one trait of the character's real form (hair dye, restyle).`
 - `create_true_form(character, selections: 'dict[FormTrait, FormTraitOption]') -> 'CharacterForm' — Create the true form for a character during character creation.`
 - `get_apparent_build(character) -> 'Build | None' — Get the apparent build for a character.`
 - `get_apparent_form(character) -> 'dict[FormTrait, FormTraitOption]' — Get the apparent form for a character, combining active form with temporaries.`
@@ -3596,6 +3686,8 @@
 - `get_cg_height_bands() -> 'QuerySet[HeightBand]' — Get height bands available in character creation.`
 - `get_height_band(height_inches: 'int') -> 'HeightBand | None' — Get the HeightBand for a given height in inches.`
 - `get_presented_appearance(character, *, pierced: 'bool' = False) -> 'list[PresentedTrait]' — Compose what a viewer sees: the presented form's normalized traits overlaid with the`
+- `knows_style(character_sheet, option: 'FormTraitOption') -> 'bool' — True when the sheet may produce ``option`` (ungated options always may).`
+- `learn_style(character_sheet, option: 'FormTraitOption', *, taught_by_label: 'str' = '') -> 'None' — Grant knowledge of an exotic option — 'learned by having it done' (#2632).`
 - `remove_disguise(character) -> 'None' — Drop the active fake overlay — the real form presents again (#1110). Idempotent.`
 - `reset_trait_to_natural(character, trait: 'FormTrait', *, persona: 'Persona', actor_persona: 'Persona | None' = None, note: 'str' = '') -> 'CharacterFormValue' — Restore one trait to its natural (origin) value — "wash out the dye.`
 - `revert_alternate_self(sheet: 'CharacterSheet') -> 'None' — Revert the active alternate self — restore return anchors, delete the`
@@ -3726,7 +3818,7 @@
   - room -> evennia_extensions.RoomProfile [FK]
   - character -> character_sheets.CharacterSheet [FK]
   - granted_by -> gm.GMProfile [FK]
-  - return_location -> objects.ObjectDB [FK] (nullable)
+  - return_location -> evennia_extensions.RoomProfile [FK] (nullable)
 
 ### SituationKind
 **Pointed to by:**
@@ -3815,7 +3907,7 @@
 
 ### CharacterGoal
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - domain -> mechanics.ModifierTarget [FK]
 **Pointed to by:**
   - instances <- goals.GoalInstance
@@ -3823,12 +3915,12 @@
 
 ### GoalJournal
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - domain -> mechanics.ModifierTarget [FK] (nullable)
 
 ### GoalRevision
 **Foreign Keys:**
-  - character -> objects.ObjectDB [OneToOne]
+  - character -> character_sheets.CharacterSheet [OneToOne]
 
 ### GoalInstance
 **Foreign Keys:**
@@ -3844,15 +3936,15 @@
 - `get_goal_bonus(character: 'CharacterSheet', domain: 'ModifierTarget') -> int — Get the goal bonus for a specific domain, applying percentage modifiers.`
 - `get_goal_bonuses_breakdown(character: 'CharacterSheet') -> dict[str, world.goals.types.GoalBonusBreakdown] — Get breakdown of all goal bonuses for a character.`
 - `get_total_goal_points(character: 'CharacterSheet') -> int — Get the total goal points available for a character to distribute.`
-- `log_goal_progress(*, character: 'ObjectDB', domain: 'ModifierTarget | None', title: str, content: str, is_public: bool = False) -> 'GoalJournal' — Create a goal-progress journal entry (records 1 XP on the row).`
-- `set_character_goals(*, character: 'ObjectDB', goals: list['GoalInputData']) -> list[world.goals.models.CharacterGoal] — Replace a character's goal allocations, enforcing the weekly revision limit.`
+- `log_goal_progress(*, character: 'CharacterSheet', domain: 'ModifierTarget | None', title: str, content: str, is_public: bool = False) -> 'GoalJournal' — Create a goal-progress journal entry (records 1 XP on the row).`
+- `set_character_goals(*, character: 'CharacterSheet', goals: list['GoalInputData']) -> list[world.goals.models.CharacterGoal] — Replace a character's goal allocations, enforcing the weekly revision limit.`
 
 
 ## world.instances
 
 ### InstancedRoom
 **Foreign Keys:**
-  - room -> objects.ObjectDB [OneToOne]
+  - room -> evennia_extensions.RoomProfile [OneToOne]
   - owner -> character_sheets.CharacterSheet [FK] (nullable)
   - gm_owner -> gm.GMProfile [FK] (nullable)
   - return_location -> objects.ObjectDB [FK] (nullable)
@@ -3984,7 +4076,7 @@
 
 ### EquippedItem
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - item_instance -> items.ItemInstance [FK]
 
 ### RoomItem
@@ -4001,10 +4093,6 @@
   - to_persona_display -> scenes.Persona [FK] (nullable)
 **Pointed to by:**
   - trace_steps <- items.ClaimTraceStep
-
-### CurrencyBalance
-**Foreign Keys:**
-  - character -> objects.ObjectDB [OneToOne]
 
 ### ItemFacet
 **Foreign Keys:**
@@ -4290,7 +4378,7 @@
 - `record_mantle_clearances(sheet: 'CharacterSheet', mantle: 'Mantle') -> 'list[MantleLevelClearance]' — Idempotently record codex-gated mantle clearances for ``sheet``.`
 - `remove_facet_from_item(*, item_facet: 'ItemFacet') -> 'None' — Remove a facet attachment and invalidate wearers' handler caches.`
 - `unequip_item(*, equipped_item: 'EquippedItem') -> 'None' — Remove an EquippedItem and invalidate the character's handler cache.`
-- `use_item(*, item_instance: 'ItemInstance', user: 'ObjectDB', target: 'ObjectDB | None' = None, descriptor: 'str | None' = None, option_id: 'int | None' = None) -> 'UseItemResult' — Use an item with an on-use pool: apply its effects (deterministic when the`
+- `use_item(*, item_instance: 'ItemInstance', user: 'ObjectDB', target: 'ObjectDB | None' = None, descriptor: 'str | None' = None, option_id: 'int | None' = None, blend: 'bool' = False) -> 'UseItemResult' — Use an item with an on-use pool: apply its effects (deterministic when the`
 - `visible_worn_items_for(character: 'ObjectDB', observer: 'object | None' = None) -> 'list[VisibleWornItem]' — Return ``character``'s worn items visible to ``observer``.`
 
 
@@ -4633,11 +4721,9 @@
   - combo_slots <- combat.ComboSlot
 
 ### TechniqueStyle
-**Foreign Keys:**
-  - allowed_paths -> classes.Path [M2M]
 **Pointed to by:**
-  - techniques <- magic.Technique
-  - technique_drafts <- magic.TechniqueDraft
+  - paths <- classes.Path
+  - capability_requirements <- magic.StyleCapabilityRequirement
 
 ### Restriction
 **Foreign Keys:**
@@ -4654,7 +4740,6 @@
 **Foreign Keys:**
   - discovery_achievement -> achievements.Achievement [FK] (nullable)
   - gift -> magic.Gift [FK]
-  - style -> magic.TechniqueStyle [FK]
   - effect_type -> magic.EffectType [FK]
   - enhances_effect_type -> magic.EffectType [FK] (nullable)
   - clash_resolution_pool -> actions.ConsequencePool [FK] (nullable)
@@ -4676,6 +4761,7 @@
   - character_grants <- magic.CharacterTechnique
   - condition_applications <- magic.TechniqueAppliedCondition
   - removed_conditions <- magic.TechniqueRemovedCondition
+  - treatments <- magic.TechniqueTreatment
   - damage_profiles <- magic.TechniqueDamageProfile
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
@@ -4708,6 +4794,11 @@
   - technique -> magic.Technique [FK]
   - capability -> conditions.CapabilityType [FK]
 
+### StyleCapabilityRequirement
+**Foreign Keys:**
+  - style -> magic.TechniqueStyle [FK]
+  - capability -> conditions.CapabilityType [FK]
+
 ### CharacterTechnique
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
@@ -4728,6 +4819,11 @@
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK]
   - technique -> magic.Technique [FK]
+
+### TechniqueTreatment
+**Foreign Keys:**
+  - technique -> magic.Technique [FK]
+  - treatment_template -> conditions.TreatmentTemplate [FK]
 
 ### TechniqueDamageProfile
 **Foreign Keys:**
@@ -4820,7 +4916,7 @@
 
 ### CharacterAnima
 **Foreign Keys:**
-  - character -> objects.ObjectDB [OneToOne]
+  - character -> character_sheets.CharacterSheet [OneToOne]
 
 ### AnimaRitualPerformance
 **Foreign Keys:**
@@ -4833,7 +4929,7 @@
 
 ### CharacterAura
 **Foreign Keys:**
-  - character -> objects.ObjectDB [OneToOne]
+  - character -> character_sheets.CharacterSheet [OneToOne]
 **Pointed to by:**
   - glimpse_tags <- magic.CharacterGlimpseTag
   - glimpse_born_distinctions <- distinctions.CharacterDistinction
@@ -5060,7 +5156,7 @@
 **Foreign Keys:**
   - tradition -> magic.Tradition [FK]
   - gift -> magic.Gift [FK]
-  - signature_techniques -> magic.Technique [M2M]
+  - special_techniques -> magic.Technique [M2M]
 
 ### DistinctionRitualGrant
 **Foreign Keys:**
@@ -5384,7 +5480,6 @@
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [OneToOne]
   - gift -> magic.Gift [FK] (nullable)
-  - style -> magic.TechniqueStyle [FK] (nullable)
   - effect_type -> magic.EffectType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
   - restrictions -> magic.Restriction [M2M]
@@ -5393,6 +5488,7 @@
   - damage_profiles <- magic.TechniqueDraftDamageProfile
   - applied_conditions <- magic.TechniqueDraftAppliedCondition
   - removed_conditions <- magic.TechniqueDraftRemovedCondition
+  - treatments <- magic.TechniqueDraftTreatment
 
 ### TechniqueDraftCapabilityGrant
 **Foreign Keys:**
@@ -5413,6 +5509,11 @@
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK]
   - draft -> magic.TechniqueDraft [FK]
+
+### TechniqueDraftTreatment
+**Foreign Keys:**
+  - draft -> magic.TechniqueDraft [FK]
+  - treatment_template -> conditions.TreatmentTemplate [FK]
 
 ### TechniqueGrant
 **Foreign Keys:**
@@ -5752,7 +5853,7 @@
 
 ### CharacterChallengeRecord
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - challenge_instance -> mechanics.ChallengeInstance [FK]
   - approach -> mechanics.ChallengeApproach [FK]
   - outcome -> traits.CheckOutcome [FK] (nullable)
@@ -5770,7 +5871,7 @@
 
 ### CharacterEngagement
 **Foreign Keys:**
-  - character -> objects.ObjectDB [OneToOne]
+  - character -> character_sheets.CharacterSheet [OneToOne]
   - source_content_type -> contenttypes.ContentType [FK]
 
 ### Service Functions
@@ -5950,7 +6051,7 @@
 ### MissionParticipant
 **Foreign Keys:**
   - instance -> missions.MissionInstance [FK]
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
 **Pointed to by:**
   - group_ballots <- missions.MissionGroupBallot
   - support_declarations <- missions.MissionSupportDeclaration
@@ -5982,7 +6083,7 @@
 ### MissionDeedRecord
 **Foreign Keys:**
   - instance -> missions.MissionInstance [FK]
-  - actor -> objects.ObjectDB [FK]
+  - actor -> character_sheets.CharacterSheet [FK]
   - node -> missions.MissionNode [FK]
   - option -> missions.MissionOption [FK]
   - outcome -> traits.CheckOutcome [FK] (nullable)
@@ -6028,12 +6129,12 @@
 ### MissionGiverCooldown
 **Foreign Keys:**
   - giver -> missions.MissionGiver [FK]
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
 
 ### MissionDeedRewardLine
 **Foreign Keys:**
   - deed -> missions.MissionDeedRecord [FK]
-  - recipient -> objects.ObjectDB [FK]
+  - recipient -> character_sheets.CharacterSheet [FK]
   - resonance -> magic.Resonance [FK] (nullable)
   - item_template -> items.ItemTemplate [FK] (nullable)
   - followon_offer -> npc_services.NPCServiceOffer [FK] (nullable)
@@ -6331,7 +6432,7 @@
 **Foreign Keys:**
   - account -> accounts.AccountDB [FK]
   - scene -> scenes.Scene [FK] (nullable)
-  - subject_character -> objects.ObjectDB [FK] (nullable)
+  - subject_character -> character_sheets.CharacterSheet [FK] (nullable)
 
 ### SubmitterStanding
 **Foreign Keys:**
@@ -6369,11 +6470,11 @@
 
 ### CharacterXP
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
 
 ### CharacterXPTransaction
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
 
 ### DuranceCohort
 **Foreign Keys:**
@@ -6419,7 +6520,7 @@
   - source_category -> progression.KudosSourceCategory [FK] (nullable)
   - claim_category -> progression.KudosClaimCategory [FK] (nullable)
   - awarded_by -> accounts.AccountDB [FK] (nullable)
-  - character -> objects.ObjectDB [FK] (nullable)
+  - character -> character_sheets.CharacterSheet [FK] (nullable)
 
 ### KudosDifficultyWeight
 
@@ -6430,7 +6531,7 @@
 
 ### CharacterPathHistory
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - path -> classes.Path [FK]
 
 ### RandomSceneTarget
@@ -6452,7 +6553,7 @@
 ### XPTransaction
 **Foreign Keys:**
   - account -> accounts.AccountDB [FK]
-  - character -> objects.ObjectDB [FK] (nullable)
+  - character -> character_sheets.CharacterSheet [FK] (nullable)
   - gm -> accounts.AccountDB [FK] (nullable)
 
 ### DevelopmentPoints
@@ -6598,7 +6699,7 @@
 
 ### CharacterUnlock
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - character_class -> classes.CharacterClass [FK]
 
 ### WeeklyVoteBudget
@@ -6618,7 +6719,7 @@
 - `award_combat_development(characters: list, combat_actions: dict[str, list[str]]) -> dict[str, dict[str, int]] — Award development points for combat actions.`
 - `award_crafting_development(characters: list, crafting_actions: dict[str, str]) -> dict[str, dict[str, int]] — Award development points for crafting actions.`
 - `award_development_points(character_sheet: 'CharacterSheet', trait: 'Trait', source: 'str', amount: 'int', scene: 'Scene | None' = None, reason: 'str' = ProgressionReason.SCENE_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'DevelopmentTransaction' — Award development points to a character and automatically apply them.`
-- `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: evennia.objects.models.ObjectDB | None = None) -> world.progression.types.AwardResult — Award kudos to an account with full audit trail.`
+- `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: world.character_sheets.models.CharacterSheet | None = None) -> world.progression.types.AwardResult — Award kudos to an account with full audit trail.`
 - `award_scene_development_points(scene: world.scenes.models.Scene, participants: list, awards: dict[str, dict]) -> None — Award development points to scene participants.`
 - `award_social_development(characters: list, social_actions: dict[str, list[str]]) -> dict[str, dict[str, int]] — Award development points for social actions.`
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' — Award XP to an account.`
@@ -6880,7 +6981,7 @@
 - `add_relationship_condition(*, source: 'CharacterSheet', target: 'CharacterSheet', condition: 'RelationshipCondition', duration: 'timedelta | None' = None) -> 'None' — Add a ``RelationshipCondition`` to the directed ``source → target`` relationship (#1697).`
 - `apply_affection_shift(*, source: 'CharacterSheet', target: 'CharacterSheet', scene: 'Scene', effect: 'ConsequenceEffect | None', amount: 'int', boon: 'Boon | None' = None) -> 'AffectionShift | None' — Apply a social action's automatic affection shift (#1697, boon mode #2540).`
 - `apply_relationship_bump(*, source: 'CharacterSheet', target: 'CharacterSheet', interaction: 'Interaction', valence: 'int', source_emoji: 'ReactionEmoji | None' = None) -> 'RelationshipBump' — Apply an ambient ±1 bump to source's regard toward target (#1699).`
-- `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: evennia.objects.models.ObjectDB | None = None) -> world.progression.types.AwardResult — Award kudos to an account with full audit trail.`
+- `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: world.character_sheets.models.CharacterSheet | None = None) -> world.progression.types.AwardResult — Award kudos to an account with full audit trail.`
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' — Award XP to an account.`
 - `bond_bonus(actor: 'ObjectDB', protected: 'ObjectDB') -> 'int' — Return the bond bonus for protection checks (INTERPOSE/SUCCOR).`
 - `bond_combat_bonus(sheet: 'CharacterSheet', encounter: 'CombatEncounter') -> 'list[ModifierContribution]' — Return ModifierContribution(RELATIONSHIP) entries for each bonded co-combatant.`
@@ -7026,7 +7127,7 @@
 ### RosterApplication
 **Foreign Keys:**
   - player_data -> evennia_extensions.PlayerData [FK]
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - reviewed_by -> evennia_extensions.PlayerData [FK] (nullable)
 
 ### Family
@@ -7497,7 +7598,7 @@
 
 ### SceneRound
 **Foreign Keys:**
-  - room -> objects.ObjectDB [FK]
+  - room -> evennia_extensions.RoomProfile [FK]
   - scene -> scenes.Scene [FK] (nullable)
 **Pointed to by:**
   - participants <- scenes.SceneRoundParticipant
@@ -7590,7 +7691,7 @@
 
 ### Place
 **Foreign Keys:**
-  - room -> objects.ObjectDB [FK] (nullable)
+  - room -> evennia_extensions.RoomProfile [FK] (nullable)
 **Pointed to by:**
   - interactions <- scenes.Interaction
   - presences <- scenes.PlacePresence
@@ -7621,7 +7722,7 @@
 
 ### SpeakerQueue
 **Foreign Keys:**
-  - room -> objects.ObjectDB [FK]
+  - room -> evennia_extensions.RoomProfile [FK]
   - scene -> scenes.Scene [FK] (nullable)
   - opened_by -> scenes.Persona [FK] (nullable)
 **Pointed to by:**
@@ -7808,12 +7909,12 @@
 
 ### CharacterSkillValue
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - skill -> skills.Skill [FK]
 
 ### CharacterSpecializationValue
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - specialization -> skills.Specialization [FK]
 
 ### SkillPointBudget
@@ -7827,7 +7928,7 @@
 
 ### TrainingAllocation
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - skill -> skills.Skill [FK] (nullable)
   - specialization -> skills.Specialization [FK] (nullable)
   - mentor -> scenes.Persona [FK] (nullable)
@@ -8047,7 +8148,7 @@
 
 ### CharacterLegendSummary
 **Foreign Keys:**
-  - character -> objects.ObjectDB [OneToOne]
+  - character -> character_sheets.CharacterSheet [OneToOne]
 
 ### PersonaLegendSummary
 **Foreign Keys:**
@@ -8385,7 +8486,7 @@
 ### StoryParticipation
 **Foreign Keys:**
   - story -> stories.Story [FK]
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
 
 ### Chapter
 **Foreign Keys:**
@@ -8718,7 +8819,7 @@
 
 ### CharacterTraitValue
 **Foreign Keys:**
-  - character -> objects.ObjectDB [FK]
+  - character -> character_sheets.CharacterSheet [FK]
   - trait -> traits.Trait [FK]
 
 ### PointConversionRange

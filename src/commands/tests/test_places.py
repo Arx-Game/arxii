@@ -8,7 +8,12 @@ from django.test import TestCase
 
 from actions.types import ActionResult
 from commands.places import CmdPlaces
-from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.factories import PlaceFactory
 
@@ -35,7 +40,7 @@ class CmdPlacesTests(TestCase):
     def test_join_resolves_place_by_name_in_current_room(self):
         room = ObjectDBFactory(db_key="CmdPlacesRoom", db_typeclass_path="typeclasses.rooms.Room")
         caller = self._caller(room)
-        place = PlaceFactory(room=room, name="The Bar")
+        place = PlaceFactory(room=RoomProfileFactory(objectdb=room), name="The Bar")
         with patch("commands.places.JoinPlaceAction.run") as mocked:
             mocked.return_value = ActionResult(success=True, message="Joined.")
             self._run(caller, "join The Bar")
@@ -51,7 +56,7 @@ class CmdPlacesTests(TestCase):
     def test_leave_dispatches_leave_place_action(self):
         room = ObjectDBFactory(db_key="CmdPlacesRoom3", db_typeclass_path="typeclasses.rooms.Room")
         caller = self._caller(room)
-        place = PlaceFactory(room=room, name="The Bar")
+        place = PlaceFactory(room=RoomProfileFactory(objectdb=room), name="The Bar")
         from world.scenes.factories import PersonaFactory
         from world.scenes.place_models import PlacePresence
 

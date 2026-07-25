@@ -57,6 +57,7 @@ treat those names as hints to confirm, not gospel.
 - [0111 — One play surface — `/game` absorbs the scene toolset; `/scenes/:id` is the record page](0111-one-play-surface-game-absorbs-scene-toolset.md)
 - [0127 — Combat renders in-scene, not on a separate route](0127-combat-renders-in-scene-not-a-separate-route.md)
 - [0128 — Scene decisive-check is pre-declared, not post-hoc](0128-scene-decisive-check-is-pre-declared.md)
+- [0167 — Technique style is a property of the caster's Path, not of the Technique](0167-technique-style-is-a-property-of-the-casters-path.md) (#2700; relates to ADR-0136, ADR-0010)
 
 ### Database & modeling
 - [0007 — No JSON fields; every setting is a typed, queryable column](0007-no-json-fields-typed-queryable-columns.md)
@@ -77,10 +78,13 @@ treat those names as hints to confirm, not gospel.
 - [0098 — Houses are Organizations with kinship recognition](0098-houses-are-organizations-with-kinship-recognition.md)
 - [0101 — House aspects are catalog-only](0101-house-aspects-are-catalog-only.md)
 - [0107 — Solo darkness, not locked doors](0107-solo-darkness-not-locked-doors.md)
+- [0163 — Natural-key lookups are case-insensitive; a tuple→pk index removes the repeat query; whole-table warming is opt-in per model](0163-case-insensitive-natural-keys-and-opt-in-lookup-tables.md) (#2687; relates to ADR-0008)
 
 ### Resolution
 - [0019 — Unified resolution: one roll path, data-sourced difficulty, graded outcomes](0019-unified-resolution-one-roll-path.md)
 - [0145 — Capabilities reach checks only through authored CheckTypeCapabilityModifier rows](0145-capability-check-links-are-authored-only.md) (extends ADR-0019; related ADR-0110; #2505)
+- [0166 — Level is a guaranteed, additive term on both sides of every check](0166-level-is-a-two-sided-check-term.md) (#2707; relates to ADR-0165; extends ADR-0019/0145)
+- [0165 — rank_difference is roller minus target; positive means the roller is stronger and gets the easier chart](0165-result-chart-direction-convention.md) (#2707; relates to ADR-0166; extends ADR-0019)
 
 ### Process & workflow
 - [0020 — Feature specs live in the GitHub issue body, gated by labels](0020-feature-specs-live-in-the-issue-body.md)
@@ -92,7 +96,7 @@ treat those names as hints to confirm, not gospel.
 - [0137 — CI shards balanced by measured runtime; oversized apps split via generated module labels](0137-ci-shards-balanced-by-measured-runtime-with-generated-splits.md) (extends ADR-0083's CI pipeline)
 - [0138 — Paginate list endpoints by default; opt out explicitly](0138-paginate-list-endpoints-by-default-with-explicit-opt-out.md)
 - [0142 — The Big Button loads all real content from arx2-lore; arxii seeds keep only non-lore config/lookup tables](0142-content-vs-config-boundary-in-the-dev-seed.md) (extends ADR-0140's content pipeline; #2474)
-- [0164 — CONTENT_MODELS registration *is* the seed/content boundary; seeders look content up and invent only under SEED_SAMPLE_CONTENT](0164-content-models-registration-is-the-seed-boundary.md) (sharpens ADR-0142; #2698)
+- [0168 — CONTENT_MODELS registration *is* the seed/content boundary; seeders look content up and invent only under SEED_SAMPLE_CONTENT](0168-content-models-registration-is-the-seed-boundary.md) (sharpens ADR-0142; #2698)
 
 ### Game-design tenets
 - [0023 — PvP is structurally non-lethal](0023-pvp-is-structurally-non-lethal.md)
@@ -192,6 +196,7 @@ treat those names as hints to confirm, not gospel.
 - [0160 — Boss fights get their three-act shape from diversity-weighted break accrual, a proportional lieutenant gate, and a Soulfray-derived pacing floor](0160-boss-fight-structure-diversity-weighted-accrual.md) (#2642; related ADR-0007)
 - [0161 — Telegraphed wind-ups downgrade, never mid-round-interrupt; a 1-reaction budget plus a 2-answer absorption cap](0161-telegraphed-windups-downgrade-not-cancel-reaction-budget.md) (#2637, #2639; extends ADR-0118; related ADR-0060, ADR-0151)
 - [0162 — Sent Flying clones the plummet pattern: marker + reactable window + explicit end-of-round resolution](0162-sent-flying-clones-the-plummet-pattern.md) (#2638; extends ADR-0161; related ADR-0118, ADR-0151)
+- [0164 — Capability values share one uncapped ladder; blocking is emergent arithmetic, not a flag](0164-capability-value-ladder-and-emergent-blocking.md) (#2704; related ADR-0143, ADR-0034)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

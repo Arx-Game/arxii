@@ -96,7 +96,7 @@ class DescendAction(Action):
                 message="There is no deeper dream to descend into from here.",
             )
 
-        actor.location = reflection.descent_target
+        actor.location = reflection.descent_target.objectdb
         actor.save(update_fields=["db_location"])
         return ActionResult(
             success=True,
@@ -128,7 +128,7 @@ class AscendAction(Action):
 
         # Find the reflection whose descent_target is the character's current room
         reflection = DreamReflection.objects.filter(
-            descent_target=actor.location,
+            descent_target_id=actor.location.pk,
             is_active=True,
         ).first()
         if reflection is None:
@@ -137,7 +137,7 @@ class AscendAction(Action):
                 message="You cannot find your way back from here.",
             )
 
-        actor.location = reflection.dream_room
+        actor.location = reflection.dream_room.objectdb
         actor.save(update_fields=["db_location"])
         return ActionResult(
             success=True,

@@ -139,3 +139,18 @@ def _flush_arx_manager_caches() -> None:
 
 
 register_test_cache_flusher(_flush_arx_manager_caches)
+
+
+def _flush_natural_key_indexes() -> None:
+    """Clear the natural-key -> pk indexes and lookup-table warm flags (#2687).
+
+    Replaces the per-model registrations previously made by
+    ``world.conditions.apps`` and ``world.traits.apps`` for their bespoke name
+    caches, both of which this index subsumes.
+    """
+    from core.natural_keys import flush_natural_key_indexes  # noqa: PLC0415
+
+    flush_natural_key_indexes()
+
+
+register_test_cache_flusher(_flush_natural_key_indexes)

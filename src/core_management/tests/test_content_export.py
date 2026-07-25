@@ -363,7 +363,7 @@ class MagicCatalogContentExportTests(TestCase):
     Uses ``load_world_content`` rather than the bare ``build_all`` +
     ``load_entries`` pair the other tests in this file use: within the
     ``fixtures/magic/`` directory, ``gift.json`` sorts alphabetically before
-    ``resonance.json`` and ``technique.json`` sorts before ``techniquestyle.json``
+    ``resonance.json`` and ``technique.json`` sorts before ``traditiongiftgrant.json``
     (file processing order is plain alphabetical — ``NaturalKeyConfig.dependencies``
     is metadata only, not consulted for load ordering anywhere in this pipeline),
     so a straight one-pass ``load_entries`` would skip ``Gift``/``Technique``
@@ -443,8 +443,7 @@ class MagicCatalogContentExportTests(TestCase):
         # key, so a populated FK there isn't exportable by this pipeline yet;
         # out of scope for this task (see task-2-report.md).
         assert reloaded_technique.discovery_achievement is None
-        # TechniqueStyle/EffectType were never wiped — same underlying rows.
-        assert reloaded_technique.style_id == technique.style_id
+        # EffectType was never wiped — same underlying row.
         assert reloaded_technique.effect_type_id == technique.effect_type_id
 
         reloaded_path_grant = PathGiftGrant.objects.get(path=path, gift=reloaded_gift)

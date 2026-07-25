@@ -1021,7 +1021,7 @@ def seed_character_creation_dev() -> None:
     # traits.trait is content-repo-owned (#2698) — looked up rather than
     # invented unless SEED_SAMPLE_CONTENT is on. These are the base stat
     # Traits every other check-composing seeder in this repo looks up by
-    # name; a real content repo authors them (the ADR-0164 audit found
+    # name; a real content repo authors them (the ADR-0168 audit found
     # checks.checktype alone at 42 seeded vs. 72 authored rows).
     for stat_name in DEFAULT_STAT_NAMES:
         authored_or_sample(

@@ -40,7 +40,6 @@ from world.magic.models.techniques import (
     EffectType,
     Technique,
     TechniqueAppliedCondition,
-    TechniqueStyle,
 )
 
 if TYPE_CHECKING:
@@ -204,7 +203,7 @@ def _ensure_charm_technique() -> Technique | None:
     player-reachable without the parley verb. Mirrors the technique seed in
     ``combat/defend_content.py``: direct ORM lookups, not the budget builder.
 
-    ``Gift``/``TechniqueStyle``/``EffectType``/``Technique``/
+    ``Gift``/``EffectType``/``Technique``/
     ``TechniqueAppliedCondition`` are all content-repo-owned (#2698) — looked
     up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns
     ``None`` (skipping the TechniqueAppliedCondition row) when any
@@ -223,11 +222,6 @@ def _ensure_charm_technique() -> Technique | None:
         {"description": "Charm, compulsion, and social influence magic."},
         name="Charm",
     )
-    style = authored_or_sample(
-        TechniqueStyle,
-        {"description": "Magic that manifests without obvious display."},
-        name="Subtle",
-    )
     effect_type = authored_or_sample(
         EffectType,
         {
@@ -238,7 +232,7 @@ def _ensure_charm_technique() -> Technique | None:
         },
         name="Compulsion",
     )
-    if charm_gift is None or style is None or effect_type is None:
+    if charm_gift is None or effect_type is None:
         return None
 
     technique = authored_or_sample(
@@ -247,7 +241,6 @@ def _ensure_charm_technique() -> Technique | None:
             "description": (
                 "A word of power that turns an enemy's loyalty, charming them to fight for you."
             ),
-            "style": style,
             "effect_type": effect_type,
             "action_category": ActionCategory.SOCIAL,
             "intensity": 4,

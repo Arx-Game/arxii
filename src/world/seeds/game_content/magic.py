@@ -262,7 +262,7 @@ class MagicContent:
             GiftFactory,
             ResonanceFactory,
         )
-        from world.magic.models import EffectType, Technique, TechniqueStyle  # noqa: PLC0415
+        from world.magic.models import EffectType, Technique  # noqa: PLC0415
         from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
         gift = GiftFactory(name="Social Arts")
@@ -274,12 +274,8 @@ class MagicContent:
         social_resonance = ResonanceFactory(name="Social Influence", affinity=social_affinity)
         gift.resonances.add(social_resonance)
 
-        # Ensure a minimal style and effect_type exist for social techniques.
+        # Ensure a minimal effect_type exists for social techniques.
         # get_or_create so re-runs don't create duplicates.
-        style, _ = TechniqueStyle.objects.get_or_create(
-            name="Social",
-            defaults={"description": "Magic expressed through social interaction."},
-        )
         effect_type, _ = EffectType.objects.get_or_create(
             name="Social Influence",
             defaults={
@@ -298,7 +294,6 @@ class MagicContent:
                 name=technique_name,
                 defaults={
                     "gift": gift,
-                    "style": style,
                     "effect_type": effect_type,
                     "intensity": 2,
                     "control": 2,
@@ -2399,9 +2394,9 @@ def ensure_portal_travel_content() -> None:
     3. ``Technique`` "Mirrorwalk" — ``travel_anchor_kind=Mirror``,
        ``anima_cost=0`` (#2222 Decision 5d: per-use cost is the technique's
        own ``anima_cost``; 0 for the seeded starter technique is convenience
-       by design). Reuses the "Translocation Stance" style and "Teleport"
-       ``EffectType`` already seeded by ``ensure_teleport_content`` — both
-       fit movement/travel, so this is reuse, not a parallel catalog
+       by design). Reuses the "Teleport" ``EffectType`` already seeded by
+       ``ensure_teleport_content`` — it fits movement/travel, so this is
+       reuse, not a parallel catalog
        (anti-reinvention pass) — plus the shared standalone cast template so
        the technique is fully castable like every other technique.
     4. A ``GiftUnlock`` row gating Mirrorwalking behind XP
@@ -2414,7 +2409,7 @@ def ensure_portal_travel_content() -> None:
     edits (never ``update_or_create``).
 
     ``PortalAnchorKind``/``Affinity``/``Resonance``/``Gift``/
-    ``TechniqueStyle``/``EffectType``/``Technique`` are all content-repo-owned
+    ``EffectType``/``Technique`` are all content-repo-owned
     (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
     on. When the anchor kind, gift, style, or effect type is unavailable, the
     Technique (and everything that hangs off it — the GiftUnlock, the starter
@@ -2424,9 +2419,6 @@ def ensure_portal_travel_content() -> None:
 
     from actions.constants import ActionTargetType  # noqa: PLC0415
     from world.magic.constants import GiftKind  # noqa: PLC0415
-    from world.magic.effect_palette_content import (  # noqa: PLC0415
-        TRANSLOCATION_STANCE_STYLE_NAME,
-    )
     from world.magic.models import (  # noqa: PLC0415
         Affinity,
         EffectType,
@@ -2435,7 +2427,6 @@ def ensure_portal_travel_content() -> None:
         PortalAnchorKind,
         Resonance,
         Technique,
-        TechniqueStyle,
     )
     from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
     from world.seeds.character_creation import ensure_canonical_fallback_room  # noqa: PLC0415
@@ -2481,12 +2472,7 @@ def ensure_portal_travel_content() -> None:
     if gift is not None and reflection is not None:
         gift.resonances.add(reflection)  # idempotent M2M add
 
-    # 3. Technique — reuse the existing movement-fitting style + EffectType.
-    style = authored_or_sample(
-        TechniqueStyle,
-        {"description": "A magical style for space-bending techniques."},
-        name=TRANSLOCATION_STANCE_STYLE_NAME,
-    )
+    # 3. Technique — reuse the existing movement-fitting EffectType.
     effect_type = authored_or_sample(
         EffectType,
         {
@@ -2497,7 +2483,7 @@ def ensure_portal_travel_content() -> None:
         },
         name="Teleport",
     )
-    if mirror_kind is None or gift is None or style is None or effect_type is None:
+    if mirror_kind is None or gift is None or effect_type is None:
         return
     technique = authored_or_sample(
         Technique,
@@ -2506,7 +2492,6 @@ def ensure_portal_travel_content() -> None:
                 "Step into an open mirror and out the other side, wherever its "
                 "twin waits open on the network."
             ),
-            "style": style,
             "effect_type": effect_type,
             "level": 1,
             "intensity": 1,

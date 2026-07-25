@@ -146,6 +146,21 @@ class NaturalKeyManagerTests(TestCase):
             Trait.objects.get_by_natural_key("nk_test_trait", "extra_arg")
         self.assertIn("Too many", str(cm.exception))
 
+    def test_lookup_table_too_few_args_raises_error(self):
+        """Test that a lookup_table model's too-few-args case raises the config
+        error, not a silent DoesNotExist.
+
+        Trait is a lookup_table model (NaturalKeyConfig.lookup_table = True), so
+        get_by_natural_key() short-circuits to _get_from_lookup_table() before
+        _natural_key_lookup() ever runs -- _assert_lookup_table_arg_count() is
+        the only thing standing between a caller mistake and a misleading
+        DoesNotExist. Trait's natural key takes exactly one argument, so "too
+        few" means zero args.
+        """
+        with self.assertRaises(NaturalKeyConfigError) as cm:
+            Trait.objects.get_by_natural_key()
+        self.assertIn("Not enough", str(cm.exception))
+
 
 class CountNaturalKeyArgsTests(TestCase):
     """Test the count_natural_key_args helper function."""

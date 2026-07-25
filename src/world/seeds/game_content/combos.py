@@ -27,7 +27,7 @@ def seed_combo_palette() -> None:
     distinct EffectTypes. At least 2 are discoverable_via_combat with
     linked discovery achievements + ceremony copy.
 
-    ``EffectType``/``Resonance``/``Gift``/``TechniqueStyle`` are all
+    ``EffectType``/``Resonance``/``Gift`` are all
     content-repo-owned (#2698) — looked up rather than invented unless
     ``SEED_SAMPLE_CONTENT`` is on (see ``_ensure_effect_types``/
     ``_ensure_resonances`` below). ``ComboDefinition``/``ComboSlot`` are not
@@ -35,7 +35,7 @@ def seed_combo_palette() -> None:
     """
     from world.achievements.factories import AchievementFactory  # noqa: PLC0415
     from world.combat.models import ComboDefinition  # noqa: PLC0415
-    from world.magic.models import Gift, TechniqueStyle  # noqa: PLC0415
+    from world.magic.models import Gift  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # Reuse or create the EffectTypes we need.
@@ -44,11 +44,6 @@ def seed_combo_palette() -> None:
 
     # Create a shared gift for combo techniques.
     authored_or_sample(Gift, {}, name="Combo Arts")
-    authored_or_sample(
-        TechniqueStyle,
-        {"description": "Magic expressed through coordinated team techniques."},
-        name="Combo",
-    )
 
     # --- Combo 1: Twin Strike (2-slot, Attack + Attack) ---
     combo_1, _ = ComboDefinition.objects.get_or_create(

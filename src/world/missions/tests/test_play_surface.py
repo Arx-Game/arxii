@@ -574,7 +574,7 @@ class InstancedPlayTests(TestCase):
         assert spawned.db_key == "Darkened Interior"
         character.refresh_from_db()
         assert character.location == spawned
-        assert InstancedRoom.objects.filter(room=spawned).exists()
+        assert InstancedRoom.objects.filter(room=RoomProfileFactory(objectdb=spawned)).exists()
 
     def test_instance_mode_gates_to_spawned_room(self) -> None:
         from world.missions.services.resolution import resolve_option

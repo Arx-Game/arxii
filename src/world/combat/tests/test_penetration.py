@@ -16,12 +16,14 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
 
+from world.checks.services import level_opposition
 from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
 from world.combat.factories import (
     CombatOpponentFactory,
     wire_penetration_check_type,
 )
+from world.combat.services import get_penetration_check_type
 from world.combat.tests.penetration_helpers import _build_resolver, _ledger
 from world.conditions.factories import (
     DamageSuccessLevelMultiplierFactory,
@@ -44,15 +46,21 @@ class PenetrationContestTests(TestCase):
         wire_penetration_factors()
         wire_penetration_check_type()
 
-    # --- 1. Difficulty sourced from the ward --------------------------------
+    # --- 1. Difficulty sourced from the ward (plus the target's level, #2707) --
 
-    def test_difficulty_is_barrier_strength(self) -> None:
+    def test_difficulty_is_barrier_strength_plus_level_opposition(self) -> None:
+        """#2707 Task 6: additive on top of the ward, never a replacement for it."""
         resolver = _build_resolver(barrier_strength=7)
+        target = resolver.action.focused_opponent_target
         with patch("world.combat.services.perform_check") as mock_pen:
             mock_pen.return_value = MagicMock(success_level=1)  # full
             resolver(power=20, ledger=_ledger(20))
         mock_pen.assert_called_once()
-        self.assertEqual(mock_pen.call_args.kwargs["target_difficulty"], 7)
+        pen_check_type = get_penetration_check_type()
+        expected = 7 + level_opposition(
+            pen_check_type, level=target.level, character=target.objectdb
+        )
+        self.assertEqual(mock_pen.call_args.kwargs["target_difficulty"], expected)
 
     def test_situation_ctx_threaded_with_live_round_context(self) -> None:
         """#2536 Task 5 review fix: _apply_penetration must thread a

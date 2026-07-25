@@ -125,8 +125,10 @@ class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
         default=0,
         help_text=(
             "Default value every character has for this capability before "
-            "modifiers/conditions. Foundational capacities (awareness, movement, "
-            "limb_use) set this >= 1; granted/specialty capabilities leave it 0."
+            "modifiers/conditions, on the capability ladder (ADR-0164): 5 = an "
+            "unimpaired mortal. Foundational capacities (awareness, movement, "
+            "limb_use) and the senses (sight, hearing) set this to 5; "
+            "granted/specialty capabilities leave it 0."
         ),
     )
     prerequisite = models.ForeignKey(
@@ -445,15 +447,11 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
 
     objects = NaturalKeyManager()
 
-    # Name → PK cache for get_by_name (below). Class-level so service hot
-    # paths (round ticks, condition advancement) reuse the cached PK
-    # across calls. Flushed between tests via core.testing's registered
-    # cache hook so test rollback can't leave stale PKs (see
-    # core.testing module docstring for the rationale).
-    _name_pk_cache: dict[str, int] = {}
-
     class NaturalKeyConfig:
         fields = ["name"]
+        # Small catalog read by name on hot paths (battle resolution, plummet,
+        # perk evaluators) — load it whole once (#2687).
+        lookup_table = True
 
     class Meta:
         ordering = ["category", "name"]
@@ -463,33 +461,15 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
 
     @classmethod
     def get_by_name(cls, name: str) -> ConditionTemplate:
-        """Return the template with this name, leveraging the identity map.
+        """Return the template with this name, case-insensitively.
 
-        Service hot paths repeatedly look up known-must-exist templates by name
-        (Soulfray, Audere, Bleeding-Out, etc.). Plain ``objects.get(name=NAME)``
-        issues a fresh query every call because the identity map is keyed by PK,
-        not name. This method maintains a class-level name→PK index so the
-        second-and-after calls hit SharedMemoryModel's identity map directly
-        (zero queries) instead of re-querying by name.
-
-        Cache invalidation: the project test runner flushes ``_name_pk_cache``
-        and ``SharedMemoryModel``'s identity map between tests (see
-        ``core.testing``). In production the cache is stable because rows
-        aren't deleted out from under it.
+        Delegates to the generic natural-key index (#2687). ``ConditionTemplate``
+        is a ``lookup_table``, so the whole (small, always-used) table is loaded
+        once and every lookup after that resolves from memory.
 
         Raises ConditionTemplate.DoesNotExist if no row matches.
         """
-        cached_pk = cls._name_pk_cache.get(name)
-        if cached_pk is not None:
-            try:
-                return cls.objects.get(pk=cached_pk)
-            except cls.DoesNotExist:
-                # Cache poisoned (e.g. somebody deleted the row in production);
-                # drop and refetch.
-                cls._name_pk_cache.pop(name, None)
-        obj = cls.objects.get(name=name)  # raises DoesNotExist
-        cls._name_pk_cache[name] = obj.pk
-        return obj
+        return cls.objects.get_by_natural_key(name)
 
     @cached_property
     def cached_stages(self) -> list[ConditionStage]:
@@ -728,21 +708,30 @@ class ConditionCapabilityEffect(NaturalKeyMixin, ConditionOrStageEffect):
     """
     Defines how a condition affects a capability.
 
-    Uses an additive integer model. Negative values reduce, positive enhance.
-    A large negative effectively blocks the capability (value floors at 0).
+    Uses an additive integer model on the capability ladder (ADR-0164). Negative
+    values reduce, positive enhance; the total floors at 0 in
+    ``get_effective_capability_value``.
 
-    Examples:
-      - Frozen: value=-100 (effectively blocks movement)
-      - Slowed: value=-5 (reduces movement)
-      - Empowered: value=+5 (enhances melee_attack)
+    The ladder: 0 blocked, 1-3 impaired, 5 unimpaired mortal, 8-12 gifted,
+    25+ greater supernatural, 100+ mythic. It is deliberately uncapped — a high
+    enough value lets a being do what is impossible for a mortal.
+
+    Blocking is emergent arithmetic, never a flag: a block is a negative large
+    enough to beat the tier it is meant to beat.
+      - Mundane block (-20): Grappled. Stops mortal and gifted; a greater
+        supernatural walks out of it.
+      - Potent block (-100): Frozen, Unconscious. Beats everything below mythic.
+      - Absolute block (-1000): reserved for mythic-defeating effects.
+      - Graded impairment: Chilled -2, Slowed -3, Hastened +3.
     """
 
     capability = models.ForeignKey(CapabilityType, on_delete=models.CASCADE)
     value = models.IntegerField(
         default=0,
         help_text=(
-            "Additive modifier. Negative reduces, positive enhances. "
-            "A large negative effectively blocks the capability."
+            "Additive modifier on the capability ladder (ADR-0164). Negative "
+            "reduces, positive enhances; a block is a negative sized to the tier "
+            "it must beat (mundane -20, potent -100, absolute -1000)."
         ),
     )
 
@@ -833,7 +822,25 @@ class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
       - Wounded gives -5 to all physical checks
     """
 
-    check_type = models.ForeignKey("checks.CheckType", on_delete=models.CASCADE)
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="Specific check type. Mutually exclusive with check_category.",
+    )
+    check_category = models.ForeignKey(
+        "checks.CheckCategory",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="condition_check_modifiers",
+        help_text=(
+            "When set (and check_type is null), this modifier applies to ANY check "
+            "in this category — including per-character checks like the signature "
+            "magic check. Mutually exclusive with check_type."
+        ),
+    )
     modifier_value = models.IntegerField(
         help_text="Flat modifier (positive = bonus, negative = penalty)",
     )
@@ -841,36 +848,76 @@ class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
-        fields = ["condition", "stage", "check_type"]
+        fields = ["condition", "stage", "check_type", "check_category"]
         dependencies = [
             _CONDITION_TEMPLATE_FK,
             _CONDITION_STAGE_FK,
             "checks.CheckType",
+            "checks.CheckCategory",
         ]
 
     class Meta(ConditionOrStageEffect.Meta):
         constraints = [
             *ConditionOrStageEffect.Meta.constraints,
+            models.CheckConstraint(
+                check=(
+                    Q(check_type__isnull=False, check_category__isnull=True)
+                    | Q(check_type__isnull=True, check_category__isnull=False)
+                ),
+                name="check_modifier_exactly_one_check_target",
+            ),
             models.UniqueConstraint(
                 fields=["condition", "check_type"],
-                condition=Q(condition__isnull=False),
+                condition=Q(condition__isnull=False, check_type__isnull=False),
                 name="check_modifier_unique_condition",
             ),
             models.UniqueConstraint(
                 fields=["stage", "check_type"],
-                condition=Q(stage__isnull=False),
+                condition=Q(stage__isnull=False, check_type__isnull=False),
                 name="check_modifier_unique_stage",
+            ),
+            models.UniqueConstraint(
+                fields=["condition", "check_category"],
+                condition=Q(condition__isnull=False, check_category__isnull=False),
+                name="check_modifier_unique_condition_category",
+            ),
+            models.UniqueConstraint(
+                fields=["stage", "check_category"],
+                condition=Q(stage__isnull=False, check_category__isnull=False),
+                name="check_modifier_unique_stage_category",
             ),
         ]
 
+    def clean(self) -> None:
+        """Validate exactly-one of check_type / check_category is set."""
+        super().clean()
+        has_check_type = self.check_type_id is not None
+        has_check_category = self.check_category_id is not None
+        if has_check_type and has_check_category:
+            from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+            msg = "check_type and check_category are mutually exclusive — set exactly one."
+            raise ValidationError(msg)
+        if not has_check_type and not has_check_category:
+            from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+            msg = "Exactly one of check_type or check_category must be set."
+            raise ValidationError(msg)
+
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
+        target = (
+            f"{self.check_category.name} (category)"
+            if self.check_category_id
+            else self.check_type.name
+        )
         if self.stage:
             return (
                 f"{self.stage.condition.name} ({self.stage.name}): "
-                f"{sign}{self.modifier_value} to {self.check_type.name}"
+                f"{sign}{self.modifier_value} to {target}"
             )
-        return f"{self.condition.name}: {sign}{self.modifier_value} to {self.check_type.name}"
+        condition_name = self.condition.name if self.condition else self.stage.condition.name
+        return f"{condition_name}: {sign}{self.modifier_value} to {target}"
 
 
 class ConditionResistanceModifier(NaturalKeyMixin, ConditionOrStageEffect):

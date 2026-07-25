@@ -41,7 +41,7 @@ _USAGE = (
     "technique draft <name>          — start/replace draft\n"
     "  technique show                  — show current draft + live price\n"
     "  technique set <field>=<v> ...   — set one or more draft fields\n"
-    "    (fields: name, description, gift, style, effect_type,\n"
+    "    (fields: name, description, gift, effect_type,\n"
     "             action_category, tier, intensity, control, anima_cost,\n"
     "             consequence_pool)\n"
     "    (put name= / description= LAST — they consume the rest of the line)\n"
@@ -64,7 +64,6 @@ _SET_FIELDS = frozenset(
         "name",
         "description",
         "gift",
-        "style",
         "effect_type",
         "action_category",
         "tier",
@@ -252,7 +251,6 @@ class CmdTechnique(ArxCommand):
             f"|wTechnique Draft:|n {draft.name or '(unnamed)'}",
             f"  Description : {draft.description or '(none)'}",
             f"  Gift        : {draft.gift or '(unset)'}",
-            f"  Style       : {draft.style or '(unset)'}",
             f"  Effect type : {draft.effect_type or '(unset)'}",
             f"  Category    : {draft.action_category or '(unset)'}",
             f"  Tier        : {tier_text}",
@@ -333,11 +331,10 @@ class CmdTechnique(ArxCommand):
 
     def _simple_fk_fields(self) -> dict:
         """Field name -> (model, human label) for the plain name-or-id lookups."""
-        from world.magic.models import EffectType, Gift, TechniqueStyle  # noqa: PLC0415
+        from world.magic.models import EffectType, Gift  # noqa: PLC0415
 
         return {
             "gift": (Gift, "gift"),
-            "style": (TechniqueStyle, "style"),
             "effect_type": (EffectType, "effect type"),
         }
 

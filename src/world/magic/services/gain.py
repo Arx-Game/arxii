@@ -1080,15 +1080,36 @@ def outfit_daily_trickle_for_character(sheet: CharacterSheet) -> int:
 def outfit_trickle_tick() -> int:
     """Outfit trickle tick (Spec D §5.1).
 
-    Iterates all CharacterSheets, skipping protagonism-locked sheets. For each
-    sheet, delegates to outfit_daily_trickle_for_character per-sheet in its own
-    atomic block so a single failure does not poison the whole tick.
+    Driven from the *narrow* side: a sheet can only earn an outfit trickle
+    through ``thread_for_facet``, so a sheet owning no active FACET-kind Thread
+    would walk its whole wardrobe and grant nothing. Selecting those owners up
+    front is therefore behaviour-identical to scanning every CharacterSheet,
+    and turns a per-playerbase scan into work proportional to the (much
+    smaller) set of characters who have actually woven a facet thread.
+
+    Skips protagonism-locked sheets. Each sheet is processed in its own atomic
+    block so a single failure does not poison the whole tick.
 
     Returns: total count of grants issued across all sheets.
     """
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.models import Thread  # noqa: PLC0415
+
     total_grants = 0
 
-    for sheet in CharacterSheet.objects.all().iterator():
+    # Matches CharacterThreadHandler._all's notion of "active" (non-retired),
+    # so the narrowing cannot skip a sheet the per-sheet pass would have paid out.
+    facet_thread_owner_ids = set(
+        Thread.objects.filter(
+            target_kind=TargetKind.FACET,
+            retired_at__isnull=True,
+        ).values_list("owner_id", flat=True)
+    )
+    if not facet_thread_owner_ids:
+        return 0
+
+    sheets = CharacterSheet.objects.filter(pk__in=facet_thread_owner_ids)
+    for sheet in sheets.iterator():
         if sheet.is_protagonism_locked:
             continue
         try:

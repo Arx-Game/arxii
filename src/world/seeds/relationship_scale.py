@@ -12,7 +12,7 @@ rewrite (track names, tier names, emoji selection pending playtest).
 ``relationships.RelationshipTrack`` is content-repo-owned (#2698) — looked up
 rather than invented unless ``SEED_SAMPLE_CONTENT`` is on (a real behavior
 change: this used to ``update_or_create``, silently re-applying the
-PLACEHOLDER name/description over a staff edit on every re-seed; ADR-0164
+PLACEHOLDER name/description over a staff edit on every re-seed; ADR-0168
 does not let a seeder write into a content model at all, so the upsert had to
 go). ``RelationshipTier``/``ReactionEmoji`` are NOT content models and stay
 unconditional, keyed by their own stable lookup via ``update_or_create`` so

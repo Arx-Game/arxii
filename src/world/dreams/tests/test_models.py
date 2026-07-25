@@ -2,7 +2,7 @@
 
 from django.test import TestCase
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from world.dreams.models import DreamReflection
 
 
@@ -10,8 +10,9 @@ class DreamReflectionTests(TestCase):
     """Tests for DreamReflection model creation and lookup."""
 
     def setUp(self):
-        self.waking_room = ObjectDBFactory(db_key="Waking Room")
-        self.dream_room = ObjectDBFactory(db_key="Dream Room")
+        self.waking_object = ObjectDBFactory(db_key="Waking Room")
+        self.waking_room = RoomProfileFactory(objectdb=self.waking_object)
+        self.dream_room = RoomProfileFactory(objectdb=ObjectDBFactory(db_key="Dream Room"))
 
     def test_create_reflection(self):
         reflection = DreamReflection.objects.create(
@@ -28,7 +29,7 @@ class DreamReflectionTests(TestCase):
             waking_room=self.waking_room,
             dream_room=self.dream_room,
         )
-        result = DreamReflection.objects.for_waking_room(self.waking_room)
+        result = DreamReflection.objects.for_waking_room(self.waking_object)
         assert result is not None
         assert result.dream_room == self.dream_room
 
@@ -42,10 +43,10 @@ class DreamReflectionTests(TestCase):
             dream_room=self.dream_room,
             is_active=False,
         )
-        assert DreamReflection.objects.for_waking_room(self.waking_room) is None
+        assert DreamReflection.objects.for_waking_room(self.waking_object) is None
 
     def test_descent_target_optional(self):
-        deep_room = ObjectDBFactory(db_key="Deep Dreaming")
+        deep_room = RoomProfileFactory(objectdb=ObjectDBFactory(db_key="Deep Dreaming"))
         reflection = DreamReflection.objects.create(
             waking_room=self.waking_room,
             dream_room=self.dream_room,

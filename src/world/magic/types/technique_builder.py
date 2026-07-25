@@ -63,7 +63,6 @@ class TechniqueDesignInput:
     name: str
     description: str
     gift_id: int
-    style_id: int
     effect_type_id: int
     action_category: str
     tier: int

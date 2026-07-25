@@ -152,7 +152,6 @@ def create_technique(  # noqa: PLR0913
     creator,
     name,
     gift,
-    style,
     effect_type,
     intensity,
     control,
@@ -184,7 +183,6 @@ def create_technique(  # noqa: PLR0913
         return Technique.objects.create(
             name=name,
             gift=gift,
-            style=style,
             effect_type=effect_type,
             intensity=intensity,
             control=control,
@@ -334,13 +332,12 @@ def enforce_policy(
 def build_technique(design: TechniqueDesignInput, *, creator) -> Technique:
     """Unrestricted core: create the Technique + payload rows + restrictions.
     No pricing, no ceiling, no character binding. creator may be None (staff seed)."""
-    from world.magic.models import EffectType, Gift, TechniqueStyle  # noqa: PLC0415
+    from world.magic.models import EffectType, Gift  # noqa: PLC0415
 
     tech = create_technique(
         creator=creator,
         name=design.name,
         gift=Gift.objects.get(pk=design.gift_id),
-        style=TechniqueStyle.objects.get(pk=design.style_id),
         effect_type=EffectType.objects.get(pk=design.effect_type_id),
         intensity=design.intensity,
         control=design.control,

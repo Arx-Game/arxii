@@ -227,11 +227,17 @@ Database design:
   game objects; an FK to it is almost always too broad. Use a specific model
   (Persona, RosterEntry, CharacterSheet, RoomProfile). Ask: "could this be a vase of
   flowers?" Only use ObjectDB when the FK genuinely needs any object type. Same rule
-  applies to service-function parameter annotations — enforced by
-  `tools/lint_objectdb_param.py` (`objectdb-param` hook); use `# noqa: OBJECTDB_PARAM`
-  when ObjectDB is genuinely right. Lint scope expands one app at a time (the
-  `files:` regex in `.pre-commit-config.yaml`); new code in in-scope modules must
-  pass clean.
+  applies to service-function parameter annotations — both are enforced by
+  `tools/lint_objectdb_param.py` (`objectdb-param` hook): `# noqa: OBJECTDB_PARAM`
+  suppresses a signature, `# noqa: OBJECTDB_FIELD` a model relation field (allowed in
+  the comment block directly above it, where the rationale belongs). A keeper without
+  a stated reason is indistinguishable from an oversight — always say why. Lint scope
+  expands one app at a time (the `files:` regex in `.pre-commit-config.yaml`); new code
+  in in-scope modules must pass clean.
+- **RoomProfile and CharacterSheet share ObjectDB's pk** (both are `primary_key=True`
+  O2Os onto it). A retarget off ObjectDB is therefore column-value-identical, and any
+  caller holding an ObjectDB can filter a retargeted FK with `field_id=obj.pk` instead
+  of fetching the profile/sheet first.
 - **FK direction — depend specific→general** (see ADR-0010). When a link joins two systems, decide
   which side the FK belongs on *deliberately*: it lives on the more specific/dependent
   system and points at the reusable primitive, **never** on the primitive. Don't anchor

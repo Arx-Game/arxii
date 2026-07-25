@@ -193,7 +193,7 @@ class RelationshipScaleSeedTests(TestCase):
         tier.refresh_from_db()
         self.assertEqual(tier.name, "Noticed")
 
-        # The track itself is content-repo-owned (#2698, ADR-0164) — a staff
+        # The track itself is content-repo-owned (#2698, ADR-0168) — a staff
         # edit to its name now survives a re-seed instead of being clobbered.
         regard.name = "Renamed"
         regard.save(update_fields=["name"])

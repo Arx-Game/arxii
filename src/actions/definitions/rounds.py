@@ -121,7 +121,13 @@ class StartRoundAction(Action):
         With no knob overrides, create a round from config defaults. With overrides,
         require an active scene and scene-admin permission, then apply the overrides.
         """
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
         from world.scenes.models import get_scene_round_defaults_config  # noqa: PLC0415
+
+        # SceneRound.room is a RoomProfile (#2608); the caller holds actor.location.
+        room_profile = RoomProfile.objects.filter(objectdb=room).first()
+        if room_profile is None:
+            return None, "Rounds can only be started in a room."
 
         cfg = get_scene_round_defaults_config()
         has_override = any(
@@ -131,7 +137,7 @@ class StartRoundAction(Action):
 
         if not has_override:
             rnd = SceneRound.objects.create(
-                room=room,
+                room=room_profile,
                 status=RoundStatus.DECLARING,
                 round_number=1,
                 start_reason=SceneRoundStartReason.OPT_IN,
@@ -155,7 +161,7 @@ class StartRoundAction(Action):
             )
 
         rnd = SceneRound.objects.create(
-            room=room,
+            room=room_profile,
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,
@@ -354,7 +360,7 @@ class LeaveRoundAction(Action):
             return ActionResult(success=False, message=NO_CHARACTER_SHEET_MESSAGE)
 
         SceneRoundParticipant.objects.filter(
-            scene_round__room=room,
+            scene_round__room_id=room.pk,
             scene_round__status__in=ACTIVE_SCENE_ROUND_STATUSES,
             character_sheet=sheet,
         ).update(status=SceneRoundParticipantStatus.LEFT)

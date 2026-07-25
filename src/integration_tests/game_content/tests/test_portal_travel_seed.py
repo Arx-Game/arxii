@@ -11,7 +11,6 @@ from __future__ import annotations
 from django.test import TestCase, override_settings
 
 from world.magic.constants import GiftKind
-from world.magic.effect_palette_content import TRANSLOCATION_STANCE_STYLE_NAME
 from world.magic.models import (
     Gift,
     GiftUnlock,
@@ -52,7 +51,6 @@ class EnsurePortalTravelContentTests(TestCase):
         technique = Technique.objects.get(name=_MIRRORWALK_TECHNIQUE_NAME)
         self.assertEqual(technique.travel_anchor_kind, kind)
         self.assertEqual(technique.anima_cost, 0)
-        self.assertEqual(technique.style.name, TRANSLOCATION_STANCE_STYLE_NAME)
         self.assertEqual(technique.effect_type.name, "Teleport")
         self.assertIsNotNone(technique.action_template)
 

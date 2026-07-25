@@ -97,7 +97,7 @@ class CmdTidings(ArxCommand):
         from world.roster.models import RosterEntry  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        entry = RosterEntry.objects.filter(character_sheet__character=self.caller).first()
+        entry = RosterEntry.objects.filter(character_sheet_id=self.caller.pk).first()
         if entry is None:
             raise CommandError(_NO_IDENTITY)
         return active_persona_for_sheet(entry.character_sheet)

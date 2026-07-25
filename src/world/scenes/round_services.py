@@ -12,6 +12,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from evennia_extensions.models import RoomProfile
 from world.scenes.constants import (
     ACTIVE_SCENE_ROUND_STATUSES,
     RoundStatus,
@@ -196,7 +197,10 @@ def active_round_for_room(room: ObjectDB) -> SceneRound | None:
     One active round per room (the ``one_active_scene_round_per_room`` constraint),
     so ``.first()`` is unambiguous.
     """
-    return SceneRound.objects.filter(room=room, status__in=ACTIVE_SCENE_ROUND_STATUSES).first()
+    # RoomProfile shares ObjectDB's pk (#2608) — look up by id, no profile fetch.
+    return SceneRound.objects.filter(
+        room_id=room.pk, status__in=ACTIVE_SCENE_ROUND_STATUSES
+    ).first()
 
 
 def actions_this_round(scene_round: SceneRound, participant: SceneRoundParticipant) -> int:
@@ -402,10 +406,14 @@ def ensure_round_for_acute_condition(character_sheet: CharacterSheet) -> SceneRo
     room = character_sheet.character.location
     if room is None:
         return None
-    rnd = SceneRound.objects.filter(room=room, status__in=ACTIVE_SCENE_ROUND_STATUSES).first()
+    rnd = SceneRound.objects.filter(room_id=room.pk, status__in=ACTIVE_SCENE_ROUND_STATUSES).first()
     if rnd is None:
+        room_profile = RoomProfile.objects.filter(objectdb=room).first()
+        if room_profile is None:
+            # No profile means it isn't a Room the round system can anchor to.
+            return None
         rnd = SceneRound.objects.create(
-            room=room,
+            room=room_profile,
             start_reason=SceneRoundStartReason.DANGER,
             mode=SceneRoundMode.STRICT,
         )
@@ -432,7 +440,7 @@ def scene_round_is_complete(scene_round: SceneRound) -> bool:
 
     from world.vitals.services import can_act  # noqa: PLC0415
 
-    present_ids = {s.character_id for s in _present_character_sheets(scene_round.room)}
+    present_ids = {s.character_id for s in _present_character_sheets(scene_round.room.objectdb)}
     active = scene_round.participants.filter(
         status=SceneRoundParticipantStatus.ACTIVE
     ).select_related("character_sheet")
@@ -662,7 +670,7 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
             round_number=rnd.round_number, is_immediate=False
         ).values_list("participant_id", flat=True)
     )
-    present_ids = {s.character_id for s in _present_character_sheets(rnd.room)}
+    present_ids = {s.character_id for s in _present_character_sheets(rnd.room.objectdb)}
 
     # Acute-peril narrowing (#1479): decide each DOWNED victim's fate BEFORE
     # _resolve_scene_declarations deletes this round's declaration rows, since the

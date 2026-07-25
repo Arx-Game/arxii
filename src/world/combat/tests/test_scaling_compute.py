@@ -9,6 +9,8 @@ Covers:
 - test_hero_killer_unscaled: HERO_KILLER block equals template base regardless of risk/party
 """
 
+import dataclasses
+
 from django.test import TestCase
 
 from world.classes.factories import CharacterClassLevelFactory
@@ -366,14 +368,34 @@ class HeroKillerUnscaledTest(TestCase):
         self.assertEqual(block_lethal.max_health, tpl.base_health)
 
     def test_hero_killer_blocks_identical_regardless_of_party(self):
-        """Different party sizes/levels yield identical HERO_KILLER blocks."""
+        """Different party sizes/levels yield identical HERO_KILLER sentinel stats.
+
+        ``level`` is deliberately excluded from this comparison (#2707): it is a
+        SEPARATE axis from the "unbeatable sentinel stats" this test guards, and
+        it DOES scale with avg_level even on the HERO_KILLER branch (asserted
+        below) -- unlike health/soak/probing/etc., which stay unscaled sentinels.
+        """
         block_small = compute_opponent_stat_block(
             OpponentTier.HERO_KILLER, self.encounter_low, party_size=1, avg_level=1.0
         )
         block_large = compute_opponent_stat_block(
             OpponentTier.HERO_KILLER, self.encounter_lethal, party_size=10, avg_level=20.0
         )
-        self.assertEqual(block_small, block_large)
+        self.assertEqual(
+            dataclasses.replace(block_small, level=0),
+            dataclasses.replace(block_large, level=0),
+        )
+
+    def test_hero_killer_level_still_scales_with_party(self):
+        """Level is independent of the HERO_KILLER sentinel-stat guard (#2707)."""
+        block_low_level = compute_opponent_stat_block(
+            OpponentTier.HERO_KILLER, self.encounter_low, party_size=1, avg_level=1.0
+        )
+        block_high_level = compute_opponent_stat_block(
+            OpponentTier.HERO_KILLER, self.encounter_lethal, party_size=10, avg_level=20.0
+        )
+        self.assertEqual(block_low_level.level, 1)
+        self.assertEqual(block_high_level.level, 20)
 
     def test_hero_killer_soak_equals_template(self):
         from world.combat.models import OpponentTierTemplate

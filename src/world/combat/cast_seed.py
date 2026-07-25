@@ -42,6 +42,7 @@ from world.combat.services import (
     declare_action,
     join_encounter,
 )
+from world.covenants.mentorship import effective_combat_level
 from world.fatigue.constants import EffortLevel
 from world.scenes.constants import RoundStatus
 from world.scenes.models import Scene
@@ -69,6 +70,7 @@ class _OpponentKwargs(TypedDict):
     max_health: int
     threat_pool: None
     existing_objectdb: ObjectDB
+    level: int
 
 
 def _opponent_kwargs_from_sheet(sheet: CharacterSheet) -> _OpponentKwargs:
@@ -83,6 +85,11 @@ def _opponent_kwargs_from_sheet(sheet: CharacterSheet) -> _OpponentKwargs:
     - ``tier`` ELITE: a played character is a competent opponent.
     - ``threat_pool`` None: a PC opponent's actions are PC-declared, not driven
       by an NPC threat pool (the model FK is nullable).
+    - ``level`` (#2707) from ``effective_combat_level(sheet)`` -- the
+      bond-aware level, not the raw primary class level. Correct specifically
+      here because a PvP mirror *is* a combat surface: the mirrored
+      opponent's level should reflect the same mentorship-adjusted level the
+      mirrored character actually fights at.
     """
     vitals = sheet.vitals_or_none
     max_health = (
@@ -94,6 +101,7 @@ def _opponent_kwargs_from_sheet(sheet: CharacterSheet) -> _OpponentKwargs:
         max_health=max_health,
         threat_pool=None,
         existing_objectdb=sheet.character,
+        level=effective_combat_level(sheet),
     )
 
 

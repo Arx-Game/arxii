@@ -469,6 +469,39 @@ class ProjectSinkTests(TestCase):
         line.refresh_from_db()
         self.assertEqual(line.project_contribution, contrib)
 
+    def test_project_line_credits_recipient_when_no_accepted_persona(self) -> None:
+        """The fallback branch must credit the recipient's own primary persona.
+
+        Every other PROJECT test sets ``accepted_as_persona`` on the instance,
+        so ``_resolve_contributor_persona`` returns before its query ever runs.
+        A mission accepted without a presented persona (trigger-granted, or any
+        instance that never recorded one) takes the fallback, which was
+        previously untested — the branch resolves the recipient's own primary
+        persona and this pins that it credits the right character.
+        """
+        from world.projects.constants import ContributionKind
+        from world.projects.models import Contribution
+
+        self.deed.instance.accepted_as_persona = None
+        self.deed.instance.save(update_fields=["accepted_as_persona"])
+
+        MissionDeedRewardLineFactory(
+            deed=self.deed,
+            recipient=self.actor.sheet_data,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.PROJECT,
+            amount=10,
+        )
+        self.deed.instance.target_project = self.project
+        self.deed.instance.save(update_fields=["target_project"])
+
+        result = apply_deed_rewards(self.deed)
+
+        self.assertEqual(len(result.project_skips), 0)
+        contrib = Contribution.objects.get(project=self.project)
+        self.assertEqual(contrib.kind, ContributionKind.MISSION)
+        self.assertEqual(contrib.contributor_persona, self.persona)
+
     def test_project_line_soft_skips_non_active_project(self) -> None:
         """A PROJECT line soft-skips when the project is COMPLETED (no raise)."""
         from world.projects.constants import ProjectStatus

@@ -450,8 +450,9 @@ export interface CGTechniqueOption {
 // =============================================================================
 
 /**
- * Technique style (how magic manifests).
- * From /api/magic/technique-styles/
+ * Technique style — how a practitioner works magic. A property of the caster's
+ * Path (#2700), not of the technique.
+ * From /api/magic/styles/
  */
 export interface TechniqueStyle {
   id: number;
@@ -527,7 +528,6 @@ export interface Technique {
   id: number;
   name: string;
   gift: number;
-  style: number;
   effect_type: number;
   restriction_ids: number[];
   level: number;

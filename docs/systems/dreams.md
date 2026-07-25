@@ -20,7 +20,7 @@ The `Sleeping` ConditionTemplate (`world/vitals/seeds.py`) mirrors `Unconscious`
 
 `perceives_dreamside()` (`world/vitals/services.py`) returns True for Sleeping OR Unconscious characters. The dead never dreamside (ghosts watch the waking room).
 
-`get_dream_space(room)` (`world/dreams/services.py`) returns the dream room (ObjectDB) for a physical room — the DreamReflection's dream_room if one exists, or the liminal placeholder room (#2287) as fallback.
+`get_dream_space(room)` (`world/dreams/services.py`) takes the waking room's ObjectDB and returns the dream room's **`RoomProfile`** (#2608 — the type `SceneRound.room` and `DreamReflection` now speak) — the DreamReflection's dream_room if one exists, or the liminal placeholder room (#2287) as fallback. Callers that need the room object dereference `.objectdb`.
 
 ## Danger: Mental Fatigue + Dream Peril Pool
 
@@ -63,7 +63,7 @@ Deep dreaming uses real ObjectDB movement — standard exit traversal, scene rou
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `DreamReflection` | Links a physical room to its dream-layer reflection | `waking_room` (OneToOne ObjectDB), `dream_room` (OneToOne ObjectDB), `descent_target` (nullable FK ObjectDB), `is_active` |
+| `DreamReflection` | Links a physical room to its dream-layer reflection | `waking_room` (OneToOne `RoomProfile`), `dream_room` (OneToOne `RoomProfile`), `descent_target` (nullable FK `RoomProfile`), `is_active` — all three retargeted off ObjectDB in #2608 |
 | `DreamPerilConfig` | Singleton config for Dream Peril resist check | `resist_check_type` (FK CheckType), `resist_difficulty` (PositiveInt) |
 
 ## Actions

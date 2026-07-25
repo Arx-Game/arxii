@@ -632,10 +632,11 @@ Check resolution engine — converts trait values to ranks and rolls against res
 
 - **Models:** `CheckCategory`, `CheckType`, `CheckTypeTrait`, `CheckTypeAspect`, `CheckTypeCapabilityModifier` (#2505 — curated authored `(check_type, capability)` weight, `related_name="capability_modifiers"`)
 - **Seeded check types:** `Composure` (willpower-weighted; resistance-specific — seeded via `create_resistance_check_types()` in `checks/factories.py`; used by `compute_resist_increment`)
-- **Key Functions:** `perform_check(character, check_type, target_difficulty, extra_modifiers) -> CheckResult`, `get_rollmod(character) -> int`, `compute_resist_increment(defender_character, resist_effort_level) -> int` (resolves the Composure CheckType to compute a numeric difficulty bonus for active defense)
-- **Key Types:** `CheckResult` (outcome, chart, roller_rank, target_rank, trait_points, aspect_bonus, specialization_points, capability_points)
-- **Pipeline:** trait points (weighted via CheckTypeTrait) + aspect bonus (path level) + capability points (weighted via authored `CheckTypeCapabilityModifier`, curated gate — #2505) + modifiers → CheckRank → ResultChart → roll+rollmod → outcome
-- **Integrates with:** traits (lookup tables), skills (check bonuses), conditions (check modifiers + `get_effective_capability_value` agency oracle for authored capability points), goals (bonuses), scenes (active resistance via `compute_resist_increment`), mechanics (`resolve_challenge()` folds its `capability_source.value` into `extra_modifiers`)
+- **Key Functions:** `perform_check(character, check_type, target_difficulty, extra_modifiers) -> CheckResult`, `get_rollmod(character) -> int`, `compute_check_rating(character, check_type, extra_modifiers=0) -> int` (pre-roll total points, no dice roll — the one answer for "what does this character bring to this check"), `compute_resist_increment(defender_character, resist_effort_level, *, level_override=None) -> int` (#2707, ADR-0166: routes through `compute_check_rating` on the Composure CheckType, so it now carries the defender's full rating — trait, specialization, aspect, and capability points, but NOT perk points, since `compute_check_rating` takes no `situation_ctx` and `_situational_perk_check_bonus` short-circuits to 0 without one — plus the effort modifier, clamped ≥ 0; the ACTIVE half of an opposed check. `level_override` SUBSTITUTES for the defender's resolved level so a `CombatOpponent`'s authored `level` reaches the resist path), `level_opposition(check_type, *, level, character=None) -> int` (#2707, ADR-0166: the PASSIVE half — `LEVEL_POINTS_PER_LEVEL * level` plus, when `character` is given, the acting check's aspects scored against the defender's Path; deliberately exclusive with `compute_resist_increment` — a call site uses one or the other, never both, since an active rating already contains level points; combat's clash roll is the deliberate exception that opposes neither, staying at `target_difficulty=0` since a clash grades two rolls against each other instead)
+- **Result-chart direction (ADR-0165):** `rank_difference = roller_rank - target_rank`; positive means the roller is stronger and gets the easier chart — the convention `ResultChart.rank_difference`'s own `help_text` states and the engine computes; guarded by `world/checks/tests/test_chart_direction.py`.
+- **Key Types:** `CheckResult` (outcome, chart, roller_rank, target_rank, trait_points, aspect_bonus, level_points, specialization_points, capability_points)
+- **Pipeline:** trait points (weighted via CheckTypeTrait) + aspect bonus (path level) + level points (`LEVEL_POINTS_PER_LEVEL * class level`, guaranteed on EVERY check — #2707, ADR-0166) + capability points (weighted via authored `CheckTypeCapabilityModifier` as `weight x (effective value − innate_baseline)`, curated gate — #2505, deviation-scored per #2704/ADR-0164) + modifiers → CheckRank → ResultChart → roll+rollmod → outcome
+- **Integrates with:** traits (lookup tables), skills (check bonuses), progression (`get_character_path_level` — sole source of a character's class level, #2707), conditions (check modifiers + `get_effective_capability_value` agency oracle for authored capability points), goals (bonuses), scenes (active resistance via `compute_resist_increment`), combat (opposed difficulty on offense/penetration/NPC-attack defense, and `CombatOpponent.level` fed into the resist path for social verbs), mechanics (`resolve_challenge()` folds its `capability_source.value` into `extra_modifiers`)
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
@@ -1558,7 +1559,7 @@ Multi-stage character creation flow with draft system.
   otherwise calls `world.missions.services.run.staff_assign_mission()` verbatim (no new
   missions-app surface). Deliberately NOT best-effort — a misconfigured template raises and rolls
   back the whole finalization transaction (a content-authoring bug, not contention).
-- **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds the 12 stat Traits + the two Roster rows unconditionally so `finalize_character` runs on a fresh DB. Species/Gender/HeightBand/Build/FormTrait family/Distinction family/CGExplanation are all `CONTENT_MODELS` (#2698, ADR-0164) — looked up via `authored_or_sample()` and invented only under `SEED_SAMPLE_CONTENT`; Realm/StartingArea/Beginnings/TarotCard/Path are open-ended world content gated behind the same flag. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
+- **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds the 12 stat Traits + the two Roster rows unconditionally so `finalize_character` runs on a fresh DB. Species/Gender/HeightBand/Build/FormTrait family/Distinction family/CGExplanation are all `CONTENT_MODELS` (#2698, ADR-0168) — looked up via `authored_or_sample()` and invented only under `SEED_SAMPLE_CONTENT`; Realm/StartingArea/Beginnings/TarotCard/Path are open-ended world content gated behind the same flag. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
 - **Email notifications (#2162):** `world.character_creation.email_service.CGEmailService` —
   submission/approved/revisions-requested/denied notices, called (best-effort) from
   `submit_draft_for_review`/`approve_application`/`request_revisions`/`deny_application`.
@@ -1893,7 +1894,9 @@ action consent flow, and a three-mode non-combat round framework.
 
 - **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneActionRequest`, `SceneActionTarget`,
   `SceneCastPullDeclaration`,
-  **Round framework (#1351):** `SceneRound` (room-anchored non-combat round; fields: `mode`
+  **Round framework (#1351):** `SceneRound` (room-anchored non-combat round — `room` FKs
+  `evennia_extensions.RoomProfile` since #2608, as do `Place.room` and `SpeakerQueue.room`;
+  fields: `mode`
   (`SceneRoundMode`), `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`;
   `mode`/`start_reason` orthogonal — danger rounds are STRICT, ensured via
   `ensure_round_for_acute_condition`, #1466), `SceneRoundDefaultsConfig` (singleton pk=1 — staff-tunable
@@ -4400,7 +4403,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `world.covenants.perks.constants` — the `TARGET_DISTRACTED`/`TARGET_SWAYED_BY_ALLY`
     provenance mapping run in reverse; a situation absent from it demands nothing).
     `SphinxVerdict.shopping_list` — up to 3 learnable techniques per uncovered function
-    (`can_learn_technique` or tradition signature-pool membership). `audit_vow_coverage()
+    (gift-ownership — `learn_technique`'s own gate; #2700/ADR-0167). `audit_vow_coverage()
     -> list[SphinxCoverageRow]` — the staff instrument (built first per the spec): every
     active anchor role × every active Tradition, specialty-demand-only coverage
     (`"full"`/`"partial"`/`"none"`), rendered at the staff-only `_sphinx/` admin page

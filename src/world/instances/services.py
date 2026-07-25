@@ -15,7 +15,7 @@ def spawn_instanced_room(  # noqa: PLR0913 — one owner-kind arg per caller (pl
     name: str,
     description: str,
     owner: CharacterSheet | None,
-    return_location: ObjectDB | None,
+    return_location: ObjectDB | None,  # noqa: OBJECTDB_PARAM — see InstancedRoom.return_location
     source_key: str = "",
     gm_owner: GMProfile | None = None,
 ) -> ObjectDB:
@@ -38,7 +38,7 @@ def spawn_instanced_room(  # noqa: PLR0913 — one owner-kind arg per caller (pl
     display_data.permanent_description = description
     display_data.save(update_fields=["permanent_description"])
     InstancedRoom.objects.create(
-        room=room,
+        room=profile,
         owner=owner,
         gm_owner=gm_owner,
         return_location=return_location,
@@ -50,7 +50,7 @@ def spawn_instanced_room(  # noqa: PLR0913 — one owner-kind arg per caller (pl
 def complete_instanced_room(room: ObjectDB) -> None:
     """Mark room completed, relocate occupants, delete if no history."""
     with transaction.atomic():
-        instance = InstancedRoom.objects.select_for_update().get(room=room)
+        instance = InstancedRoom.objects.select_for_update().get(room_id=room.pk)
         if instance.status == InstanceStatus.COMPLETED:
             return
         instance.status = InstanceStatus.COMPLETED

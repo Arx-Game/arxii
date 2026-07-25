@@ -952,6 +952,49 @@ def _extract_natural_key(model, fields: dict, source_path: Path | None) -> dict:
     return lookup
 
 
+def _case_insensitive_lookup(model, lookup: dict) -> dict:
+    """Return *lookup* with text components switched to ``__iexact``.
+
+    Natural keys are case-insensitive (#2687), so the upsert must match an
+    existing row regardless of casing. Kept separate from the create path: the
+    plain ``lookup`` is what a newly created row is written with, preserving the
+    fixture's own casing.
+    """
+    from core.natural_keys import _text_lookup_key  # noqa: PLC0415
+
+    result = {}
+    for field_name, value in lookup.items():
+        field = model._meta.get_field(field_name)  # noqa: SLF001
+        result[_text_lookup_key(field, field_name, value)] = value
+    return result
+
+
+def _get_or_create_case_insensitive(model, lookup: dict, fields: dict) -> tuple:
+    """Match an existing row by natural key case-insensitively, or create one.
+
+    Returns ``(instance, created)``. A hand-rolled get/create instead of
+    ``update_or_create`` (#2687): Django's ``update_or_create`` can't take an
+    ``__iexact`` lookup — it drops ``LOOKUP_SEP`` keys when building the
+    create-path params, so the row would be created with that field unset.
+
+    Split out of ``_upsert_fixture_object`` (#2687 review) both to keep the
+    ``try`` scoped to ONLY the lookup — a ``model.DoesNotExist`` raised from
+    inside a custom ``save()`` override on the update path must not be
+    misclassified as "row not found" and silently retried as a create — and to
+    keep ``_upsert_fixture_object``'s own branch count (ruff PLR0912) at parity
+    with the single ``update_or_create`` call it replaces.
+    """
+    try:
+        instance = model.objects.get(**_case_insensitive_lookup(model, lookup))
+    except model.DoesNotExist:
+        return model.objects.create(**lookup, **fields), True
+
+    for field_name, value in fields.items():
+        setattr(instance, field_name, value)
+    instance.save()
+    return instance, False
+
+
 def _coerce_scalar_fields(model, fields: dict) -> None:
     """Normalize JSON-native scalar values into the types their model fields expect.
 
@@ -1053,7 +1096,11 @@ def _upsert_fixture_object(  # noqa: C901 — one branch per distinct skip reaso
         _resolve_natural_key_fields(model, fields, source_path)
         resolved_m2m = _resolve_m2m_fields(model, m2m_fields, source_path)
         _coerce_scalar_fields(model, fields)
-        instance, created = model.objects.update_or_create(**lookup, defaults=fields)
+        # Case-insensitive upsert (#2687): match an existing row regardless of
+        # casing, but write a NEW row with the fixture's own casing. See
+        # _get_or_create_case_insensitive's docstring for why this can't be a
+        # plain update_or_create call.
+        instance, created = _get_or_create_case_insensitive(model, lookup, fields)
     except UnresolvedNaturalKeyError as exc:
         # Must be caught before the broader ContentError clause below (it's a
         # subclass) — this is the ONLY failure mode ever deferred.
@@ -1086,9 +1133,10 @@ def _upsert_fixture_object(  # noqa: C901 — one branch per distinct skip reaso
         # malformed duration string).
         skip_msg = f"{source_path}: {model.__name__} could not be loaded: {exc}"
     except model.DoesNotExist as exc:
-        # The model's own DoesNotExist — the natural-key lookup didn't find
-        # an existing row (shouldn't happen for update_or_create, but catch
-        # just in case).
+        # The model's own DoesNotExist. The case-insensitive get()/create()
+        # miss above is handled inline (that's the expected create path), so
+        # this clause only fires for some OTHER DoesNotExist raised by this
+        # model during the try block — defensive, not a known live path today.
         skip_msg = f"{source_path}: {model.__name__} could not be loaded (lookup failed): {exc}"
     except IntegrityError as exc:
         # DB constraint violation (e.g. a unique constraint on a

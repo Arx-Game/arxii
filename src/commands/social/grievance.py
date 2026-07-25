@@ -26,7 +26,7 @@ _NO_IDENTITY = "You have no active character to register a grievance with."
 def _caller_entry(command: ArxCommand) -> RosterEntry:
     from world.roster.models import RosterEntry  # noqa: PLC0415
 
-    entry = RosterEntry.objects.filter(character_sheet__character=command.caller).first()
+    entry = RosterEntry.objects.filter(character_sheet_id=command.caller.pk).first()
     if entry is None:
         raise CommandError(_NO_IDENTITY)
     return entry

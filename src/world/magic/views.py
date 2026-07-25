@@ -192,7 +192,7 @@ class TechniqueStyleViewSet(viewsets.ReadOnlyModelViewSet):
 
     # Use Prefetch with to_attr for SharedMemoryModel to avoid cache pollution
     queryset = TechniqueStyle.objects.prefetch_related(
-        Prefetch("allowed_paths", to_attr="cached_allowed_paths")
+        Prefetch("capability_requirements", to_attr="cached_capability_requirements")
     )
     serializer_class = TechniqueStyleSerializer
     permission_classes = [IsAuthenticated]
@@ -320,7 +320,7 @@ class GiftViewSet(viewsets.ModelViewSet):
             ),
             Prefetch(
                 "techniques",
-                queryset=Technique.objects.select_related("style", "effect_type"),
+                queryset=Technique.objects.select_related("effect_type"),
                 to_attr="cached_techniques",
             ),
         )
@@ -391,7 +391,7 @@ class TechniqueViewSet(viewsets.ModelViewSet):
     """
 
     queryset = (
-        Technique.objects.select_related("gift", "style", "effect_type")
+        Technique.objects.select_related("gift", "effect_type")
         .prefetch_related(
             Prefetch(
                 "restrictions",
@@ -404,7 +404,7 @@ class TechniqueViewSet(viewsets.ModelViewSet):
     serializer_class = TechniqueSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, OrderingFilter]
-    filterset_fields = ["gift", "style", "effect_type"]
+    filterset_fields = ["gift", "effect_type"]
     ordering_fields = ["name", "level"]
     pagination_class = StandardResultsSetPagination
 
@@ -688,7 +688,7 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
             ),
             Prefetch(
                 "gift__techniques",
-                queryset=Technique.objects.select_related("style", "effect_type"),
+                queryset=Technique.objects.select_related("effect_type"),
                 to_attr="cached_techniques",
             ),
         )

@@ -20232,6 +20232,7 @@ export interface components {
       name: string;
       tier: components['schemas']['Tier756Enum'];
       max_health?: number | null;
+      level?: number | null;
       threat_pool_id: number;
       /** @default  */
       description: string;
@@ -27844,6 +27845,12 @@ export interface components {
      *
      *     Soak value and probing threshold are GM-only — players discover
      *     these through gameplay (probing attacks, combo availability).
+     *
+     *     ``level`` (#2707) is the opposite: a plain model field, deliberately
+     *     PUBLIC and ungated. Threat assessment is the point -- players are meant
+     *     to be able to look at an opponent and gauge whether they're punching up
+     *     or down, so unlike soak_value/probing_threshold this is not wrapped in a
+     *     SerializerMethodField behind ``_is_gm_or_staff``.
      */
     Opponent: {
       readonly id: number;
@@ -27851,6 +27858,8 @@ export interface components {
       name: string;
       description?: string;
       tier: components['schemas']['Tier756Enum'];
+      /** @description Power level on the same 1-30 scale as CharacterClassLevel (#2707). A SEPARATE axis from tier: a level 3 boss and a level 20 mook are both coherent. Opposes a PC's checks through world.checks.services.level_opposition, and is public in the opponent payload so a threat readout can be built on it. Auto-scaled spawns default to the encounter's average party level; a GM setting it deliberately low is how a soloable or upset-victory boss is authored. */
+      level?: number;
       health: number;
       max_health: number;
       /** @description Soak value — GM/staff only. */
@@ -27915,11 +27924,19 @@ export interface components {
      *
      *     Soak value and probing threshold are GM-only — players discover
      *     these through gameplay (probing attacks, combo availability).
+     *
+     *     ``level`` (#2707) is the opposite: a plain model field, deliberately
+     *     PUBLIC and ungated. Threat assessment is the point -- players are meant
+     *     to be able to look at an opponent and gauge whether they're punching up
+     *     or down, so unlike soak_value/probing_threshold this is not wrapped in a
+     *     SerializerMethodField behind ``_is_gm_or_staff``.
      */
     OpponentRequest: {
       name: string;
       description?: string;
       tier: components['schemas']['Tier756Enum'];
+      /** @description Power level on the same 1-30 scale as CharacterClassLevel (#2707). A SEPARATE axis from tier: a level 3 boss and a level 20 mook are both coherent. Opposes a PC's checks through world.checks.services.level_opposition, and is public in the opponent payload so a threat readout can be built on it. Auto-scaled spawns default to the encounter's average party level; a GM setting it deliberately low is how a soloable or upset-victory boss is authored. */
+      level?: number;
       health: number;
       max_health: number;
       probing_current?: number;
@@ -32241,8 +32258,6 @@ export interface components {
       name?: string;
       /** @description The gift this technique belongs to. */
       gift?: number;
-      /** @description The style of this technique (restricted by Path). */
-      style?: number;
       /** @description The type of effect this technique produces. */
       effect_type?: number;
       restriction_ids?: number[];
@@ -36773,8 +36788,6 @@ export interface components {
       name: string;
       /** @description The gift this technique belongs to. */
       gift: number;
-      /** @description The style of this technique (restricted by Path). */
-      style: number;
       /** @description The type of effect this technique produces. */
       effect_type: number;
       restriction_ids?: number[];
@@ -36840,8 +36853,6 @@ export interface components {
       name: string;
       /** @description The gift this technique belongs to. */
       gift: number;
-      /** @description The style of this technique (restricted by Path). */
-      style: number;
       /** @description The type of effect this technique produces. */
       effect_type: number;
       restriction_ids?: number[];
@@ -54038,7 +54049,6 @@ export interface operations {
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
-        style?: number;
       };
       header?: never;
       path?: never;

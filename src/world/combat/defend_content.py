@@ -29,7 +29,6 @@ from world.magic.models.techniques import (
     EffectType,
     Technique,
     TechniqueAppliedCondition,
-    TechniqueStyle,
 )
 
 # ---------------------------------------------------------------------------
@@ -142,10 +141,6 @@ def ensure_defend_content() -> None:
         name=DEFEND_PASSIVE_NAME,
         defaults={"description": "Combat stances and protective techniques."},
     )
-    defend_style, _ = TechniqueStyle.objects.get_or_create(
-        name="Defensive Stance",
-        defaults={"description": "A fighting style focused on protecting allies."},
-    )
     defend_effect_type, _ = EffectType.objects.get_or_create(
         name="Defensive Aura",
         defaults={
@@ -163,7 +158,6 @@ def ensure_defend_content() -> None:
                 "Take a defensive stance that shields active allies, "
                 "halving the damage they receive this round."
             ),
-            "style": defend_style,
             "effect_type": defend_effect_type,
             "action_category": ActionCategory.PHYSICAL,
             "intensity": 4,

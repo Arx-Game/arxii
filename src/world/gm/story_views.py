@@ -93,7 +93,9 @@ class StoryBuilderViewSet(viewsets.ReadOnlyModelViewSet):
         ``pagination_class`` made drf-spectacular wrongly advertise
         ``PaginatedStoryInstanceList`` for a response that was always a flat list.
         """
-        qs = InstancedRoom.objects.filter(status=InstanceStatus.ACTIVE).select_related("room")
+        qs = InstancedRoom.objects.filter(status=InstanceStatus.ACTIVE).select_related(
+            "room__objectdb"
+        )
         if not request.user.is_staff:
             qs = qs.filter(gm_owner__account=request.user)
         else:

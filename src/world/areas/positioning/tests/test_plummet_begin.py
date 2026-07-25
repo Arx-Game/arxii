@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from django.test import TestCase, override_settings, tag
 
+from evennia_extensions.factories import RoomProfileFactory
 from world.areas.positioning.constants import (
     CATCH_THE_FALLER_NAME,
     PLUMMETING_CONDITION_NAME,
@@ -69,7 +70,7 @@ class FellBeginsPlummetTests(TestCase):
 
     def _danger_round(self) -> SceneRound | None:
         return SceneRound.objects.filter(
-            room=self.room, start_reason=SceneRoundStartReason.DANGER
+            room=RoomProfileFactory(objectdb=self.room), start_reason=SceneRoundStartReason.DANGER
         ).first()
 
     def test_fell_emission_begins_plummet(self) -> None:
@@ -105,7 +106,8 @@ class FellBeginsPlummetTests(TestCase):
 
         self.assertEqual(
             SceneRound.objects.filter(
-                room=self.room, start_reason=SceneRoundStartReason.DANGER
+                room=RoomProfileFactory(objectdb=self.room),
+                start_reason=SceneRoundStartReason.DANGER,
             ).count(),
             1,
             "re-entry must not create a second DANGER round",

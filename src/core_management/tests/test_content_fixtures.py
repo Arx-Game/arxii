@@ -716,7 +716,6 @@ class LoadEntriesM2MTest(TestCase):
             "fields": {
                 "name": "M2M Trip",
                 "gift": ["M2M Gift"],
-                "style": [self.style.name],
                 "effect_type": [self.effect.name],
                 "anima_cost": 5,
                 "restrictions": restrictions,
@@ -728,11 +727,9 @@ class LoadEntriesM2MTest(TestCase):
             EffectTypeFactory,
             GiftFactory,
             RestrictionFactory,
-            TechniqueStyleFactory,
         )
 
         GiftFactory(name="M2M Gift")
-        self.style = TechniqueStyleFactory()
         self.effect = EffectTypeFactory()
         restriction = RestrictionFactory(name="Touch Range")
         result = self._result_with([self._technique_obj(restrictions=[[restriction.name]])])
@@ -749,12 +746,10 @@ class LoadEntriesM2MTest(TestCase):
             EffectTypeFactory,
             GiftFactory,
             RestrictionFactory,
-            TechniqueStyleFactory,
         )
         from world.magic.models import Technique
 
         GiftFactory(name="M2M Gift")
-        self.style = TechniqueStyleFactory()
         self.effect = EffectTypeFactory()
         restriction_a = RestrictionFactory(name="Restriction A")
         restriction_b = RestrictionFactory(name="Restriction B")
@@ -772,11 +767,10 @@ class LoadEntriesM2MTest(TestCase):
         assert list(technique.restrictions.all()) == [restriction_b]
 
     def test_missing_m2m_target_defers_and_writes_nothing(self) -> None:
-        from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueStyleFactory
+        from world.magic.factories import EffectTypeFactory, GiftFactory
         from world.magic.models import Technique
 
         GiftFactory(name="M2M Gift")
-        self.style = TechniqueStyleFactory()
         self.effect = EffectTypeFactory()
         result = self._result_with([self._technique_obj(restrictions=[["No Such Restriction"]])])
         created, updated, deferred = load_entries(result, defer_unresolved=True)
@@ -787,11 +781,10 @@ class LoadEntriesM2MTest(TestCase):
         assert not Technique.objects.filter(name="M2M Trip").exists()
 
     def test_missing_m2m_target_skips_when_not_deferring(self) -> None:
-        from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueStyleFactory
+        from world.magic.factories import EffectTypeFactory, GiftFactory
         from world.magic.models import Technique
 
         GiftFactory(name="M2M Gift")
-        self.style = TechniqueStyleFactory()
         self.effect = EffectTypeFactory()
         result = self._result_with([self._technique_obj(restrictions=[["No Such Restriction"]])])
         created, updated, _ = load_entries(result)
@@ -1074,3 +1067,34 @@ class MarkdownExportRoundTripTests(TestCase):
             "world/character_creation/fixtures/content_starting_areas.json"
         ][0]["fields"]
         assert fields["default_starting_room"] == ["fallback-room-key"]
+
+
+class LoadEntriesCaseInsensitiveUpsertTest(TestCase):
+    """Upsert matches an existing row by natural key regardless of casing (#2687)."""
+
+    def _result_with(self, objects: list[dict]) -> BuildResult:
+        key = "fixtures/conditions/condition_template.json"
+        path = Path(key)
+        result = BuildResult()
+        result.fixtures[key] = objects
+        result.source_paths[key] = [path] * len(objects)
+        return result
+
+    def test_upsert_matches_existing_row_case_insensitively(self) -> None:
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.conditions.models import ConditionTemplate
+
+        existing = ConditionTemplateFactory(name="Fire Ward", description="old")
+        result = self._result_with(
+            [
+                {
+                    "model": "conditions.conditiontemplate",
+                    "fields": {"name": "fire ward", "description": "new"},
+                }
+            ]
+        )
+        created, updated, _ = load_entries(result)
+        assert (created, updated) == (0, 1), result.skipped
+        existing.refresh_from_db()
+        assert existing.description == "new"
+        assert ConditionTemplate.objects.filter(name__iexact="fire ward").count() == 1

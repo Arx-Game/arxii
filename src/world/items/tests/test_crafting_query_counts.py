@@ -18,7 +18,8 @@ rather than discovered in production profiling.
      d. material_requirements.select_related — 1 query (all requirement rows in one hit)
      e. ItemInstance filter for holder inventory — 1 query (all matching items in one hit)
   4. perform_check / _build_forced_check_result:
-     a. _get_character_level: CharacterClassLevel × 2 queries
+     a. get_character_path_level (#2707, was _get_character_level): CharacterClassLevel
+        × 2 queries
      b. _calculate_trait_points: check_type.traits.select_related + trait-values + traits
         + PointConversionRange — 4 queries
      c. _calculate_aspect_bonus: CharacterPathHistory filter — 1 query (returns None)

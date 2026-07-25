@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from commands.scene import CmdScene
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
@@ -212,7 +212,7 @@ class CmdSceneRoundTests(TestCase):
         self.scene = SceneFactory(location=self.room, is_active=True)
         SceneOwnerParticipationFactory(scene=self.scene, account=self.account)
         self.rnd = SceneRound.objects.create(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,
@@ -284,7 +284,7 @@ class CmdSceneInterposeTests(TestCase):
         self.scene = SceneFactory(location=self.room, is_active=True)
         SceneOwnerParticipationFactory(scene=self.scene, account=self.account)
         self.rnd = SceneRound.objects.create(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,
@@ -355,7 +355,7 @@ class CmdSceneStatusTests(TestCase):
         """With an active round, status line includes round number and mode."""
         scene = SceneFactory(location=self.room, is_active=True, name="Round Test")
         SceneRound.objects.create(
-            room=self.room,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=2,
             start_reason=SceneRoundStartReason.OPT_IN,

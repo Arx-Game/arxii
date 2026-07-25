@@ -437,6 +437,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 description=data.get("description", ""),
                 soak_value=data.get("soak_value", 0),
                 probing_threshold=data.get("probing_threshold"),
+                level=data.get("level"),
                 acting_account=cast(AccountDB, request.user),
                 position=position,
             )

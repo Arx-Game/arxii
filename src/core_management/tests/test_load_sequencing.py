@@ -205,11 +205,10 @@ class RetryDeferredFixpointTests(TestCase):
 
     def test_retry_deferred_settles_two_level_chain(self) -> None:
         """gift->resonance and technique->gift chains settle only via fixpoint iteration."""
-        from world.magic.factories import EffectTypeFactory, ResonanceFactory, TechniqueStyleFactory
+        from world.magic.factories import EffectTypeFactory, ResonanceFactory
         from world.magic.models import Gift, Technique
 
         resonance = ResonanceFactory(name="Chain Res")
-        style = TechniqueStyleFactory()
         effect_type = EffectTypeFactory()
 
         # Deferred list deliberately ordered worst-first:
@@ -223,7 +222,6 @@ class RetryDeferredFixpointTests(TestCase):
             "fields": {
                 "name": "Chain Technique",
                 "gift": ["Chain Gift"],
-                "style": [style.name],
                 "effect_type": [effect_type.name],
                 "anima_cost": 5,
             },
@@ -258,10 +256,9 @@ class RetryDeferredFixpointTests(TestCase):
         """A gift no fixture ever defines makes no progress; lands in result.skipped."""
         # One entry referencing a gift that never exists: fixpoint loop makes no
         # progress, final defer-off pass records it in result.skipped; no row written.
-        from world.magic.factories import EffectTypeFactory, TechniqueStyleFactory
+        from world.magic.factories import EffectTypeFactory
         from world.magic.models import Technique
 
-        style = TechniqueStyleFactory()
         effect_type = EffectTypeFactory()
 
         technique_obj = {
@@ -269,7 +266,6 @@ class RetryDeferredFixpointTests(TestCase):
             "fields": {
                 "name": "Orphan Technique",
                 "gift": ["No Such Gift"],
-                "style": [style.name],
                 "effect_type": [effect_type.name],
                 "anima_cost": 5,
             },

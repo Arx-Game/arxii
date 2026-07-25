@@ -521,9 +521,11 @@ vow the Sphinx warned about).
     (≥1 covered, ≥1 not — "the vow would lie dormant in places"), `NOT_YET` (0 covered —
     paired with a shopping list).
   - `SphinxVerdict.shopping_list` — up to 3 learnable `Technique` rows per uncovered
-    function (`can_learn_technique` passes, or the technique is in the sheet's active
-    tradition's `TraditionGiftGrant.signature_techniques` pool), excluding techniques
-    already known.
+    function, excluding techniques already known. "Learnable" = the sheet already owns
+    the technique's `Gift` (#2700) — `learn_technique`'s own first gate, so every row is
+    something the character can actually go and learn. Replaced the former
+    `can_learn_technique` path-style filter, which both recommended techniques from
+    unowned gifts and hid ones the character's own path had granted (ADR-0167).
 - **`SITUATION_CREATOR_FUNCTIONS: dict[str, frozenset[str]]`** (`world.covenants.perks.constants`)
   — code-defined: which `TechniqueFunction` casts can CREATE each DB-state `Situation` (the
   `TARGET_DISTRACTED`/`TARGET_SWAYED_BY_ALLY` provenance mapping run in reverse). v1 rows:

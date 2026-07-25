@@ -350,7 +350,7 @@ class MaybeDangerRoundOnBleedOutTest(TestCase):
 
         sheet = self._char_in_room()
         _maybe_danger_round_on_bleed_out(sheet)
-        assert SceneRound.objects.filter(room=self.room).exists()
+        assert SceneRound.objects.filter(room_id=self.room.pk).exists()
 
     def test_in_combat_character_skips_danger_round(self) -> None:
         """A character already in active combat does NOT create a SceneRound."""
@@ -368,7 +368,7 @@ class MaybeDangerRoundOnBleedOutTest(TestCase):
             status=ParticipantStatus.ACTIVE,
         )
         _maybe_danger_round_on_bleed_out(sheet)
-        assert not SceneRound.objects.filter(room=self.room).exists()
+        assert not SceneRound.objects.filter(room_id=self.room.pk).exists()
 
 
 class DeriveBaseMaxHealthTest(TestCase):

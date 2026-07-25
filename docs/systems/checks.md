@@ -86,6 +86,18 @@ seam — nothing here is enforced by a DB constraint; it is a review-time author
 rule. This is independent of, and does not change, the existing `CheckType`
 `(name, category)` natural-key uniqueness rule.
 
+### Weight calibration (#2704, ADR-0164 D4)
+
+`CheckTypeCapabilityModifier` is **authored content** — every row is a deliberate,
+curated (check_type, capability) pairing, never auto-derived. `weight` is calibrated
+from the intended full-impairment penalty, not picked freely: `weight = intended
+full-impairment penalty ÷ 5`, because 5 is the unimpaired-mortal rung on the
+capability ladder (ADR-0164 D1) and the contribution is scored as deviation from
+`innate_baseline` (D3) — a fully-impaired capability (value 0, baseline 5) deviates
+by −5, so `weight × -5` must equal the intended penalty. E.g. a row meant to cost a
+character −30 points on `Melee Attack` when `movement`-style impairment zeroes out a
+baseline-5 capability is authored with `weight = 6` (`30 ÷ 5`).
+
 ---
 
 ## Key Methods
@@ -108,6 +120,7 @@ result.outcome_name    # "Success", "Catastrophic Failure", etc.
 result.success_level   # -10 to +10
 result.trait_points    # Points from character's traits
 result.aspect_bonus    # Bonus from path aspects
+result.level_points    # LEVEL_POINTS_PER_LEVEL x class level, on every check (#2707)
 result.total_points    # Final total
 ```
 
@@ -120,6 +133,70 @@ from world.checks.services import get_rollmod
 # Returns 0 for missing relations
 rollmod = get_rollmod(character)
 ```
+
+### Opposed checks — two mutually exclusive answers for the opposing side (#2707, ADR-0166)
+
+`compute_check_rating(character, check_type, extra_modifiers=0) -> int` is the one
+answer for "what does this character bring to this check, with no dice roll" — it
+wraps `_compute_check_breakdown` (the same pipeline `perform_check` uses) and
+returns `total_points`.
+
+Two callers build opposed-check difficulty on top of it, and are deliberately
+**exclusive** — a call site uses one or the other, never both, because an active
+resistance rating already contains the defender's level points:
+
+```python
+from world.checks.services import compute_resist_increment, level_opposition
+
+# ACTIVE: the defender spends a defence check of their own (e.g. Composure).
+# Routes through compute_check_rating, so it carries the defender's full
+# rating — trait, specialization, aspect, and capability points (NOT perk
+# points: compute_check_rating takes no situation_ctx, so
+# _situational_perk_check_bonus short-circuits to 0 rather than firing its
+# announcement side effect) — plus the effort-level modifier. Clamped >= 0.
+increment = compute_resist_increment(defender_character, resist_effort_level="high")
+
+# level_override (whole-branch-review fix, #2707): compute_check_rating /
+# compute_resist_increment resolve level from the defender's own objectdb by
+# default (get_character_path_level's CharacterClassLevel rows) -- a gap for an
+# ephemeral CombatOpponent, which has none. level_override SUBSTITUTES for that
+# resolved level (never adds to it) in both the level_points term and the
+# aspect-bonus level scaling. None (the default) is byte-identical to before.
+increment = compute_resist_increment(
+    target.objectdb, effort_level, level_override=target.level
+)
+
+# PASSIVE: the defender contributes nothing beyond existing. LEVEL_POINTS_PER_LEVEL
+# * level always; plus, when a character is given, the acting check's aspects
+# scored against the DEFENDER's Path (their wheelhouse protects them). A
+# character=None (an ephemeral NPC with no sheet) contributes level alone.
+difficulty = level_opposition(check_type, level=defender_level, character=defender_character)
+```
+
+`_social_combat_difficulty` (`world/combat/services.py`, backing the Demoralize/Taunt/
+Parley combat verbs) is the one caller of `compute_resist_increment` that passes
+`level_override` — it opposes a `CombatOpponent`, whose authored `level` field isn't
+reachable through its `objectdb`'s class-level rows (an ephemeral NPC has none). Without
+the override, a boss's morale defense always floored at level 1 even though the same
+opponent's offense already opposed PC checks at its real level via `level_opposition`.
+
+`resolve_target_difficulty` (`actions/effects/base.py`) also uses
+`compute_check_rating` directly to get a target's resistance rating for
+`target_difficulty` — replacing an earlier version that rolled a throwaway
+`perform_check` and discarded the outcome, which had the side effect of
+silently burning the target's rollmod.
+
+Combat wires `level_opposition` at three call sites — offense (`focused_opponent_target
+.level`), penetration (`target.level`, additive on top of the authored `barrier_strength`,
+never replacing it), and NPC-attack defense (`opponent_action.opponent.level`, the
+inverse direction: the attacking NPC's level sets the defending PC's difficulty). See
+`docs/systems/COMBAT_DEFENSES.md`.
+
+**Clash is the deliberate exception.** `world/combat/clash.py`'s clash-contribution roll
+still passes `target_difficulty=0` — a clash is a symmetric contest (both sides roll their
+own check and the results are compared, the same shape as `_resolve_joust_pass`'s
+`success_level` gap), so each side's level already rides its own roll and an opposition
+term would double-count it. See ADR-0166.
 
 ---
 
@@ -137,19 +214,32 @@ rollmod = get_rollmod(character)
    For each CheckTypeAspect with matching PathAspect:
      bonus += int(check_aspect_weight * path_aspect_weight * character_level)
 
+2.4. Level points (#2707): LEVEL_POINTS_PER_LEVEL x character_level, on EVERY check.
+   Level was previously only reachable through the aspect bonus above, which is zero
+   unless the CheckType has an authored CheckTypeAspect matching the character's Path
+   -- so on most checks level did nothing. This is a guaranteed floor, additive with
+   (not a replacement for) the aspect bonus.
+
 2.5. Capability points from authored CheckTypeCapabilityModifier rows (#2505)
    No authored rows on check_type -> 0, capability oracle never called (curated gate).
    character.sheet_data missing -> 0, never raises.
    capability_points = int(sum(
-       row.weight * get_effective_capability_value(sheet, row.capability)
+       row.weight * (get_effective_capability_value(sheet, row.capability) - row.capability.innate_baseline)
        for row in check_type.capability_modifiers.all()
    ))  # truncated toward zero ONCE, after summing every row -- never per-row
+   # Scored as DEVIATION from innate_baseline (#2704, ADR-0164 D3), not the raw
+   # value -- an unimpaired character (effective value == baseline) contributes
+   # exactly 0 to every check that reads the capability, so authoring a
+   # capability across many checks never inflates them. Arithmetically a no-op
+   # for capabilities whose innate_baseline is 0 (most of them).
    # `_capability_point_allocation` is the ONE place this arithmetic is computed;
    # collect_check_modifiers's CAPABILITY provenance calls the same helper and
-   # allocates the same truncated total back across rows by largest remainder,
-   # so recorded contributions always sum to exactly capability_points (#2505 fix).
+   # allocates the same truncated total back across rows by largest remainder
+   # (now handling mixed-sign rows), so recorded contributions always sum to
+   # exactly capability_points (#2505 fix).
 
-3. Total = trait_points + specialization_points + aspect_bonus + capability_points + extra_modifiers
+3. Total = trait_points + specialization_points + aspect_bonus + level_points + capability_points
+   + extra_modifiers
 
 4. Total points -> CheckRank.get_rank_for_points()
    Target difficulty -> CheckRank.get_rank_for_points()
@@ -183,14 +273,16 @@ _calculate_aspect_bonus(character, check_type, level) -> int
 # 0 with no authored rows (curated gate, never calls the capability oracle) or no sheet_data
 _calculate_capability_points(character, check_type) -> int
 
-# Shared arithmetic (#2505): raw per-row weight x value products, truncated-toward-zero
-# total, and largest-remainder allocation of that total back across rows. The ONE place
-# either _calculate_capability_points (roll path) or _capability_contributions (provenance
-# path, in collect_check_modifiers) computes this, so the two paths cannot drift.
+# Shared arithmetic (#2505): raw per-row `weight * (value - innate_baseline)` products
+# (#2704, ADR-0164 D3 -- deviation from baseline, not the raw value), truncated-toward-zero
+# total, and largest-remainder allocation of that total back across rows (mixed-sign safe).
+# The ONE place either _calculate_capability_points (roll path) or _capability_contributions
+# (provenance path, in collect_check_modifiers) computes this, so the two paths cannot drift.
 _capability_point_allocation(character_sheet, capability_modifiers) -> tuple[int, list[int]]
 
-# Get character's primary class level (or highest, or default 1)
-_get_character_level(character) -> int
+# Get character's primary class level (or highest, or default 1) — shared with
+# progression (#2707); world.checks.services no longer declares its own copy
+world.progression.services.skill_development.get_character_path_level(character) -> int
 
 # Look up ResultChartOutcome for a roll value on a chart
 _get_outcome_for_roll(chart, roll) -> CheckOutcome | None
@@ -219,13 +311,22 @@ All models registered with appropriate admin interfaces:
 ## Integration Points
 
 - **Traits app**: Uses `PointConversionRange`, `CheckRank`, `ResultChart`, `CheckOutcome` for the resolution pipeline
-- **Classes app**: Uses `Aspect` and `PathAspect` for aspect bonus calculation, `CharacterClassLevel` for character level
-- **Progression app**: Uses `CharacterPathHistory` for current path lookup
-- **Conditions app** (#2505): `get_effective_capability_value(sheet, capability)` (the agency oracle — innate
-  baseline + CharacterModifier + condition contributions + passive grants) is the sole source
-  `_capability_point_allocation` reads on behalf of both `_calculate_capability_points` (roll path) and
-  `collect_check_modifiers`'s CAPABILITY contributions (provenance path); lazily imported to avoid a module
-  cycle (`world.conditions.services` already imports `world.checks.services` at module scope)
+- **Classes app**: Uses `Aspect` and `PathAspect` for aspect bonus calculation
+- **Progression app**: Uses `CharacterPathHistory` for current path lookup; `get_character_path_level`
+  (`world.progression.services.skill_development`) is the sole source of a character's class level (#2707)
+  -- both the level-points term and the aspect bonus's level scaling read it
+- **Combat app** (#2707): `CombatOpponent.level` is the authority for how sturdy an opponent is on BOTH
+  sides — read directly by `level_opposition` at the offense/penetration/NPC-attack-defense sites, and
+  passed as `compute_resist_increment(..., level_override=opponent.level)` for the social verbs, so an
+  ephemeral NPC (which has no `CharacterClassLevel` rows behind its `objectdb`) no longer resists at
+  level 1 while opposing a stab at its authored level
+- **Conditions app** (#2505): `get_effective_capability_value(sheet, capability)` (the agency oracle —
+  innate baseline + CharacterModifier total + condition contributions + passive-grant floor + best
+  (MAX) technique-grant value, floored at 0) is the sole source `_capability_point_allocation` reads
+  on behalf of both `_calculate_capability_points` (roll path) and `collect_check_modifiers`'s
+  CAPABILITY contributions (provenance path) — so a technique-granted capability reaches the check
+  bridge the same as an innate/condition-derived one; lazily imported to avoid a module cycle
+  (`world.conditions.services` already imports `world.checks.services` at module scope)
 - **Attempts app**: Calls `perform_check()` for resolution; provides roulette display content via `ConsequenceDisplay`
 - **Callers** (goals, magic, combat, conditions, GM adjudication): Compute `extra_modifiers` before calling `perform_check()`
 - **Mechanics app**: `resolve_challenge()` folds its `capability_source.value` (a `CapabilitySource`, e.g. from a
@@ -267,7 +368,7 @@ Gated by `IsSceneGMPrerequisite` (`actions/prerequisites.py` — staff bypass, e
 
 Check compositions are authored as seed data (the design tenet: **stat + skill (+ specialization)**, rarely stat+stat). The seed clusters live in `world/seeds/`.
 
-**`CheckCategory`/`CheckType`/`CheckTypeTrait` (+ `skills.Skill`/`traits.Trait`/`classes.Aspect`/`classes.PathAspect`) are content-repo-owned (#2698, ADR-0164)** — every cluster below looks its rows up via `world.seeds.sample_content.authored_or_sample()` rather than inventing them; a row is only invented when `SEED_SAMPLE_CONTENT` is on (a third-party clone with no content repo). Maintainers author these in the content repo, and the composition table below describes what the content repo is expected to carry, not what a bare Big Button press creates. `skills.Specialization`/`checks.CheckTypeSpecialization`/`checks.CheckTypeAspect` are NOT content-repo-owned and keep seeding unconditionally. A reseed no longer wipes and rewrites a CheckType's composition (the pre-#2698 "authoritative rewrite" idiom silently reverted any content-repo/staff-tuned weight on every Big Button press) — `get_or_create`/`authored_or_sample` converge instead, so an edited weight survives.
+**`CheckCategory`/`CheckType`/`CheckTypeTrait` (+ `skills.Skill`/`traits.Trait`/`classes.Aspect`/`classes.PathAspect`) are content-repo-owned (#2698, ADR-0168)** — every cluster below looks its rows up via `world.seeds.sample_content.authored_or_sample()` rather than inventing them; a row is only invented when `SEED_SAMPLE_CONTENT` is on (a third-party clone with no content repo). Maintainers author these in the content repo, and the composition table below describes what the content repo is expected to carry, not what a bare Big Button press creates. `skills.Specialization`/`checks.CheckTypeSpecialization`/`checks.CheckTypeAspect` are NOT content-repo-owned and keep seeding unconditionally. A reseed no longer wipes and rewrites a CheckType's composition (the pre-#2698 "authoritative rewrite" idiom silently reverted any content-repo/staff-tuned weight on every Big Button press) — `get_or_create`/`authored_or_sample` converge instead, so an edited weight survives.
 
 | Cluster | Checks | Composition |
 |---------|--------|-------------|

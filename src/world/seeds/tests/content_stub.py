@@ -326,7 +326,7 @@ _STUB_TECHNIQUES: list[tuple[str, str, str, str]] = [
 def _build_starter_catalog_fixture_objects() -> list[dict]:
     """Build the raw-fixture-JSON object list for the starter catalog stub.
 
-    Dependency order (Path/Style/EffectType/Gift before Technique before
+    Dependency order (Style before Path; then EffectType/Gift before Technique before
     Tradition/PathGiftGrant/TraditionGiftGrant) so ``load_world_content()``'s
     natural-key resolution succeeds on the first pass — its deferred-retry
     mechanism would paper over a wrong order anyway, but there is no reason to
@@ -334,6 +334,15 @@ def _build_starter_catalog_fixture_objects() -> list[dict]:
     """
     objects: list[dict] = []
 
+    for name, description, _linked_path_name in _STUB_STYLES:
+        objects.append(
+            {
+                "model": "magic.techniquestyle",
+                "fields": {"name": name, "description": description},
+            }
+        )
+
+    path_to_style = {path_name: style_name for style_name, _desc, path_name in _STUB_STYLES}
     for name, description, action_category in _STUB_PATHS:
         objects.append(
             {
@@ -344,15 +353,9 @@ def _build_starter_catalog_fixture_objects() -> list[dict]:
                     "stage": 1,  # PathStage.PROSPECT
                     "minimum_level": 1,
                     "action_category": action_category,
+                    # Style is a property of the caster's path (#2700).
+                    "style": [path_to_style[name]] if name in path_to_style else None,
                 },
-            }
-        )
-
-    for name, description, _linked_path_name in _STUB_STYLES:
-        objects.append(
-            {
-                "model": "magic.techniquestyle",
-                "fields": {"name": name, "description": description},
             }
         )
 
@@ -380,7 +383,6 @@ def _build_starter_catalog_fixture_objects() -> list[dict]:
                 "fields": {
                     "gift": [gift_name],
                     "name": technique_name,
-                    "style": [style_name],
                     "effect_type": [effect_type_name],
                     # Natural-key FK to the shared standalone-cast ActionTemplate
                     # (#2474 first-run gap fix) — mirrors real lore-repo Technique
