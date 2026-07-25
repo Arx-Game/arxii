@@ -41,11 +41,9 @@ from world.covenants.models import (
 from world.covenants.perks.constants import SITUATION_CREATOR_FUNCTIONS, PerkBeneficiary
 from world.magic.models import (
     CharacterTechnique,
-    CharacterTradition,
     Technique,
     TechniqueFunctionTag,
     Tradition,
-    TraditionGiftGrant,
 )
 from world.magic.services.gift_acquisition import can_learn_technique
 
@@ -290,28 +288,6 @@ def _uncovered_target_functions(demands: list[SphinxDemand]) -> set[str]:
     return targets
 
 
-def _special_technique_ids(sheet: CharacterSheet) -> set[int]:
-    """PKs of Techniques in the sheet's active tradition's special techniques pool.
-
-    One row lookup (the active ``CharacterTradition``) + one bulk
-    ``values_list`` — no per-candidate query later.
-    """
-    active_row = (
-        CharacterTradition.objects.filter(character=sheet, left_at__isnull=True)
-        .select_related("tradition")
-        .first()
-    )
-    if active_row is None:
-        return set()
-    ids = set(
-        TraditionGiftGrant.objects.filter(tradition=active_row.tradition).values_list(
-            "special_techniques", flat=True
-        )
-    )
-    ids.discard(None)
-    return ids
-
-
 def _shopping_list(
     sheet: CharacterSheet,
     demands: list[SphinxDemand],
@@ -319,15 +295,13 @@ def _shopping_list(
 ) -> list[SphinxShoppingItem]:
     """Up to ``_SHOPPING_LIST_PER_FUNCTION`` learnable techniques per uncovered function.
 
-    "Learnable" = ``can_learn_technique`` passes OR the technique is in the
-    sheet's tradition's signature pool. Bounded: one query per uncovered
-    function (typically a handful), each capped to a small candidate pool
-    before the per-candidate learnability check.
+    "Learnable" = ``can_learn_technique`` passes (the path-style gate). Bounded:
+    one query per uncovered function (typically a handful), each capped to a
+    small candidate pool before the per-candidate learnability check.
     """
     target_functions = _uncovered_target_functions(demands)
     if not target_functions:
         return []
-    special_ids = _special_technique_ids(sheet)
 
     shopping_list: list[SphinxShoppingItem] = []
     for function in sorted(target_functions):
@@ -342,7 +316,7 @@ def _shopping_list(
         for technique in candidates:
             if found >= _SHOPPING_LIST_PER_FUNCTION:
                 break
-            if technique.pk in special_ids or can_learn_technique(sheet, technique):
+            if can_learn_technique(sheet, technique):
                 shopping_list.append(
                     SphinxShoppingItem(
                         technique_name=technique.name,
