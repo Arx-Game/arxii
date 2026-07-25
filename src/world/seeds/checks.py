@@ -66,9 +66,9 @@ _OUTCOMES: tuple[tuple[str, int], ...] = (
 )
 
 # --- Result charts: rank_difference -> ordered (outcome_name, min_roll, max_roll) ---
-# Initial sane defaults (diffs -2..2). Easy diffs lean toward success, hard diffs
-# toward failure; diff 0 is the even baseline. This is the single source of the
-# global resolution charts (see module docstring).
+# rank_difference is roller_rank MINUS target_rank, so POSITIVE means the roller is
+# stronger and must get the easier bands (#2707 — this mapping was inverted, making
+# better characters fail more; world/checks/tests/test_chart_direction.py guards it).
 _EASY_BANDS: tuple[tuple[str, int, int], ...] = (
     ("Failure", 1, 20),
     ("Success", 21, 90),
@@ -85,11 +85,11 @@ _HARD_BANDS: tuple[tuple[str, int, int], ...] = (
     ("Success", 86, 100),
 )
 _CHARTS: tuple[tuple[int, tuple[tuple[str, int, int], ...]], ...] = (
-    (-2, _EASY_BANDS),
-    (-1, _EASY_BANDS),
+    (-2, _HARD_BANDS),
+    (-1, _HARD_BANDS),
     (0, _EVEN_BANDS),
-    (1, _HARD_BANDS),
-    (2, _HARD_BANDS),
+    (1, _EASY_BANDS),
+    (2, _EASY_BANDS),
 )
 
 
