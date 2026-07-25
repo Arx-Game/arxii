@@ -52,11 +52,13 @@ class CharacterThreadHandler:
                 "resonance__affinity",
                 "target_trait",
                 "target_technique",
-                "target_relationship_track",
-                "target_capstone",
+                "target_relationship_track__relationship",
+                "target_capstone__relationship",
                 "target_facet",
                 "target_covenant_role",
                 "target_gift",
+                "target_mantle__item_instance",
+                "target_sanctum_details__feature_instance__room_profile",
             )
         )
 

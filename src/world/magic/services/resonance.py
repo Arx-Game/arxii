@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
     from world.distinctions.models import CharacterDistinction
-    from world.items.models import ItemFacet
+    from world.items.models import ItemFacet, Mantle
     from world.magic.models import (
         DramaticMomentTag,
         EntryFlourishRecord,
@@ -68,6 +68,7 @@ if TYPE_CHECKING:
     from world.magic.types import PullActionContext
     from world.missions.models import MissionDeedRewardLine
     from world.projects.models import Project
+    from world.relationships.models import RelationshipCapstone, RelationshipTrackProgress
 
 logger = logging.getLogger(__name__)
 
@@ -560,6 +561,95 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:  # noqa: 
         room_obj_id = thread.target_sanctum_details.feature_instance.room_profile.objectdb_id
         return room_obj_id in ctx.involved_objects
     return False
+
+
+def _anchor_ambiently_active(  # noqa: PLR0911 — one arm per TargetKind, flat by design
+    thread: Thread,
+    ctx: PullActionContext,
+    *,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM — presence/equipment checks need the game object
+) -> bool:
+    """Return True iff ``thread`` is DEMONSTRABLY active right now (#2708).
+
+    The passive sibling of :func:`_anchor_in_action`. The two differ on purpose:
+    ``_anchor_in_action`` lets a player *assert* involvement for kinds with no anchor in
+    the action graph (GIFT, RELATIONSHIP_*), which is fair because the pull is paid for.
+    A passive capability contribution costs nothing, so assertion is not enough — every
+    arm here tests real state. Concretely: a pyromancer's fire-gift thread must not raise
+    their ability to climb a wall.
+
+    ORGANIZATION deliberately returns False. Its rule ("tied to organization missions or
+    activities", ratified 2026-07-25) needs a marker ``PullActionContext`` does not carry;
+    shipping an arm that can never fire would be worse than omitting it. Tracked as a
+    needs-design question off #2708.
+    """
+    if thread.target_kind == TargetKind.COVENANT_ROLE:
+        # Identical to the pull predicate: engagement is already demonstrable.
+        return _anchor_in_action(thread, ctx)
+    if thread.target_kind == TargetKind.TECHNIQUE:
+        return thread.target_technique_id in ctx.involved_techniques
+    if thread.target_kind == TargetKind.GIFT:
+        return _gift_in_action(thread, ctx)
+    if thread.target_kind == TargetKind.TRAIT:
+        return thread.target_trait_id in ctx.involved_traits
+    if thread.target_kind == TargetKind.SANCTUM:
+        room_obj_id = thread.target_sanctum_details.feature_instance.room_profile.objectdb_id
+        location = character.location
+        return location is not None and location.pk == room_obj_id
+    if thread.target_kind == TargetKind.RELATIONSHIP_TRACK:
+        return _relationship_target_present(thread.target_relationship_track, character)
+    if thread.target_kind == TargetKind.RELATIONSHIP_CAPSTONE:
+        return _relationship_target_present(thread.target_capstone, character)
+    if thread.target_kind == TargetKind.FACET:
+        # Direct handler access (no ``sheet_data`` hop needed) — the equipment
+        # handler hangs off the Character typeclass itself (#2708 verification;
+        # mirrors the worn-facet gate in ``_validate_pull_threads_for_commit``).
+        return bool(character.equipped_items.item_facets_for(thread.target_facet))
+    if thread.target_kind == TargetKind.MANTLE:
+        return _mantle_worn(thread.target_mantle, character)
+    return False
+
+
+def _gift_in_action(thread: Thread, ctx: PullActionContext) -> bool:
+    """True iff any technique the action involves belongs to this thread's gift."""
+    if not ctx.involved_techniques:
+        return False
+    from world.magic.models import Technique  # noqa: PLC0415
+
+    return Technique.objects.filter(
+        pk__in=ctx.involved_techniques, gift_id=thread.target_gift_id
+    ).exists()
+
+
+def _relationship_target_present(
+    owner_row: RelationshipTrackProgress | RelationshipCapstone | None,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM — room-contents check needs the game object
+) -> bool:
+    """True iff the other party to this relationship is in the acting character's room.
+
+    ``owner_row`` is a RelationshipTrackProgress or a RelationshipCapstone; both carry a
+    ``relationship`` FK to CharacterRelationship, whose ``target`` is a CharacterSheet
+    (relationships/models.py:323). CharacterSheet shares ObjectDB's pk, so the presence
+    check is a pk comparison — no extra fetch.
+    """
+    location = character.location
+    if owner_row is None or location is None:
+        return False
+    target_pk = owner_row.relationship.target_id
+    return any(obj.pk == target_pk for obj in location.contents)
+
+
+def _mantle_worn(
+    mantle: Mantle | None,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM — equipment check needs the game object
+) -> bool:
+    """True iff the ItemInstance that IS this mantle (items/models.py:1693) is equipped."""
+    if mantle is None:
+        return False
+    return any(
+        equipped.item_instance_id == mantle.item_instance_id
+        for equipped in character.equipped_items
+    )
 
 
 def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; both target (#1831) and beseech (#1718) params are required

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from world.magic.models import Thread
 from world.magic.services.power_terms import ApplicableThread
-from world.magic.services.resonance import _anchor_in_action
+from world.magic.services.resonance import _anchor_ambiently_active, _anchor_in_action
 from world.magic.types.pull import PullActionContext
 
 if TYPE_CHECKING:
@@ -48,27 +48,36 @@ def applicable_threads_for_cast(
     )
 
 
-def build_cast_applicable_threads(
+def build_applicable_threads(
     sheet: CharacterSheet,
-    technique: Technique | None,
+    ctx: PullActionContext,
     *,
-    location_id: int | None = None,
+    ambient: bool = False,
     cast_pull: CastPullDeclaration | None = None,
 ) -> list[ApplicableThread]:
-    """Return merged ApplicableThreads (passive tier-0 + declared pull). Charge-free."""
-    ctx = PullActionContext(
-        combat_encounter=None,
-        involved_techniques=(technique.pk,) if technique is not None else (),
-        involved_objects=(location_id,) if location_id is not None else (),
-    )
+    """Return merged ApplicableThreads for ``ctx``. Charge-free.
+
+    ``ambient=False`` (default) uses ``_anchor_in_action`` — the paid-pull predicate, the
+    behaviour every pre-#2708 caller relies on. ``ambient=True`` uses
+    ``_anchor_ambiently_active``, the stricter passive predicate (#2708).
+    """
     by_thread: dict[int, int] = {}
     threads = list(
         Thread.objects.filter(owner=sheet, retired_at__isnull=True).select_related(
-            "resonance", "target_technique"
+            "resonance",
+            "target_technique",
+            "target_mantle__item_instance",
+            "target_sanctum_details__feature_instance__room_profile",
+            "target_relationship_track__relationship",
+            "target_capstone__relationship",
         )
     )
     for thread in threads:
-        if _anchor_in_action(thread, ctx):
+        if ambient:
+            is_applicable = _anchor_ambiently_active(thread, ctx, character=sheet.character)
+        else:
+            is_applicable = _anchor_in_action(thread, ctx)
+        if is_applicable:
             by_thread[thread.pk] = 0
     resolved_threads = {t.pk: t for t in threads}
     if cast_pull is not None:
@@ -79,3 +88,24 @@ def build_cast_applicable_threads(
         ApplicableThread(thread=resolved_threads[pk], pull_tier=tier)
         for pk, tier in sorted(by_thread.items())
     ]
+
+
+def build_cast_applicable_threads(
+    sheet: CharacterSheet,
+    technique: Technique | None,
+    *,
+    location_id: int | None = None,
+    cast_pull: CastPullDeclaration | None = None,
+) -> list[ApplicableThread]:
+    """Return merged ApplicableThreads (passive tier-0 + declared pull). Charge-free.
+
+    Cast path only — always the paid-pull predicate (``ambient=False``). Behaviour is
+    byte-identical to pre-#2708; this is now a thin wrapper over
+    :func:`build_applicable_threads`.
+    """
+    ctx = PullActionContext(
+        combat_encounter=None,
+        involved_techniques=(technique.pk,) if technique is not None else (),
+        involved_objects=(location_id,) if location_id is not None else (),
+    )
+    return build_applicable_threads(sheet, ctx, ambient=False, cast_pull=cast_pull)
