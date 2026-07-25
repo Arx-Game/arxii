@@ -102,11 +102,17 @@ class TechniqueStyleManager(NaturalKeyManager):
 
 class TechniqueStyle(NaturalKeyMixin, SharedMemoryModel):
     """
-    Style of magical technique.
+    How a practitioner works magic (Manifestation, Subtle, Prayer, Incantation…).
 
-    Defines how a magical technique manifests (e.g., Manifestation, Subtle,
-    Imbued, Prayer, Incantation). Different Paths have access to different
-    technique styles.
+    Style is a property of the **caster**, not of the technique (#2700): it hangs off
+    ``classes.Path.style``, so the same catalog ``Technique`` is an Incantation when a
+    Path of Tomes character casts it and a Manifestation when a Path of Steel one does.
+    Many paths may share a style (higher-stage paths inherit their line's style).
+
+    Mechanical, not decorative: a style's ``StyleCapabilityRequirement`` rows gate
+    casting on the caster's capabilities (an Incantation caster who cannot speak cannot
+    incant). This does not conflict with ADR-0136 — the system still never dictates how
+    a cast *looks*; players narrate that. Style answers what casting *requires*.
     """
 
     name = models.CharField(
@@ -118,13 +124,6 @@ class TechniqueStyle(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="Description of this technique style.",
     )
-    allowed_paths = models.ManyToManyField(
-        "classes.Path",
-        blank=True,
-        related_name="allowed_styles",
-        help_text="Paths that can use techniques of this style.",
-    )
-
     objects = TechniqueStyleManager()
 
     class Meta:
@@ -139,9 +138,9 @@ class TechniqueStyle(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
     @cached_property
-    def cached_allowed_paths(self) -> list:
-        """Paths that can use this style. Supports Prefetch(to_attr=)."""
-        return list(self.allowed_paths.all())
+    def cached_capability_requirements(self) -> list:
+        """Capability requirements this style imposes. Supports Prefetch(to_attr=)."""
+        return list(self.capability_requirements.select_related("capability"))
 
 
 class RestrictionManager(NaturalKeyManager):
@@ -273,12 +272,6 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="techniques",
         help_text="The gift this technique belongs to.",
-    )
-    style = models.ForeignKey(
-        TechniqueStyle,
-        on_delete=models.PROTECT,
-        related_name="techniques",
-        help_text="The style of this technique (restricted by Path).",
     )
     effect_type = models.ForeignKey(
         EffectType,
@@ -935,6 +928,54 @@ class TechniqueCapabilityRequirement(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.technique.name} requires {self.capability.name} >= {self.minimum_value}"
+
+
+class StyleCapabilityRequirement(NaturalKeyMixin, SharedMemoryModel):
+    """A capability the *caster* must possess to work magic in this style (#2700).
+
+    The caster-scoped sibling of ``TechniqueCapabilityRequirement``: that model asks
+    "what does this technique demand of anyone who performs it," this one asks "what
+    does this style demand of whoever casts in it." Style comes from the caster's
+    ``Path`` (``classes.Path.style``), so the two sets answer different questions and
+    cannot be collapsed — "Incantation requires speech" must bind a Path of Tomes
+    caster and leave a Path of Whispers caster casting the same technique unaffected.
+
+    Both sets are evaluated by ``technique_performable`` against the same
+    ``get_effective_capability_value`` oracle, so this is one gate reading two
+    requirement sources, not a second gate.
+    """
+
+    style = models.ForeignKey(
+        TechniqueStyle,
+        on_delete=models.CASCADE,
+        related_name="capability_requirements",
+    )
+    capability = models.ForeignKey(
+        _CAPABILITY_TYPE_MODEL,
+        on_delete=models.CASCADE,
+        related_name="style_requirements",
+    )
+    minimum_value = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum effective capability value required. 1 = presence.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["style", "capability"]
+        dependencies = ["magic.TechniqueStyle", _CAPABILITY_TYPE_MODEL]
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["style", "capability"],
+                name="style_capability_requirement_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.style.name} requires {self.capability.name} >= {self.minimum_value}"
 
 
 class CharacterTechnique(SharedMemoryModel):

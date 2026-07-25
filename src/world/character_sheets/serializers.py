@@ -641,6 +641,13 @@ def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
 
     Groups character techniques by gift and includes gift resonances.
     """
+    # Style is caster-derived (#2700): every technique this character knows is worked
+    # in their own path's style, so it is resolved once here rather than per technique.
+    from world.progression.selectors import current_path_for_character  # noqa: PLC0415
+
+    path = current_path_for_character(sheet.character)
+    style_name = path.style.name if path is not None and path.style_id is not None else ""
+
     # Build a lookup of techniques by gift_id from prefetched character_techniques
     techniques_by_gift: dict[int, list[TechniqueEntry]] = {}
     for ct in sheet.cached_character_techniques:
@@ -649,7 +656,7 @@ def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
             TechniqueEntry(
                 name=tech.name,
                 level=tech.level,
-                style=tech.style.name,
+                style=style_name,
                 description=tech.description,
             )
         )

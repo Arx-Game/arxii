@@ -63,6 +63,7 @@ from world.magic.models import (
     SoulfrayConfig,
     SoulTetherConfig,
     StandingCapBand,
+    StyleCapabilityRequirement,
     Technique,
     TechniqueCapabilityGrant,
     TechniqueFunctionTag,
@@ -131,22 +132,35 @@ class EffectTypeAdmin(admin.ModelAdmin):
     search_fields = ["name"]
 
 
+class StyleCapabilityRequirementInline(admin.TabularInline):
+    """Capabilities a caster needs to work magic in this style (#2700)."""
+
+    model = StyleCapabilityRequirement
+    extra = 1
+    autocomplete_fields = ["capability"]
+
+
 @admin.register(TechniqueStyle)
 class TechniqueStyleAdmin(admin.ModelAdmin):
     list_display = ["name", "get_paths"]
     search_fields = ["name", "description"]
-    filter_horizontal = ["allowed_paths"]
+    inlines = [StyleCapabilityRequirementInline]
 
     def get_queryset(self, request):
+        from world.classes.models import Path  # noqa: PLC0415
+
         return (
             super()
             .get_queryset(request)
-            .prefetch_related(Prefetch("allowed_paths", to_attr="cached_allowed_paths"))
+            .prefetch_related(
+                Prefetch("paths", queryset=Path.objects.all(), to_attr="cached_paths")
+            )
         )
 
-    @admin.display(description="Allowed Paths")
+    @admin.display(description="Paths")
     def get_paths(self, obj):
-        return ", ".join(p.name for p in obj.cached_allowed_paths[:5])
+        """Paths that cast in this style — the reverse of ``Path.style`` (#2700)."""
+        return ", ".join(p.name for p in obj.cached_paths[:5])
 
 
 @admin.register(Restriction)
@@ -225,7 +239,6 @@ class TechniqueAdmin(admin.ModelAdmin):
     list_display = [
         "name",
         "gift",
-        "style",
         "effect_type",
         "level",
         "get_tier",
@@ -234,12 +247,12 @@ class TechniqueAdmin(admin.ModelAdmin):
         "anima_cost",
         "archetype_alignment",
     ]
-    list_filter = ["style", "effect_type", "gift", "archetype_alignment"]
+    list_filter = ["effect_type", "gift", "archetype_alignment"]
     filter_horizontal = ["restrictions", "target_prerequisites"]
     search_fields = ["name", "description"]
     readonly_fields = ["get_tier"]
-    autocomplete_fields = ["creator", "effect_type", "gift", "style"]
-    list_select_related = ["gift", "style", "effect_type"]
+    autocomplete_fields = ["creator", "effect_type", "gift"]
+    list_select_related = ["gift", "effect_type"]
     inlines = [
         TechniqueCapabilityGrantInline,
         TechniqueRemovedConditionInline,
@@ -388,7 +401,7 @@ class CharacterTraditionAdmin(admin.ModelAdmin):
 class CharacterTechniqueAdmin(admin.ModelAdmin):
     autocomplete_fields = ["character"]
     list_display = ["character", "technique", "acquired_at"]
-    list_filter = ["technique__gift", "technique__style"]
+    list_filter = ["technique__gift", "technique__effect_type"]
     search_fields = ["character__character__db_key", "technique__name"]
     date_hierarchy = "acquired_at"
 

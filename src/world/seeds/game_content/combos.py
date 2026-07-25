@@ -29,7 +29,7 @@ def seed_combo_palette() -> None:
     """
     from world.achievements.factories import AchievementFactory  # noqa: PLC0415
     from world.combat.models import ComboDefinition  # noqa: PLC0415
-    from world.magic.models import Gift, TechniqueStyle  # noqa: PLC0415
+    from world.magic.models import Gift  # noqa: PLC0415
 
     # Reuse or create the EffectTypes we need.
     effect_types = _ensure_effect_types()
@@ -37,10 +37,6 @@ def seed_combo_palette() -> None:
 
     # Create a shared gift for combo techniques.
     Gift.objects.get_or_create(name="Combo Arts")
-    TechniqueStyle.objects.get_or_create(
-        name="Combo",
-        defaults={"description": "Magic expressed through coordinated team techniques."},
-    )
 
     # --- Combo 1: Twin Strike (2-slot, Attack + Attack) ---
     combo_1, _ = ComboDefinition.objects.get_or_create(
