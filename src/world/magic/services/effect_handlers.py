@@ -4,7 +4,7 @@ Each handler is keyword-only ``def h(*, payload) -> None`` and is referenced by
 its dotted path from a seeded FlowDefinition's CALL_SERVICE_FUNCTION step.
 """
 
-from typing import Any
+from typing import Any, cast
 
 from world.areas.positioning.models import Position, PositionEdge
 from world.areas.positioning.services import (
@@ -292,7 +292,11 @@ def summon_ally(*, payload: Any) -> None:
     encounter = participant.encounter
     caster_sheet = participant.character_sheet
 
-    threat_pool = ThreatPool.objects.get(name=payload.threat_pool_name)
+    # get_by_natural_key routes through the natural-key index (#2687, closes #2679)
+    # and matches case-insensitively (__iexact on text components).
+    threat_pool = cast(
+        "ThreatPool", ThreatPool.objects.get_by_natural_key(payload.threat_pool_name)
+    )
     # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
     max_health: int = getattr(payload, "max_health", 30)  # noqa: GETATTR_LITERAL
     # Suppression justified: flow-payload optional param (fields vary per FlowDefinition).
@@ -582,7 +586,12 @@ def raise_rampart_on_condition(
     else:
         return  # no position resolved — no-op
 
-    element_profile = RampartElementProfile.objects.get(name=element_profile_name)
+    # get_by_natural_key routes through the natural-key index (#2687, closes #2679)
+    # and matches case-insensitively (__iexact on text components).
+    element_profile = cast(
+        "RampartElementProfile",
+        RampartElementProfile.objects.get_by_natural_key(element_profile_name),
+    )
     caster_sheet = _caster_sheet_from_instance(instance)
 
     raise_rampart(
