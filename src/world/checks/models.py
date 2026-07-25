@@ -134,8 +134,9 @@ class CheckTypeCapabilityModifier(NaturalKeyMixin, SharedMemoryModel):
         decimal_places=2,
         default=1.0,
         help_text=(
-            "Multiplier applied to the character's effective capability value. "
-            "Per-check contribution is int(sum of weight x value) truncated toward zero."
+            "Multiplier applied to the character's effective capability value MINUS "
+            "its innate baseline, so an unimpaired character contributes 0. "
+            "Per-check contribution is int(sum of weight x deviation) truncated toward zero."
         ),
     )
 

@@ -16,7 +16,7 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 - **`CheckTypeTrait`**: Links CheckType to Trait with a weight multiplier. SharedMemoryModel.
 - **`CheckTypeAspect`**: Links CheckType to Aspect (from classes app) with a weight multiplier. SharedMemoryModel.
 - **`CheckTypeSpecialization`** (#1688): Links CheckType to a `skills.Specialization` with a weight — the third leg of stat + skill + specialization. The parent skill rides a `CheckTypeTrait` (a skill is Trait-backed); this folds in the owned specialization (0 when unowned). Social-check compositions are seeded in `world/seeds/social_checks.py` (authoritative). SharedMemoryModel.
-- **`CheckTypeCapabilityModifier`** (#2505): Links CheckType to a `conditions.CapabilityType` with a weight — curated gate: only an authored (check_type, capability) pair can ever move points, however large the character's raw capability value. Per-row contribution is `weight * get_effective_capability_value(sheet, capability)` (the agency oracle in `world.conditions.services`), summed and truncated toward zero once. `related_name="capability_modifiers"` on CheckType. SharedMemoryModel.
+- **`CheckTypeCapabilityModifier`** (#2505): Links CheckType to a `conditions.CapabilityType` with a weight — curated gate: only an authored (check_type, capability) pair can ever move points, however large the character's raw capability value. Per-row contribution is `weight * (get_effective_capability_value(sheet, capability) - capability.innate_baseline)` (#2704, D3 — deviation from the innate baseline, not the raw value, so an unimpaired character contributes exactly 0) using the agency oracle in `world.conditions.services`, summed and truncated toward zero once. `related_name="capability_modifiers"` on CheckType. SharedMemoryModel.
 
 ### `services.py`
 - **`perform_check(character, check_type, target_difficulty, extra_modifiers)`**: Main resolution function. Returns CheckResult.
@@ -36,7 +36,9 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 1. Weighted trait points from CheckTypeTrait entries
 2. Aspect bonus from PathAspect weights * CheckTypeAspect weights * character level
 3. Capability points from authored CheckTypeCapabilityModifier rows (#2505) — curated gate,
-   0 with no authored rows (never calls the capability oracle) or no `sheet_data`
+   0 with no authored rows (never calls the capability oracle) or no `sheet_data`. Scored as
+   deviation from `innate_baseline`, not the raw value (#2704, D3) — an unimpaired character
+   contributes exactly 0; impairment goes negative, superhuman capacity goes positive.
 4. Extra modifiers from caller (goals, magic, combat, conditions, `resolve_challenge`'s
    `capability_source.value`)
 5. Total points -> CheckRank -> ResultChart -> roll 1-100 -> outcome
@@ -64,8 +66,9 @@ into one `ModifierBreakdown`. The CAPABILITY block (#2505) emits one contributio
 per authored `CheckTypeCapabilityModifier` row. Both the roll path
 (`_calculate_capability_points`) and this provenance path (`_capability_contributions`)
 share one arithmetic helper, `_capability_point_allocation` — it computes the raw
-`weight x effective-capability-value` product per row, truncates the **summed**
-total toward zero ONCE (never per-row — per-row truncation before summing is what a
+`weight x (effective-capability-value - innate_baseline)` product per row (#2704, D3 —
+deviation from baseline, so an unimpaired character contributes exactly 0), truncates
+the **summed** total toward zero ONCE (never per-row — per-row truncation before summing is what a
 prior version did and it could silently diverge from the roll path, e.g. two rows of
 weight 0.5/value 1 each: roll path truncates `1.0` once to `1`, but summing two
 per-row-truncated `int(0.5)==0`s gives `0`), then allocates that single truncated

@@ -677,7 +677,12 @@ def _capability_point_allocation(
     per-row in the provenance path, which could diverge from the roll path's
     single truncation — see #2505 review fix).
 
-    1. Raw per-row products: ``weight * get_effective_capability_value(...)`` (Decimal).
+    1. Raw per-row products: ``weight * (effective_value - innate_baseline)`` (Decimal).
+       Scoring DEVIATION from the innate baseline (#2704, D3) rather than the raw
+       value means an unimpaired character contributes exactly 0, so authoring a
+       capability onto many check types inflates none of them; impairment goes
+       negative and superhuman capacity goes positive. For a capability with
+       ``innate_baseline == 0`` this is arithmetically identical to the raw value.
     2. ``truncated_total = int(sum(raw_products))`` — truncated toward zero ONCE,
        matching ``CheckTypeCapabilityModifier.weight``'s help_text.
     3. The truncated total is allocated back across rows by **largest remainder**:
@@ -695,7 +700,11 @@ def _capability_point_allocation(
     from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
 
     raw_products: list[Decimal] = [
-        row.weight * get_effective_capability_value(character_sheet, row.capability)
+        row.weight
+        * (
+            get_effective_capability_value(character_sheet, row.capability)
+            - row.capability.innate_baseline
+        )
         for row in capability_modifiers
     ]
     truncated_total = int(sum(raw_products)) if raw_products else 0
