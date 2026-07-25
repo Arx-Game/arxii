@@ -92,7 +92,7 @@ class StartVoyageAction(Action):
             return ActionResult(success=False, message="That destination doesn't exist.")
 
         try:
-            dest_hub = TravelHub.objects.get(room_profile__objectdb=dest_room)
+            dest_hub = TravelHub.objects.get(room_profile_id=dest_room.pk)
         except TravelHub.DoesNotExist:
             return ActionResult(success=False, message="That isn't a travel hub.")
 
