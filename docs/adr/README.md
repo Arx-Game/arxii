@@ -57,6 +57,7 @@ treat those names as hints to confirm, not gospel.
 - [0111 — One play surface — `/game` absorbs the scene toolset; `/scenes/:id` is the record page](0111-one-play-surface-game-absorbs-scene-toolset.md)
 - [0127 — Combat renders in-scene, not on a separate route](0127-combat-renders-in-scene-not-a-separate-route.md)
 - [0128 — Scene decisive-check is pre-declared, not post-hoc](0128-scene-decisive-check-is-pre-declared.md)
+- [0167 — Technique style is a property of the caster's Path, not of the Technique](0167-technique-style-is-a-property-of-the-casters-path.md) (#2700; relates to ADR-0136, ADR-0010)
 
 ### Database & modeling
 - [0007 — No JSON fields; every setting is a typed, queryable column](0007-no-json-fields-typed-queryable-columns.md)

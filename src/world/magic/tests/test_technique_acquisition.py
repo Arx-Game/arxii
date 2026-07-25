@@ -64,7 +64,7 @@ class LearnTechniqueTest(TestCase):
         Gift ownership plus PathGiftGrant/TraditionGiftGrant curation is the gate;
         the old path-style gate contradicted 71% of authored starter grants and was
         bypassed entirely by grant_path_magic. Style now gates casting, not learning
-        (see StyleGatedCastingTests). ADR-0164.
+        (see StyleGatedCastingTests). ADR-0167.
         """
         from world.classes.factories import PathFactory
         from world.magic.factories import TechniqueStyleFactory
