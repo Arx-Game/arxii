@@ -11,7 +11,8 @@ from core.natural_keys import (
     index_owner,
     natural_key_index,
 )
-from world.species.models import Species
+from world.species.factories import SpeciesFactory
+from world.species.models import Species, SpeciesStatBonus
 
 
 class IndexKeyNormalizationTests(TestCase):
@@ -58,3 +59,57 @@ class IndexRegistryTests(TestCase):
         flush_natural_key_indexes()
         assert natural_key_index(Species) == {}
         assert index_owner(Species) not in _NK_WARMED
+
+
+class LazyIndexTests(TestCase):
+    """Non-lookup-table models fill the index on lookup."""
+
+    def test_repeat_lookup_issues_no_queries(self) -> None:
+        species = SpeciesFactory(name="Indexed Elf")
+        Species.objects.get_by_natural_key("Indexed Elf")  # priming call
+        with self.assertNumQueries(0):
+            result = Species.objects.get_by_natural_key("Indexed Elf")
+        assert result == species
+
+    def test_first_lookup_populates_the_index(self) -> None:
+        species = SpeciesFactory(name="Recorded Elf")
+        Species.objects.get_by_natural_key("Recorded Elf")
+        assert natural_key_index(Species)[("recorded elf",)] == species.pk
+
+    def test_composite_key_repeat_lookup_issues_no_queries(self) -> None:
+        """A hit short-circuits BEFORE the recursive FK resolution, so a
+        composite key costs nothing on repeat — not even the FK's own lookup."""
+        species = SpeciesFactory(name="Composite Elf")
+        SpeciesStatBonus.objects.create(species=species, stat="strength", value=1)
+        SpeciesStatBonus.objects.get_by_natural_key("Composite Elf", "strength")
+        with self.assertNumQueries(0):
+            result = SpeciesStatBonus.objects.get_by_natural_key("Composite Elf", "strength")
+        assert result.value == 1
+
+    def test_missing_row_is_not_cached(self) -> None:
+        with self.assertRaises(Species.DoesNotExist):
+            Species.objects.get_by_natural_key("Not Yet Created")
+        assert ("not yet created",) not in natural_key_index(Species)
+        species = SpeciesFactory(name="Not Yet Created")
+        assert Species.objects.get_by_natural_key("Not Yet Created") == species
+
+    def test_deleted_row_self_heals(self) -> None:
+        """A dead pk raises DoesNotExist on the by-pk fetch; the entry is
+        dropped and the natural-key query re-run (which then also misses)."""
+        species = SpeciesFactory(name="Doomed Elf")
+        Species.objects.get_by_natural_key("Doomed Elf")
+        Species.objects.filter(pk=species.pk).delete()
+        with self.assertRaises(Species.DoesNotExist):
+            Species.objects.get_by_natural_key("Doomed Elf")
+
+
+class IndexIsolationTests(TestCase):
+    """Companion pair: proves the test-runner flush clears the index."""
+
+    def test_a_seeds_the_index(self) -> None:
+        SpeciesFactory(name="Isolation Marker Species")
+        Species.objects.get_by_natural_key("Isolation Marker Species")
+        assert ("isolation marker species",) in natural_key_index(Species)
+
+    def test_b_starts_clean(self) -> None:
+        assert ("isolation marker species",) not in natural_key_index(Species)

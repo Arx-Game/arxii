@@ -160,15 +160,44 @@ class NaturalKeyManager(ArxSharedMemoryManager, models.Manager["NaturalKeyMixin"
 
         Self-referential FKs consume a single arg that is either None (null FK)
         or a nested list to be recursively resolved.
+
+        Repeat lookups are served from a process-level natural-key -> pk index
+        and resolve through SharedMemoryModel's identity map (zero queries).
+        The index check happens BEFORE the arg->lookup resolution, so a hit on a
+        composite key also skips the recursive FK lookups it would otherwise do.
         """
         if not hasattr(self.model, "NaturalKeyConfig"):
             msg = f"{self.model.__name__} missing NaturalKeyConfig"
             raise NaturalKeyConfigError(msg)
 
+        key = _index_key(args)
+        index = natural_key_index(self.model)
+
+        cached_pk = index.get(key)
+        if cached_pk is not None:
+            try:
+                return self.get(pk=cached_pk)
+            except self.model.DoesNotExist:
+                # Poisoned entry (row deleted, or a pk recycled). Drop it and
+                # fall through to a fresh natural-key query.
+                index.pop(key, None)
+
+        instance = self.get(**self._natural_key_lookup(args))
+        if isinstance(instance, NaturalKeyMixin):
+            index[key] = instance.pk
+            instance._nk_index_key = key  # noqa: SLF001
+        return instance
+
+    def _natural_key_lookup(self, args: tuple[Any, ...]) -> dict[str, Any]:
+        """Build the field->value lookup dict for a natural-key arg tuple.
+
+        Extracted from ``get_by_natural_key`` so the index fast path can skip it
+        entirely — on a composite key this also skips the recursive
+        ``get_by_natural_key`` calls that resolve each FK component.
+        """
         config = self.model.NaturalKeyConfig
         fields: Sequence[str] = config.fields
 
-        # Build lookup dict, handling FKs by consuming multiple args if needed
         lookup: dict[str, Any] = {}
         args_list = list(args)
 
@@ -187,7 +216,7 @@ class NaturalKeyManager(ArxSharedMemoryManager, models.Manager["NaturalKeyMixin"
             msg = f"Too many natural key values for {self.model.__name__}: {len(args)} given"
             raise NaturalKeyConfigError(msg)
 
-        return self.get(**lookup)
+        return lookup
 
 
 def _resolve_fk_arg(
