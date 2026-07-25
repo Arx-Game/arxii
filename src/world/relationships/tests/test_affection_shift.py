@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.relationships.constants import TrackSystemKey
@@ -194,6 +194,7 @@ class BoonProvenanceShiftTests(TestCase):
             )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_smitten_condition gates on #2698
 class ShiftAffectionSeedTests(TestCase):
     """Flirt/Seduce success consequences carry the SHIFT_AFFECTION effects."""
 

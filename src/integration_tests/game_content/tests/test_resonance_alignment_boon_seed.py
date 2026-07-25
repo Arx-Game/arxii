@@ -20,7 +20,7 @@ before each test method.
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from integration_tests.game_content.magic import (
     _seed_resonance_alignment_boons,
@@ -30,6 +30,7 @@ from world.magic.constants import AffinityInteractionKind, ResonanceValence
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ConditionTemplate/Category gate on #2698
 class ResonanceAlignmentBoonConditionTemplateTests(ResonanceCacheIsolationMixin, TestCase):
     """After master seed: boon ConditionTemplate rows exist in the positive Magical Boon
     category."""
@@ -147,6 +148,7 @@ class ResonanceAlignmentBoonConditionTemplateTests(ResonanceCacheIsolationMixin,
             )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ConditionTemplate/Category gate on #2698
 class ResonanceAlignmentBoonTierTests(ResonanceCacheIsolationMixin, TestCase):
     """After master seed: ResonanceAlignmentBoonTier rows exist for Abyssal/Abyssal pair."""
 
@@ -265,6 +267,7 @@ class ResonanceAlignmentBoonTierTests(ResonanceCacheIsolationMixin, TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ConditionTemplate/Category gate on #2698
 class ResonanceAlignmentBandSelectionTests(ResonanceCacheIsolationMixin, TestCase):
     """Band-selection logic matches the service's max(t if t.min_magnitude <= magnitude) rule."""
 
@@ -345,6 +348,7 @@ class ResonanceAlignmentBandSelectionTests(ResonanceCacheIsolationMixin, TestCas
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ConditionTemplate/Category gate on #2698
 class ResonanceAlignmentBoonIdempotencyTests(ResonanceCacheIsolationMixin, TestCase):
     """Running _seed_resonance_alignment_boons() twice creates no duplicate rows."""
 

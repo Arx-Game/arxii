@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from actions.models.action_templates import ActionTemplate
     from actions.models.consequence_pools import ConsequencePool
     from world.classes.models import Path
-    from world.conditions.models import CapabilityType, ConditionStage
+    from world.conditions.models import CapabilityType, ConditionStage, ConditionTemplate
     from world.magic.audere import AudereThreshold
     from world.magic.models import (
         Affinity,
@@ -64,6 +64,7 @@ if TYPE_CHECKING:
     from world.mechanics.models import Property
     from world.relationships.models import RelationshipTrack
     from world.seeds.game_content.combat import FleeSeedResult, PenetrationContestResult
+    from world.traits.models import CheckOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -715,7 +716,7 @@ _HALLOWED_REACTION_SPECS: list[dict[str, str]] = [
 ]
 
 
-def _seed_hallowed_reaction_conditions() -> None:
+def _seed_hallowed_reaction_conditions() -> dict[str, ConditionTemplate]:
     """Seed the 5 reaction conditions for the Hallowed Threshold pipeline.
 
     These conditions are applied on different check outcomes when an
@@ -728,25 +729,35 @@ def _seed_hallowed_reaction_conditions() -> None:
     Burning may already exist (factory-created in some tests); get_or_create
     reuses an existing row with the same name.
 
-    All writes use get_or_create so re-running on a populated DB is a no-op.
+    ``conditions.ConditionCategory``/``conditions.ConditionTemplate`` are
+    content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. Returns a dict of ``{name: ConditionTemplate}``
+    for whichever of the 5 are actually present (authored, or sampled) — a
+    name absent from the dict means it isn't there yet. Downstream consumers
+    (``_seed_resonance_environment_consequence_pools``,
+    ``_seed_hallowed_achievement_bridge``, ``_seed_hallowed_threshold_story``)
+    key off this dict and skip whatever it's missing rather than raising.
     """
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # Ensure a "Magical" category exists. Reuse if already present.
-    category, _ = ConditionCategory.objects.get_or_create(
-        name="Magical",
-        defaults={
+    category = authored_or_sample(
+        ConditionCategory,
+        {
             "description": "Magical conditions arising from spellcasting and aura interactions.",
             "is_negative": True,
             "display_order": 0,
         },
+        name="Magical",
     )
 
+    conditions: dict[str, ConditionTemplate] = {}
     for spec in _HALLOWED_REACTION_SPECS:
-        ConditionTemplate.objects.get_or_create(
-            name=spec["name"],
-            defaults={
+        template = authored_or_sample(
+            ConditionTemplate,
+            {
                 "category": category,
                 "description": spec["description"],
                 "player_description": spec["player_description"],
@@ -758,7 +769,11 @@ def _seed_hallowed_reaction_conditions() -> None:
                 "has_progression": False,
                 "can_be_dispelled": True,
             },
+            name=spec["name"],
         )
+        if template is not None:
+            conditions[spec["name"]] = template
+    return conditions
 
 
 # ---------------------------------------------------------------------------
@@ -800,6 +815,100 @@ _ABYSSAL_CELESTIAL_POOL_NAME: str = "OPPOSED Backfire: Abyssal caster in Celesti
 _PRIMAL_CELESTIAL_POOL_NAME: str = "OPPOSED Backfire: Primal caster in Celestial place"
 
 
+def _build_hallowed_backfire_pool(
+    pool_name: str,
+    description: str,
+    outcome_map: dict[str, CheckOutcome],
+    cond_map: dict[str, ConditionTemplate],
+) -> ConsequencePool:
+    """Create (or fetch) one OPPOSED backfire pool and wire its Consequence/effect rows.
+
+    Extracted from ``_seed_resonance_environment_consequence_pools`` (a module-level
+    function keeps its branch count off that function's own C901 budget). See that
+    function's docstring for the full dependency/skip-on-missing-condition contract.
+    """
+    from actions.models import ConsequencePool, ConsequencePoolEntry  # noqa: PLC0415
+    from world.checks.constants import EffectType as CheckEffectType  # noqa: PLC0415
+    from world.checks.models import Consequence, ConsequenceEffect  # noqa: PLC0415
+
+    pool, _ = ConsequencePool.objects.get_or_create(
+        name=pool_name,
+        defaults={"description": description},
+    )
+
+    # --- Single-effect outcomes: every tier except Critical Failure ---
+    # Derived inline from the single source of truth (no separate map constant).
+    for outcome_name, condition_name in HALLOWED_REACTION_CONDITION_NAMES.items():
+        if outcome_name == _CRIT_FAIL_TIER:
+            continue
+        condition = cond_map.get(condition_name)
+        if condition is None:
+            continue
+        outcome = outcome_map[outcome_name]
+        # SOFT NATURAL KEY: there is no DB constraint on (outcome_tier, label).
+        # Idempotency relies on ConsequencePool.name being unique=True and the
+        # label embedding that unique pool name, so (outcome_tier, label) is
+        # effectively pool-scoped-unique. A label-format change across runs
+        # would create duplicates (acceptable for seed; do NOT change the model).
+        consequence, _ = Consequence.objects.get_or_create(
+            outcome_tier=outcome,
+            label=f"{pool_name}: {outcome_name}",
+            defaults={
+                "mechanical_description": f"Apply {condition_name}.",
+                "weight": 1,
+                "character_loss": False,
+            },
+        )
+        ConsequencePoolEntry.objects.get_or_create(
+            pool=pool,
+            consequence=consequence,
+        )
+        # SOFT NATURAL KEY: the (consequence, effect_type, condition_template)
+        # triple is functionally unique for this seed but is NOT DB-enforced
+        # (pre-existing model-wide gap affecting all ConsequenceEffect callers;
+        # out of scope for this seed task — tracked as a separate follow-up).
+        ConsequenceEffect.objects.get_or_create(
+            consequence=consequence,
+            effect_type=CheckEffectType.APPLY_CONDITION,
+            condition_template=condition,
+            defaults={"execution_order": 0},
+        )
+
+    # --- Critical Failure: two APPLY_CONDITION effects on one Consequence ---
+    crit_fail_outcome = outcome_map[_CRITICAL_FAILURE]
+    crit_fail_label = f"{pool_name}: Critical Failure"
+    # SOFT NATURAL KEY (same rationale as above): (outcome_tier, label) is not
+    # DB-unique; idempotency relies on the unique pool name embedded in label.
+    crit_fail_consequence, _ = Consequence.objects.get_or_create(
+        outcome_tier=crit_fail_outcome,
+        label=crit_fail_label,
+        defaults={
+            "mechanical_description": "Apply Hallowed Burn and Cast Disrupted.",
+            "weight": 1,
+            "character_loss": False,
+        },
+    )
+    ConsequencePoolEntry.objects.get_or_create(
+        pool=pool,
+        consequence=crit_fail_consequence,
+    )
+    for order, cond_name in enumerate(CRIT_FAIL_CONDITION_NAMES):
+        condition = cond_map.get(cond_name)
+        if condition is None:
+            continue
+        # SOFT NATURAL KEY: (consequence, effect_type, condition_template) is
+        # functionally unique here but NOT DB-enforced (pre-existing model-wide
+        # gap; out of scope for this seed task — tracked separately).
+        ConsequenceEffect.objects.get_or_create(
+            consequence=crit_fail_consequence,
+            effect_type=CheckEffectType.APPLY_CONDITION,
+            condition_template=condition,
+            defaults={"execution_order": order},
+        )
+
+    return pool
+
+
 def _seed_resonance_environment_consequence_pools() -> None:
     """Seed OPPOSED consequence pools for pair #4 (Abyssal→Celestial) and #7 (Primal→Celestial).
 
@@ -818,17 +927,20 @@ def _seed_resonance_environment_consequence_pools() -> None:
     Depends on:
     - seed_canonical_affinities()      (Celestial/Primal/Abyssal must exist)
     - _seed_affinity_interactions()    (9 AffinityInteraction rows)
-    - _seed_hallowed_reaction_conditions() (all 5 ConditionTemplate rows)
+    - _seed_hallowed_reaction_conditions() (all 5 ConditionTemplate rows —
+      content-repo-owned, #2698; any of the 5 may be absent)
     - _seed_endure_hallowed_ground_check() (ensures the resolution-spine
       CheckOutcome rows via seed_check_resolution_tables)
 
     Idempotent: get_or_create keyed on stable names at every layer.  Duplicate
     ConsequencePoolEntry rows are prevented by the (pool, consequence) unique
     constraint; duplicate ConsequenceEffect rows are guarded explicitly.
+
+    ``ConditionTemplate`` is content-repo-owned (#2698); an outcome tier whose
+    condition isn't authored gets its Consequence/ConsequencePoolEntry rows
+    (config) but skips the APPLY_CONDITION effect that would need the missing
+    condition — the pool still seeds, just without teeth for that tier.
     """
-    from actions.models import ConsequencePool, ConsequencePoolEntry  # noqa: PLC0415
-    from world.checks.constants import EffectType as CheckEffectType  # noqa: PLC0415
-    from world.checks.models import Consequence, ConsequenceEffect  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.magic.models.affinity import Affinity  # noqa: PLC0415
     from world.magic.models.resonance_environment import AffinityInteraction  # noqa: PLC0415
@@ -840,96 +952,28 @@ def _seed_resonance_environment_consequence_pools() -> None:
     for name in (_CRITICAL_SUCCESS, "Success", "Failure", _CRITICAL_FAILURE):
         outcome_map[name] = CheckOutcome.objects.get(name=name)
 
-    # --- Fetch injury ConditionTemplates (created by _seed_hallowed_reaction_conditions) ---
-    # Names come from the single source of truth (_HALLOWED_REACTION_SPECS) and are
-    # unique per spec, so no de-dup guard is needed when building this map.
+    # --- Fetch injury ConditionTemplates (created by _seed_hallowed_reaction_conditions,
+    # content-repo-owned #2698) — a name absent from the DB is simply absent from
+    # this map; callers below skip the effect wiring for a missing condition. ---
     cond_map: dict[str, ConditionTemplate] = {
-        spec["name"]: ConditionTemplate.objects.get(name=spec["name"])
-        for spec in _HALLOWED_REACTION_SPECS
+        template.name: template
+        for template in ConditionTemplate.objects.filter(
+            name__in=[spec["name"] for spec in _HALLOWED_REACTION_SPECS]
+        )
     }
 
-    def _build_pool(pool_name: str, description: str) -> ConsequencePool:
-        """Create (or fetch) a pool and wire its 4 Consequence + ConsequenceEffect rows."""
-        pool, _ = ConsequencePool.objects.get_or_create(
-            name=pool_name,
-            defaults={"description": description},
-        )
-
-        # --- Single-effect outcomes: every tier except Critical Failure ---
-        # Derived inline from the single source of truth (no separate map constant).
-        for outcome_name, condition_name in HALLOWED_REACTION_CONDITION_NAMES.items():
-            if outcome_name == _CRIT_FAIL_TIER:
-                continue
-            outcome = outcome_map[outcome_name]
-            condition = cond_map[condition_name]
-            # SOFT NATURAL KEY: there is no DB constraint on (outcome_tier, label).
-            # Idempotency relies on ConsequencePool.name being unique=True and the
-            # label embedding that unique pool name, so (outcome_tier, label) is
-            # effectively pool-scoped-unique. A label-format change across runs
-            # would create duplicates (acceptable for seed; do NOT change the model).
-            consequence, _ = Consequence.objects.get_or_create(
-                outcome_tier=outcome,
-                label=f"{pool_name}: {outcome_name}",
-                defaults={
-                    "mechanical_description": f"Apply {condition_name}.",
-                    "weight": 1,
-                    "character_loss": False,
-                },
-            )
-            ConsequencePoolEntry.objects.get_or_create(
-                pool=pool,
-                consequence=consequence,
-            )
-            # SOFT NATURAL KEY: the (consequence, effect_type, condition_template)
-            # triple is functionally unique for this seed but is NOT DB-enforced
-            # (pre-existing model-wide gap affecting all ConsequenceEffect callers;
-            # out of scope for this seed task — tracked as a separate follow-up).
-            ConsequenceEffect.objects.get_or_create(
-                consequence=consequence,
-                effect_type=CheckEffectType.APPLY_CONDITION,
-                condition_template=condition,
-                defaults={"execution_order": 0},
-            )
-
-        # --- Critical Failure: two APPLY_CONDITION effects on one Consequence ---
-        crit_fail_outcome = outcome_map[_CRITICAL_FAILURE]
-        crit_fail_label = f"{pool_name}: Critical Failure"
-        # SOFT NATURAL KEY (same rationale as above): (outcome_tier, label) is not
-        # DB-unique; idempotency relies on the unique pool name embedded in label.
-        crit_fail_consequence, _ = Consequence.objects.get_or_create(
-            outcome_tier=crit_fail_outcome,
-            label=crit_fail_label,
-            defaults={
-                "mechanical_description": "Apply Hallowed Burn and Cast Disrupted.",
-                "weight": 1,
-                "character_loss": False,
-            },
-        )
-        ConsequencePoolEntry.objects.get_or_create(
-            pool=pool,
-            consequence=crit_fail_consequence,
-        )
-        for order, cond_name in enumerate(CRIT_FAIL_CONDITION_NAMES):
-            # SOFT NATURAL KEY: (consequence, effect_type, condition_template) is
-            # functionally unique here but NOT DB-enforced (pre-existing model-wide
-            # gap; out of scope for this seed task — tracked separately).
-            ConsequenceEffect.objects.get_or_create(
-                consequence=crit_fail_consequence,
-                effect_type=CheckEffectType.APPLY_CONDITION,
-                condition_template=cond_map[cond_name],
-                defaults={"execution_order": order},
-            )
-
-        return pool
-
     # --- Build both pools ---
-    abyssal_celestial_pool = _build_pool(
+    abyssal_celestial_pool = _build_hallowed_backfire_pool(
         _ABYSSAL_CELESTIAL_POOL_NAME,
         "Backfire consequences for an Abyssal caster working magic in a Celestial place.",
+        outcome_map,
+        cond_map,
     )
-    primal_celestial_pool = _build_pool(
+    primal_celestial_pool = _build_hallowed_backfire_pool(
         _PRIMAL_CELESTIAL_POOL_NAME,
         "Backfire consequences for a Primal caster working magic in a Celestial place.",
+        outcome_map,
+        cond_map,
     )
 
     # --- Wire AffinityInteraction.consequence_pool for pair #4 and #7 ---
@@ -1040,6 +1084,11 @@ def _seed_resonance_alignment_boons() -> None:
 
     Idempotent: get_or_create keyed on stable natural keys (template by name;
     tier by (affinity_interaction, min_magnitude) unique constraint).
+
+    ``ConditionCategory``/``ConditionTemplate`` are content-repo-owned (#2698)
+    — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A
+    band whose template isn't authored has its ``ResonanceAlignmentBoonTier``
+    skipped below (the tier's ``condition_template`` FK is required).
     """
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
@@ -1048,21 +1097,23 @@ def _seed_resonance_alignment_boons() -> None:
         AffinityInteraction,
         ResonanceAlignmentBoonTier,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # --- Positive "Magical Boon" ConditionCategory for buff templates ---
     # MUST be separate from the negative "Magical" category (used by injury conditions).
     # is_negative=False is load-bearing: services/views count and filter positive vs negative
     # conditions by this flag (see conditions/services.py only_negative filter and
     # conditions/views.py positive/negative counting).
-    category, _ = ConditionCategory.objects.get_or_create(
-        name=_MAGICAL_BOON_CATEGORY_NAME,
-        defaults={
+    category = authored_or_sample(
+        ConditionCategory,
+        {
             "description": (
                 "Positive magical conditions from resonance alignment and aura attunement."
             ),
             "is_negative": False,
             "display_order": 10,
         },
+        name=_MAGICAL_BOON_CATEGORY_NAME,
     )
 
     # --- Seed the two boon ConditionTemplates ---
@@ -1070,9 +1121,9 @@ def _seed_resonance_alignment_boons() -> None:
     # movement service on the next move (no inherent expiry timer).
     template_map: dict[str, ConditionTemplate] = {}
     for spec in _ABYSSAL_BOON_SPECS:
-        template, _ = ConditionTemplate.objects.get_or_create(
-            name=spec["name"],
-            defaults={
+        template = authored_or_sample(
+            ConditionTemplate,
+            {
                 "category": category,
                 "description": spec["description"],
                 "player_description": spec["player_description"],
@@ -1084,8 +1135,10 @@ def _seed_resonance_alignment_boons() -> None:
                 "has_progression": False,
                 "can_be_dispelled": False,
             },
+            name=spec["name"],
         )
-        template_map[spec["band"]] = template
+        if template is not None:
+            template_map[spec["band"]] = template
 
     # --- Fetch pair #5: Abyssal → Abyssal (ALIGNED) ---
     # Affinity is content-repo-owned (#2698); skip the boon tiers rather than
@@ -1110,7 +1163,9 @@ def _seed_resonance_alignment_boons() -> None:
         (_ABYSSAL_BOON_HIGH_MIN_MAGNITUDE, "high"),
     ]
     for min_magnitude, band in tier_specs:
-        condition_template = template_map[band]
+        condition_template = template_map.get(band)
+        if condition_template is None:
+            continue
         # get_or_create keyed on the unique (affinity_interaction, min_magnitude) pair.
         # On the CREATE path: build the instance, full_clean(), then save().
         # On the GET path: no save needed; full_clean is already guaranteed on prior run.
@@ -1179,7 +1234,9 @@ def _seed_hallowed_achievement_bridge() -> None:
     the first character earns each Achievement.
 
     Depends on _seed_hallowed_reaction_conditions() having run first to
-    create the ConditionTemplate rows we reference.
+    create the ConditionTemplate rows we reference — content-repo-owned
+    (#2698), so a given spec's condition may not exist; that spec is skipped
+    entirely (stat/rule/achievement all hang off the condition existing).
     """
     from django.utils.text import slugify  # noqa: PLC0415
 
@@ -1196,7 +1253,9 @@ def _seed_hallowed_achievement_bridge() -> None:
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
 
     for spec in _HALLOWED_ACHIEVEMENT_BRIDGE_SPECS:
-        condition = ConditionTemplate.objects.get(name=spec["condition_name"])
+        condition = ConditionTemplate.objects.filter(name=spec["condition_name"]).first()
+        if condition is None:
+            continue
         stat, _ = StatDefinition.objects.get_or_create(
             key=spec["stat_key"],
             defaults={
@@ -1277,19 +1336,24 @@ def _seed_resonance_environment_rooms() -> None:
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
     from world.magic.models.affinity import Resonance  # noqa: PLC0415
     from world.magic.services.gain import tag_room_resonance  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # ----- Hallowed Rejection marker (flavor condition for the story) -----
-    category, _ = ConditionCategory.objects.get_or_create(
-        name="Magical",
-        defaults={
+    # ConditionCategory/ConditionTemplate are content-repo-owned (#2698) —
+    # looked up rather than invented unless SEED_SAMPLE_CONTENT is on. The
+    # cascade rooms below don't depend on this marker existing.
+    category = authored_or_sample(
+        ConditionCategory,
+        {
             "description": "Magical conditions arising from spellcasting and aura interactions.",
             "is_negative": True,
             "display_order": 0,
         },
+        name="Magical",
     )
-    ConditionTemplate.objects.get_or_create(
-        name="Hallowed Rejection",
-        defaults={
+    authored_or_sample(
+        ConditionTemplate,
+        {
             "category": category,
             "description": (
                 "An Abyssal-aligned soul remembers a wound made by sanctified light. "
@@ -1305,6 +1369,7 @@ def _seed_resonance_environment_rooms() -> None:
             "has_progression": False,
             "can_be_dispelled": False,
         },
+        name="Hallowed Rejection",
     )
 
     # ----- Rooms with cascade resonance -----
@@ -1378,6 +1443,12 @@ def _seed_hallowed_threshold_story() -> None:
 
     Idempotent via get_or_create throughout. Re-running on a populated DB is a
     no-op; staff edits to existing rows are preserved.
+
+    Every beat below requires one of the 4 reaction ``ConditionTemplate``
+    rows (content-repo-owned, #2698; seeded by ``_seed_hallowed_reaction_conditions``).
+    The whole DAG is skipped — no Story/Chapter/Episode/Beat/Transition rows
+    at all — when any of the 4 isn't authored, rather than building a partial
+    story with beats missing their routing condition.
     """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.stories.constants import (  # noqa: PLC0415
@@ -1394,6 +1465,14 @@ def _seed_hallowed_threshold_story() -> None:
         TransitionRequiredOutcome,
     )
     from world.stories.types import StoryPrivacy, StoryStatus  # noqa: PLC0415
+
+    needed_condition_names = {_TEMPERED_AGAINST_LIGHT, "Singed", "Burning", _HALLOWED_BURN}
+    cond_map: dict[str, ConditionTemplate] = {
+        template.name: template
+        for template in ConditionTemplate.objects.filter(name__in=needed_condition_names)
+    }
+    if not needed_condition_names.issubset(cond_map):
+        return
 
     # --- Story (CHARACTER scope, no character_sheet — used as a template;
     #     the pipeline test wires character_sheet at runtime per playthrough) ---
@@ -1460,7 +1539,7 @@ def _seed_hallowed_threshold_story() -> None:
     ]
     beats_by_condition_name: dict[str, Beat] = {}
     for cond_name, player_resolution_text in beat_specs:
-        condition = ConditionTemplate.objects.get(name=cond_name)
+        condition = cond_map[cond_name]
         beat, _ = Beat.objects.get_or_create(
             episode=source,
             predicate_type=BeatPredicateType.CONDITION_HELD,
@@ -1835,20 +1914,27 @@ def seed_magic_config() -> MagicConfigResult:
 
     # --- Soulfray condition + stages (needed for AudereThreshold.minimum_warp_stage) ---
     # SoulfrayContentFactory() is idempotent — uses get_or_create internally.
+    # conditions.ConditionTemplate/ConditionStage are content-repo-owned (#2698);
+    # soulfray_content.stages is empty when Soulfray isn't authored and
+    # SEED_SAMPLE_CONTENT is off — ripping_stage stays None in that case.
     soulfray_content = SoulfrayContentFactory()
     ripping_stage = next(
-        s
-        for s in soulfray_content.stages
-        if s.name == "Ripping"  # noqa: STRING_LITERAL
+        (
+            s
+            for s in soulfray_content.stages
+            if s.name == "Ripping"  # noqa: STRING_LITERAL
+        ),
+        None,
     )
 
     # --- AudereThreshold (singleton, no get_or_create on factory) ---
-    # Skipped when the "Major" IntensityTier (content-repo-owned, #2698) isn't
-    # available — check_audere_eligibility()'s own gate #1 already tolerates a
-    # missing AudereThreshold (Audere just stays inactive), so this degrades
-    # the same way a real deploy without the row authored would.
+    # Skipped when the "Major" IntensityTier or the Soulfray "Ripping" stage
+    # (both content-repo-owned, #2698) isn't available — check_audere_eligibility()'s
+    # own gate #1 already tolerates a missing AudereThreshold (Audere just stays
+    # inactive), so this degrades the same way a real deploy without the row
+    # authored would.
     audere_threshold = None
-    if major_tier is not None:
+    if major_tier is not None and ripping_stage is not None:
         audere_threshold, _ = AudereThreshold.objects.get_or_create(
             pk=1,
             defaults={
@@ -2016,7 +2102,10 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
     content-repo-owned (#2698) — looked up rather than invented unless
     ``SEED_SAMPLE_CONTENT`` is on. When either is missing, the four
     ThreadPullEffect rows (which need a real ``resonance`` FK) are skipped
-    and ``canonical_resonance`` is ``None`` on the returned result.
+    and ``canonical_resonance`` is ``None`` on the returned result. The
+    "endurance" ``CapabilityType`` is likewise content-repo-owned (#2698); when
+    it's missing, only the CAPABILITY_GRANT row is skipped — FLAT_BONUS/
+    INTENSITY_BUMP/VITAL_BONUS don't need it.
 
     Returns:
         ThreadPullCatalogResult dataclass with all created/fetched instances.
@@ -2060,10 +2149,11 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
             Resonance, {"affinity": affinity}, name=_CATALOG_RESONANCE_NAME
         )
 
-    # --- CapabilityType for CAPABILITY_GRANT (get_or_create on name) ---
-    capability, _ = CapabilityType.objects.get_or_create(
+    # --- CapabilityType for CAPABILITY_GRANT — content-repo-owned (#2698) ---
+    capability = authored_or_sample(
+        CapabilityType,
+        {"description": "Endurance capability — used by thread pull catalog."},
         name=_CATALOG_CAPABILITY_NAME,
-        defaults={"description": "Endurance capability — used by thread pull catalog."},
     )
 
     # --- ThreadPullEffect rows (natural key: target_kind, resonance, tier, min_thread_level) ---
@@ -2114,17 +2204,18 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
     )
     pull_effects[EffectKind.VITAL_BONUS] = vital_bonus_effect
 
-    capability_grant_effect, _ = ThreadPullEffect.objects.get_or_create(
-        target_kind=TargetKind.TRAIT,
-        resonance=resonance,
-        tier=3,
-        min_thread_level=5,
-        defaults={
-            "effect_kind": EffectKind.CAPABILITY_GRANT,
-            "capability_grant": capability,
-        },
-    )
-    pull_effects[EffectKind.CAPABILITY_GRANT] = capability_grant_effect
+    if capability is not None:
+        capability_grant_effect, _ = ThreadPullEffect.objects.get_or_create(
+            target_kind=TargetKind.TRAIT,
+            resonance=resonance,
+            tier=3,
+            min_thread_level=5,
+            defaults={
+                "effect_kind": EffectKind.CAPABILITY_GRANT,
+                "capability_grant": capability,
+            },
+        )
+        pull_effects[EffectKind.CAPABILITY_GRANT] = capability_grant_effect
 
     return ThreadPullCatalogResult(
         pull_costs=pull_costs,

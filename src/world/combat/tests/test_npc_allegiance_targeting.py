@@ -1,6 +1,6 @@
 """E2E tests for NPC allegiance-aware targeting (#1590)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.combat.constants import TargetingMode, TargetSelection
 from world.combat.factories import (
@@ -20,6 +20,7 @@ from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_charm_content gates on #2698
 class NpcAllegianceTargetingTest(TestCase):
     """NPC target selection respects derived allegiance (charm/calm)."""
 

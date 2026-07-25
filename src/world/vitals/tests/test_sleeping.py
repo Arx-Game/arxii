@@ -1,6 +1,6 @@
 """Tests for the Sleeping condition (#2290)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.services import create_character_with_sheet
 from world.conditions.models import ConditionTemplate
@@ -9,8 +9,12 @@ from world.vitals.constants import SLEEPING_CONDITION_NAME
 from world.vitals.seeds import ensure_foundational_capabilities, ensure_sleeping_condition
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SleepingConditionTests(TestCase):
-    """Tests for the Sleeping ConditionTemplate and its capability-zeroing effects."""
+    """Tests for the Sleeping ConditionTemplate and its capability-zeroing effects.
+
+    Gates on SEED_SAMPLE_CONTENT (#2698).
+    """
 
     def setUp(self):
         ensure_foundational_capabilities()

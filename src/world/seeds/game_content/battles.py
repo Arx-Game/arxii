@@ -237,11 +237,17 @@ def _seed_starter_unit_templates() -> list[BattleUnitTemplate]:
     no-op on repeat, and the capability magnitude is written via
     ``get_or_create`` (defaults only apply at creation, so a staff-edited
     magnitude survives a rerun too).
+
+    ``conditions.CapabilityType`` is content-repo-owned (#2698) — looked up
+    rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A spec whose
+    capability isn't authored still gets its template + property; only the
+    ``BattleUnitTemplateCapability`` wiring is skipped for it.
     """
     from world.battles.factories import BattleUnitTemplateFactory  # noqa: PLC0415
     from world.battles.models import BattleUnitTemplateCapability  # noqa: PLC0415
-    from world.conditions.factories import CapabilityTypeFactory  # noqa: PLC0415
+    from world.conditions.models import CapabilityType  # noqa: PLC0415
     from world.mechanics.factories import PropertyCategoryFactory, PropertyFactory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     property_category = PropertyCategoryFactory(name="Battle Unit Traits")
 
@@ -260,14 +266,17 @@ def _seed_starter_unit_templates() -> list[BattleUnitTemplate]:
         )
         template.properties.add(prop)
 
-        capability = CapabilityTypeFactory(
-            name=spec.capability_name, description=spec.capability_description
+        capability = authored_or_sample(
+            CapabilityType,
+            {"description": spec.capability_description},
+            name=spec.capability_name,
         )
-        BattleUnitTemplateCapability.objects.get_or_create(
-            template=template,
-            capability=capability,
-            defaults={"value": spec.capability_value},
-        )
+        if capability is not None:
+            BattleUnitTemplateCapability.objects.get_or_create(
+                template=template,
+                capability=capability,
+                defaults={"value": spec.capability_value},
+            )
         templates.append(template)
 
     return templates

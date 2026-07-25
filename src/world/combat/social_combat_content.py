@@ -145,24 +145,30 @@ def _ensure_social_combat_check_types(
     return check_types
 
 
-def _ensure_inspired_condition() -> ConditionTemplate:
+def _ensure_inspired_condition() -> ConditionTemplate | None:
     """Seed the ``Inspired`` condition category + template (#2015).
 
     A short-lived benefit RALLY applies to an ally. ``alters_behavior=False`` —
     it is a buff, not a compulsion (ADR-0024: consent gates behavior-alteration,
     not benefit). Duration: 1 round (consumed by the ally's next resolved action).
+
+    ``conditions.ConditionCategory``/``ConditionTemplate`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
     """
-    category, _ = ConditionCategory.objects.get_or_create(
-        name="Inspiration",
-        defaults={
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    category = authored_or_sample(
+        ConditionCategory,
+        {
             "description": "Rallying and inspirational effects that bolster allies.",
             "is_negative": False,
             "alters_behavior": False,
         },
+        name="Inspiration",
     )
-    template, _ = ConditionTemplate.objects.get_or_create(
-        name=INSPIRED_CONDITION_NAME,
-        defaults={
+    return authored_or_sample(
+        ConditionTemplate,
+        {
             "category": category,
             "description": "Inspired by an ally's rallying words; the next action lands harder.",
             "default_duration_type": DurationType.ROUNDS,
@@ -170,8 +176,8 @@ def _ensure_inspired_condition() -> ConditionTemplate:
             "is_stackable": False,
             "can_be_dispelled": True,
         },
+        name=INSPIRED_CONDITION_NAME,
     )
-    return template
 
 
 def _ensure_charm_technique() -> Technique | None:
@@ -186,8 +192,9 @@ def _ensure_charm_technique() -> Technique | None:
     up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns
     ``None`` (skipping the TechniqueAppliedCondition row) when any
     prerequisite is missing. The ``Charmed`` ConditionTemplate this technique
-    applies is NOT in scope here (``conditions.conditiontemplate``) and stays
-    unconditional.
+    applies (``conditions.conditiontemplate``) is ALSO content-repo-owned
+    (#2698) — ``ensure_charm_content()`` now gates its own creation, so this
+    looks it up defensively rather than assuming it exists.
     """
     # Ensure the Charmed template exists first (self-contained seed).
     from world.conditions.charm_content import ensure_charm_content  # noqa: PLC0415
@@ -238,7 +245,9 @@ def _ensure_charm_technique() -> Technique | None:
     if technique is None:
         return None
 
-    charmed_template = ConditionTemplate.objects.get(name=CHARM_CONDITION_NAME)
+    charmed_template = ConditionTemplate.objects.filter(name=CHARM_CONDITION_NAME).first()
+    if charmed_template is None:
+        return technique
     authored_or_sample(
         TechniqueAppliedCondition,
         {

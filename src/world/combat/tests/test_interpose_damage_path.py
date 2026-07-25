@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from world.combat.constants import (
     CombatManeuver,
@@ -60,6 +60,7 @@ def _make_vitals(participant, health: int = 100, max_health: int = 100) -> Chara
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class TryInterposeNoOpOutsideResolvingTest(TestCase):
     """_try_interpose must be a no-op when the encounter is not RESOLVING.
 
@@ -183,6 +184,7 @@ class ApplyDamageZeroAfterInterposeTest(TestCase):
 
 
 @tag("postgres")  # apply_condition (capability grant) uses DISTINCT ON (PG-only)
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class InterposeReducesAllyDamageTest(TestCase):
     """End-to-end: Guardian's INTERPOSE reduces damage dealt to Ally.
 

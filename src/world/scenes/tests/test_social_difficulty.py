@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 from world.scenes.social_difficulty import resolved_base_difficulty
@@ -55,6 +55,7 @@ class ResolvedBaseDifficultyTests(TestCase):
         self.assertEqual(value, DIFFICULTY_VALUES[DifficultyChoice.HARROWING])
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_smitten_condition gates on #2698
 class AffectionTierLadderTests(TestCase):
     """The #1697 ladder: one tier per affection band, rungs from the #1699 system tracks."""
 
@@ -136,6 +137,7 @@ class AffectionTierLadderTests(TestCase):
         self.assertEqual(self._value(), DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL])
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_smitten_condition gates on #2698
 class NonSocialExploitableEasingTests(TestCase):
     """#2241: exploitable_tiers easing extends beyond social-category checks."""
 

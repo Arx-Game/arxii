@@ -40,6 +40,7 @@ from world.mechanics.models import (
     Property,
     PropertyCategory,
 )
+from world.seeds.sample_content import authored_or_sample
 from world.traits.models import CheckOutcome
 
 logger = logging.getLogger(__name__)
@@ -252,7 +253,13 @@ def ensure_interpose_content() -> None:
     melee_defense_check_type = _get_melee_defense_check_type()
 
     for capability_name, application_name, display_name, fiction in _INTERPOSE_CAPABILITIES:
-        capability, _ = CapabilityType.objects.get_or_create(name=capability_name)
+        # conditions.CapabilityType is content-repo-owned (#2698) — looked up
+        # rather than invented unless SEED_SAMPLE_CONTENT is on. Skip this
+        # capability's approaches entirely when it isn't authored — there's
+        # nothing to gate the Application/ChallengeApproach on.
+        capability = authored_or_sample(CapabilityType, {}, name=capability_name)
+        if capability is None:
+            continue
         application, _ = Application.objects.get_or_create(
             name=application_name,
             defaults={

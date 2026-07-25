@@ -19,7 +19,7 @@ Built in setUp (not setUpTestData): factories create Evennia ObjectDB instances
 
 from __future__ import annotations
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from world.areas.positioning.constants import (
     FALL_DAMAGE_TYPE_NAME,
@@ -39,6 +39,7 @@ from world.vitals.services import tick_round_for_targets
 
 
 @tag("postgres")  # apply_condition (plummet setup) uses DISTINCT ON (PG-only)
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_fall_content gates on #2698
 class PlummetDescentTests(TestCase):
     def setUp(self) -> None:
         from evennia import create_object

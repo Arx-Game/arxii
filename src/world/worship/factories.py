@@ -75,11 +75,15 @@ def wire_miracle_content() -> None:
     """Seed TriggerDefinition, FlowDefinition, config, ConditionTemplate, example miracles.
 
     Idempotent. Called from ``seed_worship_content()``.
+
+    ``conditions.ConditionTemplate`` is content-repo-owned (#2698) — looked up
+    rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
     """
     from flows.consts import FlowActionChoices
     from flows.factories import FlowStepDefinitionFactory
     from flows.models import FlowDefinition, TriggerDefinition
-    from world.conditions.factories import ConditionTemplateFactory
+    from world.conditions.models import ConditionCategory, ConditionTemplate
+    from world.seeds.sample_content import authored_or_sample
     from world.worship.constants import MiracleTrigger
     from world.worship.models import Miracle
     from world.worship.services import get_divine_intervention_config
@@ -106,7 +110,16 @@ def wire_miracle_content() -> None:
     get_divine_intervention_config()
 
     # 3. Cooldown ConditionTemplate
-    ConditionTemplateFactory(name="Divine Intervention Cooldown")
+    cooldown_category = authored_or_sample(
+        ConditionCategory,
+        {"description": "Cooldown markers on repeatable divine/mechanical effects."},
+        name="Cooldown",
+    )
+    authored_or_sample(
+        ConditionTemplate,
+        {"category": cooldown_category},
+        name="Divine Intervention Cooldown",
+    )
 
     # 4. Example miracles for seeded beings (PLACEHOLDER)
     for being in WorshippedBeing.objects.filter(is_active=True):

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -35,6 +35,7 @@ from world.scenes.sudden_harm import arm_or_apply_sudden_harm
 from world.vitals.factories import CharacterVitalsFactory
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class ArmOrApplySuddenHarmTests(TestCase):
     def setUp(self) -> None:
         from evennia import create_object

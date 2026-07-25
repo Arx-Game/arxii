@@ -47,9 +47,14 @@ class SoulfrayContent:
       2 → Ripping    (stage_order=3, severity_threshold=16, +blocks_anima_regen)
       3 → Sundering  (stage_order=4, severity_threshold=36, +blocks_anima_regen)
       4 → Unravelling(stage_order=5, severity_threshold=66, +blocks_anima_regen)
+
+    ``template``/``stages`` are content-repo-owned (``conditions.ConditionTemplate``/
+    ``conditions.ConditionStage``, #2698) — ``template`` is ``None`` and ``stages``
+    is empty when the Soulfray condition isn't authored and ``SEED_SAMPLE_CONTENT``
+    is off.
     """
 
-    template: ConditionTemplate
+    template: ConditionTemplate | None
     stages: tuple[ConditionStage, ...]
     blocks_anima_regen: Property
 

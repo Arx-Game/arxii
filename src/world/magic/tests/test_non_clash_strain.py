@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from actions.constants import ResolutionPhase
 from actions.factories import ActionTemplateFactory
@@ -60,6 +60,7 @@ def _make_pending_resolution(success: bool = True) -> PendingActionResolution:
 
 
 @tag("postgres")
+@override_settings(SEED_SAMPLE_CONTENT=True)  # SoulfrayContentFactory gates on #2698
 class StrainPushedNonClashCastTests(TestCase):
     """Strain-commit beyond available anima drives Soulfray accrual.
 

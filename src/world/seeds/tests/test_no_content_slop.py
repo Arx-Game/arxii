@@ -56,7 +56,9 @@ from world.seeds.tests.content_stub import stub_content_root
 #: entire ``magic.*`` slice (15 models: affinity, gift, technique, ritual,
 #: resonance, etc.) was cleared in #2698 via ``authored_or_sample()`` — every
 #: magic seeder call site now looks content up and invents only under
-#: ``SEED_SAMPLE_CONTENT``.
+#: ``SEED_SAMPLE_CONTENT``. The entire ``conditions.*`` slice (10 models:
+#: capabilitytype, conditioncategory, conditiontemplate, conditionstage,
+#: damagetype, etc.) was cleared the same way in a follow-up #2698 pass.
 #:
 #: Measured against the *stub* content root, which carries almost no content.
 #: Against a real content repo these seeders are near-total no-ops: their
@@ -85,16 +87,6 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
         "checks.checktypetrait",
         "classes.aspect",
         "classes.pathaspect",
-        "conditions.capabilitytype",
-        "conditions.conditioncapabilityeffect",
-        "conditions.conditioncategory",
-        "conditions.conditioncheckmodifier",
-        "conditions.conditiondamageinteraction",
-        "conditions.conditiondamageovertime",
-        "conditions.conditionmodifiereffect",
-        "conditions.conditionstage",
-        "conditions.conditiontemplate",
-        "conditions.damagetype",
         "covenants.covenantrite",
         "covenants.covenantriterolepackage",
         "covenants.covenantrole",

@@ -9,7 +9,7 @@ DATA — one ``CapabilityType`` + ``Application`` + ``ChallengeApproach`` row,
 with zero engine code. These tests pin that contract.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.areas.positioning.constants import (
     ACROBATICS_CAPABILITY_NAME,
@@ -42,6 +42,7 @@ _SEED_CAPABILITIES = frozenset(
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_fall_content gates on #2698
 class EnsureCatchContentTests(TestCase):
     def test_catch_challenge_has_one_approach_per_capability(self):
         ensure_fall_content()

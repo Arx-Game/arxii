@@ -4,7 +4,7 @@ Mirrors ``test_coercion.py``: a charmed NPC is extracted as a CHARM asset.
 The charmed state is the leverage — verified via ``source_character`` FK.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.assets.constants import AssetAcquisitionSource, AssetRoleContext
 from world.assets.models import NPCAsset
@@ -16,6 +16,7 @@ from world.conditions.services import apply_condition, get_active_conditions
 from world.scenes.factories import PersonaFactory
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_charm_content gates on #2698
 class CharmIntoAssetTests(TestCase):
     def setUp(self) -> None:
         ensure_charm_content()

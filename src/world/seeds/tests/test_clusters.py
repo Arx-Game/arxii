@@ -69,6 +69,7 @@ class TestClusterRegistry(TestCase):
         assert "reactive_challenges" in keys
         self.assertLess(keys.index("combat_checks"), keys.index("reactive_challenges"))
 
+    @override_settings(SEED_SAMPLE_CONTENT=True)  # PLUMMETING ConditionTemplate gates on #2698
     def test_reactive_challenges_cluster_seeds_the_content_family(self) -> None:
         from world.areas.positioning.constants import (
             CATCH_THE_FALLER_NAME,

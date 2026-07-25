@@ -1,6 +1,6 @@
 """Production social-action seed — templates, pools, and Flirt's attraction effects (#1697)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.checks.constants import EffectType
 from world.checks.models import ConsequenceEffect
@@ -14,7 +14,11 @@ from world.seeds.social_relationships import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SocialActionSeedTests(TestCase):
+    """Gates on SEED_SAMPLE_CONTENT (#2698) — Seduce's Smitten wiring needs the
+    real Smitten ConditionTemplate, which is content-repo-owned."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         seed_check_resolution_tables()

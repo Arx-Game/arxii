@@ -204,6 +204,13 @@ def ensure_smitten_condition():
 
     Applied by Seduce, not Flirt. Field updates are explicit writes / upserts so
     re-seeding applies edits (#946).
+
+    ``conditions.ConditionCategory``/``ConditionTemplate``/``ConditionCheckModifier``/
+    ``ConditionDamageInteraction``/``DamageType`` are all content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the Smitten template itself isn't authored;
+    callers (``_attach_attraction_effects``) must skip the dependent
+    APPLY_CONDITION wiring.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.conditions.models import (  # noqa: PLC0415
@@ -213,38 +220,45 @@ def ensure_smitten_condition():
         ConditionTemplate,
         DamageType,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = ConditionCategory.objects.get_or_create(
+    category = authored_or_sample(
+        ConditionCategory,
+        {"description": "Social / emotional states that color interaction."},
         name="Social",
-        defaults={"description": "Social / emotional states that color interaction."},
     )
-    template, _ = ConditionTemplate.objects.get_or_create(
-        name=SMITTEN_CONDITION_NAME,
-        defaults={
+    template = authored_or_sample(
+        ConditionTemplate,
+        {
             "category": category,
             "description": "Emotionally captivated by the seducer — more open to their influence.",
         },
+        name=SMITTEN_CONDITION_NAME,
     )
+    if template is None:
+        return None
     if template.exploitable_tiers != _SMITTEN_EXPLOITABLE_TIERS:
         template.exploitable_tiers = _SMITTEN_EXPLOITABLE_TIERS
         template.save(update_fields=["exploitable_tiers"])
 
     defense_check = CheckType.objects.filter(name=_MELEE_DEFENSE_CHECK_NAME).first()
     if defense_check is not None:
-        ConditionCheckModifier.objects.update_or_create(
+        authored_or_sample(
+            ConditionCheckModifier,
+            {"modifier_value": _SMITTEN_DEFENSE_PENALTY},
             condition=template,
             check_type=defense_check,
-            defaults={"modifier_value": _SMITTEN_DEFENSE_PENALTY},
         )
     else:
         logger.warning("Melee Defense CheckType not seeded; Smitten defense penalty skipped.")
 
     force = DamageType.objects.filter(name=_SMITTEN_DAMAGE_TYPE).first()
     if force is not None:
-        ConditionDamageInteraction.objects.update_or_create(
+        authored_or_sample(
+            ConditionDamageInteraction,
+            {"damage_modifier_percent": _SMITTEN_DAMAGE_BONUS_PCT},
             condition=template,
             damage_type=force,
-            defaults={"damage_modifier_percent": _SMITTEN_DAMAGE_BONUS_PCT},
         )
     else:
         logger.warning(
@@ -292,16 +306,21 @@ def _attach_attraction_effects(
         },
     )
     if include_smitten:
-        ConsequenceEffect.objects.get_or_create(
-            consequence=consequence,
-            effect_type=EffectType.APPLY_CONDITION,
-            condition_template=ensure_smitten_condition(),
-            defaults={
-                "target": EffectTarget.TARGET,
-                "execution_order": 2,
-                "condition_severity": 1,
-            },
-        )
+        # Smitten's ConditionTemplate is content-repo-owned (#2698); skip this
+        # APPLY_CONDITION effect entirely rather than create one with no
+        # condition_template when it isn't authored.
+        smitten_template = ensure_smitten_condition()
+        if smitten_template is not None:
+            ConsequenceEffect.objects.get_or_create(
+                consequence=consequence,
+                effect_type=EffectType.APPLY_CONDITION,
+                condition_template=smitten_template,
+                defaults={
+                    "target": EffectTarget.TARGET,
+                    "execution_order": 2,
+                    "condition_severity": 1,
+                },
+            )
     if affection_shift:
         ConsequenceEffect.objects.update_or_create(
             consequence=consequence,

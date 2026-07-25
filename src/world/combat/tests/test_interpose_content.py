@@ -6,7 +6,7 @@ one ChallengeApproach per _INTERPOSE_CAPABILITIES entry, and
 idempotency of ensure_interpose_content().
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.combat.interpose_content import (
     _INTERPOSE_CAPABILITIES,
@@ -20,6 +20,7 @@ from world.mechanics.models import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class EnsureInterposeContentIdempotencyTests(TestCase):
     """ensure_interpose_content() is safe to call repeatedly (#1273)."""
 

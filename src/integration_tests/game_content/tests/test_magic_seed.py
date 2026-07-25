@@ -974,6 +974,7 @@ class SeedCanonicalResonancesTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ConditionTemplate gates on #2698
 class SeedHallowedReactionConditionsTests(TestCase):
     def test_seeds_five_reaction_conditions(self):
         from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
@@ -1027,6 +1028,7 @@ class SeedHallowedReactionConditionsTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ConditionTemplate gates on #2698
 class SeedHallowedAchievementBridgeTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -1272,6 +1274,7 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ConditionTemplate gates on #2698
 class SeedHallowedThresholdStoryTests(TestCase):
     @classmethod
     def setUpTestData(cls):

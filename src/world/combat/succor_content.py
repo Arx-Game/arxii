@@ -28,6 +28,7 @@ from world.mechanics.models import (
     PropertyCategory,
 )
 from world.mechanics.succor_shared import SUCCOR_CHALLENGE_NAME
+from world.seeds.sample_content import authored_or_sample
 from world.traits.models import CheckOutcome
 
 SUCCORABLE_PROPERTY_NAME: str = "succorable"
@@ -138,7 +139,12 @@ def ensure_succor_content() -> None:
     _ensure_clean_succor_consequence(template)
 
     for capability_name, application_name, display_name, fiction in _SUCCOR_CAPABILITIES:
-        capability, _ = CapabilityType.objects.get_or_create(name=capability_name)
+        # conditions.CapabilityType is content-repo-owned (#2698) — looked up
+        # rather than invented unless SEED_SAMPLE_CONTENT is on. Skip this
+        # capability's approach entirely when it isn't authored.
+        capability = authored_or_sample(CapabilityType, {}, name=capability_name)
+        if capability is None:
+            continue
         application, _ = Application.objects.get_or_create(
             name=application_name,
             defaults={

@@ -55,38 +55,40 @@ from world.mechanics.models import (
     Property,
     PropertyCategory,
 )
+from world.seeds.sample_content import authored_or_sample
 from world.traits.models import CheckOutcome
 
 
-def _ensure_falling_category() -> ConditionCategory:
+def _ensure_falling_category() -> ConditionCategory | None:
     """Idempotently seed the Falling ConditionCategory.
 
     ConditionTemplate.category is a non-null PROTECT FK, so the Plummeting
-    template needs a stable category row to point at.
+    template needs a stable category row to point at. Content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
     """
-    obj, _ = ConditionCategory.objects.get_or_create(
-        name=FALLING_CATEGORY_NAME,
-        defaults={
+    return authored_or_sample(
+        ConditionCategory,
+        {
             "description": "Uncontrolled descent through the air toward an impact.",
             "is_negative": True,
         },
+        name=FALLING_CATEGORY_NAME,
     )
-    return obj
 
 
-def _ensure_fall_damage_type() -> DamageType:
+def _ensure_fall_damage_type() -> DamageType | None:
     """Idempotently seed the fall-impact DamageType.
 
     Leaves the consequence pools null so the config-default survivability
     fallback applies (the same idiom as the poison/exhaustion DamageTypes).
+    Content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on.
     """
-    obj, _ = DamageType.objects.get_or_create(
+    return authored_or_sample(
+        DamageType,
+        {"description": "Blunt impact damage from striking the ground after a fall."},
         name=FALL_DAMAGE_TYPE_NAME,
-        defaults={
-            "description": "Blunt impact damage from striking the ground after a fall.",
-        },
     )
-    return obj
 
 
 def ensure_fall_content() -> None:
@@ -102,9 +104,9 @@ def ensure_fall_content() -> None:
     _ensure_fall_damage_type()
     ensure_catch_content()
 
-    ConditionTemplate.objects.get_or_create(
-        name=PLUMMETING_CONDITION_NAME,
-        defaults={
+    authored_or_sample(
+        ConditionTemplate,
+        {
             "category": category,
             "description": (
                 "A character is falling through the air, descending deeper each "
@@ -119,6 +121,7 @@ def ensure_fall_content() -> None:
             "is_stackable": False,
             "default_duration_type": DurationType.PERMANENT,
         },
+        name=PLUMMETING_CONDITION_NAME,
     )
 
 
@@ -297,7 +300,12 @@ def ensure_catch_content() -> None:
     _ensure_clean_catch_consequence(template)
 
     for capability_name, application_name, display_name, fiction in _CATCH_CAPABILITIES:
-        capability, _ = CapabilityType.objects.get_or_create(name=capability_name)
+        # conditions.CapabilityType is content-repo-owned (#2698) — looked up
+        # rather than invented unless SEED_SAMPLE_CONTENT is on. Skip this
+        # capability's approach entirely when it isn't authored.
+        capability = authored_or_sample(CapabilityType, {}, name=capability_name)
+        if capability is None:
+            continue
         application, _ = Application.objects.get_or_create(
             name=application_name,
             defaults={

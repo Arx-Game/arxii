@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+import logging
 
 import factory
 
@@ -121,6 +122,8 @@ _PAYLOAD_PARAM = "@payload"
 _MAGIC_PROGRESSION_PATH = "/magic/progression"
 # SubFactory import paths, extracted to satisfy S1192.
 _DISTINCTION_FACTORY = "world.distinctions.factories.DistinctionFactory"
+
+logger = logging.getLogger(__name__)
 
 
 class EffectTypeFactory(factory.django.DjangoModelFactory):
@@ -1637,43 +1640,70 @@ class _SoulfrayContentFactory:
     ]
 
     def __call__(self) -> SoulfrayContent:
-        from world.conditions.models import ConditionStage
+        from world.conditions.models import ConditionCategory, ConditionStage, ConditionTemplate
         from world.mechanics.factories import BlocksAnimaRegenPropertyFactory
+        from world.seeds.sample_content import authored_or_sample
 
         # Ensure the blocks_anima_regen property exists
         blocks_prop = BlocksAnimaRegenPropertyFactory()
 
-        # Build the Soulfray ConditionTemplate (get_or_create via factory's
-        # django_get_or_create on name)
-        template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME,
-            has_progression=True,
-            passive_decay_per_day=1,
-            passive_decay_blocked_in_engagement=True,
+        # ``conditions.ConditionCategory``/``ConditionTemplate``/``ConditionStage``
+        # are content-repo-owned (#2698) — looked up rather than invented unless
+        # ``SEED_SAMPLE_CONTENT`` is on. Returns an empty SoulfrayContent
+        # (template=None, stages=()) when Soulfray isn't authored; callers
+        # (seed_magic_config's AudereThreshold wiring) skip accordingly. Reuses
+        # the "Magical" category also used by the Hallowed Threshold reaction
+        # conditions (world.seeds.game_content.magic) — both are magical
+        # conditions arising from spellcasting/aura interactions.
+        category = authored_or_sample(
+            ConditionCategory,
+            {
+                "description": (
+                    "Magical conditions arising from spellcasting and aura interactions."
+                ),
+                "is_negative": True,
+                "display_order": 0,
+            },
+            name="Magical",
         )
+        template = authored_or_sample(
+            ConditionTemplate,
+            {
+                "category": category,
+                "has_progression": True,
+                "passive_decay_per_day": 1,
+                "passive_decay_blocked_in_engagement": True,
+            },
+            name=SOULFRAY_CONDITION_NAME,
+        )
+        if template is None:
+            return SoulfrayContent(template=None, stages=(), blocks_anima_regen=blocks_prop)
 
         stages = []
         for spec in self._STAGES:
-            stage, _ = ConditionStage.objects.get_or_create(
-                condition=template,
-                stage_order=spec["stage_order"],
-                defaults={
+            stage = authored_or_sample(
+                ConditionStage,
+                {
                     "name": spec["name"],
                     "severity_threshold": spec["severity_threshold"],
                     "description": f"Soulfray {spec['name']} stage.",
                 },
+                condition=template,
+                stage_order=spec["stage_order"],
             )
-            stages.append(stage)
+            if stage is not None:
+                stages.append(stage)
 
         # Wire blocks_anima_regen onto stages 2–5 (Tearing onward, per §8.4)
         for stage in stages[1:]:
             stage.properties.add(blocks_prop)
 
         # Backfill passive_decay_max_severity = Tearing.severity_threshold - 1 = 5
-        tearing_threshold = stages[1].severity_threshold
-        if template.passive_decay_max_severity != tearing_threshold - 1:
-            template.passive_decay_max_severity = tearing_threshold - 1
-            template.save(update_fields=["passive_decay_max_severity"])
+        if len(stages) > 1:
+            tearing_threshold = stages[1].severity_threshold
+            if template.passive_decay_max_severity != tearing_threshold - 1:
+                template.passive_decay_max_severity = tearing_threshold - 1
+                template.save(update_fields=["passive_decay_max_severity"])
 
         return SoulfrayContent(
             template=template,
@@ -2145,11 +2175,25 @@ class SoulTetherRescueFactory(factory.django.DjangoModelFactory):
     check_outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
 
 
+#: Stage spec for Tether Strain per Spec B §6.3: (name, severity_threshold), in order.
+_TETHER_STRAIN_STAGE_SPEC: list[tuple[str, int]] = [
+    ("Bone-Tired", 5),
+    ("Soul-Worn", 10),
+    ("Heart-Cracked", 18),
+    ("Shadow-Touched", 28),
+    ("Half-Lost", 40),
+]
+
+
 class TetherStrainTemplateFactory(factory.django.DjangoModelFactory):
     """ConditionTemplate factory for Tether Strain (Spec B §6).
 
     Single template; ConditionInstances are lazily created per (sineater, resonance).
     Uses django_get_or_create so repeated calls in tests return the same row.
+
+    Test-fixture / ``SEED_SAMPLE_CONTENT`` use only — the production call site
+    (``wire_soul_tether_content``) looks the row up via ``authored_or_sample``
+    instead of calling this factory unconditionally (#2698).
     """
 
     class Meta:
@@ -2189,15 +2233,8 @@ def wire_tether_strain_stages(template: object) -> list:
     """
     from world.conditions.factories import ConditionStageFactory
 
-    stage_spec = [
-        ("Bone-Tired", 5),
-        ("Soul-Worn", 10),
-        ("Heart-Cracked", 18),
-        ("Shadow-Touched", 28),
-        ("Half-Lost", 40),
-    ]
     stages = []
-    for i, (stage_name, threshold) in enumerate(stage_spec, start=1):
+    for i, (stage_name, threshold) in enumerate(_TETHER_STRAIN_STAGE_SPEC, start=1):
         stage_obj = ConditionStageFactory(
             condition=template,
             stage_order=i,
@@ -2231,6 +2268,10 @@ class SoulTetherActiveTemplateFactory(factory.django.DjangoModelFactory):
     has_progression = False
     passive_decay_per_day = 0
     passive_decay_blocked_in_engagement = False
+
+    # Test-fixture / SEED_SAMPLE_CONTENT use only — the production call site
+    # (wire_soul_tether_content) looks the row up via authored_or_sample
+    # instead of calling this factory unconditionally (#2698).
 
 
 class AcceptSoulTetherRitualFactory(factory.django.DjangoModelFactory):
@@ -2502,14 +2543,20 @@ def wire_soul_tether_content() -> object:
     invented with the same shape ``AcceptSoulTetherRitualFactory`` /
     ``SoulTetherRescueRitualFactory`` author for tests) rather than created
     unconditionally, so a real deploy needs the content repo to author them.
-    Everything else here (stat definitions, condition templates, trigger
-    definitions) is out of scope for #2698 and stays unconditional.
+    The two marker ``ConditionTemplate`` rows (Tether Strain / Soul Tether
+    Active, + Tether Strain's 5 stages) are also content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on; when
+    absent, ``strain_template``/``active_template`` come back ``None`` on the
+    returned dataclass (the trigger definitions below don't read them, so
+    they still seed). Stat definitions and trigger definitions are out of
+    scope for #2698 and stay unconditional.
 
     Returns a ``SoulTetherContent`` dataclass with references to all created rows.
     Safe to call multiple times — does not create duplicates.
     """
     from dataclasses import dataclass
 
+    from world.conditions.models import ConditionCategory, ConditionStage, ConditionTemplate
     from world.magic.seeds_checks import ensure_magic_check_types
     from world.seeds.sample_content import authored_or_sample
 
@@ -2527,8 +2574,52 @@ def wire_soul_tether_content() -> object:
     # Phase 12: Wire achievement stat definitions
     wire_soul_tether_stat_definitions()
 
-    strain_template = TetherStrainTemplateFactory()
-    active_template = SoulTetherActiveTemplateFactory()
+    # conditions.ConditionCategory/ConditionTemplate/ConditionStage are
+    # content-repo-owned (#2698) — looked up rather than invented unless
+    # SEED_SAMPLE_CONTENT is on.
+    soul_tether_category = authored_or_sample(
+        ConditionCategory,
+        {
+            "description": "Markers and burdens carried by Soul Tether participants.",
+            "is_negative": False,
+        },
+        name="Soul Tether",
+    )
+    strain_template = authored_or_sample(
+        ConditionTemplate,
+        {
+            "category": soul_tether_category,
+            "description": "The wear of carrying another soul's sins. Decays with rest.",
+            "has_progression": True,
+            "passive_decay_per_day": 1,
+            "passive_decay_max_severity": None,
+            "passive_decay_blocked_in_engagement": False,
+        },
+        name="Tether Strain",
+    )
+    if strain_template is not None and not strain_template.stages.exists():
+        for i, (stage_name, threshold) in enumerate(_TETHER_STRAIN_STAGE_SPEC, start=1):
+            authored_or_sample(
+                ConditionStage,
+                {"name": stage_name, "severity_threshold": threshold},
+                condition=strain_template,
+                stage_order=i,
+            )
+
+    active_template = authored_or_sample(
+        ConditionTemplate,
+        {
+            "category": soul_tether_category,
+            "description": (
+                "Marker condition installed on Sinners with an active Soul Tether. "
+                "Carries the reactive subscriber triggers."
+            ),
+            "has_progression": False,
+            "passive_decay_per_day": 0,
+            "passive_decay_blocked_in_engagement": False,
+        },
+        name="Soul Tether Active",
+    )
 
     redirect_trigger_def, stage_advance_trigger_def = wire_soul_tether_active_template(
         active_template
@@ -3073,10 +3164,23 @@ def author_reference_corruption_content() -> None:
     content-repo-owned (#2698) — looked up rather than invented, unless
     ``SEED_SAMPLE_CONTENT`` is on. When either is missing, this skips
     entirely (no Affinity/Resonance to hang the reference Corruption content
-    off of); the ConditionTemplate/twist rows below are NOT content-model
-    creations in scope here, so they're untouched otherwise.
+    off of).
+
+    The per-resonance Corruption ``ConditionTemplate`` (+ its 5 stages) and
+    the per-twist ``ConditionTemplate`` are ALSO content-repo-owned (#2698,
+    ``conditions.ConditionTemplate``/``conditions.ConditionStage``) — each is
+    looked up first and only invented under ``SEED_SAMPLE_CONTENT``, mirroring
+    ``authored_or_sample`` but keyed through the existing factories (which
+    author the full abyssal/primal-aware stage shape) rather than a bare
+    ``.create()``. A missing corruption template skips only that template
+    (the resonance's twists are independent decoration and still seed); a
+    missing twist condition skips that one twist row (its
+    ``MagicalAlterationTemplate`` — out of scope for #2698 — has nothing to
+    attach to without it).
     """
-    from world.seeds.sample_content import authored_or_sample
+    from world.conditions.constants import DurationType
+    from world.conditions.models import ConditionCategory, ConditionTemplate
+    from world.seeds.sample_content import authored_or_sample, sample_content_enabled
 
     primal_affinity = authored_or_sample(Affinity, {}, name="Primal")
     abyssal_affinity = authored_or_sample(Affinity, {}, name="Abyssal")
@@ -3089,21 +3193,59 @@ def author_reference_corruption_content() -> None:
     if wild_hunt is None or web_of_spiders is None:
         return
 
+    # Shared category for the per-twist ConditionTemplates (deterministic name so
+    # the content repo has something stable to author against, unlike the bare
+    # ConditionTemplateFactory()'s auto-sequenced "Condition N" default).
+    twist_category = authored_or_sample(
+        ConditionCategory,
+        {"description": "Corruption twist alteration markers.", "is_negative": True},
+        name="Corruption Twist",
+    )
+
     for resonance in (wild_hunt, web_of_spiders):
-        # ConditionTemplate (idempotent via django_get_or_create on corruption_resonance)
-        CorruptionConditionTemplateFactory(corruption_resonance=resonance)
+        # ConditionTemplate — looked up by corruption_resonance; only the
+        # elaborate abyssal/primal-aware factory invention path is gated
+        # (django_get_or_create on the factory means a lookup hit is free).
+        if (
+            sample_content_enabled()
+            or ConditionTemplate.objects.filter(corruption_resonance=resonance).exists()
+        ):
+            CorruptionConditionTemplateFactory(corruption_resonance=resonance)
+        else:
+            logger.warning(
+                "ConditionTemplate matching {'corruption_resonance': %r} is not in "
+                "the content repo. Skipping. Author the row in the content repo and "
+                "re-press the Big Button, or set ARXII_SEED_SAMPLE_CONTENT=1 to have "
+                "the seeder invent a sample one (see #2698).",
+                resonance.name,
+            )
 
         # CORRUPTION_TWIST templates — 2 per stage 2/3/4
+        if twist_category is None:
+            continue
         for stage in (2, 3, 4):
             existing = MagicalAlterationTemplate.objects.filter(
                 kind=AlterationKind.CORRUPTION_TWIST,
                 resonance=resonance,
                 stage_threshold=stage,
             ).count()
-            for _i in range(max(0, 2 - existing)):
-                from world.conditions.factories import ConditionTemplateFactory
-
-                twist_condition = ConditionTemplateFactory()
+            for i in range(max(0, 2 - existing)):
+                twist_condition = authored_or_sample(
+                    ConditionTemplate,
+                    {
+                        "category": twist_category,
+                        "description": "Test condition",
+                        "default_duration_type": DurationType.ROUNDS,
+                        "default_duration_value": 3,
+                        "is_stackable": False,
+                        "max_stacks": 1,
+                        "has_progression": False,
+                        "can_be_dispelled": True,
+                    },
+                    name=f"{resonance.name} Corruption Twist S{stage}-{i}",
+                )
+                if twist_condition is None:
+                    continue
                 CorruptionTwistTemplateFactory(
                     condition_template=twist_condition,
                     origin_resonance=resonance,
