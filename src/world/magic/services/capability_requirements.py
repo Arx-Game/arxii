@@ -32,10 +32,17 @@ def style_capability_requirements(character_sheet: CharacterSheet) -> list:
     Empty when the character has no path (pre-awakening, NPCs) or their path
     authors no style — both are unrestricted, matching the pre-#2700 behaviour
     for a character outside the path system.
+
+    ``character_sheet`` is passed straight through to ``current_path_for_character``,
+    which filters on ``pk`` alone. That is deliberate: despite the annotation, live
+    callers pass either a ``CharacterSheet`` or the ``Character`` itself
+    (``actions/player_interface.py:661`` passes the Character), and the two share a
+    primary key — ``CharacterSheet`` is a pk-shared OneToOne on ``ObjectDB``. Reaching
+    for ``.character`` here would crash the Character-passing callers.
     """
     from world.progression.selectors import current_path_for_character  # noqa: PLC0415
 
-    path = current_path_for_character(character_sheet.character)
+    path = current_path_for_character(character_sheet)
     if path is None or path.style_id is None:
         return []
     return path.style.cached_capability_requirements
