@@ -40,6 +40,7 @@ database.
 from __future__ import annotations
 
 from django.apps import apps
+from django.db.models import DateField
 from django.test import TestCase
 
 from core_management.content_export import CONTENT_MODELS
@@ -134,14 +135,18 @@ class SeedersDoNotCreateContentTests(TestCase):
     seeder stops populating a model, delete its entry so the guard tightens.
     """
 
-    @stub_content_root()
-    def test_seeding_creates_no_content_model_rows(self) -> None:
-        content_models = {}
+    def _content_models(self) -> dict[str, type]:
+        models = {}
         for label in sorted(CONTENT_MODELS):
             try:
-                content_models[label] = apps.get_model(*label.split("."))
+                models[label] = apps.get_model(*label.split("."))
             except LookupError:
                 continue
+        return models
+
+    @stub_content_root()
+    def test_seeding_creates_no_content_model_rows(self) -> None:
+        content_models = self._content_models()
 
         # Snapshot BETWEEN the content load and the cluster loop. Measuring
         # across a whole seed_dev_database() call would score the stub content
@@ -167,3 +172,81 @@ class SeedersDoNotCreateContentTests(TestCase):
             "that set is a ratchet and may only shrink. Fix the seeder instead: "
             "authored content belongs in the content repo."
         )
+
+    @stub_content_root()
+    def test_seeding_does_not_delete_or_overwrite_authored_rows(self) -> None:
+        """Counting rows is not enough: a wipe-and-rebuild nets to zero.
+
+        The row-count guard above is blind to a seeder that deletes an authored
+        row and writes its own copy back — the count is identical either side.
+        That is not hypothetical. Eight check seeders ran
+        ``CheckTypeTrait.objects.filter(check_type=...).delete()`` and recreated
+        the rows from hardcoded values, and because seeders run *after* the
+        content load, every Big Button press silently reverted 62 authored trait
+        weights. ``combat_checks.py``'s own docstring advertised it as a feature
+        ("the composition is rewritten on each run"), which it was — until the
+        content repo started supplying those rows first. The count guard never
+        saw it (#2698).
+
+        So this asserts the stronger property: after the cluster seeders run,
+        every row the content load produced is still there, unchanged.
+        """
+        content_models = self._content_models()
+
+        load_content_first()
+        before = {
+            label: self._snapshot(model)
+            for label, model in content_models.items()
+            if label not in SEEDER_GRANDFATHERED_MODELS
+        }
+        for seeder in CLUSTER_SEEDERS.values():
+            seeder()
+
+        deleted: list[str] = []
+        changed: list[str] = []
+        for label, rows in before.items():
+            after_rows = self._snapshot(content_models[label])
+            for pk, values in rows.items():
+                if pk not in after_rows:
+                    deleted.append(f"  {label} pk={pk}")
+                elif after_rows[pk] != values:
+                    diff = {
+                        field: (old, after_rows[pk][field])
+                        for field, old in values.items()
+                        if after_rows[pk][field] != old
+                    }
+                    changed.append(f"  {label} pk={pk}: {diff}")
+
+        damage = deleted + changed
+        assert not damage, (
+            "Seeding destroyed or rewrote authored content rows. Seeders run "
+            "AFTER the content load, so a delete-and-recreate silently reverts "
+            "whatever the content repo authored — see #2698.\n"
+            + ("\nDELETED:\n" + "\n".join(sorted(deleted)) if deleted else "")
+            + ("\nOVERWRITTEN:\n" + "\n".join(sorted(changed)) if changed else "")
+            + "\n\nUse get_or_create keyed on the identifying fields (never "
+            "filter().delete() then create(), never update_or_create) so a "
+            "re-seed converges instead of clobbering."
+        )
+
+    @staticmethod
+    def _snapshot(model: type) -> dict[object, dict[str, object]]:
+        """pk -> {field: value} for every row, skipping auto-timestamp columns.
+
+        ``auto_now`` fields move on every save by design, so including them
+        would report a spurious change for any row a seeder merely re-saved
+        without altering.
+        """
+        # Only DateField (and its DateTimeField subclass) carry auto_now /
+        # auto_now_add, so the isinstance narrowing is what makes the attribute
+        # access safe across every other field type.
+        fields = [
+            f
+            for f in model._meta.concrete_fields
+            if not (isinstance(f, DateField) and (f.auto_now or f.auto_now_add))
+        ]
+        names = [f.attname for f in fields]
+        return {
+            row[0]: dict(zip(names[1:], row[1:], strict=True))
+            for row in model.objects.values_list("pk", *names[1:])
+        }
