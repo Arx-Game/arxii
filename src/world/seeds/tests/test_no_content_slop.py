@@ -32,16 +32,26 @@ from django.apps import apps
 from django.test import TestCase
 
 from core_management.content_export import CONTENT_MODELS
-from world.seeds.database import seed_dev_database
+from world.seeds.clusters import CLUSTER_SEEDERS
+from world.seeds.database import load_content_first
 from world.seeds.tests.content_stub import stub_content_root
 
 #: **A ratchet, not an allowlist. This set may only ever shrink.**
 #:
-#: Snapshot of every ``CONTENT_MODELS`` entry the seeders populated as of #2698 —
-#: 78 models, far more than "a few sample rows". The seeders currently build a
-#: parallel content set: 33 techniques, 48 condition templates, 19 rituals, 12
-#: mission templates, 9 gifts, 3 codex entries. Untangling that is a large piece
-#: of work and is deliberately NOT a launch blocker.
+#: Every ``CONTENT_MODELS`` entry the cluster seeders still populate. The
+#: seeders build a parallel content set — techniques, condition templates,
+#: rituals, mission templates, gifts — that the content repo already authors,
+#: usually with far more rows (33 seeded techniques against 278 authored; 48
+#: condition templates against 183).
+#:
+#: Measured against the *stub* content root, which carries almost no content.
+#: Against a real content repo these seeders are near-total no-ops: their
+#: ``get_or_create`` calls find the authored row and add nothing. Only ~77 rows
+#: across 10 models are genuine invention (62 ``checks.checktypetrait``, 5
+#: ``character_creation.cgexplanation``, the "A Simple Job" demo mission,
+#: ``forms.formtraitoption`` "court_coils", ``mechanics.modifiertarget``
+#: "menace", and two singleton configs). The stub-relative number is the
+#: stricter, hermetic one, and it is what this ratchet drives to zero.
 #:
 #: So this freezes today's state and guards the margin: a seeder that starts
 #: populating a *new* content model fails immediately, while the existing overlap
@@ -60,7 +70,6 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
         "checks.checktype",
         "checks.checktypetrait",
         "classes.aspect",
-        "classes.path",
         "classes.pathaspect",
         "conditions.capabilitytype",
         "conditions.conditioncapabilityeffect",
@@ -94,7 +103,6 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
         "magic.fallredemptionconfig",
         "magic.gift",
         "magic.intensitytier",
-        "magic.pathgiftgrant",
         "magic.portalanchorkind",
         "magic.resonance",
         "magic.resonanceconversion",
@@ -103,8 +111,6 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
         "magic.techniqueappliedcondition",
         "magic.techniquestyle",
         "magic.threadweavingunlock",
-        "magic.tradition",
-        "magic.traditiongiftgrant",
         "mechanics.application",
         "mechanics.challengeapproach",
         "mechanics.challengecategory",
@@ -143,8 +149,14 @@ class SeedersDoNotCreateContentTests(TestCase):
             except LookupError:
                 continue
 
+        # Snapshot BETWEEN the content load and the cluster loop. Measuring
+        # across a whole seed_dev_database() call would score the stub content
+        # root's own rows as seeder growth — the loader is the content repo, so
+        # its writes are the one thing this guard must not count.
+        load_content_first()
         before = {label: model.objects.count() for label, model in content_models.items()}
-        seed_dev_database()
+        for seeder in CLUSTER_SEEDERS.values():
+            seeder()
         after = {label: model.objects.count() for label, model in content_models.items()}
 
         grew = {
