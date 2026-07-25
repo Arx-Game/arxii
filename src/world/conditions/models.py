@@ -125,8 +125,10 @@ class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
         default=0,
         help_text=(
             "Default value every character has for this capability before "
-            "modifiers/conditions. Foundational capacities (awareness, movement, "
-            "limb_use) set this >= 1; granted/specialty capabilities leave it 0."
+            "modifiers/conditions, on the capability ladder (ADR-0164): 5 = an "
+            "unimpaired mortal. Foundational capacities (awareness, movement, "
+            "limb_use) and the senses (sight, hearing) set this to 5; "
+            "granted/specialty capabilities leave it 0."
         ),
     )
     prerequisite = models.ForeignKey(
@@ -706,21 +708,30 @@ class ConditionCapabilityEffect(NaturalKeyMixin, ConditionOrStageEffect):
     """
     Defines how a condition affects a capability.
 
-    Uses an additive integer model. Negative values reduce, positive enhance.
-    A large negative effectively blocks the capability (value floors at 0).
+    Uses an additive integer model on the capability ladder (ADR-0164). Negative
+    values reduce, positive enhance; the total floors at 0 in
+    ``get_effective_capability_value``.
 
-    Examples:
-      - Frozen: value=-100 (effectively blocks movement)
-      - Slowed: value=-5 (reduces movement)
-      - Empowered: value=+5 (enhances melee_attack)
+    The ladder: 0 blocked, 1-3 impaired, 5 unimpaired mortal, 8-12 gifted,
+    25+ greater supernatural, 100+ mythic. It is deliberately uncapped — a high
+    enough value lets a being do what is impossible for a mortal.
+
+    Blocking is emergent arithmetic, never a flag: a block is a negative large
+    enough to beat the tier it is meant to beat.
+      - Mundane block (-20): Grappled. Stops mortal and gifted; a greater
+        supernatural walks out of it.
+      - Potent block (-100): Frozen, Unconscious. Beats everything below mythic.
+      - Absolute block (-1000): reserved for mythic-defeating effects.
+      - Graded impairment: Chilled -2, Slowed -3, Hastened +3.
     """
 
     capability = models.ForeignKey(CapabilityType, on_delete=models.CASCADE)
     value = models.IntegerField(
         default=0,
         help_text=(
-            "Additive modifier. Negative reduces, positive enhances. "
-            "A large negative effectively blocks the capability."
+            "Additive modifier on the capability ladder (ADR-0164). Negative "
+            "reduces, positive enhances; a block is a negative sized to the tier "
+            "it must beat (mundane -20, potent -100, absolute -1000)."
         ),
     )
 

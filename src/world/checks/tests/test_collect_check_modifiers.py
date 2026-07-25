@@ -263,7 +263,10 @@ class CapabilitySourceTests(TestCase):
     def test_authored_row_emits_capability_contribution(self) -> None:
         """An authored row emits one CAPABILITY contribution with the correct value."""
         from world.checks.services import collect_check_modifiers
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
 
+        target = ModifierTargetFactory(target_capability=self.capability)
+        CharacterModifierFactory(character=self.sheet, target=target, value=5)
         CheckTypeCapabilityModifierFactory(
             check_type=self.check_type,
             capability=self.capability,
@@ -276,7 +279,7 @@ class CapabilitySourceTests(TestCase):
             c for c in breakdown.contributions if c.source_kind == ModifierSourceKind.CAPABILITY
         ]
         assert len(capability_contribs) == 1
-        # innate_baseline=5, weight=2.0 -> int(5 * 2.0) == 10
+        # baseline 5, effective 10 -> deviation 5, weight=2.0 -> int(5 * 2.0) == 10
         assert capability_contribs[0].value == 10
         assert breakdown.total == 10
 
@@ -302,9 +305,15 @@ class CapabilitySourceTests(TestCase):
         sum to the same truncated total the roll path used.
         """
         from world.checks.services import _calculate_capability_points, collect_check_modifiers
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
 
-        capability_a = CapabilityTypeFactory(name="capability-alloc-aaa", innate_baseline=1)
-        capability_b = CapabilityTypeFactory(name="capability-alloc-zzz", innate_baseline=1)
+        # baseline 0 -> deviation equals the raw value (1 either way).
+        capability_a = CapabilityTypeFactory(name="capability-alloc-aaa", innate_baseline=0)
+        capability_b = CapabilityTypeFactory(name="capability-alloc-zzz", innate_baseline=0)
+        target_a = ModifierTargetFactory(target_capability=capability_a)
+        target_b = ModifierTargetFactory(target_capability=capability_b)
+        CharacterModifierFactory(character=self.sheet, target=target_a, value=1)
+        CharacterModifierFactory(character=self.sheet, target=target_b, value=1)
         CheckTypeCapabilityModifierFactory(
             check_type=self.check_type, capability=capability_a, weight=Decimal("0.5")
         )
@@ -331,10 +340,18 @@ class CapabilitySourceTests(TestCase):
     def test_three_fractional_rows_sum_matches_roll_path_total(self) -> None:
         """3-row fractional case: sum(contributions) == capability_points on the roll path."""
         from world.checks.services import _calculate_capability_points, collect_check_modifiers
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
 
-        capability_a = CapabilityTypeFactory(name="capability-alloc3-a", innate_baseline=1)
-        capability_b = CapabilityTypeFactory(name="capability-alloc3-b", innate_baseline=1)
-        capability_c = CapabilityTypeFactory(name="capability-alloc3-c", innate_baseline=1)
+        # baseline 0 -> deviation equals the raw value (1 either way).
+        capability_a = CapabilityTypeFactory(name="capability-alloc3-a", innate_baseline=0)
+        capability_b = CapabilityTypeFactory(name="capability-alloc3-b", innate_baseline=0)
+        capability_c = CapabilityTypeFactory(name="capability-alloc3-c", innate_baseline=0)
+        target_a = ModifierTargetFactory(target_capability=capability_a)
+        target_b = ModifierTargetFactory(target_capability=capability_b)
+        target_c = ModifierTargetFactory(target_capability=capability_c)
+        CharacterModifierFactory(character=self.sheet, target=target_a, value=1)
+        CharacterModifierFactory(character=self.sheet, target=target_b, value=1)
+        CharacterModifierFactory(character=self.sheet, target=target_c, value=1)
         CheckTypeCapabilityModifierFactory(
             check_type=self.check_type, capability=capability_a, weight=Decimal("0.9")
         )

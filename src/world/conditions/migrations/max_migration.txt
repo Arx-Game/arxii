@@ -1,1 +1,1 @@
-0024_alter_treatmentattempt_helper_and_more
+0025_alter_capabilitytype_innate_baseline_and_more

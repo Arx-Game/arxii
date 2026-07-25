@@ -178,11 +178,12 @@ class PromotionCapabilityModifierEffectTests(EvenniaTestCase):
     success — so the outcome is decided entirely by which rank the capability points
     push the roller into, never by the dice.
 
-    The character's capability value (innate_baseline=5) is held constant across both
-    test methods; only whether the check_type has an authored CheckTypeCapabilityModifier
-    row linking it to that capability differs. That isolates both load-bearing claims:
-    the authored row moves the promotion outcome, and the identical capability value
-    moves nothing without it (curated gate, #2505).
+    The character's capability value (a CharacterModifier of value=5 on a
+    baseline-0 capability, contributing a deviation of 5 -- #2704 D3) is held
+    constant across both test methods; only whether the check_type has an authored
+    CheckTypeCapabilityModifier row linking it to that capability differs. That
+    isolates both load-bearing claims: the authored row moves the promotion outcome,
+    and the identical capability value moves nothing without it (curated gate, #2505).
     """
 
     def setUp(self) -> None:
@@ -199,8 +200,8 @@ class PromotionCapabilityModifierEffectTests(EvenniaTestCase):
         self.room_profile = get_room_profile(self.room)
 
         # Rank 0 (0+ pts) vs rank 1 (10+ pts, exactly what the authored row's
-        # weight * innate_baseline contributes below). Target difficulty is
-        # pinned at rank 1's threshold, so: capability_points=0 -> rank 0 ->
+        # weight * (value - innate_baseline) contributes below). Target difficulty
+        # is pinned at rank 1's threshold, so: capability_points=0 -> rank 0 ->
         # rank_difference -1 -> guaranteed-failure chart; capability_points=10
         # -> rank 1 -> rank_difference 0 -> guaranteed-success chart.
         CheckRank.objects.get_or_create(
@@ -232,7 +233,12 @@ class PromotionCapabilityModifierEffectTests(EvenniaTestCase):
         category, _ = CheckCategory.objects.get_or_create(
             name="Test Capability Category", defaults={"display_order": 0}
         )
-        self.capability = CapabilityTypeFactory(name="test_promo_charm", innate_baseline=5)
+        self.capability = CapabilityTypeFactory(name="test_promo_charm", innate_baseline=0)
+
+        from world.mechanics.factories import CharacterModifierFactory, ModifierTargetFactory
+
+        target = ModifierTargetFactory(target_capability=self.capability)
+        CharacterModifierFactory(character=self.sheet, target=target, value=5)
 
         self.gated_check_type, _ = CheckType.objects.get_or_create(
             name="Capability Gated Cultivation Check",

@@ -118,13 +118,27 @@ The core resolution loop is implemented end-to-end.
 - **Capability modifiers folded into checks** (#2505) — DONE. `CheckTypeCapabilityModifier`
   (curated, authored `(check_type, capability)` pairs, `world/checks/models.py`) lets a
   CheckType read the agency oracle (`get_effective_capability_value`) directly — an authored
-  row contributes `weight x effective_capability_value` (summed, truncated toward zero) into
-  `perform_check`'s `total_points`, alongside a `CAPABILITY`-kind `ModifierContribution` in
-  `collect_check_modifiers`'s provenance. `resolve_challenge()` also folds its
-  `capability_source.value` (the technique/trait/condition/item capability that chose the
-  approach) directly into `extra_modifiers` before calling `perform_check` — the two
-  capability oracles (availability's technique-grant read vs. this agency-value read) now both
-  reach the roll.
+  row contributes `weight x (effective_capability_value - capability.innate_baseline)`
+  (summed, truncated toward zero) into `perform_check`'s `total_points`, alongside a
+  `CAPABILITY`-kind `ModifierContribution` in `collect_check_modifiers`'s provenance.
+  `resolve_challenge()` also folds its `capability_source.value` (the technique/trait/
+  condition/item capability that chose the approach) directly into `extra_modifiers` before
+  calling `perform_check` — the two capability oracles (availability's technique-grant read
+  vs. this agency-value read) now both reach the roll.
+- **Capability value ladder + deviation-scored check contribution** (#2704, ADR-0164) — DONE.
+  Built: (1) one shared, deliberately uncapped ladder for every `CapabilityType.innate_baseline`
+  and effective value — 0 blocked, 1-3 impaired, 5 unimpaired mortal, 8-12 gifted, 25+ greater
+  supernatural, 100+ mythic (D1); (2) blocking a foundational capability re-expressed as sized
+  negative magnitude, never a boolean flag — mundane `-20` (stops mortal/gifted), potent `-100`
+  (beats everything below mythic), absolute `-1000` (reserved) (D2); (3) `_capability_point_
+  allocation`'s per-row arithmetic changed from `weight x value` to `weight x (value -
+  innate_baseline)`, so an unimpaired character authored onto many CheckTypes contributes
+  exactly 0 to all of them instead of inflating every check it touches (D3) — a no-op for the
+  ~30 capabilities whose `innate_baseline` is 0, since raw value and deviation coincide there;
+  (4) a weight-authoring rule, `weight = intended full-impairment penalty / 5`, for calibrating
+  new `CheckTypeCapabilityModifier` rows against the ladder (D4). Existing condition baselines
+  and block magnitudes (Unconscious, Immobilized, etc.) re-baselined onto the ladder in the
+  same change. See `docs/adr/0164-capability-value-ladder-and-emergent-blocking.md`.
 
 ### Phase 2: Prerequisite System — DONE
 Prerequisites are now data-driven property checks, not code-dispatched callables.
