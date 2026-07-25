@@ -164,3 +164,22 @@ class CaseInsensitiveLookupTests(TestCase):
         lookup = TraitRankDescription.objects._natural_key_lookup(("Suffix Trait", 40))
         assert "value" in lookup
         assert "value__iexact" not in lookup
+
+
+class RenameInvalidationTests(TestCase):
+    """A renamed row stops resolving under its old natural key."""
+
+    def test_old_key_no_longer_resolves_after_rename(self) -> None:
+        species = SpeciesFactory(name="Old Elf Name")
+        Species.objects.get_by_natural_key("Old Elf Name")
+        species.name = "New Elf Name"
+        species.save()
+        with self.assertRaises(Species.DoesNotExist):
+            Species.objects.get_by_natural_key("Old Elf Name")
+        assert Species.objects.get_by_natural_key("New Elf Name") == species
+
+    def test_save_without_a_prior_lookup_is_harmless(self) -> None:
+        species = SpeciesFactory(name="Never Looked Up")
+        species.description = "changed"
+        species.save()
+        assert Species.objects.get_by_natural_key("Never Looked Up") == species

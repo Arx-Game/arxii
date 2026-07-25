@@ -317,6 +317,30 @@ class NaturalKeyMixin:
     key by specifying the field name (the mixin will call natural_key() on it).
     """
 
+    #: The index key this instance was last cached under, if any (#2687).
+    #: Set by ``NaturalKeyManager.get_by_natural_key``; consumed by ``save()``.
+    _nk_index_key: tuple | None = None
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Save, then drop this instance's stale natural-key index entry.
+
+        After a rename the old key still points at a live pk, so without this the
+        index would return the renamed row instead of raising ``DoesNotExist``.
+        The stashed key is popped unconditionally rather than compared against a
+        recomputed ``natural_key()`` — recomputation traverses FK descriptors and
+        could fire a query on the save path. The cost of dropping an entry that
+        did not actually change is one ``SELECT`` on the next lookup.
+
+        Known limitation: ``queryset.update(name=...)`` bypasses ``save()`` and
+        leaves a stale entry. This is the same class of hazard the identity map
+        already has — ``.update()`` does not refresh cached instances either.
+        """
+        super().save(*args, **kwargs)
+        key = self._nk_index_key
+        if key is not None:
+            natural_key_index(type(self)).pop(key, None)
+            self._nk_index_key = None
+
     def natural_key(self) -> tuple[Any, ...]:
         """Return natural key tuple for this object.
 
