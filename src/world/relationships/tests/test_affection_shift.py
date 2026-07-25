@@ -34,6 +34,7 @@ def _shift_effect(amount: int):
     )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Regard/Friction RelationshipTrack gates on #2698
 class ApplyAffectionShiftTests(TestCase):
     def setUp(self) -> None:
         from evennia.utils.idmapper.models import flush_cache
@@ -132,6 +133,7 @@ class ApplyAffectionShiftTests(TestCase):
         self.assertEqual(relationship.affection, 10)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Regard/Friction RelationshipTrack gates on #2698
 class BoonProvenanceShiftTests(TestCase):
     """Boon-keyed shifts (#2540): per-Boon dedup — serial boons stack within one scene."""
 

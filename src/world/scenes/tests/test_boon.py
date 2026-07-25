@@ -8,7 +8,7 @@ mirroring ``test_action_services``' pattern.
 from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from actions.constants import ResolutionPhase
 from actions.types import PendingActionResolution, StepResult
@@ -198,6 +198,7 @@ class NpcBoonBandTests(TestCase):
         self.assertEqual(npc_boon_tier_shift(request), 0)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Regard/Friction RelationshipTrack gates on #2698
 class BoonResolverE2ETests(TestCase):
     """The full consent path: dispatch → NPC auto-accept → resolver fulfills + charges."""
 

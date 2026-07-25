@@ -117,10 +117,12 @@ def seed_dramatic_surge_content() -> None:
     """Seed the dramatic surge engine's default content (#2013).
 
     Idempotent (get_or_create at every layer). Creates:
-    - the FIRST production RelationshipTrack rows this codebase ships:
-      "Bond" (POSITIVE), "Rivalry" / "Enemies" (NEGATIVE) — all
+    - "Bond" (POSITIVE), "Rivalry" / "Enemies" (NEGATIVE) — all
       fuels_escalation_spikes=True. Without the negative tracks the
-      hated-foe leg is content-dead.
+      hated-foe leg is content-dead. ``relationships.RelationshipTrack`` is
+      content-repo-owned (#2698) — each is looked up rather than invented
+      unless ``SEED_SAMPLE_CONTENT`` is on; nothing else in this function
+      depends on them existing, so a missing track is simply skipped.
     - a default "Standard Dramatic Escalation" EscalationCurve.
     - StakesEscalationModifier rows for all five StakesLevel values;
       REGIONAL and above carry the default curve + increasing bonuses
@@ -135,38 +137,42 @@ def seed_dramatic_surge_content() -> None:
     from world.combat.models import EscalationCurve, StakesEscalationModifier  # noqa: PLC0415
     from world.relationships.constants import TrackSign  # noqa: PLC0415
     from world.relationships.models import RelationshipTrack  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     wire_escalation_content()
 
-    RelationshipTrack.objects.get_or_create(
-        name="Bond",
-        defaults={
+    authored_or_sample(
+        RelationshipTrack,
+        {
             "slug": "bond",
             "description": "A deep, protective attachment between characters.",
             "sign": TrackSign.POSITIVE,
             "display_order": 10,
             "fuels_escalation_spikes": True,
         },
+        name="Bond",
     )
-    RelationshipTrack.objects.get_or_create(
-        name="Rivalry",
-        defaults={
+    authored_or_sample(
+        RelationshipTrack,
+        {
             "slug": "rivalry",
             "description": "Competitive antagonism — a foe you measure yourself against.",
             "sign": TrackSign.NEGATIVE,
             "display_order": 20,
             "fuels_escalation_spikes": True,
         },
+        name="Rivalry",
     )
-    RelationshipTrack.objects.get_or_create(
-        name="Enemies",
-        defaults={
+    authored_or_sample(
+        RelationshipTrack,
+        {
             "slug": "enemies",
             "description": "Open, active hostility.",
             "sign": TrackSign.NEGATIVE,
             "display_order": 21,
             "fuels_escalation_spikes": True,
         },
+        name="Enemies",
     )
 
     pace_check_type = ensure_escalation_pace_check_type()

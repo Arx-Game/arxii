@@ -558,13 +558,15 @@ def wire_covenant_rite_content() -> CovenantRite | None:
     All effect rows use scales_with_severity=True.
 
     Safe to call as both integration-test setUp and staff/seed scripts — uses
-    get_or_create semantics at each step so no duplicate rows are created.
+    ``authored_or_sample()`` at each content-model step so no duplicate rows
+    are created and nothing is invented outside ``SEED_SAMPLE_CONTENT``.
 
     The "Renew the Oath" Ritual is content-repo-owned (#2698) — looked up
     rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. When it isn't
     authored, this returns ``None`` and skips every dependent row below
-    (CovenantRite, its role packages, and their condition/modifier content) —
-    they all hang off this Ritual and have nothing to attach to without it.
+    (CovenantRite, its roles/role packages, and their condition/modifier
+    content) — they all hang off this Ritual and have nothing to attach to
+    without it.
 
     The five "Oathbound *" ``ConditionTemplate`` rows (+ their
     ``ConditionModifierEffect`` rows) are ALSO content-repo-owned (#2698,
@@ -577,9 +579,17 @@ def wire_covenant_rite_content() -> CovenantRite | None:
     missing one skips only that band's ``CovenantRiteRolePackage`` row
     (``condition_template`` is a required FK there).
 
+    ``covenants.CovenantRite``, ``covenants.CovenantRole`` (the
+    "Oath Rite: Sword/Shield/Crown Role" reference roles), and
+    ``covenants.CovenantRiteRolePackage`` are ALSO content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT``
+    is on. A missing ``CovenantRite`` row returns ``None`` the same as a
+    missing Ritual/default condition; a missing role skips only that role's
+    bands (``covenant_role`` is a required FK on the package row).
+
     Returns the CovenantRite instance (whether newly created or already
-    present), or ``None`` when the Ritual or the default condition isn't
-    available.
+    present), or ``None`` when the Ritual, the default condition, or the
+    CovenantRite row itself isn't available.
     """
     from world.magic.constants import ParticipationRule, RitualExecutionKind
     from world.magic.models import Ritual
@@ -670,11 +680,14 @@ def wire_covenant_rite_content() -> CovenantRite | None:
         _wire_stat_modifier_effect(default_condition, stat_cat, stat_name, 5)
 
     # ------------------------------------------------------------------
-    # CovenantRite row (keyed on ritual; idempotent).
+    # CovenantRite row (keyed on ritual). ``covenants.CovenantRite`` is
+    # content-repo-owned (#2698) — looked up rather than invented unless
+    # SEED_SAMPLE_CONTENT is on; a missing row means nothing below (its role
+    # packages, their conditions/modifiers) has a rite to attach to.
     # ------------------------------------------------------------------
-    rite, _ = CovenantRite.objects.get_or_create(
-        ritual=ritual,
-        defaults={
+    rite = authored_or_sample(
+        CovenantRite,
+        {
             "granted_condition": default_condition,
             "covenant_type": CovenantType.DURANCE,
             "min_covenant_level": 2,
@@ -684,67 +697,90 @@ def wire_covenant_rite_content() -> CovenantRite | None:
             "max_severity": None,
             "duration_rounds": None,
         },
+        ritual=ritual,
     )
+    if rite is None:
+        return None
 
     # ------------------------------------------------------------------
-    # Reference-rite DURANCE roles, built via CovenantRoleFactory with a
-    # fixed ``slug=`` (its ``django_get_or_create`` key) so repeated calls
-    # stay idempotent. Formerly hardcoded ``sword-vanguard``/``shield-bulwark``/
-    # ``crown-luminary`` (mirroring world/seeds/game_content/items.py) — those
-    # placeholder slugs/names collided with the 13 real Durance covenant vows
-    # once they became lore-repo content (unique on (covenant_type, name); e.g.
+    # Reference-rite DURANCE roles, keyed on a fixed ``slug=``. Formerly
+    # hardcoded ``sword-vanguard``/``shield-bulwark``/``crown-luminary``
+    # (mirroring world/seeds/game_content/items.py) — those placeholder
+    # slugs/names collided with the 13 real Durance covenant vows once they
+    # became lore-repo content (unique on (covenant_type, name); e.g.
     # placeholder "Bulwark" blocked the real "Bulwark" row). Renamed to
     # obviously-scaffolding names that cannot collide with authored vow titles.
+    #
+    # ``covenants.CovenantRole`` is content-repo-owned (#2698) — looked up
+    # rather than invented unless SEED_SAMPLE_CONTENT is on. ``_wire_role_band``
+    # below no-ops (skips just that band's CovenantRiteRolePackage) when its
+    # role wasn't authored.
     # ------------------------------------------------------------------
-    sword_role = CovenantRoleFactory(
+    sword_role = authored_or_sample(
+        CovenantRole,
+        {
+            "name": "Oath Rite: Sword Role",
+            "covenant_type": CovenantType.DURANCE,
+            "sword_weight": 1,
+            "shield_weight": 0,
+            "crown_weight": 0,
+            "speed_rank": 2,
+        },
         slug="oath-rite-sword-role",
-        name="Oath Rite: Sword Role",
-        covenant_type=CovenantType.DURANCE,
-        sword_weight=1,
-        shield_weight=0,
-        crown_weight=0,
-        speed_rank=2,
     )
-    shield_role = CovenantRoleFactory(
+    shield_role = authored_or_sample(
+        CovenantRole,
+        {
+            "name": "Oath Rite: Shield Role",
+            "covenant_type": CovenantType.DURANCE,
+            "sword_weight": 0,
+            "shield_weight": 1,
+            "crown_weight": 0,
+            "speed_rank": 3,
+        },
         slug="oath-rite-shield-role",
-        name="Oath Rite: Shield Role",
-        covenant_type=CovenantType.DURANCE,
-        sword_weight=0,
-        shield_weight=1,
-        crown_weight=0,
-        speed_rank=3,
     )
-    crown_role = CovenantRoleFactory(
+    crown_role = authored_or_sample(
+        CovenantRole,
+        {
+            "name": "Oath Rite: Crown Role",
+            "covenant_type": CovenantType.DURANCE,
+            "sword_weight": 0,
+            "shield_weight": 0,
+            "crown_weight": 1,
+            "speed_rank": 1,
+        },
         slug="oath-rite-crown-role",
-        name="Oath Rite: Crown Role",
-        covenant_type=CovenantType.DURANCE,
-        sword_weight=0,
-        shield_weight=0,
-        crown_weight=1,
-        speed_rank=1,
     )
 
     # ------------------------------------------------------------------
     # Role-package conditions + modifier effects + CovenantRiteRolePackage.
-    # condition_template is a required FK — a band whose condition isn't
-    # authored (content-repo-owned, #2698) skips just that band's package row.
+    # condition_template AND covenant_role are required FKs — a band whose
+    # condition or role isn't authored (content-repo-owned, #2698, for both
+    # the ConditionTemplate and the CovenantRole itself) skips just that
+    # band's package row. ``covenants.CovenantRiteRolePackage`` is likewise
+    # content-repo-owned — looked up rather than invented unless
+    # SEED_SAMPLE_CONTENT is on.
     # ------------------------------------------------------------------
     def _wire_role_band(
-        covenant_role,
+        covenant_role: CovenantRole | None,
         min_covenant_level: int,
         spec: tuple[str, str, tuple[str, ...], int],
     ) -> None:
+        if covenant_role is None:
+            return
         name, description, stat_names, modifier_value = spec
         condition = _oath_condition(name, description, can_be_dispelled=False)
         if condition is None:
             return
         for stat_name in stat_names:
             _wire_stat_modifier_effect(condition, stat_cat, stat_name, modifier_value)
-        CovenantRiteRolePackage.objects.get_or_create(
+        authored_or_sample(
+            CovenantRiteRolePackage,
+            {"condition_template": condition},
             rite=rite,
             covenant_role=covenant_role,
             min_covenant_level=min_covenant_level,
-            defaults={"condition_template": condition},
         )
 
     # Sword level-1 band: strength, presence

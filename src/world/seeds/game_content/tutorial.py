@@ -46,11 +46,25 @@ since no prior seed cluster combines the two. The tutor is placed as a
 can always reach them.
 
 Idempotent throughout: templates/roles/offers via ``get_or_create``-style
-factories or direct ORM lookups; node/option/route graphs guarded by
-``template.nodes.exists()`` (mirrors ``game_content/missions.py``); the T4→T5
-follow-on-summons reward line is guarded separately since it can only be
-authored once T5's offer exists (a real ordering dependency: T4's reward
-line needs T5's ``NPCServiceOffer`` FK; T5's availability_rule needs T4's pk).
+lookups or direct ORM lookups; the T4→T5 follow-on-summons reward line is
+guarded separately since it can only be authored once T5's offer exists (a
+real ordering dependency: T4's reward line needs T5's ``NPCServiceOffer`` FK;
+T5's availability_rule needs T4's pk).
+
+``missions.MissionTemplate``/``MissionNode``/``MissionOption``/
+``MissionOptionRoute``/``MissionOptionRouteReward`` are ALL content-repo-owned
+(#2698) — this entire seven-template chain (+ the "Terms of Engagement"
+consent primer) is genuinely-unauthored demo/tutorial content, so every row
+is looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. The
+chain is linear and each step's ``availability_rule`` gates on the previous
+step's pk, so a missing template cascades: every ``_seed_t*``/
+``_seed_consent_primer`` helper returns ``None`` when its own template (or the
+gate it needs) isn't authored/sampled, and ``seed_tutorial_dev()`` skips the
+rest of the chain past the first gap rather than building a malformed gate.
+``NPCRole``/``Functionary``/``NPCServiceOffer``/``MissionGiver`` are NOT
+content models and keep seeding unconditionally; ``_ensure_offer`` skips only
+when the ``mission_template`` it would wrap is ``None`` (a required FK on
+``MissionOfferDetails``).
 """
 
 from __future__ import annotations
@@ -60,6 +74,8 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from world.missions.constants import (
+    ArcScope,
+    ConflictMode,
     DeedRewardKind,
     DeedRewardSink,
     ExternalAct,
@@ -67,13 +83,14 @@ from world.missions.constants import (
     MissionVisibility,
     OptionKind,
     OptionSource,
+    RewardGroupRule,
 )
 from world.npc_services.constants import DrawMode, OfferKind
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.missions.models import MissionOptionRoute, MissionTemplate
+    from world.missions.models import MissionOption, MissionOptionRoute, MissionTemplate
     from world.npc_services.models import NPCRole, NPCServiceOffer
 
 _T1_NAME = "Arrival"
@@ -98,8 +115,13 @@ _TUTOR_ROLE_NAME = "Threshold Warden"
 class TutorialSeedResult:
     """Returned by seed_tutorial_dev(). Templates in chain order, T1 first.
 
+    ``templates`` holds only the chain steps that are actually authored/
+    sampled (#2698) — a gap partway through the linear chain leaves every
+    later step out of this list, never a ``None`` placeholder.
+
     ``consent_template`` is the "Terms of Engagement" antagonism-consent primer (#2170) —
     a tutor-offered side-step gated on T1, parallel to the T2..T7 spine.
+    ``None`` when T1 itself isn't authored/sampled.
     """
 
     templates: list[MissionTemplate]
@@ -139,26 +161,120 @@ def _ensure_detail_object(room: ObjectDB) -> ObjectDB:
     )
 
 
-def _seed_t1(room: ObjectDB) -> MissionTemplate:
-    """T1 "Arrival" — ROOM_TRIGGER, no predecessor, OPEN visibility."""
-    from world.missions.factories import (  # noqa: PLC0415
-        MissionGiverFactory,
-        MissionNodeFactory,
-        MissionOptionFactory,
-        MissionOptionRouteFactory,
-        MissionOptionRouteRewardFactory,
-        MissionTemplateFactory,
+def _seed_template(
+    name: str, *, summary: str, risk_tier: int, **extra: object
+) -> MissionTemplate | None:
+    """Look up (or, under SEED_SAMPLE_CONTENT, invent) one tutorial-chain MissionTemplate.
+
+    Shared shape across every T1-T7 + consent-primer template: level_band 1-5
+    (all seeded within the low band), ``arc_scope=GLOBAL``, no cooldown, no
+    replace chance, all-equal reward split. ``**extra`` carries the per-template
+    knobs (``visibility``/``availability_rule``/``report_to_role``/``epilogue``).
+    Content-repo-owned (#2698).
+    """
+    from world.missions.models import MissionTemplate  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    defaults = {
+        "summary": summary,
+        "epilogue": "",
+        "risk_tier": risk_tier,
+        "level_band_min": 1,
+        "level_band_max": 5,
+        "base_weight": 1,
+        "created_in_era": None,
+        "arc_scope": ArcScope.GLOBAL,
+        "percent_replace": 0,
+        "cooldown": timedelta(0),
+        "reward_group_rule": RewardGroupRule.ALL_EQUAL,
+        "is_active": True,
+        "visibility": MissionVisibility.RESTRICTED,
+    }
+    defaults.update(extra)
+    return authored_or_sample(MissionTemplate, defaults, name=name)
+
+
+def _seed_entry_option(
+    template: MissionTemplate | None,
+    *,
+    option_kind: str,
+    authored_ic_framing: str = "",
+    required_act: str = "",
+) -> MissionOption | None:
+    """Look up (or invent) the shared entry-node + single-option graph shape.
+
+    T1/T2/T3/T4/T5/T6/T7 and the consent primer all share this exact shape:
+    one entry ``MissionNode``, one ``MissionOption`` (key="option-0"). Returns
+    the option (or ``None`` when ``template``, the node, or the option itself
+    isn't authored/sampled) — content-repo-owned (#2698).
+    """
+    from world.missions.models import MissionNode, MissionOption  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    if template is None:
+        return None
+    entry = authored_or_sample(
+        MissionNode,
+        {"is_entry": True, "conflict_mode": ConflictMode.GROUP_VOTE},
+        template=template,
+        key="entry",
+    )
+    if entry is None:
+        return None
+    return authored_or_sample(
+        MissionOption,
+        {
+            "order": 0,
+            "option_kind": option_kind,
+            "source_kind": OptionSource.AUTHORED,
+            "authored_ic_framing": authored_ic_framing,
+            "required_act": required_act,
+        },
+        node=entry,
+        key="option-0",
     )
 
-    template = MissionTemplateFactory(
-        name=_T1_NAME,
+
+def _seed_terminal_route(
+    option: MissionOption | None, reward_specs: list[tuple[str, dict]]
+) -> MissionOptionRoute | None:
+    """Look up (or invent) the shared null-``outcome_tier`` terminal route + reward line(s).
+
+    ``reward_specs`` is a list of ``(sink, defaults)`` pairs — ``(route, sink)``
+    is a narrow-enough lookup for these single-route graphs (contrast
+    ``game_content/missions.py``'s tiered-CHECK-option sibling, which needs a
+    richer per-tier lookup). Returns ``None`` when ``option`` is ``None`` or
+    the route itself isn't authored/sampled. Content-repo-owned (#2698).
+    """
+    from world.missions.models import MissionOptionRoute, MissionOptionRouteReward  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    if option is None:
+        return None
+    route = authored_or_sample(
+        MissionOptionRoute,
+        {"target_node": None, "is_random_set": False, "consequence": None},
+        option=option,
+        outcome_tier=None,
+    )
+    if route is None:
+        return None
+    for sink, defaults in reward_specs:
+        authored_or_sample(MissionOptionRouteReward, defaults, route=route, sink=sink)
+    return route
+
+
+def _seed_t1(room: ObjectDB) -> MissionTemplate | None:
+    """T1 "Arrival" — ROOM_TRIGGER, no predecessor, OPEN visibility."""
+    from world.missions.factories import MissionGiverFactory  # noqa: PLC0415
+
+    template = _seed_template(
+        _T1_NAME,
         summary=(
             "The city swallows you whole the moment you step through its gates — "
             "noise, smoke, and a thousand strangers who were here before you."
         ),
         risk_tier=1,
-        level_band_min=1,
-        level_band_max=5,
         visibility=MissionVisibility.OPEN,
     )
     giver = MissionGiverFactory(
@@ -166,47 +282,34 @@ def _seed_t1(room: ObjectDB) -> MissionTemplate:
         giver_kind=GiverKind.ROOM_TRIGGER,
         target=room,
     )
-    giver.templates.add(template)
+    if template is not None:
+        giver.templates.add(template)
 
-    if not template.nodes.exists():
-        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
-        option = MissionOptionFactory(
-            node=entry,
-            option_kind=OptionKind.BRANCH,
-            source_kind=OptionSource.AUTHORED,
-            authored_ic_framing="Take stock of where you've landed.",
-        )
-        route = MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
-        MissionOptionRouteRewardFactory(
-            route=route,
-            sink=DeedRewardSink.MONEY,
-            amount=25,
-            contract_holder_only=True,
-        )
+    option = _seed_entry_option(
+        template,
+        option_kind=OptionKind.BRANCH,
+        authored_ic_framing="Take stock of where you've landed.",
+    )
+    _seed_terminal_route(
+        option,
+        [(DeedRewardSink.MONEY, {"amount": 25, "contract_holder_only": True})],
+    )
     return template
 
 
-def _seed_t2(room: ObjectDB, gate_template: MissionTemplate) -> MissionTemplate:
+def _seed_t2(room: ObjectDB, gate_template: MissionTemplate | None) -> MissionTemplate | None:
     """T2 "What the Walls Remember" — ENVIRONMENTAL_DETAIL, gated on T1."""
-    from world.missions.factories import (  # noqa: PLC0415
-        MissionGiverFactory,
-        MissionNodeFactory,
-        MissionOptionFactory,
-        MissionOptionRouteFactory,
-        MissionOptionRouteRewardFactory,
-        MissionTemplateFactory,
-    )
+    if gate_template is None:
+        return None
+    from world.missions.factories import MissionGiverFactory  # noqa: PLC0415
 
-    template = MissionTemplateFactory(
-        name=_T2_NAME,
+    template = _seed_template(
+        _T2_NAME,
         summary=(
             "A scorch mark blackens the plaster here, old enough to have been "
             "painted over twice and stubborn enough to keep bleeding through."
         ),
         risk_tier=1,
-        level_band_min=1,
-        level_band_max=5,
-        visibility=MissionVisibility.RESTRICTED,
         availability_rule=_has_completed(gate_template.pk),
     )
     detail_obj = _ensure_detail_object(room)
@@ -215,23 +318,18 @@ def _seed_t2(room: ObjectDB, gate_template: MissionTemplate) -> MissionTemplate:
         giver_kind=GiverKind.ENVIRONMENTAL_DETAIL,
         target=detail_obj,
     )
-    giver.templates.add(template)
+    if template is not None:
+        giver.templates.add(template)
 
-    if not template.nodes.exists():
-        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
-        option = MissionOptionFactory(
-            node=entry,
-            option_kind=OptionKind.BRANCH,
-            source_kind=OptionSource.AUTHORED,
-            authored_ic_framing="Press a hand to the old burn and listen.",
-        )
-        route = MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
-        MissionOptionRouteRewardFactory(
-            route=route,
-            sink=DeedRewardSink.MONEY,
-            amount=25,
-            contract_holder_only=True,
-        )
+    option = _seed_entry_option(
+        template,
+        option_kind=OptionKind.BRANCH,
+        authored_ic_framing="Press a hand to the old burn and listen.",
+    )
+    _seed_terminal_route(
+        option,
+        [(DeedRewardSink.MONEY, {"amount": 25, "contract_holder_only": True})],
+    )
     return template
 
 
@@ -272,11 +370,11 @@ def _ensure_tutor_functionary(role: NPCRole, room: ObjectDB) -> None:
 def _ensure_offer(
     role: NPCRole,
     label: str,
-    mission_template: MissionTemplate,
+    mission_template: MissionTemplate | None,
     *,
     draw_priority: int = 1,
     role_cooldown_duration: timedelta = timedelta(0),
-) -> NPCServiceOffer:
+) -> NPCServiceOffer | None:
     """Idempotent (role, label)-keyed MISSION offer + its MissionOfferDetails row.
 
     MENU draw_mode — the tutor's offers are deterministic (always shown when
@@ -292,7 +390,14 @@ def _ensure_offer(
     across ALL of this role's offers) would otherwise block T5/T6/T7 for a
     full day after accepting T3, breaking same-session tutorial progression
     (review finding on #1035 Task 6).
+
+    ``NPCServiceOffer``/``MissionOfferDetails`` are NOT content models (#2698)
+    and would seed unconditionally, but ``MissionOfferDetails.mission_template``
+    is a required FK — returns ``None`` without creating anything when
+    ``mission_template`` is ``None`` (its own template wasn't authored/sampled).
     """
+    if mission_template is None:
+        return None
     from world.npc_services.models import MissionOfferDetails, NPCServiceOffer  # noqa: PLC0415
 
     offer, created = NPCServiceOffer.objects.get_or_create(
@@ -317,7 +422,7 @@ def _ensure_offer(
     return offer
 
 
-def _seed_consent_primer(gate_template: MissionTemplate) -> MissionTemplate:
+def _seed_consent_primer(gate_template: MissionTemplate | None) -> MissionTemplate | None:
     """ "Terms of Engagement" — the antagonism-consent onboarding beat (#2170 item 3).
 
     A tutor-offered side-step gated on T1 (parallel to the T2..T7 spine — it re-gates
@@ -328,16 +433,10 @@ def _seed_consent_primer(gate_template: MissionTemplate) -> MissionTemplate:
 
     All prose here is PLACEHOLDER (agent-drafted — Apostate to rewrite, #2170).
     """
-    from world.missions.factories import (  # noqa: PLC0415
-        MissionNodeFactory,
-        MissionOptionFactory,
-        MissionOptionRouteFactory,
-        MissionOptionRouteRewardFactory,
-        MissionTemplateFactory,
-    )
-
-    template = MissionTemplateFactory(
-        name=_TC_NAME,
+    if gate_template is None:
+        return None
+    template = _seed_template(
+        _TC_NAME,
         summary=(
             'The Warden looks you over like a quartermaster sizing a recruit. "This city will '
             "test you — with knives, with lies, with light fingers. Before it does, decide who "
@@ -351,102 +450,73 @@ def _seed_consent_primer(gate_template: MissionTemplate) -> MissionTemplate:
             "your OOC friends try anything against you until you say otherwise."
         ),
         risk_tier=1,
-        level_band_min=1,
-        level_band_max=5,
-        visibility=MissionVisibility.RESTRICTED,
         availability_rule=_has_completed(gate_template.pk),
     )
-    if not template.nodes.exists():
-        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
-        option = MissionOptionFactory(
-            node=entry,
-            option_kind=OptionKind.BRANCH,
-            source_kind=OptionSource.AUTHORED,
-            authored_ic_framing="Weigh who you'd let raise a hand against you, and set your terms.",
-        )
-        route = MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
-        MissionOptionRouteRewardFactory(
-            route=route,
-            sink=DeedRewardSink.MONEY,
-            amount=25,
-            contract_holder_only=True,
-        )
+    option = _seed_entry_option(
+        template,
+        option_kind=OptionKind.BRANCH,
+        authored_ic_framing="Weigh who you'd let raise a hand against you, and set your terms.",
+    )
+    _seed_terminal_route(
+        option,
+        [(DeedRewardSink.MONEY, {"amount": 25, "contract_holder_only": True})],
+    )
     return template
 
 
-def _seed_t3(gate_template: MissionTemplate) -> MissionTemplate:
+def _seed_t3(gate_template: MissionTemplate | None) -> MissionTemplate | None:
     """T3 "First Spark" — NPC offer, EXTERNAL_ACT/TECHNIQUE_CAST (transient)."""
-    from world.missions.factories import (  # noqa: PLC0415
-        MissionNodeFactory,
-        MissionOptionFactory,
-        MissionOptionRouteFactory,
-        MissionOptionRouteRewardFactory,
-        MissionTemplateFactory,
-    )
-
-    template = MissionTemplateFactory(
-        name=_T3_NAME,
+    if gate_template is None:
+        return None
+    template = _seed_template(
+        _T3_NAME,
         summary=(
             'The Warden presses a cold coal into your palm. "Wake it," they say. '
             '"Show me you can call something out of nothing."'
         ),
         risk_tier=1,
-        level_band_min=1,
-        level_band_max=5,
-        visibility=MissionVisibility.RESTRICTED,
         availability_rule=_has_completed(gate_template.pk),
     )
-    if not template.nodes.exists():
-        # TECHNIQUE_CAST is transient (never fast-forwards, #1035) — placement
-        # is free, but it stays on the entry node for consistency with the
-        # durable-act templates that follow.
-        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
-        option = MissionOptionFactory(
-            node=entry,
-            option_kind=OptionKind.EXTERNAL_ACT,
-            source_kind=OptionSource.AUTHORED,
-            required_act=ExternalAct.TECHNIQUE_CAST,
-            authored_ic_framing="Cast a technique, however small.",
-        )
-        route = MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
-        MissionOptionRouteRewardFactory(
-            route=route,
-            sink=DeedRewardSink.MONEY,
-            amount=25,
-            contract_holder_only=True,
-        )
+    # TECHNIQUE_CAST is transient (never fast-forwards, #1035) — placement
+    # is free, but it stays on the entry node for consistency with the
+    # durable-act templates that follow.
+    option = _seed_entry_option(
+        template,
+        option_kind=OptionKind.EXTERNAL_ACT,
+        required_act=ExternalAct.TECHNIQUE_CAST,
+        authored_ic_framing="Cast a technique, however small.",
+    )
+    _seed_terminal_route(
+        option,
+        [(DeedRewardSink.MONEY, {"amount": 25, "contract_holder_only": True})],
+    )
     return template
 
 
 def _seed_t4(
-    tutor_role: NPCRole, gate_template: MissionTemplate
-) -> tuple[MissionTemplate, MissionOptionRoute]:
+    tutor_role: NPCRole, gate_template: MissionTemplate | None
+) -> tuple[MissionTemplate | None, MissionOptionRoute | None]:
     """T4 "A Simple Job" — BOARD, reusing seed_missions_dev's board giver.
 
     Returns the template AND its terminal route so the caller can attach the
     FOLLOW_ON_SUMMONS reward line once T5's offer exists (a real ordering
     dependency — see module docstring). Takes no ``room`` argument — the
     board (and the room it sits in) come from ``seed_missions_dev()`` itself.
+    This is the one demo mission the module docstring calls out explicitly:
+    genuinely-unauthored placeholder content, exactly what
+    ``SEED_SAMPLE_CONTENT`` exists for.
     """
-    from world.missions.factories import (  # noqa: PLC0415
-        MissionNodeFactory,
-        MissionOptionFactory,
-        MissionOptionRouteFactory,
-        MissionOptionRouteRewardFactory,
-        MissionTemplateFactory,
-    )
+    if gate_template is None:
+        return None, None
     from world.seeds.game_content.missions import seed_missions_dev  # noqa: PLC0415
 
-    template = MissionTemplateFactory(
-        name=_T4_NAME,
+    template = _seed_template(
+        _T4_NAME,
         summary=(
             "A notice, pinned crooked among a dozen others: coin for anyone "
             "willing to do a plain, unglamorous job and report back."
         ),
         risk_tier=2,
-        level_band_min=1,
-        level_band_max=5,
-        visibility=MissionVisibility.RESTRICTED,
         availability_rule=_has_completed(gate_template.pk),
         report_to_role=tutor_role,
     )
@@ -455,187 +525,146 @@ def _seed_t4(
     # The board and its room are shared with the starter-mission board
     # (#2121); T4 is added to the SAME giver, not a new one.
     board_giver = seed_missions_dev().giver
-    board_giver.templates.add(template)
+    if template is not None:
+        board_giver.templates.add(template)
 
-    if not template.nodes.exists():
-        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
-        option = MissionOptionFactory(
-            node=entry,
-            option_kind=OptionKind.BRANCH,
-            source_kind=OptionSource.AUTHORED,
-            authored_ic_framing="Take the job and see it through.",
-        )
-        route = MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
-        MissionOptionRouteRewardFactory(
-            route=route,
-            sink=DeedRewardSink.MONEY,
-            amount=75,
-            contract_holder_only=True,
-        )
-    else:
-        entry = template.nodes.get(is_entry=True)
-        option = entry.options.get()
-        route = option.routes.get(outcome_tier__isnull=True)
+    option = _seed_entry_option(
+        template,
+        option_kind=OptionKind.BRANCH,
+        authored_ic_framing="Take the job and see it through.",
+    )
+    route = _seed_terminal_route(
+        option,
+        [(DeedRewardSink.MONEY, {"amount": 75, "contract_holder_only": True})],
+    )
     return template, route
 
 
-def _ensure_t4_followon_reward(route: MissionOptionRoute, t5_offer: NPCServiceOffer) -> None:
-    """Attach the T4→T5 FOLLOW_ON_SUMMONS reward line once T5's offer exists."""
-    from world.missions.factories import MissionOptionRouteRewardFactory  # noqa: PLC0415
+def _ensure_t4_followon_reward(
+    route: MissionOptionRoute | None, t5_offer: NPCServiceOffer | None
+) -> None:
+    """Attach the T4→T5 FOLLOW_ON_SUMMONS reward line once T5's offer exists.
 
-    if route.reward_templates.filter(sink=DeedRewardSink.FOLLOW_ON_SUMMONS).exists():
+    No-ops when either side is missing — T4's terminal route or T5's offer
+    didn't seed (its own template wasn't authored/sampled, #2698).
+    """
+    if route is None or t5_offer is None:
         return
-    MissionOptionRouteRewardFactory(
+    from world.missions.models import MissionOptionRouteReward  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    authored_or_sample(
+        MissionOptionRouteReward,
+        {
+            "amount": None,
+            "followon_offer": t5_offer,
+            "followon_message": (
+                "The Warden sends word: there is a thread that wants weaving, "
+                "and they think you're ready to try."
+            ),
+            "followon_expiry_hours": None,
+            "contract_holder_only": True,
+        },
         route=route,
         sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
-        amount=None,
-        followon_offer=t5_offer,
-        followon_message=(
-            "The Warden sends word: there is a thread that wants weaving, "
-            "and they think you're ready to try."
-        ),
-        followon_expiry_hours=None,
-        contract_holder_only=True,
     )
 
 
-def _seed_t5(gate_template: MissionTemplate) -> MissionTemplate:
+def _seed_t5(gate_template: MissionTemplate | None) -> MissionTemplate | None:
     """T5 "The Loom" — NPC offer, EXTERNAL_ACT/THREAD_WOVEN (durable)."""
-    from world.missions.factories import (  # noqa: PLC0415
-        MissionNodeFactory,
-        MissionOptionFactory,
-        MissionOptionRouteFactory,
-        MissionOptionRouteRewardFactory,
-        MissionTemplateFactory,
-    )
-
-    template = MissionTemplateFactory(
-        name=_T5_NAME,
+    if gate_template is None:
+        return None
+    template = _seed_template(
+        _T5_NAME,
         summary=(
             "The Warden shows you the loom that isn't wood or wire — the one "
             "strung between people who choose to be bound to each other."
         ),
         risk_tier=2,
-        level_band_min=1,
-        level_band_max=5,
-        visibility=MissionVisibility.RESTRICTED,
         availability_rule=_has_completed(gate_template.pk),
     )
-    if not template.nodes.exists():
-        # Durable act (#1035 Ruling 1): authored on the ENTRY node so
-        # fast_forward_external_acts (enter_node) can resolve it immediately
-        # for a character who already wove a thread before accepting.
-        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
-        option = MissionOptionFactory(
-            node=entry,
-            option_kind=OptionKind.EXTERNAL_ACT,
-            source_kind=OptionSource.AUTHORED,
-            required_act=ExternalAct.THREAD_WOVEN,
-            authored_ic_framing="Weave a thread with someone who matters.",
-        )
-        route = MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
-        MissionOptionRouteRewardFactory(
-            route=route,
-            sink=DeedRewardSink.MONEY,
-            amount=50,
-            contract_holder_only=True,
-        )
+    # Durable act (#1035 Ruling 1): authored on the ENTRY node so
+    # fast_forward_external_acts (enter_node) can resolve it immediately
+    # for a character who already wove a thread before accepting.
+    option = _seed_entry_option(
+        template,
+        option_kind=OptionKind.EXTERNAL_ACT,
+        required_act=ExternalAct.THREAD_WOVEN,
+        authored_ic_framing="Weave a thread with someone who matters.",
+    )
+    _seed_terminal_route(
+        option,
+        [(DeedRewardSink.MONEY, {"amount": 50, "contract_holder_only": True})],
+    )
     return template
 
 
-def _seed_t6(gate_template: MissionTemplate) -> MissionTemplate:
+def _seed_t6(gate_template: MissionTemplate | None) -> MissionTemplate | None:
     """T6 "Sworn Together" — NPC offer, EXTERNAL_ACT/COVENANT_SWORN (durable)."""
-    from world.missions.factories import (  # noqa: PLC0415
-        MissionNodeFactory,
-        MissionOptionFactory,
-        MissionOptionRouteFactory,
-        MissionOptionRouteRewardFactory,
-        MissionTemplateFactory,
-    )
-
-    template = MissionTemplateFactory(
-        name=_T6_NAME,
+    if gate_template is None:
+        return None
+    template = _seed_template(
+        _T6_NAME,
         summary=(
             '"None of us stand for long alone," the Warden says. "Swear '
             'yourself to a covenant, and see what holds you up."'
         ),
         risk_tier=2,
-        level_band_min=1,
-        level_band_max=5,
-        visibility=MissionVisibility.RESTRICTED,
         availability_rule=_has_completed(gate_template.pk),
     )
-    if not template.nodes.exists():
-        # Durable act (#1035 Ruling 1): entry node, same rationale as T5.
-        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
-        option = MissionOptionFactory(
-            node=entry,
-            option_kind=OptionKind.EXTERNAL_ACT,
-            source_kind=OptionSource.AUTHORED,
-            required_act=ExternalAct.COVENANT_SWORN,
-            authored_ic_framing="Swear yourself to a covenant.",
-        )
-        route = MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
-        MissionOptionRouteRewardFactory(
-            route=route,
-            sink=DeedRewardSink.MONEY,
-            amount=50,
-            contract_holder_only=True,
-        )
+    # Durable act (#1035 Ruling 1): entry node, same rationale as T5.
+    option = _seed_entry_option(
+        template,
+        option_kind=OptionKind.EXTERNAL_ACT,
+        required_act=ExternalAct.COVENANT_SWORN,
+        authored_ic_framing="Swear yourself to a covenant.",
+    )
+    _seed_terminal_route(
+        option,
+        [(DeedRewardSink.MONEY, {"amount": 50, "contract_holder_only": True})],
+    )
     return template
 
 
-def _seed_t7(gate_template: MissionTemplate) -> MissionTemplate:
+def _seed_t7(gate_template: MissionTemplate | None) -> MissionTemplate | None:
     """T7 "The Long Dark" — NPC offer, risk_tier=4, first legend-risk mission."""
-    from world.missions.factories import (  # noqa: PLC0415
-        MissionNodeFactory,
-        MissionOptionFactory,
-        MissionOptionRouteFactory,
-        MissionOptionRouteRewardFactory,
-        MissionTemplateFactory,
-    )
-
-    template = MissionTemplateFactory(
-        name=_T7_NAME,
+    if gate_template is None:
+        return None
+    template = _seed_template(
+        _T7_NAME,
         summary=(
             "The Warden's voice drops. \"This one isn't practice. Whatever "
             "waits past the old wall doesn't care that you're new.\""
         ),
         risk_tier=4,
-        level_band_min=1,
-        level_band_max=5,
-        visibility=MissionVisibility.RESTRICTED,
         availability_rule=_has_completed(gate_template.pk),
     )
-    if not template.nodes.exists():
-        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
-        option = MissionOptionFactory(
-            node=entry,
-            option_kind=OptionKind.BRANCH,
-            source_kind=OptionSource.AUTHORED,
-            authored_ic_framing="Go into the long dark.",
-        )
-        route = MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
-        MissionOptionRouteRewardFactory(
-            route=route,
-            sink=DeedRewardSink.MONEY,
-            amount=150,
-            contract_holder_only=True,
-        )
-        # #2051 legend guard: LEGEND_POINTS requires risk_tier >= LEGEND_RISK_FLOOR_TIER
-        # (4) — satisfied here since this template's risk_tier is 4. LEGEND_POINTS
-        # is a queued sink (rewards.py's _QUEUE_SINKS) — it ONLY routes under
-        # kind=POST_CRON; the factory's IMMEDIATE default has no dispatch target
-        # for this sink and raises MissionRewardRoutingError at report time (a gap
-        # only the Task 6 journey E2E — the first thing to actually report T7 —
-        # surfaced; test_tutorial_seed.py only checked the template row existed).
-        MissionOptionRouteRewardFactory(
-            route=route,
-            kind=DeedRewardKind.POST_CRON,
-            sink=DeedRewardSink.LEGEND_POINTS,
-            amount=10,
-            contract_holder_only=True,
-        )
+    option = _seed_entry_option(
+        template,
+        option_kind=OptionKind.BRANCH,
+        authored_ic_framing="Go into the long dark.",
+    )
+    # #2051 legend guard: LEGEND_POINTS requires risk_tier >= LEGEND_RISK_FLOOR_TIER
+    # (4) — satisfied here since this template's risk_tier is 4. LEGEND_POINTS
+    # is a queued sink (rewards.py's _QUEUE_SINKS) — it ONLY routes under
+    # kind=POST_CRON; the IMMEDIATE default has no dispatch target for this
+    # sink and raises MissionRewardRoutingError at report time (a gap only the
+    # Task 6 journey E2E — the first thing to actually report T7 — surfaced;
+    # test_tutorial_seed.py only checked the template row existed).
+    _seed_terminal_route(
+        option,
+        [
+            (DeedRewardSink.MONEY, {"amount": 150, "contract_holder_only": True}),
+            (
+                DeedRewardSink.LEGEND_POINTS,
+                {
+                    "kind": DeedRewardKind.POST_CRON,
+                    "amount": 10,
+                    "contract_holder_only": True,
+                },
+            ),
+        ],
+    )
     return template
 
 
@@ -648,9 +677,16 @@ def seed_tutorial_dev() -> TutorialSeedResult:
     for the tutor NPCRole (no other cluster's content is required to create
     it). Idempotent throughout; never overwrites a staff edit.
 
+    Every ``MissionTemplate`` in this chain is content-repo-owned (#2698) —
+    the chain is linear (each step's ``availability_rule`` gates on the
+    previous step's pk), so a gap at step N leaves every subsequent step
+    ungated and ``None`` (see the module docstring). ``NPCRole``/
+    ``NPCServiceOffer`` seed unconditionally regardless.
+
     Returns:
-        TutorialSeedResult with the seven templates (T1 first) and the tutor
-        NPCRole.
+        TutorialSeedResult with whichever templates in the chain are
+        authored/sampled (T1 first, 0-7), the tutor NPCRole, and the consent
+        primer template (``None`` if T1 itself is missing).
     """
     from world.seeds.character_creation import ensure_canonical_fallback_room  # noqa: PLC0415
 
@@ -682,7 +718,7 @@ def seed_tutorial_dev() -> TutorialSeedResult:
     _ensure_offer(tutor_role, "Answer the long dark's call", t7)
 
     return TutorialSeedResult(
-        templates=[t1, t2, t3, t4, t5, t6, t7],
+        templates=[t for t in (t1, t2, t3, t4, t5, t6, t7) if t is not None],
         tutor_role=tutor_role,
         consent_template=consent_primer,
     )

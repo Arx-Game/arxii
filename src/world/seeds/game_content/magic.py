@@ -1237,6 +1237,11 @@ def _seed_hallowed_achievement_bridge() -> None:
     create the ConditionTemplate rows we reference — content-repo-owned
     (#2698), so a given spec's condition may not exist; that spec is skipped
     entirely (stat/rule/achievement all hang off the condition existing).
+
+    ``achievements.StatDefinition`` is ALSO content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A
+    spec whose stat isn't authored/sampled skips its rule/achievement too
+    (``ConditionStatRule.stat`` is a required FK).
     """
     from django.utils.text import slugify  # noqa: PLC0415
 
@@ -1251,20 +1256,24 @@ def _seed_hallowed_achievement_bridge() -> None:
         StatDefinition,
     )
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     for spec in _HALLOWED_ACHIEVEMENT_BRIDGE_SPECS:
         condition = ConditionTemplate.objects.filter(name=spec["condition_name"]).first()
         if condition is None:
             continue
-        stat, _ = StatDefinition.objects.get_or_create(
-            key=spec["stat_key"],
-            defaults={
+        stat = authored_or_sample(
+            StatDefinition,
+            {
                 "name": spec["stat_name"],
                 "description": (
                     f"Count of times this character has gained {spec['condition_name']}."
                 ),
             },
+            key=spec["stat_key"],
         )
+        if stat is None:
+            continue
         ConditionStatRule.objects.get_or_create(
             stat=stat,
             condition=condition,
@@ -2630,14 +2639,16 @@ def seed_relationship_track_thread_unlock() -> RelationshipTrackThreadUnlockResu
     catalog (Trust/Respect/Rivalry/Fear, etc.) is separate content-authoring
     work, not framework work.
 
-    Idempotent via ``get_or_create`` on both the track (keyed on ``name``) and
-    the unlock (keyed on the ``unique_threadweaving_unlock_track`` constraint's
-    natural key: ``target_kind`` + ``unlock_track``).
+    Idempotent: the track and the unlock (keyed on the
+    ``unique_threadweaving_unlock_track`` constraint's natural key:
+    ``target_kind`` + ``unlock_track``) are each looked up rather than
+    unconditionally created.
 
-    The unlock itself is content-repo-owned (#2698) — looked up rather than
-    invented unless ``SEED_SAMPLE_CONTENT`` is on; ``RelationshipTrack`` is
-    out of scope for #2698 and stays unconditional (it's the required FK the
-    unlock hangs off, not one of the 15 models this slice clears).
+    Both the track and the unlock are content-repo-owned (#2698) — looked up
+    rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    ``ThreadWeavingUnlock.unlock_track`` is a required FK for this kind, so a
+    missing "Devotion" track means there is nothing to hang the unlock off
+    of; this returns a result with both fields ``None`` in that case.
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
     from world.magic.models.weaving import ThreadWeavingUnlock  # noqa: PLC0415
@@ -2645,16 +2656,19 @@ def seed_relationship_track_thread_unlock() -> RelationshipTrackThreadUnlockResu
     from world.relationships.models import RelationshipTrack  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    track, _ = RelationshipTrack.objects.get_or_create(
-        name="Devotion",
-        defaults={
+    track = authored_or_sample(
+        RelationshipTrack,
+        {
             "slug": "devotion",
             "description": (
                 "Depth of bond between two souls — the axis Soul Tether capstones anchor to."
             ),
             "sign": TrackSign.POSITIVE,
         },
+        name="Devotion",
     )
+    if track is None:
+        return RelationshipTrackThreadUnlockResult(track=None, unlock=None)
     unlock = authored_or_sample(
         ThreadWeavingUnlock,
         {"xp_cost": 50},  # baseline cost; staff may tune

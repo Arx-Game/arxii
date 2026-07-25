@@ -2549,9 +2549,16 @@ def wire_soul_tether_stat_definitions() -> None:
     - rescue.severity_reduced: Corruption severity reduced (fired by perform_soul_tether_rescue)
     - tether.formed: Soul Tethers formed (fired by accept_soul_tether)
 
-    Safe to call multiple times — uses get_or_create on the stat key.
+    ``achievements.StatDefinition`` is content-repo-owned (#2698) — each is
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A
+    missing stat is simply skipped: ``_increment_stat_safe`` (in
+    ``world.magic.services.soul_tether``) already tolerates a missing
+    ``StatDefinition`` for any of these keys.
+
+    Safe to call multiple times.
     """
-    from world.achievements.factories import StatDefinitionFactory
+    from world.achievements.models import StatDefinition
+    from world.seeds.sample_content import authored_or_sample
 
     stat_configs = [
         {
@@ -2592,10 +2599,10 @@ def wire_soul_tether_stat_definitions() -> None:
     ]
 
     for config in stat_configs:
-        StatDefinitionFactory(
+        authored_or_sample(
+            StatDefinition,
+            {"name": config["name"], "description": config["description"]},
             key=config["key"],
-            name=config["name"],
-            description=config["description"],
         )
 
 
@@ -2627,7 +2634,8 @@ def wire_soul_tether_content() -> object:
     ``wire_soul_tether_active_template()`` and
     ``world.magic.services.soul_tether._install_soul_tether_triggers()``,
     which now tolerates a missing definition rather than crashing tether
-    formation. Stat definitions stay unconditional (out of scope for #2698).
+    formation. ``achievements.StatDefinition`` is ALSO content-repo-owned
+    (#2698) — see ``wire_soul_tether_stat_definitions()``.
 
     Returns a ``SoulTetherContent`` dataclass with references to all created rows.
     Safe to call multiple times — does not create duplicates.

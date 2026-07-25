@@ -6,9 +6,9 @@ WIRED (callers were test-only) — so a fresh world's ``mission opportunities``
 said "Nothing pulls at you right now" forever, even though the entire
 telnet-native mission loop (``mission opportunities/take/beat/resolve/support/
 report/tale``, #2044-#2051) was fully wired. Seeds a minimal starter board +
-template set via the existing factories (never hand-authored ``get_or_create``
-rows, which would duplicate the factories' ``clean()``/``is_entry``-uniqueness
-validation for no benefit).
+template set (never hand-authored ``get_or_create`` rows for the graph, which
+would duplicate the factories' ``clean()``/``is_entry``-uniqueness validation
+for no benefit).
 
 Shape (Decision 1, #2121): one BOARD-kind ``MissionGiver`` whose ``target`` is
 an examinable notice-board Object physically located in the canonical starting
@@ -18,15 +18,35 @@ three ``OPEN``-visibility ``MissionTemplate`` rows spanning distinct
 risk_tier/level_band, each a single-``is_entry``-node graph with one plain
 CHECK-sourced ``MissionOption`` (no ``ChallengeTemplate`` attach) covering
 every canonical ``CheckOutcome`` tier and resolving to a reward line.
+
+``missions.MissionTemplate``/``MissionNode``/``MissionOption``/
+``MissionOptionRoute``/``MissionOptionRouteReward`` are ALL content-repo-owned
+(#2698) — these three starter templates (and their node/option/route/reward
+graphs) are genuinely-unauthored demo content, so every row below is looked up
+rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A missing template
+skips its own graph and is never attached to the board giver; ``MissionGiver``
+itself is NOT a content model and still seeds unconditionally (an empty board
+under a real content repo is a content-authoring gap, not a seeder bug).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from world.missions.constants import GiverKind, MissionVisibility, OptionKind, OptionSource
+from world.missions.constants import (
+    ArcScope,
+    ConflictMode,
+    DeedRewardKind,
+    DeedRewardSink,
+    GiverKind,
+    MissionVisibility,
+    OptionKind,
+    OptionSource,
+    RewardGroupRule,
+)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -142,42 +162,71 @@ def _seed_mission_template(  # noqa: PLR0913
     level_band_min: int,
     level_band_max: int,
     base_reward: int,
-) -> MissionTemplate:
-    """Get-or-create one starter MissionTemplate + its single-entry-node graph.
+) -> MissionTemplate | None:
+    """Look up (or, under SEED_SAMPLE_CONTENT, invent) one starter MissionTemplate + graph.
 
-    ``MissionTemplateFactory`` is ``django_get_or_create`` on ``name``, so the
-    template row itself is idempotent; the node/option/route graph is guarded
-    separately (``template.nodes.exists()``) since ``MissionNodeFactory`` has
-    no such guard and would duplicate the entry node on every re-run.
+    Every row here — the template, its single entry node, one CHECK-sourced
+    option, and one route + reward per canonical ``CheckOutcome`` tier — is
+    content-repo-owned (#2698); each is looked up via ``authored_or_sample()``
+    rather than created unconditionally. Returns ``None`` when the template
+    itself isn't authored/sampled; a missing entry node/option skips the rest
+    of the graph the same way.
     """
-    from world.missions.factories import (  # noqa: PLC0415
-        MissionNodeFactory,
-        MissionOptionFactory,
-        MissionOptionRouteFactory,
-        MissionOptionRouteRewardFactory,
-        MissionTemplateFactory,
+    from world.missions.models import (  # noqa: PLC0415
+        MissionNode,
+        MissionOption,
+        MissionOptionRoute,
+        MissionOptionRouteReward,
+        MissionTemplate,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.traits.models import CheckOutcome  # noqa: PLC0415
 
-    template = MissionTemplateFactory(
+    template = authored_or_sample(
+        MissionTemplate,
+        {
+            "summary": summary,
+            "epilogue": "",
+            "risk_tier": risk_tier,
+            "level_band_min": level_band_min,
+            "level_band_max": level_band_max,
+            "base_weight": 1,
+            "created_in_era": None,
+            "arc_scope": ArcScope.GLOBAL,
+            "percent_replace": 0,
+            "cooldown": timedelta(0),
+            "reward_group_rule": RewardGroupRule.ALL_EQUAL,
+            "is_active": True,
+            "visibility": MissionVisibility.OPEN,
+        },
         name=name,
-        summary=summary,
-        risk_tier=risk_tier,
-        level_band_min=level_band_min,
-        level_band_max=level_band_max,
-        visibility=MissionVisibility.OPEN,
     )
-    if template.nodes.exists():
-        return template  # already fully authored — idempotent no-op
+    if template is None:
+        return None
 
     check_type = _ensure_fieldwork_check_type()
-    entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
-    option = MissionOptionFactory(
-        node=entry,
-        option_kind=OptionKind.CHECK,
-        source_kind=OptionSource.AUTHORED,
-        authored_check_type=check_type,
+    entry = authored_or_sample(
+        MissionNode,
+        {"is_entry": True, "conflict_mode": ConflictMode.GROUP_VOTE},
+        template=template,
+        key="entry",
     )
+    if entry is None:
+        return template
+    option = authored_or_sample(
+        MissionOption,
+        {
+            "order": 0,
+            "option_kind": OptionKind.CHECK,
+            "source_kind": OptionSource.AUTHORED,
+            "authored_check_type": check_type,
+        },
+        node=entry,
+        key="option-0",
+    )
+    if option is None:
+        return template
+
     # Cover every canonical CheckOutcome tier (seeded by the "checks" cluster,
     # world/seeds/checks.py) so resolve_option never raises
     # "route-set incompleteness" on a rolled outcome this graph didn't author
@@ -192,21 +241,38 @@ def _seed_mission_template(  # noqa: PLR0913
     }
     for outcome_name, reward_amount in tier_rewards.items():
         outcome = CheckOutcome.objects.get(name=outcome_name)
-        route = MissionOptionRouteFactory(option=option, outcome_tier=outcome, target_node=None)
-        if reward_amount:
-            MissionOptionRouteRewardFactory(route=route, amount=reward_amount)
+        route = authored_or_sample(
+            MissionOptionRoute,
+            {"target_node": None, "is_random_set": False, "consequence": None},
+            option=option,
+            outcome_tier=outcome,
+        )
+        if route is not None and reward_amount:
+            authored_or_sample(
+                MissionOptionRouteReward,
+                {"amount": reward_amount, "contract_holder_only": False},
+                route=route,
+                kind=DeedRewardKind.IMMEDIATE,
+                sink=DeedRewardSink.MONEY,
+            )
     return template
 
 
 def seed_missions_dev() -> MissionsSeedResult:
-    """Seed the starter mission board: 1 BOARD giver + 3 OPEN templates (#2121).
+    """Seed the starter mission board: 1 BOARD giver + up to 3 OPEN templates (#2121).
 
     Registered as the "missions" cluster in ``world.seeds.clusters`` — reachable
     from the Big Button. Idempotent throughout: re-running on a populated DB
     creates no new rows and never overwrites a staff edit.
 
+    ``MissionGiver`` is NOT a content model and still seeds unconditionally.
+    The three starter ``MissionTemplate`` rows are content-repo-owned (#2698,
+    see the module docstring) — a template missing under a real content repo
+    (sampling off) is simply left off the giver and the returned list.
+
     Returns:
-        MissionsSeedResult with the giver and its 3 templates.
+        MissionsSeedResult with the giver and whichever starter templates are
+        authored/sampled (0-3).
     """
     from world.missions.factories import MissionGiverFactory  # noqa: PLC0415
     from world.seeds.character_creation import ensure_canonical_fallback_room  # noqa: PLC0415
@@ -218,6 +284,9 @@ def seed_missions_dev() -> MissionsSeedResult:
         giver_kind=GiverKind.BOARD,
         target=board_obj,
     )
-    templates = [_seed_mission_template(*row) for row in _TEMPLATES]
-    giver.templates.add(*templates)  # idempotent M2M add
+    templates = [
+        template for row in _TEMPLATES if (template := _seed_mission_template(*row)) is not None
+    ]
+    if templates:
+        giver.templates.add(*templates)  # idempotent M2M add
     return MissionsSeedResult(giver=giver, templates=templates)

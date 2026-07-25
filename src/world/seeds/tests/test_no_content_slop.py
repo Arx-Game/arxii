@@ -68,11 +68,19 @@ from world.seeds.tests.content_stub import stub_content_root
 #: property, propertycategory, flowdefinition, flowstepdefinition,
 #: triggerdefinition) was cleared the same way in a follow-up #2698 pass —
 #: including the "menace" ``mechanics.modifiertarget`` row that was one of the
-#: genuine stub-relative inventions. What remains is genuine invention (62
-#: ``checks.checktypetrait``, 5 ``character_creation.cgexplanation``, the "A
-#: Simple Job" demo mission, ``forms.formtraitoption`` "court_coils", and two
-#: singleton configs). The stub-relative number is the stricter, hermetic one,
-#: and it is what this ratchet drives to zero.
+#: genuine stub-relative inventions. A further #2698 pass cleared 11 more
+#: (``achievements.statdefinition``; ``covenants.covenantrite``/
+#: ``covenantriterolepackage``/``covenantrole`` — ``covenants.mentorbondconfig``
+#: stays, a pk=1 tuning singleton under separate review; the entire
+#: ``missions.*`` demo/tutorial-chain quintet — missiontemplate/missionnode/
+#: missionoption/missionoptionroute/missionoptionroutereward, including the "A
+#: Simple Job" demo mission called out below; ``realms.realm``;
+#: ``relationships.relationshiptrack``, which also dropped an ``update_or_create``
+#: that silently re-applied PLACEHOLDER names over a staff edit on every reseed).
+#: What remains is genuine invention (62 ``checks.checktypetrait``, 5
+#: ``character_creation.cgexplanation``, ``forms.formtraitoption`` "court_coils",
+#: and two singleton configs). The stub-relative number is the stricter,
+#: hermetic one, and it is what this ratchet drives to zero.
 #:
 #: So this freezes today's state and guards the margin: a seeder that starts
 #: populating a *new* content model fails immediately, while the existing overlap
@@ -84,7 +92,6 @@ from world.seeds.tests.content_stub import stub_content_root
 #: only legitimate edits are deletions, as each model stops being seeded.
 SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
     {
-        "achievements.statdefinition",
         "character_creation.cgexplanation",
         "character_sheets.gender",
         "checks.checkcategory",
@@ -92,9 +99,6 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
         "checks.checktypetrait",
         "classes.aspect",
         "classes.pathaspect",
-        "covenants.covenantrite",
-        "covenants.covenantriterolepackage",
-        "covenants.covenantrole",
         "covenants.mentorbondconfig",
         "distinctions.distinction",
         "distinctions.distinctioncategory",
@@ -104,13 +108,6 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
         "forms.formtraitoption",
         "forms.heightband",
         "forms.speciesformtrait",
-        "missions.missionnode",
-        "missions.missionoption",
-        "missions.missionoptionroute",
-        "missions.missionoptionroutereward",
-        "missions.missiontemplate",
-        "realms.realm",
-        "relationships.relationshiptrack",
         "skills.skill",
         "species.species",
         "traits.trait",
