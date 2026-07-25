@@ -383,7 +383,7 @@ class AcceptTechniqueOfferTest(TestCase):
 
         The old path-style gate made this raise TechniqueStyleForbidden even though
         grant_path_magic would have handed the learner the same technique without a
-        check. Style now gates casting, not learning. ADR-0164.
+        check. Style now gates casting, not learning. ADR-0167.
         """
         from world.classes.factories import PathFactory
         from world.magic.factories import (

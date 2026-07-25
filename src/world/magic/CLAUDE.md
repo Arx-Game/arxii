@@ -82,7 +82,7 @@ The magic system for Arx II. Power flows from identity and connection.
   (`unique_technique_gift_name`), so authoring a duplicate raises
   `DuplicateTechniqueName` (clean 400) instead of an `IntegrityError`. See
   `docs/systems/magic.md`'s "Content pipeline" section for the full model list.
-- `TechniqueStyle` - How a **practitioner** works magic (Manifestation, Subtle, Performance, Prayer, Incantation). A property of the caster's `Path` (`classes.Path.style`), NOT of the technique (#2700, ADR-0164). `StyleCapabilityRequirement` rows let a style gate casting on the caster's capabilities (an Incantation caster who cannot speak cannot incant), evaluated by `technique_performable`.
+- `TechniqueStyle` - How a **practitioner** works magic (Manifestation, Subtle, Performance, Prayer, Incantation). A property of the caster's `Path` (`classes.Path.style`), NOT of the technique (#2700, ADR-0167). `StyleCapabilityRequirement` rows let a style gate casting on the caster's capabilities (an Incantation caster who cannot speak cannot incant), evaluated by `technique_performable`.
 - `EffectType` - Types of magical effects (Attack, Defense, Movement, etc.)
 - `Restriction` - Limitations that grant power bonuses (Touch Range, etc.)
 - `IntensityTier` - Configurable thresholds for power intensity (Minor, Moderate, Major)
@@ -316,7 +316,7 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
   `TechniqueStyleForbidden` are deleted. Gift ownership plus
   `PathGiftGrant`/`TraditionGiftGrant` curation is the gate, at technique
   granularity; style now gates *casting* (via `StyleCapabilityRequirement`), not
-  learning. See ADR-0164.
+  learning. See ADR-0167.
 - `GiftAcquisitionConfig.major_gift_ap_multiplier` — staff-tunable AP multiplier
   for MAJOR-gift techniques on the `has_gift` branch of `accept_technique_offer`.
 - `GiftAcquisitionConfig.imbue_ap_cost` — staff-tunable flat AP cost per Rite of

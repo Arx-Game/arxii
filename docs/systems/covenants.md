@@ -525,7 +525,7 @@ vow the Sphinx warned about).
     the technique's `Gift` (#2700) — `learn_technique`'s own first gate, so every row is
     something the character can actually go and learn. Replaced the former
     `can_learn_technique` path-style filter, which both recommended techniques from
-    unowned gifts and hid ones the character's own path had granted (ADR-0164).
+    unowned gifts and hid ones the character's own path had granted (ADR-0167).
 - **`SITUATION_CREATOR_FUNCTIONS: dict[str, frozenset[str]]`** (`world.covenants.perks.constants`)
   — code-defined: which `TechniqueFunction` casts can CREATE each DB-state `Situation` (the
   `TARGET_DISTRACTED`/`TARGET_SWAYED_BY_ALLY` provenance mapping run in reverse). v1 rows:
