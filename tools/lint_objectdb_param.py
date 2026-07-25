@@ -41,6 +41,7 @@ _RELATION_FIELDS = frozenset({"ForeignKey", "OneToOneField", "ManyToManyField"})
 
 # The dotted model path Django resolves to Evennia's ObjectDB.
 _OBJECTDB_MODEL_PATHS = frozenset({"objects.ObjectDB", "ObjectDB"})
+_OBJECTDB_MODEL_PATHS_LOWER = frozenset(p.lower() for p in _OBJECTDB_MODEL_PATHS)
 
 # Names that count as "ObjectDB" annotations. Includes the bare name and the
 # typical attribute-access form. Substring match on the last component handles
@@ -99,7 +100,7 @@ def _collect_objectdb_aliases(tree: ast.Module) -> set[str]:
         value = node.value
         if not (isinstance(value, ast.Constant) and isinstance(value.value, str)):
             continue
-        if value.value not in _OBJECTDB_MODEL_PATHS:
+        if value.value.lower() not in _OBJECTDB_MODEL_PATHS_LOWER:
             continue
         for target in node.targets:
             if isinstance(target, ast.Name):
@@ -108,16 +109,36 @@ def _collect_objectdb_aliases(tree: ast.Module) -> set[str]:
 
 
 def _field_target_is_objectdb(node: ast.expr | None, aliases: set[str]) -> bool:
-    """Return whether a relation field's target argument resolves to ObjectDB."""
+    """Return whether a relation field's target argument resolves to ObjectDB.
+
+    Model reference strings are matched case-insensitively — Django resolves
+    ``"objects.objectdb"`` and ``"objects.ObjectDB"`` to the same model, and the
+    lowercase form is what its own generated migrations write.
+    """
     if node is None:
         return False
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value in _OBJECTDB_MODEL_PATHS
+        return node.value.lower() in _OBJECTDB_MODEL_PATHS_LOWER
     if isinstance(node, ast.Name):
         return node.id == _OBJECTDB_NAME or node.id in aliases
     if isinstance(node, ast.Attribute):
         return node.attr == _OBJECTDB_NAME
     return False
+
+
+def _relation_target_arg(node: ast.Call) -> ast.expr | None:
+    """Return the node naming a relation field's target model.
+
+    Django accepts the target positionally *or* as the ``to=`` keyword; both
+    forms have to be checked, or a field written as
+    ``ForeignKey(to="objects.ObjectDB")`` slips past the ratchet silently.
+    """
+    if node.args:
+        return node.args[0]
+    for kw in node.keywords:
+        if kw.arg == "to":
+            return kw.value
+    return None
 
 
 def _field_call_name(func: ast.expr) -> str | None:
@@ -160,7 +181,7 @@ class ObjectDBFieldVisitor(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:
         name = _field_call_name(node.func)
         if name in _RELATION_FIELDS:
-            target = node.args[0] if node.args else None
+            target = _relation_target_arg(node)
             if _field_target_is_objectdb(target, self.aliases) and not self._suppressed(node):
                 self.errors.append((node.lineno, node.col_offset, f"{name} target"))
         self.generic_visit(node)

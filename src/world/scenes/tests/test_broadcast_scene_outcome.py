@@ -61,11 +61,11 @@ class RenderChallengeOutcomeNarrationTests(SimpleTestCase):
 
 class BroadcastSceneOutcomeTests(TestCase):
     def setUp(self):
-        from evennia_extensions.factories import ObjectDBFactory
+        from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         self.rnd = SceneRoundFactory(
-            room=self.room.room_profile,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             start_reason=SceneRoundStartReason.OPT_IN,
         )

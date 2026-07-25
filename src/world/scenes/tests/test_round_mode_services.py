@@ -137,7 +137,7 @@ class SetSceneRoundModeTests(TestCase):
 
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         rnd = SceneRoundFactory(
-            room=room.room_profile,
+            room=RoomProfileFactory(objectdb=room),
             status=RoundStatus.DECLARING,
             round_number=1,
             mode=SceneRoundMode.STRICT,
@@ -179,13 +179,13 @@ class ActiveRoundForRoomTests(TestCase):
 
     def test_active_round_for_room_returns_active_round(self):
         rnd = SceneRound.objects.create(
-            room=self.room.room_profile, start_reason=SceneRoundStartReason.OPT_IN
+            room=RoomProfileFactory(objectdb=self.room), start_reason=SceneRoundStartReason.OPT_IN
         )
         self.assertEqual(active_round_for_room(self.room), rnd)
 
     def test_active_round_for_room_none_when_only_completed(self):
         SceneRound.objects.create(
-            room=self.room.room_profile,
+            room=RoomProfileFactory(objectdb=self.room),
             start_reason=SceneRoundStartReason.OPT_IN,
             status=RoundStatus.COMPLETED,
         )

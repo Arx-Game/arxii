@@ -31,7 +31,9 @@ def is_dream_engaged(character_sheet: CharacterSheet | None) -> bool:
         return False
     from world.scenes.models import SceneRound  # noqa: PLC0415
 
+    # SceneRound.room is a RoomProfile (#2608), which shares ObjectDB's pk — so
+    # the dream room's own pk is the profile id, no lookup needed.
     return SceneRound.objects.filter(
-        room=dream_room,
+        room_id=dream_room.pk,
         status__in=["DECLARING", "RESOLVING"],
     ).exists()

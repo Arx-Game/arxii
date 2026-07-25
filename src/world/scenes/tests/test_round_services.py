@@ -81,11 +81,11 @@ class SceneRoundServiceTests(TestCase):
     def test_danger_round_ends_when_no_bleedout_remains(self):
         # Under #1466, a danger round is STRICT and auto-ends inside resolve_scene_round
         # once no ACTIVE participant carries an acute danger condition.
-        from evennia_extensions.factories import ObjectDBFactory
+        from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         rnd = SceneRoundFactory(
-            room=room.room_profile,
+            room=RoomProfileFactory(objectdb=room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.DANGER,
@@ -105,7 +105,7 @@ class SceneRoundServiceTests(TestCase):
 
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         rnd = SceneRoundFactory(
-            room=room.room_profile,
+            room=RoomProfileFactory(objectdb=room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.DANGER,
@@ -130,7 +130,7 @@ class SceneRoundResolutionTests(TestCase):
 
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         self.rnd = SceneRoundFactory(
-            room=self.room.room_profile,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,
@@ -512,7 +512,7 @@ class SceneRoundAbandonmentTests(TestCase):
 
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         self.rnd = SceneRoundFactory(
-            room=self.room.room_profile,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             mode=SceneRoundMode.STRICT,
@@ -758,7 +758,7 @@ class SceneRoundOutcomeBroadcastTests(TestCase):
 
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         self.rnd = SceneRoundFactory(
-            room=self.room.room_profile,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,

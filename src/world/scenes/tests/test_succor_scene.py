@@ -73,13 +73,13 @@ class ResolveSceneRoundWithPendingSuccorTests(TestCase):
         """Same as above but through the production quorum-gated entry point — both
         participants are placed in the room and declare, so scene_round_is_complete's
         presence-gated quorum is genuinely met and resolution actually fires."""
-        from evennia_extensions.factories import ObjectDBFactory
+        from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.scenes.round_services import maybe_resolve_scene_round
 
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         scene_round = SceneRoundFactory(
-            room=room.room_profile,
+            room=RoomProfileFactory(objectdb=room),
             status=RoundStatus.DECLARING,
             round_number=1,
             mode=SceneRoundMode.STRICT,

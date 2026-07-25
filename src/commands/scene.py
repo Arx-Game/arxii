@@ -208,7 +208,7 @@ class CmdScene(ArxCommand):
             return
 
         rnd = SceneRound.objects.filter(
-            room=room,
+            room_id=room.pk,
             status__in=ACTIVE_SCENE_ROUND_STATUSES,
         ).first()
 

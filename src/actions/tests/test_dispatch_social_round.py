@@ -110,7 +110,7 @@ class TestSocialRoundAutoResolvesOnLastDeclaration(TestCase):
         # Build Evennia objects per-test in setUp (NOT setUpTestData): class-level Evennia
         # objects carry a DbHolder that Django's setUpTestData deep-copy cannot handle,
         # which surfaces only under CI's larger shard runs (idmapper contamination).
-        from evennia_extensions.factories import ObjectDBFactory
+        from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 
         self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
 
@@ -125,7 +125,7 @@ class TestSocialRoundAutoResolvesOnLastDeclaration(TestCase):
 
         # STRICT (social) round in DECLARING; both participants ACTIVE and present.
         self.scene_round = SceneRoundFactory(
-            room=self.room.room_profile,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,

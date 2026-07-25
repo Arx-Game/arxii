@@ -101,7 +101,9 @@ class SceneRoomCloseTests(TestCase):
         _run(CmdSceneRoom, "Trap Room = A snare.", gm)
         instance = InstancedRoom.objects.get(room__db_key="Trap Room")
         StoryRoomGrantFactory(
-            room=instance.room.room_profile, character=player.sheet_data, granted_by=profile
+            room=RoomProfileFactory(objectdb=instance.room),
+            character=player.sheet_data,
+            granted_by=profile,
         )
 
         join_msgs = _run(CmdJoinRoom, str(instance.room_id), player)

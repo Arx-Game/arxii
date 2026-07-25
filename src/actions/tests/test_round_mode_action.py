@@ -5,7 +5,12 @@ from __future__ import annotations
 from django.test import TestCase
 
 from actions.definitions.rounds import SetRoundModeAction, StartRoundAction
-from evennia_extensions.factories import CharacterFactory, GMCharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import (
+    CharacterFactory,
+    GMCharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus, SceneRoundMode, SceneRoundStartReason
@@ -38,7 +43,7 @@ def _make_room():
 
 def _make_active_round(room, mode=SceneRoundMode.POSE_ORDER, scene=None):
     rnd = SceneRound.objects.create(
-        room=room,
+        room=RoomProfileFactory(objectdb=room),
         status=RoundStatus.DECLARING,
         round_number=1,
         start_reason=SceneRoundStartReason.OPT_IN,
@@ -153,7 +158,7 @@ class SetRoundModeActionRefusalTests(TestCase):
         scene = SceneFactory(location=room, is_active=True)
         SceneOwnerParticipationFactory(scene=scene, account=account)
         rnd = SceneRound.objects.create(
-            room=room,
+            room=RoomProfileFactory(objectdb=room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.DANGER,

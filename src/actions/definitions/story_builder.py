@@ -685,7 +685,8 @@ class SpinUpSceneRoomAction(_StoryBuilderAction):
         return ActionResult(
             success=True,
             message=(
-                f"{instance.room.db_key} spun up (#{instance.room.pk}) — grant characters access."
+                f"{instance.room.objectdb.db_key} spun up (#{instance.room.pk})"
+                " — grant characters access."
             ),
         )
 

@@ -562,7 +562,7 @@ class GrantStoryRoomAccessActionTests(TestCase):
         )
         assert result.success, result.message
         assert StoryRoomGrant.objects.filter(
-            room=instance.room.room_profile, character=self.target.sheet_data
+            room=RoomProfileFactory(objectdb=instance.room), character=self.target.sheet_data
         ).exists()
 
     def test_grant_on_foreign_gm_room_fails(self) -> None:

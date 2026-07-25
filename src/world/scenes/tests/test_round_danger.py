@@ -55,7 +55,7 @@ class DangerRoundTests(TestCase):
         from world.scenes.factories import SceneRoundFactory
 
         social = SceneRoundFactory(
-            room=self.room.room_profile,
+            room=RoomProfileFactory(objectdb=self.room),
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,

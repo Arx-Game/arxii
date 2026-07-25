@@ -438,6 +438,16 @@ class StoryRoomGrant(SharedMemoryModel):
             UniqueConstraint(fields=["room", "character"], name="unique_story_room_grant"),
         ]
 
+    # The Room-typeclass `clean()` this model used to carry is gone (#2608): a
+    # RoomProfile only exists for Rooms, so the FK type enforces it structurally.
+    # `save()` keeps calling full_clean() — it predates that guard and also runs
+    # field validation / surfaces uniqueness as ValidationError, which callers
+    # still rely on.
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """full_clean() on save so direct ORM writes stay validated."""
+        self.full_clean()
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return f"StoryRoomGrant({self.character}, room={self.room_id})"
 
