@@ -35,8 +35,14 @@ def resolve_target_difficulty(
     """Compute the target's resistance as a point total for target_difficulty.
 
     Uses compute_check_rating to get the target's raw points if
-    resistance_check_type is set. Falls back to a fixed value for synthetic
-    NPCs or mission contexts.
+    resistance_check_type is set. fallback_difficulty is authored as a floor,
+    not just a substitute for a missing resistance_check_type: since #2707,
+    compute_check_rating always returns at least LEVEL_POINTS_PER_LEVEL (level
+    floors at 1, and nothing on this path goes negative), so a statless
+    synthetic NPC no longer reads as 0 -- the authored floor still has to win
+    against that guaranteed level contribution, or content tuned before #2707
+    (e.g. a ConditionOnCheckConfig authored with target_difficulty=60 for
+    statless NPCs) silently resists at 5 instead of 60.
 
     #2707: this used to call perform_check with target_difficulty=0 and read
     total_points, which rolls a die whose outcome is discarded and — worse —
@@ -44,17 +50,16 @@ def resolve_target_difficulty(
     side effect. compute_check_rating computes the same pre-roll point total
     with no roll at all.
     """
+    total_points = 0
     if resistance_check_type is not None:
         try:
             from world.checks.services import compute_check_rating  # noqa: PLC0415
 
             total_points = compute_check_rating(target, resistance_check_type)
-            if total_points > 0:
-                return total_points
         except (AttributeError, TypeError):
             pass  # Target has no traits -- fall through to fallback
 
-    return fallback_difficulty or 0
+    return max(total_points, fallback_difficulty or 0)
 
 
 def apply_immunity_on_fail(

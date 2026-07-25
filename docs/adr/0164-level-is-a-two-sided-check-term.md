@@ -47,7 +47,10 @@ Two callers build opposed-check difficulty on top of it:
   sheet) contributes level alone.
 - `compute_resist_increment(defender_character, resist_effort_level)` — the **active**
   half: the defender's full `compute_check_rating` on the Composure `CheckType` (trait,
-  specialization, aspect, capability, and perk points) plus the effort-level modifier,
+  specialization, aspect, and capability points — NOT perk points; `compute_check_rating`
+  takes no `situation_ctx`, so `_situational_perk_check_bonus` short-circuits to 0 before
+  firing, deliberately, since it has the side effect of announcing perk firings and a
+  difficulty computation must never announce anything) plus the effort-level modifier,
   clamped to >= 0.
 
 **The two opposing-side helpers are mutually exclusive — a call site uses one or the

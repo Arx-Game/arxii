@@ -7,6 +7,7 @@ for the whole life of the project because nothing asserted direction.
 
 from django.test import TestCase
 
+from world.checks.services import chart_has_success_outcomes
 from world.seeds.checks import seed_check_resolution_tables
 from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
 
@@ -79,3 +80,19 @@ class ChartDirectionTests(TestCase):
         self.assertLess(success_share(-5), success_share(-2))
         # Never a dead end: a hopeless matchup still produces a non-failure outcome.
         self.assertGreater(100 - failure_share(-5), 0)
+
+    def test_hopeless_matchup_is_not_reported_impossible(self):
+        """A hopeless matchup must still be offered as an available action (#2707 review).
+
+        chart_has_success_outcomes(rank_difference) feeds
+        world.mechanics.services._get_difficulty_indicator_for_check, which maps False to
+        DifficultyIndicator.IMPOSSIBLE -- and both approach-listing call sites drop the
+        approach from the player's available-actions list entirely when that indicator
+        comes back. Every rank_difference <= -5 snaps to the HOPELESS chart (the most
+        extreme charts, -6 and -5, share one chart via get_chart_for_difference's
+        closest-match fallback), so the deepest gap in the ladder must still carry a
+        success_level > 0 outcome -- chipping, never vanishing from the list.
+        """
+        for rank_difference in (-5, -6, -50):
+            with self.subTest(rank_difference=rank_difference):
+                self.assertTrue(chart_has_success_outcomes(rank_difference))

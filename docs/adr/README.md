@@ -77,6 +77,7 @@ treat those names as hints to confirm, not gospel.
 - [0098 — Houses are Organizations with kinship recognition](0098-houses-are-organizations-with-kinship-recognition.md)
 - [0101 — House aspects are catalog-only](0101-house-aspects-are-catalog-only.md)
 - [0107 — Solo darkness, not locked doors](0107-solo-darkness-not-locked-doors.md)
+- [0163 — Natural-key lookups are case-insensitive; a tuple→pk index removes the repeat query; whole-table warming is opt-in per model](0163-case-insensitive-natural-keys-and-opt-in-lookup-tables.md) (#2687; relates to ADR-0008)
 
 ### Resolution
 - [0019 — Unified resolution: one roll path, data-sourced difficulty, graded outcomes](0019-unified-resolution-one-roll-path.md)

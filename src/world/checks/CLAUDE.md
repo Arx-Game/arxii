@@ -74,7 +74,10 @@ exclusive** — a call site uses one or the other, never both:
 
 - `compute_resist_increment(defender_character, resist_effort_level) -> int` — the
   ACTIVE half: the defender's FULL `compute_check_rating` on the Composure `CheckType`
-  (trait, specialization, aspect, capability, and perk points) plus the effort-level
+  (trait, specialization, aspect, and capability points — NOT perk points; no
+  `situation_ctx` is threaded through, so `_situational_perk_check_bonus` short-circuits
+  before firing, deliberately, since it has the side effect of announcing perk firings
+  and a difficulty computation must never announce anything) plus the effort-level
   modifier, clamped >= 0. Already contains the defender's level points internally.
 - `level_opposition(check_type, *, level, character=None) -> int` — the PASSIVE half:
   `LEVEL_POINTS_PER_LEVEL * level` always, plus (when `character` is given) the acting

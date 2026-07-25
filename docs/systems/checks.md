@@ -138,8 +138,10 @@ from world.checks.services import compute_resist_increment, level_opposition
 
 # ACTIVE: the defender spends a defence check of their own (e.g. Composure).
 # Routes through compute_check_rating, so it carries the defender's full
-# rating — trait, specialization, aspect, capability, and perk points —
-# plus the effort-level modifier. Clamped >= 0.
+# rating — trait, specialization, aspect, and capability points (NOT perk
+# points: compute_check_rating takes no situation_ctx, so
+# _situational_perk_check_bonus short-circuits to 0 rather than firing its
+# announcement side effect) — plus the effort-level modifier. Clamped >= 0.
 increment = compute_resist_increment(defender_character, resist_effort_level="high")
 
 # PASSIVE: the defender contributes nothing beyond existing. LEVEL_POINTS_PER_LEVEL

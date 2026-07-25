@@ -139,8 +139,18 @@ class OpposedDifficultyTests(TestCase):
         rich = compute_resist_increment(self.decorated_defender, "medium")
         self.assertGreater(rich, bare)
 
-    def test_level_is_counted_exactly_once(self):
-        """The passive and active helpers are exclusive -- no call site uses both."""
+    def test_resist_increment_is_exactly_rating_plus_effort(self):
+        """compute_resist_increment adds no term beyond the Composure rating + effort.
+
+        Pins the exact composition rather than restating the implementation: the
+        active-half result must equal compute_check_rating(defender, Composure) plus
+        the effort-level modifier, clamped to >= 0, with nothing else folded in. This
+        is what makes compute_resist_increment and level_opposition mutually
+        exclusive (#2707, ADR-0164) -- if compute_resist_increment carried an extra
+        term beyond the rating, a call site combining it with level_opposition
+        wouldn't obviously double-count the defender's level, since the rating
+        already contains it.
+        """
         active = compute_resist_increment(self.plain_defender, "medium")
         rating = compute_check_rating(self.plain_defender, self.composure_check_type)
         self.assertEqual(active, max(0, rating + EFFORT_CHECK_MODIFIER["medium"]))

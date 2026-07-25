@@ -103,9 +103,16 @@ _DIRE_BANDS: tuple[tuple[str, int, int], ...] = (
     (_OUTCOME_PARTIAL_SUCCESS, 56, 98),
     ("Success", 99, 100),
 )
+# A one-in-a-hundred Success keeps this chart out of chart_has_success_outcomes'
+# IMPOSSIBLE bucket (#2707 review): with an all-Failure/Partial-Success chart here,
+# world.mechanics.services reported DifficultyIndicator.IMPOSSIBLE for any rank
+# difference <= -5, and both approach-listing call sites (services.py:1408/:1657)
+# then dropped the action from the player's available-actions list entirely —
+# the exact inverse of "chip, not whiff, and still be offered" above.
 _HOPELESS_BANDS: tuple[tuple[str, int, int], ...] = (
     ("Failure", 1, 45),
-    (_OUTCOME_PARTIAL_SUCCESS, 46, 100),
+    (_OUTCOME_PARTIAL_SUCCESS, 46, 99),
+    ("Success", 100, 100),
 )
 # Mirror bands for a roller far ABOVE the difficulty.
 _DOMINANT_BANDS: tuple[tuple[str, int, int], ...] = (

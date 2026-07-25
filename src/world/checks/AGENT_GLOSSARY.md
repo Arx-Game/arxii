@@ -51,10 +51,13 @@ function specifically)
 **Resist increment** (#2707, ADR-0164 — updated: now a full rating, not trait points):
 The ACTIVE half of an opposed check's difficulty, via `compute_resist_increment
 (defender_character, resist_effort_level)`: the defender's full pre-roll rating on the
-Composure `CheckType` (trait, specialization, aspect, capability, and perk points — the
-same breakdown `perform_check` uses, via `compute_check_rating`) plus the effort-level
-modifier, clamped >= 0. Before #2707 this summed only weighted Composure trait points,
-silently dropping specialization/aspect/capability/perk points and the defender's level.
+Composure `CheckType` (trait, specialization, aspect, and capability points, via
+`compute_check_rating` — NOT perk points, since `compute_check_rating` takes no
+`situation_ctx` and `_situational_perk_check_bonus` short-circuits to 0 without one,
+deliberately, to avoid the side-effect perk-firing announcement a difficulty
+computation must never trigger) plus the effort-level modifier, clamped >= 0. Before
+#2707 this summed only weighted Composure trait points, silently dropping
+specialization/aspect/capability points and the defender's level.
 Used when the defender IS actively resisting with a check of their own (e.g. a social
 action). Deliberately exclusive with level opposition (above).
 _Avoid_: resistance rating (use "resist increment" for this specific helper's return

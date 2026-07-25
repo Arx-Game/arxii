@@ -825,10 +825,15 @@ def compute_resist_increment(defender_character: "ObjectDB", resist_effort_level
     """Compute how much a defender's active resistance raises difficulty.
 
     Resolves the Composure CheckType by name (category-agnostic) and returns the
-    defender's FULL pre-roll rating on it (trait, specialization, aspect, capability,
-    and perk points — the same breakdown ``perform_check`` uses) plus the effort-level
-    modifier. Result is clamped to ≥ 0 — resistance never lowers the attacker's
-    difficulty.
+    defender's FULL pre-roll rating on it (trait, specialization, aspect, and
+    capability points) plus the effort-level modifier. Result is clamped to ≥ 0 —
+    resistance never lowers the attacker's difficulty.
+
+    Perk points remain 0 here: this function has no ``situation_ctx`` parameter, so
+    ``_situational_perk_check_bonus`` short-circuits before firing — deliberately,
+    since it has the side effect of announcing perk firings, and a difficulty
+    computation must never announce anything (mirrors
+    :func:`preview_check_difficulty`'s docstring below).
 
     #2707 gap 1: this used to sum only weighted Composure trait points, silently
     dropping specialization, aspect, capability, and perk points that a defender's
