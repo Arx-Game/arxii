@@ -56,6 +56,79 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
+#: Per-model natural-key index: casefolded natural-key tuple -> pk.
+#:
+#: Keyed by the model's ``__dbclass__`` (Evennia stores the identity map there so
+#: proxies share one cache), so a proxy and its concrete model share an index.
+#: A module-level registry rather than a class attribute, so an index can never be
+#: silently inherited by a sibling model.
+#:
+#: Stores pks rather than instances deliberately (#2687): the index can then never
+#: retain an instance or grow beyond what the identity map already holds, instance
+#: freshness stays the identity map's concern, and a deleted row self-heals because
+#: ``get(pk=N)`` raises ``DoesNotExist``.
+_NK_PK_INDEX: dict[type, dict[tuple, int]] = {}
+
+#: Models whose whole table has been warmed (``NaturalKeyConfig.lookup_table``).
+_NK_WARMED: set[type] = set()
+
+
+def index_owner(model: type) -> type:
+    """Return the class that owns *model*'s natural-key index.
+
+    ``SharedMemoryModel`` subclasses share one identity map per ``__dbclass__``;
+    mirror that here. Models using ``NaturalKeyManager`` without being a
+    ``SharedMemoryModel`` have no ``__dbclass__`` and own their index directly.
+    """
+    # Suppression justified: duck-typed check for Evennia's idmapper attribute.
+    return getattr(model, "__dbclass__", model)  # noqa: GETATTR_LITERAL
+
+
+def natural_key_index(model: type) -> dict[tuple, int]:
+    """Return (creating if needed) the natural-key -> pk index for *model*."""
+    return _NK_PK_INDEX.setdefault(index_owner(model), {})
+
+
+def _index_key(values: Any) -> tuple[Any, ...]:
+    """Normalize a natural-key value sequence into a hashable, caseless key.
+
+    Two normalizations, both required:
+
+    * nested lists -> tuples. Self-referential FK natural keys nest their value
+      as a list (``("Wolf", ["Mammals", ["Creatures", None]])``), and lists are
+      unhashable.
+    * ``str`` -> ``str.casefold()``. Natural-key lookups are case-insensitive
+      (#2687): there is no case in which a natural key should match
+      case-sensitively. ``casefold()`` rather than ``lower()`` — it is the
+      correct operation for caseless matching.
+
+    Every key entering or querying the index goes through this one function, so
+    the stored and queried spellings can never diverge.
+    """
+    normalized: list[Any] = []
+    for value in values:
+        if isinstance(value, str):
+            normalized.append(value.casefold())
+        elif isinstance(value, (list, tuple)):
+            normalized.append(_index_key(value))
+        else:
+            normalized.append(value)
+    return tuple(normalized)
+
+
+def flush_natural_key_indexes() -> None:
+    """Clear every natural-key index and warm flag.
+
+    Called between tests (see ``core.testing``). Tests roll the database back but
+    leave this process-level index intact, so a pk recycled across a rollback
+    would otherwise resolve to the wrong row — and the ``DoesNotExist`` self-heal
+    does NOT catch that, because the pk is live, just wrong.
+    """
+    for index in _NK_PK_INDEX.values():
+        index.clear()
+    _NK_WARMED.clear()
+
+
 class NaturalKeyConfigError(ValueError):
     """Raised when NaturalKeyConfig is missing or invalid."""
 
