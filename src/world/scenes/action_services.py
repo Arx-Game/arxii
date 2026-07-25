@@ -889,6 +889,18 @@ def _resolve_action_against_persona(
     )
     check_modifiers += fatigue_penalty
     if action_request.technique is not None:
+        # Fold condition / rollmod / scene / equipment / fashion modifiers into
+        # the technique branch's check roll through the shared seam — the plain
+        # branch already does this at line 930. Without this, conditions are
+        # structurally invisible to technique-enhanced social actions (#2697).
+        tech_check_type = action_template.check_type
+        technique_check_modifiers = 0
+        if tech_check_type is not None:
+            technique_check_modifiers = collect_check_modifiers(
+                action_request.initiator_persona.character_sheet,
+                tech_check_type,
+                scene=action_request.scene,
+            ).total
         result = _resolve_enhanced_action(
             character=character,
             technique=action_request.technique,
@@ -896,7 +908,7 @@ def _resolve_action_against_persona(
             action_key=action_request.action_key,
             difficulty=difficulty,
             context=context,
-            effort_modifier=check_modifiers,
+            effort_modifier=check_modifiers + technique_check_modifiers,
             strain_commitment=action_request.strain_commitment,
             fury_commitment=action_request.fury_commitment,
             fury_anchor=action_request.fury_anchor,
