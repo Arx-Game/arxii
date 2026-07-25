@@ -39,11 +39,43 @@ class ChartDirectionTests(TestCase):
     def test_success_odds_are_monotonic_in_roller_strength(self):
         """Holding difficulty fixed, more points must never mean fewer successes."""
         shares = [
-            _success_share(roller_points=pts, target_difficulty=25) for pts in (0, 10, 25, 50)
+            _success_share(roller_points=pts, target_difficulty=25)
+            for pts in (0, 10, 25, 50, 80, 115, 155)
         ]
         self.assertEqual(shares, sorted(shares))
 
     def test_success_odds_are_monotonic_in_difficulty(self):
         """Holding the roller fixed, a harder target must never mean more successes."""
-        shares = [_success_share(roller_points=50, target_difficulty=d) for d in (0, 10, 25, 50)]
+        shares = [
+            _success_share(roller_points=50, target_difficulty=d)
+            for d in (0, 10, 25, 50, 80, 115, 155)
+        ]
         self.assertEqual(shares, sorted(shares, reverse=True))
+
+    def test_deep_gap_degrades_effect_without_increasing_failure(self):
+        """Past a two-rung gap, the failure share must stop growing (#2707).
+
+        A party attacking something far above its level should chip away, not
+        whiff for ten rounds. What degrades with depth is what you accomplish.
+        """
+        seed_check_resolution_tables()
+        ResultChart.clear_cache()
+
+        def failure_share(rank_difference: int) -> int:
+            chart = ResultChart.get_chart_for_difference(rank_difference)
+            rows = ResultChartOutcome.objects.filter(chart=chart).select_related("outcome")
+            return sum(
+                row.max_roll - row.min_roll + 1 for row in rows if row.outcome.success_level < 0
+            )
+
+        def success_share(rank_difference: int) -> int:
+            chart = ResultChart.get_chart_for_difference(rank_difference)
+            rows = ResultChartOutcome.objects.filter(chart=chart).select_related("outcome")
+            return sum(
+                row.max_roll - row.min_roll + 1 for row in rows if row.outcome.success_level > 0
+            )
+
+        self.assertLess(failure_share(-5), failure_share(-2))
+        self.assertLess(success_share(-5), success_share(-2))
+        # Never a dead end: a hopeless matchup still produces a non-failure outcome.
+        self.assertGreater(100 - failure_share(-5), 0)

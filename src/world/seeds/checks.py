@@ -40,13 +40,21 @@ _CONVERSION_RANGES: tuple[tuple[str, int, int, int], ...] = (
 )
 
 # --- Rank ladder (point thresholds -> rank) ---
-# Initial sane defaults, aligned with the checks service tests (PerformCheckTests
-# uses min_points 10/25/50).
+# Ranks 0-3 are the original defaults (aligned with PerformCheckTests). Ranks 4-8
+# were added with #2707: level contributes LEVEL_POINTS_PER_LEVEL points per level,
+# so a level-30 character carries 150 points from level alone and would otherwise
+# sit pinned at the old top rung from level 10 onward, making level stop mattering
+# exactly where the power fantasy needs it most.
 _CHECK_RANKS: tuple[tuple[int, int, str], ...] = (
     (0, 0, "Incompetent"),
     (1, 10, "Novice"),
     (2, 25, "Competent"),
     (3, 50, "Expert"),
+    (4, 80, "Master"),
+    (5, 115, "Grandmaster"),
+    (6, 155, "Peerless"),
+    (7, 200, "Legendary"),
+    (8, 250, "Mythic"),
 )
 
 # CheckOutcome tier name constants — referenced in both _OUTCOMES and the band tuples.
@@ -84,12 +92,45 @@ _HARD_BANDS: tuple[tuple[str, int, int], ...] = (
     (_OUTCOME_PARTIAL_SUCCESS, 71, 85),
     ("Success", 86, 100),
 )
+
+# Deep-gap bands (#2707). Design intent, stated because the numbers alone don't
+# show it: past a two-rung gap the FAILURE share stops growing — what degrades is
+# what you ACCOMPLISH. A party attacking something far above its level chips away
+# (Partial Success) instead of whiffing round after round; the chip-damage value
+# itself is an authored DamageSuccessLevelMultiplier row, not code.
+_DIRE_BANDS: tuple[tuple[str, int, int], ...] = (
+    ("Failure", 1, 55),
+    (_OUTCOME_PARTIAL_SUCCESS, 56, 98),
+    ("Success", 99, 100),
+)
+_HOPELESS_BANDS: tuple[tuple[str, int, int], ...] = (
+    ("Failure", 1, 45),
+    (_OUTCOME_PARTIAL_SUCCESS, 46, 100),
+)
+# Mirror bands for a roller far ABOVE the difficulty.
+_DOMINANT_BANDS: tuple[tuple[str, int, int], ...] = (
+    ("Failure", 1, 5),
+    ("Success", 6, 55),
+    ("Critical Success", 56, 100),
+)
+_OVERWHELMING_BANDS: tuple[tuple[str, int, int], ...] = (
+    ("Success", 1, 30),
+    ("Critical Success", 31, 100),
+)
 _CHARTS: tuple[tuple[int, tuple[tuple[str, int, int], ...]], ...] = (
+    (-6, _HOPELESS_BANDS),
+    (-5, _HOPELESS_BANDS),
+    (-4, _DIRE_BANDS),
+    (-3, _DIRE_BANDS),
     (-2, _HARD_BANDS),
     (-1, _HARD_BANDS),
     (0, _EVEN_BANDS),
     (1, _EASY_BANDS),
     (2, _EASY_BANDS),
+    (3, _DOMINANT_BANDS),
+    (4, _DOMINANT_BANDS),
+    (5, _OVERWHELMING_BANDS),
+    (6, _OVERWHELMING_BANDS),
 )
 
 
