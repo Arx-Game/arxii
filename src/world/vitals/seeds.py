@@ -83,8 +83,14 @@ _DREAM_ROOM_DESC = (
 
 
 def ensure_foundational_capabilities() -> None:
-    """Ensure the foundational CapabilityType rows exist at the capability
-    ladder's unimpaired-mortal anchor (5, ADR-0164).
+    """Ensure the foundational CapabilityType rows exist.
+
+    A newly created row is seeded at the capability ladder's unimpaired-mortal
+    anchor (5, ADR-0164). This does NOT guarantee every row sits at 5: a
+    pre-existing row is only ever raised, and only when it is below 1 (to 1,
+    not to 5) — a row seeded before this change, sitting anywhere in 1-4, is
+    left untouched. The guard is a safety net against a zero baseline
+    incapacitating everyone, not a normalizer to the ladder anchor.
 
     ``can_act`` treats a missing awareness CapabilityType as "capability
     system unseeded" and returns True for everyone — so this row is what

@@ -7,15 +7,15 @@ they were one: `CapabilityType.innate_baseline` sat at 0–1, the 739 authored
 to the same result regardless of how negative it was. `Hastened +50` on a baseline-1
 `movement` produced an effective value of 51, which `world/battles/resolution.py:935`
 reads directly as grid squares of movement per round — an artifact of the scale
-mismatch, not an authored design. We decided a single ladder: 0 blocked, 1-3 impaired,
-5 unimpaired mortal, 8-12 gifted, 25+ greater supernatural, 100+ mythic, deliberately
-uncapped above — because a high enough value must let a being do what is flatly
-impossible for a mortal, and an upper cap would foreclose that on principle.
-**Blocking is emergent arithmetic, never a flag**: a block is just a negative sized to
-beat the tier it must beat — mundane (`-20`, e.g. Grappled: stops mortal and gifted, a
+mismatch, not an authored design. We decided **(D1) a single ladder**: 0 blocked, 1-3
+impaired, 5 unimpaired mortal, 8-12 gifted, 25+ greater supernatural, 100+ mythic,
+deliberately uncapped above — because a high enough value must let a being do what is
+flatly impossible for a mortal, and an upper cap would foreclose that on principle.
+**(D2) Blocking is emergent arithmetic, never a flag**: a block is just a negative sized
+to beat the tier it must beat — mundane (`-20`, e.g. Grappled: stops mortal and gifted, a
 greater supernatural walks out of it), potent (`-100`, e.g. Frozen/Unconscious: beats
 everything below mythic), and absolute (`-1000`, reserved for mythic-defeating effects).
-The check-roll contribution (`_capability_point_allocation`, ADR-0164/D3) scores
+**(D3)** The check-roll contribution (`_capability_point_allocation`, ADR-0164/D3) scores
 *deviation from `innate_baseline`* rather than the raw value, so an unimpaired character
 authored onto many check types contributes exactly 0 to all of them — a no-op for any
 capability whose baseline is 0, since raw value and deviation coincide there.
