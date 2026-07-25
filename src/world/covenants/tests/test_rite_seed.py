@@ -12,7 +12,7 @@ Verifies that:
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.conditions.constants import DurationType
 from world.conditions.models import ConditionModifierEffect
@@ -62,8 +62,13 @@ class CovenantRiteFactoryTests(TestCase):
         self.assertEqual(rite.covenant_type, CovenantType.DURANCE)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class WireCovenantRiteContentIdempotencyTests(TestCase):
-    """wire_covenant_rite_content() must be idempotent."""
+    """wire_covenant_rite_content() must be idempotent.
+
+    The backing "Renew the Oath" Ritual is content-repo-owned (#2698);
+    ``SEED_SAMPLE_CONTENT`` opts this suite into the sample-seeding path.
+    """
 
     def test_single_call_creates_ritual_and_rite(self) -> None:
         """One call produces exactly one Ritual and one CovenantRite."""
@@ -85,8 +90,13 @@ class WireCovenantRiteContentIdempotencyTests(TestCase):
         self.assertEqual(result.ritual.name, "Renew the Oath")
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class WireCovenantRiteContentPackagesTests(TestCase):
-    """Task 10: wire_covenant_rite_content seeds scaling default + role/level bands."""
+    """Task 10: wire_covenant_rite_content seeds scaling default + role/level bands.
+
+    The backing "Renew the Oath" Ritual is content-repo-owned (#2698);
+    ``SEED_SAMPLE_CONTENT`` opts this suite into the sample-seeding path.
+    """
 
     def test_default_package_has_scaling_modifier_effects(self) -> None:
         """granted_condition has ConditionModifierEffect rows, all scales_with_severity."""

@@ -21,7 +21,7 @@ used to live here (#2426 Task 7, ``seed_starter_gift_catalog()``) is retired
 ``load_world_content()``, not something ``seed_magic_dev()`` authors.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from integration_tests.game_content.magic import (
     MagicConfigResult,
@@ -39,6 +39,7 @@ from integration_tests.game_content.magic import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicConfigCreation(TestCase):
     """First-call assertions: correct rows exist with expected values."""
 
@@ -140,6 +141,7 @@ class TestSeedMagicConfigCreation(TestCase):
         self.assertEqual(self.result.mishap_pool_tier.pk, tier.pk)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicConfigIdempotency(TestCase):
     """Second-call assertions: row counts unchanged, same PKs returned."""
 
@@ -221,6 +223,7 @@ class TestSeedMagicConfigIdempotency(TestCase):
             )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicConfigPreservesEdits(TestCase):
     """Staff edits to existing rows survive a re-run (get_or_create semantics)."""
 
@@ -245,6 +248,7 @@ class TestSeedMagicConfigPreservesEdits(TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedCanonicalRituals(TestCase):
     """Task 1.2: seed_canonical_rituals() creates idempotent ritual rows."""
 
@@ -301,6 +305,7 @@ class TestSeedCanonicalRituals(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedThreadPullCatalogCreation(TestCase):
     """First-call assertions: correct rows exist with expected values."""
 
@@ -381,6 +386,7 @@ class TestSeedThreadPullCatalogCreation(TestCase):
         self.assertEqual(self.result.canonical_resonance.affinity.name, "Primal (Tideborne)")
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedThreadPullCatalogIdempotency(TestCase):
     """Second-call assertions: row counts unchanged, same PKs returned."""
 
@@ -452,6 +458,7 @@ class TestSeedThreadPullCatalogIdempotency(TestCase):
             )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedThreadPullCatalogPreservesEdits(TestCase):
     """Staff edits to ThreadPullEffect survive a re-run (get_or_create semantics)."""
 
@@ -483,6 +490,7 @@ class TestSeedThreadPullCatalogPreservesEdits(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicDevCheckTypeConvergence(TestCase):
     """TDD: guard for _make_magical_endurance_check_type() orphan bug.
 
@@ -517,6 +525,7 @@ class TestSeedMagicDevCheckTypeConvergence(TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicDevTechniqueIdempotency(TestCase):
     """TDD: guard for MagicContent.create_all() duplicate Technique bug.
 
@@ -561,6 +570,7 @@ class TestSeedMagicDevTechniqueIdempotency(TestCase):
                 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicDev(TestCase):
     """Verify the master orchestrator composes all Phase 1 seed helpers."""
 
@@ -720,6 +730,7 @@ class TestSeedMagicDev(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicDevSoulTetherContent(TestCase):
     """Soul Tether formation prerequisites exist after seed_magic_dev() alone.
 
@@ -825,6 +836,7 @@ class TestSeedMagicDevSoulTetherContent(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedCanonicalAffinitiesTests(TestCase):
     """Task 1.11: seed_canonical_affinities() creates idempotent Affinity rows."""
 
@@ -920,6 +932,7 @@ class SeedEndureHallowedGroundCheckTests(TestCase):
         self.assertEqual(ResultChartOutcome.objects.count(), rco_count_a)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedCanonicalResonancesTests(TestCase):
     """Task 1.12: seed_canonical_resonances() creates idempotent Celestial Resonance rows."""
 
@@ -1121,6 +1134,7 @@ class SeedHallowedAchievementBridgeTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedResonanceEnvironmentRoomsTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -1395,6 +1409,7 @@ class SeedHallowedThresholdStoryTests(TestCase):
         self.assertEqual(snapshot, post)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedStarterMagicStoryOrchestratorTests(TestCase):
     """Tests for seed_starter_magic_story() — Task 13g."""
 
@@ -1578,6 +1593,7 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         self.assertEqual(marker.description, "edited by orchestrator idempotency test")
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
     """Verify that seed_magic_dev() includes the magic-story slice content."""
 
@@ -1667,6 +1683,7 @@ _EXPECTED_INTERACTIONS: list[tuple[str, str, str, str, str, str]] = [
 ]
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedAffinityInteractionsTests(TestCase):
     """RC1: _seed_affinity_interactions() creates the 9 directed AffinityInteraction rows."""
 
@@ -1768,6 +1785,7 @@ class SeedResonanceEnvironmentConfigTests(TestCase):
         self.assertEqual(cfg.pk, 1)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedMagicDevMagicChecksTests(TestCase):
     """#709: seed_magic_dev includes the magical check content."""
 
@@ -1778,6 +1796,7 @@ class SeedMagicDevMagicChecksTests(TestCase):
         self.assertEqual(len(result.magic_checks.configs), 5)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicDevVariants(TestCase):
     """seed_magic_dev authors starter gift-technique variants (#1581)."""
 

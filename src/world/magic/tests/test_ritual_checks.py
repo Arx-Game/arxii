@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.magic.exceptions import RitualCheckConfigMissing
 from world.magic.services.ritual_checks import (
@@ -37,6 +37,7 @@ class PerformRitualCheckMissingConfigTests(TestCase):
             perform_ritual_check("This Ritual Does Not Exist", character)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PerformRitualCheckReturnShapeTests(TestCase):
     """perform_ritual_check returns RitualCheckRoll with the expected success_level."""
 

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
+import logging
 from typing import TYPE_CHECKING
 
 from world.magic.seeds_checks import MagicCheckContentResult
@@ -63,6 +64,8 @@ if TYPE_CHECKING:
     from world.mechanics.models import Property
     from world.relationships.models import RelationshipTrack
     from world.seeds.game_content.combat import FleeSeedResult, PenetrationContestResult
+
+logger = logging.getLogger(__name__)
 
 # Maps action_key → technique name (narrative, not mechanical)
 ACTION_TECHNIQUE_MAP: dict[str, str] = {
@@ -930,23 +933,30 @@ def _seed_resonance_environment_consequence_pools() -> None:
     )
 
     # --- Wire AffinityInteraction.consequence_pool for pair #4 and #7 ---
-    abyssal = Affinity.objects.get(name="Abyssal")
-    primal = Affinity.objects.get(name="Primal")
-    celestial = Affinity.objects.get(name="Celestial")
+    # Affinity is content-repo-owned (#2698); AffinityInteraction depends on
+    # it existing (seeded by _seed_affinity_interactions(), which itself
+    # skips a pairing whose Affinity is absent) — so both are resolved via
+    # filter().first() and this wiring step is skipped rather than raising
+    # when either canonical Affinity or its pairing isn't there.
+    abyssal = Affinity.objects.filter(name="Abyssal").first()
+    primal = Affinity.objects.filter(name="Primal").first()
+    celestial = Affinity.objects.filter(name="Celestial").first()
+    if abyssal is None or primal is None or celestial is None:
+        return
 
-    pair4 = AffinityInteraction.objects.get(
+    pair4 = AffinityInteraction.objects.filter(
         source_affinity=abyssal,
         environment_affinity=celestial,
-    )
-    if pair4.consequence_pool_id != abyssal_celestial_pool.pk:
+    ).first()
+    if pair4 is not None and pair4.consequence_pool_id != abyssal_celestial_pool.pk:
         pair4.consequence_pool = abyssal_celestial_pool
         pair4.save(update_fields=["consequence_pool"])
 
-    pair7 = AffinityInteraction.objects.get(
+    pair7 = AffinityInteraction.objects.filter(
         source_affinity=primal,
         environment_affinity=celestial,
-    )
-    if pair7.consequence_pool_id != primal_celestial_pool.pk:
+    ).first()
+    if pair7 is not None and pair7.consequence_pool_id != primal_celestial_pool.pk:
         pair7.consequence_pool = primal_celestial_pool
         pair7.save(update_fields=["consequence_pool"])
 
@@ -1078,11 +1088,17 @@ def _seed_resonance_alignment_boons() -> None:
         template_map[spec["band"]] = template
 
     # --- Fetch pair #5: Abyssal → Abyssal (ALIGNED) ---
-    abyssal = Affinity.objects.get(name="Abyssal")
-    pair5 = AffinityInteraction.objects.get(
+    # Affinity is content-repo-owned (#2698); skip the boon tiers rather than
+    # raising when the canonical Affinity or its self-pairing isn't there.
+    abyssal = Affinity.objects.filter(name="Abyssal").first()
+    if abyssal is None:
+        return
+    pair5 = AffinityInteraction.objects.filter(
         source_affinity=abyssal,
         environment_affinity=abyssal,
-    )
+    ).first()
+    if pair5 is None:
+        return
 
     # --- Seed two boon tiers with full_clean() guard before every save() ---
     # full_clean() is MANDATORY here: ResonanceAlignmentBoonTier.clean() validates
@@ -1292,8 +1308,12 @@ def _seed_resonance_environment_rooms() -> None:
     )
 
     # ----- Rooms with cascade resonance -----
-    light = Resonance.objects.get(name="Light")
-    dissolution = Resonance.objects.get(name="Dissolution")
+    # Resonance is content-repo-owned (#2698): skip cascade-room seeding
+    # rather than raising when either canonical Resonance isn't there.
+    light = Resonance.objects.filter(name="Light").first()
+    dissolution = Resonance.objects.filter(name="Dissolution").first()
+    if light is None or dissolution is None:
+        return
 
     room_specs: list[tuple[str, Resonance, int]] = [
         ("The Hallowed Threshold (Low)", light, _CELESTIAL_LOW_MAGNITUDE),
@@ -1496,14 +1516,18 @@ def _seed_hallowed_threshold_story() -> None:
 def seed_canonical_affinities() -> None:
     """Seed the 3 canonical magic Affinities (Celestial / Primal / Abyssal).
 
-    Idempotent. Re-running on a populated DB is a no-op for these rows.
-    Other magic content (resonances, room aura, etc.) can depend on these
-    existing — call this before any seed that references Affinity FKs.
+    Content-repo-owned (#2698): looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. Idempotent. Re-running on a populated DB is
+    a no-op for these rows. Other magic content (resonances, room aura, etc.)
+    depends on these existing — every consumer downstream of this (in this
+    module and elsewhere) is written to skip gracefully, never crash, when a
+    canonical Affinity is absent.
     """
     from world.magic.models.affinity import Affinity  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     for name in ("Celestial", "Primal", "Abyssal"):
-        Affinity.objects.get_or_create(name=name)
+        authored_or_sample(Affinity, {}, name=name)
 
 
 def seed_canonical_resonances() -> None:
@@ -1512,26 +1536,27 @@ def seed_canonical_resonances() -> None:
     Celestial: Light / Sanctity / Radiance
     Abyssal: Dissolution
 
-    Depends on seed_canonical_affinities(). Idempotent via get_or_create.
+    Content-repo-owned (#2698): looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. Depends on seed_canonical_affinities()
+    having run — skips a resonance group entirely when its Affinity is
+    absent (rather than raising), since that Affinity is itself
+    content-repo-owned and may not exist.
     The Celestial resonances are used by Hallowed Threshold room cascade rows.
     Dissolution (Abyssal) is used by the Resonant Sanctum room for the
     ALIGNED-pole amplification subtest (an Abyssal caster casting in an Abyssal
     resonance room gets the boon).
     """
     from world.magic.models.affinity import Affinity, Resonance  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    celestial = Affinity.objects.get(name="Celestial")
-    for name in ("Light", "Sanctity", "Radiance"):
-        Resonance.objects.get_or_create(
-            name=name,
-            defaults={"affinity": celestial},
-        )
+    celestial = Affinity.objects.filter(name="Celestial").first()
+    if celestial is not None:
+        for name in ("Light", "Sanctity", "Radiance"):
+            authored_or_sample(Resonance, {"affinity": celestial}, name=name)
 
-    abyssal = Affinity.objects.get(name="Abyssal")
-    Resonance.objects.get_or_create(
-        name="Dissolution",
-        defaults={"affinity": abyssal},
-    )
+    abyssal = Affinity.objects.filter(name="Abyssal").first()
+    if abyssal is not None:
+        authored_or_sample(Resonance, {"affinity": abyssal}, name="Dissolution")
 
 
 # Task RC1 — directed RPS affinity interaction matrix
@@ -1562,6 +1587,10 @@ def _seed_affinity_interactions() -> None:
     enforced even on pre-existing rows via an explicit set-after-get — this avoids the
     get_or_create "defaults dropped when the row already exists" gotcha, while leaving
     the genuinely-tunable fields untouched.
+
+    Affinity is content-repo-owned (#2698): a row missing from
+    ``affinity_cache`` (content repo doesn't author it, sample content off)
+    skips that pairing rather than raising ``KeyError``.
     """
     from decimal import Decimal  # noqa: PLC0415
 
@@ -1574,6 +1603,8 @@ def _seed_affinity_interactions() -> None:
     }
     for row in _AFFINITY_INTERACTION_ROWS:
         src_name, env_name, valence, kind, aggressor, mult_str, defiles = row
+        if src_name not in affinity_cache or env_name not in affinity_cache:
+            continue
         obj, created = AffinityInteraction.objects.get_or_create(
             source_affinity=affinity_cache[src_name],
             environment_affinity=affinity_cache[env_name],
@@ -1779,19 +1810,28 @@ def seed_magic_config() -> MagicConfigResult:
     corruption_config, _ = CorruptionConfig.objects.get_or_create(pk=1, defaults={})
 
     # --- IntensityTier reference rows ---
+    # Content-repo-owned (#2698): looked up rather than invented unless
+    # SEED_SAMPLE_CONTENT is on. A missing tier is simply absent from the
+    # returned dict — nothing downstream in the seeder chain asserts a
+    # specific tier exists.
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
     intensity_tiers: dict[str, IntensityTier] = {}
     for tier_name, threshold, control_mod in _INTENSITY_TIERS:
-        tier, _ = IntensityTier.objects.get_or_create(
-            name=tier_name,
-            defaults={
+        tier = authored_or_sample(
+            IntensityTier,
+            {
                 "threshold": threshold,
                 "control_modifier": control_mod,
                 "description": f"{tier_name} intensity level.",
             },
+            name=tier_name,
         )
+        if tier is None:
+            continue
         intensity_tiers[tier_name] = tier
 
-    major_tier = intensity_tiers["Major"]
+    major_tier = intensity_tiers.get("Major")
 
     # --- Soulfray condition + stages (needed for AudereThreshold.minimum_warp_stage) ---
     # SoulfrayContentFactory() is idempotent — uses get_or_create internally.
@@ -1803,16 +1843,22 @@ def seed_magic_config() -> MagicConfigResult:
     )
 
     # --- AudereThreshold (singleton, no get_or_create on factory) ---
-    audere_threshold, _ = AudereThreshold.objects.get_or_create(
-        pk=1,
-        defaults={
-            "minimum_intensity_tier": major_tier,
-            "minimum_warp_stage": ripping_stage,
-            "intensity_bonus": 20,
-            "anima_pool_bonus": 30,
-            "warp_multiplier": 2,
-        },
-    )
+    # Skipped when the "Major" IntensityTier (content-repo-owned, #2698) isn't
+    # available — check_audere_eligibility()'s own gate #1 already tolerates a
+    # missing AudereThreshold (Audere just stays inactive), so this degrades
+    # the same way a real deploy without the row authored would.
+    audere_threshold = None
+    if major_tier is not None:
+        audere_threshold, _ = AudereThreshold.objects.get_or_create(
+            pk=1,
+            defaults={
+                "minimum_intensity_tier": major_tier,
+                "minimum_warp_stage": ripping_stage,
+                "intensity_bonus": 20,
+                "anima_pool_bonus": 30,
+                "warp_multiplier": 2,
+            },
+        )
 
     # --- MishapPoolTier: one catch-all tier (min_deficit=1, max_deficit=None) ---
     mishap_pool, _ = ConsequencePool.objects.get_or_create(
@@ -1873,18 +1919,39 @@ def seed_canonical_rituals() -> RitualSeedResult:
       fresh DB (RitualOfTheDuranceFactory also lazy-creates the companion
       RitualLiturgy row via its post_generation hook).
 
+    Content-repo-owned (#2698): each Ritual is only invented (by calling its
+    factory, preserving side effects like the Durance's companion
+    RitualLiturgy post_generation hook) when it's already authored or
+    ``SEED_SAMPLE_CONTENT`` is on; otherwise it's skipped (logged, ``None``)
+    rather than fabricated.
+
     Returns:
-        RitualSeedResult dataclass with all three ritual instances.
+        RitualSeedResult dataclass with all three ritual instances (a field
+        is ``None`` when its content isn't authored and sample content is off).
     """
     from world.magic.factories import (  # noqa: PLC0415
         AtonementRitualFactory,
         ImbuingRitualFactory,
         RitualOfTheDuranceFactory,
     )
+    from world.magic.models import Ritual  # noqa: PLC0415
+    from world.seeds.sample_content import sample_content_enabled  # noqa: PLC0415
 
-    imbuing = ImbuingRitualFactory()
-    atonement = AtonementRitualFactory()
-    durance = RitualOfTheDuranceFactory()
+    def _authored_ritual_or_sample(factory_cls: type, name: str) -> Ritual | None:
+        if sample_content_enabled() or Ritual.objects.filter(name=name).exists():
+            return factory_cls()
+        logger.warning(
+            "Ritual matching %r is not in the content repo. Skipping. Author the "
+            "row in the content repo and re-press the Big Button, or set "
+            "ARXII_SEED_SAMPLE_CONTENT=1 to have the seeder invent a sample one "
+            "(see #2698).",
+            {"name": name},
+        )
+        return None
+
+    imbuing = _authored_ritual_or_sample(ImbuingRitualFactory, "Rite of Imbuing")
+    atonement = _authored_ritual_or_sample(AtonementRitualFactory, "Rite of Atonement")
+    durance = _authored_ritual_or_sample(RitualOfTheDuranceFactory, "Ritual of the Durance")
     return RitualSeedResult(
         rite_of_imbuing=imbuing,
         rite_of_atonement=atonement,
@@ -1945,17 +2012,21 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
         - VITAL_BONUS (tier=0, min_thread_level=0, vital_bonus_amount=10, MAX_HEALTH)
         - CAPABILITY_GRANT (tier=3, min_thread_level=5, capability=endurance)
 
+    The "Primal (Tideborne)" Affinity and "Tideborne" Resonance are
+    content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. When either is missing, the four
+    ThreadPullEffect rows (which need a real ``resonance`` FK) are skipped
+    and ``canonical_resonance`` is ``None`` on the returned result.
+
     Returns:
         ThreadPullCatalogResult dataclass with all created/fetched instances.
     """
     from world.conditions.models import CapabilityType  # noqa: PLC0415
     from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget  # noqa: PLC0415
-    from world.magic.factories import (  # noqa: PLC0415
-        AffinityFactory,
-        ResonanceFactory,
-        ThreadPullCostFactory,
-    )
+    from world.magic.factories import ThreadPullCostFactory  # noqa: PLC0415
+    from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.magic.models.threads import ThreadPullEffect  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # --- ThreadPullCost rows (universal defaults; target_kind=None) ---
     pull_costs: dict[int, ThreadPullCost] = {}
@@ -1981,9 +2052,13 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
         label="gift-imbue",
     )
 
-    # --- Canonical resonance (both factory calls use django_get_or_create on name) ---
-    affinity = AffinityFactory(name=_CATALOG_AFFINITY_NAME)
-    resonance = ResonanceFactory(name=_CATALOG_RESONANCE_NAME, affinity=affinity)
+    # --- Canonical resonance — content-repo-owned (#2698) ---
+    affinity = authored_or_sample(Affinity, {}, name=_CATALOG_AFFINITY_NAME)
+    resonance = None
+    if affinity is not None:
+        resonance = authored_or_sample(
+            Resonance, {"affinity": affinity}, name=_CATALOG_RESONANCE_NAME
+        )
 
     # --- CapabilityType for CAPABILITY_GRANT (get_or_create on name) ---
     capability, _ = CapabilityType.objects.get_or_create(
@@ -1993,7 +2068,14 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
 
     # --- ThreadPullEffect rows (natural key: target_kind, resonance, tier, min_thread_level) ---
     # Using direct ORM get_or_create per task spec to avoid non-idempotent factory calls.
+    # Skipped entirely when the catalog Resonance above isn't available.
     pull_effects: dict[str, ThreadPullEffect] = {}
+    if resonance is None:
+        return ThreadPullCatalogResult(
+            pull_costs=pull_costs,
+            canonical_resonance=None,
+            pull_effects=pull_effects,
+        )
 
     flat_bonus_effect, _ = ThreadPullEffect.objects.get_or_create(
         target_kind=TargetKind.TRAIT,
@@ -2223,6 +2305,13 @@ def ensure_portal_travel_content() -> None:
 
     Idempotent at every layer. Re-running on a populated DB preserves staff
     edits (never ``update_or_create``).
+
+    ``PortalAnchorKind``/``Affinity``/``Resonance``/``Gift``/
+    ``TechniqueStyle``/``EffectType``/``Technique`` are all content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. When the anchor kind, gift, style, or effect type is unavailable, the
+    Technique (and everything that hangs off it — the GiftUnlock, the starter
+    anchors) is skipped entirely.
     """
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
@@ -2243,55 +2332,69 @@ def ensure_portal_travel_content() -> None:
     )
     from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
     from world.seeds.character_creation import ensure_canonical_fallback_room  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # 1. Anchor kind.
-    mirror_kind, _ = PortalAnchorKind.objects.get_or_create(
-        name=_MIRROR_ANCHOR_KIND_NAME,
-        defaults={
+    mirror_kind = authored_or_sample(
+        PortalAnchorKind,
+        {
             "description": (
                 "A tall, silvered mirror — a threshold to every other mirror open on its network."
             ),
             "arrival_verb": "steps out of",
             "departure_verb": "steps into",
         },
+        name=_MIRROR_ANCHOR_KIND_NAME,
     )
 
     # 2. MINOR Gift + its own dedicated Resonance.
-    celestial, _ = Affinity.objects.get_or_create(name="Celestial")
-    reflection, _ = Resonance.objects.get_or_create(
-        name="Reflection",
-        defaults={
-            "description": "The resonance of thresholds and mirrored passage.",
-            "affinity": celestial,
-        },
+    celestial = authored_or_sample(
+        Affinity,
+        {"description": "The affinity of order, radiance, and the divine."},
+        name="Celestial",
     )
-    gift, _ = Gift.objects.get_or_create(
-        name=_MIRRORWALKING_GIFT_NAME,
-        defaults={
+    reflection = None
+    if celestial is not None:
+        reflection = authored_or_sample(
+            Resonance,
+            {
+                "description": "The resonance of thresholds and mirrored passage.",
+                "affinity": celestial,
+            },
+            name="Reflection",
+        )
+    gift = authored_or_sample(
+        Gift,
+        {
             "description": "Step through an open mirror here and out of its twin elsewhere.",
             "kind": GiftKind.MINOR,
         },
+        name=_MIRRORWALKING_GIFT_NAME,
     )
-    gift.resonances.add(reflection)  # idempotent M2M add
+    if gift is not None and reflection is not None:
+        gift.resonances.add(reflection)  # idempotent M2M add
 
     # 3. Technique — reuse the existing movement-fitting style + EffectType.
-    style, _ = TechniqueStyle.objects.get_or_create(
+    style = authored_or_sample(
+        TechniqueStyle,
+        {"description": "A magical style for space-bending techniques."},
         name=TRANSLOCATION_STANCE_STYLE_NAME,
-        defaults={"description": "A magical style for space-bending techniques."},
     )
-    effect_type, _ = EffectType.objects.get_or_create(
-        name="Teleport",
-        defaults={
+    effect_type = authored_or_sample(
+        EffectType,
+        {
             "description": "Instant relocation through bent space.",
             "base_power": None,
             "base_anima_cost": 0,
             "has_power_scaling": False,
         },
+        name="Teleport",
     )
-    Technique.objects.get_or_create(
-        name=_MIRRORWALK_TECHNIQUE_NAME,
-        gift=gift,
-        defaults={
+    if mirror_kind is None or gift is None or style is None or effect_type is None:
+        return
+    technique = authored_or_sample(
+        Technique,
+        {
             "description": (
                 "Step into an open mirror and out the other side, wherever its "
                 "twin waits open on the network."
@@ -2306,7 +2409,11 @@ def ensure_portal_travel_content() -> None:
             "travel_anchor_kind": mirror_kind,
             "action_template": get_standalone_cast_template(),
         },
+        name=_MIRRORWALK_TECHNIQUE_NAME,
+        gift=gift,
     )
+    if technique is None:
+        return
 
     # 4. XP-gated unlock.
     GiftUnlock.objects.get_or_create(
@@ -2400,13 +2507,18 @@ def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
     thread. Idempotency is guaranteed by ``get_or_create`` semantics keyed on
     ``target_kind=FACET``. The model has no DB-level uniqueness for FACET
     unlocks, but only one global unlock is ever needed (no per-facet variant).
+
+    Content-repo-owned (#2698): looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on.
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
     from world.magic.models.weaving import ThreadWeavingUnlock  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    unlock, _ = ThreadWeavingUnlock.objects.get_or_create(
+    unlock = authored_or_sample(
+        ThreadWeavingUnlock,
+        {"xp_cost": 50},  # baseline cost; staff may tune
         target_kind=TargetKind.FACET,
-        defaults={"xp_cost": 50},  # baseline cost; staff may tune
     )
     return FacetThreadUnlockResult(unlock=unlock)
 
@@ -2430,11 +2542,17 @@ def seed_relationship_track_thread_unlock() -> RelationshipTrackThreadUnlockResu
     Idempotent via ``get_or_create`` on both the track (keyed on ``name``) and
     the unlock (keyed on the ``unique_threadweaving_unlock_track`` constraint's
     natural key: ``target_kind`` + ``unlock_track``).
+
+    The unlock itself is content-repo-owned (#2698) — looked up rather than
+    invented unless ``SEED_SAMPLE_CONTENT`` is on; ``RelationshipTrack`` is
+    out of scope for #2698 and stays unconditional (it's the required FK the
+    unlock hangs off, not one of the 15 models this slice clears).
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
     from world.magic.models.weaving import ThreadWeavingUnlock  # noqa: PLC0415
     from world.relationships.constants import TrackSign  # noqa: PLC0415
     from world.relationships.models import RelationshipTrack  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     track, _ = RelationshipTrack.objects.get_or_create(
         name="Devotion",
@@ -2446,10 +2564,11 @@ def seed_relationship_track_thread_unlock() -> RelationshipTrackThreadUnlockResu
             "sign": TrackSign.POSITIVE,
         },
     )
-    unlock, _ = ThreadWeavingUnlock.objects.get_or_create(
+    unlock = authored_or_sample(
+        ThreadWeavingUnlock,
+        {"xp_cost": 50},  # baseline cost; staff may tune
         target_kind=TargetKind.RELATIONSHIP_TRACK,
         unlock_track=track,
-        defaults={"xp_cost": 50},  # baseline cost; staff may tune
     )
     return RelationshipTrackThreadUnlockResult(track=track, unlock=unlock)
 
@@ -2556,13 +2675,28 @@ def seed_magic_dev() -> MagicDevSeedResult:
         seed_flee_check,
         seed_penetration_contest,
     )
+    from world.seeds.sample_content import sample_content_enabled  # noqa: PLC0415
 
     config = seed_magic_config()
     rituals = seed_canonical_rituals()
     thread_pull_catalog = seed_thread_pull_catalog()
     seed_thread_survivability_tuning()
     author_reference_corruption_content()
-    magic_content = MagicContent.create_all()
+    # MagicContent.create_all() is also a test-fixture builder (called directly
+    # by several test suites), so it stays an unconditional, unchanged content
+    # factory — only THIS production call site is gated (#2698). Its 6 social
+    # techniques + Gift/Affinity/Resonance/TechniqueStyle/EffectType rows are
+    # content-repo-owned; a real deploy needs them authored there.
+    if sample_content_enabled():
+        magic_content = MagicContent.create_all()
+    else:
+        logger.warning(
+            "Social-action MagicContent (Gift 'Social Arts' and its 6 techniques) is "
+            "not in the content repo. Skipping. Author it there and re-press the Big "
+            "Button, or set ARXII_SEED_SAMPLE_CONTENT=1 to have the seeder invent a "
+            "sample one (see #2698)."
+        )
+        magic_content = None
     facet_thread_unlock = seed_facet_thread_unlock()
     relationship_track_thread_unlock = seed_relationship_track_thread_unlock()
     seed_starter_magic_story()

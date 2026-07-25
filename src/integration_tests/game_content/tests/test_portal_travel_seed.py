@@ -8,7 +8,7 @@ when a candidate room hasn't been seeded yet (rather than crashing).
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.magic.constants import GiftKind
 from world.magic.effect_palette_content import TRANSLOCATION_STANCE_STYLE_NAME
@@ -29,6 +29,7 @@ from world.seeds.game_content.magic import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsurePortalTravelContentTests(TestCase):
     def test_seeds_mirror_anchor_kind(self) -> None:
         ensure_portal_travel_content()
@@ -100,6 +101,7 @@ class EnsurePortalTravelContentTests(TestCase):
         self.assertEqual(PortalAnchor.objects.count(), anchor_count_1)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsurePortalTravelContentWithCascadeRoomsTests(TestCase):
     """When the magic-story cascade rooms exist first, the network has 3 nodes."""
 

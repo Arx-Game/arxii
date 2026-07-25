@@ -39,10 +39,13 @@ from world.seeds.tests.content_stub import stub_content_root
 #: **A ratchet, not an allowlist. This set may only ever shrink.**
 #:
 #: Every ``CONTENT_MODELS`` entry the cluster seeders still populate. The
-#: seeders build a parallel content set — techniques, condition templates,
-#: rituals, mission templates, gifts — that the content repo already authors,
-#: usually with far more rows (33 seeded techniques against 278 authored; 48
-#: condition templates against 183).
+#: seeders build a parallel content set — condition templates, rituals,
+#: mission templates, distinctions — that the content repo already authors,
+#: usually with far more rows (48 condition templates against 183). The
+#: entire ``magic.*`` slice (15 models: affinity, gift, technique, ritual,
+#: resonance, etc.) was cleared in #2698 via ``authored_or_sample()`` — every
+#: magic seeder call site now looks content up and invents only under
+#: ``SEED_SAMPLE_CONTENT``.
 #:
 #: Measured against the *stub* content root, which carries almost no content.
 #: Against a real content repo these seeders are near-total no-ops: their
@@ -96,21 +99,6 @@ SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset(
         "forms.formtraitoption",
         "forms.heightband",
         "forms.speciesformtrait",
-        "magic.affinity",
-        "magic.compromiseacttype",
-        "magic.dramaticmomenttype",
-        "magic.effecttype",
-        "magic.fallredemptionconfig",
-        "magic.gift",
-        "magic.intensitytier",
-        "magic.portalanchorkind",
-        "magic.resonance",
-        "magic.resonanceconversion",
-        "magic.ritual",
-        "magic.technique",
-        "magic.techniqueappliedcondition",
-        "magic.techniquestyle",
-        "magic.threadweavingunlock",
         "mechanics.application",
         "mechanics.challengeapproach",
         "mechanics.challengecategory",

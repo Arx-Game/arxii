@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from actions.definitions.sanctum import SanctumInstallAction
 from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
@@ -54,6 +54,7 @@ def _mock_check_success() -> object:
     return type("CheckResult", (), {"outcome": outcome})()
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SanctumInstallActionComponentsTests(TestCase):
     def setUp(self) -> None:
         from evennia.utils.idmapper.models import flush_cache

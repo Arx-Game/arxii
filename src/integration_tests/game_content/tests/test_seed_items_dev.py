@@ -8,7 +8,7 @@ Verifies:
 4. A second call to seed_facet_thread_unlock() is a no-op.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from integration_tests.game_content.items import (
     ItemsDevSeedResult,
@@ -77,6 +77,7 @@ class SeedItemsDevIdempotencyTests(TestCase):
         self.assertEqual(TemplateSlot.objects.count(), self.slot_count)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedFacetThreadUnlockCreationTests(TestCase):
     """First-call assertions for seed_facet_thread_unlock()."""
 
@@ -114,6 +115,7 @@ class SeedFacetThreadUnlockCreationTests(TestCase):
         self.assertIsNone(unlock.unlock_track_id)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedFacetThreadUnlockIdempotencyTests(TestCase):
     """Second-call assertions: exactly one FACET unlock row at all times."""
 

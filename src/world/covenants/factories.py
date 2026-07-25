@@ -493,7 +493,7 @@ def seed_resonance_subrole_slice(
     return subroles
 
 
-def wire_covenant_rite_content() -> CovenantRite:
+def wire_covenant_rite_content() -> CovenantRite | None:
     """Idempotent seed helper: create the Renew the Oath ritual + CovenantRite row.
 
     Also seeds the default and role/level-band stat packages (#753 Task 10):
@@ -508,14 +508,22 @@ def wire_covenant_rite_content() -> CovenantRite:
     Safe to call as both integration-test setUp and staff/seed scripts — uses
     get_or_create semantics at each step so no duplicate rows are created.
 
-    Returns the CovenantRite instance (whether newly created or already present).
+    The "Renew the Oath" Ritual is content-repo-owned (#2698) — looked up
+    rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. When it isn't
+    authored, this returns ``None`` and skips every dependent row below
+    (CovenantRite, its role packages, and their condition/modifier content) —
+    they all hang off this Ritual and have nothing to attach to without it.
+
+    Returns the CovenantRite instance (whether newly created or already
+    present), or ``None`` when the Ritual isn't available.
     """
     from world.magic.constants import ParticipationRule, RitualExecutionKind
     from world.magic.models import Ritual
+    from world.seeds.sample_content import authored_or_sample
 
-    ritual, _ = Ritual.objects.get_or_create(
-        name="Renew the Oath",
-        defaults={
+    ritual = authored_or_sample(
+        Ritual,
+        {
             "description": (
                 "A covenant rite performed by engaged members in the heat of battle. "
                 "By reaffirming their sacred oath together, participants renew the bond "
@@ -533,7 +541,10 @@ def wire_covenant_rite_content() -> CovenantRite:
             "flow": None,
             "participation_rule": ParticipationRule.FORMATION,
         },
+        name="Renew the Oath",
     )
+    if ritual is None:
+        return None
 
     from world.conditions.factories import (
         OathboundBulwarkConditionFactory,

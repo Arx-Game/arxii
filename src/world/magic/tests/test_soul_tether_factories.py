@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.magic.factories import wire_soul_tether_content
 from world.magic.models.rituals import Ritual
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class AcceptSoulTetherRitualFactoryTests(TestCase):
     """Tests for the accept_soul_tether Ritual wiring in factories (Slice B BILATERAL)."""
 

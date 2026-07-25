@@ -174,39 +174,52 @@ def _ensure_inspired_condition() -> ConditionTemplate:
     return template
 
 
-def _ensure_charm_technique() -> Technique:
+def _ensure_charm_technique() -> Technique | None:
     """Seed the ``Charming Word`` technique that applies Charmed to an ENEMY (#2015).
 
     Makes the Charm → allegiance flip (``derive_allegiance`` → ``ALLY_OF_CASTER``)
     player-reachable without the parley verb. Mirrors the technique seed in
-    ``combat/defend_content.py``: direct ORM (``Technique.get_or_create`` +
-    ``TechniqueAppliedCondition.get_or_create``), not the budget builder.
+    ``combat/defend_content.py``: direct ORM lookups, not the budget builder.
+
+    ``Gift``/``TechniqueStyle``/``EffectType``/``Technique``/
+    ``TechniqueAppliedCondition`` are all content-repo-owned (#2698) — looked
+    up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns
+    ``None`` (skipping the TechniqueAppliedCondition row) when any
+    prerequisite is missing. The ``Charmed`` ConditionTemplate this technique
+    applies is NOT in scope here (``conditions.conditiontemplate``) and stays
+    unconditional.
     """
     # Ensure the Charmed template exists first (self-contained seed).
     from world.conditions.charm_content import ensure_charm_content  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     ensure_charm_content()
-    charm_gift, _ = Gift.objects.get_or_create(
+    charm_gift = authored_or_sample(
+        Gift,
+        {"description": "Charm, compulsion, and social influence magic."},
         name="Charm",
-        defaults={"description": "Charm, compulsion, and social influence magic."},
     )
-    style, _ = TechniqueStyle.objects.get_or_create(
+    style = authored_or_sample(
+        TechniqueStyle,
+        {"description": "Magic that manifests without obvious display."},
         name="Subtle",
-        defaults={"description": "Magic that manifests without obvious display."},
     )
-    effect_type, _ = EffectType.objects.get_or_create(
-        name="Compulsion",
-        defaults={
+    effect_type = authored_or_sample(
+        EffectType,
+        {
             "description": "Alters a target's behavior or allegiance.",
             "base_power": None,
             "base_anima_cost": 0,
             "has_power_scaling": False,
         },
+        name="Compulsion",
     )
-    technique, _created = Technique.objects.get_or_create(
-        name=CHARM_TECHNIQUE_NAME,
-        gift=charm_gift,
-        defaults={
+    if charm_gift is None or style is None or effect_type is None:
+        return None
+
+    technique = authored_or_sample(
+        Technique,
+        {
             "description": (
                 "A word of power that turns an enemy's loyalty, charming them to fight for you."
             ),
@@ -219,16 +232,22 @@ def _ensure_charm_technique() -> Technique:
             "anima_cost": 2,
             "combo_opening_probing": None,
         },
+        name=CHARM_TECHNIQUE_NAME,
+        gift=charm_gift,
     )
+    if technique is None:
+        return None
+
     charmed_template = ConditionTemplate.objects.get(name=CHARM_CONDITION_NAME)
-    TechniqueAppliedCondition.objects.get_or_create(
-        technique=technique,
-        condition=charmed_template,
-        target_kind=ConditionTargetKind.ENEMY,
-        defaults={
+    authored_or_sample(
+        TechniqueAppliedCondition,
+        {
             "base_severity": 1,
             "minimum_success_level": 1,
         },
+        technique=technique,
+        condition=charmed_template,
+        target_kind=ConditionTargetKind.ENEMY,
     )
     return technique
 

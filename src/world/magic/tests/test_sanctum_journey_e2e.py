@@ -17,7 +17,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from commands.sanctum import CmdSanctum
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
@@ -85,6 +85,7 @@ def _mock_check_success() -> object:
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SanctumTelnetJourneyTests(TestCase):
     """All 7 CmdSanctum subverbs in one sequential journey on high-fidelity fixtures.
 

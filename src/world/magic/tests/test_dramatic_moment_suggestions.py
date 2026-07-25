@@ -8,7 +8,7 @@ path to maybe_suggest_dramatic_moments and a GM-facing resolve surface to
 resolve_dramatic_moment_suggestion.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -191,7 +191,13 @@ class ResolveDramaticMomentSuggestionTest(TestCase):
             )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsureDramaticEntranceContentTest(TestCase):
+    """Exercises the sample-seeding path directly (#2698) — the DramaticMomentType
+    (+ its Affinity/Resonance) is content-repo-owned, so this suite needs
+    ``SEED_SAMPLE_CONTENT`` on to get a real row to test idempotency against.
+    """
+
     def test_seed_idempotent(self):
         first = ensure_dramatic_entrance_content()
         second = ensure_dramatic_entrance_content()

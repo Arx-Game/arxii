@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.seeds.database import seed_dev_database
 from world.seeds.tests.content_stub import stub_content_root
@@ -38,7 +38,12 @@ class TestSeedIdempotency(TestCase):
             )
 
     @stub_content_root()
+    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_edit_survives_reseed(self) -> None:
+        """Resonance is content-repo-owned (#2698) — sample content must be on
+        for the stub root to yield a row here; the invariant under test
+        (staff edits survive re-seed) is otherwise unrelated to that gating.
+        """
         from world.magic.models import Resonance
 
         seed_dev_database()

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.magic.factories import CharacterResonanceFactory, ThreadFactory
 
@@ -428,8 +428,13 @@ class SoulTetherTriggerDefinitionFactoryTests(TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class WireSoulTetherContentTests(TestCase):
-    """Task 3.6: wire_soul_tether_content() master orchestrator."""
+    """Task 3.6: wire_soul_tether_content() master orchestrator.
+
+    The accept_soul_tether/soul_tether_rescue Ritual rows are content-repo-owned
+    (#2698); ``SEED_SAMPLE_CONTENT`` opts this suite into the sample-seeding path.
+    """
 
     def test_wire_creates_all_content(self) -> None:
         from world.magic.factories import wire_soul_tether_content

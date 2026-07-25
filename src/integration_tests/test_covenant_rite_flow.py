@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from evennia_extensions.factories import ObjectDBFactory
@@ -56,6 +56,7 @@ def _place_character_in_room(character, room) -> None:
     character.save(update_fields=["db_location"])
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class CovenantRiteFlowIntegrationTest(TestCase):
     """End-to-end exercise of the Covenant Rite fire path.
 
@@ -305,6 +306,7 @@ def _build_session_for_covenant(
     return session
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class CovenantRiteRolePackageFlowIntegrationTest(TestCase):
     """End-to-end test for role-aware, level-banded, severity-scaling stat packages (#753).
 

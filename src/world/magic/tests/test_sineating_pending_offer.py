@@ -15,7 +15,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
 
 from world.magic.constants import TargetKind
@@ -164,6 +164,7 @@ def _fire_request_sineating_in_scene(sinner_sheet, sineater_sheet, resonance, sc
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SineatingPendingOfferUniquenessTests(TestCase):
     """SineatingPendingOffer.one_pending_sineating_per_pair constraint."""
 
@@ -227,6 +228,7 @@ class SineatingPendingOfferUniquenessTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class RequestSineatingCreatesPendingOfferTests(TestCase):
     """request_sineating writes a SineatingPendingOffer row (Task 1.6 Step 3)."""
 
@@ -293,6 +295,7 @@ class RequestSineatingCreatesPendingOfferTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResolveSineatingFromDbHappyPathTests(TestCase):
     """resolve_sineating_from_db resolves the offer when both are co-located (Task 1.6 Step 4)."""
 
@@ -371,6 +374,7 @@ class ResolveSineatingFromDbHappyPathTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResolveSineatingFromDbSineaterDepartedTests(TestCase):
     """resolve_sineating_from_db raises SineatingValidationError when Sineater left scene."""
 
@@ -450,6 +454,7 @@ class ResolveSineatingFromDbSineaterDepartedTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResolveSineatingFromDbSinnerDepartedTests(TestCase):
     """resolve_sineating_from_db raises SineatingValidationError when Sinner left scene."""
 
@@ -508,6 +513,7 @@ class ResolveSineatingFromDbSinnerDepartedTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResolveSineatingFromDbNoPendingOfferTests(TestCase):
     """resolve_sineating_from_db raises SineatingValidationError when no row found."""
 
@@ -534,8 +540,13 @@ class ResolveSineatingFromDbNoPendingOfferTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SineatingPendingOfferViewSetTests(APITestCase):
-    """GET /api/magic/soul-tether/sineating/pending/ — scoped to caller as Sineater."""
+    """GET /api/magic/soul-tether/sineating/pending/ — scoped to caller as Sineater.
+
+    The accept_soul_tether Ritual is content-repo-owned (#2698);
+    ``SEED_SAMPLE_CONTENT`` opts this suite into the sample-seeding path.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:

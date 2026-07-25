@@ -244,8 +244,11 @@ def ensure_ritual_check_configs(
 ) -> dict[str, RitualCheckConfig]:
     """Seed RitualCheckConfig rows for the five SERVICE sanctum rituals.
 
-    Requires ensure_sanctum_rituals() to have run (the Ritual rows must
-    exist) — raises Ritual.DoesNotExist otherwise.
+    Requires ensure_sanctum_rituals() to have run first. Each of the five
+    Ritual rows is content-repo-owned (#2698) — ``ensure_sanctum_rituals()``
+    skips a ritual it can't find (content repo doesn't author it and
+    ``SEED_SAMPLE_CONTENT`` is off), so this looks each ritual up rather than
+    asserting it exists, and skips the matching RitualCheckConfig when absent.
 
     When check_types is None, calls ensure_magic_check_types() internally
     to satisfy its own contract. Pass check_types explicitly (from the umbrella
@@ -265,7 +268,9 @@ def ensure_ritual_check_configs(
 
     configs: dict[str, RitualCheckConfig] = {}
     for ritual_name, ct_name, difficulty, non_founder in _RITUAL_CHECK_CONFIGS:
-        ritual = Ritual.objects.get(name=ritual_name)
+        ritual = Ritual.objects.filter(name=ritual_name).first()
+        if ritual is None:
+            continue
         config, _ = RitualCheckConfig.objects.get_or_create(
             ritual=ritual,
             defaults={

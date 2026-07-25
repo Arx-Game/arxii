@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import math
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import SoulTetherRole, TargetKind
@@ -105,6 +105,7 @@ def _make_sineater_thread_for(
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class CorruptionResistanceGatingTests(TestCase):
     """9.1: Without a Sineater Thread, lifetime_helped accumulates but resistance doesn't apply.
 
@@ -170,6 +171,7 @@ class CorruptionResistanceGatingTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class CorruptionResistanceAppliedTests(TestCase):
     """9.2: Sineater with Thread + lifetime_helped receives reduced corruption accrual.
 
@@ -246,6 +248,7 @@ class CorruptionResistanceAppliedTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class CorruptionResistancePerResonanceTests(TestCase):
     """9.3: Sineater resistance is per-resonance — Abyssal lifetime_helped doesn't reduce Primal.
 
@@ -302,6 +305,7 @@ class CorruptionResistancePerResonanceTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class CorruptionResistanceRedirectGuardTests(TestCase):
     """9.4: When redirect_origin is set, the resistance helper skips without reducing.
 
@@ -357,6 +361,7 @@ class CorruptionResistanceRedirectGuardTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResolveCorruptionResistancePullEffectTests(TestCase):
     """9.5: CORRUPTION_RESISTANCE rows in resolve_pull_effects produce scaled_value=None.
 
