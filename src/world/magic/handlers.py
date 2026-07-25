@@ -354,6 +354,29 @@ class CharacterThreadHandler:
 
         return granted
 
+    @cached_property
+    def context_free_power(self) -> int:
+        """Power contributions that hold regardless of what the character is doing (#2708).
+
+        Derived with ``channeled_intensity=0`` and ``technique=None``, so it carries the
+        character-level term plus globally-scoped (null-scoped) character and condition
+        modifiers, and nothing technique- or thread-contextual. Gift-scoped aura and
+        touchstone terms return 0 without a technique by construction.
+
+        Memoized here rather than recomputed per grant: ``_derive_power`` costs roughly a
+        dozen queries, and the agency oracle sweeps every known technique. One derivation
+        per character per request keeps that sweep constant-query. Cleared by
+        ``invalidate()`` alongside ``_all``.
+        """
+        from world.magic.services.techniques import _derive_power  # noqa: PLC0415
+
+        return _derive_power(
+            channeled_intensity=0,
+            technique=None,
+            character=self.character,
+            applicable_threads=[],
+        ).total
+
     def _gift_capability_grant_ids(self, gift_threads: list[Thread]) -> set[int]:
         """Return CapabilityType PKs from GIFT threads using gift-specific preference.
 
@@ -430,6 +453,7 @@ class CharacterThreadHandler:
         self.__dict__.pop("_all", None)
         self.__dict__.pop("_passive_capability_grants_cache", None)
         self.__dict__.pop("_crossing_choices", None)
+        self.__dict__.pop("context_free_power", None)
         # Clear the pull-side cached_property only if the combat_pulls handler is
         # already instantiated (avoids triggering an import cycle on cold access).
         combat_pulls_handler = self.character.__dict__.get("combat_pulls")
