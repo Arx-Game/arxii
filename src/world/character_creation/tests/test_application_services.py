@@ -38,7 +38,6 @@ from world.magic.factories import (
     PathGiftGrantFactory,
     ResonanceFactory,
     TechniqueFactory,
-    TechniqueStyleFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
@@ -698,7 +697,6 @@ class ApproveApplicationIntegrationTests(TestCase):
             stage=PathStage.PROSPECT,
             minimum_level=1,
         )
-        cls.technique_style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
         cls.resonance = ResonanceFactory()
         cls.tradition = TraditionFactory()
@@ -707,9 +705,7 @@ class ApproveApplicationIntegrationTests(TestCase):
         # with a pool technique, plus a Skill and the STAT trait for the anima check.
         cls.gift = GiftFactory(name="Approve Integration Gift")
         path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
-        cls.technique = TechniqueFactory(
-            gift=cls.gift, style=cls.technique_style, effect_type=cls.effect_type
-        )
+        cls.technique = TechniqueFactory(gift=cls.gift, effect_type=cls.effect_type)
         path_grant.starter_techniques.set([cls.technique])
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
         cls.skill = SkillFactory()

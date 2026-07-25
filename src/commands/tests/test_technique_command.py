@@ -15,7 +15,7 @@ from django.test import TestCase
 
 from commands.technique import CmdTechnique
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueStyleFactory
+from world.magic.factories import EffectTypeFactory, GiftFactory
 from world.magic.models import Technique, TechniqueDraft
 
 
@@ -124,7 +124,6 @@ class CmdTechniqueAuthorTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
         cls.gift = GiftFactory(creator=cls.sheet)
-        cls.style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
 
     def setUp(self) -> None:
@@ -140,7 +139,6 @@ class CmdTechniqueAuthorTests(TestCase):
         set_draft_fields(
             draft,
             gift=self.gift,
-            style=self.style,
             effect_type=self.effect_type,
             action_category="physical",
             tier=1,

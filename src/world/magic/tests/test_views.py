@@ -202,7 +202,6 @@ class TechniqueViewSetTest(APITestCase):
         cls.technique = TechniqueFactory(
             name="Test Shadow Strike",
             gift=cls.gift,
-            style=cls.style,
             effect_type=cls.effect_type,
         )
 
@@ -257,7 +256,6 @@ class TechniqueViewSetTest(APITestCase):
         data = {
             "name": "Test New Technique",
             "gift": self.gift.pk,
-            "style": self.style.pk,
             "effect_type": self.effect_type.pk,
             "level": 1,
             "anima_cost": 2,
@@ -275,7 +273,6 @@ class TechniqueViewSetTest(APITestCase):
         data = {
             "name": "Test Forbidden Technique",
             "gift": self.gift.pk,
-            "style": self.style.pk,
             "effect_type": self.effect_type.pk,
             "level": 1,
             "anima_cost": 2,
@@ -293,7 +290,6 @@ class TechniqueViewSetTest(APITestCase):
         data = {
             "name": "Test Restricted Technique",
             "gift": self.gift.pk,
-            "style": self.style.pk,
             "effect_type": self.effect_type.pk,
             "level": 1,
             "anima_cost": 2,
@@ -312,7 +308,6 @@ class TechniqueViewSetTest(APITestCase):
         data = {
             "name": "Test Forbidden Restricted Technique",
             "gift": self.gift.pk,
-            "style": self.style.pk,
             "effect_type": self.effect_type.pk,
             "level": 1,
             "anima_cost": 2,
@@ -329,7 +324,6 @@ class TechniqueViewSetTest(APITestCase):
         data = {
             "name": "Test Updated Technique",
             "gift": self.gift.pk,
-            "style": self.style.pk,
             "effect_type": self.effect_type.pk,
             "level": 5,
             "anima_cost": 3,
@@ -348,7 +342,6 @@ class TechniqueViewSetTest(APITestCase):
         data = {
             "name": "Test Forbidden Update",
             "gift": self.gift.pk,
-            "style": self.style.pk,
             "effect_type": self.effect_type.pk,
             "level": 5,
             "anima_cost": 3,

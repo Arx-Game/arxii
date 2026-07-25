@@ -82,7 +82,7 @@ The magic system for Arx II. Power flows from identity and connection.
   (`unique_technique_gift_name`), so authoring a duplicate raises
   `DuplicateTechniqueName` (clean 400) instead of an `IntegrityError`. See
   `docs/systems/magic.md`'s "Content pipeline" section for the full model list.
-- `TechniqueStyle` - How magic manifests (Manifestation, Subtle, Performance, Prayer, Incantation) with `allowed_paths` M2M
+- `TechniqueStyle` - How a **practitioner** works magic (Manifestation, Subtle, Performance, Prayer, Incantation). A property of the caster's `Path` (`classes.Path.style`), NOT of the technique (#2700, ADR-0164). `StyleCapabilityRequirement` rows let a style gate casting on the caster's capabilities (an Incantation caster who cannot speak cannot incant), evaluated by `technique_performable`.
 - `EffectType` - Types of magical effects (Attack, Defense, Movement, etc.)
 - `Restriction` - Limitations that grant power bonuses (Touch Range, etc.)
 - `IntensityTier` - Configurable thresholds for power intensity (Minor, Moderate, Major)
@@ -308,13 +308,15 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
   `Technique` to an `ItemTemplate` (on-use delivery) or `Ritual` (SERVICE delivery).
   Exactly one vehicle enforced by `clean()` + partial UniqueConstraints.
 - `learn_technique(learner, technique, *, source, ap_cost=0, xp_cost=0)` — shared
-  commit seam in `services/technique_acquisition.py`. Runs gift-owned → path gate →
+  commit seam in `services/technique_acquisition.py`. Runs gift-owned →
   cap → AP spend → mint → announce. Called by `UseItemAction` (item path) and
   `learn_technique_from_ritual` (ritual SERVICE path). `accept_technique_offer`
   delegates its mint step here.
-- `can_learn_technique(learner, technique)` — shared path-style gate in
-  `services/gift_acquisition.py`. Checks `technique.style.allowed_paths` against
-  `current_path_for_character(learner.character)`.
+- **No path-style learn gate (#2700).** `can_learn_technique` /
+  `TechniqueStyleForbidden` are deleted. Gift ownership plus
+  `PathGiftGrant`/`TraditionGiftGrant` curation is the gate, at technique
+  granularity; style now gates *casting* (via `StyleCapabilityRequirement`), not
+  learning. See ADR-0164.
 - `GiftAcquisitionConfig.major_gift_ap_multiplier` — staff-tunable AP multiplier
   for MAJOR-gift techniques on the `has_gift` branch of `accept_technique_offer`.
 - `GiftAcquisitionConfig.imbue_ap_cost` — staff-tunable flat AP cost per Rite of
@@ -324,7 +326,7 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
 - `charge_and_learn(learner, technique, *, base_ap_cost, source, gold_cost=0,
   gold_treasury=None, teacher_tenure=None, teacher_banked_ap=0)`
   (`services/gift_acquisition.py`, #2440) — the shared charge+acquire core
-  extracted from `accept_technique_offer`: duplicate/path-style gates →
+  extracted from `accept_technique_offer`: duplicate gate →
   has-gift/major-gift AP multiplier → implicit gift acquisition → cap check →
   AP spend (+ teacher banked-AP consumption when `teacher_tenure` is set) →
   gold spend (learner purse → `gold_treasury`, when `gold_cost` > 0) → mint +

@@ -452,7 +452,6 @@ export const mockTechnique: Technique = {
   id: 1,
   name: 'Shadow Strike',
   gift: 1,
-  style: 1,
   effect_type: 1,
   restriction_ids: [1],
   level: 5,
