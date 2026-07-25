@@ -13,6 +13,8 @@ from core.natural_keys import (
 )
 from world.species.factories import SpeciesFactory
 from world.species.models import Species, SpeciesStatBonus
+from world.traits.factories import TraitFactory
+from world.traits.models import TraitRankDescription
 
 
 class IndexKeyNormalizationTests(TestCase):
@@ -130,10 +132,35 @@ class CaseInsensitiveLookupTests(TestCase):
             Species.objects.get_by_natural_key("shared entry elf")
         assert list(natural_key_index(Species)) == [("shared entry elf",)]
 
-    def test_numeric_component_still_matches_exactly(self) -> None:
-        """__iexact applies only to text fields — an int component must not be
-        coerced into a string comparison."""
+    def test_fk_and_text_components_combine_case_insensitively(self) -> None:
+        """A composite key with an FK (species -> name) plus a plain CharField
+        (stat) both match case-insensitively."""
         species = SpeciesFactory(name="Numeric Elf")
         bonus = SpeciesStatBonus.objects.create(species=species, stat="strength", value=2)
         found = SpeciesStatBonus.objects.get_by_natural_key("NUMERIC ELF", "STRENGTH")
         assert found == bonus
+
+    def test_integer_component_matches_exactly(self) -> None:
+        """__iexact applies only to text fields. The FK's name component matches
+        case-insensitively; the integer component must still match exactly and
+        must never be turned into a text comparison."""
+        trait = TraitFactory(name="Rank Trait")
+        description = TraitRankDescription.objects.create(
+            trait=trait, value=30, label="Good", description="Above average"
+        )
+        assert TraitRankDescription.objects.get_by_natural_key("RANK TRAIT", 30) == description
+        with self.assertRaises(TraitRankDescription.DoesNotExist):
+            TraitRankDescription.objects.get_by_natural_key("Rank Trait", 31)
+
+    def test_integer_component_gets_no_iexact_suffix(self) -> None:
+        """Directly pins the branch: the lookup dict must key the integer field
+        plainly, never as '<field>__iexact'."""
+        TraitRankDescription.objects.create(
+            trait=TraitFactory(name="Suffix Trait"),
+            value=40,
+            label="Great",
+            description="x",
+        )
+        lookup = TraitRankDescription.objects._natural_key_lookup(("Suffix Trait", 40))
+        assert "value" in lookup
+        assert "value__iexact" not in lookup
