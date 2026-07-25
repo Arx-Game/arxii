@@ -480,7 +480,7 @@ class CaptureBrigRoutingTests(TestCase):
         assert sheet.lifecycle_state == LifecycleState.CAPTURED
         captivity = Captivity.objects.get(captive=sheet)
         assert captivity.cell is None
-        assert captivity.holding_room == brig_room
+        assert captivity.holding_room == brig_room.room_profile
         assert character.location == brig_room
 
     def test_capture_falls_back_to_instanced_cell_when_no_brig(self) -> None:
