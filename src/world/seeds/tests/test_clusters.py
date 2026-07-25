@@ -143,7 +143,12 @@ class TestClusterRegistry(TestCase):
         # content row on every press).
         CGExplanation.objects.filter(key="origin_heading").update(text="staff-edited")
         seed_character_creation_dev()
-        self.assertEqual(CGExplanation.objects.get(key="origin_heading").text, "staff-edited")
+        # SharedMemoryModel (idmapper) — re-fetch via .values() rather than
+        # .get() so a stale cached instance can't mask a regression (mirrors
+        # EnsureTraditionTrainingDistinctionTests in
+        # test_character_creation_magic_seed.py).
+        db_value = CGExplanation.objects.filter(key="origin_heading").values("text").get()
+        self.assertEqual(db_value["text"], "staff-edited")
 
     @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_every_active_beginning_has_a_seeded_tradition(self) -> None:
