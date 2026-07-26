@@ -221,6 +221,33 @@ class GiftAcquisitionConfig(SharedMemoryModel):
             "1 = no effect (same cap). Higher = slower per-week progress."
         ),
     )
+    training_tier_difficulty_step = models.PositiveIntegerField(
+        default=10,
+        help_text=(
+            "Points of target_difficulty added per technique tier. "
+            "A T5 technique adds 50 difficulty at default."
+        ),
+    )
+    training_level_divisor = models.PositiveIntegerField(
+        default=2,
+        help_text=(
+            "Divisor for learner level -> difficulty reduction. "
+            "Level 20 with divisor 2 reduces difficulty by 10."
+        ),
+    )
+    training_self_study_difficulty_penalty = models.PositiveIntegerField(
+        default=10,
+        help_text=(
+            "Flat difficulty added when training without a teacher (teacher=None). 0 = no penalty."
+        ),
+    )
+    training_teacher_skill_divisor = models.PositiveIntegerField(
+        default=5,
+        help_text=(
+            "Divisor for the teacher's check rating -> difficulty reduction. "
+            "A teacher with 50 rating reduces difficulty by 10 at divisor 5."
+        ),
+    )
 
     class Meta:
         verbose_name = "Gift Acquisition Config"
