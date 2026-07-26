@@ -94,7 +94,13 @@ def _ensure_fury_check_type(trait_name: str) -> CheckType:
     )
     # Unconditional so a pre-existing (e.g. fixture-supplied) bare CheckType still gets
     # its trait attached (#2724); get_or_create's defaults let an authored weight survive
-    # a re-run.
+    # a re-run. Deliberately still tolerant of a missing Trait (skip rather than create) —
+    # unlike fatigue's endurance/willpower checks, trait_name here comes from
+    # FuryConfig.check_trait, a DB-configurable column, not a code string literal, so
+    # #2724's "named by a string literal in code is config" rule doesn't reach it: there
+    # is no fixed authored Trait row this function could reliably create on staff's
+    # behalf. The composition self-heals via this same unchanged gameplay call site once
+    # the configured trait's Trait row exists.
     trait = Trait.objects.filter(name=trait_name, trait_type=TraitType.STAT).first()
     if trait is not None:
         CheckTypeTrait.objects.get_or_create(
