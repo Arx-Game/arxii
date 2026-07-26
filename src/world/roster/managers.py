@@ -45,12 +45,12 @@ class RosterEntryQuerySet(models.QuerySet):
         )
 
     def by_roster_type(self, roster_type: str) -> RosterEntryQuerySet:
-        """Filter by roster type name."""
-        return self.filter(roster__name=roster_type)
+        """Filter by the roster's typed key (#2728), never its display name."""
+        return self.filter(roster__roster_type=roster_type)
 
     def exclude_roster_types(self, roster_types: list[str]) -> RosterEntryQuerySet:
-        """Exclude specific roster types."""
-        return self.exclude(roster__name__in=roster_types)
+        """Exclude specific roster types, matched by typed key (#2728)."""
+        return self.exclude(roster__roster_type__in=roster_types)
 
     def for_account(self, user: AccountDB) -> RosterEntryQuerySet:
         """Active roster entries for a user account (current tenures only)."""

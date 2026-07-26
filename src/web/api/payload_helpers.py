@@ -44,7 +44,7 @@ def build_account_payload_context(account: AccountDB) -> AccountPayloadContext:
     """
     active_entries = list(
         RosterEntry.objects.for_account(account)
-        .filter(roster__name=RosterType.ACTIVE)
+        .filter(roster__roster_type=RosterType.ACTIVE)
         .distinct()
         .select_related(
             "roster",

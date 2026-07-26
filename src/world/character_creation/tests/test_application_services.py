@@ -795,6 +795,7 @@ class ApproveApplicationIntegrationTests(TestCase):
     def test_approve_moves_to_active_roster(self):
         """Approval moves the RosterEntry from Pending to the Active roster."""
         from world.roster.models import RosterEntry
+        from world.roster.models.choices import RosterType
 
         app = self._create_approved_application()
         approve_application(app, reviewer=self.staff)
@@ -803,7 +804,8 @@ class ApproveApplicationIntegrationTests(TestCase):
             character_sheet__character__db_key__startswith="ApproveTest",
         ).first()
         self.assertIsNotNone(entry)
-        self.assertEqual(entry.roster.name, "Active")
+        # Match the typed key (#2728), never the display label.
+        self.assertEqual(entry.roster.roster_type, RosterType.ACTIVE)
         self.assertTrue(entry.roster.is_active)
 
     def test_approve_creates_character_with_tenure(self):

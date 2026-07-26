@@ -55,10 +55,9 @@ class RosterPolicyService:
         if not roster_entry:
             return issues
 
-        roster_name = roster_entry.roster.name
-
-        # Restricted characters require special approval
-        if roster_name == RosterType.RESTRICTED:
+        # Match the typed key, never the display label (#2728) — the label is
+        # free text and drifted from the enum, so this comparison never fired.
+        if roster_entry.roster.roster_type == RosterType.RESTRICTED:
             issues.append(
                 {
                     "code": ValidationErrorCodes.RESTRICTED_REQUIRES_REVIEW,

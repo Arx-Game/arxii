@@ -28,7 +28,6 @@ from world.magic.factories import (
     TraditionGiftGrantFactory,
 )
 from world.realms.models import Realm
-from world.roster.models import Roster
 from world.skills.factories import SkillFactory
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
@@ -118,7 +117,10 @@ class FinalizationTestMixin:
                 name=stat_name,
                 defaults={"trait_type": TraitType.STAT, "description": stat_name},
             )
-        Roster.objects.get_or_create(name="Available Characters")
+        # No manual Roster pre-seed here: finalize_character() -> ensure_rosters()
+        # (#2728) creates every shelf on demand, keyed by roster_type. A
+        # name-only pre-seed used to collide with that seeder's canonical
+        # "Available Characters" row (unique on name, roster_type left NULL).
         target.path = PathFactory(name=f"{prefix} Path", stage=PathStage.PROSPECT, minimum_level=1)
         target.effect_type = EffectTypeFactory()
         target.resonance = ResonanceFactory()
@@ -1776,11 +1778,13 @@ class FinalizeGMCharacterTests(TestCase):
 
     def test_creates_roster_entry_on_available(self) -> None:
         from world.character_creation.services import finalize_gm_character
+        from world.roster.models.choices import RosterType
 
         draft = self._make_gm_draft()
         entry, _ = finalize_gm_character(draft)
         assert entry.pk is not None
-        assert entry.roster.name == "Available"
+        # Match the typed key (#2728), never the display label.
+        assert entry.roster.roster_type == RosterType.AVAILABLE
 
     def test_stamps_gm_table_provenance(self) -> None:
         """The roster entry records GM_TABLE provenance + the authoring GM + table (#1506)."""

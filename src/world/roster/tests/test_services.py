@@ -12,6 +12,7 @@ from world.roster.factories import (
     RosterFactory,
 )
 from world.roster.models import RosterApplication
+from world.roster.models.choices import RosterType
 
 
 class PlayerDataServiceTestCase(TestCase):
@@ -143,10 +144,13 @@ class RosterPolicyServiceTestCase(TestCase):
         """Set up test data for each test"""
         self.player_data = PlayerDataFactory()
 
-        # Create different roster types for testing
+        # Create different roster types for testing. roster_type (#2728) is what the
+        # policy gate matches on now, not name — set it explicitly for the restricted
+        # roster so this test actually exercises the gate.
         self.active_roster = RosterFactory(name="Active", is_active=True, sort_order=1)
         self.restricted_roster = RosterFactory(
             name="Restricted",
+            roster_type=RosterType.RESTRICTED,
             is_active=True,
             sort_order=2,
         )

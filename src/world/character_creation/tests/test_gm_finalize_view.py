@@ -13,7 +13,7 @@ from world.character_creation.factories import CharacterDraftFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.magic.factories import TraditionFactory
 from world.roster.models import RosterEntry
-from world.roster.models.choices import CreationProvenance
+from world.roster.models.choices import CreationProvenance, RosterType
 
 
 class GMFinalizeViewTests(APITestCase):
@@ -47,7 +47,8 @@ class GMFinalizeViewTests(APITestCase):
         self.assertEqual(entry.creation_provenance, CreationProvenance.GM_TABLE)
         self.assertEqual(entry.created_for_table, self.table)
         self.assertEqual(entry.created_by_account, self.gm.account)
-        self.assertEqual(entry.roster.name, "Available")
+        # Match the typed key (#2728), never the display label.
+        self.assertEqual(entry.roster.roster_type, RosterType.AVAILABLE)
 
     def test_non_owner_of_the_table_is_forbidden(self) -> None:
         other_gm = GMProfileFactory()

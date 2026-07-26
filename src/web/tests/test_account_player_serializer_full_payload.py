@@ -23,7 +23,8 @@ class AccountPlayerSerializerFullPayloadTests(TestCase):
 
     def setUp(self) -> None:
         self.account = AccountFactory()
-        self.active_roster = RosterFactory(name=RosterType.ACTIVE)
+        # roster_type (#2728) is what the payload filter matches on now, not name.
+        self.active_roster = RosterFactory(name=RosterType.ACTIVE, roster_type=RosterType.ACTIVE)
         self.inactive_roster = RosterFactory(name=RosterType.INACTIVE)
 
     def _add_character(self, *, key: str, roster) -> None:
@@ -129,7 +130,8 @@ class AccountPayloadQueryCountTests(TestCase):
     regardless of how many active characters the account has."""
 
     def setUp(self) -> None:
-        self.active_roster = RosterFactory(name=RosterType.ACTIVE)
+        # roster_type (#2728) is what the payload filter matches on now, not name.
+        self.active_roster = RosterFactory(name=RosterType.ACTIVE, roster_type=RosterType.ACTIVE)
         self._test_room = None
 
     def _add_character(self, *, account, key: str) -> None:

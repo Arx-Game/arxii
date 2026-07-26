@@ -32,11 +32,9 @@ from world.character_creation.models import (
 )
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
-from world.roster.models import Roster, RosterEntry, RosterTenure
+from world.roster.models import RosterEntry, RosterTenure
 from world.roster.models.choices import CreationProvenance, RosterType
-
-# "Pending" is CG-specific and not a general roster type in RosterType choices
-PENDING_ROSTER_NAME = "Pending"
+from world.roster.seeds import ensure_rosters
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
@@ -168,7 +166,7 @@ def finalize_character(
     author = created_by_account if created_by_account is not None else draft.account
     if add_to_roster:
         # Staff/GM directly adding to roster - no application needed
-        roster = _get_or_create_available_roster()
+        roster = ensure_rosters()[RosterType.AVAILABLE]
         RosterEntry.objects.create(
             character_sheet=character.sheet_data,
             roster=roster,
@@ -178,7 +176,7 @@ def finalize_character(
     else:
         # Character awaiting approval — placed in Pending roster.
         # approve_application() moves to Active and creates RosterTenure.
-        roster = _get_or_create_pending_roster()
+        roster = ensure_rosters()[RosterType.PENDING]
         RosterEntry.objects.create(
             character_sheet=character.sheet_data,
             roster=roster,
@@ -713,48 +711,6 @@ def _set_pronouns_from_gender(sheet: CharacterSheet, gender: str) -> None:
     sheet.pronoun_subject = subject
     sheet.pronoun_object = obj
     sheet.pronoun_possessive = possessive
-
-
-def _get_or_create_available_roster() -> Roster:
-    """Get or create the 'Available' roster for staff-added characters."""
-    roster, _ = Roster.objects.get_or_create(
-        name=RosterType.AVAILABLE,
-        defaults={
-            "description": "Characters available for players to apply for",
-            "is_active": True,
-            "is_public": True,
-            "allow_applications": True,
-        },
-    )
-    return roster
-
-
-def _get_or_create_active_roster() -> Roster:
-    """Get or create the 'Active' roster for approved player characters."""
-    roster, _ = Roster.objects.get_or_create(
-        name=RosterType.ACTIVE,
-        defaults={
-            "description": "Currently active player characters",
-            "is_active": True,
-            "is_public": True,
-            "allow_applications": False,
-        },
-    )
-    return roster
-
-
-def _get_or_create_pending_roster() -> Roster:
-    """Get or create the 'Pending' roster for characters awaiting approval."""
-    roster, _ = Roster.objects.get_or_create(
-        name=PENDING_ROSTER_NAME,
-        defaults={
-            "description": "Characters awaiting staff approval",
-            "is_active": False,
-            "is_public": False,
-            "allow_applications": False,
-        },
-    )
-    return roster
 
 
 def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
@@ -1825,7 +1781,7 @@ def approve_application(
     character = finalize_character(draft, add_to_roster=False)
 
     # Move character from Pending → Active roster
-    active_roster = _get_or_create_active_roster()
+    active_roster = ensure_rosters()[RosterType.ACTIVE]
     roster_entry = character.sheet_data.roster_entry
     roster_entry.move_to_roster(active_roster)
 
@@ -2058,7 +2014,7 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
     # quality/trust signal alongside the GM's account and the table itself.
     entry = RosterEntry.objects.create(
         character_sheet=sheet,
-        roster=_get_or_create_available_roster(),
+        roster=ensure_rosters()[RosterType.AVAILABLE],
         creation_provenance=CreationProvenance.GM_TABLE,
         created_by_account=draft.account,
         created_for_table=draft.target_table,
