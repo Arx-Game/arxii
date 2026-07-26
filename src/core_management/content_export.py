@@ -231,6 +231,14 @@ CONTENT_MODELS: frozenset[str] = frozenset(
 #: every predicate below is a single lookup — expressing it as a dict literal needs no
 #: Django import at module scope at all.
 #:
+#: This form expresses AND-of-lookups ONLY. A predicate that needs OR/NOT must switch
+#: to ``django.db.models.Q``, imported INSIDE ``export_to_content_repo`` (never at
+#: module scope — that would break the Django-unconfigured import contract above) —
+#: NOT be bolted on as extra dict keys: ``queryset.filter(**predicate)`` silently ANDs
+#: every key together, so a second key doesn't express OR/NOT, it expresses a stricter
+#: AND — a wrong-but-running filter with no error, the same silent-leak failure class
+#: this whole mechanism exists to close.
+#:
 #: NOTE: each predicate assumes staff authoring leaves the owner column NULL. If a staff
 #: authoring surface ever stamps the acting account, those rows silently stop exporting —
 #: ``test_content_export`` carries a count tripwire for exactly that.
