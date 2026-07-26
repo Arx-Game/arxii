@@ -687,6 +687,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         technique = get_object_or_404(Technique, pk=technique_id)
 
         use_base_form: bool = vd.get("use_base_form", False)
+        cast_openly: bool = vd.get("cast_openly", False)
 
         try:
             cast_result = request_technique_cast(
@@ -698,6 +699,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 cast_pull=cast_pull,
                 supplied_personas=supplied_personas,
                 use_base_form=use_base_form,
+                cast_openly=cast_openly,
             )
         except DjangoValidationError as exc:
             messages = exc.messages if hasattr(exc, "messages") else ["Unable to process cast."]

@@ -41,6 +41,8 @@ class CastTechniqueAction(Action):
         confirm_soulfray_risk: When ``True`` the cast proceeds even if the caster has
             an active Soulfray stage. Defaults ``False`` so the first cast of a
             soulfray-afflicted character halts and prompts for consent.
+        cast_openly: One-way waiver of the caster's style-imposed cast concealment
+            for this cast (#2710) — never adds concealment to an overt style.
         **kwargs: Forwarded into ``PendingCast.kwargs`` for re-dispatch on accept.
     """
 
@@ -62,6 +64,7 @@ class CastTechniqueAction(Action):
         use_base_form: bool = False,
         position_params: dict[str, int] | None = None,
         preferred_resonance_id: int | None = None,
+        cast_openly: bool = False,
         **kwargs: Any,
     ) -> ActionResult:
         """Resolve or gate the cast.
@@ -130,6 +133,7 @@ class CastTechniqueAction(Action):
                 use_base_form=use_base_form,
                 position_params=position_params,
                 preferred_resonance=preferred_resonance,
+                cast_openly=cast_openly,
             )
         except MagicError as exc:
             # Surface magic-layer failures (e.g. invalid/inert pull

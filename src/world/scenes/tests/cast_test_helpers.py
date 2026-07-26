@@ -135,6 +135,43 @@ def grant_technique(persona: Persona, technique: Technique) -> None:
     CharacterTechniqueFactory(character=persona.character_sheet, technique=technique)
 
 
+def _put_on_subtle_path(persona: Persona, *, cast_concealment: int, level: int = 1) -> None:
+    """Put *persona* on a fresh Path whose style carries the given concealment.
+
+    Mirrors ``world.magic.tests.services.test_cast_observation
+    ._caster_on_path_with_style``'s Path/TechniqueStyle/CharacterPathHistory
+    construction, adapted to attach to an existing ``Persona`` (built by
+    ``CastScenarioMixin``) rather than a fresh character.
+
+    Calling this twice for the same persona (e.g. to flip a caster from subtle
+    back to overt mid-test) replaces the prior ``CharacterPathHistory`` row
+    rather than adding a second one — ``current_path_for_character`` orders by
+    ``-selected_at`` with no tiebreaker, and two rows minted microseconds apart
+    could otherwise resolve to either one.
+
+    Also ensures the ``DETECT_CAST_CHECK_NAME`` CheckType exists — without it
+    ``resolve_cast_audience`` fails closed (ADR-0033) and a "concealed"
+    assertion would pass for the wrong reason.
+    """
+    from world.checks.factories import CheckTypeFactory  # noqa: PLC0415
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.classes.factories import CharacterClassLevelFactory, PathFactory  # noqa: PLC0415
+    from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+    from world.magic.constants import DETECT_CAST_CHECK_NAME  # noqa: PLC0415
+    from world.magic.factories import TechniqueStyleFactory  # noqa: PLC0415
+    from world.progression.models import CharacterPathHistory  # noqa: PLC0415
+
+    sheet = persona.character_sheet
+    style = TechniqueStyleFactory(cast_concealment=cast_concealment)
+    path = PathFactory(style=style)
+    CharacterPathHistory.objects.filter(character=sheet).delete()
+    CharacterPathHistory.objects.create(character=sheet, path=path)
+    if not CharacterClassLevel.objects.filter(character=sheet, is_primary=True).exists():
+        CharacterClassLevelFactory(character=sheet, level=level, is_primary=True)
+    if not CheckType.objects.filter(name=DETECT_CAST_CHECK_NAME).exists():
+        CheckTypeFactory(name=DETECT_CAST_CHECK_NAME)
+
+
 def make_cast_pull_fixture(
     owner_sheet: CharacterSheet,
     *,

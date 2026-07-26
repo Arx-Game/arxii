@@ -461,9 +461,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913, PLR0915 - one cohesive cast resolu
 
     from world.magic.services.cast_observation import resolve_cast_audience  # noqa: PLC0415
 
-    # Task 6 threads the real flag; until then every standalone cast rolls as if
-    # never declared open.
-    audience = resolve_cast_audience(caster=character, cast_openly=False)
+    audience = resolve_cast_audience(caster=character, cast_openly=request.cast_openly)
 
     pose, _vague_pose = create_cast_outcome_pose(
         scene=scene,
@@ -838,6 +836,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
     preferred_resonance: Resonance | None = None,
+    cast_openly: bool = False,
 ) -> CastResult:
     """Route a FILTERED_GROUP cast that has a player-supplied persona list.
 
@@ -873,6 +872,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
         use_base_form=use_base_form,
         position_params=position_params,
         preferred_resonance=preferred_resonance,
+        cast_openly=cast_openly,
     )
 
 
@@ -891,6 +891,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
     position_params: dict[str, int] | None = None,
     originated_as_entrance: bool = False,
     preferred_resonance: Resonance | None = None,
+    cast_openly: bool = False,
 ) -> CastResult:
     """Route a cast directed at another PC (not the caster's own sheet)."""
     if is_technique_hostile(technique):
@@ -903,6 +904,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
             target_persona=target_persona,
             technique=technique,
             originated_as_entrance=originated_as_entrance,
+            cast_openly=cast_openly,
         )
     if cast_requires_consent(technique, caster=initiator_persona.character_sheet.character):
         return _route_benign_cast(
@@ -916,6 +918,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
             cast_pull=cast_pull,
             confirm_soulfray_risk=confirm_soulfray_risk,
             originated_as_entrance=originated_as_entrance,
+            cast_openly=cast_openly,
         )
     return _route_immediate_cast(
         scene=scene,
@@ -930,6 +933,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
         use_base_form=use_base_form,
         position_params=position_params,
         preferred_resonance=preferred_resonance,
+        cast_openly=cast_openly,
     )
 
 
@@ -949,6 +953,7 @@ def request_technique_cast(  # noqa: PLR0913
     position_params: dict[str, int] | None = None,
     originated_as_entrance: bool = False,
     preferred_resonance: Resonance | None = None,
+    cast_openly: bool = False,
 ) -> CastResult:
     """Route a standalone technique cast per the consent/combat/immediate matrix.
 
@@ -979,6 +984,13 @@ def request_technique_cast(  # noqa: PLR0913
             the self/room/no-target immediate path resolves in this same call and
             has no later resolution step to gate. Defaults ``False`` so all existing
             callers are unaffected.
+        cast_openly: One-way waiver of the caster's style-imposed cast concealment
+            for this cast (#2710). It can only remove concealment a subtle style
+            already imposes; it can never add concealment to an overt style.
+            Persisted on the ``SceneActionRequest`` (rather than threaded through
+            the call stack alone) so a consent-gated cast — which poses at ACCEPT
+            time, not at request time — still reads the caster's choice. Defaults
+            ``False`` so all existing callers are unaffected.
 
     Returns:
         A CastResult whose populated payload depends on the routing branch taken.
@@ -1026,6 +1038,7 @@ def request_technique_cast(  # noqa: PLR0913
             use_base_form=use_base_form,
             position_params=position_params,
             preferred_resonance=preferred_resonance,
+            cast_openly=cast_openly,
         )
 
     # Inline the other-PC check (rather than a bool var) so the type checker can
@@ -1048,6 +1061,7 @@ def request_technique_cast(  # noqa: PLR0913
             position_params=position_params,
             originated_as_entrance=originated_as_entrance,
             preferred_resonance=preferred_resonance,
+            cast_openly=cast_openly,
         )
 
     return _route_immediate_cast(
@@ -1063,6 +1077,7 @@ def request_technique_cast(  # noqa: PLR0913
         use_base_form=use_base_form,
         position_params=position_params,
         preferred_resonance=preferred_resonance,
+        cast_openly=cast_openly,
     )
 
 
@@ -1078,6 +1093,7 @@ def _create_cast_request(  # noqa: PLR0913
     fury_anchor: CharacterSheet | None = None,
     resolved_at: datetime | None = None,
     originated_as_entrance: bool = False,
+    cast_openly: bool = False,
 ) -> SceneActionRequest:
     """Create a SceneActionRequest for a standalone cast.
 
@@ -1097,16 +1113,18 @@ def _create_cast_request(  # noqa: PLR0913
         fury_anchor=fury_anchor,
         resolved_at=resolved_at,
         originated_as_entrance=originated_as_entrance,
+        cast_openly=cast_openly,
     )
 
 
-def _route_hostile_cast(
+def _route_hostile_cast(  # noqa: PLR0913 - cohesive hostile-cast routing params
     *,
     scene: Scene,
     initiator_persona: Persona,
     target_persona: Persona,
     technique: Technique,
     originated_as_entrance: bool = False,
+    cast_openly: bool = False,
 ) -> CastResult:
     """Hostile cast at another PC → audit request + seed/feed a combat encounter.
 
@@ -1125,6 +1143,7 @@ def _route_hostile_cast(
             technique=technique,
             status=ActionRequestStatus.PENDING,
             originated_as_entrance=originated_as_entrance,
+            cast_openly=cast_openly,
         )
         return CastResult(request=request)
     with transaction.atomic():
@@ -1136,6 +1155,7 @@ def _route_hostile_cast(
             status=ActionRequestStatus.RESOLVED,
             resolved_at=timezone.now(),
             originated_as_entrance=originated_as_entrance,
+            cast_openly=cast_openly,
         )
         encounter = seed_or_feed_encounter_from_cast(
             caster_sheet=initiator_persona.character_sheet,
@@ -1160,6 +1180,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
     cast_pull: CastPullDeclaration | None = None,
     confirm_soulfray_risk: bool = True,  # noqa: ARG001 — resolution deferred to accept; kept for signature symmetry
     originated_as_entrance: bool = False,
+    cast_openly: bool = False,
 ) -> CastResult:
     """Benign cast at another PC → PENDING request awaiting consent (resolved on accept).
 
@@ -1177,6 +1198,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
             fury_commitment=fury_commitment,
             fury_anchor=fury_anchor,
             originated_as_entrance=originated_as_entrance,
+            cast_openly=cast_openly,
         )
         if cast_pull is not None:
             declaration = SceneActionPullDeclaration.objects.create(
@@ -1263,6 +1285,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
     preferred_resonance: Resonance | None = None,
+    cast_openly: bool = False,
 ) -> CastResult:
     """Self/room/no-target cast → resolve now, persist RESOLVED, author OUTCOME pose.
 
@@ -1290,6 +1313,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
             strain_commitment=strain_commitment,
             fury_commitment=fury_commitment,
             fury_anchor=fury_anchor,
+            cast_openly=cast_openly,
         )
         result, power_ledger, pose = _resolve_and_pose_cast(
             request=request,

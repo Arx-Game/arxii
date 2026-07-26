@@ -21,7 +21,8 @@ from world.magic.models.techniques import ConditionTargetKind
 from world.magic.narration import render_vague_cast_narration
 from world.magic.services.cast_observation import CastAudience
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
-from world.scenes.cast_services import request_technique_cast
+from world.scenes.action_constants import ActionRequestStatus
+from world.scenes.cast_services import request_technique_cast, resolve_accepted_cast
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -41,6 +42,8 @@ from world.scenes.reaction_services import (
 )
 from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
+    _put_on_subtle_path,
+    attach_behavior_altering_condition,
     grant_technique,
     make_benign_castable_technique,
 )
@@ -462,3 +465,87 @@ class ConcealedCastRequestLeakTests(APITestCase, ConcealedCastJourneyTests):
         """No regression for the ordinary case."""
         request = self._cast_at_target(CastAudience(concealed=False, full=[], vague=[]))
         self.assertIn(request.pk, self._request_ids_visible_to(self.target))
+
+
+class CastOpenlyTests(CastScenarioMixin):
+    """The one-way waiver, exercised without stubbing the audience.
+
+    Unlike ``ConcealedCastJourneyTests``, this class does NOT patch
+    ``resolve_cast_audience`` — the whole point is proving the persisted
+    ``cast_openly`` flag actually reaches the real service.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        room = cls.scene.location
+        cls.bystander = PersonaFactory()
+        for persona in (cls.caster, cls.target, cls.bystander):
+            character = persona.character_sheet.character
+            character.location = room
+            character.save()
+        _put_on_subtle_path(cls.caster, cast_concealment=25)
+        cls.technique = make_benign_castable_technique()
+        grant_technique(cls.caster, cls.technique)
+
+    def test_openly_cast_in_a_subtle_style_is_room_heard(self) -> None:
+        """A subtle-style caster may choose spectacle."""
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            technique=self.technique,
+            cast_openly=True,
+        )
+        pose = cast.request.result_interaction
+        self.assertEqual(pose.visibility, InteractionVisibility.DEFAULT)
+        self.assertFalse(pose.receivers.exists())
+
+    def test_same_cast_without_the_flag_is_concealed(self) -> None:
+        """The control: the flag is what changed the outcome, not the fixture.
+
+        Reads the pose back via ``request.result_interaction`` rather than a bare
+        ``Interaction.objects.get(...)`` — with real (unstubbed) detection rolls
+        against two co-located observers, a marginal detection can additionally
+        mint a second, unlinked "vague" OUTCOME row (``create_cast_outcome_pose``),
+        which would make a blind query ambiguous. ``result_interaction`` always
+        names the main pose, never the vague one.
+        """
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            technique=self.technique,
+        )
+        pose = cast.request.result_interaction
+        self.assertEqual(pose.visibility, InteractionVisibility.PERCEIVED_ONLY)
+
+    def test_openly_survives_the_consent_path(self) -> None:
+        """The crux for the persisted column: a consent-gated cast poses at ACCEPT
+        time, so a flag held only in the calling frame would silently go subtle
+        when the target accepts.
+        """
+        attach_behavior_altering_condition(self.technique)
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            target_persona=self.target,
+            technique=self.technique,
+            cast_openly=True,
+        )
+        self.assertEqual(cast.request.status, ActionRequestStatus.PENDING)
+        self.assertTrue(cast.request.cast_openly)
+        resolve_accepted_cast(cast.request)
+        cast.request.refresh_from_db()
+        pose = cast.request.result_interaction
+        self.assertEqual(pose.visibility, InteractionVisibility.DEFAULT)
+
+    def test_nobody_can_opt_into_subtlety_they_lack(self) -> None:
+        """One-way waiver: an overt style stays overt no matter what is passed."""
+        _put_on_subtle_path(self.caster, cast_concealment=0)
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            technique=self.technique,
+            cast_openly=False,
+        )
+        pose = cast.request.result_interaction
+        self.assertEqual(pose.visibility, InteractionVisibility.DEFAULT)
