@@ -41,6 +41,33 @@ class TechniqueFunction(models.TextChoices):
     HOLD = "hold", "Hold / Lock"
 
 
+class CastDetail(models.TextChoices):
+    """How much of a concealed cast an observer perceived (#2710)."""
+
+    FULL = "full", "Full"
+    VAGUE = "vague", "Vague"
+
+
+DETECT_CAST_CHECK_NAME = "Perception"
+"""The CheckType an observer rolls to notice a cast worked in a concealed style (#2710).
+
+Resolved by name, matching the established pattern (``world/npc_services/guard_services.py``
+rolls "Stealth"; ``world/clues/constants.py`` names "Search"). The row itself is CONTENT
+and belongs in the lore repo — arxii authors no seed for it. When it is absent,
+``resolve_cast_audience`` fails CLOSED (nobody detects) rather than open: under ADR-0033
+the unacceptable failure is leaking, and concealment defaults to 0 so this can only bite
+a world that authored a concealment rating without authoring the check.
+"""
+
+CAST_DETECTION_ATTRIBUTION_LEVEL = 2
+"""Success level at which a detecting observer learns WHO cast WHAT (#2710).
+
+Below this and above zero the observer gets a vague, unattributed line: they know
+something was worked, not by whom. Sized against the canonical -10..+10 outcome scale
+(``world/checks/constants.py``). Tunable spine value, not engine logic.
+"""
+
+
 class StandingCapMode(models.TextChoices):
     """Mode for a StandingCapBand: hard clamp vs. soft diminish (#853)."""
 
