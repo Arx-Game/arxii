@@ -2547,22 +2547,22 @@ class RelationshipTrackThreadUnlockResult:
 
 
 def ensure_technique_training_content():
-    """Seed the Arcane Theory skill + Technique Training CheckType + award rows (#2727).
+    """Seed config + sample content for check-based technique training (#2727).
 
-    Idempotent. Seeds:
-    - The "Arcane Theory" Skill + backing SKILL Trait (category MAGIC).
-    - The "intellect" STAT Trait (if not already present from CG seed).
-    - The "Technique Training" CheckType composing intellect + Arcane Theory.
-    - TrainingOutcomeAward rows for the 5 canonical CheckOutcome tiers.
-
-    Without this, resolve_training_check has no CheckType to resolve and no
-    award rows to map outcomes to multipliers — the check-based training
-    layer is unreachable in a live game.
+    The ``TrainingOutcomeAward`` rows are config (staff-tunable tuning
+    data, not lore-repo content), so they're always seeded. The
+    "Arcane Theory" Skill/Trait, "Technique Training" CheckType, and
+    their CheckTypeTrait composition rows ARE content models
+    (``CONTENT_MODELS`` per #2698) — they're looked up first and only
+    invented under ``SEED_SAMPLE_CONTENT`` (off by default) via
+    ``authored_or_sample``. In a real deploy they come from the lore
+    repo; in a test/dev DB with sampling on, a stand-in is created.
     """
     from decimal import Decimal  # noqa: PLC0415
 
     from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
     from world.magic.models import TrainingOutcomeAward  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import (  # noqa: PLC0415
         CheckOutcome,
@@ -2571,62 +2571,71 @@ def ensure_technique_training_content():
         TraitType,
     )
 
-    # 1. Arcane Theory skill + backing trait.
-    arcane_trait, _ = Trait.objects.get_or_create(
-        name="Arcane Theory",
+    # 1. Arcane Theory skill + backing trait (content models — sample only).
+    arcane_trait = authored_or_sample(
+        Trait,
         defaults={
             "trait_type": TraitType.SKILL,
             "category": TraitCategory.MAGIC,
             "is_public": True,
         },
+        name="Arcane Theory",
     )
-    Skill.objects.get_or_create(
-        trait=arcane_trait,
-        defaults={
-            "tooltip": "Understanding the theoretical underpinnings of magical techniques.",
-            "display_order": 0,
-            "is_active": True,
-        },
-    )
+    if arcane_trait is not None:
+        Skill.objects.get_or_create(
+            trait=arcane_trait,
+            defaults={
+                "tooltip": "Understanding the theoretical underpinnings of magical techniques.",
+                "display_order": 0,
+                "is_active": True,
+            },
+        )
 
-    # 2. intellect stat trait (may already exist from CG seed).
-    intellect_trait, _ = Trait.objects.get_or_create(
-        name="intellect",
+    # 2. intellect stat trait (content model — sample only, may already exist
+    # from CG seed).
+    intellect_trait = authored_or_sample(
+        Trait,
         defaults={
             "trait_type": TraitType.STAT,
             "category": TraitCategory.MENTAL,
             "is_public": True,
         },
+        name="intellect",
     )
 
-    # 3. Magic check category.
-    category, _ = CheckCategory.objects.get_or_create(
-        name="Magic",
+    # 3. Magic check category (content model — sample only).
+    category = authored_or_sample(
+        CheckCategory,
         defaults={
             "description": "Checks involving magical theory and practice.",
             "display_order": 40,
         },
+        name="Magic",
     )
 
-    # 4. Technique Training CheckType.
-    check_type, _ = CheckType.objects.get_or_create(
-        name="Technique Training",
-        category=category,
-        defaults={"is_active": True, "display_order": 10},
-    )
-    weight = Decimal("1.0")
-    CheckTypeTrait.objects.update_or_create(
-        check_type=check_type,
-        trait=intellect_trait,
-        defaults={"weight": weight},
-    )
-    CheckTypeTrait.objects.update_or_create(
-        check_type=check_type,
-        trait=arcane_trait,
-        defaults={"weight": weight},
-    )
+    # 4. Technique Training CheckType (content model — sample only).
+    check_type = None
+    if category is not None:
+        check_type = authored_or_sample(
+            CheckType,
+            defaults={"is_active": True, "display_order": 10},
+            name="Technique Training",
+            category=category,
+        )
+    if check_type is not None and intellect_trait is not None and arcane_trait is not None:
+        weight = Decimal("1.0")
+        CheckTypeTrait.objects.update_or_create(
+            check_type=check_type,
+            trait=intellect_trait,
+            defaults={"weight": weight},
+        )
+        CheckTypeTrait.objects.update_or_create(
+            check_type=check_type,
+            trait=arcane_trait,
+            defaults={"weight": weight},
+        )
 
-    # 5. TrainingOutcomeAward rows (5 canonical tiers).
+    # 5. TrainingOutcomeAward rows (config, NOT content models — always seeded).
     award_defaults = {
         "Critical Failure": Decimal("0.00"),
         "Failure": Decimal("0.00"),

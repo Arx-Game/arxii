@@ -6,7 +6,10 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0130_alter_auderemajorafaithvariantcapabilitygrant_intensity_multiplier_and_more"),
+        (
+            "magic",
+            "0130_alter_auderemajorafaithvariantcapabilitygrant_intensity_multiplier_and_more",
+        ),
         ("traits", "0002_alter_charactertraitvalue_character"),
     ]
 
