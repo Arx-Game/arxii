@@ -262,7 +262,8 @@
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK] (nullable)
   - stage -> conditions.ConditionStage [FK] (nullable)
-  - check_type -> checks.CheckType [FK]
+  - check_type -> checks.CheckType [FK] (nullable)
+  - check_category -> checks.CheckCategory [FK] (nullable)
 
 ### ConditionResistanceModifier
 **Foreign Keys:**
@@ -1754,6 +1755,7 @@
 
 ### CheckCategory
 **Pointed to by:**
+  - condition_check_modifiers <- conditions.ConditionCheckModifier
   - check_types <- checks.CheckType
 
 ### CheckType
@@ -2723,7 +2725,8 @@
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK] (nullable)
   - stage -> conditions.ConditionStage [FK] (nullable)
-  - check_type -> checks.CheckType [FK]
+  - check_type -> checks.CheckType [FK] (nullable)
+  - check_category -> checks.CheckCategory [FK] (nullable)
 
 ### ConditionResistanceModifier
 **Foreign Keys:**

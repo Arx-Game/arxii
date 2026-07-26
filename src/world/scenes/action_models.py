@@ -261,6 +261,15 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
             "resolve_accepted_cast fires the entrance hooks when set."
         ),
     )
+    cast_openly = models.BooleanField(
+        default=False,
+        help_text=(
+            "The caster waived their style's cast concealment for this cast (#2710). "
+            "Persisted rather than passed, because a consent-gated cast poses at ACCEPT "
+            "time: a flag held only in the calling frame would silently go subtle when "
+            "the target accepts. One-way — it can only waive concealment, never add it."
+        ),
+    )
     created_at = models.DateTimeField(default=timezone.now)
     resolved_at = models.DateTimeField(
         null=True,

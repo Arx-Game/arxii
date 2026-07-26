@@ -71,6 +71,10 @@ def _requires_receiver_check(obj: Interaction) -> bool:
     """Return True if the interaction is restricted to receivers/writer only."""
     if obj.visibility == InteractionVisibility.VERY_PRIVATE:
         return True
+    if obj.visibility == InteractionVisibility.PERCEIVED_ONLY:
+        # #2710 — only the characters who perceived the event. Staff still pass,
+        # via the is_staff branch above the caller's use of this predicate.
+        return True
     if obj.place_id is not None:
         return True
     scene = obj.scene
@@ -96,14 +100,21 @@ class CanViewInteraction(permissions.BasePermission):
         if user.is_staff:
             return True
 
+        # Directed or escalated-visibility content (whisper, place-scoped table talk,
+        # PERCEIVED_ONLY, or a private scene) is NOT made public by its scene being
+        # public -- this must run BEFORE the public-scene branch below, or a
+        # receiver-scoped interaction sitting inside a public scene leaks to everyone.
+        # (#2710 review: the public-scene branch previously ran first and always won,
+        # so this predicate's whisper/place/PERCEIVED_ONLY restrictions were dead code
+        # for any interaction in a public scene -- the common case. Mirrors the order
+        # already correct in the sibling service function, can_view_interaction.)
+        if _requires_receiver_check(obj):
+            return _is_receiver_or_writer(obj, persona_ids)
+
         # Public scene: visible to all
         scene = obj.scene
         if scene and scene.privacy_mode == ScenePrivacyMode.PUBLIC:
             return True
-
-        # Place-scoped, private scene, whisper, or other restricted modes
-        if _requires_receiver_check(obj):
-            return _is_receiver_or_writer(obj, persona_ids)
 
         # Default: public (pose/emit/say/shout/action without a scene)
         return True

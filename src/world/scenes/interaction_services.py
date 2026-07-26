@@ -117,6 +117,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     strain_committed: int = 0,
     fury_committed: FuryTier | None = None,
     pose_kind: str = PoseKind.STANDARD,
+    visibility: str = InteractionVisibility.DEFAULT,
 ) -> Interaction:
     """Create an atomic RP interaction with optional receiver records.
 
@@ -141,6 +142,10 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         fury_committed: Realized FuryTier post-resolution (null = no fury). Audit field.
         pose_kind: PoseKind classification (Spec C); ENTRY poses open a
             Make-an-Entrance reaction window (#904) at the call site.
+        visibility: InteractionVisibility tier. DEFAULT is room-heard; PERCEIVED_ONLY
+            (#2710) restricts the interaction to its explicit ``receivers`` plus staff
+            and the scene GM. Escalate only — never pass a weaker tier than the scene
+            or mode already implies.
 
     Returns:
         The created Interaction.
@@ -157,6 +162,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         strain_committed=strain_committed,
         fury_committed=fury_committed,
         pose_kind=pose_kind,
+        visibility=visibility,
     )
     # #1826 — posing in a scene is IC action in its area: lie-low breaks.
     _break_lie_low_for_interaction(persona, scene)
@@ -173,7 +179,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
 
     if effective_receivers:
         # Pin each receiver's account too (#1219), batched to one query for the whole room.
-        receiver_accounts = _accounts_for_personas(effective_receivers)
+        receiver_accounts = accounts_for_personas(effective_receivers)
         InteractionReceiver.objects.bulk_create(
             [
                 InteractionReceiver(
@@ -339,7 +345,16 @@ def push_interaction(
         target_persona_ids=t_ids,
     )
 
-    if interaction.mode == InteractionMode.WHISPER or interaction.place_id is not None:
+    # Any escalated visibility is receiver-scoped, not room-heard. Before #2710 this
+    # branch tested only whisper/place, so a VERY_PRIVATE pose would have broadcast to
+    # the whole room over the WebSocket — no live caller did that, but the next one
+    # would have. Fixed on sight.
+    receiver_scoped = (
+        interaction.mode == InteractionMode.WHISPER
+        or interaction.place_id is not None
+        or interaction.visibility != InteractionVisibility.DEFAULT
+    )
+    if receiver_scoped:
         writer_char = persona.character_sheet.character
         _send_to_objects([writer_char, *r_chars], payload)
     else:
@@ -413,13 +428,21 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
 ) -> bool:
     """Check if a persona can view an interaction.
 
+    This gate governs an IC ACTION (a scene reaction — "did you actually witness
+    this event?"), which is why it exists as a third cascade alongside
+    ``InteractionQuerySet.visible_to`` (read-visibility for the scene log) and
+    ``CanViewInteraction`` (REST object permission) rather than being redundant
+    with either: a reactor whose account can technically read the log is still
+    blocked here if their PERSONA never perceived the event (#2710).
+
     Visibility cascade:
     1. very_private -> writer + InteractionReceiver check (not staff)
-    2. Whisper or place-scoped -> writer + InteractionReceiver check (+ staff),
+    2. perceived_only -> writer + InteractionReceiver check (+ staff) (#2710)
+    3. Whisper or place-scoped -> writer + InteractionReceiver check (+ staff),
        regardless of scene privacy — mirrors the real-time push rule so the
        persisted log never shows more than the room heard
-    3. Private scene -> all scene participants (Account-based via SceneParticipation)
-    4. Public -> everyone
+    4. Private scene -> all scene participants (Account-based via SceneParticipation)
+    5. Public -> everyone
     """
     is_writer = interaction.persona_id == persona.pk
     is_receiver = InteractionReceiver.objects.filter(
@@ -434,6 +457,12 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
     # Staff can see everything except very_private
     if is_staff:
         return True
+
+    # Perceived only (#2710): only the characters who actually perceived the
+    # event, plus staff (already returned True above). Unlike VERY_PRIVATE this
+    # tier still admits staff — checked here, after the staff early-return.
+    if interaction.visibility == InteractionVisibility.PERCEIVED_ONLY:
+        return is_receiver or is_writer
 
     # Whisper, receiver-scoped mutter, or place-scoped (table talk): only
     # writer + receivers, even inside a public or private scene. A mutter
@@ -476,12 +505,15 @@ def _get_account_for_persona(persona: Persona) -> int | None:
     return _get_account_for_character(persona.character_sheet_id)
 
 
-def _accounts_for_personas(personas: list[Persona]) -> dict[int, int]:
+def accounts_for_personas(personas: list[Persona]) -> dict[int, int]:
     """Map persona pk -> current account id for a batch of personas, in one query (#1219).
 
     The batched form of ``_get_account_for_persona`` — used when pinning receiver accounts at
     interaction creation so a place-scoped (whole-room) interaction stays O(1) queries.
-    Personas whose character has no current tenure are simply absent from the map.
+    Personas whose character has no current tenure are simply absent from the map. Public
+    (#2710) so callers outside this module — e.g. concealing a cast's ACTION interaction in
+    ``world.scenes.cast_services`` — can pin receiver accounts without reaching for an
+    underscore-prefixed name.
     """
     from world.roster.models import RosterTenure  # noqa: PLC0415
 

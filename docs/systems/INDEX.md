@@ -558,6 +558,18 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `"magic"`) — single seam; telnet `CmdTechnique` and web `POST /api/magic/techniques/author/`
   both converge here. Telnet: `technique draft|show|set|restrict|grant|damage|condition|price|author|discard`
   (`cmd:perm(Builder)` — staff/GM only).
+- **Cast observation (#2710, ADR-0170):** `resolve_cast_audience(*, caster,
+  cast_openly=False) -> CastAudience` (`world/magic/services/cast_observation.py`) — who
+  perceived a cast worked in a concealed `TechniqueStyle.cast_concealment` style, and in
+  how much detail (full/vague/nothing), resolved per co-located observer at cast time.
+  Materialised as `InteractionReceiver` rows under the new
+  `InteractionVisibility.PERCEIVED_ONLY` tier (writer + receivers + staff + scene GM;
+  stricter than `VERY_PRIVATE`, which admits no exception). Wired into standalone casts
+  only (`world/scenes/cast_services.py`); combat casts
+  (`world.combat.interaction_services.broadcast_action_outcome`) are NOT covered — see
+  magic.md's "Cast observation" section for the full mechanism, the three enforcement
+  points (`InteractionQuerySet.visible_to`, `SceneActionRequestViewSet.get_queryset`,
+  `can_view_interaction`), and the lore-repo content this stays inert without.
 - **Source:** `src/world/magic/`
 - **Details:** [magic.md](magic.md) · cast lifecycle (How Magic Works):
   [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +

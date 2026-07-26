@@ -246,6 +246,7 @@ class TechniqueCastCreateSerializer(serializers.Serializer):
     fury_anchor_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     pull = CastPullRequestSerializer(required=False, allow_null=True)
     use_base_form = serializers.BooleanField(required=False, default=False)
+    cast_openly = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs: dict) -> dict:
         """Cap strain by anima; cap fury by provocation; validate pull (#854)."""

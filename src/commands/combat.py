@@ -53,6 +53,7 @@ from commands.pull_parsing import (
     _BASE_KEYWORD,
     _EFFORT_PREFIX,
     _FURY_PREFIX,
+    _OPENLY_KEYWORD,
     _SECONDARY_KEYWORD,
     PullParsingMixin,
 )
@@ -147,8 +148,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     """Cast a technique — works both in and out of combat.
 
     Usage:
-        cast <technique> [at <target>] [effort=<level>] [secondary]
-        declare <technique> [at <target>] [effort=<level>] [secondary]
+        cast <technique> [at <target>] [effort=<level>] [secondary] [base] [openly]
+        declare <technique> [at <target>] [effort=<level>] [secondary] [base] [openly]
 
     Outside combat: casts the technique immediately in the active scene.
     In a DECLARING combat round: declares the technique for this round;
@@ -160,6 +161,10 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
     Use ``secondary`` to declare the technique as a passive action in its
     arena slot (the technique's action_category decides the slot).
+
+    Use ``openly`` to waive your Path style's cast concealment for this one
+    cast — a one-way choice: it can only remove concealment a subtle style
+    already imposes, never add concealment to an overt one.
     """
 
     key = "cast"
@@ -184,6 +189,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     _anchor_str: str | None = None
     # Base-form opt-out (#1581 Task 8).
     _use_base_form: bool = False
+    # Cast-concealment waiver (#2710 Task 6).
+    _cast_openly: bool = False
     # #1619: Variant resonance selection for multi-resonance characters.
     _variant_resonance_str: str | None = None
 
@@ -206,7 +213,9 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
         raw = (self.args or "").strip()
         if not raw:
-            msg = "Usage: cast <technique> [at <target>] [effort=<level>] [secondary]"
+            msg = (
+                "Usage: cast <technique> [at <target>] [effort=<level>] [secondary] [base] [openly]"
+            )
             raise CommandError(msg)
 
         # Strip pull=<threads>, resonance=<name>, tier=<1-3> if present FIRST so
@@ -247,10 +256,11 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
                 raise CommandError(msg)
             effort_str = effort_val
 
-        # Strip standalone trailing "secondary" and "base" keywords (case-insensitive,
-        # whole word).  Must come after effort= stripping so the remaining raw is
-        # clean.  Both keywords can coexist on the same command line in any order.
-        raw, secondary, use_base_form = self._strip_cast_mode_keywords(raw)
+        # Strip standalone trailing "secondary", "base", and "openly" keywords
+        # (case-insensitive, whole word).  Must come after effort= stripping so the
+        # remaining raw is clean.  All three keywords can coexist on the same
+        # command line in any order.
+        raw, secondary, use_base_form, cast_openly = self._strip_cast_mode_keywords(raw)
 
         # Split on the first " at " (case-insensitive) to separate technique from
         # the optional target. A literal search avoids a backtracking-prone regex.
@@ -263,12 +273,15 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             self._target_name = None
 
         if not self._technique_name:
-            msg = "Usage: cast <technique> [at <target>] [effort=<level>] [secondary]"
+            msg = (
+                "Usage: cast <technique> [at <target>] [effort=<level>] [secondary] [base] [openly]"
+            )
             raise CommandError(msg)
 
         self._effort = effort_str
         self._secondary = secondary
         self._use_base_form = use_base_form
+        self._cast_openly = cast_openly
         self._pull_thread_str = pull_thread_str
         self._pull_resonance_str = resonance_str
         self._pull_tier = pull_tier
@@ -294,18 +307,20 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             return stripped[: -len(kw)].rstrip(), True
         return raw, False
 
-    def _strip_cast_mode_keywords(self, raw: str) -> tuple[str, bool, bool]:
-        """Strip trailing ``secondary`` and ``base`` keywords in any order.
+    def _strip_cast_mode_keywords(self, raw: str) -> tuple[str, bool, bool, bool]:
+        """Strip trailing ``secondary``, ``base``, and ``openly`` keywords in any order.
 
-        Both keywords are standalone trailing tokens (case-insensitive, whole
-        word).  Loops until neither is the trailing token so that ``secondary
-        base`` and ``base secondary`` both yield the correct flags — fixing the
-        fixed-order stripping bug (#1581 Task 9).
+        All three keywords are standalone trailing tokens (case-insensitive, whole
+        word).  Loops until none is the trailing token so that any order (e.g.
+        ``secondary base openly``, ``openly base``) yields the correct flags —
+        fixing the fixed-order stripping bug (#1581 Task 9), extended for
+        ``openly`` (#2710 Task 6).
 
-        Returns ``(remainder, secondary, use_base_form)``.
+        Returns ``(remainder, secondary, use_base_form, cast_openly)``.
         """
         secondary = False
         use_base_form = False
+        cast_openly = False
         changed = True
         while changed:
             changed = False
@@ -317,7 +332,11 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             if found:
                 use_base_form = True
                 changed = True
-        return raw, secondary, use_base_form
+            raw, found = self._strip_trailing_keyword(raw, _OPENLY_KEYWORD)
+            if found:
+                cast_openly = True
+                changed = True
+        return raw, secondary, use_base_form, cast_openly
 
     @staticmethod
     def _extract_fury_keywords(raw: str) -> tuple[str, str | None, str | None]:
@@ -750,6 +769,11 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         # default (variant applied) from polluting kwargs unnecessarily.
         if self._use_base_form:
             kwargs["use_base_form"] = True
+
+        # Cast-concealment waiver (#2710): only inject when explicitly declared,
+        # same pattern as use_base_form above.
+        if self._cast_openly:
+            kwargs["cast_openly"] = True
 
         if self._target_name:
             self._inject_target_kwargs(kwargs)

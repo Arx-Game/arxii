@@ -54,7 +54,7 @@ from world.scenes.action_constants import (
     ActionRequestStatus,
 )
 from world.scenes.action_models import SceneActionPullDeclaration, SceneActionRequest
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.interaction_services import create_interaction
 from world.scenes.narrator import get_or_create_narrator_persona
 from world.scenes.types import CastResult, EnhancedSceneActionResult
@@ -65,6 +65,7 @@ if TYPE_CHECKING:
     from actions.types import PendingActionResolution
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import FuryTier, Resonance, Technique
+    from world.magic.services.cast_observation import CastAudience
     from world.magic.services.fury import FuryResolution
     from world.magic.types.power_ledger import PowerLedger
     from world.magic.types.pull import CastPullDeclaration
@@ -217,13 +218,27 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     target_persona: Persona | None,
     technique: Technique,
     result: EnhancedSceneActionResult,
+    audience: CastAudience,
     power_ledger: PowerLedger | None = None,
     fizzle_note: str | None = None,
     technique_name: str | None = None,
-) -> Interaction:
-    """Author the Narrator OUTCOME pose describing a resolved standalone cast.
+) -> tuple[Interaction, Interaction | None]:
+    """Author the Narrator OUTCOME pose(s) describing a resolved standalone cast (#2710).
+
+    Returns ``(pose, vague_pose)``. ``vague_pose`` is ``None`` unless the cast was
+    concealed AND at least one observer only marginally detected it.
+
+    Both poses are scene-linked but deliberately NOT wired to
+    ``SceneActionRequest.result_interaction`` — that FK is a ``OneToOne``, so it can
+    only ever point at one Interaction, and the caller already wires ``pose`` there.
+    Combat's broadcast poses are likewise unlinked from any per-request FK. The vague
+    pose also carries **no** ``target_personas`` — naming the target would leak the
+    attribution this detection tier is meant to withhold.
 
     Args:
+        audience: Who perceived this cast, from ``resolve_cast_audience``. When
+            ``audience.concealed`` is False, behavior is byte-identical to before
+            #2710 — a single DEFAULT-visibility, room-heard pose.
         fizzle_note: Optional explanatory note appended to the narration when a
             declared pull could not be charged (e.g. resonance drained mid-consent).
         technique_name: Optional display name override. When provided (e.g. a
@@ -254,16 +269,73 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         signature_snippet=signature_snippet,
     )
 
-    return create_interaction(
+    if not audience.concealed:
+        return create_interaction(
+            persona=get_or_create_narrator_persona(),
+            content=narration,
+            mode=InteractionMode.OUTCOME,
+            scene=scene,
+            target_personas=[target_persona] if target_persona is not None else None,
+        ), None
+
+    from world.magic.narration import render_vague_cast_narration  # noqa: PLC0415
+
+    pose = create_interaction(
         persona=get_or_create_narrator_persona(),
         content=narration,
         mode=InteractionMode.OUTCOME,
         scene=scene,
+        receivers=audience.full,
         target_personas=[target_persona] if target_persona is not None else None,
+        visibility=InteractionVisibility.PERCEIVED_ONLY,
+    )
+    vague_pose = None
+    if audience.vague:
+        vague_pose = create_interaction(
+            persona=get_or_create_narrator_persona(),
+            content=render_vague_cast_narration(),
+            mode=InteractionMode.OUTCOME,
+            scene=scene,
+            receivers=audience.vague,
+            visibility=InteractionVisibility.PERCEIVED_ONLY,
+        )
+    return pose, vague_pose
+
+
+def _conceal_action_interaction(action_interaction: Interaction, audience: CastAudience) -> None:
+    """Set a concealed cast's ACTION row to PERCEIVED_ONLY with the resolved receivers.
+
+    #2710: this row's content is the technique name. Concealing only the OUTCOME pose
+    would still show every bystander "Ilyra — Whisper of Binding" in the scene log via
+    the ACTION row's ``technique_name``.
+    """
+    from world.scenes.interaction_services import accounts_for_personas  # noqa: PLC0415
+    from world.scenes.place_models import InteractionReceiver  # noqa: PLC0415
+
+    action_interaction.visibility = InteractionVisibility.PERCEIVED_ONLY
+    action_interaction.save(update_fields=["visibility"])
+    receiver_accounts = accounts_for_personas(audience.full)
+    # audience.full always includes the caster (resolve_cast_audience appends them),
+    # and unlike create_interaction's place-scoped auto-populate path (which excludes
+    # the writer via .exclude(pk=persona.pk)), we deliberately do NOT exclude them
+    # here. create_action_interaction_core builds this row via Interaction.objects.
+    # create(...) directly rather than through create_interaction, so it never pins
+    # writer_account_id — receiver membership is the caster's only route back to
+    # their own concealed ACTION row.
+    InteractionReceiver.objects.bulk_create(
+        [
+            InteractionReceiver(
+                interaction=action_interaction,
+                timestamp=action_interaction.timestamp,
+                persona=p,
+                account_id=receiver_accounts.get(p.pk),
+            )
+            for p in audience.full
+        ]
     )
 
 
-def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast resolution; cohesive
+def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
     *,
     request: SceneActionRequest,
     scene: Scene,
@@ -420,12 +492,17 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     request.resolved_difficulty = difficulty
     request.save(update_fields=["status", "resolved_at", "resolved_difficulty"])
 
-    pose = create_cast_outcome_pose(
+    from world.magic.services.cast_observation import resolve_cast_audience  # noqa: PLC0415
+
+    audience = resolve_cast_audience(caster=character, cast_openly=request.cast_openly)
+
+    pose, _vague_pose = create_cast_outcome_pose(
         scene=scene,
         caster_persona=caster_persona,
         target_persona=target_persona,
         technique=technique,
         result=result,
+        audience=audience,
         power_ledger=power_ledger,
         fizzle_note=fizzle_note,
         technique_name=resolved_name,
@@ -443,6 +520,8 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         strain_committed=strain_commitment,
         fury_committed=fury_res.realized_tier if fury_res else None,
     )
+    if audience.concealed:
+        _conceal_action_interaction(action_interaction, audience)
     persist_power_ledger(interaction=action_interaction, ledger=power_ledger)
     request.action_interaction = action_interaction
     request.save(update_fields=["action_interaction"])
@@ -763,6 +842,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
     preferred_resonance: Resonance | None = None,
+    cast_openly: bool = False,
 ) -> CastResult:
     """Route a FILTERED_GROUP cast that has a player-supplied persona list.
 
@@ -798,6 +878,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
         use_base_form=use_base_form,
         position_params=position_params,
         preferred_resonance=preferred_resonance,
+        cast_openly=cast_openly,
     )
 
 
@@ -816,6 +897,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
     position_params: dict[str, int] | None = None,
     originated_as_entrance: bool = False,
     preferred_resonance: Resonance | None = None,
+    cast_openly: bool = False,
 ) -> CastResult:
     """Route a cast directed at another PC (not the caster's own sheet)."""
     if is_technique_hostile(technique):
@@ -828,6 +910,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
             target_persona=target_persona,
             technique=technique,
             originated_as_entrance=originated_as_entrance,
+            cast_openly=cast_openly,
         )
     if cast_requires_consent(technique, caster=initiator_persona.character_sheet.character):
         return _route_benign_cast(
@@ -841,6 +924,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
             cast_pull=cast_pull,
             confirm_soulfray_risk=confirm_soulfray_risk,
             originated_as_entrance=originated_as_entrance,
+            cast_openly=cast_openly,
         )
     return _route_immediate_cast(
         scene=scene,
@@ -855,6 +939,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
         use_base_form=use_base_form,
         position_params=position_params,
         preferred_resonance=preferred_resonance,
+        cast_openly=cast_openly,
     )
 
 
@@ -874,6 +959,7 @@ def request_technique_cast(  # noqa: PLR0913
     position_params: dict[str, int] | None = None,
     originated_as_entrance: bool = False,
     preferred_resonance: Resonance | None = None,
+    cast_openly: bool = False,
 ) -> CastResult:
     """Route a standalone technique cast per the consent/combat/immediate matrix.
 
@@ -904,6 +990,13 @@ def request_technique_cast(  # noqa: PLR0913
             the self/room/no-target immediate path resolves in this same call and
             has no later resolution step to gate. Defaults ``False`` so all existing
             callers are unaffected.
+        cast_openly: One-way waiver of the caster's style-imposed cast concealment
+            for this cast (#2710). It can only remove concealment a subtle style
+            already imposes; it can never add concealment to an overt style.
+            Persisted on the ``SceneActionRequest`` (rather than threaded through
+            the call stack alone) so a consent-gated cast — which poses at ACCEPT
+            time, not at request time — still reads the caster's choice. Defaults
+            ``False`` so all existing callers are unaffected.
 
     Returns:
         A CastResult whose populated payload depends on the routing branch taken.
@@ -951,6 +1044,7 @@ def request_technique_cast(  # noqa: PLR0913
             use_base_form=use_base_form,
             position_params=position_params,
             preferred_resonance=preferred_resonance,
+            cast_openly=cast_openly,
         )
 
     # Inline the other-PC check (rather than a bool var) so the type checker can
@@ -973,6 +1067,7 @@ def request_technique_cast(  # noqa: PLR0913
             position_params=position_params,
             originated_as_entrance=originated_as_entrance,
             preferred_resonance=preferred_resonance,
+            cast_openly=cast_openly,
         )
 
     return _route_immediate_cast(
@@ -988,6 +1083,7 @@ def request_technique_cast(  # noqa: PLR0913
         use_base_form=use_base_form,
         position_params=position_params,
         preferred_resonance=preferred_resonance,
+        cast_openly=cast_openly,
     )
 
 
@@ -1003,6 +1099,7 @@ def _create_cast_request(  # noqa: PLR0913
     fury_anchor: CharacterSheet | None = None,
     resolved_at: datetime | None = None,
     originated_as_entrance: bool = False,
+    cast_openly: bool = False,
 ) -> SceneActionRequest:
     """Create a SceneActionRequest for a standalone cast.
 
@@ -1022,16 +1119,18 @@ def _create_cast_request(  # noqa: PLR0913
         fury_anchor=fury_anchor,
         resolved_at=resolved_at,
         originated_as_entrance=originated_as_entrance,
+        cast_openly=cast_openly,
     )
 
 
-def _route_hostile_cast(
+def _route_hostile_cast(  # noqa: PLR0913 - cohesive hostile-cast routing params
     *,
     scene: Scene,
     initiator_persona: Persona,
     target_persona: Persona,
     technique: Technique,
     originated_as_entrance: bool = False,
+    cast_openly: bool = False,
 ) -> CastResult:
     """Hostile cast at another PC → audit request + seed/feed a combat encounter.
 
@@ -1050,6 +1149,7 @@ def _route_hostile_cast(
             technique=technique,
             status=ActionRequestStatus.PENDING,
             originated_as_entrance=originated_as_entrance,
+            cast_openly=cast_openly,
         )
         return CastResult(request=request)
     with transaction.atomic():
@@ -1061,6 +1161,7 @@ def _route_hostile_cast(
             status=ActionRequestStatus.RESOLVED,
             resolved_at=timezone.now(),
             originated_as_entrance=originated_as_entrance,
+            cast_openly=cast_openly,
         )
         encounter = seed_or_feed_encounter_from_cast(
             caster_sheet=initiator_persona.character_sheet,
@@ -1085,6 +1186,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
     cast_pull: CastPullDeclaration | None = None,
     confirm_soulfray_risk: bool = True,  # noqa: ARG001 — resolution deferred to accept; kept for signature symmetry
     originated_as_entrance: bool = False,
+    cast_openly: bool = False,
 ) -> CastResult:
     """Benign cast at another PC → PENDING request awaiting consent (resolved on accept).
 
@@ -1102,6 +1204,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
             fury_commitment=fury_commitment,
             fury_anchor=fury_anchor,
             originated_as_entrance=originated_as_entrance,
+            cast_openly=cast_openly,
         )
         if cast_pull is not None:
             declaration = SceneActionPullDeclaration.objects.create(
@@ -1188,6 +1291,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
     preferred_resonance: Resonance | None = None,
+    cast_openly: bool = False,
 ) -> CastResult:
     """Self/room/no-target cast → resolve now, persist RESOLVED, author OUTCOME pose.
 
@@ -1215,6 +1319,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
             strain_commitment=strain_commitment,
             fury_commitment=fury_commitment,
             fury_anchor=fury_anchor,
+            cast_openly=cast_openly,
         )
         result, power_ledger, pose = _resolve_and_pose_cast(
             request=request,
