@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import NamedTuple
 
 from world.roster.models import Roster
-from world.roster.models.choices import ActivityRequirement, RosterType
+from world.roster.models.choices import RosterType
 
 
 class RosterSeedSpec(NamedTuple):
@@ -23,7 +23,6 @@ class RosterSeedSpec(NamedTuple):
     is_active: bool
     is_public: bool
     allow_applications: bool
-    activity_requirement: str
 
 
 _ROSTER_SEED: dict[str, RosterSeedSpec] = {
@@ -33,7 +32,6 @@ _ROSTER_SEED: dict[str, RosterSeedSpec] = {
         is_active=True,
         is_public=True,
         allow_applications=False,
-        activity_requirement=ActivityRequirement.HIGH,
     ),
     RosterType.AVAILABLE: RosterSeedSpec(
         name="Available Characters",
@@ -41,7 +39,6 @@ _ROSTER_SEED: dict[str, RosterSeedSpec] = {
         is_active=True,
         is_public=True,
         allow_applications=True,
-        activity_requirement=ActivityRequirement.NONE,
     ),
     RosterType.INACTIVE: RosterSeedSpec(
         name="Inactive Characters",
@@ -49,7 +46,6 @@ _ROSTER_SEED: dict[str, RosterSeedSpec] = {
         is_active=True,
         is_public=True,
         allow_applications=True,
-        activity_requirement=ActivityRequirement.NONE,
     ),
     RosterType.PENDING: RosterSeedSpec(
         name="Pending Characters",
@@ -57,7 +53,6 @@ _ROSTER_SEED: dict[str, RosterSeedSpec] = {
         is_active=False,
         is_public=False,
         allow_applications=False,
-        activity_requirement=ActivityRequirement.NONE,
     ),
     RosterType.RESTRICTED: RosterSeedSpec(
         name="Restricted Characters",
@@ -65,7 +60,6 @@ _ROSTER_SEED: dict[str, RosterSeedSpec] = {
         is_active=True,
         is_public=True,
         allow_applications=True,
-        activity_requirement=ActivityRequirement.HIGH,
     ),
     RosterType.FROZEN: RosterSeedSpec(
         name="Frozen Characters",
@@ -73,7 +67,6 @@ _ROSTER_SEED: dict[str, RosterSeedSpec] = {
         is_active=True,
         is_public=False,
         allow_applications=False,
-        activity_requirement=ActivityRequirement.NONE,
     ),
     RosterType.NPC: RosterSeedSpec(
         name="NPCs",
@@ -81,7 +74,6 @@ _ROSTER_SEED: dict[str, RosterSeedSpec] = {
         is_active=True,
         is_public=False,
         allow_applications=False,
-        activity_requirement=ActivityRequirement.NONE,
     ),
 }
 
@@ -106,7 +98,6 @@ def ensure_rosters() -> dict[str, Roster]:
                 "is_active": spec.is_active,
                 "is_public": spec.is_public,
                 "allow_applications": spec.allow_applications,
-                "activity_requirement": spec.activity_requirement,
             },
         )
         rosters[roster_type] = roster

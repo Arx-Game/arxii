@@ -88,18 +88,23 @@ class RosterAdmin(admin.ModelAdmin):
         "description",
         "is_active",
         "allow_applications",
-        "activity_requirement",
         "sort_order",
     ]
-    list_filter = ["roster_type", "is_active", "allow_applications", "activity_requirement"]
+    list_filter = ["roster_type", "is_active", "allow_applications"]
     search_fields = ["name", "roster_type", "description"]
     ordering = ["sort_order", "name"]
 
 
 @admin.register(RosterEntry)
 class RosterEntryAdmin(admin.ModelAdmin):
-    list_display = ["character_sheet", "roster", "joined_roster", "profile_picture"]
-    list_filter = ["roster", "joined_roster"]
+    list_display = [
+        "character_sheet",
+        "roster",
+        "activity_requirement",
+        "joined_roster",
+        "profile_picture",
+    ]
+    list_filter = ["roster", "activity_requirement", "joined_roster"]
     search_fields = ["character_sheet__character__db_key"]
     readonly_fields = ["joined_roster", "created_date", "updated_date"]
 
@@ -108,7 +113,10 @@ class RosterEntryAdmin(admin.ModelAdmin):
     # Roster is a lookup table with few entries, keep default widget
 
     fieldsets = (
-        ("Character Info", {"fields": ("character_sheet", "roster", "profile_picture")}),
+        (
+            "Character Info",
+            {"fields": ("character_sheet", "roster", "activity_requirement", "profile_picture")},
+        ),
         (
             "History",
             {"fields": ("joined_roster", "previous_roster"), "classes": ("collapse",)},

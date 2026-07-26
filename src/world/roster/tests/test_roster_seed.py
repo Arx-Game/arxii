@@ -22,10 +22,20 @@ class EnsureRostersTests(TestCase):
         ensure_rosters()
         self.assertEqual(Roster.objects.count(), len(RosterType.values))
 
-    def test_activity_requirement_is_set_so_the_sweep_is_reachable(self):
-        """The sweep filters on this; leaving it at NONE made the feature inert."""
+    def test_activity_requirement_is_not_a_shelf_property(self):
+        """It moved to RosterEntry (#2728).
+
+        A shelf-level value would be flattened the moment approval moved every
+        played character onto the Active roster, losing the authored per-character
+        bar. Kept as a test so it doesn't drift back onto Roster.
+        """
         rosters = ensure_rosters()
-        self.assertEqual(rosters[RosterType.ACTIVE].activity_requirement, ActivityRequirement.HIGH)
+        self.assertFalse(hasattr(rosters[RosterType.ACTIVE], "activity_requirement"))
+
+    def test_a_new_entry_defaults_to_high_so_the_sweep_is_reachable(self):
+        """Defaulting to NONE would make the whole feature inert by omission."""
+        entry = RosterEntryFactory()
+        self.assertEqual(entry.activity_requirement, ActivityRequirement.HIGH)
 
     def test_npc_and_active_refuse_applications(self):
         rosters = ensure_rosters()
