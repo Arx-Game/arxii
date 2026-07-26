@@ -456,6 +456,7 @@ class CreateTechniqueDefaultActionTemplateTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # wire_melee_attack_action_template gates on #2698
 class ConsequencePoolCatalogResolutionTests(TestCase):
     def test_none_pool_id_returns_shared_base_template(self):
         from world.magic.seeds_cast import get_standalone_cast_template
@@ -611,6 +612,7 @@ class ConsequencePoolCatalogCombatSplitTests(TestCase):
         self.assertEqual(catalog.count(), 2)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # wire_melee_attack_action_template gates on #2698
 class BuildTechniqueConsequencePoolTests(TestCase):
     def _minimal_design_kwargs(self, **overrides):
         from world.magic.types.technique_builder import TechniqueDesignInput
