@@ -688,3 +688,26 @@ class CombatRoundActionCommitmentTests(TestCase):
         self.assertIsNone(action.fury_commitment)
         self.assertIsNone(action.fury_anchor)
         self.assertEqual(action.strain_commitment, 0)
+
+
+class OpponentTierTemplateAssessProseTest(TestCase):
+    """OpponentTierTemplate.assess_prose holds designer-authored tier narrative."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.combat.factories import (
+            OpponentTierTemplateFactory,
+            seed_scaling_defaults,
+        )
+
+        seed_scaling_defaults()
+        cls.mook = OpponentTierTemplateFactory(tier=OpponentTier.MOOK)
+        cls.boss = OpponentTierTemplateFactory(tier=OpponentTier.BOSS)
+        cls.boss.assess_prose = "a commanding presence"
+        cls.boss.save(update_fields=["assess_prose"])
+
+    def test_field_defaults_blank(self) -> None:
+        self.assertEqual(self.mook.assess_prose, "")
+
+    def test_field_can_be_set(self) -> None:
+        self.assertEqual(self.boss.assess_prose, "a commanding presence")

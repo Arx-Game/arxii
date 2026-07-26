@@ -2388,6 +2388,15 @@ class OpponentTierTemplate(SharedMemoryModel):
         default=1,
         help_text="Tier-level action economy. MOOK/ELITE=1; BOSS=2 or 3.",
     )
+    assess_prose = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "#2716: designer-authored narrative prose for this tier in a "
+            "consider reading (e.g. 'a commanding presence' for BOSS). "
+            "Blank = the tier clause is omitted from the reading."
+        ),
+    )
 
     class Meta:
         ordering = ["tier"]
