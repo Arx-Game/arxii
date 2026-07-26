@@ -257,3 +257,94 @@ class ConsiderOpponentServiceTest(TestCase):
         )
         reading = consider_opponent(self.participant, self.opponent)
         self.assertTrue(reading.is_enhanced)
+
+
+class ConsiderEndpointTest(TestCase):
+    """GET /api/combat/encounters/<pk>/consider/<opp_pk>/ returns prose only."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import (
+            AccountFactory,
+            CharacterFactory,
+        )
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.classes.factories import CharacterClassLevelFactory
+        from world.combat.constants import (
+            OpponentTier,
+            ParticipantStatus,
+        )
+        from world.combat.factories import (
+            CombatEncounterFactory,
+            CombatOpponentFactory,
+            CombatParticipantFactory,
+            seed_scaling_defaults,
+        )
+        from world.roster.factories import RosterTenureFactory
+        from world.scenes.factories import SceneFactory, SceneParticipationFactory
+
+        seed_scaling_defaults()
+        cls.player_account = AccountFactory(username="considerer")
+        cls.player_character = CharacterFactory(db_key="considerer_char")
+        cls.player_sheet = CharacterSheetFactory(character=cls.player_character)
+        cls.tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=cls.player_character,
+            player_data__account=cls.player_account,
+        )
+        cls.scene = SceneFactory()
+        SceneParticipationFactory(
+            scene=cls.scene,
+            account=cls.player_account,
+            is_gm=True,
+        )
+        cls.encounter = CombatEncounterFactory(scene=cls.scene)
+        cls.participant = CombatParticipantFactory(
+            encounter=cls.encounter,
+            character_sheet=cls.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        CharacterClassLevelFactory(
+            character=cls.player_sheet,
+            level=10,
+            is_primary=True,
+        )
+        cls.opponent = CombatOpponentFactory(
+            encounter=cls.encounter,
+            tier=OpponentTier.MOOK,
+            level=10,
+        )
+
+    def test_endpoint_returns_prose(self) -> None:
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        url = f"/api/combat/{self.encounter.pk}/consider/{self.opponent.pk}/"
+        response = client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("prose", response.data)
+        self.assertTrue(response.data["prose"])
+        self.assertIn("assessed_at", response.data)
+        self.assertIn("is_cached", response.data)
+
+    def test_endpoint_never_exposes_mechanics(self) -> None:
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        url = f"/api/combat/{self.encounter.pk}/consider/{self.opponent.pk}/"
+        response = client.get(url)
+        self.assertNotIn("success_level", response.data)
+        self.assertNotIn("true_band_index", response.data)
+        self.assertNotIn("reported_band_index", response.data)
+
+    def test_second_call_returns_cached(self) -> None:
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        url = f"/api/combat/{self.encounter.pk}/consider/{self.opponent.pk}/"
+        first = client.get(url)
+        second = client.get(url)
+        self.assertFalse(first.data["is_cached"])
+        self.assertTrue(second.data["is_cached"])
