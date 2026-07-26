@@ -1449,7 +1449,16 @@ class EscalationCurveFactory(factory_django.DjangoModelFactory):
 
     @factory.lazy_attribute
     def pace_check_type(self) -> object:
-        return ensure_escalation_pace_check_type()
+        """Factory-owned CheckType — not the gated #872 seed (#2698).
+
+        ``ensure_escalation_pace_check_type()`` is content-repo-gated
+        (``authored_or_sample``) and returns ``None`` when SEED_SAMPLE_CONTENT
+        is off, which would violate this FK's NOT NULL constraint. A test
+        factory must always produce a valid object regardless of that setting.
+        """
+        from world.checks.factories import CheckTypeFactory
+
+        return CheckTypeFactory(name="Escalation Pace")
 
 
 def wire_flee_config():
