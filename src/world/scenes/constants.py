@@ -31,9 +31,17 @@ class InteractionMode(models.TextChoices):
 
 
 class InteractionVisibility(models.TextChoices):
-    """Per-interaction privacy override. Can only escalate, never reduce."""
+    """Per-interaction privacy override. Can only escalate, never reduce.
+
+    ``PERCEIVED_ONLY`` (#2710) restricts an interaction to its writer and the
+    personas recorded as ``InteractionReceiver`` rows — the characters who actually
+    perceived the event — while STILL admitting staff and the scene's GM, so a scene
+    stays runnable. ``VERY_PRIVATE`` is the stricter tier and admits no exception,
+    staff included; the two are not interchangeable.
+    """
 
     DEFAULT = "default", "Default"
+    PERCEIVED_ONLY = "perceived_only", "Perceived Only"
     VERY_PRIVATE = "very_private", "Very Private"
 
 

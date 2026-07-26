@@ -117,6 +117,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     strain_committed: int = 0,
     fury_committed: FuryTier | None = None,
     pose_kind: str = PoseKind.STANDARD,
+    visibility: str = InteractionVisibility.DEFAULT,
 ) -> Interaction:
     """Create an atomic RP interaction with optional receiver records.
 
@@ -141,6 +142,10 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         fury_committed: Realized FuryTier post-resolution (null = no fury). Audit field.
         pose_kind: PoseKind classification (Spec C); ENTRY poses open a
             Make-an-Entrance reaction window (#904) at the call site.
+        visibility: InteractionVisibility tier. DEFAULT is room-heard; PERCEIVED_ONLY
+            (#2710) restricts the interaction to its explicit ``receivers`` plus staff
+            and the scene GM. Escalate only — never pass a weaker tier than the scene
+            or mode already implies.
 
     Returns:
         The created Interaction.
@@ -157,6 +162,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         strain_committed=strain_committed,
         fury_committed=fury_committed,
         pose_kind=pose_kind,
+        visibility=visibility,
     )
     # #1826 — posing in a scene is IC action in its area: lie-low breaks.
     _break_lie_low_for_interaction(persona, scene)
@@ -339,7 +345,16 @@ def push_interaction(
         target_persona_ids=t_ids,
     )
 
-    if interaction.mode == InteractionMode.WHISPER or interaction.place_id is not None:
+    # Any escalated visibility is receiver-scoped, not room-heard. Before #2710 this
+    # branch tested only whisper/place, so a VERY_PRIVATE pose would have broadcast to
+    # the whole room over the WebSocket — no live caller did that, but the next one
+    # would have. Fixed on sight.
+    receiver_scoped = (
+        interaction.mode == InteractionMode.WHISPER
+        or interaction.place_id is not None
+        or interaction.visibility != InteractionVisibility.DEFAULT
+    )
+    if receiver_scoped:
         writer_char = persona.character_sheet.character
         _send_to_objects([writer_char, *r_chars], payload)
     else:

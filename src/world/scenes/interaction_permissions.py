@@ -71,6 +71,10 @@ def _requires_receiver_check(obj: Interaction) -> bool:
     """Return True if the interaction is restricted to receivers/writer only."""
     if obj.visibility == InteractionVisibility.VERY_PRIVATE:
         return True
+    if obj.visibility == InteractionVisibility.PERCEIVED_ONLY:
+        # #2710 — only the characters who perceived the event. Staff still pass,
+        # via the is_staff branch above the caller's use of this predicate.
+        return True
     if obj.place_id is not None:
         return True
     scene = obj.scene
