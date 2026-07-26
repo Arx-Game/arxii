@@ -390,8 +390,12 @@ def ensure_character_magic_check_type(character_sheet, *, stat, skill):
         defaults={
             "description": "A character's personal magic check (anima ritual + casting).",
             "is_active": True,
+            "owner_sheet": character_sheet,
         },
     )
+    if check_type.owner_sheet_id != character_sheet.pk:
+        check_type.owner_sheet = character_sheet
+        check_type.save(update_fields=["owner_sheet"])
     CheckTypeTrait.objects.get_or_create(
         check_type=check_type, trait=stat, defaults={"weight": Decimal("1.00")}
     )
