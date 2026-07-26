@@ -41,9 +41,12 @@ models:
    is the self-healing path if a row is later deleted. Fatigue's prerequisite creates its
    missing stat `Trait` rows too (`FATIGUE_TRAIT_DEFAULTS`), matching the existing
    `world.magic.seeds_cast` precedent, rather than skipping when a trait is absent — the
-   check breaks without the trait exactly as it breaks without the CheckType. Fury
-   deliberately stays unregistered: its trait name is `FuryConfig.check_trait`, a
-   DB-configurable column, not a code literal, so there is no fixed name to declare.
+   check breaks without the trait exactly as it breaks without the CheckType. Fury's
+   prerequisite is registered like every other entry and ensures its CheckType row,
+   but deliberately does not create a missing `Trait`, because its trait name is
+   `FuryConfig.check_trait` — a DB-configurable column, not a code literal — so the
+   "named by a string literal in code" rule that justifies auto-creating a `Trait`
+   does not reach it.
 
 2. **Per-player rows are excluded from export by a real owner column, never a name
    pattern.** `checks.checktype` gained `owner_sheet` (nullable FK to
