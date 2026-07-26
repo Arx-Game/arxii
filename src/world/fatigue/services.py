@@ -351,15 +351,22 @@ def _ensure_endurance_check_type(category: str) -> CheckType:
         name="Fatigue",
         defaults={"description": "Fatigue resistance checks", "display_order": 99},
     )
-    check_type, created = CheckType.objects.get_or_create(
+    check_type, _ = CheckType.objects.get_or_create(
         name=check_name,
         category=fatigue_category,
         defaults={"description": f"Endurance check against {category} fatigue"},
     )
-    if created:
-        # Requires trait fixtures loaded (stamina/composure/stability)
-        trait = Trait.objects.get(name=endurance_stat_name, trait_type=TraitType.STAT)
-        CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=1.0)
+    # Unconditional (not gated on `created`) so a pre-existing (e.g. fixture-supplied)
+    # bare CheckType still gets its trait attached (#2724); get_or_create's defaults let
+    # an authored weight survive a re-run. Tolerant of a not-yet-loaded Trait — as a
+    # config prerequisite this can run before the content load populates the stat Trait
+    # fixtures; the gameplay call site (unchanged) self-heals the composition once the
+    # Trait exists.
+    trait = Trait.objects.filter(name=endurance_stat_name, trait_type=TraitType.STAT).first()
+    if trait is not None:
+        CheckTypeTrait.objects.get_or_create(
+            check_type=check_type, trait=trait, defaults={"weight": 1.0}
+        )
     return check_type
 
 
@@ -374,15 +381,24 @@ def _ensure_willpower_check_type() -> CheckType:
         name="Fatigue",
         defaults={"description": "Fatigue resistance checks", "display_order": 99},
     )
-    check_type, created = CheckType.objects.get_or_create(
+    check_type, _ = CheckType.objects.get_or_create(
         name="fatigue_willpower",
         category=fatigue_category,
         defaults={"description": "Willpower check to power through fatigue collapse"},
     )
-    if created:
-        # Requires willpower trait fixture loaded
-        trait = Trait.objects.get(name=PrimaryStat.WILLPOWER.value, trait_type=TraitType.STAT)
-        CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=1.0)
+    # Unconditional (not gated on `created`) so a pre-existing (e.g. fixture-supplied)
+    # bare CheckType still gets its trait attached (#2724); get_or_create's defaults let
+    # an authored weight survive a re-run. Tolerant of a not-yet-loaded Trait — as a
+    # config prerequisite this can run before the content load populates the willpower
+    # Trait fixture; the gameplay call site (unchanged) self-heals the composition once
+    # the Trait exists.
+    trait = Trait.objects.filter(
+        name=PrimaryStat.WILLPOWER.value, trait_type=TraitType.STAT
+    ).first()
+    if trait is not None:
+        CheckTypeTrait.objects.get_or_create(
+            check_type=check_type, trait=trait, defaults={"weight": 1.0}
+        )
     return check_type
 
 

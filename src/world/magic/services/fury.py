@@ -87,15 +87,19 @@ def _ensure_fury_check_type(trait_name: str) -> CheckType:
         defaults={"description": "Fury control-retention checks", "display_order": 98},
     )
     check_type_name = f"fury_control_retention_{trait_name}"
-    check_type, created = CheckType.objects.get_or_create(
+    check_type, _ = CheckType.objects.get_or_create(
         name=check_type_name,
         category=check_category,
         defaults={"description": f"Control-retention check for fury ({trait_name})"},
     )
-    if created:
-        trait = Trait.objects.filter(name=trait_name, trait_type=TraitType.STAT).first()
-        if trait is not None:
-            CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=1.0)
+    # Unconditional so a pre-existing (e.g. fixture-supplied) bare CheckType still gets
+    # its trait attached (#2724); get_or_create's defaults let an authored weight survive
+    # a re-run.
+    trait = Trait.objects.filter(name=trait_name, trait_type=TraitType.STAT).first()
+    if trait is not None:
+        CheckTypeTrait.objects.get_or_create(
+            check_type=check_type, trait=trait, defaults={"weight": 1.0}
+        )
     return check_type
 
 
