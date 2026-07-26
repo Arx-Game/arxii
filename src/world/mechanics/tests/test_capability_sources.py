@@ -78,6 +78,68 @@ class TechniqueSourceTests(TestCase):
         assert len(ice_sources) == 0
 
 
+class InertOracleAtNonzeroSensitivityTests(TestCase):
+    """#2708 C1 review: the availability-oracle sibling of
+    ``world.conditions.tests.test_effective_capability_value
+    .InertOracleAtNonzeroSensitivityTests``.
+
+    That test covers the agency oracle (``get_effective_capability_value``); this
+    covers ``_get_technique_sources`` (via ``get_capability_sources_for_character``),
+    the availability oracle. Both oracles previously shared the same bug: with no
+    ``CapabilityPowerConfig`` row, each unconditionally computed
+    ``technique.intensity + context_free_power + contextual_thread_power(...)`` and fed
+    it to the RETIRED additive formula as ``effective_power``, so an ambiently-active
+    thread's bump leaked into a value that should have been untouched. The fix makes
+    both oracles skip the power derivation entirely when the config is absent
+    (``_inert_technique_capability_sources`` here). This test uses the SAME fixture
+    shape as the agency-oracle test (nonzero ``intensity_multiplier`` + a real
+    ambiently-active GIFT-thread tier-0 ``INTENSITY_BUMP``, no config row) so the pair
+    is obviously a pair to the next reader.
+    """
+
+    def test_ambient_gift_thread_bump_does_not_move_the_inert_value(self) -> None:
+        sheet = CharacterSheetFactory()
+        cap = CapabilityTypeFactory(innate_baseline=0)
+        gift = GiftFactory()
+        technique = TechniqueFactory(gift=gift, intensity=3)
+        TechniqueCapabilityGrantFactory(
+            technique=technique, capability=cap, base_value=1, intensity_multiplier=1
+        )
+        CharacterTechnique.objects.create(character=sheet, technique=technique)
+
+        # A GIFT thread is always in-action (_ALWAYS_IN_ACTION_KINDS), so this bump
+        # is visible under the ambient default this oracle always uses (it has no
+        # action_ctx param at all — see ADR-0169 D6).
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ThreadFactory, ThreadPullEffectFactory
+
+        thread = ThreadFactory(
+            owner=sheet,
+            target_kind=TargetKind.GIFT,
+            target_gift=gift,
+            target_trait=None,
+            level=20,
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.GIFT,
+            resonance=thread.resonance,
+            target_gift=gift,
+            tier=0,
+            as_intensity_bump=True,
+            intensity_bump_amount=100,
+        )
+
+        sources = get_capability_sources_for_character(sheet.character)
+        technique_sources = [s for s in sources if s.source_type == CapabilitySourceType.TECHNIQUE]
+        assert len(technique_sources) == 1
+
+        # No CapabilityPowerConfig row: the curve is disabled, and the ambient
+        # thread's bump must be invisible to the RETIRED additive formula — the
+        # exact pre-#2708 number, computed from technique.intensity alone:
+        # base_value(1) + intensity_multiplier(1) * technique.intensity(3) = 4.
+        self.assertEqual(technique_sources[0].value, 4)
+
+
 class TraitSourceTests(TestCase):
     """Tests for _get_trait_sources."""
 
