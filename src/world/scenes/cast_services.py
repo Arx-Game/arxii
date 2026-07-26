@@ -302,7 +302,40 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     return pose, vague_pose
 
 
-def _resolve_and_pose_cast(  # noqa: PLR0913, PLR0915 - one cohesive cast resolution
+def _conceal_action_interaction(action_interaction: Interaction, audience: CastAudience) -> None:
+    """Set a concealed cast's ACTION row to PERCEIVED_ONLY with the resolved receivers.
+
+    #2710: this row's content is the technique name. Concealing only the OUTCOME pose
+    would still show every bystander "Ilyra — Whisper of Binding" in the scene log via
+    the ACTION row's ``technique_name``.
+    """
+    from world.scenes.interaction_services import accounts_for_personas  # noqa: PLC0415
+    from world.scenes.place_models import InteractionReceiver  # noqa: PLC0415
+
+    action_interaction.visibility = InteractionVisibility.PERCEIVED_ONLY
+    action_interaction.save(update_fields=["visibility"])
+    receiver_accounts = accounts_for_personas(audience.full)
+    # audience.full always includes the caster (resolve_cast_audience appends them),
+    # and unlike create_interaction's place-scoped auto-populate path (which excludes
+    # the writer via .exclude(pk=persona.pk)), we deliberately do NOT exclude them
+    # here. create_action_interaction_core builds this row via Interaction.objects.
+    # create(...) directly rather than through create_interaction, so it never pins
+    # writer_account_id — receiver membership is the caster's only route back to
+    # their own concealed ACTION row.
+    InteractionReceiver.objects.bulk_create(
+        [
+            InteractionReceiver(
+                interaction=action_interaction,
+                timestamp=action_interaction.timestamp,
+                persona=p,
+                account_id=receiver_accounts.get(p.pk),
+            )
+            for p in audience.full
+        ]
+    )
+
+
+def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
     *,
     request: SceneActionRequest,
     scene: Scene,
@@ -477,10 +510,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913, PLR0915 - one cohesive cast resolu
     request.result_interaction = pose
     request.save(update_fields=["result_interaction"])
 
-    from world.scenes.interaction_services import (  # noqa: PLC0415
-        accounts_for_personas,
-        create_action_interaction_core,
-    )
+    from world.scenes.interaction_services import create_action_interaction_core  # noqa: PLC0415
     from world.scenes.power_ledger_services import persist_power_ledger  # noqa: PLC0415
 
     action_interaction = create_action_interaction_core(
@@ -491,31 +521,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913, PLR0915 - one cohesive cast resolu
         fury_committed=fury_res.realized_tier if fury_res else None,
     )
     if audience.concealed:
-        # #2710: this row's content is the technique name. Concealing only the OUTCOME
-        # pose would still show every bystander "Ilyra — Whisper of Binding" in the log.
-        from world.scenes.place_models import InteractionReceiver  # noqa: PLC0415
-
-        action_interaction.visibility = InteractionVisibility.PERCEIVED_ONLY
-        action_interaction.save(update_fields=["visibility"])
-        receiver_accounts = accounts_for_personas(audience.full)
-        # audience.full always includes the caster (resolve_cast_audience appends them),
-        # and unlike create_interaction's place-scoped auto-populate path (which excludes
-        # the writer via .exclude(pk=persona.pk)), we deliberately do NOT exclude them
-        # here. create_action_interaction_core builds this row via Interaction.objects.
-        # create(...) directly rather than through create_interaction, so it never pins
-        # writer_account_id — receiver membership is the caster's only route back to
-        # their own concealed ACTION row.
-        InteractionReceiver.objects.bulk_create(
-            [
-                InteractionReceiver(
-                    interaction=action_interaction,
-                    timestamp=action_interaction.timestamp,
-                    persona=p,
-                    account_id=receiver_accounts.get(p.pk),
-                )
-                for p in audience.full
-            ]
-        )
+        _conceal_action_interaction(action_interaction, audience)
     persist_power_ledger(interaction=action_interaction, ledger=power_ledger)
     request.action_interaction = action_interaction
     request.save(update_fields=["action_interaction"])
