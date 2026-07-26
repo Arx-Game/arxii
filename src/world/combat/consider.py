@@ -84,6 +84,22 @@ _HEALTH_HALE = 75
 _HEALTH_WOUNDED = 50
 _HEALTH_BLOODIED = 25
 
+OVERCONFIDENT_SLUG = "overconfident"
+
+
+def _has_overconfident(character: ObjectDB) -> bool:
+    """True if the character holds the Overconfident distinction.
+
+    Uses ``character.id`` which equals the ``CharacterSheet`` pk (primary_key
+    O2O), matching the ``CharacterDistinction.character_id`` FK.
+    """
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+
+    return CharacterDistinction.objects.filter(
+        character_id=character.id,
+        distinction__slug=OVERCONFIDENT_SLUG,
+    ).exists()
+
 
 def skew_for_success_level(success_level: int) -> int:
     """Return the skew magnitude for a given check success level.
@@ -110,19 +126,21 @@ def bias_direction(true_index: int, skew: int, character: ObjectDB | None) -> in
     ``participant.character_sheet.character``.
 
     Default: random.choice([-1, +1]).
-    Override point for the future Overconfident distinction, which
-    always returns -1 (toward 'weaker than you actually are').
+    Overconfident distinction: always returns -1 (toward 'weaker than you
+    actually are').
 
     Args:
         true_index: The correct band index.
         skew: The skew magnitude (from ``skew_for_success_level``).
-        character: The assessing character (for future distinction lookup).
+        character: The assessing character (for distinction lookup).
 
     Returns:
         +1, -1, or 0 (when skew is 0).
     """
     if skew == 0:
         return 0
+    if character is not None and _has_overconfident(character):
+        return -1
     return random.choice([-1, 1])  # noqa: S311
 
 
@@ -234,6 +252,45 @@ def ensure_consider_check_type() -> CheckType:
         ),
         defaults={"weight": Decimal("1.00")},
     )
+
+    # Create a scoped ModifierTarget so DistinctionEffect → CharacterModifier
+    # rows can target the Consider check specifically (#2742). Follows the
+    # same programmatic pattern as combat/factories.py penetration/flee
+    # targets — the CheckType is runtime get_or_created, so the ModifierTarget
+    # must be too.
+    from world.distinctions.models import Distinction, DistinctionEffect  # noqa: PLC0415
+    from world.mechanics.models import (  # noqa: PLC0415
+        ModifierCategory,
+        ModifierTarget,
+    )
+
+    check_category, _ = ModifierCategory.objects.get_or_create(name="check")
+    consider_target, _ = ModifierTarget.objects.get_or_create(
+        target_check_type=check_type,
+        defaults={
+            "name": "consider_check",
+            "category": check_category,
+            "is_active": True,
+        },
+    )
+
+    # Wire the Overconfident distinction's check penalty: a -2 per-rank
+    # DistinctionEffect targeting the Consider-scoped ModifierTarget. Created
+    # programmatically (not via fixture) because the ModifierTarget itself is
+    # programmatic — a fixture's natural-key FK can't resolve to a row that
+    # doesn't exist at loaddata time.
+    overconfident = Distinction.objects.filter(slug="overconfident").first()
+    if overconfident is not None:
+        DistinctionEffect.objects.get_or_create(
+            distinction=overconfident,
+            target=consider_target,
+            defaults={
+                "value_per_rank": -2,
+                "description": (
+                    "Applies a -2 penalty to Consider checks, making threat assessment harder."
+                ),
+            },
+        )
     return check_type
 
 
@@ -269,6 +326,7 @@ def consider_opponent(participant: CombatParticipant, opponent: CombatOpponent) 
         A ConsiderReading with the (possibly inaccurate) prose reading.
     """
     from world.checks.services import (  # noqa: PLC0415
+        collect_check_modifiers,
         level_opposition,
         perform_check,
     )
@@ -288,10 +346,20 @@ def consider_opponent(participant: CombatParticipant, opponent: CombatOpponent) 
 
     check_type = ensure_consider_check_type()
     difficulty = level_opposition(check_type, level=opponent.level, character=opponent.objectdb)
+
+    # Route through the central modifier aggregator so conditions, equipment,
+    # scene modifiers, fashion, and distinction-sourced check modifiers reach
+    # the consider check — matching every other check path (#2742).
+    modifier_breakdown = collect_check_modifiers(
+        sheet,
+        check_type,
+        scene=participant.encounter.scene,
+    )
     result = perform_check(
         character,
         check_type,
         target_difficulty=difficulty,
+        extra_modifiers=modifier_breakdown.total,
     )
     success_level = result.success_level
 

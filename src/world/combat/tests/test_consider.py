@@ -91,6 +91,87 @@ class BiasDirectionTest(TestCase):
         self.assertEqual(bias_direction(2, 0, character=None), 0)
 
 
+class OverconfidentBiasDirectionTest(TestCase):
+    """bias_direction returns -1 for characters with the Overconfident distinction."""
+
+    def test_overconfident_always_underestimates(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.distinctions.factories import (
+            CharacterDistinctionFactory,
+            DistinctionCategoryFactory,
+            DistinctionFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        category = DistinctionCategoryFactory(slug="personality")
+        distinction = DistinctionFactory(
+            slug="overconfident",
+            category=category,
+            cost_per_rank=-10,
+        )
+        CharacterDistinctionFactory(
+            character=sheet,
+            distinction=distinction,
+        )
+        # skew > 0, should always return -1 (underestimate)
+        result = bias_direction(2, 1, character=sheet.character)
+        self.assertEqual(result, -1)
+
+    def test_overconfident_with_higher_skew(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.distinctions.factories import (
+            CharacterDistinctionFactory,
+            DistinctionCategoryFactory,
+            DistinctionFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        category = DistinctionCategoryFactory(slug="personality")
+        distinction = DistinctionFactory(
+            slug="overconfident",
+            category=category,
+        )
+        CharacterDistinctionFactory(
+            character=sheet,
+            distinction=distinction,
+        )
+        # skew = 3 (crit fail), should still return -1
+        result = bias_direction(2, 3, character=sheet.character)
+        self.assertEqual(result, -1)
+
+    def test_non_overconfident_uses_random(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        # No distinction — should fall through to random.choice
+        with patch("world.combat.consider.random.choice") as mock_choice:
+            mock_choice.return_value = 1
+            result = bias_direction(2, 1, character=sheet.character)
+            self.assertEqual(result, 1)
+
+    def test_overconfident_zero_skew_returns_zero(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.distinctions.factories import (
+            CharacterDistinctionFactory,
+            DistinctionCategoryFactory,
+            DistinctionFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        category = DistinctionCategoryFactory(slug="personality")
+        distinction = DistinctionFactory(
+            slug="overconfident",
+            category=category,
+        )
+        CharacterDistinctionFactory(
+            character=sheet,
+            distinction=distinction,
+        )
+        # skew == 0 always returns 0, even with the distinction
+        result = bias_direction(2, 0, character=sheet.character)
+        self.assertEqual(result, 0)
+
+
 class ApplySkewTest(TestCase):
     """Skewed band indices clamp to valid range."""
 
@@ -257,6 +338,78 @@ class ConsiderOpponentServiceTest(TestCase):
         )
         reading = consider_opponent(self.participant, self.opponent)
         self.assertTrue(reading.is_enhanced)
+
+    def test_consider_picks_up_check_modifiers(self) -> None:
+        """consider_opponent routes through collect_check_modifiers (#2742).
+
+        Verifies the modifier aggregator is called by patching it and
+        confirming the patched value reaches perform_check.
+        """
+        from unittest.mock import MagicMock, patch
+
+        from world.checks.services import ModifierBreakdown, ModifierContribution
+        from world.combat.consider import consider_opponent
+
+        # Patch collect_check_modifiers to return a known breakdown.
+        fake_contribution = ModifierContribution(
+            source_kind="character",
+            source_label="Test modifier",
+            value=-42,
+        )
+        fake_breakdown = ModifierBreakdown(contributions=[fake_contribution])
+
+        # Patch perform_check to return a mock — we only care about call args.
+        fake_result = MagicMock()
+        fake_result.success_level = 0
+
+        with (
+            patch(
+                "world.checks.services.collect_check_modifiers",
+                return_value=fake_breakdown,
+            ) as mock_collect,
+            patch(
+                "world.checks.services.perform_check",
+                return_value=fake_result,
+            ) as mock_perform,
+        ):
+            consider_opponent(self.participant, self.opponent)
+
+            # collect_check_modifiers was called with the sheet.
+            mock_collect.assert_called_once()
+            call_args = mock_collect.call_args
+            self.assertEqual(call_args.args[0], self.participant.character_sheet)
+
+            # perform_check received extra_modifiers=-42 (the breakdown total).
+            mock_perform.assert_called_once()
+            perform_kwargs = mock_perform.call_args.kwargs
+            self.assertEqual(perform_kwargs["extra_modifiers"], -42)
+
+
+class EnsureConsiderCheckTypeTest(TestCase):
+    """ensure_consider_check_type creates the CheckType + scoped ModifierTarget."""
+
+    def test_creates_modifier_target_scoped_to_consider(self) -> None:
+        from world.combat.consider import ensure_consider_check_type
+
+        check_type = ensure_consider_check_type()
+        # The reverse OneToOne accessor should resolve to a ModifierTarget
+        # scoped to this CheckType.
+        target = check_type.modifier_target
+        self.assertIsNotNone(target)
+        self.assertEqual(target.target_check_type, check_type)
+        self.assertTrue(target.is_active)
+
+    def test_modifier_target_is_idempotent(self) -> None:
+        from world.combat.consider import ensure_consider_check_type
+        from world.mechanics.models import ModifierTarget
+
+        # Call twice — should not create a duplicate.
+        ensure_consider_check_type()
+        ensure_consider_check_type()
+        count = ModifierTarget.objects.filter(
+            target_check_type__name="Consider",
+        ).count()
+        self.assertEqual(count, 1)
 
 
 class ConsiderEndpointTest(TestCase):
