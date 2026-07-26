@@ -711,3 +711,61 @@ class OpponentTierTemplateAssessProseTest(TestCase):
 
     def test_field_can_be_set(self) -> None:
         self.assertEqual(self.boss.assess_prose, "a commanding presence")
+
+
+class ConsiderReadingModelTest(TestCase):
+    """ConsiderReading caches one assessment per (participant, opponent)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.combat.factories import (
+            CombatEncounterFactory,
+            CombatOpponentFactory,
+            CombatParticipantFactory,
+            seed_scaling_defaults,
+        )
+
+        seed_scaling_defaults()
+        cls.encounter = CombatEncounterFactory()
+        cls.participant = CombatParticipantFactory(encounter=cls.encounter)
+        cls.opponent = CombatOpponentFactory(encounter=cls.encounter)
+
+    def test_create_reading(self) -> None:
+        from world.combat.models import ConsiderReading
+
+        reading = ConsiderReading.objects.create(
+            participant=self.participant,
+            opponent=self.opponent,
+            success_level=5,
+            true_band_index=2,
+            reported_band_index=2,
+            prose="The foe is an even match.",
+            is_enhanced=False,
+        )
+        self.assertEqual(reading.success_level, 5)
+        self.assertEqual(reading.prose, "The foe is an even match.")
+        self.assertFalse(reading.is_enhanced)
+        self.assertIsNotNone(reading.created_at)
+
+    def test_unique_per_participant_opponent(self) -> None:
+        from world.combat.models import ConsiderReading
+
+        ConsiderReading.objects.create(
+            participant=self.participant,
+            opponent=self.opponent,
+            success_level=0,
+            true_band_index=2,
+            reported_band_index=1,
+            prose="The foe is below you.",
+            is_enhanced=False,
+        )
+        with self.assertRaises(IntegrityError):
+            ConsiderReading.objects.create(
+                participant=self.participant,
+                opponent=self.opponent,
+                success_level=3,
+                true_band_index=2,
+                reported_band_index=2,
+                prose="The foe is an even match.",
+                is_enhanced=True,
+            )
