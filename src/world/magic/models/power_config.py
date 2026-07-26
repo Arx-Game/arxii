@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -143,3 +143,37 @@ class CovenantRoleBlendConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return _COVENANT_ROLE_BLEND_CONFIG_LABEL
+
+
+class CapabilityPowerConfig(SharedMemoryModel):
+    """Staff-tunable singleton controlling how power curves capability magnitude (#2708).
+
+    Capability values live on the ADR-0164 ladder (0 blocked, 5 unimpaired mortal,
+    8-12 gifted, 25+ greater supernatural, 100+ mythic). That ladder's tier anchors are
+    roughly geometric, so power multiplies a capability rather than adding to it:
+
+        value = base * 2 ** (sensitivity * power / power_per_doubling)
+
+    **No row = the curve is disabled** and every consumer falls back to its pre-#2708
+    arithmetic, matching the "zero values disable the term entirely" convention on
+    LevelPowerConfig / AuraPowerConfig above. The feature is therefore turned on by
+    tuning, not by deploying. Access via ``get_capability_power_config()`` in
+    ``services/capability_curve.py``.
+    """
+
+    power_per_doubling = models.PositiveIntegerField(
+        default=10,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "Power required to double a capability's value. Lower = steeper curve. "
+            "At 10, a character at power 30 sits two tiers up the ADR-0164 ladder. "
+            "Must be at least 1 (0 would divide by zero)."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Capability Power Config"
+        verbose_name_plural = "Capability Power Configs"
+
+    def __str__(self) -> str:
+        return f"CapabilityPowerConfig(doubling every {self.power_per_doubling} power)"

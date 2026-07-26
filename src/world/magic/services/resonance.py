@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from decimal import Decimal
 import logging
 import math
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
     from world.distinctions.models import CharacterDistinction
-    from world.items.models import ItemFacet
+    from world.items.models import ItemFacet, Mantle
     from world.magic.models import (
         DramaticMomentTag,
         EntryFlourishRecord,
@@ -68,6 +68,7 @@ if TYPE_CHECKING:
     from world.magic.types import PullActionContext
     from world.missions.models import MissionDeedRewardLine
     from world.projects.models import Project
+    from world.relationships.models import RelationshipCapstone, RelationshipTrackProgress
 
 logger = logging.getLogger(__name__)
 
@@ -560,6 +561,159 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:  # noqa: 
         room_obj_id = thread.target_sanctum_details.feature_instance.room_profile.objectdb_id
         return room_obj_id in ctx.involved_objects
     return False
+
+
+def _anchor_ambiently_active(  # noqa: PLR0911 — one arm per TargetKind, flat by design
+    thread: Thread,
+    ctx: PullActionContext,
+    *,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM — presence/equipment checks need the game object
+    gift_id_by_technique: Mapping[int, int] | None = None,
+) -> bool:
+    """Return True iff ``thread`` is DEMONSTRABLY active right now (#2708).
+
+    The passive sibling of :func:`_anchor_in_action`. The two differ on purpose:
+    ``_anchor_in_action`` lets a player *assert* involvement for kinds with no anchor in
+    the action graph (GIFT, RELATIONSHIP_*), which is fair because the pull is paid for.
+    A passive capability contribution costs nothing, so assertion is not enough — every
+    arm here tests real state. Concretely: a pyromancer's fire-gift thread must not raise
+    their ability to climb a wall.
+
+    ORGANIZATION deliberately returns False. Its rule ("tied to organization missions or
+    activities", ratified 2026-07-25) needs a marker ``PullActionContext`` does not carry;
+    shipping an arm that can never fire would be worse than omitting it. Tracked as a
+    needs-design question #2731.
+
+    ``gift_id_by_technique`` lets a batch caller (``build_applicable_threads``, which
+    invokes this once per thread in a loop, or a caller sweeping many technique-contexts
+    for one character) resolve a technique_id -> gift_id mapping ONCE — covering as many
+    techniques as the caller likes, even a whole sweep's worth spanning several
+    techniques/gifts — and pass it through, instead of this function re-querying
+    ``Technique`` for every GIFT thread. :func:`_gift_in_action` always narrows the
+    mapping down to THIS call's own ``ctx.involved_techniques`` before deciding, so a
+    wider mapping can never leak a thread active-on-one-technique's gift into a
+    different technique's evaluation (#2708 review — passing a pre-flattened gift-id
+    *set* instead of this mapping was the unsound shape that made that leak possible). A
+    lone call (e.g. from tests) omits the kwarg and :func:`_gift_in_action` computes the
+    mapping internally — single-call correctness is preserved.
+
+    ``ctx.excluded_kinds`` (#1919) is honoured ONLY via the COVENANT_ROLE arm, which
+    delegates straight to :func:`_anchor_in_action` (the function that actually checks
+    it). Every other arm below ignores it entirely — harmless today because no caller of
+    this function currently populates ``excluded_kinds`` on a context it also threads
+    through here, but the next arm author (or the first caller to do so) should not
+    assume exclusion is honoured uniformly across kinds without checking each arm.
+    """
+    if thread.target_kind == TargetKind.COVENANT_ROLE:
+        # Identical to the pull predicate: engagement is already demonstrable.
+        return _anchor_in_action(thread, ctx)
+    if thread.target_kind == TargetKind.TECHNIQUE:
+        return thread.target_technique_id in ctx.involved_techniques
+    if thread.target_kind == TargetKind.GIFT:
+        return _gift_in_action(thread, ctx, gift_id_by_technique=gift_id_by_technique)
+    if thread.target_kind == TargetKind.TRAIT:
+        return thread.target_trait_id in ctx.involved_traits
+    if thread.target_kind == TargetKind.SANCTUM:
+        room_obj_id = thread.target_sanctum_details.feature_instance.room_profile.objectdb_id
+        location = character.location
+        return location is not None and location.pk == room_obj_id
+    if thread.target_kind == TargetKind.RELATIONSHIP_TRACK:
+        return _relationship_target_present(thread.target_relationship_track, character)
+    if thread.target_kind == TargetKind.RELATIONSHIP_CAPSTONE:
+        return _relationship_target_present(thread.target_capstone, character)
+    if thread.target_kind == TargetKind.FACET:
+        # Direct handler access (no ``sheet_data`` hop needed) — the equipment
+        # handler hangs off the Character typeclass itself (#2708 verification;
+        # mirrors the worn-facet gate in ``_validate_pull_threads_for_commit``).
+        return bool(character.equipped_items.item_facets_for(thread.target_facet))
+    if thread.target_kind == TargetKind.MANTLE:
+        return _mantle_worn(thread.target_mantle, character)
+    return False
+
+
+def _gift_in_action(
+    thread: Thread,
+    ctx: PullActionContext,
+    *,
+    gift_id_by_technique: Mapping[int, int] | None = None,
+) -> bool:
+    """True iff any technique the action involves belongs to this thread's gift.
+
+    ``gift_id_by_technique``, when supplied, is a technique_id -> gift_id mapping that
+    MAY cover more techniques than just ``ctx.involved_techniques`` (a batch caller may
+    pass one mapping covering an entire multi-technique sweep). This function ALWAYS
+    narrows the mapping down to ``ctx.involved_techniques`` before testing membership —
+    that narrowing is the whole point: it's what makes it safe to hand this call a
+    mapping built for a wider sweep without the extra entries changing the answer.
+    Never trust a pre-flattened gift-id set here — that shape can't be narrowed per call
+    and silently leaks an unrelated technique's gift into this thread's evaluation
+    (#2708 review Critical finding). When omitted (a standalone call), the mapping is
+    computed here so single-call correctness is preserved.
+    """
+    if not ctx.involved_techniques:
+        return False
+    if gift_id_by_technique is None:
+        gift_id_by_technique = resolve_gift_ids_by_technique(ctx.involved_techniques)
+    involved_gift_ids = {
+        gift_id_by_technique[tid] for tid in ctx.involved_techniques if tid in gift_id_by_technique
+    }
+    return thread.target_gift_id in involved_gift_ids
+
+
+def resolve_gift_ids_by_technique(involved_techniques: tuple[int, ...]) -> dict[int, int]:
+    """Resolve technique_id -> gift_id for ``involved_techniques`` in a single query.
+
+    Batch callers precompute this ONCE — optionally over the union of every technique in
+    a whole multi-call sweep, not just one call's ``ctx.involved_techniques`` — and thread
+    it through ``_anchor_ambiently_active``'s ``gift_id_by_technique`` kwarg, rather than
+    letting ``_gift_in_action`` re-query per GIFT thread in the predicate loop (#2708
+    review — a character with several owned Gifts fired one ``Technique`` query per GIFT
+    thread on every ambient evaluation).
+
+    Deliberately returns a technique_id -> gift_id MAPPING, not a flattened set of gift
+    ids: ``_gift_in_action`` narrows this mapping down to each call's own
+    ``ctx.involved_techniques`` before testing membership, so passing a mapping that
+    covers more techniques than one particular call needs is always safe. A pre-flattened
+    set has no way to be narrowed back down per call and was the unsound shape (#2708
+    review Critical finding) that let one technique's gift leak into a different
+    technique's ambient evaluation.
+    """
+    if not involved_techniques:
+        return {}
+    from world.magic.models import Technique  # noqa: PLC0415
+
+    return dict(Technique.objects.filter(pk__in=involved_techniques).values_list("pk", "gift_id"))
+
+
+def _relationship_target_present(
+    owner_row: RelationshipTrackProgress | RelationshipCapstone | None,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM — room-contents check needs the game object
+) -> bool:
+    """True iff the other party to this relationship is in the acting character's room.
+
+    ``owner_row`` is a RelationshipTrackProgress or a RelationshipCapstone; both carry a
+    ``relationship`` FK to CharacterRelationship, whose ``target`` is a CharacterSheet
+    (relationships/models.py:323). CharacterSheet shares ObjectDB's pk, so the presence
+    check is a pk comparison — no extra fetch.
+    """
+    location = character.location
+    if owner_row is None or location is None:
+        return False
+    target_pk = owner_row.relationship.target_id
+    return any(obj.pk == target_pk for obj in location.contents)
+
+
+def _mantle_worn(
+    mantle: Mantle | None,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM — equipment check needs the game object
+) -> bool:
+    """True iff the ItemInstance that IS this mantle (items/models.py:1693) is equipped."""
+    if mantle is None:
+        return False
+    return any(
+        equipped.item_instance_id == mantle.item_instance_id
+        for equipped in character.equipped_items
+    )
 
 
 def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; both target (#1831) and beseech (#1718) params are required

@@ -48,7 +48,11 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 - **ChallengeApproach.action_template** — nullable FK to ActionTemplate. When set, `resolve_challenge()` delegates to the template's pipeline instead of inline resolution
 
 ### Data Models (magic app)
-- **TechniqueCapabilityGrant** — links Techniques to Capabilities with `base_value + (intensity_multiplier * intensity)` formula, plus optional FK to PrerequisiteType
+- **TechniqueCapabilityGrant** — links Techniques to Capabilities, plus optional FK to
+  PrerequisiteType. `calculate_value()` curves `base_value` geometrically by power when a
+  `CapabilityPowerConfig` row exists (#2708, ADR-0169); falls back to the original
+  `base_value + (intensity_multiplier * intensity)` additive formula otherwise — see
+  `docs/systems/conditions.md`'s "Capability magnitude curve" section
 - **Technique.action_template** — nullable FK to ActionTemplate for using techniques outside challenge contexts (social scenes, freeform magic)
 
 ### Data Models (conditions app)

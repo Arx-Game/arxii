@@ -205,12 +205,30 @@ def price_design(
 ) -> TechniqueCostBreakdown:
     """Pure pricing: itemize the design's power cost, subtract restriction
     refunds, and compare to the tier budget."""
+    from world.magic.services.capability_curve import get_capability_power_config  # noqa: PLC0415
+
     lines: list[TechniqueCostLine] = [
         TechniqueCostLine("intensity", "Intensity", design.intensity * config.intensity_unit_cost),
         TechniqueCostLine("control", "Control", design.control * config.control_unit_cost),
     ]
+    # Fetched once for every capability-grant spec below (never per spec) — mirrors the
+    # calculate_value(config=...) memoization pattern the runtime oracles use (#2708 Task
+    # 5 review finding 3). A design may price several grants; a per-spec fetch would be
+    # the same N+1 shape findings 1/2 fixed on the runtime side.
+    power_config = get_capability_power_config()
     for spec in design.capability_grants:
-        value = int(spec.base_value + spec.intensity_multiplier * design.intensity)
+        # #2708 Task 5 review finding 3: this must track whatever calculate_value's
+        # effective_power=None default case does at runtime — the geometric curve once a
+        # CapabilityPowerConfig row exists, the retired additive shape while it doesn't —
+        # so the authoring budget gate never underprices a grant relative to what casting
+        # it will actually cost on the ADR-0164 ladder. A transient (unsaved)
+        # TechniqueCapabilityGrant is the single source of truth for that branch; power is
+        # design.intensity, the same base-case figure a freshly authored technique casts
+        # at before any contextual thread/condition power is added.
+        value = TechniqueCapabilityGrant(
+            base_value=spec.base_value,
+            intensity_multiplier=Decimal(str(spec.intensity_multiplier)),
+        ).calculate_value(effective_power=design.intensity, config=power_config)
         lines.append(
             TechniqueCostLine(
                 "capability",

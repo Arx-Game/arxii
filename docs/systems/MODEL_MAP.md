@@ -2827,7 +2827,7 @@
 - `get_condition_modifier_vow_contributions(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget') -> list['ConditionModifierVowContribution'] — Vow-keyed sibling of get_condition_modifier_breakdown (#2643).`
 - `get_condition_penalty_percent_modifier(character_sheet: 'CharacterSheet', condition_name: str) -> int — Get percentage modifier to check penalties for a condition.`
 - `get_damage_multiplier(success_level: int) -> decimal.Decimal — Look up the damage multiplier for a given success level.`
-- `get_effective_capability_value(character_sheet: 'CharacterSheet', capability: world.conditions.models.CapabilityType) -> int — Effective capability value = innate baseline + CharacterModifier contributions`
+- `get_effective_capability_value(character_sheet: 'CharacterSheet', capability: world.conditions.models.CapabilityType, *, action_ctx: 'PullActionContext | None' = None) -> int — Effective capability value = innate baseline + CharacterModifier contributions`
 - `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None — Return the current IC datetime, or None if no clock exists.`
 - `get_penetration_factor(success_level: int) -> decimal.Decimal — Look up the penetration power factor for a given success level (#639).`
 - `get_resistance_modifier(character_sheet: 'CharacterSheet', damage_type: world.conditions.models.DamageType | None = None) -> world.conditions.types.ResistanceModifierResult — Get the total resistance modifier for a damage type from active conditions.`
@@ -3408,7 +3408,7 @@
   - resist_check_type -> checks.CheckType [FK] (nullable)
 
 ### Service Functions
-- `get_dream_space(*, room: 'ObjectDB') -> 'RoomProfile | None' — Return the dream room for a physical waking room.`
+- `get_dream_space(*, room: 'ObjectDB') -> 'ObjectDB | None' — Return the dream room for a physical waking room.`
 
 
 ## world.estates
@@ -5247,6 +5247,8 @@
 ### StandingCapBand
 
 ### CovenantRoleBlendConfig
+
+### CapabilityPowerConfig
 
 ### MagicProgressionMilestone
 **Foreign Keys:**

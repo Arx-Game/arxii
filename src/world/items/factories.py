@@ -163,9 +163,10 @@ class ItemFacetFactory(factory.django.DjangoModelFactory):
 class EquippedItemFactory(factory.django.DjangoModelFactory):
     """Factory for EquippedItem.
 
-    Caller must pass ``character`` (an ObjectDB / Character instance) explicitly;
-    there is no safe default since EquippedItem.character is a FK to ObjectDB and
-    the available character-creation helpers are outside this app.
+    Caller must pass ``character`` (a ``character_sheets.CharacterSheet`` instance)
+    explicitly; there is no safe default since EquippedItem.character is a FK to
+    CharacterSheet (not ObjectDB) and the available sheet-creation helpers are
+    outside this app.
     """
 
     class Meta:

@@ -414,6 +414,70 @@ class CapabilityConditionPricingLineTests(TestCase):
         assert bd.gross_cost == intensity_cost + control_cost + cap_line_cost + cond_line_cost
 
 
+class PriceDesignTracksCapabilityCurveTests(TestCase):
+    """#2708 Task 5 review finding 3: the authoring pricer must track whatever
+    ``calculate_value``'s ``effective_power=None`` default case does at runtime — the
+    geometric curve once a ``CapabilityPowerConfig`` row exists, not the retired
+    additive shape — or the budget gate silently underprices a curved grant the moment
+    staff turn tuning on."""
+
+    def test_pricer_matches_runtime_with_config_row_and_positive_sensitivity(self):
+        from decimal import Decimal
+
+        from world.magic.models import CapabilityPowerConfig, TechniqueCapabilityGrant
+
+        CapabilityPowerConfig.objects.create(pk=1, power_per_doubling=10)
+        cfg = get_technique_budget_config()
+
+        cap_spec = CapabilityGrantSpec(capability_id=9999, base_value=5, intensity_multiplier=1.0)
+        d = _design(intensity=20, control=0, capability_grants=(cap_spec,))
+        bd = price_design(d, config=cfg, budget=200)
+
+        cap_lines = [line for line in bd.lines if line.dimension == "capability"]
+        assert len(cap_lines) == 1
+
+        # The runtime figure a freshly authored technique would actually cast at:
+        # calculate_value's effective_power=None default falls back to
+        # technique.intensity, which for a brand-new technique equals design.intensity.
+        runtime_grant = TechniqueCapabilityGrant(
+            base_value=cap_spec.base_value,
+            intensity_multiplier=Decimal(str(cap_spec.intensity_multiplier)),
+        )
+        runtime_value = runtime_grant.calculate_value(effective_power=d.intensity)
+        # base 5, power 20, power_per_doubling 10 -> two doublings -> 20 (curve, not 5+20=25)
+        assert runtime_value == 20
+
+        expected_cost = cfg.payload_base_cost + runtime_value * cfg.capability_value_unit_cost
+        assert cap_lines[0].power_cost == expected_cost
+        # The retired additive shape (base + multiplier*power = 25) must NOT be what
+        # got priced — this is the exact underpricing the review finding caught.
+        additive_shape_cost = cfg.payload_base_cost + 25 * cfg.capability_value_unit_cost
+        assert cap_lines[0].power_cost != additive_shape_cost
+
+    def test_pricer_still_matches_runtime_without_config_row(self):
+        """Inert case: no config row means the pricer's additive fallback must equal
+        the runtime additive fallback exactly (the untouched pre-#2708 shape)."""
+        from decimal import Decimal
+
+        from world.magic.models import TechniqueCapabilityGrant
+
+        cfg = get_technique_budget_config()
+        cap_spec = CapabilityGrantSpec(capability_id=9999, base_value=5, intensity_multiplier=1.5)
+        d = _design(intensity=10, control=0, capability_grants=(cap_spec,))
+        bd = price_design(d, config=cfg, budget=200)
+
+        cap_lines = [line for line in bd.lines if line.dimension == "capability"]
+        runtime_grant = TechniqueCapabilityGrant(
+            base_value=cap_spec.base_value,
+            intensity_multiplier=Decimal(str(cap_spec.intensity_multiplier)),
+        )
+        runtime_value = runtime_grant.calculate_value(effective_power=d.intensity)
+        assert runtime_value == 20  # 5 + 1.5*10, pre-#2708 additive shape
+
+        expected_cost = cfg.payload_base_cost + runtime_value * cfg.capability_value_unit_cost
+        assert cap_lines[0].power_cost == expected_cost
+
+
 # =============================================================================
 # §10 create_technique default action_template (#1306)
 # =============================================================================

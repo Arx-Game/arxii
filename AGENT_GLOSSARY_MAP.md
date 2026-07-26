@@ -299,6 +299,15 @@ levelled and pulled. _Avoid_: bond, string, link.
 A character's animating magical reserve (`CharacterAnima`) drawn on to perform rituals and
 weave threads. _Avoid_: mana, energy.
 
+**Ambient Activation** (#2708, ADR-0169):
+The test for whether a thread contributes *passively* to a capability — strictly stricter
+than anchor-in-action: a thread pull may be authorised by player assertion because it is
+paid for; a free passive contribution costs nothing, so it must be demonstrable (real worn
+items, real current room, the technique/trait actually in play). _Avoid_: "passive anchor
+check", "auto-pull". Full entry: [magic AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md)
+("Ambient Activation"); capability-oracle framing (the `action_ctx` param it feeds) in
+[conditions AGENT_GLOSSARY](src/world/conditions/AGENT_GLOSSARY.md) ("Agency oracle").
+
 **Intensity vs Power**:
 **Intensity** is the authored tier/magnitude band of a technique's effect; **Power** is the
 realized force a particular casting brings to bear. Keep them distinct — they are not synonyms. _Avoid_: using "power" for "intensity".

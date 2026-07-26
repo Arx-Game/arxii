@@ -291,4 +291,17 @@ TARGET's PRE-hit health runs low — `1 + multiplier * missing_health_fraction`,
 never computed off post-hit health (which would be self-referential). Strike-family
 techniques opt in; default 0 elsewhere.
 
+**Ambient Activation** (#2708, ADR-0169):
+The test for whether a thread contributes *passively* to a capability's power figure —
+`world.magic.services.resonance._anchor_ambiently_active`. Strictly stricter than
+anchor-in-action (`_anchor_in_action`): a thread pull may be authorised by player
+assertion because it is paid for; a free passive contribution costs nothing, so it must
+be demonstrable — every arm tests real state (actually-worn items, the character's
+actual current room, the technique/trait actually in play) rather than trusting the
+caller. Feeds `CharacterThreadHandler.contextual_thread_power`, one of the two terms
+(with `context_free_power`) composing the `power` figure that curves a technique's
+`TechniqueCapabilityGrant`. See `docs/systems/conditions.md`'s "Capability magnitude
+curve" section for the full nine-arm breakdown and the deferred ORGANIZATION arm.
+_Avoid_: "passive anchor check", "auto-pull".
+
 _Avoid_: invisible (use "intangible" when referring to the game-mechanical untargetable state)

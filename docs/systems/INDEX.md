@@ -669,7 +669,30 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`,
   `process_round_end()`, `process_damage_interactions()` (wired into combat #2018), `get_treatment_candidates()`,
   `perform_treatment()` (routes `mend_on_*` through `world.vitals.services.mend_wound()`
-  alongside its existing severity-decay path, #2644)
+  alongside its existing severity-decay path, #2644), `get_effective_capability_value()`
+  (the one-oracle agency/requirement answer — see "Capability magnitude curve" below)
+- **Capability magnitude curve (#2708 — `magic.CapabilityPowerConfig`):** staff-tunable
+  singleton (`power_per_doubling`, default 10) driving
+  `world.magic.services.capability_curve.apply_capability_curve` /
+  `get_capability_power_config()` — `value = round(base * 2 ** (sensitivity * power /
+  power_per_doubling))`, replacing the old linear `base + intensity_multiplier * power`
+  shape on `TechniqueCapabilityGrant.calculate_value()`. **No config row = every
+  consumer's pre-#2708 number, bit-for-bit** — both oracles check for the row FIRST and,
+  when absent, skip power derivation entirely and call `calculate_value()` bare rather
+  than deriving a real power figure and feeding it to the retired formula (a regression
+  caught and fixed before merge). Two oracles read technique-granted capability magnitude
+  and must agree on the ambient default: `_technique_capability_values`
+  (`world.conditions.services`, the agency oracle behind `get_effective_capability_value`,
+  accepts an optional `action_ctx`) and `_get_technique_sources`
+  (`world.mechanics.services`, the availability oracle behind
+  `get_capability_sources_for_character`, always ambient — no `action_ctx` param). Both
+  derive power as `technique.intensity + context_free_power + contextual_thread_power(...)`
+  (`CharacterThreadHandler`, `world/magic/handlers.py`) and resolve the technique→gift
+  mapping via `resolve_gift_ids_by_technique` once per sweep, never per grant. A thread's
+  tier-0 `INTENSITY_BUMP` only feeds this power figure when
+  `_anchor_ambiently_active` (`world/magic/services/resonance.py`) confirms real,
+  demonstrable engagement (not player assertion) — the paid-pull sibling predicate is
+  `_anchor_in_action`, deliberately separate. See ADR-0169 for the full design decisions.
 - **Perception gate (#1225):** `can_perceive(actor, target)` composes co-location with
   per-observer concealment detection (`is_concealed()`, `active_concealments()`,
   `ConditionInstance.detected_by`). Consulted by `OnUseTargetPrerequisite` (item-use targeting),

@@ -10,8 +10,9 @@ Three event hooks + one recompute:
   and subtracts the polish.
 * ``recompute_persona_prestige_from_items(persona)`` — sums
   ``polish_value`` of every item currently equipped on the persona's
-  body. Reads through ``EquippedItem.character`` (Evennia ObjectDB
-  side). Returns the new value.
+  body. Reads through ``EquippedItem.character``, which FKs to
+  ``character_sheets.CharacterSheet`` — NOT to Evennia's ObjectDB.
+  Returns the new value.
 
 Mutual exclusivity: place/equip are XOR. Placement is gated by
 ``EquippedItem.objects.filter(item_instance=...).exists()``; equipping
