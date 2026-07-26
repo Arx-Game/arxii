@@ -1,6 +1,6 @@
 """Tests for vitals survivability service layer."""
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from evennia_extensions.factories import CharacterFactory
@@ -216,6 +216,7 @@ def _build_death_pool_for_bleed_out(*, failure_outcome):
 
 
 @tag("postgres")
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
 class ProcessDamageConsequencesSourceCharacterTest(TestCase):
     """Thread source_character through process_damage_consequences → Bleeding-Out.
 
