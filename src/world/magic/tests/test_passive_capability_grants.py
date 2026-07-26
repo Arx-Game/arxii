@@ -2,7 +2,10 @@
 
 Tier-0 CAPABILITY_GRANT ThreadPullEffect rows on COVENANT_ROLE threads are
 applied only while the character holds an active, *engaged* CharacterCovenantRole
-for that role. The handler returns the SET of granted CapabilityType PKs.
+for that role. The handler returns a dict of granted CapabilityType PK -> value
+(#2708 — magnitude now varies with thread level/power; ``set(...)`` over the
+returned dict still yields the granted PKs, so tests here that only care about
+membership use ``assertIn``/``set(...)`` rather than assuming a set literal).
 """
 
 from django.test import TestCase
@@ -170,7 +173,7 @@ class PassiveCapabilityGrantsTests(TestCase):
         )
 
         granted = character.threads.passive_capability_grants()
-        self.assertEqual(granted, {cap_a.pk, cap_b.pk})
+        self.assertEqual(set(granted), {cap_a.pk, cap_b.pk})
 
     def test_same_resonance_two_roles_grants_when_any_engaged(self):
         """Two roles share one resonance + one tier-0 effect; engagement of any wins.

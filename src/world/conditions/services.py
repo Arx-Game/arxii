@@ -1566,20 +1566,24 @@ def process_damage_interactions(
 # =============================================================================
 
 
-def _passive_capability_grants(character_sheet: "CharacterSheet") -> set[int]:
-    """Thread-passive CapabilityType PKs granted to ``character_sheet`` (#751 B2).
+def _passive_capability_grants(character_sheet: "CharacterSheet") -> dict[int, int]:
+    """Thread-passive CapabilityType PK -> value granted to ``character_sheet`` (#751 B2).
 
     Single source of thread-passive grants — delegates to the B1 handler
     (``CharacterThreadHandler.passive_capability_grants``), the canonical,
     engagement-gated authority. Prefers the character's memoized ``.threads``
     handler (a typeclass ``cached_property`` returning the same instance across
     calls in a request), so a sweep over many techniques reuses one cached grant
-    set instead of re-querying per requirement (no N+1). Falls back to a fresh
+    dict instead of re-querying per requirement (no N+1). Falls back to a fresh
     ``CharacterThreadHandler`` only when ``.threads`` is unavailable — e.g. when
     ``character_sheet.character`` is a bare ObjectDB (the test setup in
     test_services.py), where that lazy property is absent. The handler only needs
     ``character.sheet_data``, which a sheet-bearing ObjectDB always exposes.
     Magic is imported locally to avoid a circular import at module load.
+
+    #2708: the value is no longer always 1 — ``ThreadPullEffect``-sourced grants are
+    curved by thread level and power (see the handler's cache docstring); the #2022
+    ``CovenantRole.granted_capabilities`` M2M source stays flat at 1.
     """
     character = character_sheet.character
     try:
@@ -1950,14 +1954,16 @@ def get_effective_capability_value(
     status = get_capability_status(character_sheet, capability)
     condition_total = sum(modifier for _instance, modifier in status.condition_contributions)
     # Thread-passive grants (#751 B2): an engaged tier-0 role CAPABILITY_GRANT
-    # means the capability is POSSESSED → contribute an additive floor of 1
+    # means the capability is POSSESSED → contribute an additive floor
     # (intrinsic capacity, not a condition). Folded here rather than in
     # get_capability_status because that chokepoint is shared with
     # get_capability_value, whose condition-only semantics must stay intact.
     # The handler caches threads and runs ~2 queries; this is a per-capability
     # read, not a loop, so the cost is acceptable.
+    # #2708: the floor is no longer always 1 — thread-sourced grants are curved by
+    # thread level and power; see CharacterThreadHandler._passive_capability_grants_cache.
     granted = _passive_capability_grants(character_sheet)
-    grant_floor = 1 if capability.pk in granted else 0
+    grant_floor = granted.get(capability.pk, 0)
     technique_value = _technique_capability_values(character_sheet).get(capability.pk, 0)
     return max(0, baseline + modifier_total + condition_total + grant_floor + technique_value)
 

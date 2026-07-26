@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
     from typeclasses.characters import Character
     from world.conditions.models import DamageType
-    from world.magic.models import Facet, Resonance
+    from world.magic.models import CapabilityPowerConfig, Facet, Resonance
     from world.magic.types.pull import PullActionContext
 
 logger = logging.getLogger(__name__)
@@ -266,32 +266,58 @@ class CharacterThreadHandler:
             total += row.resistance_amount
         return total
 
-    def passive_capability_grants(self) -> set[int]:
-        """Return CapabilityType PKs granted by tier-0 CAPABILITY_GRANT effects.
+    def passive_capability_grants(self) -> dict[int, int]:
+        """Return CapabilityType PK -> value granted by tier-0 CAPABILITY_GRANT effects.
 
-        Thin accessor over the per-handler cached grant set
+        Thin accessor over the per-handler cached grant dict
         (``_passive_capability_grants_cache``). Cleared by ``invalidate()``
         alongside ``_all`` so a sweep over many techniques reuses one memoized
         result (one set of queries per character per request, not per
-        requirement).
+        requirement). ``set(handler.passive_capability_grants())`` still yields
+        the granted CapabilityType PKs (dict iteration is over keys) — the
+        shape callers that only care about membership (e.g.
+        ``world.covenants.services``) already rely on.
         """
         return self._passive_capability_grants_cache
 
     @cached_property
-    def _passive_capability_grants_cache(self) -> set[int]:
-        """Compute CapabilityType PKs granted by tier-0 CAPABILITY_GRANT effects.
+    def _passive_capability_grants_cache(self) -> dict[int, int]:
+        """Compute CapabilityType PK -> value granted by tier-0 CAPABILITY_GRANT effects.
 
         Derive-on-read mirror of ``passive_vital_bonuses``. For COVENANT_ROLE
         threads the grant only applies while the character holds an active,
         *engaged* CharacterCovenantRole for that role (Slice A §3.6 / #751).
         Other thread kinds always pass (anchor-in-scope via PROTECT — see
         ``passive_vital_bonuses``). Single batched query; no N+1.
+
+        **#2708 magnitude curve — two distinct sources, only one is curved.**
+        ``ThreadPullEffect`` CAPABILITY_GRANT rows are thread-sourced: they carry a
+        level (via the granting thread) and a ``capability_grant_value`` base, so
+        each qualifying thread's contribution is run through
+        ``apply_capability_curve(row.capability_grant_value, power=context_free_power,
+        sensitivity=thread_level_multiplier(thread.level))`` — a level-10 thread now
+        outweighs a level-1 thread granting the same capability, where before both
+        contributed an identical flat +1. ``CovenantRole.granted_capabilities`` (#2022,
+        the M2M listed directly on an engaged role) is NOT thread-sourced — it has no
+        thread, no level, and no ``capability_grant_value`` to curve — so it stays flat
+        at 1, exactly as before. Curving it would mean inventing a sensitivity for a
+        source that has none. ``power`` is ``context_free_power`` (Task 2): a passive
+        grant is not tied to any one cast, so the context-free power baseline is the
+        only power figure available here. ``CapabilityPowerConfig`` is fetched ONCE for
+        the whole cache build and threaded through every ``apply_capability_curve``
+        call — never once per grant (the N+1 shape #2708 review already caught twice
+        elsewhere in this file). Multiple sources granting the same capability fold via
+        MAX, not sum (ADR-0034 individuation), matching ``_technique_capability_values``.
         """
         threads = self._all
         if not threads:
-            return set()
+            return {}
 
         from django.db.models import Q  # noqa: PLC0415
+
+        from world.magic.services.capability_curve import (  # noqa: PLC0415
+            get_capability_power_config,
+        )
 
         # GIFT threads require gift-specific preference logic; separate them from
         # the non-GIFT batch to avoid cross-gift row leakage.
@@ -328,9 +354,64 @@ class CharacterThreadHandler:
             ).values_list("covenant_role_id", flat=True)
         )
 
-        granted: set[int] = set()
+        config = get_capability_power_config()  # fetched once for the whole build
+        power = self.context_free_power
 
-        # Non-GIFT batch processing (unchanged logic)
+        granted: dict[int, int] = {}
+
+        def _fold(capability_id: int, value: int) -> None:
+            granted[capability_id] = max(granted.get(capability_id, 0), value)
+
+        # Non-GIFT batch processing: curved per qualifying thread.
+        for capability_id, value in self._non_gift_capability_grant_ids(
+            non_gift_effects, threads_by_key, engaged_role_ids, power=power, config=config
+        ).items():
+            _fold(capability_id, value)
+
+        # GIFT threads: prefer gift-specific, fall back to null (per-thread), curved.
+        for capability_id, value in self._gift_capability_grant_ids(
+            gift_threads, config=config
+        ).items():
+            _fold(capability_id, value)
+
+        # #2022: Role-granted capabilities from the CovenantRole.granted_capabilities
+        # M2M — these are capabilities directly listed on the role (not via
+        # ThreadPullEffect). They apply while the role is engaged. No thread, no
+        # level, no capability_grant_value — flat 1, never curved.
+        if engaged_role_ids:
+            from world.covenants.models import CovenantRole  # noqa: PLC0415
+
+            role_capability_ids = set(
+                CovenantRole.objects.filter(
+                    pk__in=engaged_role_ids,
+                ).values_list("granted_capabilities", flat=True)
+            )
+            role_capability_ids.discard(None)
+            for capability_id in role_capability_ids:
+                _fold(capability_id, 1)
+
+        return granted
+
+    @staticmethod
+    def _non_gift_capability_grant_ids(
+        non_gift_effects: list[ThreadPullEffect],
+        threads_by_key: dict[tuple[str, int], list[Thread]],
+        engaged_role_ids: set[int],
+        *,
+        power: int,
+        config: CapabilityPowerConfig | None,
+    ) -> dict[int, int]:
+        """Return CapabilityType PK -> curved value for the non-GIFT batch (#2708).
+
+        Extracted from ``_passive_capability_grants_cache`` to keep that method below
+        the complexity ceiling. Preserves the pre-#2708 gates unchanged (``min_thread_level``
+        and the COVENANT_ROLE engagement check) — only the magnitude, via
+        ``apply_capability_curve``, is new. Multiple qualifying threads for the same row
+        fold via MAX (ADR-0034 individuation).
+        """
+        from world.magic.services.capability_curve import apply_capability_curve  # noqa: PLC0415
+
+        granted: dict[int, int] = {}
         for row in non_gift_effects:
             candidates = threads_by_key.get((row.target_kind, row.resonance_id), [])
             for t in candidates:
@@ -341,26 +422,15 @@ class CharacterThreadHandler:
                     and t.target_covenant_role_id not in engaged_role_ids
                 ):
                     continue
-                granted.add(row.capability_grant_id)
-                break  # one qualifying thread suffices for this effect
-
-        # GIFT threads: prefer gift-specific, fall back to null (per-thread)
-        granted.update(self._gift_capability_grant_ids(gift_threads))
-
-        # #2022: Role-granted capabilities from the CovenantRole.granted_capabilities
-        # M2M — these are capabilities directly listed on the role (not via
-        # ThreadPullEffect). They apply while the role is engaged.
-        if engaged_role_ids:
-            from world.covenants.models import CovenantRole  # noqa: PLC0415
-
-            role_capability_ids = set(
-                CovenantRole.objects.filter(
-                    pk__in=engaged_role_ids,
-                ).values_list("granted_capabilities", flat=True)
-            )
-            role_capability_ids.discard(None)
-            granted.update(role_capability_ids)
-
+                value = apply_capability_curve(
+                    row.capability_grant_value,
+                    power=power,
+                    sensitivity=thread_level_multiplier(t.level),
+                    config=config,
+                )
+                granted[row.capability_grant_id] = max(
+                    granted.get(row.capability_grant_id, 0), value
+                )
         return granted
 
     @cached_property
@@ -628,14 +698,21 @@ class CharacterThreadHandler:
                 total += bump
         return total
 
-    def _gift_capability_grant_ids(self, gift_threads: list[Thread]) -> set[int]:
-        """Return CapabilityType PKs from GIFT threads using gift-specific preference.
+    def _gift_capability_grant_ids(
+        self, gift_threads: list[Thread], *, config: CapabilityPowerConfig | None
+    ) -> dict[int, int]:
+        """Return CapabilityType PK -> curved value from GIFT threads (#2708).
 
         Extracted from ``_passive_capability_grants_cache`` to keep that method
         below the complexity ceiling. Called only when the character has active
-        GIFT threads.
+        GIFT threads. Preserves the gift-specific-vs-null-fallback preference
+        (``get_pull_effects_for_thread``); only the magnitude is new. ``config`` is
+        the ``CapabilityPowerConfig`` already fetched once by the caller — never
+        re-fetched per gift thread.
         """
-        granted: set[int] = set()
+        from world.magic.services.capability_curve import apply_capability_curve  # noqa: PLC0415
+
+        granted: dict[int, int] = {}
         for t in gift_threads:
             rows = get_pull_effects_for_thread(
                 t,
@@ -646,7 +723,15 @@ class CharacterThreadHandler:
                 if row.min_thread_level > t.level:
                     continue
                 if row.capability_grant_id is not None:
-                    granted.add(row.capability_grant_id)
+                    value = apply_capability_curve(
+                        row.capability_grant_value,
+                        power=self.context_free_power,
+                        sensitivity=thread_level_multiplier(t.level),
+                        config=config,
+                    )
+                    granted[row.capability_grant_id] = max(
+                        granted.get(row.capability_grant_id, 0), value
+                    )
         return granted
 
     @cached_property
