@@ -47,14 +47,14 @@ character_creation seed cluster) — it creates all seven canonical shelves keye
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `Roster` | Character category groups (Active, Inactive, etc.) — keyed by `roster_type` (#2728); `name` is a display label only | `roster_type` (unique, `RosterType`, the key), `name` (unique, display label), `description`, `is_active`, `is_public`, `allow_applications`, `sort_order` |
-| `RosterEntry` | Bridge linking characters to rosters (1:1 with ObjectDB) | `character` (OneToOne ObjectDB), `roster` (FK), `profile_picture` (FK TenureMedia), `joined_roster`, `previous_roster`, `last_puppeted`, `frozen`, `gm_notes`, `creation_provenance` (`CreationProvenance`, #1506), `created_by_account` (FK AccountDB), `created_for_table` (FK gm.GMTable — set for GM_TABLE) |
+| `RosterEntry` | Bridge linking characters to rosters (1:1 with CharacterSheet) | `character_sheet` (OneToOne CharacterSheet — retargeted from ObjectDB in #2608), `roster` (FK), `profile_picture` (FK TenureMedia), `joined_roster`, `previous_roster`, `last_puppeted`, `gm_notes`, `creation_provenance` (`CreationProvenance`, #1506), `created_by_account` (FK AccountDB), `created_for_table` (FK gm.GMTable — set for GM_TABLE) |
 
 ### Tenures & Anonymity
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `RosterTenure` | Player-character relationship with anonymity | `player_data` (FK PlayerData), `roster_entry` (FK), `player_number`, `start_date`, `end_date` (null = current), `applied_date`, `approved_date`, `approved_by` (FK PlayerData), `photo_folder` |
-| `RosterApplication` | Application workflow before tenures | `player_data` (FK PlayerData), `character` (FK ObjectDB), `status` (TextChoices), `application_text`, `review_notes`, `reviewed_by` (FK PlayerData) |
+| `RosterApplication` | Application workflow before tenures | `player_data` (FK PlayerData), `character` (FK CharacterSheet — retargeted from ObjectDB in #2608), `status` (TextChoices), `application_text`, `review_notes`, `reviewed_by` (FK PlayerData) |
 
 ### Settings & Media
 
@@ -215,7 +215,9 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
 ## API Endpoints
 
 ### Rosters (`/api/roster/rosters/`)
-- `GET /api/roster/rosters/` - List active rosters (public, read-only)
+- `GET /api/roster/rosters/` - List active rosters (read-only). Staff see every
+  active roster; everyone else is narrowed to `is_public=True`, so staff-only
+  shelves (e.g. NPC) never surface to players (#2728).
 
 ### Entries (`/api/roster/entries/`)
 - `GET /api/roster/entries/` - List roster entries with character data

@@ -36,7 +36,10 @@ def build_account_payload_context(account: AccountDB) -> AccountPayloadContext:
           personas (PRIMARY+ESTABLISHED) and select_related on roster,
           character_sheet.character, profile_picture.media.
         - pending_applications: pending RosterApplication rows with
-          select_related on character.
+          select_related on character__character. The serializer reads the
+          character's id/key off the ObjectDB behind the CharacterSheet
+          (#2608 retargeted this FK), so stopping at `character` would cost
+          one ObjectDB query per pending application.
         - puppeted_character_ids: ObjectDB ids currently puppeted by
           this account in any session.
 
@@ -74,7 +77,7 @@ def build_account_payload_context(account: AccountDB) -> AccountPayloadContext:
             RosterApplication.objects.filter(
                 player_data=player_data,
                 status=ApplicationStatus.PENDING,
-            ).select_related("character")
+            ).select_related("character__character")
         )
         if player_data
         else []

@@ -132,11 +132,12 @@ class RosterFactory(factory_django.DjangoModelFactory):
         django_get_or_create = ("roster_type",)
 
     name = factory.Sequence(lambda n: f"Roster_{n}")
-    # Cycle through the closed vocabulary so independent RosterFactory() calls
-    # (including via RosterEntryFactory's SubFactory) never collide within a single
-    # test's transaction. Callers that care which shelf a roster represents should
-    # pass roster_type= explicitly.
-    roster_type = factory.Iterator(RosterType.values)
+    # Pinned, NOT an Iterator. factory.Iterator advances off a process-global counter,
+    # so a bare RosterFactory() would land on a different shelf depending on how many
+    # other tests ran first — nondeterminism on a *unique* column, which is a latent
+    # flake generator (#2728). A character with no stated shelf belongs on Active, and
+    # any test that cares which shelf it gets passes roster_type= explicitly.
+    roster_type = RosterType.ACTIVE
     description = factory.LazyAttribute(lambda obj: f"Description for {obj.name}")
     is_active = True
     allow_applications = True
