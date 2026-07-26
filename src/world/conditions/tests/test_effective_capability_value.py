@@ -622,6 +622,63 @@ class ActionContextThreadingTests(TestCase):
 
         self.assertEqual(result, 1)
 
+    def test_caller_naming_one_technique_does_not_leak_into_another(self) -> None:
+        """#2708 Task 8 review: naming T1 must not empower T2's grant via T1's thread.
+
+        T1 and T2 both grant capability ``cap``. Only T1 has a TECHNIQUE-kind thread
+        (a large tier-0 INTENSITY_BUMP). T1's own grant has intensity_multiplier=0, so
+        its value is unaffected by power either way — T1's own self-anchoring (a
+        technique's context always names itself, unchanged since before this task)
+        cannot be what moves the result. T2's grant has intensity_multiplier=1, so if
+        T1's thread leaks into T2's per-technique context (the bug: the caller's whole
+        ``involved_techniques`` used to be merged into every technique's context,
+        instead of narrowing to just the technique being evaluated), T2's grant value
+        jumps and wins the cross-grant max(). A caller honestly naming "T1 is in play"
+        must not inflate a capability T2 grants.
+        """
+        cap = CapabilityTypeFactory(innate_baseline=0)
+        t1 = TechniqueFactory(intensity=0)
+        t2 = TechniqueFactory(intensity=0)
+        TechniqueCapabilityGrantFactory(
+            technique=t1, capability=cap, base_value=1, intensity_multiplier=0
+        )
+        TechniqueCapabilityGrantFactory(
+            technique=t2, capability=cap, base_value=1, intensity_multiplier=1
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=t1)
+        CharacterTechniqueFactory(character=self.sheet, technique=t2)
+
+        resonance = ResonanceFactory()
+        ThreadFactory(
+            owner=self.sheet,
+            resonance=resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=t1,
+            target_trait=None,
+            level=10,
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TECHNIQUE,
+            resonance=resonance,
+            tier=0,
+            min_thread_level=0,
+            as_intensity_bump=True,
+            intensity_bump_amount=50,
+        )
+
+        action_ctx = PullActionContext(involved_techniques=(t1.pk,))
+
+        result = get_effective_capability_value(self.sheet, cap, action_ctx=action_ctx)
+
+        # T1's own iteration: power=50 (self-anchored, as always), but
+        # multiplier=0 -> value = base_value(1) + 0*50 = 1.
+        # T2's iteration: T1's thread must NOT be visible here -> power=0 ->
+        # value = base_value(1) + 1*0 = 1.
+        # max(1, 1) = 1. Before the fix, T2's iteration saw T1's thread too
+        # (ctx.involved_techniques=(T2, T1)), giving T2 a value of 51 and a
+        # result of 51 — this assertion is what catches that regression.
+        self.assertEqual(result, 1)
+
 
 class CapabilityOracleQueryCountTests(TestCase):
     """#2708 Task 8: the regression guard for the whole caching design.

@@ -97,6 +97,15 @@ class HoldsCapabilityPrerequisite(Prerequisite):
         # A TRAIT-thread grant of this capability stays exactly as dark here as it would
         # under the ambient default — correct, since no trait is demonstrably in play at
         # a generic gate like this one.
+        # NOTE: involved_objects is carried for future use / parity with the pull
+        # path's PullActionContext shape, but is currently UNREAD when this context
+        # reaches world.magic.services.resonance._anchor_ambiently_active (used via
+        # get_effective_capability_value -> _technique_capability_values) — its
+        # SANCTUM arm reads character.location directly rather than
+        # ctx.involved_objects, by design (see that function's docstring: "test
+        # real state, not caller assertion"). See world.conditions.services'
+        # get_effective_capability_value for the matching note at its own ambient
+        # construction site.
         action_ctx = PullActionContext(
             involved_objects=(actor.location.pk,) if actor.location else (),
             target=target,

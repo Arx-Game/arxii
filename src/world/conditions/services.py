@@ -1649,17 +1649,29 @@ def _technique_capability_values(
     landed in one here).
 
     ``action_ctx`` (#2708 Task 8): the caller's real action context, if any. Every
-    technique's per-call ``PullActionContext`` always names ITSELF in
-    ``involved_techniques`` (so a TECHNIQUE-kind thread anchored on the technique being
-    evaluated lights up, unchanged from before this task) and additionally carries
-    ``action_ctx``'s own ``involved_traits``/``involved_objects``/``involved_techniques``/
-    combat fields when supplied — this is what lets a TRAIT-kind thread's tier-0
-    INTENSITY_BUMP contribute to ``power`` (and therefore to ``calculate_value()``) when
-    the caller can honestly name the trait in play (the climbing case). When
-    ``action_ctx`` is None (the ambient default built by ``get_effective_capability_value``),
-    ``involved_traits`` stays empty and every TRAIT-kind thread's contextual bump stays
-    dark — see that function's docstring for why this is deliberate, not a gap. Merging
-    happens per technique, not by mutating a single shared context, so ``gift_id_by_technique``
+    technique's per-call ``PullActionContext`` always names ONLY ITSELF in
+    ``involved_techniques`` — ``action_ctx.involved_techniques`` is deliberately NOT
+    merged in. The GIFT arm's ``_gift_in_action`` narrows a wider technique->gift
+    mapping back down to ``ctx.involved_techniques`` before deciding, but the TECHNIQUE
+    arm in ``_anchor_ambiently_active`` is a bare membership test with no such
+    narrowing (``thread.target_technique_id in ctx.involved_techniques``); merging the
+    caller's other known techniques into every per-technique context would let a
+    TECHNIQUE-kind thread anchored on technique T1 (named in the caller's action_ctx)
+    light up during T2's iteration of this sweep too, inflating T2's ``power`` — and
+    therefore ``calculate_value()`` and the cross-grant ``max()`` — with power that has
+    nothing to do with T2 (the Task 8 review finding this note exists to prevent
+    reintroducing). Which technique is being evaluated is this sweep's own business,
+    not the caller's to expand. ``action_ctx``'s other fields — ``involved_traits``,
+    ``involved_objects``, the combat fields, ``participant``, ``target``,
+    ``excluded_kinds`` — genuinely describe the caller's action and ARE carried through
+    unnarrowed on every per-technique context: this is what lets a TRAIT-kind thread's
+    tier-0 INTENSITY_BUMP contribute to ``power`` (and therefore to
+    ``calculate_value()``) when the caller can honestly name the trait in play (the
+    climbing case). When ``action_ctx`` is None (the ambient default built by
+    ``get_effective_capability_value``), ``involved_traits`` stays empty and every
+    TRAIT-kind thread's contextual bump stays dark — see that function's docstring for
+    why this is deliberate, not a gap. Merging happens per technique, not by mutating a
+    single shared context, so ``gift_id_by_technique``
     (precomputed once, below) still narrows correctly per call
     (``contextual_thread_power``'s own per-call-narrowing contract).
 
@@ -1706,8 +1718,12 @@ def _technique_capability_values(
             if action_ctx is None:
                 ctx = PullActionContext(involved_techniques=(technique_id,))
             else:
+                # Deliberately NOT merging action_ctx.involved_techniques here — see
+                # the docstring's scoping note above. Only THIS technique's own id
+                # goes in; every other field of action_ctx genuinely describes the
+                # caller's action and is safe to carry through unnarrowed.
                 ctx = PullActionContext(
-                    involved_techniques=(technique_id, *action_ctx.involved_techniques),
+                    involved_techniques=(technique_id,),
                     involved_traits=action_ctx.involved_traits,
                     involved_objects=action_ctx.involved_objects,
                     combat_encounter=action_ctx.combat_encounter,
@@ -2032,6 +2048,14 @@ def get_effective_capability_value(
         # Evennia location lookup, not a query per technique — this runs once per
         # call, never inside the technique sweep below (see the PERFORMANCE note on
         # #2708 Task 8's dispatch brief re: contents_cache vs a fresh query).
+        # NOTE: involved_objects is carried for future use / parity with the pull
+        # path's PullActionContext shape, but is currently UNREAD on this ambient
+        # path — _anchor_ambiently_active's SANCTUM arm reads character.location
+        # directly rather than ctx.involved_objects (deliberately: that function's
+        # whole design is "test real state, not caller assertion" — see its
+        # docstring — so trusting a caller-supplied object tuple there would cut
+        # against the reason it exists). Only the pull path's _anchor_in_action
+        # SANCTUM arm actually consumes ctx.involved_objects today.
         action_ctx = PullActionContext(
             involved_objects=(location.pk,) if location is not None else (),
         )
