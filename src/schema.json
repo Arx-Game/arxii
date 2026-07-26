@@ -5531,6 +5531,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/consider/{opponent_pk}/:
+    get:
+      operationId: combat_consider_retrieve
+      description: |-
+        Assess an opponent's threat level (#2716).
+
+        GET /api/combat/encounters/<pk>/consider/<opponent_pk>/
+        Returns narrative prose — never the check mechanics.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      - in: path
+        name: opponent_pk
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/cover/:
     post:
       operationId: combat_cover_create

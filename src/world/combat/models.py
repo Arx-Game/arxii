@@ -2388,6 +2388,15 @@ class OpponentTierTemplate(SharedMemoryModel):
         default=1,
         help_text="Tier-level action economy. MOOK/ELITE=1; BOSS=2 or 3.",
     )
+    assess_prose = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "#2716: designer-authored narrative prose for this tier in a "
+            "consider reading (e.g. 'a commanding presence' for BOSS). "
+            "Blank = the tier clause is omitted from the reading."
+        ),
+    )
 
     class Meta:
         ordering = ["tier"]
@@ -3600,3 +3609,49 @@ class CombatMark(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"CombatMark({self.participant} → {self.opponent}, round {self.round_number})"
+
+
+class ConsiderReading(SharedMemoryModel):
+    """A cached threat assessment of one opponent by one participant (#2716).
+
+    One reading per (participant, opponent) — the first consider sticks; you
+    can't reroll. Stores the check result and true band server-side (never
+    serialized to the client); the client only sees ``prose``.
+    """
+
+    participant = models.ForeignKey(
+        CombatParticipant,
+        on_delete=models.CASCADE,
+        related_name="consider_readings",
+    )
+    opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        related_name="consider_readings",
+    )
+    success_level = models.SmallIntegerField(
+        help_text="The check's success_level (-10 to +10). Server-only.",
+    )
+    true_band_index = models.SmallIntegerField(
+        help_text="The correct band index. Server-only.",
+    )
+    reported_band_index = models.SmallIntegerField(
+        help_text="The band index the player was told (may differ on failure).",
+    )
+    prose = models.TextField(help_text="The assembled narrative reading.")
+    is_enhanced = models.BooleanField(
+        default=False,
+        help_text="Whether the enhancement capability was active for this reading.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["participant", "opponent"],
+                name="unique_consider_reading_per_participant_opponent",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"ConsiderReading({self.participant} → {self.opponent})"

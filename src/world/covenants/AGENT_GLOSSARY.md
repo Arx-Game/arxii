@@ -401,6 +401,16 @@ authored delta.
 _Avoid_: Insight (the random-draw sibling — see #2645); mage-scar weakness (a damage-type
 vulnerability modifier on alteration templates, a completely different concept).
 
+**Enhanced Assessment** (`CovenantRole.enhances_assessment`, #2716):
+A covenant-role flag (initially the Sage) that grants a finer `consider` reading —
+9-band fine bands + health/condition axes, vs. the 5-band coarse reading everyone gets.
+Parallels `reveals_weakness` but is mechanically distinct: weakness reading is a
+combat-active BOSS-only rider tied to PERCEPTION technique casts; enhanced assessment
+is a pre-combat threat readout. The check still gates accuracy — this grants a better
+tool, not a guaranteed result. Not coupled to `reveals_weakness`; other roles could
+carry either flag independently.
+_Avoid_: Sage reading (use **enhanced assessment** — the Sage is one source, not the mechanism).
+
 **Pending Selection**:
 `world.combat.models.PendingSelection` — a generic deferred player choice created during
 combat resolution (#2665). The combat round is synchronous and cannot pause for a player

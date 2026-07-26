@@ -393,6 +393,18 @@ class CovenantRole(NaturalKeyMixin, AbstractSpecializedVariant, SharedMemoryMode
             "encounter (CombatParticipant.weakness_reading_used)."
         ),
     )
+    enhances_assessment = models.BooleanField(
+        default=False,
+        help_text=(
+            "#2716: grants a finer consider reading (fine bands + health "
+            "+ conditions axes) when the character holds an engaged "
+            "membership in this role (or one of its sub-roles, which ride "
+            "the parent's grant like every other role-scoped flag in this "
+            "table). The Sage role carries this; other roles could too. "
+            "The check still gates accuracy — this grants a better tool, "
+            "not a guaranteed result."
+        ),
+    )
 
     objects = CovenantRoleManager()
 

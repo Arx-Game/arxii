@@ -42,6 +42,7 @@ from world.combat.models import (
     CombatParticipant,
     CombatRoundAction,
     ComboDefinition,
+    ConsiderReading,
     DuelChallenge,
     EngagementLock,
     ThreatPool,
@@ -55,6 +56,7 @@ from world.combat.serializers import (
     ACTIVE_CONDITIONS_CACHE_ATTR,
     AddOpponentSerializer,
     AddParticipantSerializer,
+    ConsiderReadingSerializer,
     CoverSerializer,
     DuelChallengeSerializer,
     EncounterDetailSerializer,
@@ -972,6 +974,42 @@ class CombatEncounterViewSet(ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return self._serialize_encounter(request, encounter)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.GET],
+        url_path=r"consider/(?P<opponent_pk>\d+)",
+    )
+    def consider(
+        self,
+        request: Request,
+        pk: int | None = None,
+        opponent_pk: str | None = None,
+    ) -> Response:
+        """Assess an opponent's threat level (#2716).
+
+        GET /api/combat/encounters/<pk>/consider/<opponent_pk>/
+        Returns narrative prose — never the check mechanics.
+        """
+        from world.combat.consider import consider_opponent  # noqa: PLC0415
+
+        encounter = self.get_object()
+        opponent = get_object_or_404(CombatOpponent, pk=opponent_pk, encounter=encounter)
+        participant = self._get_participant(request, encounter)
+        if not participant:
+            return Response(
+                {"detail": _ERR_NOT_PARTICIPANT},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Check for cached reading before running the check.
+        is_cached = ConsiderReading.objects.filter(
+            participant=participant, opponent=opponent
+        ).exists()
+
+        reading = consider_opponent(participant, opponent)
+        serializer = ConsiderReadingSerializer(reading, context={"is_cached": is_cached})
+        return Response(serializer.data)
 
     # --- Helpers ---
 

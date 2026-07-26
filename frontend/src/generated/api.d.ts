@@ -3777,6 +3777,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/consider/{opponent_pk}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Assess an opponent's threat level (#2716).
+     *
+     *     GET /api/combat/encounters/<pk>/consider/<opponent_pk>/
+     *     Returns narrative prose — never the check mechanics.
+     */
+    get: operations['combat_consider_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/cover/': {
     parameters: {
       query?: never;
@@ -43018,6 +43040,29 @@ export interface operations {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
     };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_consider_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+        opponent_pk: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
     responses: {
       200: {
         headers: {

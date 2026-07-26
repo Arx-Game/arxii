@@ -140,6 +140,20 @@ deliberately low is how a soloable or upset-victory boss is authored.
 _Avoid_: tier (that's `OpponentTier`, a different axis — see above), rank, difficulty
 (for the NPC's class), CR/challenge rating
 
+**Consider** (`consider_opponent`, #2716):
+A narrative threat readout verb — the DikuMUD/EverQuest `/consider` descendant.
+Runs a PERCEPTION check opposed by the opponent's level via `level_opposition`;
+the `success_level` (−10 to +10) maps to accuracy. Failures produce **confidently
+wrong** bands (off by 1–3 steps), not silence — the player can't distinguish
+accurate from inaccurate readings. One cached reading per (participant, opponent)
+per encounter — no re-rolls (`ConsiderReading` model). An enhancement capability
+(`CovenantRole.enhances_assessment`, initially the Sage role) grants finer 9-band
+readings + health/condition axes; the check still gates accuracy. A
+`bias_direction()` seam exists for the future Overconfident distinction (always
+underestimates). Web-first REST endpoint on `CombatEncounterViewSet`; telnet
+`consider` command follows.
+_Avoid_: assess, appraise, threat-level (use **consider**), accuracy rating
+
 **Lieutenant** (#2642):
 An NPC opponent whose `reinforces` self-FK points at a BOSS-tier opponent. While active
 (ACTIVE status, morale not BREAK, no behavior-altering condition, not pinned in an ACTIVE
