@@ -11,8 +11,48 @@ from world.roster.factories import (
     CharacterFactory,
     PlayerDataFactory,
     RosterEntryFactory,
+    RosterFactory,
+    RosterTenureFactory,
 )
 from world.roster.models import ApplicationStatus, RosterApplication, RosterEntry
+from world.roster.models.choices import RosterType
+
+
+class AvailableCharactersTestCase(TestCase):
+    """available_characters() must offer characters nobody has ever played."""
+
+    def setUp(self):
+        self.roster = RosterFactory(
+            roster_type=RosterType.AVAILABLE,
+            allow_applications=True,
+        )
+
+    def test_a_never_played_character_is_available(self):
+        """Regression (#2728): the old ``.exclude(tenures__end_date__isnull=True)``
+        compiled to a LEFT JOIN inside NOT EXISTS, so an entry with no tenures at
+        all was silently excluded — hiding exactly the characters up for grabs."""
+        never_played = RosterEntryFactory(roster=self.roster)
+
+        available = RosterEntry.objects.available_characters()
+
+        self.assertIn(never_played.pk, set(available.values_list("pk", flat=True)))
+
+    def test_a_currently_played_character_is_not_available(self):
+        played = RosterEntryFactory(roster=self.roster)
+        RosterTenureFactory(roster_entry=played, end_date=None)
+
+        available = RosterEntry.objects.available_characters()
+
+        self.assertNotIn(played.pk, set(available.values_list("pk", flat=True)))
+
+    def test_a_released_character_becomes_available_again(self):
+        """An ended tenure must not keep the character off the shelf."""
+        released = RosterEntryFactory(roster=self.roster)
+        RosterTenureFactory(roster_entry=released, end_date=timezone.now())
+
+        available = RosterEntry.objects.available_characters()
+
+        self.assertIn(released.pk, set(available.values_list("pk", flat=True)))
 
 
 class RosterApplicationManagerTestCase(TestCase):

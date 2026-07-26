@@ -25,10 +25,21 @@ class RosterEntryQuerySet(models.QuerySet):
         return self.filter(roster__is_active=True)
 
     def available_characters(self) -> RosterEntryQuerySet:
-        """Filter to characters accepting applications."""
-        return self.filter(roster__allow_applications=True).exclude(
-            tenures__end_date__isnull=True,
+        """Entries on an applications-open roster that nobody is currently playing.
+
+        The "currently played" set is an explicit subquery, NOT
+        ``.exclude(tenures__end_date__isnull=True)``. That form compiles to a
+        LEFT OUTER JOIN inside the NOT EXISTS, so an entry with *no* tenures
+        yields a joined row whose ``end_date`` is NULL, matches the condition,
+        and gets excluded — silently hiding every never-played character, which
+        is exactly the population an Available roster exists to offer (#2728).
+        """
+        from world.roster.models.tenures import RosterTenure  # noqa: PLC0415
+
+        currently_played = RosterTenure.objects.filter(end_date__isnull=True).values(
+            "roster_entry_id",
         )
+        return self.filter(roster__allow_applications=True).exclude(pk__in=currently_played)
 
     def exclude_dormant(self) -> RosterEntryQuerySet:
         """Exclude characters with any non-ACTIVE/non-ALIVE state (#671).

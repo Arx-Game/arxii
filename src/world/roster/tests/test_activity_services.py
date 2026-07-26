@@ -71,9 +71,9 @@ class DecayTierMathTests(TestCase):
         sheet, _, _, _ = _build_sheet_with_tenure(days_inactive=14)
         self.assertEqual(sheet.decay_tier, DecayTier.RECENT_INACTIVE)
 
-    def test_inactive_at_30_days(self):
+    def test_short_inactive_at_30_days(self):
         sheet, _, _, _ = _build_sheet_with_tenure(days_inactive=30)
-        self.assertEqual(sheet.decay_tier, DecayTier.INACTIVE)
+        self.assertEqual(sheet.decay_tier, DecayTier.SHORT_INACTIVE)
 
     def test_long_inactive_at_90_days(self):
         sheet, _, _, _ = _build_sheet_with_tenure(days_inactive=90)

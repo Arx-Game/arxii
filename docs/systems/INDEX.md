@@ -1568,6 +1568,27 @@ Character identity, appearance, demographics, and guise system.
 - **API:** `GET /api/character-sheets/{pk}/profile-text-versions/` — the prose-history
   timeline; **owner/staff-only by default** (#2631 ruling — everyone else gets an empty
   list); entries carry era/IC-date stamps + the applying request's reasoning caption
+- **Absence vocabulary (#2728 §5):** `CharacterSheet.objects` carries the single
+  answer to "is this character absent?" — `.active()` (ACTIVE + ALIVE),
+  `.dormant()` (its exact complement), `.claimable()` (delegates to
+  `RosterEntryQuerySet.available_characters()`, never a second copy of the
+  predicate), and `.inactive_at_least(tier)` (the DB-level twin of the
+  `decay_tier` property, pinned to it by a parity test). Consumers ask these
+  instead of each deriving absence from raw timestamps or flags — mothballing,
+  the sanctum gates and applications previously used three different
+  definitions. Derived, never stored: a stored tier would need maintaining on
+  both the cron path and the login path. The manager is based on
+  `SharedMemoryManager` (identity map preserved) but deliberately NOT
+  `ArxSharedMemoryManager`, whose `cached_all()` is a footgun on a
+  playerbase-scoped table.
+- **State axes (#671, split #2728 §2):** `ActivityState` is OOC (is the player
+  showing up); `LifecycleState` is IC (what is true in the fiction) — orthogonal
+  by design. `LifecycleState.UNKNOWN` is separate from `CAPTURED`: captured means
+  someone is holding them (the captivity system drives it), unknown means
+  whereabouts are genuinely unknown and investigation can resolve it.
+  `DecayTier.SHORT_INACTIVE` (30d) is named so it stops colliding with
+  `ActivityState.INACTIVE` — a day-count tier and a swept flag are not the same
+  thing.
 - **Integrates with:** roster (character management), character_creation (sheet setup),
   gm (table update requests apply prose rewrites), stories (`Era` stamps)
 - **Source:** `src/world/character_sheets/`
@@ -1594,7 +1615,7 @@ Multi-stage character creation flow with draft system.
   otherwise calls `world.missions.services.run.staff_assign_mission()` verbatim (no new
   missions-app surface). Deliberately NOT best-effort — a misconfigured template raises and rolls
   back the whole finalization transaction (a content-authoring bug, not contention).
-- **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds the 12 stat Traits + the two Roster rows unconditionally so `finalize_character` runs on a fresh DB. Species/Gender/HeightBand/Build/FormTrait family/Distinction family/CGExplanation are all `CONTENT_MODELS` (#2698, ADR-0168) — looked up via `authored_or_sample()` and invented only under `SEED_SAMPLE_CONTENT`; Realm/StartingArea/Beginnings/TarotCard/Path are open-ended world content gated behind the same flag. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
+- **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds the 12 stat Traits unconditionally, plus every `RosterType` shelf via `world.roster.seeds.ensure_rosters()` (#2728 — replaced two name-keyed `Roster.objects.get_or_create` calls that created duplicates of Active/Available while never creating Inactive, Frozen or Restricted at all), so `finalize_character` runs on a fresh DB. Species/Gender/HeightBand/Build/FormTrait family/Distinction family/CGExplanation are all `CONTENT_MODELS` (#2698, ADR-0168) — looked up via `authored_or_sample()` and invented only under `SEED_SAMPLE_CONTENT`; Realm/StartingArea/Beginnings/TarotCard/Path are open-ended world content gated behind the same flag. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
 - **Email notifications (#2162):** `world.character_creation.email_service.CGEmailService` —
   submission/approved/revisions-requested/denied notices, called (best-effort) from
   `submit_draft_for_review`/`approve_application`/`request_revisions`/`deny_application`.
