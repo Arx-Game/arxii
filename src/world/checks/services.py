@@ -667,6 +667,7 @@ def _calculate_specialization_points(
 
 def _capability_point_allocation(
     character_sheet: "CharacterSheet",
+    check_type: "CheckType",
     capability_modifiers: list["CheckTypeCapabilityModifier"],
 ) -> tuple[int, list[int]]:
     """Shared capability arithmetic (#2505) — the ONLY place either caller computes it.
@@ -691,6 +692,16 @@ def _capability_point_allocation(
        fractional remainder, breaking ties by capability name for determinism.
        This guarantees per-row allocated ints sum EXACTLY to ``truncated_total``.
 
+    **``action_ctx`` (#2708 Task 8):** the check_type's own authored
+    ``CheckTypeTrait`` rows are genuinely "the traits in scope for this check" — the
+    same read ``world.scenes.action_services._charge_social_pull`` already does to
+    populate ``involved_traits`` on the ``PullActionContext`` it builds for a thread
+    pull tied to a social check. Passing them through here lets a
+    TRAIT-kind thread whose trait backs THIS check demonstrate ambient activation
+    (see ``get_effective_capability_value``'s docstring on the TRAIT-stays-dark
+    default) instead of silently missing out just because this read has no explicit
+    action attached. One query for the whole allocation (never per capability row).
+
     Returns:
         ``(truncated_total, allocated)`` where ``allocated`` is a list of ints in
         the same order as ``capability_modifiers``. Callers filter zero entries
@@ -698,11 +709,17 @@ def _capability_point_allocation(
         land on zero, or vice versa).
     """
     from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
+    from world.magic.types.pull import PullActionContext  # noqa: PLC0415
+
+    # check_type.traits is the reverse FK manager from CheckTypeTrait.
+    traits_qs = check_type.traits.values_list("trait_id", flat=True)  # type: ignore[attr-defined]
+    involved_traits = tuple(traits_qs)
+    action_ctx = PullActionContext(involved_traits=involved_traits)
 
     raw_products: list[Decimal] = [
         row.weight
         * (
-            get_effective_capability_value(character_sheet, row.capability)
+            get_effective_capability_value(character_sheet, row.capability, action_ctx=action_ctx)
             - row.capability.innate_baseline
         )
         for row in capability_modifiers
@@ -756,7 +773,9 @@ def _calculate_capability_points(character: "ObjectDB", check_type: "CheckType")
     except (ObjectDoesNotExist, AttributeError):
         return 0
 
-    total, _allocated = _capability_point_allocation(character_sheet, capability_modifiers)
+    total, _allocated = _capability_point_allocation(
+        character_sheet, check_type, capability_modifiers
+    )
     return total
 
 
@@ -1222,7 +1241,9 @@ def _capability_contributions(
     if not capability_modifiers:
         return []
 
-    _total, allocated = _capability_point_allocation(character_sheet, capability_modifiers)
+    _total, allocated = _capability_point_allocation(
+        character_sheet, check_type, capability_modifiers
+    )
 
     contributions: list[ModifierContribution] = []
     for row, value in zip(capability_modifiers, allocated, strict=True):

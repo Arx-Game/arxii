@@ -35,7 +35,8 @@ from world.magic.factories import (
     ThreadFactory,
     ThreadPullEffectFactory,
 )
-from world.magic.models import CapabilityPowerConfig, LevelPowerConfig
+from world.magic.models import CapabilityPowerConfig, LevelPowerConfig, Thread
+from world.magic.types.pull import PullActionContext
 from world.mechanics.factories import ModifierCategoryFactory, PrerequisiteFactory
 from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
 
@@ -549,3 +550,148 @@ class CapabilityEffectSeverityScalingCrossReaderTests(TestCase):
         summary = _aggregate_capability_effects(lookups)
 
         self.assertEqual(summary.values[cap.name], agency_value)
+
+
+class ActionContextThreadingTests(TestCase):
+    """#2708 Task 8: get_effective_capability_value(..., action_ctx=...).
+
+    A TRAIT-kind thread's tier-0 INTENSITY_BUMP can only raise a technique
+    grant's power — and therefore its curved value — when the caller supplies
+    an ``action_ctx`` naming the trait. The ambient default (no action_ctx)
+    deliberately cannot demonstrate the trait, so it stays dark. This is the
+    "climbing" case from the #2708 design: a rope-and-pulley TRAIT thread
+    should only light up during an actual climb.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+
+    def _trait_thread_technique_setup(self) -> tuple[CapabilityType, Thread]:
+        """A technique whose capability grant curves with power, plus a TRAIT
+        thread carrying a tier-0 INTENSITY_BUMP that only feeds that power when
+        the trait is named in a supplied action_ctx.
+        """
+        cap = CapabilityTypeFactory(innate_baseline=0)
+        technique = TechniqueFactory(intensity=0)
+        TechniqueCapabilityGrantFactory(
+            technique=technique, capability=cap, base_value=1, intensity_multiplier=1
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=technique)
+
+        resonance = ResonanceFactory()
+        thread = ThreadFactory(owner=self.sheet, resonance=resonance, level=10)
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TRAIT,
+            resonance=resonance,
+            tier=0,
+            min_thread_level=0,
+            as_intensity_bump=True,
+            intensity_bump_amount=50,
+        )
+        return cap, thread
+
+    def test_default_context_excludes_trait_threads(self) -> None:
+        """No action context: a TRAIT thread cannot be demonstrated, so it stays dark."""
+        cap, _thread = self._trait_thread_technique_setup()
+
+        result = get_effective_capability_value(self.sheet, cap)
+
+        # power = technique.intensity(0) + context_free_power(0, no config) +
+        # contextual_thread_power(0, trait not named) -> base_value(1) + 1*0 = 1.
+        self.assertEqual(result, 1)
+
+    def test_supplied_context_activates_trait_thread(self) -> None:
+        """The climbing case: an action that involves the trait lights its thread up."""
+        cap, thread = self._trait_thread_technique_setup()
+        action_ctx = PullActionContext(involved_traits=(thread.target_trait_id,))
+
+        result = get_effective_capability_value(self.sheet, cap, action_ctx=action_ctx)
+
+        # power = 0 + 0 + 50 (tier-0 bump at thread level 10, multiplier 1.0) ->
+        # base_value(1) + intensity_multiplier(1) * 50 = 51.
+        self.assertEqual(result, 51)
+        dark_value = get_effective_capability_value(self.sheet, cap)
+        self.assertGreater(result, dark_value)
+
+    def test_every_existing_caller_signature_still_works(self) -> None:
+        """The param is keyword-only with a default; positional calls are unaffected."""
+        cap = CapabilityTypeFactory(name="positional_call_still_works", innate_baseline=1)
+
+        result = get_effective_capability_value(self.sheet, cap)
+
+        self.assertEqual(result, 1)
+
+
+class CapabilityOracleQueryCountTests(TestCase):
+    """#2708 Task 8: the regression guard for the whole caching design.
+
+    Uses ONE sheet/handler throughout (mirrors ``ThreadCapabilityGrantQueryCountTests``
+    above) so measurements start from identical process-wide SharedMemoryModel cache
+    warmth rather than an artifact of which character happens to be measured first.
+    """
+
+    @staticmethod
+    def _add_known_technique(sheet, cap: CapabilityType) -> None:
+        """Add one more independently-known technique granting ``cap``."""
+        technique = TechniqueFactory(intensity=1)
+        TechniqueCapabilityGrantFactory(
+            technique=technique, capability=cap, base_value=1, intensity_multiplier=0
+        )
+        CharacterTechniqueFactory(character=sheet, technique=technique)
+
+    def test_sweeping_many_techniques_is_constant_query(self) -> None:
+        """Ten known techniques must not cost ten derivations."""
+        sheet = CharacterSheetFactory()
+        cap = CapabilityTypeFactory(innate_baseline=0)
+        handler = sheet.character.threads
+
+        self._add_known_technique(sheet, cap)
+        self._add_known_technique(sheet, cap)
+        get_effective_capability_value(sheet, cap)  # warm every process-wide singleton
+        handler.invalidate()
+
+        with CaptureQueriesContext(connection) as two_ctx:
+            get_effective_capability_value(sheet, cap)
+        two_count = len(two_ctx.captured_queries)
+        self.assertGreater(two_count, 0)
+
+        for _ in range(8):
+            self._add_known_technique(sheet, cap)
+        handler.invalidate()
+
+        with CaptureQueriesContext(connection) as ten_ctx:
+            get_effective_capability_value(sheet, cap)
+
+        self.assertEqual(two_count, len(ten_ctx.captured_queries))
+
+    def test_action_ctx_does_not_increase_query_count(self) -> None:
+        """Supplying action_ctx costs no more than the ambient default, and repeated
+        reads with the same action_ctx stay flat rather than re-deriving anything.
+        """
+        sheet = CharacterSheetFactory()
+        cap = CapabilityTypeFactory(innate_baseline=0)
+        handler = sheet.character.threads
+        self._add_known_technique(sheet, cap)
+        self._add_known_technique(sheet, cap)
+        get_effective_capability_value(sheet, cap)  # warm every process-wide singleton
+        handler.invalidate()
+
+        with CaptureQueriesContext(connection) as ambient_ctx:
+            get_effective_capability_value(sheet, cap)
+        ambient_count = len(ambient_ctx.captured_queries)
+        self.assertGreater(ambient_count, 0)
+        handler.invalidate()
+
+        action_ctx = PullActionContext(involved_traits=(1,), involved_objects=(1,))
+        with CaptureQueriesContext(connection) as first_ctx:
+            get_effective_capability_value(sheet, cap, action_ctx=action_ctx)
+        first_count = len(first_ctx.captured_queries)
+        self.assertLessEqual(first_count, ambient_count)
+        handler.invalidate()
+
+        with CaptureQueriesContext(connection) as second_ctx:
+            get_effective_capability_value(sheet, cap, action_ctx=action_ctx)
+        second_count = len(second_ctx.captured_queries)
+
+        self.assertEqual(first_count, second_count)

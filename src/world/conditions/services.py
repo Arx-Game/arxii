@@ -96,6 +96,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.covenants.models import CovenantRole
     from world.magic.models import PendingAlteration, Technique, Thread
+    from world.magic.types.pull import PullActionContext
     from world.mechanics.models import ModifierTarget
     from world.scenes.models import Scene
 
@@ -1584,6 +1585,19 @@ def _passive_capability_grants(character_sheet: "CharacterSheet") -> dict[int, i
     #2708: the value is no longer always 1 — ``ThreadPullEffect``-sourced grants are
     curved by thread level and power (see the handler's cache docstring); the #2022
     ``CovenantRole.granted_capabilities`` M2M source stays flat at 1.
+
+    #2708 Task 8: unlike ``_technique_capability_values``, this function does NOT take
+    an ``action_ctx`` parameter. ``CharacterThreadHandler.passive_capability_grants()``
+    gates its tier-0 CAPABILITY_GRANT rows on permanent-capacity checks only
+    (``min_thread_level`` + COVENANT_ROLE engagement) — never on demonstrable ambient
+    activation (``_anchor_ambiently_active``, the predicate ``contextual_thread_power``
+    reads). A TRAIT-kind thread's tier-0 CAPABILITY_GRANT is possessed capacity ("you
+    know how to pick locks") rather than an in-the-moment demonstration ("you are
+    picking a lock right now"), so it stays lit regardless of what action is being
+    attempted. Threading a currently-inert ``action_ctx`` through here would be a
+    fabricated no-op parameter, not a real wire-up — if a future design decision gates
+    passive grants on ambient activation too, this docstring is where that wiring
+    belongs.
     """
     character = character_sheet.character
     try:
@@ -1595,7 +1609,11 @@ def _passive_capability_grants(character_sheet: "CharacterSheet") -> dict[int, i
     return handler.passive_capability_grants()
 
 
-def _technique_capability_values(character_sheet: "CharacterSheet") -> dict[int, int]:
+def _technique_capability_values(
+    character_sheet: "CharacterSheet",
+    *,
+    action_ctx: "PullActionContext | None" = None,
+) -> dict[int, int]:
     """Best (max) technique-granted value per CapabilityType, for the agency oracle (#2504).
 
     One query over ``TechniqueCapabilityGrant`` restricted to the character's KNOWN
@@ -1630,8 +1648,24 @@ def _technique_capability_values(character_sheet: "CharacterSheet") -> dict[int,
     review finding 1/2 — a helper that had never been called in a loop before this task
     landed in one here).
 
+    ``action_ctx`` (#2708 Task 8): the caller's real action context, if any. Every
+    technique's per-call ``PullActionContext`` always names ITSELF in
+    ``involved_techniques`` (so a TECHNIQUE-kind thread anchored on the technique being
+    evaluated lights up, unchanged from before this task) and additionally carries
+    ``action_ctx``'s own ``involved_traits``/``involved_objects``/``involved_techniques``/
+    combat fields when supplied — this is what lets a TRAIT-kind thread's tier-0
+    INTENSITY_BUMP contribute to ``power`` (and therefore to ``calculate_value()``) when
+    the caller can honestly name the trait in play (the climbing case). When
+    ``action_ctx`` is None (the ambient default built by ``get_effective_capability_value``),
+    ``involved_traits`` stays empty and every TRAIT-kind thread's contextual bump stays
+    dark — see that function's docstring for why this is deliberate, not a gap. Merging
+    happens per technique, not by mutating a single shared context, so ``gift_id_by_technique``
+    (precomputed once, below) still narrows correctly per call
+    (``contextual_thread_power``'s own per-call-narrowing contract).
+
     Args:
         character_sheet: The character's CharacterSheet.
+        action_ctx: Optional real action context; ambient default when omitted.
 
     Returns:
         Dict mapping CapabilityType PK to the best positive technique-granted value.
@@ -1669,7 +1703,18 @@ def _technique_capability_values(character_sheet: "CharacterSheet") -> dict[int,
         technique_id = grant.technique_id
         power = power_by_technique.get(technique_id)
         if power is None:
-            ctx = PullActionContext(involved_techniques=(technique_id,))
+            if action_ctx is None:
+                ctx = PullActionContext(involved_techniques=(technique_id,))
+            else:
+                ctx = PullActionContext(
+                    involved_techniques=(technique_id, *action_ctx.involved_techniques),
+                    involved_traits=action_ctx.involved_traits,
+                    involved_objects=action_ctx.involved_objects,
+                    combat_encounter=action_ctx.combat_encounter,
+                    participant=action_ctx.participant,
+                    target=action_ctx.target,
+                    excluded_kinds=action_ctx.excluded_kinds,
+                )
             power = (
                 grant.technique.intensity
                 + handler.context_free_power
@@ -1926,7 +1971,10 @@ def get_capability_value(
 
 
 def get_effective_capability_value(
-    character_sheet: "CharacterSheet", capability: CapabilityType
+    character_sheet: "CharacterSheet",
+    capability: CapabilityType,
+    *,
+    action_ctx: "PullActionContext | None" = None,
 ) -> int:
     """Effective capability value = innate baseline + CharacterModifier contributions
     (distinctions/species/equipment via ModifierTarget.target_capability) + raw
@@ -1945,13 +1993,49 @@ def get_effective_capability_value(
     ``TraitCapabilityDerivation`` deliberately does NOT fold in here (ruled
     availability-only) — that asymmetry is intentional, not an oversight.
 
+    **``action_ctx`` (#2708 Task 8):** exercising a capability is itself an action,
+    even an implicit one — climbing a wall uses capabilities the same way swinging a
+    sword does, and any action can have thread pulls associated with it. Keyword-only
+    with a ``None`` default, so every existing caller (~13 production call sites) is
+    unaffected. When supplied, it is threaded into ``_technique_capability_values``,
+    which feeds it to ``CharacterThreadHandler.contextual_thread_power`` — the richer
+    context lets more thread kinds demonstrate real activation for the power figure
+    that curves a technique's capability grants.
+
+    When omitted, an AMBIENT default is built from what's knowable without an action:
+    the character's current room (in ``involved_objects``), no traits, no techniques.
+    **``TRAIT``-kind threads stay dark under the ambient default** — a TRAIT thread's
+    tier-0 INTENSITY_BUMP can only contribute to the power figure when a supplied
+    ``action_ctx`` names the trait in ``involved_traits`` (see
+    ``world.magic.services.resonance._anchor_ambiently_active``'s TRAIT arm). This is a
+    known, deliberate limitation, not a gap: a bare capability read has no way to know
+    which trait, if any, the character is exercising right now — a rope-and-pulley
+    TRAIT thread should light up during an actual climb, not on every ambient read of
+    an unrelated capability. Thread-passive ``CAPABILITY_GRANT`` rows (the
+    ``grant_floor`` term below) are unaffected by ``action_ctx`` — see
+    ``_passive_capability_grants``'s docstring for why that source is possessed
+    capacity, not a context-gated demonstration.
+
     Args:
         character_sheet: The character's CharacterSheet.
         capability: CapabilityType instance
+        action_ctx: Optional real action context (keyword-only). Ambient default
+            when omitted — see above for what that default can and cannot activate.
 
     Returns:
         Integer effective capability value (0 = effectively blocked / not possessed)
     """
+    from world.magic.types.pull import PullActionContext  # noqa: PLC0415
+
+    if action_ctx is None:
+        location = character_sheet.character.location
+        # Evennia location lookup, not a query per technique — this runs once per
+        # call, never inside the technique sweep below (see the PERFORMANCE note on
+        # #2708 Task 8's dispatch brief re: contents_cache vs a fresh query).
+        action_ctx = PullActionContext(
+            involved_objects=(location.pk,) if location is not None else (),
+        )
+
     baseline = capability.innate_baseline
     modifier_total = sum(
         m.value
@@ -1974,7 +2058,9 @@ def get_effective_capability_value(
     # thread level and power; see CharacterThreadHandler._passive_capability_grants_cache.
     granted = _passive_capability_grants(character_sheet)
     grant_floor = granted.get(capability.pk, 0)
-    technique_value = _technique_capability_values(character_sheet).get(capability.pk, 0)
+    technique_value = _technique_capability_values(character_sheet, action_ctx=action_ctx).get(
+        capability.pk, 0
+    )
     return max(0, baseline + modifier_total + condition_total + grant_floor + technique_value)
 
 
