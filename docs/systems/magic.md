@@ -57,7 +57,7 @@ and the 5-axis Thread model no longer exist.
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `EffectType` | Types of magical effects (Attack, Defense, Movement) | `name`, `description`, `base_power`, `base_anima_cost`, `has_power_scaling` |
-| `TechniqueStyle` | How a **practitioner** works magic (Manifestation, Subtle, Prayer). A property of the caster's Path, not of the technique (#2700, ADR-0167) — the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Reverse of `classes.Path.style` via `related_name="paths"`. | `name`, `description` |
+| `TechniqueStyle` | How a **practitioner** works magic (Manifestation, Subtle, Prayer). A property of the caster's Path, not of the technique (#2700, ADR-0167) — the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Reverse of `classes.Path.style` via `related_name="paths"`. `cast_concealment` (#2710, ADR-0170) is the style's difficulty floor for being noticed while casting — 0 (default) is overt and skips detection entirely; see "Cast observation" below. | `name`, `description`, `cast_concealment` |
 | `StyleCapabilityRequirement` | A capability the **caster** needs to work magic in this style (#2700) — e.g. Incantation requires `speech >= 1`. Caster-scoped sibling of `TechniqueCapabilityRequirement`; both are evaluated by `technique_performable` against `get_effective_capability_value`. | `style` FK, `capability` FK (`conditions.CapabilityType`), `minimum_value`. Natural key `(style, capability)` |
 | `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
 | `Restriction` | Limitations that grant power bonuses | `name`, `description`, `power_bonus` |
@@ -1965,6 +1965,114 @@ prerequisite before `load_world_content()` runs, and ADR-0142 for the rationale)
 The deferred-retry loop resolves load-order gaps *within* the content/grid load; it
 cannot conjure a config row the load itself never creates — which is why the config
 prerequisites run first in that sequence.
+
+---
+
+### Cast observation — who noticed that cast (#2710, ADR-0167)
+
+**[BUILT & WIRED].** How obvious a cast is to bystanders is a property of the caster's
+Path-derived `TechniqueStyle`, resolved per observer at the moment the cast poses — not
+a room-wide visible/hidden flag on the Technique or the Interaction. See ADR-0167 for
+the full decision record; this section is the reference for the mechanism.
+
+**Entry point:** `resolve_cast_audience(*, caster, cast_openly=False) ->
+CastAudience` (`world/magic/services/cast_observation.py`). `CastAudience` is a frozen
+dataclass: `concealed` (bool), `full` (list of `Persona`), `vague` (list of `Persona`).
+When `concealed` is False, `full`/`vague` are empty and the caller poses to the whole
+room exactly as before #2710.
+
+**Resolution:**
+1. `_concealment_for(caster, cast_openly=)` reads `cast_concealment` off the caster's
+   current Path's `TechniqueStyle` (`world.progression.selectors
+   .current_path_for_character`). Returns 0 (overt — no query, no check, byte-identical
+   to pre-#2710 behavior) when the caster has no Path, the Path has no style, or
+   `cast_openly=True` (the caster's own one-way waiver).
+2. When `cast_concealment > 0`, the caster is unconditionally added to `full` — a caster
+   always knows what they just cast.
+3. `world.checks.models.CheckType.objects.filter(name=DETECT_CAST_CHECK_NAME,
+   is_active=True)` resolves the detection check. **Missing this row fails CLOSED**
+   (ADR-0033): the cast is concealed from everyone but the caster, logged as a warning,
+   rather than leaking to the whole room.
+4. Difficulty = `cast_concealment + level_opposition(check_type, level=<caster's path
+   level>, character=caster)` (ADR-0166 — level is a two-sided check term).
+5. Every character co-located with the caster (excluding the caster) rolls
+   `perform_check(observer, check_type, target_difficulty=difficulty)`:
+   `success_level >= CAST_DETECTION_ATTRIBUTION_LEVEL` (2) → `full` (sees who cast what);
+   `== 1` → `vague` (perceives *something* happened, not by whom); `<= 0` → nothing.
+
+**The `PERCEIVED_ONLY` privacy tier** (`world.scenes.constants.InteractionVisibility`)
+is how the resolved audience is persisted. It sits between `DEFAULT` and `VERY_PRIVATE`:
+writer + `InteractionReceiver` rows can read it, **plus staff and the scene's GM** — a
+scene must stay runnable for the person adjudicating it. `VERY_PRIVATE` is stricter and
+admits no exception, staff included; the two tiers are deliberately not interchangeable
+(ADR-0167). `world.scenes.cast_services.create_cast_outcome_pose` writes up to two
+Narrator OUTCOME poses when concealed — a `full`-tier pose (receivers = `audience.full`)
+and, only if `audience.vague` is non-empty, a second attribution-free `vague`-tier pose
+(no `target_personas`, so the vague line cannot leak who was targeted either).
+`_resolve_and_pose_cast` additionally sets the caster's own ACTION-mode Interaction to
+`PERCEIVED_ONLY` with receivers = `audience.full` — concealing only the OUTCOME pose
+would still show every bystander "Ilyra — Whisper of Binding" in the scene log via the
+ACTION row's `technique_name`.
+
+**`cast_openly`** (`SceneActionRequest.cast_openly`, `BooleanField`, default False) is
+the caster's one-way waiver — it can only remove concealment for this cast, never add
+it. Persisted rather than passed as a plain kwarg, because a consent-gated cast poses at
+*accept* time: a flag held only in the declaring call's frame would silently go subtle
+by the time a target accepts a PENDING request.
+
+**Three enforcement points close three distinct leaks.** The scene log (above) is the
+most visible one and the least of it — a concealed cast that only hid the pose while
+still exposing the request row or the reaction gate would leak the caster's identity
+through those other doors instead:
+
+1. **`InteractionQuerySet.visible_to`** (`world/scenes/managers.py`) — read visibility
+   for the scene log. **[BUILT & WIRED], needed NO change for #2710**: its room-heard
+   predicate already requires `visibility=DEFAULT` and `receivers__isnull=True`, so a
+   `PERCEIVED_ONLY` row is automatically excluded from "what the whole room heard"; its
+   staff and GM branches already exclude only `VERY_PRIVATE`, so both already admit
+   `PERCEIVED_ONLY`. The pre-existing writer/receiver `party` branch covers the caster
+   and every observer in `audience.full`/`audience.vague` for free.
+2. **`SceneActionRequestViewSet.get_queryset`** (`world/scenes/action_views.py`) — the
+   REST object permission surface. The *target* of a cast rolls detection like any other
+   observer and can fail to perceive it, but `SceneActionRequestSerializer` still
+   serializes `technique_name` and `initiator_persona` on the request row itself — so a
+   request whose result is `PERCEIVED_ONLY` is excluded for any non-initiator viewer who
+   has no matching `InteractionReceiver` row on `result_interaction`, via a correlated
+   `Exists()`/`OuterRef` subquery (not a joined `receivers__persona_id__in=` condition —
+   see the code comment for why the join shape silently mis-hides multi-receiver rows).
+3. **`can_view_interaction`** (`world/scenes/interaction_services.py`,
+   `reaction_services.py:132`) — the witness gate for `react_to_window`. **[BUILT &
+   WIRED]** — an earlier draft of this spec incorrectly claimed this predicate was
+   unwired and proposed deleting it; it is not, and doing so would have let a bystander
+   react to a concealed cast they never perceived, which is itself an IC act (a reaction
+   implies "I saw that"). It was kept and taught the `PERCEIVED_ONLY` tier: writer or
+   receiver, plus staff (unlike `VERY_PRIVATE`, which is writer/receiver-only).
+
+These three surfaces stay legitimately distinct rather than collapsing into one
+predicate: `visible_to` filters a **queryset** (the scene log feed), `CanViewInteraction`
+(`interaction_permissions.py`) gates a **REST object** (single-interaction fetch/delete),
+and `can_view_interaction` gates an **IC action** (can this persona react as a witness).
+A viewer's account being permitted to read a row and a viewer's *character* having
+witnessed the underlying event are different questions.
+
+**Combat casts are explicitly NOT covered — a scope boundary, not an oversight.**
+`world.combat.interaction_services.broadcast_action_outcome` (line ~433) still persists
+and broadcasts every combat OUTCOME pose room-wide, unconditionally, with no concealment
+check at all. `resolve_cast_audience` is only wired into the standalone (non-combat) cast
+path (`world/scenes/cast_services.py`). A Subtle-style caster's technique casts overtly
+the instant it lands in combat.
+
+**Content dependency — this feature ships INERT until authored, and every piece of that
+content lives in the lore repo, never as arxii seed data:**
+- `DETECT_CAST_CHECK_NAME` (`world/magic/constants.py`, value `"Perception"`) — the
+  detection `CheckType` row itself. Absent → fails closed (nobody ever detects).
+- A `CheckTypeCapabilityModifier` row bridging a magic-detection capability into that
+  `CheckType`, so a character with such a capability rolls better at detection. Without
+  it, detection is a flat stat/skill roll with no capability leg (ADR-0167 — this bonus
+  is deliberately never an auto-detect threshold).
+- Non-zero `TechniqueStyle.cast_concealment` values per style. Every style defaults to 0
+  (overt) until authored otherwise, so no existing style behavior changes until content
+  chooses to make one subtle.
 
 ---
 

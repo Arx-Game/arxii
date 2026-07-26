@@ -389,6 +389,47 @@ bump never lands where the ladder's own tiers actually sit.
 - Full detail: `docs/systems/conditions.md`'s "Capability magnitude curve" section,
   `docs/systems/magic.md`'s "Capability Magnitude Curve — Technique & Thread Grants"
   section, and `docs/adr/0169-capability-magnitude-curves-geometrically-with-contextual-power.md`.
+## Cast observation — style-driven concealment (#2710 — BUILT, 2026-07-26)
+
+"How absolute is subtle casting" (#2700's follow-on, now that style hangs off the
+caster's Path — ADR-0167) is resolved: concealment is a per-observer graded contest at
+cast time, not a boolean on the Technique or the Interaction.
+
+**Built:**
+- `TechniqueStyle.cast_concealment` (`PositiveSmallIntegerField`, default 0) — the
+  style's difficulty floor for being noticed while casting. 0 = overt; every existing
+  style defaults to 0, so nothing changes until content authors a non-zero value.
+- `resolve_cast_audience(*, caster, cast_openly=False) -> CastAudience`
+  (`world/magic/services/cast_observation.py`) — per co-located observer, rolls the
+  detection `CheckType` against `cast_concealment + level_opposition(caster)` (ADR-0166)
+  and sorts into full attribution / vague unattributed / nothing. Fails CLOSED
+  (ADR-0033) when the detection `CheckType` is unauthored.
+- `InteractionVisibility.PERCEIVED_ONLY` — the new privacy tier the resolved audience is
+  materialised into (writer + `InteractionReceiver` rows + staff + scene GM), sitting
+  between `DEFAULT` and the stricter, no-exception `VERY_PRIVATE`.
+- `SceneActionRequest.cast_openly` — the caster's one-way waiver, persisted so it
+  survives a consent-gated cast's accept-time pose.
+- Three enforcement points closed against leaking a concealed cast's identity: the scene
+  log (`InteractionQuerySet.visible_to`, needed no change), the request-row REST surface
+  (`SceneActionRequestViewSet.get_queryset`, `Exists()`/`OuterRef` filter), and the
+  reaction witness gate (`can_view_interaction`, taught the new tier — an earlier spec
+  draft wrongly called this predicate unwired; it is wired, see
+  `reaction_services.py:132`).
+- Full record: ADR-0170. Mechanism detail: `docs/systems/magic.md`'s "Cast observation"
+  section.
+
+**Explicitly deferred — not a gap, a scope boundary:**
+- **Combat casts are not covered.** `world.combat.interaction_services
+  .broadcast_action_outcome` still persists and broadcasts every combat OUTCOME pose
+  room-wide, unconditionally. A Subtle-style caster's technique casts overtly the
+  instant it lands in combat. Bringing combat casts under the same concealment model is
+  future work, not filed as a gap here — it needs its own design pass (combat has its
+  own broadcast/round machinery this feature never touched).
+- **Ships inert until content authors it.** The detection `CheckType`
+  (`DETECT_CAST_CHECK_NAME`, `"Perception"`), a `CheckTypeCapabilityModifier` row
+  bridging a magic-detection capability into that check, and per-style
+  `cast_concealment` values are all lore-repo content — arxii authors no seed data for
+  any of them.
 
 ---
 
