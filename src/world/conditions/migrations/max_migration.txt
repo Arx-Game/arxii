@@ -1,1 +1,1 @@
-0026_conditioncheckmodifier_check_category
+0027_conditioninstance_is_aware_and_more

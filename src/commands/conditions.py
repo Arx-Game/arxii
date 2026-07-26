@@ -103,3 +103,77 @@ class CmdTreatCondition(ArxCommand):
             bond_note = " (requires bond thread)" if treatment.requires_bond else ""
             lines.append(f"{i}. {treatment.name} on {effect}{bond_note}")
         self.msg("\n".join(lines))
+
+
+class CmdBreakFree(ArxCommand):
+    """Attempt to break free from a behavior-altering condition.
+
+    Usage:
+        breakfree [<condition name>]
+
+    If no condition name is given, fights the most severe one affecting you.
+    """
+
+    key = "breakfree"
+    help_category = "Conditions"
+
+    def func(self) -> None:
+        from actions.definitions.conditions import break_free  # noqa: PLC0415
+
+        args = self.args.strip()
+        kwargs: dict[str, Any] = {}
+        if args:
+            kwargs["condition_name"] = args
+        result = break_free.run(self.caller, **kwargs)
+        self.msg(result.message)
+
+
+class CmdRevealCondition(ArxCommand):
+    """Reveal a subtle condition affecting someone.
+
+    Usage:
+        reveal <target>
+
+    Makes a check to detect if the target is under a subtle behavior-altering
+    effect they may not be aware of.
+    """
+
+    key = "reveal"
+    help_category = "Conditions"
+
+    def func(self) -> None:
+        from actions.definitions.conditions import reveal_condition  # noqa: PLC0415
+
+        if not self.args.strip():
+            self.msg("Usage: reveal <target>")
+            return
+        target = self.caller.search(self.args.strip())
+        if target is None:
+            return
+        result = reveal_condition.run(self.caller, target=target)
+        self.msg(result.message)
+
+
+class CmdRally(ArxCommand):
+    """Rally someone to fight off a behavior-altering condition.
+
+    Usage:
+        rally <target>
+
+    The classic 'fight it, I know you're in there' moment.
+    """
+
+    key = "rally"
+    help_category = "Conditions"
+
+    def func(self) -> None:
+        from actions.definitions.conditions import rally  # noqa: PLC0415
+
+        if not self.args.strip():
+            self.msg("Usage: rally <target>")
+            return
+        target = self.caller.search(self.args.strip())
+        if target is None:
+            return
+        result = rally.run(self.caller, target=target)
+        self.msg(result.message)

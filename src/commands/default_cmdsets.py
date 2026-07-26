@@ -32,7 +32,12 @@ from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
 from commands.comfort import CmdComfort
 from commands.companion import CmdCompanion
-from commands.conditions import CmdTreatCondition
+from commands.conditions import (
+    CmdBreakFree,
+    CmdRally,
+    CmdRevealCondition,
+    CmdTreatCondition,
+)
 from commands.consent import (
     CmdAccept,
     CmdDeceive,
@@ -269,6 +274,10 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdEntrance,
             CmdRestoreSense,
             CmdTreatCondition,
+            # #2706 — break-free from behavior-altering conditions.
+            CmdBreakFree,
+            CmdRevealCondition,
+            CmdRally,
             # #1487 - telnet consent preference management namespace.
             CmdConsent,
             CmdDig,

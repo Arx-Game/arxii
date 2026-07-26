@@ -20,6 +20,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.conditions.constants import (
+    BreakFreeMode,
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
     DamageTickTiming,
@@ -313,6 +314,40 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
     resist_difficulty = models.PositiveIntegerField(
         default=10,
         help_text="Base difficulty for the target's resist check.",
+    )
+
+    # === Break-Free Settings (#2706) ===
+    break_free_mode = models.CharField(
+        max_length=20,
+        choices=BreakFreeMode.choices,
+        default=BreakFreeMode.NONE,
+        help_text=(
+            "Whether and how a target can shake off this condition once applied. "
+            "NONE = subtle, no shake-off; SELF_INITIATED = player command; "
+            "PERIODIC = auto-roll on ticks."
+        ),
+    )
+    break_free_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="breaks_free_conditions",
+        help_text=(
+            "Check type the target rolls to break free. Falls back to resist_check_type when null."
+        ),
+    )
+    break_free_difficulty = models.PositiveIntegerField(
+        default=10,
+        help_text="Base difficulty for the break-free check (before caster level opposition).",
+    )
+    subtlety = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "How hard it is for an observer to detect this condition on a target "
+            "(0 = obvious, higher = harder to detect). Drives the reveal_condition "
+            "detection check difficulty."
+        ),
     )
 
     # === Combat Relevance ===
@@ -1270,6 +1305,23 @@ class ConditionInstance(SharedMemoryModel):
         null=True,
         blank=True,
         help_text="Rounds until progression to next stage",
+    )
+
+    # === Break-Free State (#2706) ===
+    is_aware = models.BooleanField(
+        default=True,
+        help_text=(
+            "Whether the bearer is IC-aware of this condition. Unaware bearers "
+            "cannot self-initiate break-free. Obvious conditions default True; "
+            "subtle ones default False. Flipped by a successful reveal_condition check."
+        ),
+    )
+    pending_rally_bonus = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Pending helper bonus from a RallyAction, applied to the bearer's next "
+            "break-free attempt and consumed (reset to 0) on use."
+        ),
     )
 
     # === Source Tracking ===
