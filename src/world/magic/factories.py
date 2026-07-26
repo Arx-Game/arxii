@@ -2018,13 +2018,23 @@ _ABYSSAL_AFFINITY_NAME: str = "abyssal"
 
 
 def _make_magical_endurance_check_type():
-    """Return the canonical 'Magical Endurance' CheckType via the #709 seed chain."""
+    """Return a 'Magical Endurance' CheckType — factory-owned, not the gated #709 seed (#2698).
+
+    ``ensure_magic_check_types()`` is content-repo-gated (``authored_or_sample``) and
+    may omit this key entirely when SEED_SAMPLE_CONTENT is off — a test factory must
+    always produce a valid object regardless of that setting (test rows never reach
+    the dev database). Uses ``CheckCategoryFactory``/``CheckTypeFactory``'s own
+    ``get_or_create`` under the same names the real seed uses, so repeated calls
+    within one test run share one row.
+    """
+    from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
     from world.magic.seeds_checks import (
+        MAGIC_CHECK_CATEGORY_NAME,
         MAGICAL_ENDURANCE_CHECK_TYPE_NAME,
-        ensure_magic_check_types,
     )
 
-    return ensure_magic_check_types()[MAGICAL_ENDURANCE_CHECK_TYPE_NAME]
+    category = CheckCategoryFactory(name=MAGIC_CHECK_CATEGORY_NAME)
+    return CheckTypeFactory(name=MAGICAL_ENDURANCE_CHECK_TYPE_NAME, category=category)
 
 
 class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
