@@ -10,7 +10,11 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
 )
 from world.conditions.models import CapabilityType
-from world.conditions.services import apply_condition, get_effective_capability_value
+from world.conditions.services import (
+    apply_condition,
+    get_all_capability_values,
+    get_effective_capability_value,
+)
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
@@ -270,6 +274,39 @@ class ThreadCapabilityGrantValueTests(TestCase):
         low_value = low_sheet.character.threads.passive_capability_grants()[cap_low.pk]
         high_value = high_sheet.character.threads.passive_capability_grants()[cap_high.pk]
         self.assertGreater(high_value, low_value)
+
+    def test_availability_oracle_matches_agency_oracle_for_same_grant(self) -> None:
+        """#2708 Task 6 regression: the availability oracle must fold the SAME
+        curved value the agency oracle reads for one thread-passive grant.
+
+        ``get_all_capability_values`` (availability oracle: feeds
+        ``mechanics._get_condition_sources`` -> ``CapabilitySource.value`` ->
+        ``resolve_challenge``'s dice roll) used to add a hardcoded +1 per granted
+        capability, discarding the curved magnitude that
+        ``_passive_capability_grants`` returns. ``get_effective_capability_value``
+        (agency oracle) already read the real curved value via its
+        ``grant_floor`` term. A level-10 thread and a level-1 thread would
+        therefore reach the roll identically even though the agency oracle told
+        them apart. Asserting the two oracles equal each other (not a hardcoded
+        number) keeps this guard valid if the curve is retuned later.
+        """
+        CapabilityPowerConfig.objects.create(pk=1, power_per_doubling=10)
+        LevelPowerConfig.objects.create(pk=1, character_level_bonus=10, technique_level_bonus=0)
+
+        sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(character=sheet, level=1)
+        cap = CapabilityTypeFactory(innate_baseline=0)
+        self._trait_capability_grant(sheet=sheet, level=10, capability=cap)
+
+        curved_value = sheet.character.threads.passive_capability_grants()[cap.pk]
+        # Confirm the curve is actually engaged for this setup, not incidentally 1.
+        self.assertGreater(curved_value, 1)
+
+        availability_value = get_all_capability_values(sheet)[cap.pk]
+        agency_value = get_effective_capability_value(sheet, cap)
+
+        self.assertEqual(availability_value, curved_value)
+        self.assertEqual(availability_value, agency_value)
 
     def test_thread_without_a_grant_row_for_x_contributes_nothing_to_x(self) -> None:
         """Ratified scope rule: a thread moves a capability only if it GRANTS it."""

@@ -2034,14 +2034,20 @@ def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, in
             totals[cap_id] = totals.get(cap_id, 0) + modifier
 
     # Thread-passive grants (#751 B2): fold engaged tier-0 role CAPABILITY_GRANT
-    # PKs in with an additive floor of 1 so the obstacle/action-generation
-    # consumer (mechanics._get_condition_sources) sees them. Called ONCE; the
-    # handler caches threads. The early-return for the no-active-conditions case
-    # was removed above so grants surface even when the character has no
+    # PKs in so the obstacle/action-generation consumer
+    # (mechanics._get_condition_sources) sees them. Called ONCE; the handler
+    # caches threads. The early-return for the no-active-conditions case was
+    # removed above so grants surface even when the character has no
     # conditions at all.
+    # #2708: fold the actual granted value, not a hardcoded 1 — ThreadPullEffect
+    # grants are curved by thread level and power (see
+    # CharacterThreadHandler._passive_capability_grants_cache); the #2022
+    # CovenantRole.granted_capabilities M2M source stays flat at 1 upstream. This
+    # is the availability oracle's read of the same grants the agency oracle folds
+    # in via get_effective_capability_value's grant_floor — both must agree.
     granted = _passive_capability_grants(character_sheet)
-    for cap_id in granted:
-        totals[cap_id] = totals.get(cap_id, 0) + 1
+    for cap_id, value in granted.items():
+        totals[cap_id] = totals.get(cap_id, 0) + value
 
     # Floor at 0
     return {cap_id: max(0, val) for cap_id, val in totals.items()}
