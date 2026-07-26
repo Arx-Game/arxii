@@ -57,7 +57,7 @@ and the 5-axis Thread model no longer exist.
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `EffectType` | Types of magical effects (Attack, Defense, Movement) | `name`, `description`, `base_power`, `base_anima_cost`, `has_power_scaling` |
-| `TechniqueStyle` | How a **practitioner** works magic (Manifestation, Subtle, Prayer). A property of the caster's Path, not of the technique (#2700, ADR-0167) — the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Reverse of `classes.Path.style` via `related_name="paths"`. | `name`, `description` |
+| `TechniqueStyle` | How a **practitioner** works magic (Manifestation, Subtle, Prayer). A property of the caster's Path, not of the technique (#2700, ADR-0167) — the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Reverse of `classes.Path.style` via `related_name="paths"`. `cast_concealment` (#2710, ADR-0170) is the style's difficulty floor for being noticed while casting — 0 (default) is overt and skips detection entirely; see "Cast observation" below. | `name`, `description`, `cast_concealment` |
 | `StyleCapabilityRequirement` | A capability the **caster** needs to work magic in this style (#2700) — e.g. Incantation requires `speech >= 1`. Caster-scoped sibling of `TechniqueCapabilityRequirement`; both are evaluated by `technique_performable` against `get_effective_capability_value`. | `style` FK, `capability` FK (`conditions.CapabilityType`), `minimum_value`. Natural key `(style, capability)` |
 | `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
 | `Restriction` | Limitations that grant power bonuses | `name`, `description`, `power_bonus` |
@@ -1968,6 +1968,117 @@ prerequisites run first in that sequence.
 
 ---
 
+### Cast observation — who noticed that cast (#2710, ADR-0170)
+
+**[BUILT & WIRED].** How obvious a cast is to bystanders is a property of the caster's
+Path-derived `TechniqueStyle`, resolved per observer at the moment the cast poses — not
+a room-wide visible/hidden flag on the Technique or the Interaction. See ADR-0170 for
+the full decision record; this section is the reference for the mechanism.
+
+**Entry point:** `resolve_cast_audience(*, caster, cast_openly=False) ->
+CastAudience` (`world/magic/services/cast_observation.py`). `CastAudience` is a frozen
+dataclass: `concealed` (bool), `full` (list of `Persona`), `vague` (list of `Persona`).
+When `concealed` is False, `full`/`vague` are empty and the caller poses to the whole
+room exactly as before #2710.
+
+**Resolution:**
+1. `_concealment_for(caster, cast_openly=)` reads `cast_concealment` off the caster's
+   current Path's `TechniqueStyle` (`world.progression.selectors
+   .current_path_for_character`). Returns 0 (overt — no query, no check, byte-identical
+   to pre-#2710 behavior) when the caster has no Path, the Path has no style, or
+   `cast_openly=True` (the caster's own one-way waiver).
+2. When `cast_concealment > 0`, the caster is unconditionally added to `full` — a caster
+   always knows what they just cast.
+3. `world.checks.models.CheckType.objects.filter(name=DETECT_CAST_CHECK_NAME,
+   is_active=True)` resolves the detection check. **Missing this row fails CLOSED**
+   (ADR-0033): the cast is concealed from everyone but the caster, logged as a warning,
+   rather than leaking to the whole room.
+4. Difficulty = `cast_concealment + level_opposition(check_type, level=<caster's path
+   level>, character=caster)` (ADR-0166 — level is a two-sided check term).
+5. Every character co-located with the caster (excluding the caster) rolls
+   `perform_check(observer, check_type, target_difficulty=difficulty)`:
+   `success_level >= CAST_DETECTION_ATTRIBUTION_LEVEL` (2) → `full` (sees who cast what);
+   `== 1` → `vague` (perceives *something* happened, not by whom); `<= 0` → nothing.
+
+**The `PERCEIVED_ONLY` privacy tier** (`world.scenes.constants.InteractionVisibility`)
+is how the resolved audience is persisted. It sits between `DEFAULT` and `VERY_PRIVATE`:
+writer + `InteractionReceiver` rows can read it, **plus staff and the scene's GM** — a
+scene must stay runnable for the person adjudicating it. The GM exception is a scene-log
+read guarantee only (`InteractionQuerySet.visible_to`'s `gm_visible` branch); a non-staff
+GM is denied on the REST object-access permission (`CanViewInteraction`) and the
+reaction-witness gate (`can_view_interaction`), both staff-only. `VERY_PRIVATE` is
+stricter and admits no exception, staff included; the two tiers are deliberately not
+interchangeable (ADR-0170). `world.scenes.cast_services.create_cast_outcome_pose` writes up to two
+Narrator OUTCOME poses when concealed — a `full`-tier pose (receivers = `audience.full`)
+and, only if `audience.vague` is non-empty, a second attribution-free `vague`-tier pose
+(no `target_personas`, so the vague line cannot leak who was targeted either).
+`_resolve_and_pose_cast` additionally sets the caster's own ACTION-mode Interaction to
+`PERCEIVED_ONLY` with receivers = `audience.full` — concealing only the OUTCOME pose
+would still show every bystander "Ilyra — Whisper of Binding" in the scene log via the
+ACTION row's `technique_name`.
+
+**`cast_openly`** (`SceneActionRequest.cast_openly`, `BooleanField`, default False) is
+the caster's one-way waiver — it can only remove concealment for this cast, never add
+it. Persisted rather than passed as a plain kwarg, because a consent-gated cast poses at
+*accept* time: a flag held only in the declaring call's frame would silently go subtle
+by the time a target accepts a PENDING request.
+
+**Three enforcement points close three distinct leaks.** The scene log (above) is the
+most visible one and the least of it — a concealed cast that only hid the pose while
+still exposing the request row or the reaction gate would leak the caster's identity
+through those other doors instead:
+
+1. **`InteractionQuerySet.visible_to`** (`world/scenes/managers.py`) — read visibility
+   for the scene log. **[BUILT & WIRED], needed NO change for #2710**: its room-heard
+   predicate already requires `visibility=DEFAULT` and `receivers__isnull=True`, so a
+   `PERCEIVED_ONLY` row is automatically excluded from "what the whole room heard"; its
+   staff and GM branches already exclude only `VERY_PRIVATE`, so both already admit
+   `PERCEIVED_ONLY`. The pre-existing writer/receiver `party` branch covers the caster
+   and every observer in `audience.full`/`audience.vague` for free.
+2. **`SceneActionRequestViewSet.get_queryset`** (`world/scenes/action_views.py`) — the
+   REST object permission surface. The *target* of a cast rolls detection like any other
+   observer and can fail to perceive it, but `SceneActionRequestSerializer` still
+   serializes `technique_name` and `initiator_persona` on the request row itself — so a
+   request whose result is `PERCEIVED_ONLY` is excluded for any non-initiator viewer who
+   has no matching `InteractionReceiver` row on `result_interaction`, via a correlated
+   `Exists()`/`OuterRef` subquery (not a joined `receivers__persona_id__in=` condition —
+   see the code comment for why the join shape silently mis-hides multi-receiver rows).
+3. **`can_view_interaction`** (`world/scenes/interaction_services.py`,
+   `reaction_services.py:132`) — the witness gate for `react_to_window`. **[BUILT &
+   WIRED]** — an earlier draft of this spec incorrectly claimed this predicate was
+   unwired and proposed deleting it; it is not, and doing so would have let a bystander
+   react to a concealed cast they never perceived, which is itself an IC act (a reaction
+   implies "I saw that"). It was kept and taught the `PERCEIVED_ONLY` tier: writer or
+   receiver, plus staff (unlike `VERY_PRIVATE`, which is writer/receiver-only).
+
+These three surfaces stay legitimately distinct rather than collapsing into one
+predicate: `visible_to` filters a **queryset** (the scene log feed), `CanViewInteraction`
+(`interaction_permissions.py`) gates a **REST object** (single-interaction fetch/delete),
+and `can_view_interaction` gates an **IC action** (can this persona react as a witness).
+A viewer's account being permitted to read a row and a viewer's *character* having
+witnessed the underlying event are different questions.
+
+**Combat casts are explicitly NOT covered — a scope boundary, not an oversight.**
+`world.combat.interaction_services.broadcast_action_outcome` (line ~433) still persists
+and broadcasts every combat OUTCOME pose room-wide, unconditionally, with no concealment
+check at all. `resolve_cast_audience` is only wired into the standalone (non-combat) cast
+path (`world/scenes/cast_services.py`). A Subtle-style caster's technique casts overtly
+the instant it lands in combat.
+
+**Content dependency — this feature ships INERT until authored, and every piece of that
+content lives in the lore repo, never as arxii seed data:**
+- `DETECT_CAST_CHECK_NAME` (`world/magic/constants.py`, value `"Perception"`) — the
+  detection `CheckType` row itself. Absent → fails closed (nobody ever detects).
+- A `CheckTypeCapabilityModifier` row bridging a magic-detection capability into that
+  `CheckType`, so a character with such a capability rolls better at detection. Without
+  it, detection is a flat stat/skill roll with no capability leg (ADR-0170 — this bonus
+  is deliberately never an auto-detect threshold).
+- Non-zero `TechniqueStyle.cast_concealment` values per style. Every style defaults to 0
+  (overt) until authored otherwise, so no existing style behavior changes until content
+  chooses to make one subtle.
+
+---
+
 ## Key Methods and Properties
 
 ### CharacterAura
@@ -2022,7 +2133,82 @@ pulled_hp = character.combat_pulls.active_pull_vital_bonuses("MAX_HEALTH")
 character.threads.invalidate()
 character.resonances.invalidate()
 character.combat_pulls.invalidate()
+
+# Capability magnitude curve (#2708, ADR-0169) — see docs/systems/conditions.md's
+# "Capability magnitude curve" section for the full formula/oracle detail.
+context_free_power = character.threads.context_free_power  # int, memoized
+contextual_power = character.threads.contextual_thread_power(action_ctx)  # int
 ```
+
+### Capability Magnitude Curve — Technique & Thread Grants (#2708, ADR-0169) [BUILT & WIRED]
+
+Both `TechniqueCapabilityGrant.calculate_value()` (`world/magic/models/techniques.py`)
+and thread-passive tier-0 `CAPABILITY_GRANT` rows (`CharacterThreadHandler
+._passive_capability_grants_cache`, `world/magic/handlers.py`) curve their authored
+`base_value`/`capability_grant_value` geometrically by the caster's real power, via the
+shared `world.magic.services.capability_curve.apply_capability_curve` helper:
+
+```
+value = round(base * 2 ** (sensitivity * power / power_per_doubling))
+```
+
+Gated on the `CapabilityPowerConfig` singleton (pk=1, `power_per_doubling` — power
+required to double the value, default 10) existing at all — no row means every consumer
+returns its pre-#2708 number unchanged, so the migration that ships the model is inert
+on landing. `intensity_multiplier` (technique grants) / `thread_level_multiplier(level)`
+(thread grants) is the curve's exponent sensitivity, not an additive term — a grant
+authored at sensitivity `0` (every pre-#2708 row) is inert under the curve regardless of
+config-row existence. Never returns less than `base` — the curve is a pure empowerment
+axis; a negative `ConditionCapabilityEffect` is still how impairment works.
+
+**Power inputs, by grant type:**
+
+- **Technique grants** — `world.conditions.services._technique_capability_values`
+  derives power as `technique.intensity + context_free_power + contextual_thread_power`,
+  computed fresh per known technique and fed to `calculate_value(effective_power=...)`.
+  `context_free_power` (`CharacterThreadHandler`, memoized `@cached_property`) is
+  `_derive_power(channeled_intensity=0, technique=None, applicable_threads=[]).total` —
+  the character-level term plus globally-scoped condition/character modifiers, nothing
+  technique- or thread-contextual. `contextual_thread_power(ctx)` sums the batched,
+  level-scaled tier-0 `INTENSITY_BUMP` of every owned thread that
+  `_anchor_ambiently_active` (below) confirms is genuinely engaged by `ctx` right now.
+  **Deliberately excludes combat's `eff_intensity`** — a character's capability standing
+  must not flicker based on whether combat happens to be running.
+- **Thread-passive `CAPABILITY_GRANT` rows** — sensitivity is
+  `thread_level_multiplier(thread.level)` (the same #1718 level-bucketing helper pull
+  resolution uses); power is the same `context_free_power` + `contextual_thread_power`
+  figure. Multiple threads granting the same capability fold by **MAX**, mirroring
+  ADR-0034 individuation on the technique-grant side — never sum.
+
+**Ambient activation** — `world.magic.services.resonance._anchor_ambiently_active` —
+is the demonstrable-activation gate for the contextual thread-power term: the passive
+sibling of `_anchor_in_action` (the paid-pull predicate), and deliberately a **separate
+function**, not a shared one with an `ambient=` flag. A pull is paid for, so
+`_anchor_in_action` lets a player *assert* involvement for anchor kinds with no anchor in
+the action graph (GIFT, RELATIONSHIP_*); a free passive contribution costs nothing, so
+every arm of `_anchor_ambiently_active` tests real state instead — a GIFT arm checks the
+involved technique's actual gift, a SANCTUM arm checks the character's actual current
+room, a FACET arm checks actually-worn items. Nine arms total (COVENANT_ROLE, TECHNIQUE,
+GIFT, TRAIT, SANCTUM, RELATIONSHIP_TRACK, RELATIONSHIP_CAPSTONE, FACET, MANTLE);
+`ORGANIZATION` deliberately returns `False` (needs-design follow-up — `PullActionContext`
+carries no org/mission marker yet). The canonical case this predicate exists to catch: a
+pyromancer's fire-gift thread must not raise their ability to climb a wall.
+
+`get_effective_capability_value(sheet, capability, *, action_ctx=None)` (the agency
+oracle, `world/conditions/services.py`) threads an optional real `PullActionContext`
+through to the technique-grant power derivation above. Full detail (severity-scaling fix
+on `ConditionCapabilityEffect`, the ambient-default fallback and its `TRAIT`-thread
+limitation, the ORGANIZATION deferral, the two-grant-path disambiguation) lives in
+`docs/systems/conditions.md`'s "Capability magnitude curve" section and
+`docs/adr/0169-capability-magnitude-curves-geometrically-with-contextual-power.md`.
+
+**Not the same mechanism as a paid pull's `CAPABILITY_GRANT`.** `resolve_pull_effects`
+(tiers 0-3, feeding `CombatPull`/`CombatPullResolvedEffect` — see "Thread Pull —
+Declaration Modifier" below) still treats `CAPABILITY_GRANT` as binary, gated only by
+`min_thread_level`; it does not read `capability_grant_value` and is unaffected by this
+curve. The two paths answer different questions from the same authored row: "is the
+capability granted for this committed pull" (pull-commit) vs. "what is this capability's
+standing value right now" (the oracle read above).
 
 ### Technique
 

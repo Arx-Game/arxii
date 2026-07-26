@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+import logging
 
 import factory
 
@@ -123,6 +124,8 @@ _MAGIC_PROGRESSION_PATH = "/magic/progression"
 # SubFactory import paths, extracted to satisfy S1192.
 _DISTINCTION_FACTORY = "world.distinctions.factories.DistinctionFactory"
 
+logger = logging.getLogger(__name__)
+
 
 class EffectTypeFactory(factory.django.DjangoModelFactory):
     """Factory for EffectType with power scaling."""
@@ -155,6 +158,7 @@ class TechniqueStyleFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Technique Style {n}")
     description = factory.LazyAttribute(lambda o: f"Description for {o.name}.")
+    cast_concealment = 0
 
 
 class StyleCapabilityRequirementFactory(factory.django.DjangoModelFactory):
@@ -1640,43 +1644,87 @@ class _SoulfrayContentFactory:
     ]
 
     def __call__(self) -> SoulfrayContent:
-        from world.conditions.models import ConditionStage
-        from world.mechanics.factories import BlocksAnimaRegenPropertyFactory
+        from world.conditions.models import ConditionCategory, ConditionStage, ConditionTemplate
+        from world.mechanics.models import Property, PropertyCategory
+        from world.seeds.sample_content import authored_or_sample
 
-        # Ensure the blocks_anima_regen property exists
-        blocks_prop = BlocksAnimaRegenPropertyFactory()
-
-        # Build the Soulfray ConditionTemplate (get_or_create via factory's
-        # django_get_or_create on name)
-        template = ConditionTemplateFactory(
-            name=SOULFRAY_CONDITION_NAME,
-            has_progression=True,
-            passive_decay_per_day=1,
-            passive_decay_blocked_in_engagement=True,
+        # mechanics.Property/PropertyCategory are content-repo-owned (#2698) —
+        # looked up rather than invented unless SEED_SAMPLE_CONTENT is on.
+        # blocks_prop may come back None; the stage-wiring loop below already
+        # tolerates a missing property (it just skips the .properties.add()).
+        blocks_category = authored_or_sample(
+            PropertyCategory,
+            {"description": "Property tags describing condition mechanical effects."},
+            name="Condition Effect",
         )
+        blocks_prop = authored_or_sample(
+            Property,
+            {
+                "description": "Blocks daily anima regeneration while this stage is active.",
+                "category": blocks_category,
+            },
+            name="blocks_anima_regen",
+        )
+
+        # ``conditions.ConditionCategory``/``ConditionTemplate``/``ConditionStage``
+        # are content-repo-owned (#2698) — looked up rather than invented unless
+        # ``SEED_SAMPLE_CONTENT`` is on. Returns an empty SoulfrayContent
+        # (template=None, stages=()) when Soulfray isn't authored; callers
+        # (seed_magic_config's AudereThreshold wiring) skip accordingly. Reuses
+        # the "Magical" category also used by the Hallowed Threshold reaction
+        # conditions (world.seeds.game_content.magic) — both are magical
+        # conditions arising from spellcasting/aura interactions.
+        category = authored_or_sample(
+            ConditionCategory,
+            {
+                "description": (
+                    "Magical conditions arising from spellcasting and aura interactions."
+                ),
+                "is_negative": True,
+                "display_order": 0,
+            },
+            name="Magical",
+        )
+        template = authored_or_sample(
+            ConditionTemplate,
+            {
+                "category": category,
+                "has_progression": True,
+                "passive_decay_per_day": 1,
+                "passive_decay_blocked_in_engagement": True,
+            },
+            name=SOULFRAY_CONDITION_NAME,
+        )
+        if template is None:
+            return SoulfrayContent(template=None, stages=(), blocks_anima_regen=blocks_prop)
 
         stages = []
         for spec in self._STAGES:
-            stage, _ = ConditionStage.objects.get_or_create(
-                condition=template,
-                stage_order=spec["stage_order"],
-                defaults={
+            stage = authored_or_sample(
+                ConditionStage,
+                {
                     "name": spec["name"],
                     "severity_threshold": spec["severity_threshold"],
                     "description": f"Soulfray {spec['name']} stage.",
                 },
+                condition=template,
+                stage_order=spec["stage_order"],
             )
-            stages.append(stage)
+            if stage is not None:
+                stages.append(stage)
 
-        # Wire blocks_anima_regen onto stages 2–5 (Tearing onward, per §8.4)
-        for stage in stages[1:]:
-            stage.properties.add(blocks_prop)
+        # Wire blocks_anima_regen onto stages 2–5 (Tearing onward, per §8.4). Skip
+        # entirely when the Property isn't authored (SEED_SAMPLE_CONTENT off).
+        if blocks_prop is not None:
+            for stage in stages[1:]:
+                stage.properties.add(blocks_prop)
 
         # Backfill passive_decay_max_severity = Tearing.severity_threshold - 1 = 5
-        tearing_threshold = stages[1].severity_threshold
-        if template.passive_decay_max_severity != tearing_threshold - 1:
-            template.passive_decay_max_severity = tearing_threshold - 1
-            template.save(update_fields=["passive_decay_max_severity"])
+        if len(stages) > 1:
+            tearing_threshold = stages[1].severity_threshold
+            if template.passive_decay_max_severity != tearing_threshold - 1:
+                template.passive_decay_max_severity = tearing_threshold - 1
+                template.save(update_fields=["passive_decay_max_severity"])
 
         return SoulfrayContent(
             template=template,
@@ -1824,26 +1872,36 @@ def ensure_dramatic_entrance_content() -> object:
     row rather than resetting it (catalog rows are preserved; only pk=1 tuning
     singletons get ``update_or_create`` resets — see CLAUDE.md).
 
-    Returns the "Grand Entrance" DramaticMomentType.
+    Returns the "Grand Entrance" DramaticMomentType, or ``None`` when it (or
+    its Affinity/Resonance prerequisites) isn't authored in the content repo
+    and ``SEED_SAMPLE_CONTENT`` is off (#2698) — Affinity, Resonance, and
+    DramaticMomentType are all content-repo-owned.
     """
     from world.magic.models import Affinity, Resonance
     from world.magic.models.dramatic_moment import DramaticMomentType
+    from world.seeds.sample_content import authored_or_sample
 
-    celestial_affinity, _ = Affinity.objects.get_or_create(
+    celestial_affinity = authored_or_sample(
+        Affinity,
+        {"description": "The affinity of order, radiance, and the divine."},
         name="Celestial",
-        defaults={"description": "The affinity of order, radiance, and the divine."},
     )
-    fervor, _ = Resonance.objects.get_or_create(
-        name="Fervor",
-        defaults={
+    if celestial_affinity is None:
+        return None
+    fervor = authored_or_sample(
+        Resonance,
+        {
             "description": "The resonance of dramatic flair and commanding presence.",
             "affinity": celestial_affinity,
         },
+        name="Fervor",
     )
+    if fervor is None:
+        return None
 
-    moment_type, _ = DramaticMomentType.objects.get_or_create(
-        label="Grand Entrance",
-        defaults={
+    return authored_or_sample(
+        DramaticMomentType,
+        {
             "description": "A technique cast with such flair the room takes notice.",
             "resonance": fervor,
             "resonance_amount": 15,
@@ -1851,8 +1909,8 @@ def ensure_dramatic_entrance_content() -> object:
             "suggest_on_technique_entrance": True,
             "suggestion_min_success_level": 3,
         },
+        label="Grand Entrance",
     )
-    return moment_type
 
 
 def with_corruption_at_stage(sheet, resonance, stage: int):
@@ -1961,13 +2019,23 @@ _ABYSSAL_AFFINITY_NAME: str = "abyssal"
 
 
 def _make_magical_endurance_check_type():
-    """Return the canonical 'Magical Endurance' CheckType via the #709 seed chain."""
+    """Return a 'Magical Endurance' CheckType — factory-owned, not the gated #709 seed (#2698).
+
+    ``ensure_magic_check_types()`` is content-repo-gated (``authored_or_sample``) and
+    may omit this key entirely when SEED_SAMPLE_CONTENT is off — a test factory must
+    always produce a valid object regardless of that setting (test rows never reach
+    the dev database). Uses ``CheckCategoryFactory``/``CheckTypeFactory``'s own
+    ``get_or_create`` under the same names the real seed uses, so repeated calls
+    within one test run share one row.
+    """
+    from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
     from world.magic.seeds_checks import (
+        MAGIC_CHECK_CATEGORY_NAME,
         MAGICAL_ENDURANCE_CHECK_TYPE_NAME,
-        ensure_magic_check_types,
     )
 
-    return ensure_magic_check_types()[MAGICAL_ENDURANCE_CHECK_TYPE_NAME]
+    category = CheckCategoryFactory(name=MAGIC_CHECK_CATEGORY_NAME)
+    return CheckTypeFactory(name=MAGICAL_ENDURANCE_CHECK_TYPE_NAME, category=category)
 
 
 class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
@@ -2138,11 +2206,25 @@ class SoulTetherRescueFactory(factory.django.DjangoModelFactory):
     check_outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
 
 
+#: Stage spec for Tether Strain per Spec B §6.3: (name, severity_threshold), in order.
+_TETHER_STRAIN_STAGE_SPEC: list[tuple[str, int]] = [
+    ("Bone-Tired", 5),
+    ("Soul-Worn", 10),
+    ("Heart-Cracked", 18),
+    ("Shadow-Touched", 28),
+    ("Half-Lost", 40),
+]
+
+
 class TetherStrainTemplateFactory(factory.django.DjangoModelFactory):
     """ConditionTemplate factory for Tether Strain (Spec B §6).
 
     Single template; ConditionInstances are lazily created per (sineater, resonance).
     Uses django_get_or_create so repeated calls in tests return the same row.
+
+    Test-fixture / ``SEED_SAMPLE_CONTENT`` use only — the production call site
+    (``wire_soul_tether_content``) looks the row up via ``authored_or_sample``
+    instead of calling this factory unconditionally (#2698).
     """
 
     class Meta:
@@ -2182,15 +2264,8 @@ def wire_tether_strain_stages(template: object) -> list:
     """
     from world.conditions.factories import ConditionStageFactory
 
-    stage_spec = [
-        ("Bone-Tired", 5),
-        ("Soul-Worn", 10),
-        ("Heart-Cracked", 18),
-        ("Shadow-Touched", 28),
-        ("Half-Lost", 40),
-    ]
     stages = []
-    for i, (stage_name, threshold) in enumerate(stage_spec, start=1):
+    for i, (stage_name, threshold) in enumerate(_TETHER_STRAIN_STAGE_SPEC, start=1):
         stage_obj = ConditionStageFactory(
             condition=template,
             stage_order=i,
@@ -2224,6 +2299,10 @@ class SoulTetherActiveTemplateFactory(factory.django.DjangoModelFactory):
     has_progression = False
     passive_decay_per_day = 0
     passive_decay_blocked_in_engagement = False
+
+    # Test-fixture / SEED_SAMPLE_CONTENT use only — the production call site
+    # (wire_soul_tether_content) looks the row up via authored_or_sample
+    # instead of calling this factory unconditionally (#2698).
 
 
 class AcceptSoulTetherRitualFactory(factory.django.DjangoModelFactory):
@@ -2326,18 +2405,28 @@ def _build_soul_tether_redirect_flow() -> object:
 
     The step calls ``soul_tether_redirect_handler`` with the event payload.
     Uses the flows system's ``CALL_SERVICE_FUNCTION`` action (FlowActionChoices).
+
+    ``flows.FlowDefinition``/``FlowStepDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the FlowDefinition isn't authored.
     """
     from flows.consts import FlowActionChoices
-    from flows.factories import FlowStepDefinitionFactory
-    from flows.models import FlowDefinition
+    from flows.models import FlowDefinition, FlowStepDefinition
+    from world.seeds.sample_content import authored_or_sample
 
-    flow, _ = FlowDefinition.objects.get_or_create(name="soul_tether_redirect")
+    flow = authored_or_sample(FlowDefinition, {}, name="soul_tether_redirect")
+    if flow is None:
+        return None
     if not flow.steps.exists():
-        FlowStepDefinitionFactory(
+        authored_or_sample(
+            FlowStepDefinition,
+            {
+                "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                "parameters": {"payload": _PAYLOAD_PARAM},
+            },
             flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="world.magic.services.soul_tether.soul_tether_redirect_handler",
-            parameters={"payload": _PAYLOAD_PARAM},
+            parent=None,
         )
     return flow
 
@@ -2346,18 +2435,28 @@ def _build_soul_tether_stage_advance_prompt_flow() -> object:
     """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the stage-advance prompt.
 
     The step calls ``soul_tether_stage_advance_prompt`` with the event payload.
+
+    ``flows.FlowDefinition``/``FlowStepDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the FlowDefinition isn't authored.
     """
     from flows.consts import FlowActionChoices
-    from flows.factories import FlowStepDefinitionFactory
-    from flows.models import FlowDefinition
+    from flows.models import FlowDefinition, FlowStepDefinition
+    from world.seeds.sample_content import authored_or_sample
 
-    flow, _ = FlowDefinition.objects.get_or_create(name="soul_tether_stage_advance_prompt")
+    flow = authored_or_sample(FlowDefinition, {}, name="soul_tether_stage_advance_prompt")
+    if flow is None:
+        return None
     if not flow.steps.exists():
-        FlowStepDefinitionFactory(
+        authored_or_sample(
+            FlowStepDefinition,
+            {
+                "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                "parameters": {"payload": _PAYLOAD_PARAM},
+            },
             flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name=("world.magic.services.soul_tether.soul_tether_stage_advance_prompt"),
-            parameters={"payload": _PAYLOAD_PARAM},
+            parent=None,
         )
     return flow
 
@@ -2401,18 +2500,54 @@ class SoulTetherStageAdvancePromptTriggerDefinitionFactory(factory.django.Django
 
 
 def wire_soul_tether_active_template(_template: object) -> tuple:
-    """Create the two TriggerDefinition rows for Soul Tether subscribers.
+    """Look up the two TriggerDefinition rows for Soul Tether subscribers.
 
     Note: In this system, TriggerDefinitions are not M2M-linked to
     ConditionTemplate. They are installed as Trigger instances on characters
     when a ConditionInstance of SoulTetherActiveTemplate is applied (by
-    ``accept_soul_tether`` service). This function creates the canonical
-    TriggerDefinition rows so the service can reference them by name.
+    ``accept_soul_tether`` service, via ``_install_soul_tether_triggers`` —
+    which now tolerates either coming back ``None``, see that function's
+    docstring). This function looks up the canonical TriggerDefinition rows
+    so the service can reference them by name.
+
+    ``flows.FlowDefinition``/``FlowStepDefinition``/``TriggerDefinition`` are
+    all content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. Either element of the returned tuple may be
+    ``None`` when its FlowDefinition/TriggerDefinition isn't authored.
 
     Returns (redirect_trigger_def, stage_advance_trigger_def).
     """
-    redirect_def = SoulTetherRedirectTriggerDefinitionFactory()
-    stage_advance_def = SoulTetherStageAdvancePromptTriggerDefinitionFactory()
+    from flows.models import TriggerDefinition
+    from world.seeds.sample_content import authored_or_sample
+
+    redirect_def = None
+    redirect_flow = _build_soul_tether_redirect_flow()
+    if redirect_flow is not None:
+        redirect_def = authored_or_sample(
+            TriggerDefinition,
+            {
+                "event_name": "corruption_accruing",
+                "flow_definition": redirect_flow,
+                "priority": 100,
+                "base_filter_condition": None,
+            },
+            name="soul_tether_redirect",
+        )
+
+    stage_advance_def = None
+    stage_advance_flow = _build_soul_tether_stage_advance_prompt_flow()
+    if stage_advance_flow is not None:
+        stage_advance_def = authored_or_sample(
+            TriggerDefinition,
+            {
+                "event_name": "condition_stage_advance_check_about_to_fire",
+                "flow_definition": stage_advance_flow,
+                "priority": 100,
+                "base_filter_condition": None,
+            },
+            name="soul_tether_stage_advance_prompt",
+        )
+
     return redirect_def, stage_advance_def
 
 
@@ -2428,9 +2563,16 @@ def wire_soul_tether_stat_definitions() -> None:
     - rescue.severity_reduced: Corruption severity reduced (fired by perform_soul_tether_rescue)
     - tether.formed: Soul Tethers formed (fired by accept_soul_tether)
 
-    Safe to call multiple times — uses get_or_create on the stat key.
+    ``achievements.StatDefinition`` is content-repo-owned (#2698) — each is
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A
+    missing stat is simply skipped: ``_increment_stat_safe`` (in
+    ``world.magic.services.soul_tether``) already tolerates a missing
+    ``StatDefinition`` for any of these keys.
+
+    Safe to call multiple times.
     """
-    from world.achievements.factories import StatDefinitionFactory
+    from world.achievements.models import StatDefinition
+    from world.seeds.sample_content import authored_or_sample
 
     stat_configs = [
         {
@@ -2471,10 +2613,10 @@ def wire_soul_tether_stat_definitions() -> None:
     ]
 
     for config in stat_configs:
-        StatDefinitionFactory(
+        authored_or_sample(
+            StatDefinition,
+            {"name": config["name"], "description": config["description"]},
             key=config["key"],
-            name=config["name"],
-            description=config["description"],
         )
 
 
@@ -2488,15 +2630,35 @@ def wire_soul_tether_content() -> object:
     - SoulTetherActiveTemplate (marker condition)
     - SoulTetherRedirectTriggerDefinition + backing FlowDefinition
     - SoulTetherStageAdvancePromptTriggerDefinition + backing FlowDefinition
-    - accept_soul_tether Ritual (SERVICE-dispatched)
-    - soul_tether_rescue Ritual (SERVICE-dispatched)
+    - accept_soul_tether Ritual (SERVICE-dispatched) — content-repo-owned (#2698)
+    - soul_tether_rescue Ritual (SERVICE-dispatched) — content-repo-owned (#2698)
+
+    The two Ritual rows are looked up (or, under ``SEED_SAMPLE_CONTENT``,
+    invented with the same shape ``AcceptSoulTetherRitualFactory`` /
+    ``SoulTetherRescueRitualFactory`` author for tests) rather than created
+    unconditionally, so a real deploy needs the content repo to author them.
+    The two marker ``ConditionTemplate`` rows (Tether Strain / Soul Tether
+    Active, + Tether Strain's 5 stages) are also content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on; when
+    absent, ``strain_template``/``active_template`` come back ``None`` on the
+    returned dataclass (the trigger definitions below don't read them, so
+    they still seed). The two ``TriggerDefinition`` rows (+ their backing
+    ``FlowDefinition``/``FlowStepDefinition``) are likewise content-repo-owned
+    and may come back ``None`` on the returned dataclass — see
+    ``wire_soul_tether_active_template()`` and
+    ``world.magic.services.soul_tether._install_soul_tether_triggers()``,
+    which now tolerates a missing definition rather than crashing tether
+    formation. ``achievements.StatDefinition`` is ALSO content-repo-owned
+    (#2698) — see ``wire_soul_tether_stat_definitions()``.
 
     Returns a ``SoulTetherContent`` dataclass with references to all created rows.
     Safe to call multiple times — does not create duplicates.
     """
     from dataclasses import dataclass
 
+    from world.conditions.models import ConditionCategory, ConditionStage, ConditionTemplate
     from world.magic.seeds_checks import ensure_magic_check_types
+    from world.seeds.sample_content import authored_or_sample
 
     ensure_magic_check_types()
 
@@ -2512,15 +2674,130 @@ def wire_soul_tether_content() -> object:
     # Phase 12: Wire achievement stat definitions
     wire_soul_tether_stat_definitions()
 
-    strain_template = TetherStrainTemplateFactory()
-    active_template = SoulTetherActiveTemplateFactory()
+    # conditions.ConditionCategory/ConditionTemplate/ConditionStage are
+    # content-repo-owned (#2698) — looked up rather than invented unless
+    # SEED_SAMPLE_CONTENT is on.
+    soul_tether_category = authored_or_sample(
+        ConditionCategory,
+        {
+            "description": "Markers and burdens carried by Soul Tether participants.",
+            "is_negative": False,
+        },
+        name="Soul Tether",
+    )
+    strain_template = authored_or_sample(
+        ConditionTemplate,
+        {
+            "category": soul_tether_category,
+            "description": "The wear of carrying another soul's sins. Decays with rest.",
+            "has_progression": True,
+            "passive_decay_per_day": 1,
+            "passive_decay_max_severity": None,
+            "passive_decay_blocked_in_engagement": False,
+        },
+        name="Tether Strain",
+    )
+    if strain_template is not None and not strain_template.stages.exists():
+        for i, (stage_name, threshold) in enumerate(_TETHER_STRAIN_STAGE_SPEC, start=1):
+            authored_or_sample(
+                ConditionStage,
+                {"name": stage_name, "severity_threshold": threshold},
+                condition=strain_template,
+                stage_order=i,
+            )
+
+    active_template = authored_or_sample(
+        ConditionTemplate,
+        {
+            "category": soul_tether_category,
+            "description": (
+                "Marker condition installed on Sinners with an active Soul Tether. "
+                "Carries the reactive subscriber triggers."
+            ),
+            "has_progression": False,
+            "passive_decay_per_day": 0,
+            "passive_decay_blocked_in_engagement": False,
+        },
+        name="Soul Tether Active",
+    )
 
     redirect_trigger_def, stage_advance_trigger_def = wire_soul_tether_active_template(
         active_template
     )
 
-    accept_ritual = AcceptSoulTetherRitualFactory()
-    rescue_ritual = SoulTetherRescueRitualFactory()
+    accept_ritual = authored_or_sample(
+        Ritual,
+        {
+            "description": (
+                "A ritual that forms a Soul Tether bond between two willing souls — "
+                "a Sinner (Abyssal-aligned) and a Sineater (Celestial- or Primal-aligned)."
+            ),
+            "narrative_prose": (
+                "Two souls stand at the boundary between light and dark, each choosing to "
+                "carry a part of the other. The Sineater opens themselves to carry the weight "
+                "of the Sinner's corruption, and the bond is sealed."
+            ),
+            "execution_kind": RitualExecutionKind.SERVICE,
+            "service_function_path": (
+                "world.magic.services.soul_tether.accept_soul_tether_via_session"
+            ),
+            "flow": None,
+            "hedge_accessible": False,
+            "glimpse_eligible": False,
+            "participation_rule": ParticipationRule.BILATERAL,
+            "min_participants": 2,
+            "max_participants": 2,
+            "input_schema": {
+                "fields": [
+                    {
+                        "name": "resonance_id",
+                        "label": "Resonance",
+                        "type": "resonance_picker",
+                        "required": True,
+                        "scope": "owned_by_caller",
+                        "help": "The resonance that will channel the bond.",
+                    },
+                    {
+                        "name": "writeup",
+                        "label": "Bond Writeup",
+                        "type": "text",
+                        "required": False,
+                        "help": "Narrative description of the bond formation.",
+                    },
+                ],
+                "participant_fields": [
+                    {
+                        "name": "soul_tether_role",
+                        "label": "Your Role",
+                        "type": "soul_tether_role_picker",
+                        "required": True,
+                        "help": "Choose SINNER (Abyssal-aligned) or SINEATER (Celestial/Primal).",
+                    },
+                ],
+            },
+        },
+        name="accept_soul_tether",
+    )
+    rescue_ritual = authored_or_sample(
+        Ritual,
+        {
+            "description": (
+                "A Sineater pulls their Sinner back from the brink of Subsumption. "
+                "Requires the Sinner to be at corruption stage 3 or higher."
+            ),
+            "narrative_prose": (
+                "The Sineater reaches through the bond between them, anchoring the Sinner's "
+                "soul and drawing the worst of the corruption into themselves. It is costly, "
+                "painful work — but it keeps the Sinner from being lost entirely."
+            ),
+            "execution_kind": RitualExecutionKind.SERVICE,
+            "service_function_path": "world.magic.services.soul_tether.perform_soul_tether_rescue",
+            "flow": None,
+            "hedge_accessible": False,
+            "glimpse_eligible": False,
+        },
+        name="soul_tether_rescue",
+    )
 
     return SoulTetherContent(
         strain_template=strain_template,
@@ -2560,12 +2837,21 @@ def wire_covenant_lifecycle_rituals() -> object:
     player-editable content), unlike the Ritual rows above which preserve
     staff edits across re-runs.
 
+    Every Ritual row here is content-repo-owned (#2698) — each is looked up
+    (or, under ``SEED_SAMPLE_CONTENT``, invented with the same shape the
+    corresponding ``*RitualFactory`` authors for tests) rather than created
+    unconditionally. ``seed_mentor_bond_defaults()`` stays unconditional — its
+    ``MentorBondConfig`` singleton is out of scope for #2698.
+
     Returns a ``CovenantLifecycleContent`` dataclass with references to all
-    created rows. Safe to call multiple times — does not create duplicates.
+    created rows (a Ritual field is ``None`` when its content isn't authored
+    and sample content is off). Safe to call multiple times — does not
+    create duplicates.
     """
     from dataclasses import dataclass
 
     from world.covenants.factories import seed_mentor_bond_defaults, wire_covenant_rite_content
+    from world.seeds.sample_content import authored_or_sample
 
     @dataclass(frozen=True)
     class CovenantLifecycleContent:
@@ -2578,12 +2864,196 @@ def wire_covenant_lifecycle_rituals() -> object:
         org_induction_ritual: object
         mentor_bond_config: object
 
-    formation = CovenantFormationRitualFactory()
-    induction = CovenantInductionRitualFactory()
-    banner_call = BattleCovenantRiseRitualFactory()
-    mentors_vow = MentorsVowRitualFactory()
+    formation = authored_or_sample(
+        Ritual,
+        {
+            "description": "Bind multiple souls in a sworn magical covenant.",
+            "narrative_prose": "Three or more swear an oath of magical bond...",
+            "execution_kind": RitualExecutionKind.SERVICE,
+            "service_function_path": "world.covenants.services.create_covenant_via_session",
+            "flow": None,
+            "participation_rule": ParticipationRule.FORMATION,
+            "input_schema": {
+                "fields": [
+                    {
+                        "name": "name",
+                        "type": "text",
+                        "label": "Covenant name",
+                        "required": True,
+                    },
+                    {
+                        "name": "covenant_type",
+                        "type": "select",
+                        "options": ["DURANCE", "BATTLE"],
+                        "required": True,
+                    },
+                    {
+                        "name": "battle_binding",
+                        "type": "select",
+                        "options": ["standing", "campaign"],
+                        "depends_on": "covenant_type",
+                        "show_if": {"covenant_type": "BATTLE"},
+                        "required": False,
+                    },
+                    {"name": "sworn_objective", "type": "textarea", "required": True},
+                    {
+                        "name": "invitees",
+                        "type": "character_search",
+                        "multi": True,
+                        "min": 1,
+                        "required": True,
+                    },
+                ],
+                "participant_fields": [
+                    {
+                        "name": "chosen_covenant_role",
+                        "type": "covenant_role_picker",
+                        "depends_on": "covenant_type",
+                        "emits_reference": "COVENANT_ROLE",
+                        "required": True,
+                    },
+                ],
+            },
+        },
+        name="Covenant Formation",
+    )
+    induction = authored_or_sample(
+        Ritual,
+        {
+            "description": "Welcome a new member into an existing covenant.",
+            "narrative_prose": "An existing covenant inducts a new member...",
+            "execution_kind": RitualExecutionKind.SERVICE,
+            "service_function_path": "world.covenants.services.induct_member_via_session",
+            "draft_validator_path": "world.covenants.services.assert_initiator_can_induct",
+            "flow": None,
+            "participation_rule": ParticipationRule.INDUCTION,
+            "input_schema": {
+                "fields": [
+                    {
+                        "name": "target_covenant",
+                        "type": "covenant_picker",
+                        "filter": "initiator_active_memberships",
+                        "required": True,
+                    },
+                    {
+                        "name": "candidate",
+                        "type": "character_search",
+                        "multi": False,
+                        "required": True,
+                    },
+                ],
+                "participant_fields": [
+                    {
+                        "name": "chosen_covenant_role",
+                        "type": "covenant_role_picker",
+                        "depends_on": "session.target_covenant.covenant_type",
+                        "applies_to": "candidate_only",
+                        "emits_reference": "COVENANT_ROLE",
+                        "required": True,
+                    },
+                ],
+            },
+        },
+        name="Covenant Induction",
+    )
+    banner_call = authored_or_sample(
+        Ritual,
+        {
+            "description": "Raise a dormant standing battle covenant back to war.",
+            "narrative_prose": (
+                "The banners are unfurled and the oath is sworn anew: war is declared "
+                "and the covenant rises to defend its own."
+            ),
+            "execution_kind": RitualExecutionKind.SERVICE,
+            "service_function_path": "world.covenants.services.rise_battle_covenant_via_session",
+            "flow": None,
+            "participation_rule": ParticipationRule.FORMATION,
+            "input_schema": {
+                "fields": [
+                    {
+                        "name": "target_covenant",
+                        "type": "covenant_picker",
+                        "filter": "initiator_dormant_standing_battle_memberships",
+                        "required": True,
+                    },
+                    {"name": "declaration", "type": "textarea", "required": True},
+                    {
+                        "name": "invitees",
+                        "type": "character_search",
+                        "multi": True,
+                        "min": 1,
+                        "required": True,
+                    },
+                ],
+            },
+        },
+        name="Call the Banners",
+    )
+    mentors_vow = authored_or_sample(
+        Ritual,
+        {
+            "description": (
+                "A bilateral vow between two covenant members — one within the covenant's "
+                "level band, one outside it — to bridge the gap between their paths."
+            ),
+            "narrative_prose": (
+                "Two souls stand at the threshold: one a seasoned member of the covenant, "
+                "one who walks a different road. They speak the Vow aloud before the "
+                "covenant's power, binding themselves to each other's journey until the "
+                "gap is bridged."
+            ),
+            "execution_kind": RitualExecutionKind.SERVICE,
+            "service_function_path": "world.covenants.services.establish_mentor_bond_via_session",
+            "flow": None,
+            "participation_rule": ParticipationRule.BILATERAL,
+            "input_schema": {
+                "fields": [
+                    {
+                        "name": "target_covenant",
+                        "type": "covenant_picker",
+                        "filter": "initiator_active_memberships",
+                        "required": True,
+                    },
+                    {
+                        "name": "partner",
+                        "type": "character_search",
+                        "multi": False,
+                        "required": True,
+                    },
+                ],
+                "participant_fields": [
+                    {
+                        "name": "role",
+                        "type": "hidden",
+                        "description": ("mentor or sidekick — set automatically by the ritual."),
+                        "required": True,
+                    },
+                ],
+            },
+        },
+        name="Mentor's Vow",
+    )
     covenant_rite = wire_covenant_rite_content()
-    org_induction = OrganizationInductionRitualFactory()
+    org_induction = authored_or_sample(
+        Ritual,
+        {
+            "description": "Formally induct a new member into a non-Covenant organization.",
+            "narrative_prose": "A ranking member leads the rite that welcomes a new member in.",
+            "execution_kind": RitualExecutionKind.SERVICE,
+            "service_function_path": (
+                "world.societies.membership_services.induct_organization_member_via_session"
+            ),
+            "draft_validator_path": (
+                "world.societies.membership_services.assert_initiator_can_lead_org_ritual"
+            ),
+            "flow": None,
+            "participation_rule": ParticipationRule.BILATERAL,
+            "min_participants": 2,
+            "max_participants": 2,
+            "input_schema": {"fields": [], "participant_fields": []},
+        },
+        name="Organization Induction",
+    )
     mentor_bond_config = seed_mentor_bond_defaults()
 
     return CovenantLifecycleContent(
@@ -2591,7 +3061,7 @@ def wire_covenant_lifecycle_rituals() -> object:
         induction_ritual=induction,
         banner_call_ritual=banner_call,
         mentors_vow_ritual=mentors_vow,
-        renew_the_oath_ritual=covenant_rite.ritual,
+        renew_the_oath_ritual=covenant_rite.ritual if covenant_rite is not None else None,
         covenant_rite=covenant_rite,
         org_induction_ritual=org_induction,
         mentor_bond_config=mentor_bond_config,
@@ -2622,18 +3092,25 @@ def wire_fall_redemption_content() -> object:
     from types import SimpleNamespace
 
     from world.magic.models import (
+        Affinity,
         CompromiseActType,
         FallRedemptionConfig,
+        Resonance,
         ResonanceConversion,
     )
+    from world.seeds.sample_content import authored_or_sample
 
-    # Singleton config
+    # Pure config: a pk=1 singleton of tuning multipliers, seeder-owned. It was
+    # briefly gated behind SEED_SAMPLE_CONTENT while it sat in CONTENT_MODELS;
+    # #2698 de-registered it (a "pk" natural key carries no content identity, so
+    # its exported fixture could never load back), so it seeds unconditionally
+    # again — a flag-off press must leave the game with Fall/Redemption tuning.
     config, _ = FallRedemptionConfig.objects.get_or_create(pk=1)
 
-    # The Fall/Redemption ritual
-    fall_ritual, _ = Ritual.objects.get_or_create(
-        name="Ritual of Falling",
-        defaults={
+    # The Fall/Redemption ritual — content-repo-owned (#2698).
+    fall_ritual = authored_or_sample(
+        Ritual,
+        {
             "description": (
                 "The irreversible ceremony of Fall or Redemption — converting "
                 "all resonance and threads to a new affinity. Falling grants "
@@ -2651,67 +3128,66 @@ def wire_fall_redemption_content() -> object:
             "hedge_accessible": False,
             "glimpse_eligible": False,
         },
+        name="Ritual of Falling",
     )
 
     # Seed example CompromiseActType rows (self-contained — only if
-    # the canonical Affinities/Resonances exist)
+    # the canonical Affinities exist, and only their own Resonances/
+    # CompromiseActType/ResonanceConversion rows are content-repo-owned #2698)
     compromise_types = []
-    try:
-        from world.magic.models import Affinity, Resonance
+    celestial_affinity = Affinity.objects.filter(name__iexact="Celestial").first()
+    primal_affinity = Affinity.objects.filter(name__iexact="Primal").first()
+    abyssal_affinity = Affinity.objects.filter(name__iexact="Abyssal").first()
 
-        celestial_affinity = Affinity.objects.get(name__iexact="Celestial")
-        primal_affinity = Affinity.objects.get(name__iexact="Primal")
-        abyssal_affinity = Affinity.objects.get(name__iexact="Abyssal")
-
+    have_affinities = (
+        celestial_affinity is not None
+        and primal_affinity is not None
+        and abyssal_affinity is not None
+    )
+    if have_affinities:
         # Find or create example resonances in each affinity
-        cele_res, _ = Resonance.objects.get_or_create(
-            name="Bene",
-            defaults={"affinity": celestial_affinity},
-        )
-        primal_res, _ = Resonance.objects.get_or_create(
-            name="Praedari",
-            defaults={"affinity": primal_affinity},
-        )
-        abyssal_res, _ = Resonance.objects.get_or_create(
-            name="Dissolution",
-            defaults={"affinity": abyssal_affinity},
+        cele_res = authored_or_sample(Resonance, {"affinity": celestial_affinity}, name="Bene")
+        primal_res = authored_or_sample(Resonance, {"affinity": primal_affinity}, name="Praedari")
+        abyssal_res = authored_or_sample(
+            Resonance, {"affinity": abyssal_affinity}, name="Dissolution"
         )
 
-        # Example compromise act types
-        for name, resonance, amount, is_cruelty in [
-            ("Combat Kill", primal_res, 10, False),
-            ("Pragmatic Choice", primal_res, 15, False),
-            ("Torture", abyssal_res, 25, True),
-            ("Malicious Harm", abyssal_res, 20, True),
-        ]:
-            act_type, _ = CompromiseActType.objects.get_or_create(
-                name=name,
-                defaults={
-                    "target_resonance": resonance,
-                    "amount": amount,
-                    "is_cruelty": is_cruelty,
-                    "description": f"Grants {amount} {resonance.name} resonance.",
-                },
-            )
-            compromise_types.append(act_type)
+        if cele_res is not None and primal_res is not None and abyssal_res is not None:
+            # Example compromise act types
+            for name, resonance, amount, is_cruelty in [
+                ("Combat Kill", primal_res, 10, False),
+                ("Pragmatic Choice", primal_res, 15, False),
+                ("Torture", abyssal_res, 25, True),
+                ("Malicious Harm", abyssal_res, 20, True),
+            ]:
+                act_type = authored_or_sample(
+                    CompromiseActType,
+                    {
+                        "target_resonance": resonance,
+                        "amount": amount,
+                        "is_cruelty": is_cruelty,
+                        "description": f"Grants {amount} {resonance.name} resonance.",
+                    },
+                    name=name,
+                )
+                if act_type is not None:
+                    compromise_types.append(act_type)
 
-        # Example ResonanceConversion mappings
-        for source_res, target_affinity, target_res in [
-            (cele_res, "primal", primal_res),
-            (cele_res, "abyssal", abyssal_res),
-            (primal_res, "abyssal", abyssal_res),
-            (primal_res, "celestial", cele_res),
-            (abyssal_res, "primal", primal_res),
-            (abyssal_res, "celestial", cele_res),
-        ]:
-            ResonanceConversion.objects.get_or_create(
-                source_resonance=source_res,
-                target_affinity=target_affinity,
-                defaults={"target_resonance": target_res},
-            )
-    except Affinity.DoesNotExist:
-        # Canonical affinities don't exist yet — skip example content.
-        pass
+            # Example ResonanceConversion mappings
+            for source_res, target_affinity, target_res in [
+                (cele_res, "primal", primal_res),
+                (cele_res, "abyssal", abyssal_res),
+                (primal_res, "abyssal", abyssal_res),
+                (primal_res, "celestial", cele_res),
+                (abyssal_res, "primal", primal_res),
+                (abyssal_res, "celestial", cele_res),
+            ]:
+                authored_or_sample(
+                    ResonanceConversion,
+                    {"target_resonance": target_res},
+                    source_resonance=source_res,
+                    target_affinity=target_affinity,
+                )
 
     return SimpleNamespace(
         config=config,
@@ -2736,14 +3212,16 @@ def wire_ghost_tutor_content() -> object:
     this seed creates a framework-proving placeholder with no components
     and no site gate. Staff add real components + site in admin.
 
-    Returns the Ritual instance.
+    Returns the Ritual instance, or ``None`` when it isn't authored in the
+    content repo and ``SEED_SAMPLE_CONTENT`` is off (#2698).
     """
     from world.magic.constants import RitualExecutionKind
     from world.magic.models import Ritual
+    from world.seeds.sample_content import authored_or_sample
 
-    ritual, _ = Ritual.objects.get_or_create(
-        name="Summon Ghostly Tutor",
-        defaults={
+    return authored_or_sample(
+        Ritual,
+        {
             "description": (
                 "Summon the ghostly tutor of an orphaned tradition. The tutor's "
                 "knowledge becomes available through the Academy's training. "
@@ -2770,8 +3248,8 @@ def wire_ghost_tutor_content() -> object:
                 ]
             },
         },
+        name="Summon Ghostly Tutor",
     )
-    return ritual
 
 
 def author_reference_corruption_content() -> None:
@@ -2785,27 +3263,93 @@ def author_reference_corruption_content() -> None:
     Idempotent: safe to call repeatedly.  CorruptionConditionTemplateFactory
     uses django_get_or_create on corruption_resonance; twist factories create
     new rows each time, so the twist-exists check below prevents duplication.
+
+    The "Wild Hunt"/"Web of Spiders" Affinity + Resonance rows are
+    content-repo-owned (#2698) — looked up rather than invented, unless
+    ``SEED_SAMPLE_CONTENT`` is on. When either is missing, this skips
+    entirely (no Affinity/Resonance to hang the reference Corruption content
+    off of).
+
+    The per-resonance Corruption ``ConditionTemplate`` (+ its 5 stages) and
+    the per-twist ``ConditionTemplate`` are ALSO content-repo-owned (#2698,
+    ``conditions.ConditionTemplate``/``conditions.ConditionStage``) — each is
+    looked up first and only invented under ``SEED_SAMPLE_CONTENT``, mirroring
+    ``authored_or_sample`` but keyed through the existing factories (which
+    author the full abyssal/primal-aware stage shape) rather than a bare
+    ``.create()``. A missing corruption template skips only that template
+    (the resonance's twists are independent decoration and still seed); a
+    missing twist condition skips that one twist row (its
+    ``MagicalAlterationTemplate`` — out of scope for #2698 — has nothing to
+    attach to without it).
     """
-    primal_affinity = AffinityFactory(name="Primal")
-    abyssal_affinity = AffinityFactory(name="Abyssal")
-    wild_hunt = ResonanceFactory(name="Wild Hunt", affinity=primal_affinity)
-    web_of_spiders = ResonanceFactory(name="Web of Spiders", affinity=abyssal_affinity)
+    from world.conditions.constants import DurationType
+    from world.conditions.models import ConditionCategory, ConditionTemplate
+    from world.seeds.sample_content import authored_or_sample, sample_content_enabled
+
+    primal_affinity = authored_or_sample(Affinity, {}, name="Primal")
+    abyssal_affinity = authored_or_sample(Affinity, {}, name="Abyssal")
+    if primal_affinity is None or abyssal_affinity is None:
+        return
+    wild_hunt = authored_or_sample(Resonance, {"affinity": primal_affinity}, name="Wild Hunt")
+    web_of_spiders = authored_or_sample(
+        Resonance, {"affinity": abyssal_affinity}, name="Web of Spiders"
+    )
+    if wild_hunt is None or web_of_spiders is None:
+        return
+
+    # Shared category for the per-twist ConditionTemplates (deterministic name so
+    # the content repo has something stable to author against, unlike the bare
+    # ConditionTemplateFactory()'s auto-sequenced "Condition N" default).
+    twist_category = authored_or_sample(
+        ConditionCategory,
+        {"description": "Corruption twist alteration markers.", "is_negative": True},
+        name="Corruption Twist",
+    )
 
     for resonance in (wild_hunt, web_of_spiders):
-        # ConditionTemplate (idempotent via django_get_or_create on corruption_resonance)
-        CorruptionConditionTemplateFactory(corruption_resonance=resonance)
+        # ConditionTemplate — looked up by corruption_resonance; only the
+        # elaborate abyssal/primal-aware factory invention path is gated
+        # (django_get_or_create on the factory means a lookup hit is free).
+        if (
+            sample_content_enabled()
+            or ConditionTemplate.objects.filter(corruption_resonance=resonance).exists()
+        ):
+            CorruptionConditionTemplateFactory(corruption_resonance=resonance)
+        else:
+            logger.warning(
+                "ConditionTemplate matching {'corruption_resonance': %r} is not in "
+                "the content repo. Skipping. Author the row in the content repo and "
+                "re-press the Big Button, or set ARXII_SEED_SAMPLE_CONTENT=1 to have "
+                "the seeder invent a sample one (see #2698).",
+                resonance.name,
+            )
 
         # CORRUPTION_TWIST templates — 2 per stage 2/3/4
+        if twist_category is None:
+            continue
         for stage in (2, 3, 4):
             existing = MagicalAlterationTemplate.objects.filter(
                 kind=AlterationKind.CORRUPTION_TWIST,
                 resonance=resonance,
                 stage_threshold=stage,
             ).count()
-            for _i in range(max(0, 2 - existing)):
-                from world.conditions.factories import ConditionTemplateFactory
-
-                twist_condition = ConditionTemplateFactory()
+            for i in range(max(0, 2 - existing)):
+                twist_condition = authored_or_sample(
+                    ConditionTemplate,
+                    {
+                        "category": twist_category,
+                        "description": "Test condition",
+                        "default_duration_type": DurationType.ROUNDS,
+                        "default_duration_value": 3,
+                        "is_stackable": False,
+                        "max_stacks": 1,
+                        "has_progression": False,
+                        "can_be_dispelled": True,
+                    },
+                    name=f"{resonance.name} Corruption Twist S{stage}-{i}",
+                )
+                if twist_condition is None:
+                    continue
                 CorruptionTwistTemplateFactory(
                     condition_template=twist_condition,
                     origin_resonance=resonance,

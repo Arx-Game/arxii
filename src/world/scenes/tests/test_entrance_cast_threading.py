@@ -9,6 +9,8 @@ when ``resolve_accepted_cast`` resolves an entrance-originated PENDING request.
 
 from unittest.mock import MagicMock, patch
 
+from django.test import override_settings
+
 from actions.factories import ActionTemplateFactory
 from world.combat.constants import ParticipantStatus, RiskLevel
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
@@ -73,13 +75,15 @@ class TestEntranceCastThreading(CastScenarioMixin):
         self.assertFalse(cast.request.originated_as_entrance)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestAcceptedEntranceCastHooks(CastScenarioMixin):
     """resolve_accepted_cast fires the deferred entrance hooks (#2183 Task 5).
 
     Consent-gated benign entrances resolve on accept, at which point the real
     success level becomes known — the flourish offer, dramatic-moment suggestion,
     disposition delta, and combat-intervention join all fire here instead of at
-    request time.
+    request time. The DramaticMomentType is content-repo-owned (#2698);
+    ``SEED_SAMPLE_CONTENT`` opts this suite into the sample-seeding path.
     """
 
     @classmethod

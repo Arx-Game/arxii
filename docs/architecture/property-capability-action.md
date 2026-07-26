@@ -1072,6 +1072,22 @@ Both must pass for the Capability to be available.
   Technique's current intensity
 - `prerequisite` (FK to `PrerequisiteType`, nullable) — source-specific constraint
 
+**[BUILT & WIRED, superseded by #2708/ADR-0169]** The two-component additive formula
+below was the original design and is still what a grant computes when no
+`CapabilityPowerConfig` row exists. Once staff create that singleton, `calculate_value()`
+switches to a **geometric curve** instead — `intensity_multiplier` stops being an additive
+per-power bump and becomes the exponent's sensitivity:
+
+```
+value = round(base_value * 2 ** (intensity_multiplier * power / power_per_doubling))
+```
+
+— see `docs/adr/0169-capability-magnitude-curves-geometrically-with-contextual-power.md`
+and `docs/systems/conditions.md`'s "Capability magnitude curve" section for the full
+rationale, the `power` figure's own derivation (technique intensity + context-free power
++ contextual thread power), and why it deliberately excludes combat's `eff_intensity`.
+The pre-#2708 additive formula, still live when no config row exists:
+
 **Effective value** = `base_value + (intensity_multiplier * technique.intensity)`
 
 This two-component formula supports:
@@ -1096,7 +1112,12 @@ can be removed later.
 
 **Other Capability sources** use the same additive pattern but their own
 grant models:
-- **Conditions** — `ConditionCapabilityEffect` (already built, flat value)
+- **Conditions** — `ConditionCapabilityEffect` (additive `value`; also carries
+  `scales_with_severity` — inherited from the shared `ConditionOrStageEffect` base and,
+  as of #2708, honoured identically by all three readers: `get_capability_status`,
+  `get_all_capability_values`, and `conditions.views._aggregate_capability_effects`.
+  Before #2708 the flag was defined on the model but silently ignored by these three
+  readers — see `docs/systems/conditions.md`'s "Capability magnitude curve" section)
 - **Traits** — calculated at query time, not stored (see open question)
 - **Species, Equipment, Distinctions** — future, same pattern
 

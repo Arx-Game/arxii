@@ -20,7 +20,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import ObjectDBFactory
@@ -256,6 +256,7 @@ def _build_sineating_offer(
 # ===========================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SoulTetherFullPipelineTests(TestCase):
     """Scenario 13.1: exercise every phase contribution end-to-end.
 
@@ -494,6 +495,7 @@ class SoulTetherFullPipelineTests(TestCase):
 # ===========================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class AntiResentmentInvariantTests(TestCase):
     """Scenario 13.2: Dormant tether imposes zero resource cost on both parties.
 
@@ -658,6 +660,7 @@ class AntiResentmentInvariantTests(TestCase):
 # ===========================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ManyToManyIndependenceTests(TestCase):
     """Scenario 13.3: One Sineater, two Sinners — fully independent state.
 

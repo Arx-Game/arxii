@@ -1,6 +1,6 @@
 """Tests for the dramatic-surge content-slice seeder (#2013)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.combat.constants import StakesLevel
 from world.combat.models import EscalationCurve, StakesEscalationModifier
@@ -9,7 +9,11 @@ from world.relationships.models import RelationshipTrack
 from world.seeds.game_content.combat import seed_dramatic_surge_content
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedDramaticSurgeContentTests(TestCase):
+    """``relationships.RelationshipTrack`` is content-repo-owned (#2698);
+    SEED_SAMPLE_CONTENT opts this suite into the sample-seeding path."""
+
     def test_seeds_relationship_tracks(self):
         seed_dramatic_surge_content()
 

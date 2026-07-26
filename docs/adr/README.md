@@ -96,6 +96,7 @@ treat those names as hints to confirm, not gospel.
 - [0137 — CI shards balanced by measured runtime; oversized apps split via generated module labels](0137-ci-shards-balanced-by-measured-runtime-with-generated-splits.md) (extends ADR-0083's CI pipeline)
 - [0138 — Paginate list endpoints by default; opt out explicitly](0138-paginate-list-endpoints-by-default-with-explicit-opt-out.md)
 - [0142 — The Big Button loads all real content from arx2-lore; arxii seeds keep only non-lore config/lookup tables](0142-content-vs-config-boundary-in-the-dev-seed.md) (extends ADR-0140's content pipeline; #2474)
+- [0168 — CONTENT_MODELS registration *is* the seed/content boundary; seeders look content up and invent only under SEED_SAMPLE_CONTENT](0168-content-models-registration-is-the-seed-boundary.md) (sharpens ADR-0142; #2698)
 
 ### Game-design tenets
 - [0023 — PvP is structurally non-lethal](0023-pvp-is-structurally-non-lethal.md)
@@ -196,6 +197,7 @@ treat those names as hints to confirm, not gospel.
 - [0161 — Telegraphed wind-ups downgrade, never mid-round-interrupt; a 1-reaction budget plus a 2-answer absorption cap](0161-telegraphed-windups-downgrade-not-cancel-reaction-budget.md) (#2637, #2639; extends ADR-0118; related ADR-0060, ADR-0151)
 - [0162 — Sent Flying clones the plummet pattern: marker + reactable window + explicit end-of-round resolution](0162-sent-flying-clones-the-plummet-pattern.md) (#2638; extends ADR-0161; related ADR-0118, ADR-0151)
 - [0164 — Capability values share one uncapped ladder; blocking is emergent arithmetic, not a flag](0164-capability-value-ladder-and-emergent-blocking.md) (#2704; related ADR-0143, ADR-0034)
+- [0169 — Capability magnitude curves geometrically with contextual power, uncapped](0169-capability-magnitude-curves-geometrically-with-contextual-power.md) (#2708; builds on ADR-0164, ADR-0034; related ADR-0144)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

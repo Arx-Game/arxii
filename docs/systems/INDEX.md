@@ -558,6 +558,18 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `"magic"`) — single seam; telnet `CmdTechnique` and web `POST /api/magic/techniques/author/`
   both converge here. Telnet: `technique draft|show|set|restrict|grant|damage|condition|price|author|discard`
   (`cmd:perm(Builder)` — staff/GM only).
+- **Cast observation (#2710, ADR-0170):** `resolve_cast_audience(*, caster,
+  cast_openly=False) -> CastAudience` (`world/magic/services/cast_observation.py`) — who
+  perceived a cast worked in a concealed `TechniqueStyle.cast_concealment` style, and in
+  how much detail (full/vague/nothing), resolved per co-located observer at cast time.
+  Materialised as `InteractionReceiver` rows under the new
+  `InteractionVisibility.PERCEIVED_ONLY` tier (writer + receivers + staff + scene GM;
+  stricter than `VERY_PRIVATE`, which admits no exception). Wired into standalone casts
+  only (`world/scenes/cast_services.py`); combat casts
+  (`world.combat.interaction_services.broadcast_action_outcome`) are NOT covered — see
+  magic.md's "Cast observation" section for the full mechanism, the three enforcement
+  points (`InteractionQuerySet.visible_to`, `SceneActionRequestViewSet.get_queryset`,
+  `can_view_interaction`), and the lore-repo content this stays inert without.
 - **Source:** `src/world/magic/`
 - **Details:** [magic.md](magic.md) · cast lifecycle (How Magic Works):
   [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +
@@ -669,7 +681,30 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`,
   `process_round_end()`, `process_damage_interactions()` (wired into combat #2018), `get_treatment_candidates()`,
   `perform_treatment()` (routes `mend_on_*` through `world.vitals.services.mend_wound()`
-  alongside its existing severity-decay path, #2644)
+  alongside its existing severity-decay path, #2644), `get_effective_capability_value()`
+  (the one-oracle agency/requirement answer — see "Capability magnitude curve" below)
+- **Capability magnitude curve (#2708 — `magic.CapabilityPowerConfig`):** staff-tunable
+  singleton (`power_per_doubling`, default 10) driving
+  `world.magic.services.capability_curve.apply_capability_curve` /
+  `get_capability_power_config()` — `value = round(base * 2 ** (sensitivity * power /
+  power_per_doubling))`, replacing the old linear `base + intensity_multiplier * power`
+  shape on `TechniqueCapabilityGrant.calculate_value()`. **No config row = every
+  consumer's pre-#2708 number, bit-for-bit** — both oracles check for the row FIRST and,
+  when absent, skip power derivation entirely and call `calculate_value()` bare rather
+  than deriving a real power figure and feeding it to the retired formula (a regression
+  caught and fixed before merge). Two oracles read technique-granted capability magnitude
+  and must agree on the ambient default: `_technique_capability_values`
+  (`world.conditions.services`, the agency oracle behind `get_effective_capability_value`,
+  accepts an optional `action_ctx`) and `_get_technique_sources`
+  (`world.mechanics.services`, the availability oracle behind
+  `get_capability_sources_for_character`, always ambient — no `action_ctx` param). Both
+  derive power as `technique.intensity + context_free_power + contextual_thread_power(...)`
+  (`CharacterThreadHandler`, `world/magic/handlers.py`) and resolve the technique→gift
+  mapping via `resolve_gift_ids_by_technique` once per sweep, never per grant. A thread's
+  tier-0 `INTENSITY_BUMP` only feeds this power figure when
+  `_anchor_ambiently_active` (`world/magic/services/resonance.py`) confirms real,
+  demonstrable engagement (not player assertion) — the paid-pull sibling predicate is
+  `_anchor_in_action`, deliberately separate. See ADR-0169 for the full design decisions.
 - **Perception gate (#1225):** `can_perceive(actor, target)` composes co-location with
   per-observer concealment detection (`is_concealed()`, `active_concealments()`,
   `ConditionInstance.detected_by`). Consulted by `OnUseTargetPrerequisite` (item-use targeting),
@@ -1559,7 +1594,7 @@ Multi-stage character creation flow with draft system.
   otherwise calls `world.missions.services.run.staff_assign_mission()` verbatim (no new
   missions-app surface). Deliberately NOT best-effort — a misconfigured template raises and rolls
   back the whole finalization transaction (a content-authoring bug, not contention).
-- **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds Realm/StartingArea/Beginnings/Species/Gender/TarotCard/HeightBand/Build/12 stat Traits/Rosters/Path so `finalize_character` runs on a fresh DB, plus (#2162) every `CGExplanation` stage heading/intro/desc row (`CG_EXPLANATION_COPY`, 28 keys, `update_or_create`d so repo copy fixes keep reaching seeded deploys) so a fresh DB never ships blank CG stage copy. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
+- **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds the 12 stat Traits + the two Roster rows unconditionally so `finalize_character` runs on a fresh DB. Species/Gender/HeightBand/Build/FormTrait family/Distinction family/CGExplanation are all `CONTENT_MODELS` (#2698, ADR-0168) — looked up via `authored_or_sample()` and invented only under `SEED_SAMPLE_CONTENT`; Realm/StartingArea/Beginnings/TarotCard/Path are open-ended world content gated behind the same flag. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
 - **Email notifications (#2162):** `world.character_creation.email_service.CGEmailService` —
   submission/approved/revisions-requested/denied notices, called (best-effort) from
   `submit_draft_for_review`/`approve_application`/`request_revisions`/`deny_application`.
@@ -2503,6 +2538,21 @@ register as additional kinds.
   Path-discovery system (#2603); it does not model the full research/discovery
   progression that gates Path selection. Seeded by `wire_ghost_tutor_content()`
   (`world.magic.factories`), called by `seed_magic_dev()`.
+- **Check-based technique training (#2727):** `resolve_training_check()`
+  (`world.magic.services.technique_training`) wraps
+  `contribute_to_technique_progress` with a learning check. The learner
+  rolls intellect + the new "Arcane Theory" skill ("Technique Training"
+  `CheckType`, seeded by `ensure_technique_training_content()`). The
+  check outcome maps to a dev-point multiplier via
+  `TrainingOutcomeAward(OutcomeTierAward)` (botch/failure=0×, partial=0.5×,
+  success=1.0×, critical=1.5×). AP is always spent; only dev-point yield
+  varies. `contribute_to_technique_progress` was changed to accept
+  `dev_points` + `ap_to_spend` as co-equal params (decoupling AP from
+  dev points). Difficulty: `target_difficulty = (technique.tier × step)
+  − (learner_level // divisor) − teacher_skill_bonus
+  + (self_study_penalty if teacher is None)`. Four tuning knobs on
+  `GiftAcquisitionConfig`. No production caller yet — the player-facing
+  training trigger is a deferred follow-up.
 - **SETTLE_OBLIGATION — the Academy Registrar (#2428 whole-branch fix):** closes the gap
   where `societies.obligation_services.settle_obligation` (Task 1) shipped with no live
   caller — an Unbound Prospect had no in-game way to ever pay off their Academy entrance
@@ -5887,7 +5937,7 @@ Production-callable seed layer for populating sane defaults on a fresh dev insta
   - Django admin **"Load sane defaults"** button (`src/web/admin/seed_views.py`) — superuser-only; runs `seed_dev_database()` and flashes a success/error message; redirects to the Game Setup hub on success.
   - Django admin **"Game Setup"** hub (`src/web/admin/game_setup_views.py`, `_game_setup/` URL, `admin_game_setup` name) — superuser-only landing page ("Welcome to a new Arx-based instance"): the clone→seed→tweak→export flow, a per-cluster content inventory (via `seeded_models_by_cluster()`) with live row counts, and links to the Big Button, Export/Import, and the World authoring apps. Header link visible to superusers next to the Big Button.
 - **Cluster masters:** `src/world/seeds/clusters.py` imports the seed cluster masters (`seed_magic_dev`, `seed_items_dev`, etc.) from `world.seeds.game_content` — relocated there from `integration_tests.game_content` by roadmap task 3.2 (#1220); `integration_tests.game_content` keeps a thin compatibility facade so existing test imports keep working. The natively-owned clusters (`checks`, `consent`, `character_creation`) live directly under `src/world/seeds/`.
-- **Key modules:** `database.py` (orchestrator), `clusters.py` (per-cluster dispatch + inventory helpers), `checks.py` (`seed_check_resolution_tables()` — the checks spine), `consent.py` (`seed_social_consent_categories()`), `character_creation.py` (`seed_character_creation_dev()` — CG-world content: Realm/StartingArea/Beginnings/Species/Gender/TarotCard/HeightBand/Build/12 stats/Rosters/Path), `types.py` (`SeedReport` dataclass).
+- **Key modules:** `database.py` (orchestrator), `clusters.py` (per-cluster dispatch + inventory helpers), `checks.py` (`seed_check_resolution_tables()` — the checks spine), `consent.py` (`seed_social_consent_categories()`), `character_creation.py` (`seed_character_creation_dev()` — 12 stat Traits + Rosters unconditionally; Species/Gender/HeightBand/Build/forms/distinctions/Realm/StartingArea/Beginnings/TarotCard/Path all content-repo-owned or gated behind `SEED_SAMPLE_CONTENT`, #2698), `types.py` (`SeedReport` dataclass).
 - **Tests:** `src/world/seeds/tests/` — idempotency, non-overwrite, and playable-slice regression (including `TestSeededCharacterCreation` — `finalize_character` runs end-to-end on a seeded-only DB).
 - **Source:** `src/world/seeds/`
 - **Details:** [seed-and-integration-tests.md](../roadmap/seed-and-integration-tests.md) (Phase 3)

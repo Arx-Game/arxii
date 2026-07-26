@@ -168,6 +168,26 @@ by `world.magic.services.portal_travel.perform_portal_travel`, not a damage/cond
 capability-grant row.
 _Avoid_: portal technique, teleport spell.
 
+**Cast Concealment** (#2710, ADR-0170):
+`TechniqueStyle.cast_concealment` — the style's difficulty floor for being noticed while
+casting. A magnitude, not a flag: 0 (default, overt) means the cast is posed to the whole
+room exactly as always and no detection check runs at all; above 0 it's the difficulty an
+observer's detection roll must beat, on top of the caster's own level opposition. Style is
+a property of the caster's Path (ADR-0164), so concealment is too — the same catalog
+`Technique` is loud cast by one Path and concealed cast by another.
+_Avoid_: spell visibility, stealth casting.
+
+**Cast Audience** (#2710, ADR-0170):
+Who perceived a concealed cast, and in how much detail — resolved per co-located
+observer at cast time by `resolve_cast_audience`, never a single room-wide flag. Three
+tiers: the caster is always `full`; an observer who beats the detection check by enough
+(`success_level >= CAST_DETECTION_ATTRIBUTION_LEVEL`) is `full` (sees who cast what); a
+lesser success is `vague` (perceives something happened, not by whom); a failure
+perceives nothing. Materialised as `InteractionReceiver` rows under the
+`InteractionVisibility.PERCEIVED_ONLY` tier so a scene log replays what each viewer
+perceived at the time, not what they could detect if re-read today.
+_Avoid_: spell visibility, stealth casting.
+
 **Mage Scar**:
 The player-facing name for a magical alteration imprinted on a character by magical exposure — a queued, tiered cosmetic-to-profound change carrying social, weakness, and resonance effects. Backend class and table names retain the `MagicalAlteration` naming.
 _Avoid_: Magical Scar, Magical Alteration (as the player-facing name).
@@ -290,5 +310,18 @@ A damage-profile authored ramp (`AbstractDamageProfile
 TARGET's PRE-hit health runs low — `1 + multiplier * missing_health_fraction`,
 never computed off post-hit health (which would be self-referential). Strike-family
 techniques opt in; default 0 elsewhere.
+
+**Ambient Activation** (#2708, ADR-0169):
+The test for whether a thread contributes *passively* to a capability's power figure —
+`world.magic.services.resonance._anchor_ambiently_active`. Strictly stricter than
+anchor-in-action (`_anchor_in_action`): a thread pull may be authorised by player
+assertion because it is paid for; a free passive contribution costs nothing, so it must
+be demonstrable — every arm tests real state (actually-worn items, the character's
+actual current room, the technique/trait actually in play) rather than trusting the
+caller. Feeds `CharacterThreadHandler.contextual_thread_power`, one of the two terms
+(with `context_free_power`) composing the `power` figure that curves a technique's
+`TechniqueCapabilityGrant`. See `docs/systems/conditions.md`'s "Capability magnitude
+curve" section for the full nine-arm breakdown and the deferred ORGANIZATION arm.
+_Avoid_: "passive anchor check", "auto-pull".
 
 _Avoid_: invisible (use "intangible" when referring to the game-mechanical untargetable state)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.relationships.constants import TrackSystemKey
@@ -34,6 +34,7 @@ def _shift_effect(amount: int):
     )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Regard/Friction RelationshipTrack gates on #2698
 class ApplyAffectionShiftTests(TestCase):
     def setUp(self) -> None:
         from evennia.utils.idmapper.models import flush_cache
@@ -132,6 +133,7 @@ class ApplyAffectionShiftTests(TestCase):
         self.assertEqual(relationship.affection, 10)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Regard/Friction RelationshipTrack gates on #2698
 class BoonProvenanceShiftTests(TestCase):
     """Boon-keyed shifts (#2540): per-Boon dedup — serial boons stack within one scene."""
 
@@ -194,6 +196,7 @@ class BoonProvenanceShiftTests(TestCase):
             )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_smitten_condition gates on #2698
 class ShiftAffectionSeedTests(TestCase):
     """Flirt/Seduce success consequences carry the SHIFT_AFFECTION effects."""
 

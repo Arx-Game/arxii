@@ -4,7 +4,7 @@ REST-shape rule: these tests call ``.run()`` with plain int ``evidence_id`` kwar
 (never pre-resolved instances) to prove the web dispatch path works.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -31,6 +31,7 @@ def _set_character_location(character, room):
     return character
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_security_check_content gates on #2698
 class EvidenceActionTests(TestCase):
     @classmethod
     def setUpTestData(cls):

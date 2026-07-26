@@ -18,7 +18,7 @@ caches are flushed before each test method.
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from integration_tests.game_content.magic import (
     _HALLOWED_REACTION_SPECS,
@@ -30,6 +30,7 @@ from integration_tests.game_content.magic import (
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ConditionTemplate gates on #2698
 class ResonanceConsequencePoolSeedTests(ResonanceCacheIsolationMixin, TestCase):
     """Core assertions: pools, consequences, effects, and FK wiring after seed."""
 
@@ -253,6 +254,7 @@ class ResonanceConsequencePoolSeedTests(ResonanceCacheIsolationMixin, TestCase):
             self.assertIn(tier, HALLOWED_REACTION_CONDITION_NAMES)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ConditionTemplate gates on #2698
 class ResonanceConsequencePoolIdempotencyTests(ResonanceCacheIsolationMixin, TestCase):
     """Running _seed_resonance_environment_consequence_pools() twice does not create duplicates."""
 

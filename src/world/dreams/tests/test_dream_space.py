@@ -1,6 +1,6 @@
 """Tests for dream space resolution and dreamside perception (#2290)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
@@ -51,8 +51,12 @@ class GetDreamSpaceTests(TestCase):
         assert result is None
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PerceivesDreamsideSleepingTests(TestCase):
-    """Tests that Sleeping characters perceive dreamside."""
+    """Tests that Sleeping characters perceive dreamside.
+
+    Gates on SEED_SAMPLE_CONTENT (#2698) — drives the real Sleeping condition.
+    """
 
     def setUp(self):
         ensure_foundational_capabilities()

@@ -1,6 +1,6 @@
 """Tests for the Champion duel outcome trigger wiring (#1710)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from evennia import create_object
 
 from flows.events.payloads import EncounterCompletedPayload
@@ -25,7 +25,12 @@ from world.covenants.factories import CovenantFactory
 from world.military.factories import MilitaryUnitFactory
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ChampionDuelOutcomeWiringTests(TestCase):
+    """flows.FlowDefinition/TriggerDefinition are content-repo-owned (#2698);
+    wire_champion_duel_trigger() only invents them under SEED_SAMPLE_CONTENT —
+    this test drives the real reactive-trigger firing, so it opts in."""
+
     @classmethod
     def setUpTestData(cls):
         cls.pc_sheet = CharacterSheetFactory()

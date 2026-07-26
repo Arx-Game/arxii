@@ -21,24 +21,42 @@ STEWARD_ROLE_NAME = "House Steward"
 
 
 def ensure_dev_domain() -> None:
-    """Seed the walkable domain loop: house, streams, steward, offers."""
+    """Seed the walkable domain loop: house, streams, steward, offers.
+
+    ``_ensure_house()`` returns ``None`` when the "Arx" ``realms.Realm`` isn't
+    authored/sampled (#2698) — the whole demo loop skips since Society/
+    Organization both hang off it via a required FK.
+    """
     # Scandal vocabulary now lives in the authored seed (scandal_archetypes.py).
     from world.seeds.scandal_archetypes import seed_scandal_archetypes  # noqa: PLC0415
 
     seed_scandal_archetypes()
     organization = _ensure_house()
+    if organization is None:
+        return
     _ensure_income_streams(organization)
     _ensure_steward_offers(organization)
 
 
 def _ensure_house():
+    """Look up (or, under SEED_SAMPLE_CONTENT, invent) the demo house's realm/org.
+
+    ``realms.Realm`` is content-repo-owned (#2698) — looked up rather than
+    invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` when it
+    isn't authored/sampled: ``Society.realm`` is a required FK, so nothing
+    below can be built without it.
+    """
     from world.realms.models import Realm  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.societies.models import Organization, OrganizationType, Society  # noqa: PLC0415
 
-    realm, _ = Realm.objects.get_or_create(
+    realm = authored_or_sample(
+        Realm,
+        {"description": "The default realm.", "crest_asset": "", "theme": ""},
         name="Arx",
-        defaults={"description": "The default realm.", "crest_asset": "", "theme": ""},
     )
+    if realm is None:
+        return None
     society, _ = Society.objects.get_or_create(
         name="PLACEHOLDER Peerage of Arx",
         defaults={"description": "PLACEHOLDER: the landed nobility.", "realm": realm},

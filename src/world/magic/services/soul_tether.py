@@ -19,6 +19,7 @@ FlowDefinition + SERVICE step):
 from __future__ import annotations
 
 from datetime import timedelta
+import logging
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
@@ -55,6 +56,8 @@ from world.relationships.models import CharacterRelationship, RelationshipCapsto
 
 if TYPE_CHECKING:
     from world.magic.models import Thread
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Config getter
@@ -300,10 +303,14 @@ def _install_soul_tether_triggers(
     SoulTetherActiveTemplate ConditionInstance is first created). Later
     tethers reuse the existing Triggers.
 
-    Raises:
-        flows.models.triggers.TriggerDefinition.DoesNotExist: if Phase 3
-            content has not been seeded. In production this is always seeded;
-            in tests, call wire_soul_tether_content() first.
+    ``flows.TriggerDefinition`` is content-repo-owned (#2698) — seeded by
+    ``wire_soul_tether_active_template()`` via ``authored_or_sample()``, which
+    returns ``None`` (after logging) when the row isn't authored and
+    ``SEED_SAMPLE_CONTENT`` is off. Formerly this looked the definition up with
+    ``.get()`` and let a missing row raise ``DoesNotExist`` — now it skips that
+    one Trigger (with a warning) rather than crashing tether formation; a
+    partially-wired tether (missing the redirect and/or stage-advance
+    subscriber) is a real degraded state, not silently papered over.
     """
     from flows.models.triggers import Trigger, TriggerDefinition  # noqa: PLC0415
 
@@ -312,7 +319,15 @@ def _install_soul_tether_triggers(
         "soul_tether_redirect",
         "soul_tether_stage_advance_prompt",
     ):
-        trigger_def = TriggerDefinition.objects.get(name=definition_name)
+        trigger_def = TriggerDefinition.objects.filter(name=definition_name).first()
+        if trigger_def is None:
+            logger.warning(
+                "TriggerDefinition %r not seeded; Soul Tether formed without this "
+                "reactive subscriber (author it in the content repo, or set "
+                "ARXII_SEED_SAMPLE_CONTENT=1 — see #2698).",
+                definition_name,
+            )
+            continue
         trigger = Trigger.objects.create(
             obj=sinner_objectdb,
             trigger_definition=trigger_def,

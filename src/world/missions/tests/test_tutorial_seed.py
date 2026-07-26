@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.missions.constants import DeedRewardSink, ExternalAct, GiverKind, OptionKind
 from world.missions.models import (
@@ -47,6 +47,7 @@ def _gate_for(template: MissionTemplate) -> dict:
     return {"leaf": "has_completed_mission", "params": {"template_id": template.pk}}
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # missions.* tutorial-chain content gates on #2698
 class SeedTutorialDevTests(TestCase):
     """Row shape of the T1-T7 chain + idempotency."""
 
@@ -243,6 +244,7 @@ class SeedTutorialDevTests(TestCase):
             self.assertTrue(option.node.is_entry)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # missions.* tutorial-chain content gates on #2698
 class MissionOptionRouteQueryHelperTests(TestCase):
     """Sanity: the chain's routes are structurally reachable via ORM lookups
     the way the reward-emission engine walks them (no orphaned FKs)."""
@@ -267,6 +269,7 @@ class MissionOptionRouteQueryHelperTests(TestCase):
             self.assertIsNone(route.target_node_id)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # missions.* tutorial-chain content gates on #2698
 class AuditLegendFloorTutorialChainTests(TestCase):
     """``audit_legend_floor`` (#2051 risk-floor guard) reports no violations
     for the seeded T1-T7 chain templates (#1035 review fold-in F2) — a

@@ -21,6 +21,8 @@ Test coverage:
 
 from __future__ import annotations
 
+from django.test import override_settings
+
 from actions.definitions.social import EntranceAction
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import ObjectDBFactory
@@ -60,11 +62,17 @@ def _make_room(label: str = "BattleEntranceRoom") -> object:
     )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class BattleFrontEntranceTestBase(CastScenarioMixin):
     """Shared fixture: cast scenario + a battle with a place and stationed participant.
 
     The caster is enlisted as a BattleParticipant stationed at a BattlePlace
     whose battle's scene is the cast scenario's scene.
+
+    The "Grand Entrance" DramaticMomentType (+ its Affinity/Resonance) is
+    content-repo-owned (#2698); ``SEED_SAMPLE_CONTENT`` opts this suite into
+    the sample-seeding path so ``ensure_dramatic_entrance_content()`` still
+    returns a real row.
     """
 
     @classmethod

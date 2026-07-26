@@ -1,10 +1,9 @@
 """TRAIN offer kind (#2440): Academy trainers teach techniques for AP + coin + a Hare."""
 
-import math
 from unittest import mock
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.classes.factories import PathFactory
 from world.currency.models import FavorTokenDetails
@@ -85,17 +84,24 @@ class TrainOfferHappyPathTests(TestCase):
     def test_happy_path_debits_all_three_currencies_and_creates_technique(self) -> None:
         result = run_train_offer(self.offer, self.persona)
 
-        known = CharacterTechnique.objects.filter(character=self.sheet, technique=self.technique)
-        self.assertTrue(known.exists())
+        # Meter created, not CharacterTechnique (#2711)
+        from world.magic.models import TechniqueProgress
+
+        progress = TechniqueProgress.objects.filter(
+            character_sheet=self.sheet, technique=self.technique
+        )
+        self.assertTrue(progress.exists())
         self.assertIsNotNone(result.object_pk)
 
-        # AP: gift not yet owned -> first_technique_ap_multiplier applies.
+        # AP: not spent at meter creation — spent per-session (#2711).
+        # Meter total reflects the first_technique_ap_multiplier.
         from world.magic.services.gift_acquisition import get_gift_acquisition_config
 
         config = get_gift_acquisition_config()
-        expected_ap = self.details.learn_ap_cost * config.first_technique_ap_multiplier
+        expected_total = self.details.learn_ap_cost * config.first_technique_ap_multiplier
+        self.assertEqual(progress.first().total_required, expected_total)
         self.ap_pool.refresh_from_db()
-        self.assertEqual(self.ap_pool.current, 200 - expected_ap)
+        self.assertEqual(self.ap_pool.current, 200)
 
         # Coin: purse -> Academy treasury.
         self.purse.refresh_from_db()
@@ -209,10 +215,13 @@ class TrainOfferSignatureMembersOnlyTests(TestCase):
         result = run_train_offer(self.offer, self.persona)
 
         self.assertIsNotNone(result.object_pk)
-        known = CharacterTechnique.objects.filter(
-            character=self.sheet, technique=self.special_technique
+        # Meter created, not CharacterTechnique (#2711)
+        from world.magic.models import TechniqueProgress
+
+        progress = TechniqueProgress.objects.filter(
+            character_sheet=self.sheet, technique=self.special_technique
         )
-        self.assertTrue(known.exists())
+        self.assertTrue(progress.exists())
 
     def test_left_member_is_blocked(self) -> None:
         """A membership row with left_at set is not active — TRAIN treats it as if the
@@ -322,11 +331,30 @@ class TrainOfferAtomicChargeSequenceTests(TestCase):
         self.assertIsNone(row.redeemed_at)
 
     def test_charge_and_learn_failure_leaves_hare_unredeemed(self) -> None:
-        """Insufficient AP fails charge_and_learn before the Hare is ever touched."""
+        """A cap-exceeded failure rolls back the whole atomic block — Hare
+        stays unredeemed (#2711: AP is no longer spent at meter creation, so
+        0 AP is no longer a failure trigger; use cap-exceeded instead)."""
         from world.currency.models import CharacterPurse, OrganizationTreasury
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import Thread
 
-        self.ap_pool.current = 0
-        self.ap_pool.save()
+        # Fill the technique cap (level-10 thread → depth 1 → cap 3)
+        resonance = ResonanceFactory()
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=10,
+        )
+        from world.magic.factories import TechniqueFactory
+        from world.magic.models import CharacterTechnique
+
+        for _ in range(3):
+            CharacterTechnique.objects.create(
+                character=self.sheet, technique=TechniqueFactory(gift=self.gift)
+            )
 
         result = run_train_offer(self.offer, self.persona)
 
@@ -405,12 +433,18 @@ class TrainOfferApCostGuardTests(TestCase):
         self.assertIn("isn't yours to learn", result.message)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TrainOfferUnboundSurchargeTests(TestCase):
     """The Unbound magic-learning AP surcharge (#2442) on the Academy TRAIN
     door — the other of ``charge_and_learn``'s two front doors (#2440), proving
     the surcharge applies identically here as it does on the PC-teaching-accept
     door (see world.magic.tests.test_gift_acquisition_service
-    .UnboundMagicLearningApSurchargeTest)."""
+    .UnboundMagicLearningApSurchargeTest).
+
+    mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    the surcharge's target only invents under SEED_SAMPLE_CONTENT — this test
+    asserts on the real surcharge amount, so it opts in.
+    """
 
     def setUp(self) -> None:
         from world.action_points.models import ActionPointPool
@@ -450,8 +484,15 @@ class TrainOfferUnboundSurchargeTests(TestCase):
         self.unbound_distinction = ensure_unbound_drawback_distinction()
 
     def test_unbound_learner_pays_surcharge_on_train(self) -> None:
+        """The Unbound surcharge is per-session, not at meter creation (#2711).
+
+        The meter total is the base cost (first_technique_ap_multiplier only);
+        the surcharge increases AP cost per-session via
+        ``contribute_to_technique_progress``.
+        """
         from world.distinctions.services import grant_distinction
         from world.distinctions.types import DistinctionOrigin
+        from world.magic.models import TechniqueProgress
         from world.magic.services.gift_acquisition import get_gift_acquisition_config
 
         grant_distinction(
@@ -460,28 +501,35 @@ class TrainOfferUnboundSurchargeTests(TestCase):
 
         result = run_train_offer(self.offer, self.persona)
 
-        known = CharacterTechnique.objects.filter(character=self.sheet, technique=self.technique)
-        self.assertTrue(known.exists())
+        progress = TechniqueProgress.objects.filter(
+            character_sheet=self.sheet, technique=self.technique
+        )
+        self.assertTrue(progress.exists())
         self.assertIsNotNone(result.object_pk)
 
         config = get_gift_acquisition_config()
-        # gift not yet owned -> first_technique_ap_multiplier applies, THEN the
-        # +50% Unbound surcharge (ceil).
-        base = self.details.learn_ap_cost * config.first_technique_ap_multiplier
-        expected_ap = math.ceil(base * 1.5)
+        # Meter total = base × first_technique_ap_multiplier (no surcharge)
+        expected_total = self.details.learn_ap_cost * config.first_technique_ap_multiplier
+        self.assertEqual(progress.first().total_required, expected_total)
+        # AP not spent at meter creation
         self.ap_pool.refresh_from_db()
-        self.assertEqual(self.ap_pool.current, 200 - expected_ap)
+        self.assertEqual(self.ap_pool.current, 200)
 
     def test_non_unbound_learner_unaffected_on_train(self) -> None:
+        from world.magic.models import TechniqueProgress
         from world.magic.services.gift_acquisition import get_gift_acquisition_config
 
         result = run_train_offer(self.offer, self.persona)
 
-        known = CharacterTechnique.objects.filter(character=self.sheet, technique=self.technique)
-        self.assertTrue(known.exists())
+        progress = TechniqueProgress.objects.filter(
+            character_sheet=self.sheet, technique=self.technique
+        )
+        self.assertTrue(progress.exists())
         self.assertIsNotNone(result.object_pk)
 
         config = get_gift_acquisition_config()
-        expected_ap = self.details.learn_ap_cost * config.first_technique_ap_multiplier
+        expected_total = self.details.learn_ap_cost * config.first_technique_ap_multiplier
+        self.assertEqual(progress.first().total_required, expected_total)
+        # AP not spent at meter creation
         self.ap_pool.refresh_from_db()
-        self.assertEqual(self.ap_pool.current, 200 - expected_ap)
+        self.assertEqual(self.ap_pool.current, 200)

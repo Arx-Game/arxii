@@ -1529,10 +1529,21 @@ and the list of threads to pull:
      levels 1-9).
      The level-scaling rule applies to all numeric
      effect_kinds (FLAT_BONUS, INTENSITY_BUMP, VITAL_BONUS).
-     CAPABILITY_GRANT and NARRATIVE_ONLY do not scale (granting a
-     capability is binary; a narrative snippet is text). For
-     CAPABILITY_GRANT, `min_thread_level` is the gating mechanism
-     instead of scaling.
+     **In this pull-commit path** (`resolve_pull_effects`, tiers 0-3, feeding
+     `CombatPull`/`CombatPullResolvedEffect`), CAPABILITY_GRANT and NARRATIVE_ONLY do
+     not scale — granting a capability here is still binary, and `min_thread_level` is
+     the gating mechanism instead of scaling; a narrative snippet is text either way.
+     **A separate, newer mechanism curves CAPABILITY_GRANT for the capability-value
+     oracles** (`get_effective_capability_value`/`get_all_capability_values`, not this
+     pull-resolution path): `ThreadPullEffect.capability_grant_value` (#2708) is read by
+     `CharacterThreadHandler._passive_capability_grants_cache`, which applies the same
+     geometric power curve as `TechniqueCapabilityGrant.calculate_value()` (sensitivity =
+     `thread_level_multiplier(thread.level)`) — see `docs/systems/conditions.md`'s
+     "Capability magnitude curve" section and ADR-0169. The two mechanisms read the same
+     authored `ThreadPullEffect` row differently: this pull-commit path answers "is the
+     capability granted for this committed pull," the other answers "what is this
+     capability's standing value right now" — do not assume a fix to one applies to the
+     other.
      A thread at level 0 (just-woven, never imbued) applies effects at
      ×1 baseline so freshly-woven threads still feel like something.
      Add (effect_row, scaled_amount, source_thread) tuples to the active

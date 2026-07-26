@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from evennia.accounts.models import AccountDB
 
 from world.character_creation.models import Beginnings, StartingArea
@@ -39,6 +39,7 @@ from world.traits.factories import TraitFactory
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Arcana Aspect gates on #2698
 class CharacterMagicCheckTypeTests(TestCase):
     @classmethod
     def setUpTestData(cls):

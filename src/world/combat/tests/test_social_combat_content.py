@@ -1,11 +1,17 @@
 """Tests for the social-combat content seed (#2015)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.combat.social_combat_content import ensure_social_combat_content
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SocialCombatContentSeedTests(TestCase):
+    """The Charm technique's Gift/EffectType/Technique are content-repo-owned
+    (#2698) — this suite exercises the sample-seeding path to still get a
+    real Technique row to assert against.
+    """
+
     def test_seed_creates_four_check_types(self) -> None:
         from world.checks.models import CheckType
 

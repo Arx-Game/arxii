@@ -59,6 +59,7 @@ from world.magic.factories import (
     ThreadPullEffectFactory,
 )
 from world.magic.models.techniques import ConditionTargetKind
+from world.magic.services.cast_observation import CastAudience
 from world.magic.services.gain import tag_room_resonance
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.magic.types.power_ledger import PowerLedgerBuilder
@@ -391,14 +392,16 @@ class TestCreateCastOutcomePoseLedgerClause(TestCase):
             technique_result=None,
         )
 
-        pose = create_cast_outcome_pose(
+        pose, vague_pose = create_cast_outcome_pose(
             scene=scene,
             caster_persona=caster,
             target_persona=None,
             technique=technique,
             result=result,
             power_ledger=ledger,
+            audience=CastAudience(concealed=False, full=[], vague=[]),
         )
+        self.assertIsNone(vague_pose)
         self.assertTrue(
             pose.content.endswith("— the place's resonance swells the working."),
             f"OUTCOME pose missing environment clause: {pose.content!r}",

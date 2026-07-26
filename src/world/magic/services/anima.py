@@ -187,6 +187,14 @@ def apply_anima_ritual_outcome(
     stage_after = None
     if soulfray_inst is not None:
         stage_after = soulfray_inst.current_stage
+    # checks.CheckType is content-repo-owned (#2698); SoulfrayConfig.
+    # resilience_check_type is a required FK, so seed_magic_config() skips the
+    # singleton entirely when the "Magical Endurance" CheckType isn't
+    # authored — config may legitimately be None here. Severity reduction is
+    # skipped gracefully (the anima refill below still applies, and
+    # soulfray_stage_after still reports the current stage above) rather than
+    # crashing on config.ritual_severity_cost_per_point.
+    if soulfray_inst is not None and config is not None:
         while budget >= config.ritual_severity_cost_per_point and soulfray_inst.severity > 0:
             decay_result = decay_condition_severity(soulfray_inst, amount=1)
             severity_reduced += 1

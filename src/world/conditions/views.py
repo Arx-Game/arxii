@@ -204,7 +204,12 @@ def _aggregate_capability_effects(lookups: EffectLookups) -> CapabilitySummary:
             continue
         cap_name = effect.capability.name
         modifier = effect.value
-        if inst.current_stage:
+        # effective_severity already folds in the stage multiplier, so scaling by
+        # severity and by the stage are mutually exclusive — if/elif, not two ifs,
+        # mirroring get_capability_status / get_all_capability_values (#2708).
+        if effect.scales_with_severity:
+            modifier = int(modifier * inst.effective_severity)
+        elif inst.current_stage:
             modifier = int(modifier * inst.current_stage.severity_multiplier)
         summary.values[cap_name] = summary.values.get(cap_name, 0) + modifier
     # Floor at 0

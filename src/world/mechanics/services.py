@@ -1160,9 +1160,28 @@ def get_capability_sources_for_character(
     return sources
 
 
-def _get_technique_sources(character: ObjectDB) -> list[CapabilitySource]:
-    """Get Capability sources from character's known Techniques."""
-    grants = (
+def _get_technique_sources(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM — pre-existing signature (world.mechanics
+    # is not yet in the objectdb-param lint scope); `.threads` is reached directly off
+    # the ObjectDB the same way `_passive_capability_grants` reaches it off a CharacterSheet.
+) -> list[CapabilitySource]:
+    """Get Capability sources from character's known Techniques.
+
+    #2708: each grant's value is computed against the SAME real power figure
+    ``_technique_capability_values`` (``world.conditions.services``, the agency oracle)
+    uses — ``technique.intensity + context_free_power + contextual_thread_power(...)`` —
+    so both oracles agree on a character's capability standing (spec decision 9:
+    combat's ``eff_intensity`` pull bumps are deliberately NOT threaded in here either,
+    so availability doesn't flicker based on whether combat is running). The
+    technique->gift mapping ``contextual_thread_power`` needs is resolved ONCE for
+    every technique in this sweep, never per grant, to keep the sweep constant-query.
+
+    ``CapabilityPowerConfig`` is likewise fetched ONCE for the whole sweep and threaded
+    through every ``calculate_value(config=...)`` call, mirroring ``power_by_technique``
+    below (Task 5 review finding 1/2 — left to its own single-fetch default,
+    ``calculate_value`` issues one query per grant).
+    """
+    grants = list(
         TechniqueCapabilityGrant.objects.filter(
             technique__character_grants__character__character=character,
         )
@@ -1187,10 +1206,52 @@ def _get_technique_sources(character: ObjectDB) -> list[CapabilitySource]:
             ),
         )
     )
+    if not grants:
+        return []
 
+    from world.magic.services.capability_curve import get_capability_power_config  # noqa: PLC0415
+    from world.magic.services.resonance import resolve_gift_ids_by_technique  # noqa: PLC0415
+    from world.magic.types.pull import PullActionContext  # noqa: PLC0415
+
+    power_config = get_capability_power_config()
+    if power_config is None:
+        # Inert invariant (#2708 C1): no config row means the curve is disabled
+        # EVERYWHERE. Skip the thread/power derivation entirely — see the sibling
+        # note in world.conditions.services._technique_capability_values, the
+        # agency oracle this availability oracle must agree with in the inert
+        # state. See ``_inert_technique_capability_sources`` for why bare
+        # ``calculate_value()`` reproduces the pre-#2708 output exactly.
+        return _inert_technique_capability_sources(grants)
+
+    try:
+        handler = character.threads
+    except AttributeError:
+        from world.magic.handlers import CharacterThreadHandler  # noqa: PLC0415
+
+        handler = CharacterThreadHandler(character)
+
+    # The technique->gift mapping only matters to GIFT-thread ambient bumps; a
+    # character owning no threads at all can never have one, so skip the query.
+    gift_id_by_technique: dict[int, int] = {}
+    if handler.all():
+        gift_id_by_technique = resolve_gift_ids_by_technique(
+            tuple({grant.technique_id for grant in grants})
+        )
+
+    power_by_technique: dict[int, int] = {}
     sources: list[CapabilitySource] = []
     for grant in grants:
-        value = grant.calculate_value()
+        technique_id = grant.technique_id
+        power = power_by_technique.get(technique_id)
+        if power is None:
+            ctx = PullActionContext(involved_techniques=(technique_id,))
+            power = (
+                grant.technique.intensity
+                + handler.context_free_power
+                + handler.contextual_thread_power(ctx, gift_id_by_technique=gift_id_by_technique)
+            )
+            power_by_technique[technique_id] = power
+        value = grant.calculate_value(effective_power=power, config=power_config)
         if value <= 0:
             continue
 
@@ -1210,6 +1271,40 @@ def _get_technique_sources(character: ObjectDB) -> list[CapabilitySource]:
             )
         )
 
+    return sources
+
+
+def _inert_technique_capability_sources(
+    grants: list[TechniqueCapabilityGrant],
+) -> list[CapabilitySource]:
+    """Availability-oracle sources with ``calculate_value()`` called bare.
+
+    The inert branch of the #2708 C1 fix: with no ``CapabilityPowerConfig`` row,
+    the curve is disabled everywhere, so ``calculate_value()`` (no ``effective_power``
+    passed) falls back to ``self.technique.intensity`` and returns the RETIRED
+    additive formula unchanged — byte-identical to the pre-#2708 value. Mirrors
+    ``world.conditions.services._inert_technique_capability_totals``, the agency
+    oracle's sibling; extracted to a module-level helper purely to keep
+    ``_get_technique_sources``'s cyclomatic complexity under the lint ceiling.
+    """
+    sources: list[CapabilitySource] = []
+    for grant in grants:
+        value = grant.calculate_value(config=None)
+        if value <= 0:
+            continue
+        effect_property_ids = _get_technique_effect_property_ids(grant.technique)
+        sources.append(
+            CapabilitySource(
+                capability_name=grant.capability.name,
+                capability_id=grant.capability_id,
+                value=value,
+                source_type=CapabilitySourceType.TECHNIQUE,
+                source_name=grant.technique.name,
+                source_id=grant.technique_id,
+                effect_property_ids=effect_property_ids,
+                prerequisite=grant.prerequisite,
+            )
+        )
     return sources
 
 

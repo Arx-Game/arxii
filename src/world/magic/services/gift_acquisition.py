@@ -12,7 +12,6 @@ earning/spending is untouched.
 
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -35,10 +34,10 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.currency.models import OrganizationTreasury
     from world.magic.models import (
-        CharacterTechnique,
         Gift,
         GiftUnlock,
         Technique,
+        TechniqueProgress,
         TechniqueTeachingOffer,
     )
     from world.roster.models import RosterTenure
@@ -140,18 +139,30 @@ def spend_xp_on_gift_unlock(
 
 
 def count_techniques_for_gift(sheet: CharacterSheet, gift: Gift) -> int:
-    """Count CharacterTechnique rows for ``gift``.
+    """Count CharacterTechnique + in-progress TechniqueProgress rows for ``gift``.
 
     Variants (TechniqueVariant) are derived on read (ADR-0055) — they are
     never stored as CharacterTechnique rows, so all CharacterTechnique rows
     for this gift are base techniques that count against the cap.
-    """
-    from world.magic.models import CharacterTechnique  # noqa: PLC0415
 
-    return CharacterTechnique.objects.filter(
+    In-progress TechniqueProgress meters also count against the cap (#2711) —
+    a character training toward a technique has committed a slot even though
+    the CharacterTechnique row doesn't exist yet.
+    """
+    from world.magic.models import (  # noqa: PLC0415
+        CharacterTechnique,
+        TechniqueProgress,
+    )
+
+    learned = CharacterTechnique.objects.filter(
         character=sheet,
         technique__gift=gift,
     ).count()
+    in_progress = TechniqueProgress.objects.filter(
+        character_sheet=sheet,
+        technique__gift=gift,
+    ).count()
+    return learned + in_progress
 
 
 def _gift_thread_depth(sheet: CharacterSheet, gift: Gift) -> int:
@@ -260,24 +271,30 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
     gold_treasury: OrganizationTreasury | None = None,
     teacher_tenure: RosterTenure | None = None,
     teacher_banked_ap: int = 0,
-) -> CharacterTechnique:
-    """Shared charge+acquire core for technique acquisition (#1587, #2440).
+) -> TechniqueProgress:
+    """Shared charge+acquire core for technique acquisition (#1587, #2440, #2711).
 
     One seam, two front doors: ``accept_technique_offer`` (player-to-player
     teaching) and the Academy TRAIN offer handler
     (``world.npc_services.effects.run_train_offer``) both delegate here.
+
+    Creates a ``TechniqueProgress`` meter instead of minting immediately
+    (#2711). The learner fills the meter in subsequent sessions via
+    ``contribute_to_technique_progress``. The teacher's banked AP and any
+    gold/Hare are consumed at meter creation (commitment).
 
     If the learner doesn't yet have the technique's gift, this implicitly
     acquires it (via grant_gift_to_character). The first technique from
     a not-yet-acquired gift costs more AP (config.first_technique_ap_multiplier)
     and requires a CharacterGiftUnlock receipt (the XP gate).
 
-    After the has-gift/major-gift multiplier, the Unbound magic-learning AP
-    surcharge (#2442) scales the result: ``ceil(ap_cost × (100 + surcharge%) /
-    100)``, where ``surcharge%`` is the learner's live ``magic_learning_ap_cost``
-    modifier total (``magic_learning_ap_cost_surcharge_percent``, +50 while the
-    "Unbound" drawback distinction is held, 0 once shed via
-    ``world.magic.services.tradition_membership.join_tradition``).
+    The Unbound magic-learning AP surcharge (#2442) is applied per-session
+    by ``contribute_to_technique_progress``, not to the meter total.
+
+    Cross-path friction (#2711): when the teacher's ``Path.style`` differs
+    from the learner's, ``total_required`` is multiplied by
+    ``config.cross_path_cost_multiplier``. Null style on either side =
+    no surcharge (fail-open).
 
     Args:
         learner: The character learning the technique.
@@ -297,27 +314,27 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
             Meaningless when ``teacher_tenure`` is None.
 
     Returns:
-        The new CharacterTechnique.
+        The new TechniqueProgress meter. The learner trains via
+        ``contribute_to_technique_progress`` in subsequent sessions.
 
     Raises:
         GiftUnlockMissing: First technique from a gift with no receipt.
         TechniqueCapExceeded: At the cap for this gift at current thread level.
-        MagicError: Insufficient action points.
         ValueError: Learner already knows this technique.
     """
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
     from world.magic.exceptions import (  # noqa: PLC0415
         GiftUnlockMissing,
-        MagicError,
         TechniqueCapExceeded,
     )
     from world.magic.models import (  # noqa: PLC0415
         CharacterGift,
         CharacterResonance,
         CharacterTechnique,
+        TechniqueProgress,
     )
-    from world.magic.services.technique_acquisition import (  # noqa: PLC0415
-        learn_technique,
+    from world.magic.services.technique_progress import (  # noqa: PLC0415
+        is_cross_path_learning,
     )
     from world.magic.specialization.services import (  # noqa: PLC0415
         grant_gift_to_character,
@@ -336,24 +353,22 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
     # 2. Check if learner has the gift.
     has_gift = CharacterGift.objects.filter(character=sheet, gift=gift).exists()
 
-    # 3. Compute AP cost.
+    # 3. Compute total_required from base_ap_cost × existing multipliers.
     config = get_gift_acquisition_config()
     if not has_gift:
         # Check the XP gate (CharacterGiftUnlock receipt).
         if not CharacterGiftUnlock.objects.filter(character=sheet, unlock__gift=gift).exists():
             raise GiftUnlockMissing
-        ap_cost = base_ap_cost * config.first_technique_ap_multiplier
+        total_required = base_ap_cost * config.first_technique_ap_multiplier
     elif gift.kind == GiftKind.MAJOR:
-        ap_cost = base_ap_cost * config.major_gift_ap_multiplier
+        total_required = base_ap_cost * config.major_gift_ap_multiplier
     else:
-        ap_cost = base_ap_cost
+        total_required = base_ap_cost
 
-    # 3b. Unbound magic-learning AP surcharge (#2442) — TIME, not power; applies
-    # identically to both front doors (accept_technique_offer and #2440 TRAIN),
-    # since both delegate here. ceil() so a fractional surcharge never rounds down
-    # to a free ride.
-    surcharge_percent = magic_learning_ap_cost_surcharge_percent(sheet)
-    ap_cost = math.ceil(ap_cost * (100 + surcharge_percent) / 100)
+    # 3b. Cross-path multiplier (#2711).
+    cross_path = is_cross_path_learning(teacher_tenure, sheet)
+    if cross_path:
+        total_required = int(total_required * config.cross_path_cost_multiplier)
 
     # 4. Implicit gift acquisition (first technique).
     if not has_gift:
@@ -371,12 +386,9 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
     if current_count >= cap:
         raise TechniqueCapExceeded
 
-    # 6. Spend learner AP. Consume teacher's banked AP (teaching path only).
-    learner_pool = ActionPointPool.get_or_create_for_character(sheet.character)
-    if not learner_pool.can_afford(ap_cost):
-        msg = f"Insufficient action points (need {ap_cost}, have {learner_pool.current})."
-        raise MagicError(msg)
-    learner_pool.spend(ap_cost)
+    # 6. Consume teacher's banked AP (teaching path only). Learner AP is
+    # no longer spent here — it's spent per-session via
+    # contribute_to_technique_progress (#2711).
     if teacher_tenure is not None:
         teacher_pool = ActionPointPool.get_or_create_for_character(teacher_tenure.character)
         teacher_pool.consume_banked(teacher_banked_ap)
@@ -397,24 +409,27 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
             to_treasury=gold_treasury,
         )
 
-    # 7-8. Delegate mint + announce to the shared commit seam.
-    # AP is already spent above (step 6); learn_technique receives ap_cost=0.
-    # The gift-owned check in learn_technique passes because step 4 acquired
-    # the gift if needed. The gate/cap/duplicate checks re-run idempotently.
-    return learn_technique(
-        sheet,
-        technique,
+    # 7. Create the progress meter. The learner trains in subsequent
+    # sessions via contribute_to_technique_progress (#2711).
+    return TechniqueProgress.objects.create(
+        character_sheet=sheet,
+        technique=technique,
+        total_required=total_required,
+        teacher_tenure=teacher_tenure,
         source=source,
-        ap_cost=0,
-        location=sheet.character.location,
+        is_cross_path=cross_path,
     )
 
 
 def accept_technique_offer(
     learner: CharacterSheet,
     offer: TechniqueTeachingOffer,
-) -> CharacterTechnique:
-    """Accept a TechniqueTeachingOffer — the acquisition step (#1587).
+) -> TechniqueProgress:
+    """Accept a TechniqueTeachingOffer — creates a training meter (#1587, #2711).
+
+    Creates a ``TechniqueProgress`` meter instead of minting immediately
+    (#2711). The learner fills the meter in subsequent sessions via
+    ``contribute_to_technique_progress``.
 
     If the learner doesn't yet have the technique's gift, this implicitly
     acquires it (via grant_gift_to_character). The first technique from
@@ -429,7 +444,7 @@ def accept_technique_offer(
         offer: The TechniqueTeachingOffer being accepted.
 
     Returns:
-        The new CharacterTechnique.
+        The new TechniqueProgress meter.
 
     Raises:
         GiftUnlockMissing: First technique from a gift with no receipt.

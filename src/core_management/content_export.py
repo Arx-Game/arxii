@@ -41,6 +41,21 @@ class ContentExportError(Exception):
 #:
 #: Every model here must have ``NaturalKeyMixin`` so the exported fixtures
 #: are identity-stable (no pk churn) and round-trip through ``load_entries``.
+#:
+#: **Config never belongs here** (TehomCD, 2026-07-25; ADR-0168). This set is
+#: also what #2698's seeder guard reads: whatever is registered here, the
+#: content repo owns and no seeder may create. So a mechanical tuning table
+#: registered by mistake doesn't just bloat the corpus — it tells the seeder to
+#: stop producing something the game needs.
+#:
+#: The pk-keyed tuning singletons (``magic.fallredemptionconfig``,
+#: ``covenants.mentorbondconfig``, ``magic.soultetherconfig``) were removed for
+#: exactly that reason. Their ``NaturalKeyConfig.fields`` is ``["pk"]``, and the
+#: export writes no ``pk``, so ``load_entries`` could never resolve their
+#: identity — both shipped fixtures existed in the lore repo for months and
+#: loaded zero rows. A natural key of "pk" carries no content identity; a table
+#: whose whole payload is tuning multipliers with model-level defaults is config,
+#: and config is the Big Button's job.
 CONTENT_MODELS: frozenset[str] = frozenset(
     {
         # achievements
@@ -102,7 +117,6 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "covenants.covenantroletechniquespecialty",
         "covenants.geararchetypecompatibility",
         "covenants.insighttableentry",
-        "covenants.mentorbondconfig",
         "covenants.weaknesspoolentry",
         "covenants.vowsituationalperk",
         "covenants.vowsituationalperkrung",
@@ -135,7 +149,6 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.dramaticmomenttype",
         "magic.effecttype",
         "magic.facet",
-        "magic.fallredemptionconfig",
         "magic.gift",
         "magic.glimpsetag",
         "magic.glimpsetagdistinctionsuggestion",
@@ -146,7 +159,6 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.restriction",
         "magic.resonanceconversion",
         "magic.ritual",
-        "magic.soultetherconfig",
         "magic.stylecapabilityrequirement",
         "magic.technique",
         "magic.techniqueappliedcondition",

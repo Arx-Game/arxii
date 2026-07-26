@@ -931,6 +931,12 @@ def _advance_move_mover(
     if capability_type is None:
         max_distance = Decimal(0)
     elif is_self_move:
+        # #2708 Task 8: no technique or trait is genuinely in scope for grid movement
+        # on the battle map — MOVE is a generic capability read, not tied to any one
+        # trait/technique in play. Leaving action_ctx at its ambient default (rather
+        # than fabricating involved_traits/involved_techniques) keeps TRAIT-kind
+        # threads honestly dark here, same as any other capability read with no real
+        # action context to supply.
         max_distance = Decimal(
             get_effective_capability_value(participant.character_sheet, capability_type)
         )

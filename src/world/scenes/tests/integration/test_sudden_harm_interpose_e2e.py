@@ -41,7 +41,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
@@ -87,6 +87,7 @@ def _clean_block_dispatch(  # noqa: PLR0913
     return result
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class SuddenHarmInterposeE2ETests(TestCase):
     """Full journey: trap fires via apply_effect -> ally Interposes via the real
     action seam -> the round resolves -> the outcome is confirmed."""

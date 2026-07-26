@@ -136,6 +136,11 @@ def ensure_frame_job_contribution_method() -> None:
     ``Forge Evidence`` (wits + Skulduggery + Forgery, the #1825 security seed) is
     the check — patient hands reworking what the crime left behind. AP cost /
     progress magnitudes are PLACEHOLDER.
+
+    ``checks.CheckType`` is content-repo-owned (#2698) — ``check_type`` is a
+    required FK on ``ContributionMethod``, so the whole method is skipped when
+    "Forge Evidence" still isn't seeded after ``seed_security_check_content()``
+    runs, rather than raising ``CheckType.DoesNotExist``.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.projects.constants import ProjectKind  # noqa: PLC0415
@@ -145,7 +150,9 @@ def ensure_frame_job_contribution_method() -> None:
     check_type = CheckType.objects.filter(name="Forge Evidence").first()
     if check_type is None:
         seed_security_check_content()
-        check_type = CheckType.objects.get(name="Forge Evidence")
+        check_type = CheckType.objects.filter(name="Forge Evidence").first()
+    if check_type is None:
+        return
 
     ContributionMethod.objects.update_or_create(
         kind=ProjectKind.FRAME_JOB,

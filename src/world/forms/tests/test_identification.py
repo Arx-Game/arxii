@@ -5,7 +5,7 @@ overlay FULL) x (stranger / active relationship / famous true-persona), plus gue
 and the auto-fail band.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -38,6 +38,7 @@ from world.traits.factories import CheckOutcomeFactory
 from world.traits.models import Trait, TraitType
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_investigation_check_content gates on #2698
 class IdentificationCheckSeedTests(TestCase):
     """The seeded ``CheckType`` — intellect + Investigation (Decision 1)."""
 
@@ -301,6 +302,7 @@ class IdentificationDifficultyTests(TestCase):
         self.assertTrue(odds.auto_fail)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_investigation_check_content gates on #2698
 class AttemptIdentificationTests(TestCase):
     """``attempt_identification`` — the roll + ``PersonaDiscovery``-write orchestrator (Task 2).
 

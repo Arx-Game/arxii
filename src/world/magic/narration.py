@@ -34,6 +34,16 @@ def render_cast_outcome_narration(  # noqa: PLR0913 - stable caller signature
     return f"{base} {fizzle_note}" if fizzle_note else base
 
 
+def render_vague_cast_narration() -> str:
+    """The line a marginally-detecting observer gets for a concealed cast (#2710).
+
+    Deliberately carries no attribution — no caster, no technique, no outcome. The
+    observer registered that something was worked, and nothing more; naming either
+    party here would collapse the graded-detection tier into the full one.
+    """
+    return "Something is being worked here — you cannot tell by whom."
+
+
 def signature_clause(snippet: str | None) -> str:
     """Build a cosmetic em-dash clause from an already-resolved signature snippet.
 

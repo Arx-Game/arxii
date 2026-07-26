@@ -75,7 +75,12 @@ from actions.definitions.companions import (
     PromoteSummonAction,
     ReleaseCompanionAction,
 )
-from actions.definitions.conditions import treat_condition
+from actions.definitions.conditions import (
+    break_free,
+    rally,
+    reveal_condition,
+    treat_condition,
+)
 from actions.definitions.consent_preferences import (
     AddSocialConsentBlacklistAction,
     AddSocialConsentWhitelistAction,
@@ -692,6 +697,9 @@ _ALL_ACTIONS: list[Action] = [
     resolve_entry_flourish,
     resolve_crossing_offer,
     treat_condition,
+    break_free,
+    reveal_condition,
+    rally,
     SanctumInstallAction(),
     SanctumHomecomingAction(),
     SanctumPurgingAction(),

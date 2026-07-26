@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.models import CheckType
@@ -86,6 +86,7 @@ from world.combat.social_combat_content import ensure_social_combat_content  # n
 from world.traits.factories import CheckOutcomeFactory  # noqa: E402
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_social_combat_content gates on #2698
 class ResolveSocialVerbTests(TestCase):
     """E2E resolve tests for the social verbs (#2015).
 
@@ -147,6 +148,7 @@ class ResolveSocialVerbTests(TestCase):
         self.assertEqual(record.threat_value, TAUNT_THREAT_PER_LEVEL)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_social_combat_content gates on #2698
 class ResolveSocialCheckSituationContextTests(TestCase):
     """#2536 Task 5 review fix: `_resolve_social_check` (the shared Rally/
     Demoralize/Taunt/Parley roll seam) must thread a SituationContext into
@@ -181,6 +183,7 @@ class ResolveSocialCheckSituationContextTests(TestCase):
         self.assertEqual(situation_ctx.resolution.participant, self.participant)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_social_combat_content gates on #2698
 class TargetSituationalPerkFiresThroughSocialCombatTests(TestCase):
     """#2536 Task 6 review fix (Important finding — untested fold-in): proves
     a TARGET_* situational perk genuinely fires through the shared

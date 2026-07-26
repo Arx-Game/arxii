@@ -1,6 +1,6 @@
 """Tests for the general party-encounter outcome trigger wiring (#2008)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from evennia import create_object
 
 from flows.events.payloads import EncounterCompletedPayload
@@ -26,7 +26,12 @@ from world.military.factories import MilitaryUnitFactory
 from world.scenes.constants import RoundStatus
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PlaceEncounterOutcomeWiringTests(TestCase):
+    """flows.FlowDefinition/TriggerDefinition are content-repo-owned (#2698);
+    wire_place_encounter_trigger() only invents them under SEED_SAMPLE_CONTENT —
+    this test drives the real reactive-trigger firing, so it opts in."""
+
     @classmethod
     def setUpTestData(cls):
         cls.pc_sheet = CharacterSheetFactory()

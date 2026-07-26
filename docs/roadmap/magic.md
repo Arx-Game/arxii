@@ -356,6 +356,83 @@ known technique failed requirement checks a condition or innate baseline would h
 
 ---
 
+## Capability magnitude curve — geometric scaling with contextual power (#2708 — BUILT, 2026-07-26)
+
+Before #2708, every capability grant's magnitude was flat or linear with respect to
+power: `TechniqueCapabilityGrant.calculate_value()` only ever added
+`intensity_multiplier * technique.intensity`, and thread-passive tier-0
+`CAPABILITY_GRANT` rows were worth a hardcoded `1` regardless of the granting thread's
+level. Neither could cross an ADR-0164 ladder tier boundary at any realistic power
+figure — the ladder's own tier anchors (5/~10/25/100) are roughly geometric, so a linear
+bump never lands where the ladder's own tiers actually sit.
+
+- **Geometric curve, uncapped, staff-gated by a config singleton**: both grant types now
+  compute `round(base * 2 ** (sensitivity * power / power_per_doubling))` via
+  `world.magic.services.capability_curve.apply_capability_curve`, driven by a new
+  `CapabilityPowerConfig` singleton. No config row = every consumer's pre-#2708 number,
+  bit-for-bit — the feature is turned on by staff tuning, not by this code deploying.
+- **`intensity_multiplier` retired as additive, repurposed as sensitivity** — a grant
+  authored at the default `0` (every pre-#2708 row) stays inert under the curve.
+- **`ConditionCapabilityEffect.scales_with_severity` now honoured** by all three
+  value-aggregating readers (`get_capability_status`, `get_all_capability_values`,
+  `conditions.views._aggregate_capability_effects`) — the column existed since
+  migration `conditions/0007` but every reader silently ignored it until this fix.
+- **A new ambient-activation predicate** (`_anchor_ambiently_active`,
+  `world/magic/services/resonance.py`) gates the contextual-power term feeding the
+  technique-grant curve: a free passive contribution requires demonstrable real state
+  (actual equipped items, actual current room, actual involved technique/trait), not
+  player assertion — deliberately a separate function from the paid-pull predicate
+  (`_anchor_in_action`), which does allow assertion because a pull is paid for.
+- **`get_effective_capability_value` gained an optional `action_ctx` param** (Task 8;
+  keyword-only, `None`-default, ~13 pre-existing call sites unaffected) so a real action
+  context can light up more thread kinds' contextual power than the ambient default can.
+- Full detail: `docs/systems/conditions.md`'s "Capability magnitude curve" section,
+  `docs/systems/magic.md`'s "Capability Magnitude Curve — Technique & Thread Grants"
+  section, and `docs/adr/0169-capability-magnitude-curves-geometrically-with-contextual-power.md`.
+## Cast observation — style-driven concealment (#2710 — BUILT, 2026-07-26)
+
+"How absolute is subtle casting" (#2700's follow-on, now that style hangs off the
+caster's Path — ADR-0167) is resolved: concealment is a per-observer graded contest at
+cast time, not a boolean on the Technique or the Interaction.
+
+**Built:**
+- `TechniqueStyle.cast_concealment` (`PositiveSmallIntegerField`, default 0) — the
+  style's difficulty floor for being noticed while casting. 0 = overt; every existing
+  style defaults to 0, so nothing changes until content authors a non-zero value.
+- `resolve_cast_audience(*, caster, cast_openly=False) -> CastAudience`
+  (`world/magic/services/cast_observation.py`) — per co-located observer, rolls the
+  detection `CheckType` against `cast_concealment + level_opposition(caster)` (ADR-0166)
+  and sorts into full attribution / vague unattributed / nothing. Fails CLOSED
+  (ADR-0033) when the detection `CheckType` is unauthored.
+- `InteractionVisibility.PERCEIVED_ONLY` — the new privacy tier the resolved audience is
+  materialised into (writer + `InteractionReceiver` rows + staff + scene GM), sitting
+  between `DEFAULT` and the stricter, no-exception `VERY_PRIVATE`.
+- `SceneActionRequest.cast_openly` — the caster's one-way waiver, persisted so it
+  survives a consent-gated cast's accept-time pose.
+- Three enforcement points closed against leaking a concealed cast's identity: the scene
+  log (`InteractionQuerySet.visible_to`, needed no change), the request-row REST surface
+  (`SceneActionRequestViewSet.get_queryset`, `Exists()`/`OuterRef` filter), and the
+  reaction witness gate (`can_view_interaction`, taught the new tier — an earlier spec
+  draft wrongly called this predicate unwired; it is wired, see
+  `reaction_services.py:132`).
+- Full record: ADR-0170. Mechanism detail: `docs/systems/magic.md`'s "Cast observation"
+  section.
+
+**Explicitly deferred — not a gap, a scope boundary:**
+- **Combat casts are not covered.** `world.combat.interaction_services
+  .broadcast_action_outcome` still persists and broadcasts every combat OUTCOME pose
+  room-wide, unconditionally. A Subtle-style caster's technique casts overtly the
+  instant it lands in combat. Bringing combat casts under the same concealment model is
+  future work, not filed as a gap here — it needs its own design pass (combat has its
+  own broadcast/round machinery this feature never touched).
+- **Ships inert until content authors it.** The detection `CheckType`
+  (`DETECT_CAST_CHECK_NAME`, `"Perception"`), a `CheckTypeCapabilityModifier` row
+  bridging a magic-detection capability into that check, and per-style
+  `cast_concealment` values are all lore-repo content — arxii authors no seed data for
+  any of them.
+
+---
+
 ## Deeper design & history
 
 - Scope-by-scope build record: [`magic-build-history.md`](magic-build-history.md)

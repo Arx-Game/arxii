@@ -6,7 +6,7 @@ Covers:
 - author_reference_corruption_content: idempotent seeding of Primal + Abyssal sets
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.magic.constants import AlterationKind
 from world.magic.factories import (
@@ -163,8 +163,15 @@ class TestCorruptionTwistTemplateFactory(TestCase):
         self.assertEqual(twist.resonance_id, resonance.pk)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestAuthorReferenceCorruptionContent(TestCase):
-    """author_reference_corruption_content seeds Primal + Abyssal sets correctly."""
+    """author_reference_corruption_content seeds Primal + Abyssal sets correctly.
+
+    The "Wild Hunt"/"Web of Spiders" Affinity + Resonance rows are
+    content-repo-owned (#2698); ``SEED_SAMPLE_CONTENT`` opts this suite into
+    the sample-seeding path so the function has something to hang the
+    Corruption content off of.
+    """
 
     def test_both_resonances_get_condition_templates(self) -> None:
         from world.conditions.models import ConditionTemplate

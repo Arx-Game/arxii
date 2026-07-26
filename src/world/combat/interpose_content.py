@@ -40,6 +40,7 @@ from world.mechanics.models import (
     Property,
     PropertyCategory,
 )
+from world.seeds.sample_content import authored_or_sample
 from world.traits.models import CheckOutcome
 
 logger = logging.getLogger(__name__)
@@ -100,44 +101,52 @@ _INTERPOSE_CAPABILITIES: tuple[tuple[str, str, str, str], ...] = (
 # ---------------------------------------------------------------------------
 
 
-def _ensure_interpose_property() -> Property:
-    """Idempotently seed the shared 'interposable' target Property.
+def _ensure_interpose_property() -> Property | None:
+    """Idempotently look up the shared 'interposable' target Property.
 
     Every interpose Application addresses this single Property; the challenge
     template carries it too so its approaches surface in ``_match_approaches``
     (which gates an approach on the challenge holding the Application's target
-    property).
+    property). mechanics.Property/PropertyCategory are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
     """
-    category, _ = PropertyCategory.objects.get_or_create(
+    category = authored_or_sample(
+        PropertyCategory,
+        {"description": "Physical state of a target or environment."},
         name="Physical",
-        defaults={"description": "Physical state of a target or environment."},
     )
-    obj, _ = Property.objects.get_or_create(
-        name=INTERPOSABLE_PROPERTY_NAME,
-        defaults={
+    return authored_or_sample(
+        Property,
+        {
             "description": "A character positioned to take a blow on behalf of an ally.",
             "category": category,
         },
+        name=INTERPOSABLE_PROPERTY_NAME,
     )
-    return obj
 
 
-def _ensure_interpose_check_type() -> CheckType:
-    """Idempotently seed the Reflexes CheckType reused by every interpose approach.
+def _ensure_interpose_check_type() -> CheckType | None:
+    """Look up (or sample) the Reflexes CheckType reused by every interpose approach.
 
     Reuses the same CheckType row as the catch challenge (CATCH_CHECK_TYPE_NAME ==
     'Reflexes'). A split-second reaction is the shared mechanical fiction whether
     you're catching a faller or stepping in front of a blow.
+
+    ``checks.CheckCategory``/``CheckType`` are content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    Returns ``None`` when either isn't authored; the Reflexes-flavor approach
+    is skipped for every capability, mirroring how a missing Melee Defense
+    CheckType already skips its own twin approach below.
     """
-    category, _ = CheckCategory.objects.get_or_create(name="Exploration")
-    obj, _ = CheckType.objects.get_or_create(
+    category = authored_or_sample(CheckCategory, {}, name="Exploration")
+    if category is None:
+        return None
+    return authored_or_sample(
+        CheckType,
+        {"description": "A split-second reaction to arrest a falling body."},
         name=CATCH_CHECK_TYPE_NAME,
         category=category,
-        defaults={
-            "description": "A split-second reaction to arrest a falling body.",
-        },
     )
-    return obj
 
 
 def _get_melee_defense_check_type() -> CheckType | None:
@@ -212,17 +221,31 @@ def ensure_interpose_content() -> None:
     Adding a new interpose capability later is pure data: a new
     ``CapabilityType`` + ``Application(target_property=interpose property)`` +
     ``ChallengeApproach`` row surfaces with no engine change.
+
+    ``mechanics.Property``/``PropertyCategory``/``ChallengeCategory``/
+    ``ChallengeTemplate``/``Application``/``ChallengeApproach`` and
+    ``checks.CheckCategory``/``CheckType`` are all content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. The
+    whole challenge is skipped when the anchor Property or ChallengeCategory/
+    ChallengeTemplate aren't authored — there is nothing left to hang
+    approaches on. A missing Reflexes CheckType only skips that one flavor's
+    approach per capability (the Melee-Defense twin is independent).
     """
     interpose_property = _ensure_interpose_property()
+    if interpose_property is None:
+        return
     check_type = _ensure_interpose_check_type()
 
-    challenge_category, _ = ChallengeCategory.objects.get_or_create(
+    challenge_category = authored_or_sample(
+        ChallengeCategory,
+        {"description": "Hazards arising from the surroundings."},
         name="Environmental",
-        defaults={"description": "Hazards arising from the surroundings."},
     )
-    template, _ = ChallengeTemplate.objects.get_or_create(
-        name=INTERPOSE_CHALLENGE_NAME,
-        defaults={
+    if challenge_category is None:
+        return
+    template = authored_or_sample(
+        ChallengeTemplate,
+        {
             "description_template": (
                 "{interposer} moves to shield {ally} — someone with the means may "
                 "attempt to turn the blow aside."
@@ -232,7 +255,10 @@ def ensure_interpose_content() -> None:
             "category": challenge_category,
             "challenge_type": ChallengeType.THREAT,
         },
+        name=INTERPOSE_CHALLENGE_NAME,
     )
+    if template is None:
+        return
 
     # The challenge holds the interposable property so its approaches surface in
     # _match_approaches (an approach is offered iff the challenge carries the
@@ -252,36 +278,49 @@ def ensure_interpose_content() -> None:
     melee_defense_check_type = _get_melee_defense_check_type()
 
     for capability_name, application_name, display_name, fiction in _INTERPOSE_CAPABILITIES:
-        capability, _ = CapabilityType.objects.get_or_create(name=capability_name)
-        application, _ = Application.objects.get_or_create(
-            name=application_name,
-            defaults={
+        # conditions.CapabilityType is content-repo-owned (#2698) — looked up
+        # rather than invented unless SEED_SAMPLE_CONTENT is on. Skip this
+        # capability's approaches entirely when it isn't authored — there's
+        # nothing to gate the Application/ChallengeApproach on.
+        capability = authored_or_sample(CapabilityType, {}, name=capability_name)
+        if capability is None:
+            continue
+        application = authored_or_sample(
+            Application,
+            {
                 "capability": capability,
                 "target_property": interpose_property,
                 "description": f"Interpose on behalf of an ally using {capability_name}.",
             },
+            name=application_name,
         )
-        ChallengeApproach.objects.get_or_create(
-            challenge_template=template,
-            application=application,
-            defaults={
-                "check_type": check_type,
-                "display_name": display_name,
-                "custom_description": fiction,
-            },
-        )
+        if application is None:
+            continue
+        # The Reflexes CheckType may not be authored either — skip just this
+        # flavor's approach (the Melee-Defense twin below is independent).
+        if check_type is not None:
+            authored_or_sample(
+                ChallengeApproach,
+                {
+                    "check_type": check_type,
+                    "display_name": display_name,
+                    "custom_description": fiction,
+                },
+                challenge_template=template,
+                application=application,
+            )
 
         if melee_defense_check_type is None:
             continue
 
         # Melee-Defense twin (#2207 fix): reuses *the same* `capability` row as
         # the Reflexes Application above — not a separate shared CapabilityType
-        # — so a guardian granted this one capability (trait or condition) sees
+        # — so a guardian granted that one capability (trait or condition) sees
         # both flavors in _match_approaches's `cap_id_to_sources` lookup
         # (world/mechanics/services.py), which keys strictly on capability_id.
-        melee_application, _ = Application.objects.get_or_create(
-            name=f"{application_name} (Melee Defense)",
-            defaults={
+        melee_application = authored_or_sample(
+            Application,
+            {
                 "capability": capability,
                 "target_property": interpose_property,
                 "description": (
@@ -289,15 +328,19 @@ def ensure_interpose_content() -> None:
                     f"melee defense ({capability_name} flavor)."
                 ),
             },
+            name=f"{application_name} (Melee Defense)",
         )
-        ChallengeApproach.objects.get_or_create(
-            challenge_template=template,
-            application=melee_application,
-            defaults={
+        if melee_application is None:
+            continue
+        authored_or_sample(
+            ChallengeApproach,
+            {
                 "check_type": melee_defense_check_type,
                 "display_name": f"{display_name} (Melee Defense)",
                 "custom_description": (
                     f"{fiction} Years of melee training carry the parry as surely as raw reflex."
                 ),
             },
+            challenge_template=template,
+            application=melee_application,
         )

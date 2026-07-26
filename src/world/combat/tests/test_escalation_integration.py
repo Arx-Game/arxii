@@ -14,7 +14,7 @@ room trigger installed by the round wiring -> relationship_spike_handler).
 
 from itertools import pairwise
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from flows.models import Trigger
 from world.character_sheets.factories import CharacterSheetFactory
@@ -206,6 +206,7 @@ class BuildToClimaxTests(TestCase):
         self.assertTrue(all(a < b for a, b in pairwise(costs)))
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class BondedSpikeRealDamagePathTests(TestCase):
     """Relationship spike end-to-end through the real damage entry (#872).
 
@@ -213,6 +214,10 @@ class BondedSpikeRealDamagePathTests(TestCase):
     the room spike triggers from a real escalating begin_declaration_phase
     (NOT a manual install), and the CHARACTER_INCAPACITATED emit from
     apply_damage_to_participant's knockout-band transition latch.
+
+    flows.FlowDefinition/TriggerDefinition are content-repo-owned (#2698);
+    wire_escalation_content() only invents them under SEED_SAMPLE_CONTENT — this
+    test drives the real end-to-end reactive-trigger firing, so it opts in.
     """
 
     def setUp(self) -> None:

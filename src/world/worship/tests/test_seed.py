@@ -1,6 +1,6 @@
 """Seed tests for the worship content cluster (#2355)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.achievements.models import Achievement
 from world.checks.models import CheckType, CheckTypeAspect
@@ -12,6 +12,7 @@ from world.skills.models import Skill, Specialization
 from world.worship.models import WorshippedBeing, WorshipTradition
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_worship_content gates on #2698
 class WorshipSeedTests(TestCase):
     def test_seed_creates_expected_rows_and_is_idempotent(self) -> None:
         seed_worship_content()

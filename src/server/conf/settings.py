@@ -202,6 +202,23 @@ else:
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@arxmush.org")
 SITE_URL = env("SITE_URL", default="https://arxmush.org")
 
+# Sample world content in the dev seeders (#2698). OFF by default.
+#
+# ``seed_dev_database()`` (the admin "Big Button") is mandatory — it is the only
+# source of the game's mechanical spine (CheckRank, ResultChart, CheckOutcome,
+# ConsequencePool, ActionTemplate, PointConversionRange, Pronouns, Heritage),
+# none of which live in the content repo. But the same seeders also invented
+# *named world content* — "House Veyrane PLACEHOLDER", "Great Archive
+# Librarian", sample Beginnings/StartingAreas/Techniques — which
+# ``export_to_content_repo`` then captured as though it were authored. That is
+# how "Commoner", "Noble", "Arx City" and "Luxen Port" reached the content repo.
+#
+# With this off (the default), the Big Button seeds config only and invents no
+# named content. Maintainers keep it off and author in the content repo. It
+# exists for a future clone that has no content repo and needs a starter set;
+# see #2698 for why that path is not yet complete.
+SEED_SAMPLE_CONTENT = env.bool("ARXII_SEED_SAMPLE_CONTENT", default=False)
+
 # Sentry error/performance monitoring (#2236 Phase 5). Optional: an empty DSN
 # disables it entirely (dev/rehearsal have none), matching the ops dashboard's
 # `sentry_dsn_configured` probe in `web/admin/tuning/tech_health.py`, which reads

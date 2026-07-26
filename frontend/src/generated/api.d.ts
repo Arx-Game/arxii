@@ -25654,9 +25654,10 @@ export interface components {
        * @description Privacy override — can only escalate, never reduce
        *
        *     * `default` - Default
+       *     * `perceived_only` - Perceived Only
        *     * `very_private` - Very Private
        */
-      visibility?: components['schemas']['VisibilityF91Enum'];
+      visibility?: components['schemas']['Visibility352Enum'];
       /** Format: date-time */
       readonly timestamp: string;
       /**
@@ -25800,9 +25801,10 @@ export interface components {
        * @description Privacy override — can only escalate, never reduce
        *
        *     * `default` - Default
+       *     * `perceived_only` - Perceived Only
        *     * `very_private` - Very Private
        */
-      visibility?: components['schemas']['VisibilityF91Enum'];
+      visibility?: components['schemas']['Visibility352Enum'];
       /** Format: date-time */
       readonly timestamp: string;
       /**
@@ -25919,9 +25921,10 @@ export interface components {
        * @description Privacy override — can only escalate, never reduce
        *
        *     * `default` - Default
+       *     * `perceived_only` - Perceived Only
        *     * `very_private` - Very Private
        */
-      visibility?: components['schemas']['VisibilityF91Enum'];
+      visibility?: components['schemas']['Visibility352Enum'];
       /**
        * @description Classifies the pose as standard, entry, or departure. Set by the +enter command (future) or scene-entry hook. Spec C reads ENTRY to filter scene-entry-endorsement targets.
        *
@@ -36838,6 +36841,8 @@ export interface components {
       pull?: components['schemas']['CastPullRequestRequest'] | null;
       /** @default false */
       use_base_form: boolean;
+      /** @default false */
+      cast_openly: boolean;
     };
     /**
      * @description * `same` - Same position
@@ -37890,10 +37895,11 @@ export interface components {
     };
     /**
      * @description * `default` - Default
+     *     * `perceived_only` - Perceived Only
      *     * `very_private` - Very Private
      * @enum {string}
      */
-    VisibilityF91Enum: 'default' | 'very_private';
+    Visibility352Enum: 'default' | 'perceived_only' | 'very_private';
     /**
      * @description * `private` - Private
      *     * `shared` - Shared

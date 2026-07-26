@@ -69,6 +69,7 @@ from world.magic.models import (
     TechniqueFunctionTag,
     TechniqueGrant,
     TechniqueOutcomeModifier,
+    TechniqueProgress,
     TechniqueRemovedCondition,
     TechniqueStyle,
     TechniqueTeachingOffer,
@@ -1061,6 +1062,10 @@ class GiftAcquisitionConfigAdmin(admin.ModelAdmin):
         "techniques_per_thread_level",
         "first_technique_ap_multiplier",
         "major_gift_ap_multiplier",
+        "imbue_ap_cost",
+        "cross_path_cost_multiplier",
+        "weekly_training_cap",
+        "cross_path_cap_divisor",
     ]
 
 
@@ -1201,6 +1206,7 @@ from world.magic.models import (  # noqa: E402
     FallRedemptionRecord,
     GhostTutelage,
     ResonanceConversion,
+    TrainingOutcomeAward,
 )
 
 
@@ -1282,3 +1288,48 @@ class AudereMajoraFaithVariantAdmin(admin.ModelAdmin):
     list_display = ("threshold", "being", "resonance_pool_cost", "favor_threshold", "is_active")
     list_filter = ("is_active",)
     inlines = [FaithVariantCapabilityGrantInline, FaithVariantAppliedConditionInline]
+
+
+@admin.register(TechniqueProgress)
+class TechniqueProgressAdmin(admin.ModelAdmin):
+    """Read-only admin for technique progress meters (#2711).
+
+    Meters are created by the service layer, not hand-edited.
+    """
+
+    list_display = [
+        "character_sheet",
+        "technique",
+        "points_accumulated",
+        "total_required",
+        "is_cross_path",
+        "source",
+        "teacher_tenure",
+    ]
+    list_filter = ["is_cross_path", "source"]
+    autocomplete_fields = ["character_sheet", "technique", "teacher_tenure"]
+    readonly_fields = [
+        "character_sheet",
+        "technique",
+        "points_accumulated",
+        "total_required",
+        "teacher_tenure",
+        "source",
+        "is_cross_path",
+        "created_at",
+        "updated_at",
+    ]
+
+    def has_add_permission(self, request):  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None):  # noqa: ARG002
+        return False
+
+
+@admin.register(TrainingOutcomeAward)
+class TrainingOutcomeAwardAdmin(admin.ModelAdmin):
+    """Staff-tunable dev-point multiplier per outcome tier (#2727)."""
+
+    list_display = ["outcome_tier", "dev_point_multiplier"]
+    ordering = ["outcome_tier__success_level"]

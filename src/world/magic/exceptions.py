@@ -661,3 +661,25 @@ class GhostTutelageAlreadyExistsError(GhostTutorError):
     """
 
     user_message = "You have already summoned a tutor for that tradition."
+
+
+class TechniqueProgressError(Exception):
+    """Base for technique-progress-meter failures (#2711).
+
+    ``user_message`` is what reaches the player. Raise-sites that pass an
+    explicit message are authoring player-facing text; raising with no args
+    keeps the class-level default.
+    """
+
+    user_message = "An error occurred with technique training."
+
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+        if args:
+            self.user_message = str(args[0])
+
+
+class WeeklyTrainingCapExceeded(TechniqueProgressError):
+    """Raised when a learner tries to contribute past the weekly training cap."""
+
+    user_message = "You've trained as much as you can this week."

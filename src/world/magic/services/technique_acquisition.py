@@ -19,7 +19,6 @@ from django.db import transaction
 
 from world.achievements.constants import AccessChangeSource
 from world.achievements.discovery import announce_access_change
-from world.action_points.models import ActionPointPool
 from world.magic.exceptions import (
     GiftNotOwned,
     TechniqueCapExceeded,
@@ -31,7 +30,7 @@ from world.magic.services.gift_acquisition import (
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import CharacterTechnique, Technique
+    from world.magic.models import CharacterTechnique, Technique, TechniqueProgress
 
 
 def _training_room_discounted_ap_cost(ap_cost: int, location: object | None) -> int:
@@ -69,31 +68,43 @@ def learn_technique(  # noqa: PLR0913
     ap_cost: int = 0,
     xp_cost: int = 0,
     location: object | None = None,
-) -> CharacterTechnique:
+) -> CharacterTechnique | TechniqueProgress:
     """Learn a technique from an owned gift (non-teaching path).
 
-    Runs: gift-owned check -> cap check -> AP/XP spend -> mint -> announce.
+    When ``ap_cost > 0``: creates a ``TechniqueProgress`` meter instead of
+    minting immediately (#2711). The learner fills the meter in subsequent
+    sessions via ``contribute_to_technique_progress``.
+
+    When ``ap_cost == 0``: mints the ``CharacterTechnique`` immediately
+    (the meter-completion path, or a free grant). Runs: gift-owned check
+    -> cap check -> mint -> announce.
+
     Never implicitly acquires the gift — that is the teaching path's job.
 
     Args:
         learner: The character learning the technique.
         technique: The technique to learn.
         source: The AccessChangeSource for the announce message.
-        ap_cost: AP to spend (0 = free).
+        ap_cost: AP to spend (0 = mint immediately; >0 = create meter).
         xp_cost: XP to spend (0 = free; not yet implemented — deferred).
         location: Optional room object the learner is in. When provided,
             an active Training Room feature in that room discounts the AP
             cost (#675).
 
     Returns:
-        The new CharacterTechnique.
+        ``CharacterTechnique`` when ``ap_cost == 0`` (immediate mint),
+        ``TechniqueProgress`` when ``ap_cost > 0`` (meter created).
 
     Raises:
         GiftNotOwned: Learner doesn't own the technique's gift.
         TechniqueCapExceeded: At the cap for this gift at current thread level.
         ValueError: Learner already knows this technique.
     """
-    from world.magic.models import CharacterGift, CharacterTechnique  # noqa: PLC0415
+    from world.magic.models import (  # noqa: PLC0415
+        CharacterGift,
+        CharacterTechnique,
+        TechniqueProgress,
+    )
 
     # 1. Gift-owned precondition.
     if not CharacterGift.objects.filter(character=learner, gift=technique.gift).exists():
@@ -110,22 +121,20 @@ def learn_technique(  # noqa: PLR0913
     if current_count >= cap:
         raise TechniqueCapExceeded
 
-    # 5. AP spend.
+    # 4b. If ap_cost > 0, create a progress meter instead of minting (#2711).
     if ap_cost > 0:
-        from world.magic.exceptions import MagicError  # noqa: PLC0415
-
         effective_ap_cost = _training_room_discounted_ap_cost(ap_cost, location)
-
-        pool = ActionPointPool.get_or_create_for_character(learner.character)
-        if not pool.can_afford(effective_ap_cost):
-            msg = f"Insufficient action points (need {effective_ap_cost}, have {pool.current})."
-            raise MagicError(msg)
-        pool.spend(effective_ap_cost)
+        return TechniqueProgress.objects.create(
+            character_sheet=learner,
+            technique=technique,
+            total_required=effective_ap_cost,
+            source=source,
+        )
 
     # TODO(#1732-deferred): XP spend when xp_cost > 0 — needs XPTransaction wiring.
     _ = xp_cost
 
-    # 6. Mint.
+    # 6. Mint (ap_cost == 0 path — immediate).
     ct = CharacterTechnique.objects.create(character=learner, technique=technique)
 
     # 7. Announce.

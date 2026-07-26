@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from actions.definitions.doors import BreakExitAction, LockAction, PickLockAction, UnlockAction
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
@@ -71,6 +71,7 @@ class UnlockActionTests(TestCase):
         assert exit_obj.db.locked is False
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_lockpicking_check gates on #2698
 class PickLockActionTests(TestCase):
     """Tests for PickLockAction (#2176) — quiet, check-gated lockpicking."""
 

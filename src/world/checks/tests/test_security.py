@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import SECURITY_CHECK_TYPE_NAMES, SecurityCheckKind
@@ -24,6 +24,7 @@ from world.traits.models import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # stealth/security check seeds gate on #2698
 class ResolveSecurityCheckTests(TestCase):
     @classmethod
     def setUpTestData(cls):

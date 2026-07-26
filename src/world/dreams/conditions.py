@@ -79,14 +79,18 @@ def ensure_nightmares_condition() -> ConditionTemplate:
         },
     )
 
-    # Reduce awareness capability (mental clouding)
-    awareness = CapabilityType.objects.get(name=FoundationalCapability.AWARENESS)
-    ConditionCapabilityEffect.objects.get_or_create(
-        condition=template,
-        stage=None,
-        capability=awareness,
-        defaults={"value": -20},
-    )
+    # Reduce awareness capability (mental clouding). CapabilityType is
+    # content-repo-owned (#2698) — a real deploy without the row authored
+    # degrades by skipping this effect, same as the rest of the capability
+    # system does when unseeded (see ensure_foundational_capabilities).
+    awareness = CapabilityType.objects.filter(name=FoundationalCapability.AWARENESS).first()
+    if awareness is not None:
+        ConditionCapabilityEffect.objects.get_or_create(
+            condition=template,
+            stage=None,
+            capability=awareness,
+            defaults={"value": -20},
+        )
 
     # Apply a mental check penalty
     from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
@@ -139,12 +143,17 @@ def ensure_madness_condition() -> ConditionTemplate:
         },
     )
 
-    # Significantly reduce awareness and movement (impaired function)
+    # Significantly reduce awareness and movement (impaired function).
+    # CapabilityType is content-repo-owned (#2698) — a real deploy without a
+    # row authored degrades by skipping that effect, same as the rest of the
+    # capability system does when unseeded (see ensure_foundational_capabilities).
     for cap_name, value in (
         (FoundationalCapability.AWARENESS, -50),
         (FoundationalCapability.MOVEMENT, -10),
     ):
-        capability = CapabilityType.objects.get(name=cap_name)
+        capability = CapabilityType.objects.filter(name=cap_name).first()
+        if capability is None:
+            continue
         ConditionCapabilityEffect.objects.get_or_create(
             condition=template,
             stage=None,

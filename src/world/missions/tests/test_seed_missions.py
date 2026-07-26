@@ -12,7 +12,7 @@ seeds them (cluster ordering in ``world.seeds.clusters``).
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -24,6 +24,7 @@ from world.seeds.tests.content_stub import stub_content_root
 from world.traits.models import CheckOutcome
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # missions.* demo content gates on #2698
 class SeedMissionsDevTests(TestCase):
     """The "missions" cluster's row shape + idempotency."""
 
@@ -95,6 +96,7 @@ class SeedMissionsDevTests(TestCase):
         self.assertEqual(template.summary, "Staff-rewritten summary.")
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # missions.* demo content gates on #2698
 class MissionOpportunitiesFromSeededStartingRoomTests(TestCase):
     """The symptom fix: `mission opportunities` shows content from spawn (#2121)."""
 

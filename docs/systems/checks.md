@@ -366,7 +366,9 @@ Gated by `IsSceneGMPrerequisite` (`actions/prerequisites.py` — staff bypass, e
 
 ## Seeded Compositions
 
-Check compositions are authored as seed data (the design tenet: **stat + skill (+ specialization)**, rarely stat+stat). The seed clusters live in `world/seeds/`:
+Check compositions are authored as seed data (the design tenet: **stat + skill (+ specialization)**, rarely stat+stat). The seed clusters live in `world/seeds/`.
+
+**`CheckCategory`/`CheckType`/`CheckTypeTrait` (+ `skills.Skill`/`traits.Trait`/`classes.Aspect`/`classes.PathAspect`) are content-repo-owned (#2698, ADR-0168)** — every cluster below looks its rows up via `world.seeds.sample_content.authored_or_sample()` rather than inventing them; a row is only invented when `SEED_SAMPLE_CONTENT` is on (a third-party clone with no content repo). Maintainers author these in the content repo, and the composition table below describes what the content repo is expected to carry, not what a bare Big Button press creates. `skills.Specialization`/`checks.CheckTypeSpecialization`/`checks.CheckTypeAspect` are NOT content-repo-owned and keep seeding unconditionally. A reseed no longer wipes and rewrites a CheckType's composition (the pre-#2698 "authoritative rewrite" idiom silently reverted any content-repo/staff-tuned weight on every Big Button press) — `get_or_create`/`authored_or_sample` converge instead, so an edited weight survives.
 
 | Cluster | Checks | Composition |
 |---------|--------|-------------|
@@ -382,7 +384,7 @@ Check compositions are authored as seed data (the design tenet: **stat + skill (
 | `investigation` (#1705) | `Search` | perception + Investigation |
 | `governance` (#930) | Tax/Investment checks | stat + Scholarship/Economics |
 | `stealth` (#1464) | `Stealth` | agility + Stealth |
-| `security` (#2180) | `Lockpick` / `Break and Enter` / `Escape Through Window` / `Guard Detection` | wits+Larceny / strength+Athletics / agility+Athletics / perception+Investigation |
+| `security` (#2180) | `Lockpick` / `Break and Enter` / `Escape Through Window` / `Guard Detection` | wits+Skulduggery / strength+Athletics / agility+Athletics / perception+Investigation |
 
 **Resist checks** (Reflexes, Escalation Pace, Endurance, Mortal Resolve) are the tenet-permitted single-stat exception — they seed exactly one `CheckTypeTrait`. The `Melee Combat` skill catalog (with weapon-class specializations aligned to `progression.services.scene_integration`'s `weapon_map`) is seeded by the `combat_checks` cluster; the penetration/flee retrofits depend on it.
 
@@ -398,7 +400,7 @@ Five security-domain check types seeded via the `"security"` cluster
 | CheckType | Category | Composition | Used by |
 |---|---|---|---|
 | Stealth | Physical | agility + Stealth | Sneaking past guards (reuses #1464 seed) |
-| Lockpick | Physical | wits + Larceny (+ Lockpicking) | Picking locks (#2176) |
+| Lockpick | Physical | wits + Skulduggery (+ Lockpicking) | Picking locks (#2176, renamed from Larceny #1825) |
 | Break and Enter | Physical | strength + Athletics | Forcing barriers (#2176) |
 | Escape Through Window | Physical | agility + Athletics (+ Climbing) | Fleeing via window (#2175) |
 | Guard Detection | Exploration | perception + Investigation | Guard NPC spotting intruders (#2178) |

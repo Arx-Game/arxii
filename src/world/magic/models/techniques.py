@@ -11,6 +11,7 @@ ConditionTemplate with formula-based severity/duration scaling.
 """
 
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -25,10 +26,19 @@ from world.covenants.constants import RoleArchetype
 from world.magic.constants import TechniqueCategory, TechniqueFunction, TechniqueReach
 from world.magic.models.gifts import Gift
 
+if TYPE_CHECKING:
+    from world.magic.models.power_config import CapabilityPowerConfig
+
 # App-qualified model paths repeated across FK references; centralized for dedup.
 _TECHNIQUE_MODEL = "magic.Technique"
 _CONDITION_TEMPLATE_MODEL = "conditions.ConditionTemplate"
 _CAPABILITY_TYPE_MODEL = "conditions.CapabilityType"
+
+# Sentinel distinguishing "no config argument passed" (self-fetch) from an explicit
+# ``config=None`` (caller already established no row exists — skip the fetch). Lets a
+# sweep over many grants fetch CapabilityPowerConfig once and hand it to every
+# ``calculate_value()`` call without re-triggering a per-grant query (#2708 Task 5 review).
+_CONFIG_UNSET = object()
 
 
 class ConditionTargetKind(models.TextChoices):
@@ -123,6 +133,17 @@ class TechniqueStyle(NaturalKeyMixin, SharedMemoryModel):
     description = models.TextField(
         blank=True,
         help_text="Description of this technique style.",
+    )
+    cast_concealment = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "How hard it is to notice a cast worked in this style (#2710). 0 = overt: "
+            "the cast is posed to the whole room exactly as an unconcealed cast is, and "
+            "no detection check runs at all. Above 0 this is the difficulty floor an "
+            "observer must beat, on top of the caster's own level opposition — so a "
+            "Subtle style sits high and Manifestation stays 0. A magnitude, not a flag: "
+            "styles differ in how subtle they are, not merely whether they are."
+        ),
     )
     objects = TechniqueStyleManager()
 
@@ -656,7 +677,11 @@ class AbstractCapabilityGrant(SharedMemoryModel):
         max_digits=5,
         decimal_places=2,
         default=0,
-        help_text="Multiplied by the Technique's current intensity.",
+        help_text=(
+            "Sensitivity of this grant to the caster's power (#2708). 0 (default) is a "
+            "flat, rock-steady grant; higher values curve the value harder as power "
+            "rises. Inert (no curve at all) until a CapabilityPowerConfig row exists."
+        ),
     )
 
     class Meta:
@@ -837,9 +862,12 @@ class AbstractDamageProfile(SharedMemoryModel):
 
 class TechniqueCapabilityGrant(NaturalKeyMixin, AbstractCapabilityGrant):
     """
-    A Capability granted by a Technique, with value derived from intensity.
+    A Capability granted by a Technique, with value derived from power.
 
-    effective_value = base_value + (intensity_multiplier * technique.intensity)
+    See ``calculate_value()`` for the exact formula (ADR-0169): a geometric curve
+    driven by the caster's real power when a ``CapabilityPowerConfig`` row exists,
+    falling back to the pre-#2708 additive shape (``base_value +
+    intensity_multiplier * power``) when it doesn't.
 
     A single Technique typically grants 2-4 Capabilities.
     """
@@ -879,15 +907,50 @@ class TechniqueCapabilityGrant(NaturalKeyMixin, AbstractCapabilityGrant):
         self,
         *,
         effective_power: int | None = None,
+        config: "CapabilityPowerConfig | None" = _CONFIG_UNSET,  # type: ignore[assignment]
     ) -> int:
-        """Calculate effective Capability value.
+        """Calculate effective Capability value on the ADR-0164 ladder.
 
-        effective_power: when provided (e.g., from combat where pull bumps
-        may apply), uses that aggregate. When None (out-of-combat challenges
-        or no combat context), falls back to self.technique.intensity.
+        With a CapabilityPowerConfig row (#2708):
+
+            base_value * 2 ** (intensity_multiplier * power / power_per_doubling)
+
+        ``intensity_multiplier`` is the grant's **sensitivity** — how responsive this
+        capability is to the caster's power. 0 (the authored default) means a flat,
+        rock-steady grant; higher values curve harder. The pre-#2708 additive shape
+        (``base + multiplier * power``) is RETIRED, not merely bypassed — see the ADR.
+
+        Without a config row the curve is disabled and the additive shape is returned
+        unchanged, so this lands inert and is turned on by tuning.
+
+        ``effective_power``: when provided, used as the aggregate. When None, falls back
+        to ``self.technique.intensity`` — the oracles supply the real figure.
+
+        ``config``: pass an already-fetched ``CapabilityPowerConfig`` (or ``None`` when
+        the caller has already established no row exists) so a sweep over many grants
+        issues one config query total, not one per grant (#2708 Task 5 review — this
+        helper was placed inside both oracles' per-grant loops, and its own single-fetch
+        default previously meant a real row was fetched TWICE per grant: once here for the
+        inert check, once more inside ``apply_capability_curve``). Omit the argument
+        entirely to self-fetch — the single-call convenience path callers used before this
+        param existed.
         """
+        from world.magic.services.capability_curve import (  # noqa: PLC0415
+            apply_capability_curve,
+            get_capability_power_config,
+        )
+
         power = effective_power if effective_power is not None else self.technique.intensity
-        return int(self.base_value + (self.intensity_multiplier * Decimal(power)))
+        if config is _CONFIG_UNSET:
+            config = get_capability_power_config()
+        if config is None:
+            return int(self.base_value + (self.intensity_multiplier * Decimal(power)))
+        return apply_capability_curve(
+            self.base_value,
+            power=power,
+            sensitivity=self.intensity_multiplier,
+            config=config,
+        )
 
 
 class TechniqueCapabilityRequirement(NaturalKeyMixin, SharedMemoryModel):

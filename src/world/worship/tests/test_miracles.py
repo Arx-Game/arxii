@@ -1,6 +1,6 @@
 """Tests for Miracle models and divine intervention (#2360)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.worship.constants import MiracleTrigger
 from world.worship.factories import WorshippedBeingFactory, wire_miracle_content
@@ -228,8 +228,13 @@ class TriggerLifecycleTests(TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class WireMiracleContentTests(TestCase):
-    """Tests for wire_miracle_content seed (#2360)."""
+    """Tests for wire_miracle_content seed (#2360).
+
+    Gates on SEED_SAMPLE_CONTENT (#2698) — the Cooldown ConditionTemplate is
+    content-repo-owned.
+    """
 
     def test_seeds_trigger_and_config(self) -> None:
         wire_miracle_content()

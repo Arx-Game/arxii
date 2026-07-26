@@ -2,7 +2,7 @@
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.relationships.constants import BUMP_POINTS, BumpValence, TrackSign, TrackSystemKey
@@ -147,8 +147,18 @@ class ApplyRelationshipBumpTests(TestCase):
             )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class RelationshipScaleSeedTests(TestCase):
-    """The relationship_scale seed cluster is idempotent and re-applies edits."""
+    """The relationship_scale seed cluster is idempotent; tiers/emoji re-apply edits,
+    but the system tracks themselves preserve a staff edit (#2698).
+
+    ``relationships.RelationshipTrack`` is content-repo-owned (#2698) — looked up
+    rather than invented unless ``SEED_SAMPLE_CONTENT`` is on (this suite opts in).
+    Unlike ``RelationshipTier``/``ReactionEmoji`` (still config, still
+    ``update_or_create``), the track row itself no longer upserts: a real behavior
+    change from the pre-#2698 ``update_or_create``, which silently re-applied the
+    PLACEHOLDER name over a staff edit on every re-seed.
+    """
 
     def test_seed_idempotent_and_upserting(self) -> None:
         from world.relationships.models import RelationshipTier
@@ -175,9 +185,18 @@ class RelationshipScaleSeedTests(TestCase):
         self.assertEqual(ReactionEmoji.objects.count(), 3)
         self.assertEqual(ReactionEmoji.objects.filter(valence=0).count(), 1)
 
-        # Upsert re-applies an edited value on re-seed (loaddata can't — #946).
+        # Tiers still upsert (config, not content) — an edited tier name re-applies.
+        tier = tiers.get(track=regard, tier_number=1)
+        tier.name = "Renamed Tier"
+        tier.save(update_fields=["name"])
+        seed_relationship_scale_content()
+        tier.refresh_from_db()
+        self.assertEqual(tier.name, "Noticed")
+
+        # The track itself is content-repo-owned (#2698, ADR-0168) — a staff
+        # edit to its name now survives a re-seed instead of being clobbered.
         regard.name = "Renamed"
         regard.save(update_fields=["name"])
         seed_relationship_scale_content()
         regard.refresh_from_db()
-        self.assertEqual(regard.name, "Regard")
+        self.assertEqual(regard.name, "Renamed")

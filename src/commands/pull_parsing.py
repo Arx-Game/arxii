@@ -29,6 +29,8 @@ _EFFORT_PREFIX = "effort="
 _SECONDARY_KEYWORD = "secondary"
 # Standalone keyword that opts out of gift-technique variant resolution.
 _BASE_KEYWORD = "base"
+# Standalone keyword that waives a subtle style's cast concealment for this cast (#2710).
+_OPENLY_KEYWORD = "openly"
 # Keyword prefixes used to parse fury=<tier> anchor=<name> from cast command args.
 _FURY_PREFIX = "fury="
 _ANCHOR_PREFIX = "anchor="

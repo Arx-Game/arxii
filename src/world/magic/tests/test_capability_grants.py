@@ -7,7 +7,7 @@ from django.test import TestCase
 
 from world.conditions.factories import CapabilityTypeFactory
 from world.magic.factories import TechniqueCapabilityGrantFactory, TechniqueFactory
-from world.magic.models import TechniqueCapabilityGrant
+from world.magic.models import CapabilityPowerConfig, TechniqueCapabilityGrant
 
 
 class TechniqueCapabilityGrantTests(TestCase):
@@ -88,3 +88,43 @@ class TechniqueCapabilityGrantTests(TestCase):
             prerequisite=prereq,
         )
         assert grant.prerequisite_id == prereq.id
+
+
+class CapabilityGrantCurveTests(TestCase):
+    """The curve replaces the additive term once a CapabilityPowerConfig row exists (#2708)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.technique = TechniqueFactory(name="Iron Skin", intensity=3)
+        cls.capability = CapabilityTypeFactory(name="Armor")
+
+    def test_inert_without_config(self) -> None:
+        """THE critical invariant: no config row means today's exact number."""
+        grant = TechniqueCapabilityGrant.objects.create(
+            technique=self.technique,
+            capability=self.capability,
+            base_value=5,
+            intensity_multiplier=Decimal("1.0"),
+        )
+        self.assertEqual(grant.calculate_value(), 8)  # 5 + 1.0 * 3, pre-#2708
+
+    def test_zero_sensitivity_rows_unchanged_with_config(self) -> None:
+        CapabilityPowerConfig.objects.create(pk=1, power_per_doubling=10)
+        grant = TechniqueCapabilityGrant.objects.create(
+            technique=self.technique,
+            capability=self.capability,
+            base_value=5,
+            intensity_multiplier=Decimal(0),
+        )
+        self.assertEqual(grant.calculate_value(), 5)
+
+    def test_curves_with_explicit_power(self) -> None:
+        CapabilityPowerConfig.objects.create(pk=1, power_per_doubling=10)
+        grant = TechniqueCapabilityGrant.objects.create(
+            technique=self.technique,
+            capability=self.capability,
+            base_value=5,
+            intensity_multiplier=Decimal("1.0"),
+        )
+        self.assertEqual(grant.calculate_value(effective_power=10), 10)
+        self.assertEqual(grant.calculate_value(effective_power=30), 40)

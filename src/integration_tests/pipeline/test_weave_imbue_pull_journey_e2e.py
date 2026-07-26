@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from evennia.utils.idmapper import models as idmapper_models
 
 from commands.combat import CmdDeclareTechnique
@@ -61,6 +61,7 @@ from world.traits.factories import CharacterTraitValueFactory, CheckSystemSetupF
 from world.vitals.models import CharacterVitals
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class WeaveImbulePullJourneyE2ETests(TestCase):
     """5-step journey from ceremony through weave, imbue, and pull.
 

@@ -149,6 +149,7 @@ from world.magic.models.motifs import (
 from world.magic.models.portals import PortalAnchor, PortalAnchorKind
 from world.magic.models.power_config import (
     AuraPowerConfig,
+    CapabilityPowerConfig,
     CovenantRoleBlendConfig,
     LevelPowerConfig,
     StandingCapBand,
@@ -204,6 +205,10 @@ from world.magic.models.technique_draft import (
     TechniqueDraftTreatment,
 )
 from world.magic.models.technique_grant import TechniqueGrant
+from world.magic.models.technique_progress import (
+    TechniqueProgress,
+    TechniqueProgressWeekly,
+)
 from world.magic.models.techniques import (
     CharacterTechnique,
     EffectType,
@@ -234,6 +239,7 @@ from world.magic.models.threads import (
     ThreadXPLockedLevel,
 )
 from world.magic.models.touchstone_config import TouchstoneCastConfig
+from world.magic.models.training_outcome import TrainingOutcomeAward
 from world.magic.models.weaving import (
     CharacterThreadWeavingUnlock,
     ThreadWeavingTeachingOffer,
@@ -270,6 +276,8 @@ __all__ = [
     "AuraPowerConfig",
     # knowledge layer grants (Anima Ritual UI spec §Decision 6)
     "BeginningsRitualGrant",
+    # geometric capability power curve config (#2708)
+    "CapabilityPowerConfig",
     "CharacterAnima",
     "CharacterAura",
     # gifts
@@ -435,6 +443,8 @@ __all__ = [
     "TechniqueFunctionTagManager",
     "TechniqueGrant",
     "TechniqueOutcomeModifier",
+    "TechniqueProgress",
+    "TechniqueProgressWeekly",
     "TechniqueRemovedCondition",
     "TechniqueStyle",
     "TechniqueStyleManager",
@@ -462,4 +472,6 @@ __all__ = [
     "TraditionGiftGrant",
     "TraditionManager",
     "TraditionRitualGrant",
+    # training outcome awards (#2727)
+    "TrainingOutcomeAward",
 ]

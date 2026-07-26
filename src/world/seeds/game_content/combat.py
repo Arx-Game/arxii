@@ -20,20 +20,33 @@ if TYPE_CHECKING:
 
 @dataclass
 class PenetrationContestResult:
-    """Returned by seed_penetration_contest()."""
+    """Returned by seed_penetration_contest().
 
-    check_type: CheckType
+    ``check_type`` (``checks.CheckType``) and ``modifier_target``
+    (``mechanics.ModifierTarget``) are content-repo-owned (#2698) — each is
+    ``None`` when its category/row isn't authored and ``SEED_SAMPLE_CONTENT``
+    is off. ``factors`` doesn't depend on ``check_type`` and always seeds.
+    """
+
+    check_type: CheckType | None
     factors: list[PenetrationOutcomeFactor]
-    modifier_target: ModifierTarget
+    modifier_target: ModifierTarget | None
 
 
 @dataclass
 class FleeSeedResult:
-    """Returned by seed_flee_check()."""
+    """Returned by seed_flee_check().
 
-    check_type: CheckType
-    modifier_target: ModifierTarget
-    config: FleeConfig
+    ``check_type`` (``checks.CheckType``) and ``modifier_target``
+    (``mechanics.ModifierTarget``) are content-repo-owned (#2698) — each is
+    ``None`` when its category/row isn't authored and ``SEED_SAMPLE_CONTENT``
+    is off. ``config`` (the ``FleeConfig`` singleton) is ``None`` too in that
+    case, since its ``check_type`` FK is required.
+    """
+
+    check_type: CheckType | None
+    modifier_target: ModifierTarget | None
+    config: FleeConfig | None
 
 
 def seed_penetration_contest() -> PenetrationContestResult:
@@ -107,10 +120,12 @@ def seed_dramatic_surge_content() -> None:
     """Seed the dramatic surge engine's default content (#2013).
 
     Idempotent (get_or_create at every layer). Creates:
-    - the FIRST production RelationshipTrack rows this codebase ships:
-      "Bond" (POSITIVE), "Rivalry" / "Enemies" (NEGATIVE) — all
+    - "Bond" (POSITIVE), "Rivalry" / "Enemies" (NEGATIVE) — all
       fuels_escalation_spikes=True. Without the negative tracks the
-      hated-foe leg is content-dead.
+      hated-foe leg is content-dead. ``relationships.RelationshipTrack`` is
+      content-repo-owned (#2698) — each is looked up rather than invented
+      unless ``SEED_SAMPLE_CONTENT`` is on; nothing else in this function
+      depends on them existing, so a missing track is simply skipped.
     - a default "Standard Dramatic Escalation" EscalationCurve.
     - StakesEscalationModifier rows for all five StakesLevel values;
       REGIONAL and above carry the default curve + increasing bonuses
@@ -125,55 +140,65 @@ def seed_dramatic_surge_content() -> None:
     from world.combat.models import EscalationCurve, StakesEscalationModifier  # noqa: PLC0415
     from world.relationships.constants import TrackSign  # noqa: PLC0415
     from world.relationships.models import RelationshipTrack  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     wire_escalation_content()
 
-    RelationshipTrack.objects.get_or_create(
-        name="Bond",
-        defaults={
+    authored_or_sample(
+        RelationshipTrack,
+        {
             "slug": "bond",
             "description": "A deep, protective attachment between characters.",
             "sign": TrackSign.POSITIVE,
             "display_order": 10,
             "fuels_escalation_spikes": True,
         },
+        name="Bond",
     )
-    RelationshipTrack.objects.get_or_create(
-        name="Rivalry",
-        defaults={
+    authored_or_sample(
+        RelationshipTrack,
+        {
             "slug": "rivalry",
             "description": "Competitive antagonism — a foe you measure yourself against.",
             "sign": TrackSign.NEGATIVE,
             "display_order": 20,
             "fuels_escalation_spikes": True,
         },
+        name="Rivalry",
     )
-    RelationshipTrack.objects.get_or_create(
-        name="Enemies",
-        defaults={
+    authored_or_sample(
+        RelationshipTrack,
+        {
             "slug": "enemies",
             "description": "Open, active hostility.",
             "sign": TrackSign.NEGATIVE,
             "display_order": 21,
             "fuels_escalation_spikes": True,
         },
+        name="Enemies",
     )
 
+    # checks.CheckType is content-repo-owned (#2698); pace_check_type is a
+    # required FK on EscalationCurve, so the curve is skipped entirely (curve
+    # stays None — StakesEscalationModifier.default_curve is nullable) when
+    # the "Escalation Pace" CheckType isn't authored.
     pace_check_type = ensure_escalation_pace_check_type()
-    curve, _ = EscalationCurve.objects.get_or_create(
-        name="Standard Dramatic Escalation",
-        defaults={
-            "description": "Default escalating ramp for stakes-driven encounters.",
-            "start_round": 2,
-            "intensity_step": 1,
-            "pace_check_type": pace_check_type,
-            "spike_intensity_amount": 3,
-            "spike_minimum_track_points": 5,
-            "peril_spike_intensity_amount": 4,
-            "hated_foe_spike_intensity_amount": 4,
-            "surge_narration": "{character}'s power surges with sudden, dramatic force.",
-        },
-    )
+    curve = None
+    if pace_check_type is not None:
+        curve, _ = EscalationCurve.objects.get_or_create(
+            name="Standard Dramatic Escalation",
+            defaults={
+                "description": "Default escalating ramp for stakes-driven encounters.",
+                "start_round": 2,
+                "intensity_step": 1,
+                "pace_check_type": pace_check_type,
+                "spike_intensity_amount": 3,
+                "spike_minimum_track_points": 5,
+                "peril_spike_intensity_amount": 4,
+                "hated_foe_spike_intensity_amount": 4,
+                "surge_narration": "{character}'s power surges with sudden, dramatic force.",
+            },
+        )
 
     StakesEscalationModifier.objects.get_or_create(
         stakes_level=StakesLevel.LOCAL,

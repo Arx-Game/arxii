@@ -8,6 +8,7 @@ call ``.invalidate()`` after mutation.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.db.models import Prefetch
@@ -17,12 +18,18 @@ from world.magic.constants import EffectKind, TargetKind
 from world.magic.models import CharacterResonance, Thread, ThreadPullEffect
 from world.magic.models.techniques import Technique
 from world.magic.services.pull_effects import get_pull_effects_for_thread
+from world.magic.services.resonance import _anchor_ambiently_active, resolve_gift_ids_by_technique
 from world.magic.services.threads import thread_level_multiplier
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from typeclasses.characters import Character
     from world.conditions.models import DamageType
-    from world.magic.models import Facet, Resonance
+    from world.magic.models import CapabilityPowerConfig, Facet, Resonance
+    from world.magic.types.pull import PullActionContext
+
+logger = logging.getLogger(__name__)
 
 
 class CharacterThreadHandler:
@@ -52,11 +59,13 @@ class CharacterThreadHandler:
                 "resonance__affinity",
                 "target_trait",
                 "target_technique",
-                "target_relationship_track",
-                "target_capstone",
+                "target_relationship_track__relationship",
+                "target_capstone__relationship",
                 "target_facet",
                 "target_covenant_role",
                 "target_gift",
+                "target_mantle__item_instance",
+                "target_sanctum_details__feature_instance__room_profile",
             )
         )
 
@@ -257,32 +266,58 @@ class CharacterThreadHandler:
             total += row.resistance_amount
         return total
 
-    def passive_capability_grants(self) -> set[int]:
-        """Return CapabilityType PKs granted by tier-0 CAPABILITY_GRANT effects.
+    def passive_capability_grants(self) -> dict[int, int]:
+        """Return CapabilityType PK -> value granted by tier-0 CAPABILITY_GRANT effects.
 
-        Thin accessor over the per-handler cached grant set
+        Thin accessor over the per-handler cached grant dict
         (``_passive_capability_grants_cache``). Cleared by ``invalidate()``
         alongside ``_all`` so a sweep over many techniques reuses one memoized
         result (one set of queries per character per request, not per
-        requirement).
+        requirement). ``set(handler.passive_capability_grants())`` still yields
+        the granted CapabilityType PKs (dict iteration is over keys) — the
+        shape callers that only care about membership (e.g.
+        ``world.covenants.services``) already rely on.
         """
         return self._passive_capability_grants_cache
 
     @cached_property
-    def _passive_capability_grants_cache(self) -> set[int]:
-        """Compute CapabilityType PKs granted by tier-0 CAPABILITY_GRANT effects.
+    def _passive_capability_grants_cache(self) -> dict[int, int]:
+        """Compute CapabilityType PK -> value granted by tier-0 CAPABILITY_GRANT effects.
 
         Derive-on-read mirror of ``passive_vital_bonuses``. For COVENANT_ROLE
         threads the grant only applies while the character holds an active,
         *engaged* CharacterCovenantRole for that role (Slice A §3.6 / #751).
         Other thread kinds always pass (anchor-in-scope via PROTECT — see
         ``passive_vital_bonuses``). Single batched query; no N+1.
+
+        **#2708 magnitude curve — two distinct sources, only one is curved.**
+        ``ThreadPullEffect`` CAPABILITY_GRANT rows are thread-sourced: they carry a
+        level (via the granting thread) and a ``capability_grant_value`` base, so
+        each qualifying thread's contribution is run through
+        ``apply_capability_curve(row.capability_grant_value, power=context_free_power,
+        sensitivity=thread_level_multiplier(thread.level))`` — a level-10 thread now
+        outweighs a level-1 thread granting the same capability, where before both
+        contributed an identical flat +1. ``CovenantRole.granted_capabilities`` (#2022,
+        the M2M listed directly on an engaged role) is NOT thread-sourced — it has no
+        thread, no level, and no ``capability_grant_value`` to curve — so it stays flat
+        at 1, exactly as before. Curving it would mean inventing a sensitivity for a
+        source that has none. ``power`` is ``context_free_power`` (Task 2): a passive
+        grant is not tied to any one cast, so the context-free power baseline is the
+        only power figure available here. ``CapabilityPowerConfig`` is fetched ONCE for
+        the whole cache build and threaded through every ``apply_capability_curve``
+        call — never once per grant (the N+1 shape #2708 review already caught twice
+        elsewhere in this file). Multiple sources granting the same capability fold via
+        MAX, not sum (ADR-0034 individuation), matching ``_technique_capability_values``.
         """
         threads = self._all
         if not threads:
-            return set()
+            return {}
 
         from django.db.models import Q  # noqa: PLC0415
+
+        from world.magic.services.capability_curve import (  # noqa: PLC0415
+            get_capability_power_config,
+        )
 
         # GIFT threads require gift-specific preference logic; separate them from
         # the non-GIFT batch to avoid cross-gift row leakage.
@@ -319,9 +354,64 @@ class CharacterThreadHandler:
             ).values_list("covenant_role_id", flat=True)
         )
 
-        granted: set[int] = set()
+        config = get_capability_power_config()  # fetched once for the whole build
+        power = self.context_free_power
 
-        # Non-GIFT batch processing (unchanged logic)
+        granted: dict[int, int] = {}
+
+        def _fold(capability_id: int, value: int) -> None:
+            granted[capability_id] = max(granted.get(capability_id, 0), value)
+
+        # Non-GIFT batch processing: curved per qualifying thread.
+        for capability_id, value in self._non_gift_capability_grant_ids(
+            non_gift_effects, threads_by_key, engaged_role_ids, power=power, config=config
+        ).items():
+            _fold(capability_id, value)
+
+        # GIFT threads: prefer gift-specific, fall back to null (per-thread), curved.
+        for capability_id, value in self._gift_capability_grant_ids(
+            gift_threads, config=config
+        ).items():
+            _fold(capability_id, value)
+
+        # #2022: Role-granted capabilities from the CovenantRole.granted_capabilities
+        # M2M — these are capabilities directly listed on the role (not via
+        # ThreadPullEffect). They apply while the role is engaged. No thread, no
+        # level, no capability_grant_value — flat 1, never curved.
+        if engaged_role_ids:
+            from world.covenants.models import CovenantRole  # noqa: PLC0415
+
+            role_capability_ids = set(
+                CovenantRole.objects.filter(
+                    pk__in=engaged_role_ids,
+                ).values_list("granted_capabilities", flat=True)
+            )
+            role_capability_ids.discard(None)
+            for capability_id in role_capability_ids:
+                _fold(capability_id, 1)
+
+        return granted
+
+    @staticmethod
+    def _non_gift_capability_grant_ids(
+        non_gift_effects: list[ThreadPullEffect],
+        threads_by_key: dict[tuple[str, int], list[Thread]],
+        engaged_role_ids: set[int],
+        *,
+        power: int,
+        config: CapabilityPowerConfig | None,
+    ) -> dict[int, int]:
+        """Return CapabilityType PK -> curved value for the non-GIFT batch (#2708).
+
+        Extracted from ``_passive_capability_grants_cache`` to keep that method below
+        the complexity ceiling. Preserves the pre-#2708 gates unchanged (``min_thread_level``
+        and the COVENANT_ROLE engagement check) — only the magnitude, via
+        ``apply_capability_curve``, is new. Multiple qualifying threads for the same row
+        fold via MAX (ADR-0034 individuation).
+        """
+        from world.magic.services.capability_curve import apply_capability_curve  # noqa: PLC0415
+
+        granted: dict[int, int] = {}
         for row in non_gift_effects:
             candidates = threads_by_key.get((row.target_kind, row.resonance_id), [])
             for t in candidates:
@@ -332,36 +422,329 @@ class CharacterThreadHandler:
                     and t.target_covenant_role_id not in engaged_role_ids
                 ):
                     continue
-                granted.add(row.capability_grant_id)
-                break  # one qualifying thread suffices for this effect
-
-        # GIFT threads: prefer gift-specific, fall back to null (per-thread)
-        granted.update(self._gift_capability_grant_ids(gift_threads))
-
-        # #2022: Role-granted capabilities from the CovenantRole.granted_capabilities
-        # M2M — these are capabilities directly listed on the role (not via
-        # ThreadPullEffect). They apply while the role is engaged.
-        if engaged_role_ids:
-            from world.covenants.models import CovenantRole  # noqa: PLC0415
-
-            role_capability_ids = set(
-                CovenantRole.objects.filter(
-                    pk__in=engaged_role_ids,
-                ).values_list("granted_capabilities", flat=True)
-            )
-            role_capability_ids.discard(None)
-            granted.update(role_capability_ids)
-
+                value = apply_capability_curve(
+                    row.capability_grant_value,
+                    power=power,
+                    sensitivity=thread_level_multiplier(t.level),
+                    config=config,
+                )
+                granted[row.capability_grant_id] = max(
+                    granted.get(row.capability_grant_id, 0), value
+                )
         return granted
 
-    def _gift_capability_grant_ids(self, gift_threads: list[Thread]) -> set[int]:
-        """Return CapabilityType PKs from GIFT threads using gift-specific preference.
+    @cached_property
+    def context_free_power(self) -> int:
+        """Power contributions that hold regardless of what the character is doing (#2708).
+
+        Derived with ``channeled_intensity=0`` and ``technique=None``, so it carries the
+        character-level term plus globally-scoped (null-scoped) character and condition
+        modifiers, and nothing technique- or thread-contextual. Gift-scoped aura and
+        touchstone terms return 0 without a technique by construction.
+
+        ``applicable_threads=[]`` is passed explicitly but is not load-bearing:
+        ``_derive_power`` normalizes ``None`` to ``[]`` internally
+        (``applicable_threads or []``), so ``None``, ``[]``, and omitting the kwarg are
+        byte-identical here. The thread term below is zero because nothing populates the
+        list, not because ``[]`` suppresses any resolution — no layer anywhere resolves a
+        character's real threads on its own. A later contextual thread term must actively
+        resolve and pass a populated list; nothing here is primed to switch on.
+
+        Memoized here rather than recomputed per grant: ``_derive_power`` costs roughly a
+        dozen queries, and the agency oracle sweeps every known technique. One derivation
+        per character per request keeps that sweep constant-query. Cleared by
+        ``invalidate()`` alongside ``_all``.
+
+        **STALENESS CONTRACT (#2708 C1 review, I2 — read before adding a POWER source):**
+        this ``cached_property`` lives on ``CharacterThreadHandler``, which hangs off
+        ``character.threads`` — a ``cached_property`` on the ``Character`` typeclass, so
+        it survives as long as the underlying ``ObjectDB`` stays resident in the
+        SharedMemoryModel idmapper, NOT just one request. ``invalidate()`` is called only
+        from ~6 thread/covenant/gift mutation sites (``world/covenants/services.py``,
+        ``world/magic/specialization/services.py``, ``world/magic/services/crossing.py``,
+        ``world/magic/services/signature.py``, ``world/magic/services/threads.py``). But
+        the value this method derives now depends on ``get_modifier_breakdown`` +
+        ``get_condition_modifier_breakdown`` (null-scoped POWER contributions from
+        distinctions/species/equipment AND conditions) and, via the power-term providers,
+        ``sheet.current_level``. NOTHING in ``world.conditions`` (applying/removing a
+        POWER-boosting condition), ``world.progression`` (leveling), or
+        ``world.distinctions`` (granting/revoking a POWER-scoped distinction) calls
+        ``threads.invalidate()``. A character who gains such a condition, levels, or
+        gains a distinction after this property is first read keeps the STALE value —
+        and, symmetrically, keeps an inflated value after a boosting condition expires —
+        until something on the thread/covenant/gift list happens to invalidate the whole
+        handler. Pre-#2708 this cache held only thread-derived data, so its invalidation
+        contract was exactly right; #2708 widened what it depends on without widening who
+        clears it. Fixing this needs either (a) invalidating from every condition/
+        progression/distinction write path that touches a POWER-category
+        ``ModifierTarget`` (broad, cross-app, real risk of missing a site — the same
+        failure shape that created this gap), or (b) narrowing this cache's scope so it
+        cannot outlive the state it reads (conflicts with the O(1)-sweep reason it's
+        memoized here at all, per the ``_technique_capability_values``/
+        ``_get_technique_sources`` query-count regression tests). Neither is safely
+        scoped to a fold-in fix; this docstring is the deliberate (c) — flag it loudly
+        for whoever turns the curve on (i.e. creates the first ``CapabilityPowerConfig``
+        row), since that is the moment this staleness starts actually moving capability
+        magnitudes rather than being inert.
+        """
+        from world.magic.services.techniques import _derive_power  # noqa: PLC0415
+
+        return _derive_power(
+            channeled_intensity=0,
+            technique=None,
+            character=self.character,
+            applicable_threads=[],
+        ).total
+
+    @cached_property
+    def _tier0_intensity_bumps(self) -> dict[int, int]:
+        """Thread pk -> its tier-0 INTENSITY_BUMP total, batched once per character (#2708).
+
+        One or two queries (non-GIFT threads batched by ``(target_kind, resonance_id)``;
+        GIFT threads batched separately so gift-specific rows can be preferred over the
+        null-``target_gift`` fallback, resolved in memory) covering every tier-0
+        INTENSITY_BUMP row that could possibly apply to any of the character's threads,
+        level-scaled the same way ``resolve_pull_effects`` scales an active pull
+        (``round(intensity_bump_amount * thread_level_multiplier(thread.level))``, gated
+        by ``min_thread_level <= thread.level``) — see
+        ``world/magic/services/resonance.py`` around lines 716-734. Memoizing here is what
+        keeps ``contextual_thread_power`` query-free per context, so the agency oracle's
+        technique sweep stays constant-query. Cleared by ``invalidate()``.
+
+        Does not replicate the FACET-kind worn-item quality-tier scaling
+        ``resolve_pull_effects`` applies on top of the level multiplier (it would require
+        a per-thread equipment query, defeating the point of this cache) — a tier-0
+        INTENSITY_BUMP row authored against a FACET thread would under-scale here relative
+        to an active pull of the same thread. No such content exists today.
+        ``_non_gift_tier0_intensity_bumps`` guards against silently under-scaling one:
+        a FACET-kind row is skipped (with a ``logger.warning``) rather than folded into
+        the batch, so the day one is authored this surfaces loudly instead of quietly
+        disagreeing with an active pull of the same thread.
+        """
+        threads = self._all
+        if not threads:
+            return {}
+
+        gift_threads = [t for t in threads if t.target_kind == TargetKind.GIFT]
+        non_gift_threads = [t for t in threads if t.target_kind != TargetKind.GIFT]
+
+        bumps: dict[int, int] = self._non_gift_tier0_intensity_bumps(non_gift_threads)
+        for pk, amount in self._gift_tier0_intensity_bumps(gift_threads).items():
+            bumps[pk] = bumps.get(pk, 0) + amount
+        return bumps
+
+    @staticmethod
+    def _non_gift_tier0_intensity_bumps(non_gift_threads: list[Thread]) -> dict[int, int]:
+        """Tier-0 INTENSITY_BUMP totals for non-GIFT threads (single batched query).
+
+        FACET-kind rows are skipped loudly (``logger.warning``) rather than folded into
+        the generic batch: ``resolve_pull_effects`` scales a FACET pull by the worn-item
+        quality-tier aggregate (``resonance.py`` ~lines 749-776) on top of the level
+        multiplier this batch applies; replicating that here would need a per-thread
+        equipment query, defeating the point of this cache (see the docstring on
+        ``_tier0_intensity_bumps``). Silently computing an under-scaled value would let a
+        passive contribution and a paid pull of the same thread disagree with no error —
+        this makes that divergence impossible to miss instead.
+        """
+        if not non_gift_threads:
+            return {}
+
+        from django.db.models import Q  # noqa: PLC0415
+
+        by_key: dict[tuple[str, int], list[Thread]] = {}
+        for t in non_gift_threads:
+            by_key.setdefault((t.target_kind, t.resonance_id), []).append(t)
+
+        q = Q()
+        for target_kind, resonance_id in by_key:
+            q |= Q(target_kind=target_kind, resonance_id=resonance_id)
+        rows = ThreadPullEffect.objects.filter(
+            q,
+            tier=0,
+            effect_kind=EffectKind.INTENSITY_BUMP,
+            target_gift__isnull=True,
+        ).exclude(intensity_bump_amount__isnull=True)
+
+        bumps: dict[int, int] = {}
+        for row in rows:
+            if row.target_kind == TargetKind.FACET:
+                logger.warning(
+                    "ThreadPullEffect %s is a FACET-kind tier-0 INTENSITY_BUMP row. "
+                    "CharacterThreadHandler.contextual_thread_power does not replicate "
+                    "resolve_pull_effects' worn-item quality-tier scaling for FACET "
+                    "threads (world/magic/services/resonance.py, FACET branch of "
+                    "resolve_pull_effects), so this row is skipped here rather than "
+                    "silently under-scaled (#2708).",
+                    row.pk,
+                )
+                continue
+            for t in by_key.get((row.target_kind, row.resonance_id), []):
+                if row.min_thread_level > t.level:
+                    continue
+                scaled = round(row.intensity_bump_amount * thread_level_multiplier(t.level))
+                bumps[t.pk] = bumps.get(t.pk, 0) + scaled
+        return bumps
+
+    @staticmethod
+    def _gift_tier0_intensity_bumps(gift_threads: list[Thread]) -> dict[int, int]:
+        """Tier-0 INTENSITY_BUMP totals for GIFT threads.
+
+        One batched query; gift-specific rows are preferred over the null-``target_gift``
+        fallback per thread, resolved in memory (mirrors ``get_pull_effects_for_thread``'s
+        per-thread preference without re-querying per thread).
+        """
+        if not gift_threads:
+            return {}
+
+        from django.db.models import Q  # noqa: PLC0415
+
+        gift_ids = {t.target_gift_id for t in gift_threads}
+        resonance_ids = {t.resonance_id for t in gift_threads}
+        rows = list(
+            ThreadPullEffect.objects.filter(
+                Q(target_gift_id__in=gift_ids) | Q(target_gift__isnull=True),
+                target_kind=TargetKind.GIFT,
+                resonance_id__in=resonance_ids,
+                tier=0,
+                effect_kind=EffectKind.INTENSITY_BUMP,
+            ).exclude(intensity_bump_amount__isnull=True)
+        )
+
+        by_resonance_gift: dict[tuple[int, int], list[ThreadPullEffect]] = {}
+        by_resonance_null: dict[int, list[ThreadPullEffect]] = {}
+        for row in rows:
+            if row.target_gift_id is not None:
+                by_resonance_gift.setdefault((row.resonance_id, row.target_gift_id), []).append(row)
+            else:
+                by_resonance_null.setdefault(row.resonance_id, []).append(row)
+
+        bumps: dict[int, int] = {}
+        for t in gift_threads:
+            candidates = by_resonance_gift.get((t.resonance_id, t.target_gift_id))
+            if candidates is None:
+                candidates = by_resonance_null.get(t.resonance_id, [])
+            total = 0
+            for row in candidates:
+                if row.min_thread_level > t.level:
+                    continue
+                total += round(row.intensity_bump_amount * thread_level_multiplier(t.level))
+            if total:
+                bumps[t.pk] = total
+        return bumps
+
+    @cached_property
+    def _gift_id_by_technique_cache(self) -> dict[tuple[int, ...], dict[int, int]]:
+        """Memoizes ``resolve_gift_ids_by_technique`` per distinct ``involved_techniques``.
+
+        ``contextual_thread_power`` is swept once per technique by the capability oracle
+        (Task 5), each call carrying a different ``ctx.involved_techniques`` singleton — so
+        keying only on "have we resolved gift ids at all this request" (the pre-fix
+        behaviour) still re-issued a ``Technique`` query on *every* call for any character
+        who owns a GIFT thread. This dict caps that at one query per distinct
+        ``involved_techniques`` value for the handler's lifetime (repeat calls with the
+        same context: zero queries). It does NOT collapse an N-distinct-context sweep to
+        one query on its own — see ``contextual_thread_power``'s ``gift_id_by_technique=``
+        parameter for the shape that does. Cleared by ``invalidate()``.
+        """
+        return {}
+
+    def _resolve_gift_id_by_technique_cached(
+        self, involved_techniques: tuple[int, ...]
+    ) -> dict[int, int]:
+        """Return cached technique->gift mapping, resolving+caching on miss."""
+        cache = self._gift_id_by_technique_cache
+        cached = cache.get(involved_techniques)
+        if cached is None:
+            cached = resolve_gift_ids_by_technique(involved_techniques)
+            cache[involved_techniques] = cached
+        return cached
+
+    def contextual_thread_power(
+        self, ctx: PullActionContext, *, gift_id_by_technique: Mapping[int, int] | None = None
+    ) -> int:
+        """Tier-0 INTENSITY_BUMP from threads ambiently active for ``ctx`` (#2708).
+
+        The contextual sibling of ``context_free_power``: sums the batched, level-scaled
+        tier-0 INTENSITY_BUMP contribution (``_tier0_intensity_bumps``) of every owned
+        thread that ``_anchor_ambiently_active`` (Task 3's demonstrable-activation gate,
+        not the paid-pull ``_anchor_in_action`` predicate) confirms is genuinely engaged by
+        ``ctx`` right now — a pyromancer's fire-gift thread must not raise their ability to
+        climb a wall.
+
+        Pure in-memory over the already-cached ``self._all`` and the batched bump map — no
+        queries after the first call, EXCEPT for resolving ``ctx.involved_techniques``'s
+        gift ids, which needs a real ``Technique`` query and is only skippable when the
+        character owns no GIFT thread carrying tier-0 bump content (checked against
+        ``bumps``, not merely "owns any GIFT thread" — a GIFT thread with no bump content
+        can never change the answer, so the query is skipped even then).
+
+        ``gift_id_by_technique`` is a technique_id -> gift_id mapping, NOT a flattened set
+        of gift ids — ``_anchor_ambiently_active``/``_gift_in_action`` always narrow it
+        down to THIS call's own ``ctx.involved_techniques`` before deciding. That
+        narrowing is what makes it safe to pass a mapping covering more techniques than
+        this one call needs — a GIFT-B thread can never read as active for a GIFT-A
+        technique's call just because the mapping also happens to know GIFT B's
+        technique. (A pre-flattened gift-id set has no way to be narrowed back down per
+        call and is exactly the shape #2708 review's Critical finding flagged as unsound —
+        a caller supplying the union of a whole sweep's gift ids on every call would leak
+        every owned GIFT thread's gift into every technique's evaluation.)
+
+        Two ways this stays cheap under repeated/swept calls, in order of preference:
+
+        - **Batch callers that sweep many techniques** (Task 5's capability oracle: one
+          call per technique, each with its own singleton ``involved_techniques``) should
+          resolve the technique->gift mapping for the WHOLE technique set ONCE via
+          ``resolve_gift_ids_by_technique`` (pass the union of every technique in the
+          sweep) and pass the result as ``gift_id_by_technique=`` on every call — this is
+          what keeps an N-technique sweep at one query total instead of N. Per-call
+          narrowing (see above) makes this correct even though the mapping spans
+          techniques/gifts outside any one call's own context. When supplied, no cache
+          lookup or query happens here at all.
+        - **Callers that don't precompute** fall back to ``_gift_id_by_technique_cache``,
+          which memoizes per distinct ``involved_techniques`` tuple — free for repeated
+          calls with an unchanged context, but still one query per distinct tuple (a
+          sweep with a genuinely distinct singleton per technique is NOT collapsed by this
+          path alone; use ``gift_id_by_technique=`` for that case).
+        """
+        bumps = self._tier0_intensity_bumps
+        if not bumps:
+            return 0
+        if gift_id_by_technique is None:
+            has_active_gift_bump = any(
+                t.target_kind == TargetKind.GIFT and t.pk in bumps for t in self._all
+            )
+            if has_active_gift_bump and ctx.involved_techniques:
+                gift_id_by_technique = self._resolve_gift_id_by_technique_cached(
+                    ctx.involved_techniques
+                )
+            else:
+                gift_id_by_technique = {}
+        total = 0
+        for thread in self._all:
+            bump = bumps.get(thread.pk)
+            if not bump:
+                continue
+            if _anchor_ambiently_active(
+                thread, ctx, character=self.character, gift_id_by_technique=gift_id_by_technique
+            ):
+                total += bump
+        return total
+
+    def _gift_capability_grant_ids(
+        self, gift_threads: list[Thread], *, config: CapabilityPowerConfig | None
+    ) -> dict[int, int]:
+        """Return CapabilityType PK -> curved value from GIFT threads (#2708).
 
         Extracted from ``_passive_capability_grants_cache`` to keep that method
         below the complexity ceiling. Called only when the character has active
-        GIFT threads.
+        GIFT threads. Preserves the gift-specific-vs-null-fallback preference
+        (``get_pull_effects_for_thread``); only the magnitude is new. ``config`` is
+        the ``CapabilityPowerConfig`` already fetched once by the caller — never
+        re-fetched per gift thread.
         """
-        granted: set[int] = set()
+        from world.magic.services.capability_curve import apply_capability_curve  # noqa: PLC0415
+
+        granted: dict[int, int] = {}
         for t in gift_threads:
             rows = get_pull_effects_for_thread(
                 t,
@@ -372,7 +755,15 @@ class CharacterThreadHandler:
                 if row.min_thread_level > t.level:
                     continue
                 if row.capability_grant_id is not None:
-                    granted.add(row.capability_grant_id)
+                    value = apply_capability_curve(
+                        row.capability_grant_value,
+                        power=self.context_free_power,
+                        sensitivity=thread_level_multiplier(t.level),
+                        config=config,
+                    )
+                    granted[row.capability_grant_id] = max(
+                        granted.get(row.capability_grant_id, 0), value
+                    )
         return granted
 
     @cached_property
@@ -430,6 +821,9 @@ class CharacterThreadHandler:
         self.__dict__.pop("_all", None)
         self.__dict__.pop("_passive_capability_grants_cache", None)
         self.__dict__.pop("_crossing_choices", None)
+        self.__dict__.pop("context_free_power", None)
+        self.__dict__.pop("_tier0_intensity_bumps", None)
+        self.__dict__.pop("_gift_id_by_technique_cache", None)
         # Clear the pull-side cached_property only if the combat_pulls handler is
         # already instantiated (avoids triggering an import cycle on cold access).
         combat_pulls_handler = self.character.__dict__.get("combat_pulls")

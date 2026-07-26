@@ -10,7 +10,7 @@ is that caller.
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.currency.models import FavorTokenDetails
 from world.currency.services import mint_favor_token
@@ -124,6 +124,12 @@ class SettleObligationLoopEndToEndTests(TestCase):
     Hare, settle at the Registrar, and the training door that was refused while
     OWED now opens."""
 
+    # Walks the whole CG flow against the *sample* starter set — "Arx City",
+    # "Commoner", "The Fool" — which the Big Button only creates with
+    # SEED_SAMPLE_CONTENT on (#2698). Opting in here keeps that third-party
+    # path covered; a maintainer press (flag off) seeds config only and those
+    # named rows come from the content repo instead.
+    @override_settings(SEED_SAMPLE_CONTENT=True)
     @stub_content_root()
     def test_settle_at_registrar_unblocks_train_offer(self) -> None:  # noqa: PLR0915
         from evennia.accounts.models import AccountDB
@@ -278,6 +284,11 @@ class SettleObligationLoopEndToEndTests(TestCase):
         )
         accepted = resolve_offer(train_session, trainer_offer)
         self.assertIsNotNone(accepted.object_pk, accepted.message)
+        # Meter created, not CharacterTechnique (#2711)
+        from world.magic.models import TechniqueProgress
+
         self.assertTrue(
-            CharacterTechnique.objects.filter(character=sheet, technique=train_technique).exists()
+            TechniqueProgress.objects.filter(
+                character_sheet=sheet, technique=train_technique
+            ).exists()
         )

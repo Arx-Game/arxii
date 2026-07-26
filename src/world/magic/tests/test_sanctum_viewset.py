@@ -16,7 +16,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import PropertyMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from actions.types import ActionResult
@@ -438,6 +438,7 @@ def _mock_check_success_components() -> object:
     return type("CheckResult", (), {"outcome": outcome})()
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class InstallComponentsOwnershipEndpointTests(SanctumViewSetTestBase):
     """Real (unmocked) install through the web endpoint, component ownership."""
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import CombatAllegiance, OpponentStatus
@@ -13,6 +13,7 @@ from world.companions.services import PromoteSummonError, promote_summon_to_comp
 from world.magic.specialization.services import grant_gift_to_character
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_charm_content gates on #2698
 class PromoteSummonTests(TestCase):
     """Summon-path and charmed-enemy-path promotion to persistent Companion."""
 

@@ -81,6 +81,7 @@ class HoldsCapabilityPrerequisite(Prerequisite):
 
         from world.conditions.models import CapabilityType  # noqa: PLC0415
         from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
+        from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
         try:
             sheet = actor.sheet_data
@@ -89,7 +90,27 @@ class HoldsCapabilityPrerequisite(Prerequisite):
         capability = CapabilityType.objects.filter(name=self.capability_name).first()
         if capability is None:
             return False, "You cannot shift forms at will."
-        if get_effective_capability_value(sheet, capability) >= 1:
+        # #2708 Task 8: this is a generic capability gate — no technique or trait is
+        # knowable from a bare capability_name string, so this builds an honest context
+        # from what the prerequisite actually has (the optional target + the actor's
+        # current room) rather than fabricating involved_traits/involved_techniques.
+        # A TRAIT-thread grant of this capability stays exactly as dark here as it would
+        # under the ambient default — correct, since no trait is demonstrably in play at
+        # a generic gate like this one.
+        # NOTE: involved_objects is carried for future use / parity with the pull
+        # path's PullActionContext shape, but is currently UNREAD when this context
+        # reaches world.magic.services.resonance._anchor_ambiently_active (used via
+        # get_effective_capability_value -> _technique_capability_values) — its
+        # SANCTUM arm reads character.location directly rather than
+        # ctx.involved_objects, by design (see that function's docstring: "test
+        # real state, not caller assertion"). See world.conditions.services'
+        # get_effective_capability_value for the matching note at its own ambient
+        # construction site.
+        action_ctx = PullActionContext(
+            involved_objects=(actor.location.pk,) if actor.location else (),
+            target=target,
+        )
+        if get_effective_capability_value(sheet, capability, action_ctx=action_ctx) >= 1:
             return True, ""
         return False, "You cannot shift forms at will."
 

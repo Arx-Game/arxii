@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from world.locations.constants import HolderType, LocationParentType
 from world.locations.factories import LocationOwnershipFactory
@@ -96,6 +96,7 @@ class DissolutionRecoveryMathTests(TestCase):
         self.assertEqual(_dissolution_recovery_fraction(outcome), Decimal("0.0"))
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class RitualSeedTests(TestCase):
     def test_sanctification_personal_idempotent(self) -> None:
         r1 = ensure_sanctification_personal_ritual()
@@ -221,6 +222,7 @@ def _setup_covenant_sanctification_room(*, leader_rank_can_lead_rituals: bool, r
     return room_profile, leader, covenant, resonance
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PerformSanctificationCovenantLeaderGateTests(TestCase):
     """First-ever coverage of the COVENANT owner_mode leader-authorization path."""
 
@@ -299,6 +301,7 @@ class PerformSanctificationCovenantLeaderGateTests(TestCase):
             )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PerformSanctificationTests(TestCase):
     """Existing validation-gate tests — patch perform_check to a deterministic SUCCESS."""
 
@@ -395,6 +398,7 @@ class PerformSanctificationTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class AbsorbSanctumPoolTests(TestCase):
     def setUp(self):
         from unittest.mock import patch
@@ -567,6 +571,7 @@ def _mock_check_result(success_level: int = 1):
     return type("CR", (), {"outcome": outcome})()
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PerformDissolutionDifficultyTests(TestCase):
     """Dissolution uses authored RitualCheckConfig difficulty."""
 
@@ -638,6 +643,7 @@ def _build_sanctification_room_with_seeds():
     return room_profile, owner, resonance
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PerformSanctificationGradedCheckTests(TestCase):
     """Sanctification rolls a graded check; fail/botch → fizzled=True, no rows created."""
 
@@ -751,6 +757,7 @@ class SanctificationFizzleDetailTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PerformDissolutionSoftDeleteTests(TestCase):
     """Dissolution SOFT-deletes the sanctum and SOFT-retires threads.
 

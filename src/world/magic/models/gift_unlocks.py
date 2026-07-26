@@ -198,6 +198,56 @@ class GiftAcquisitionConfig(SharedMemoryModel):
             "surcharge is applied on top via the magic_learning_ap_cost modifier."
         ),
     )
+    cross_path_cost_multiplier = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("2.00"),
+        help_text=(
+            "Multiplier on the technique-progress meter total when the teacher's "
+            "Path.style differs from the learner's. 1.00 = no cross-path friction."
+        ),
+    )
+    weekly_training_cap = models.PositiveIntegerField(
+        default=50,
+        help_text=(
+            "Max meter-progress points a learner can contribute per game week "
+            "toward a single technique."
+        ),
+    )
+    cross_path_cap_divisor = models.PositiveIntegerField(
+        default=1,
+        help_text=(
+            "Divides the weekly training cap for cross-path learning. "
+            "1 = no effect (same cap). Higher = slower per-week progress."
+        ),
+    )
+    training_tier_difficulty_step = models.PositiveIntegerField(
+        default=10,
+        help_text=(
+            "Points of target_difficulty added per technique tier. "
+            "A T5 technique adds 50 difficulty at default."
+        ),
+    )
+    training_level_divisor = models.PositiveIntegerField(
+        default=2,
+        help_text=(
+            "Divisor for learner level -> difficulty reduction. "
+            "Level 20 with divisor 2 reduces difficulty by 10."
+        ),
+    )
+    training_self_study_difficulty_penalty = models.PositiveIntegerField(
+        default=10,
+        help_text=(
+            "Flat difficulty added when training without a teacher (teacher=None). 0 = no penalty."
+        ),
+    )
+    training_teacher_skill_divisor = models.PositiveIntegerField(
+        default=5,
+        help_text=(
+            "Divisor for the teacher's check rating -> difficulty reduction. "
+            "A teacher with 50 rating reduces difficulty by 10 at divisor 5."
+        ),
+    )
 
     class Meta:
         verbose_name = "Gift Acquisition Config"

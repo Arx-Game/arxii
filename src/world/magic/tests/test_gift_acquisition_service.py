@@ -3,7 +3,7 @@
 import itertools
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import GiftKind
@@ -253,9 +253,9 @@ class AcceptTechniqueOfferTest(TestCase):
 
         from world.magic.services.gift_acquisition import accept_technique_offer
 
-        ct = accept_technique_offer(self.sheet, offer)
-        self.assertEqual(ct.character, self.sheet)
-        self.assertEqual(ct.technique, self.technique)
+        progress = accept_technique_offer(self.sheet, offer)
+        self.assertEqual(progress.character_sheet, self.sheet)
+        self.assertEqual(progress.technique, self.technique)
 
         # Gift was implicitly acquired
         from world.magic.models import CharacterGift
@@ -294,10 +294,12 @@ class AcceptTechniqueOfferTest(TestCase):
 
         from world.magic.services.gift_acquisition import accept_technique_offer
 
-        accept_technique_offer(self.sheet, offer)
+        progress = accept_technique_offer(self.sheet, offer)
+        # 5 * 3 (first_technique_ap_multiplier) = 15 total_required
+        self.assertEqual(progress.total_required, 15)
+        # Learner AP is NOT spent at meter creation (#2711)
         self.learner_ap.refresh_from_db()
-        # 5 * 3 (first_technique_ap_multiplier) = 15 AP
-        self.assertEqual(self.learner_ap.current, 200 - 15)
+        self.assertEqual(self.learner_ap.current, 200)
 
     @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
     def test_second_technique_costs_base_ap(self, mock_gate):
@@ -326,12 +328,9 @@ class AcceptTechniqueOfferTest(TestCase):
             learn_ap_cost=5,
             banked_ap=1,
         )
-        self.learner_ap.current = 200
-        self.learner_ap.save()
-        accept_technique_offer(self.sheet, offer2)
-        self.learner_ap.refresh_from_db()
+        progress2 = accept_technique_offer(self.sheet, offer2)
         # 5 AP (no multiplier, gift already owned)
-        self.assertEqual(self.learner_ap.current, 200 - 5)
+        self.assertEqual(progress2.total_required, 5)
 
     @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
     def test_major_gift_subsequent_technique_uses_multiplier(self, mock_gate):
@@ -372,10 +371,9 @@ class AcceptTechniqueOfferTest(TestCase):
         )
         self.learner_ap.current = 200
         self.learner_ap.save()
-        accept_technique_offer(self.sheet, offer)
-        self.learner_ap.refresh_from_db()
-        # 5 * 2 (major_gift_ap_multiplier) = 10 AP
-        self.assertEqual(self.learner_ap.current, 200 - 10)
+        progress = accept_technique_offer(self.sheet, offer)
+        # 5 * 2 (major_gift_ap_multiplier) = 10 total_required
+        self.assertEqual(progress.total_required, 10)
 
     @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
     def test_path_does_not_block_accept(self, mock_gate):
@@ -432,7 +430,7 @@ class AcceptTechniqueOfferTest(TestCase):
             level=10,
         )
 
-        # Learn 3 techniques (fills the cap)
+        # Learn 3 techniques (fills the cap via meters)
         for _ in range(3):
             tech = TechniqueFactory(gift=self.gift)
             offer = TechniqueTeachingOffer.objects.create(
@@ -442,8 +440,6 @@ class AcceptTechniqueOfferTest(TestCase):
                 learn_ap_cost=5,
                 banked_ap=1,
             )
-            self.learner_ap.current = 200
-            self.learner_ap.save()
             accept_technique_offer(self.sheet, offer)
 
         # 4th should fail
@@ -509,7 +505,7 @@ class ChargeAndLearnGoldCostTest(TestCase):
         from world.achievements.constants import AccessChangeSource
         from world.magic.services.gift_acquisition import charge_and_learn
 
-        ct = charge_and_learn(
+        progress = charge_and_learn(
             self.sheet,
             self.technique,
             base_ap_cost=5,
@@ -517,7 +513,7 @@ class ChargeAndLearnGoldCostTest(TestCase):
             gold_cost=100,
             gold_treasury=self.treasury,
         )
-        self.assertEqual(ct.technique, self.technique)
+        self.assertEqual(progress.technique, self.technique)
         self.purse.refresh_from_db()
         self.treasury.refresh_from_db()
         self.assertEqual(self.purse.balance, 900)
@@ -537,10 +533,16 @@ class ChargeAndLearnGoldCostTest(TestCase):
         self.assertEqual(self.purse.balance, 1000)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class UnboundMagicLearningApSurchargeTest(TestCase):
     """The Unbound magic-learning AP surcharge (#2442) on the PC-teaching-accept
     door (``accept_technique_offer``). TIME, not power — resonance is untouched;
-    only the AP charged at the shared ``charge_and_learn`` seam scales."""
+    only the AP charged at the shared ``charge_and_learn`` seam scales.
+
+    mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    the surcharge's target only invents under SEED_SAMPLE_CONTENT — this test
+    asserts on the real surcharge amount, so it opts in.
+    """
 
     def setUp(self):
         from evennia_extensions.factories import AccountFactory
@@ -586,6 +588,11 @@ class UnboundMagicLearningApSurchargeTest(TestCase):
         )
 
     def test_unbound_learner_pays_surcharge(self):
+        """The Unbound surcharge applies per-session, not at meter creation (#2711).
+
+        The meter total is the base cost; the surcharge increases AP cost
+        per-session via ``contribute_to_technique_progress``.
+        """
         from world.magic.factories import TechniqueFactory
         from world.magic.services.gift_acquisition import accept_technique_offer
 
@@ -599,12 +606,14 @@ class UnboundMagicLearningApSurchargeTest(TestCase):
             banked_ap=1,
         )
 
-        ct = accept_technique_offer(self.sheet, offer)
+        progress = accept_technique_offer(self.sheet, offer)
 
-        self.assertEqual(ct.technique, technique)
+        self.assertEqual(progress.technique, technique)
+        # Meter total is base AP (5), NOT surcharged — surcharge is per-session
+        self.assertEqual(progress.total_required, 5)
+        # Learner AP is NOT spent at meter creation
         self.learner_ap.refresh_from_db()
-        # Gift already owned (MINOR) -> base AP 5, then ceil(5 * 1.5) = 8.
-        self.assertEqual(self.learner_ap.current, 200 - 8)
+        self.assertEqual(self.learner_ap.current, 200)
 
     def test_non_unbound_learner_unaffected(self):
         from world.magic.factories import TechniqueFactory
@@ -619,20 +628,27 @@ class UnboundMagicLearningApSurchargeTest(TestCase):
             banked_ap=1,
         )
 
-        accept_technique_offer(self.sheet, offer)
+        progress = accept_technique_offer(self.sheet, offer)
 
+        # Meter total is base AP (5)
+        self.assertEqual(progress.total_required, 5)
+        # Learner AP is NOT spent at meter creation
         self.learner_ap.refresh_from_db()
-        self.assertEqual(self.learner_ap.current, 200 - 5)
+        self.assertEqual(self.learner_ap.current, 200)
 
     def test_surcharge_reapplies_after_leaving_a_living_tradition(self):
-        """Mirror of ``test_surcharge_disappears_after_joining_a_living_tradition``
-        (review-requested, Minor): a member of a living tradition pays base AP;
-        ``leave_tradition`` re-applies the REAL seeded "unbound" drawback
-        (``ensure_unbound_drawback_distinction`` in ``setUp``, #2441 ruling 4 / #2442
-        Task 9), and the very next acquisition is charged the surcharge again."""
+        """The surcharge is per-session (#2711); meter totals are unaffected.
+
+        A member of a living tradition and a traditionless character both
+        get the same meter total. The surcharge difference is felt when they
+        contribute AP per-session via ``contribute_to_technique_progress``.
+        """
         from world.magic.factories import TechniqueFactory, TraditionFactory
         from world.magic.services.gift_acquisition import accept_technique_offer
-        from world.magic.services.tradition_membership import join_tradition, leave_tradition
+        from world.magic.services.tradition_membership import (
+            join_tradition,
+            leave_tradition,
+        )
 
         tradition = TraditionFactory(name="The Caretakers")
         join_tradition(self.sheet, tradition)
@@ -645,9 +661,8 @@ class UnboundMagicLearningApSurchargeTest(TestCase):
             learn_ap_cost=5,
             banked_ap=1,
         )
-        accept_technique_offer(self.sheet, offer_before)
-        self.learner_ap.refresh_from_db()
-        self.assertEqual(self.learner_ap.current, 200 - 5)
+        progress_before = accept_technique_offer(self.sheet, offer_before)
+        self.assertEqual(progress_before.total_required, 5)
 
         leave_tradition(self.sheet)
 
@@ -659,17 +674,13 @@ class UnboundMagicLearningApSurchargeTest(TestCase):
             learn_ap_cost=5,
             banked_ap=1,
         )
-        accept_technique_offer(self.sheet, offer_after)
-
-        self.learner_ap.refresh_from_db()
-        # base AP (5) already spent above; this second charge is ceil(5 * 1.5) = 8.
-        self.assertEqual(self.learner_ap.current, 200 - 5 - 8)
+        progress_after = accept_technique_offer(self.sheet, offer_after)
+        # Meter total is the same — surcharge is per-session, not at creation
+        self.assertEqual(progress_after.total_required, 5)
 
     def test_surcharge_disappears_after_joining_a_living_tradition(self):
-        """Integration with #2441 Task 8 — join_tradition sheds the Unbound
-        drawback; its ModifierSource/CharacterModifier rows cascade-delete
-        (ModifierSource.character_distinction is CASCADE), so the next
-        acquisition is charged at the un-surcharged rate."""
+        """Integration with #2441 Task 8 — meter totals are unaffected by
+        the Unbound distinction (#2711). The surcharge is per-session."""
         from world.magic.factories import TechniqueFactory, TraditionFactory
         from world.magic.services.gift_acquisition import accept_technique_offer
         from world.magic.services.tradition_membership import join_tradition
@@ -686,7 +697,7 @@ class UnboundMagicLearningApSurchargeTest(TestCase):
             banked_ap=1,
         )
 
-        accept_technique_offer(self.sheet, offer)
+        progress = accept_technique_offer(self.sheet, offer)
 
-        self.learner_ap.refresh_from_db()
-        self.assertEqual(self.learner_ap.current, 200 - 5)
+        # Meter total is base AP (5) — surcharge is per-session
+        self.assertEqual(progress.total_required, 5)

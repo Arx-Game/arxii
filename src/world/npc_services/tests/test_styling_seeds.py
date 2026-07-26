@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.forms.factories import FormTraitFactory, FormTraitOptionFactory
 from world.npc_services.models import NPCServiceOffer, StylingOfferDetails
@@ -13,7 +13,13 @@ from world.seeds.styling import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class StylingSeedTests(TestCase):
+    """forms.formtraitoption is content-repo-owned (#2698); the "court_coils"
+    exotic style has no authored counterpart, so _seed_exotic_style() only
+    invents it under SEED_SAMPLE_CONTENT — this test asserts on the real row,
+    so it opts in."""
+
     def _seed_traits(self) -> None:
         hair_color = FormTraitFactory(
             name="hair_color", display_name="Hair Color", is_cosmetic=True

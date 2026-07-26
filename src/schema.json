@@ -44993,11 +44993,12 @@ components:
             * `outcome` - Outcome
         visibility:
           allOf:
-          - $ref: '#/components/schemas/VisibilityF91Enum'
+          - $ref: '#/components/schemas/Visibility352Enum'
           description: |-
             Privacy override — can only escalate, never reduce
 
             * `default` - Default
+            * `perceived_only` - Perceived Only
             * `very_private` - Very Private
         timestamp:
           type: string
@@ -45250,11 +45251,12 @@ components:
             * `outcome` - Outcome
         visibility:
           allOf:
-          - $ref: '#/components/schemas/VisibilityF91Enum'
+          - $ref: '#/components/schemas/Visibility352Enum'
           description: |-
             Privacy override — can only escalate, never reduce
 
             * `default` - Default
+            * `perceived_only` - Perceived Only
             * `very_private` - Very Private
         timestamp:
           type: string
@@ -45449,11 +45451,12 @@ components:
             * `outcome` - Outcome
         visibility:
           allOf:
-          - $ref: '#/components/schemas/VisibilityF91Enum'
+          - $ref: '#/components/schemas/Visibility352Enum'
           description: |-
             Privacy override — can only escalate, never reduce
 
             * `default` - Default
+            * `perceived_only` - Perceived Only
             * `very_private` - Very Private
         pose_kind:
           allOf:
@@ -65841,6 +65844,9 @@ components:
         use_base_form:
           type: boolean
           default: false
+        cast_openly:
+          type: boolean
+          default: false
       required:
       - initiator_persona
       - scene
@@ -67678,13 +67684,15 @@ components:
       - can_kick
       - can_manage_ranks
       - can_request_gm
-    VisibilityF91Enum:
+    Visibility352Enum:
       enum:
       - default
+      - perceived_only
       - very_private
       type: string
       description: |-
         * `default` - Default
+        * `perceived_only` - Perceived Only
         * `very_private` - Very Private
     VisibilityFdaEnum:
       enum:

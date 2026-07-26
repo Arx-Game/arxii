@@ -15,7 +15,7 @@ SQLite-compatible: all factories use get_or_create; no ObjectDB-backed
 model is used in setUpTestData (DbHolder trap — see MEMORY.md).
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.vitals.factories import (
@@ -138,8 +138,13 @@ class AbandonmentPoolsTests(TestCase):
             self.assertEqual(self.pools[name].pk, pools2[name].pk)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsureSurroundedContentTests(TestCase):
-    """ensure_surrounded_content seeds the Surrounded condition + 3 pools (#1733)."""
+    """ensure_surrounded_content seeds the Surrounded condition + 3 pools (#1733).
+
+    Gates on SEED_SAMPLE_CONTENT (#2698) — the Surrounded ConditionTemplate is
+    content-repo-owned.
+    """
 
     def test_creates_condition_with_three_stages(self) -> None:
         from world.vitals.factories import ensure_surrounded_content

@@ -228,72 +228,92 @@ def calculate_wound_difficulty(*, damage: int, max_health: int) -> int:
     return cfg.wound_base_difficulty + (pct_over * cfg.wound_scaling_per_percent)
 
 
-def _ensure_survival_category() -> CheckCategory:
-    """Get or create the Survival CheckCategory, creating it if absent.
+def _ensure_survival_category() -> CheckCategory | None:
+    """Look up (or sample) the Survival CheckCategory — content-repo-owned (#2698)."""
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    Seeded on first use — no Trait fixtures required.
-    """
-    cat, _ = CheckCategory.objects.get_or_create(
+    return authored_or_sample(
+        CheckCategory,
+        {"description": "Survivability resistance checks", "display_order": 98},
         name=SURVIVABILITY_CHECK_CATEGORY,
-        defaults={"description": "Survivability resistance checks", "display_order": 98},
     )
-    return cat
 
 
-def _ensure_endurance_check_type() -> CheckType:
-    """Get or create the Endurance CheckType, seeding its stamina trait (#1706).
+def _ensure_endurance_check_type() -> CheckType | None:
+    """Look up (or sample) the Endurance CheckType, its stamina trait (#1706).
 
     Used for both knockout and permanent wound resistance checks. The single
     stamina stat leg is the tenet-permitted resist composition; staff may add
-    further trait rows via admin. Idempotent — ``get_or_create`` preserves any
-    existing staff weight edit on the (check_type, trait) pair.
+    further trait rows via admin. ``checks.CheckCategory``/``CheckType``/
+    ``CheckTypeTrait`` and ``traits.Trait`` are content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    Returns ``None`` when the category or the check type itself isn't authored
+    — callers must degrade gracefully (a missing check skips that tier, like a
+    missing pool already does).
     """
     from decimal import Decimal  # noqa: PLC0415
 
     from world.checks.models import CheckTypeTrait  # noqa: PLC0415
-    from world.traits.factories import StatTraitFactory  # noqa: PLC0415
-    from world.traits.models import TraitCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    check, _ = CheckType.objects.get_or_create(
+    category = _ensure_survival_category()
+    if category is None:
+        return None
+    check = authored_or_sample(
+        CheckType,
+        {"category": category, "description": "Resist knockout and permanent wounds."},
         name=ENDURANCE_CHECK_NAME,
-        defaults={
-            "category": _ensure_survival_category(),
-            "description": "Resist knockout and permanent wounds.",
-        },
     )
-    CheckTypeTrait.objects.get_or_create(
-        check_type=check,
-        trait=StatTraitFactory(name="stamina", category=TraitCategory.PHYSICAL),
-        defaults={"weight": Decimal("1.00")},
+    if check is None:
+        return None
+    stamina = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL, "is_public": True},
+        name="stamina",
     )
+    if stamina is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": Decimal("1.00")}, check_type=check, trait=stamina
+        )
     return check
 
 
-def _ensure_death_check_type() -> CheckType:
-    """Get or create the Mortal Resolve CheckType, seeding its willpower trait (#1706).
+def _ensure_death_check_type() -> CheckType | None:
+    """Look up (or sample) the Mortal Resolve CheckType, its willpower trait (#1706).
 
     Used for death resistance when a character is brought below zero health.
     The single willpower stat leg is the tenet-permitted resist composition.
-    Idempotent — ``get_or_create`` preserves any existing staff weight edit.
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` and
+    ``traits.Trait`` are content-repo-owned (#2698) — looked up rather than
+    invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` when the
+    category or the check type itself isn't authored.
     """
     from decimal import Decimal  # noqa: PLC0415
 
     from world.checks.models import CheckTypeTrait  # noqa: PLC0415
-    from world.traits.factories import StatTraitFactory  # noqa: PLC0415
-    from world.traits.models import TraitCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    check, _ = CheckType.objects.get_or_create(
+    category = _ensure_survival_category()
+    if category is None:
+        return None
+    check = authored_or_sample(
+        CheckType,
+        {"category": category, "description": "Resist death when brought below zero health."},
         name=DEATH_CHECK_NAME,
-        defaults={
-            "category": _ensure_survival_category(),
-            "description": "Resist death when brought below zero health.",
-        },
     )
-    CheckTypeTrait.objects.get_or_create(
-        check_type=check,
-        trait=StatTraitFactory(name="willpower", category=TraitCategory.META),
-        defaults={"weight": Decimal("1.00")},
+    if check is None:
+        return None
+    willpower = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.META, "is_public": True},
+        name="willpower",
     )
+    if willpower is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": Decimal("1.00")}, check_type=check, trait=willpower
+        )
     return check
 
 
@@ -700,6 +720,16 @@ def process_damage_consequences(  # noqa: PLR0913 - each param is a distinct sur
     health_pct = vitals.health_percentage
     raw_health_pct = vitals.health / vitals.max_health if vitals.max_health > 0 else 0.0
 
+    # checks.CheckType is content-repo-owned (#2698) — _ensure_endurance_check_type/
+    # _ensure_death_check_type look it up rather than invent it unless
+    # SEED_SAMPLE_CONTENT is on. A missing check type degrades exactly like a
+    # missing pool below: that tier is skipped rather than crashing combat.
+    # Resolved lazily, inside each tier's own guard below (not hoisted to run
+    # unconditionally on every call) — an unconditional call here regressed
+    # resolve_battle_round's per-declaration query budget (#1871's marginal-cost
+    # gate caught it): every STRIKE-fail paid this lookup even on damage events
+    # where no tier ends up firing at all.
+
     # 1. Permanent wound check
     wound_difficulty = calculate_wound_difficulty(
         damage=damage_dealt,
@@ -707,25 +737,28 @@ def process_damage_consequences(  # noqa: PLR0913 - each param is a distinct sur
     )
     wound_pool = _wound_pool(damage_type)
     if wound_difficulty > 0 and wound_pool is not None:
-        _apply_wound_tier(
-            character_sheet=character_sheet,
-            result=result,
-            wound_check_type=_ensure_endurance_check_type(),
-            wound_difficulty=wound_difficulty,
-            wound_pool=wound_pool,
-            extra_modifiers=extra_modifiers + saves.wound,
-            combat_interaction_factory=combat_interaction_factory,
-            damage_dealt=damage_dealt,
-        )
+        endurance_check_type = _ensure_endurance_check_type()
+        if endurance_check_type is not None:
+            _apply_wound_tier(
+                character_sheet=character_sheet,
+                result=result,
+                wound_check_type=endurance_check_type,
+                wound_difficulty=wound_difficulty,
+                wound_pool=wound_pool,
+                extra_modifiers=extra_modifiers + saves.wound,
+                combat_interaction_factory=combat_interaction_factory,
+                damage_dealt=damage_dealt,
+            )
 
     # 2. Death check (health <= 0)
     death_difficulty = calculate_death_difficulty(health_pct=raw_health_pct)
     death_pool = _death_pool(damage_type)
     if death_difficulty > 0 and death_pool is not None:
-        if _apply_death_tier(
+        death_check_type = _ensure_death_check_type()
+        if death_check_type is not None and _apply_death_tier(
             character_sheet=character_sheet,
             result=result,
-            death_check_type=_ensure_death_check_type(),
+            death_check_type=death_check_type,
             death_difficulty=death_difficulty,
             death_pool=death_pool,
             extra_modifiers=extra_modifiers + saves.death,
@@ -740,15 +773,17 @@ def process_damage_consequences(  # noqa: PLR0913 - each param is a distinct sur
     )
     knockout_pool = _knockout_pool()
     if knockout_difficulty > 0 and knockout_pool is not None:
-        _apply_knockout_tier(
-            character_sheet=character_sheet,
-            result=result,
-            ko_check_type=_ensure_endurance_check_type(),
-            knockout_difficulty=knockout_difficulty,
-            knockout_pool=knockout_pool,
-            extra_modifiers=extra_modifiers + saves.knockout,
-            combat_interaction_factory=combat_interaction_factory,
-        )
+        endurance_check_type = _ensure_endurance_check_type()
+        if endurance_check_type is not None:
+            _apply_knockout_tier(
+                character_sheet=character_sheet,
+                result=result,
+                ko_check_type=endurance_check_type,
+                knockout_difficulty=knockout_difficulty,
+                knockout_pool=knockout_pool,
+                extra_modifiers=extra_modifiers + saves.knockout,
+                combat_interaction_factory=combat_interaction_factory,
+            )
 
     return result
 
@@ -1293,14 +1328,17 @@ def _wake_roll_blocked(
     "one check per round" means per *elapsed* round. Out of combat: at most
     one roll per wall-clock round-equivalent (stamps the attempt time).
     """
-    from world.conditions.services import SECONDS_PER_ROUND  # noqa: PLC0415
+    from world.conditions.services import (  # noqa: PLC0415
+        FREEFORM_RESIST_COOLDOWN_SECONDS,
+        SECONDS_PER_ROUND,
+    )
 
     if in_combat_tick:
         if (now - instance.applied_at).total_seconds() < SECONDS_PER_ROUND:
             return ""
         return None
     last = instance.last_resist_attempt_at
-    if last is not None and (now - last).total_seconds() < SECONDS_PER_ROUND:
+    if last is not None and (now - last).total_seconds() < FREEFORM_RESIST_COOLDOWN_SECONDS:
         return "You are still sunk too deep to try again."
     instance.last_resist_attempt_at = now
     instance.save(update_fields=["last_resist_attempt_at"])
@@ -1319,7 +1357,7 @@ def _maybe_move_to_destination(character: ObjectDB, destination_room: ObjectDB |
     character.save(update_fields=["db_location"])
 
 
-def attempt_wake(
+def attempt_wake(  # noqa: PLR0911 - one return per resolved wake-attempt outcome
     character_sheet: CharacterSheet | None,
     *,
     in_combat_tick: bool = False,
@@ -1369,7 +1407,14 @@ def attempt_wake(
     except (AttributeError, ObjectDoesNotExist):
         health_pct = 0.0
     difficulty = calculate_wake_difficulty(health_pct=health_pct, rounds_elapsed=rounds_elapsed)
+    # checks.CheckType is content-repo-owned (#2698) — degrades gracefully
+    # (like the guaranteed-wake/blocked branches above) rather than crashing
+    # perform_check when the Endurance CheckType isn't authored.
     check_type = _ensure_endurance_check_type()
+    if check_type is None:
+        return WakeResult(
+            attempted=False, woke=False, message="You strain, but nothing answers the effort."
+        )
     result = perform_check(character, check_type, target_difficulty=difficulty)
     if int(result.success_level) >= 0:
         remove_condition(character, instance.condition)

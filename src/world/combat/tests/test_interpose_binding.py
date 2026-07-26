@@ -20,7 +20,7 @@ instances (DbHolder — not deepcopyable), which would break setUpTestData deepc
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.combat.constants import CombatManeuver, ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
@@ -58,6 +58,7 @@ def _arm_interpose(
     )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class EnsureInterposeChallengesToSpecificAllyTest(TestCase):
     """Specific-ally path: creates one bound ChallengeInstance for the named ally."""
 
@@ -145,6 +146,7 @@ class EnsureInterposeChallengesToSpecificAllyTest(TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class EnsureInterposeChallengesToAllAlliesTest(TestCase):
     """None-ally path: INTERPOSE with focused_ally_target=None → binds to all active allies."""
 
@@ -226,6 +228,7 @@ class EnsureInterposeChallengesToAllAlliesTest(TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class EnsureInterposeChallengeIdempotencyTest(TestCase):
     """Calling _ensure_interpose_challenges twice creates no duplicates."""
 

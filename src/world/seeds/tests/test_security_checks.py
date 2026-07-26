@@ -5,7 +5,9 @@ Skulduggery was born "Larceny" (#2180) and renamed with its criminal specializat
 ensuring, so old dev DBs converge.
 """
 
-from django.test import TestCase
+from decimal import Decimal
+
+from django.test import TestCase, override_settings
 
 from world.checks.models import CheckType, CheckTypeTrait
 from world.seeds.checks import seed_check_resolution_tables
@@ -13,6 +15,7 @@ from world.seeds.security_checks import seed_security_check_content
 from world.seeds.stealth_checks import seed_stealth_check_content
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_security_check_content gates on #2698
 class SecurityCheckSeedTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -156,7 +159,24 @@ class SecurityCheckSeedTests(TestCase):
         ct = CheckType.objects.get(name="Guard Detection")
         assert ct.category.name == "Exploration"
 
-    def test_reseed_is_authoritative(self):
+    def test_reseed_preserves_an_existing_weight(self):
+        # #2698 Part 1: seeders run AFTER the content load, so a reseed must
+        # never revert an authored/staff-tuned weight — get_or_create converges
+        # instead of wiping and recreating the composition.
+        from world.traits.models import Trait
+
+        lockpick = CheckType.objects.get(name="Lockpick")
+        wits = Trait.objects.get(name="wits")
+        row = CheckTypeTrait.objects.get(check_type=lockpick, trait=wits)
+        row.weight = Decimal("4.25")
+        row.save(update_fields=["weight"])
+        seed_security_check_content()
+        row.refresh_from_db()
+        assert row.weight == Decimal("4.25")
+
+    def test_reseed_does_not_remove_an_unrelated_trait_row(self):
+        # A row the seed doesn't know about (e.g. staff-added) must survive a
+        # reseed too — the composition is no longer wiped wholesale (#2698).
         from world.traits.models import Trait, TraitType
 
         lockpick = CheckType.objects.get(name="Lockpick")
@@ -166,7 +186,7 @@ class SecurityCheckSeedTests(TestCase):
         trait_names = set(
             CheckTypeTrait.objects.filter(check_type=lockpick).values_list("trait__name", flat=True)
         )
-        assert trait_names == {"wits", "Skulduggery"}
+        assert trait_names == {"wits", "Skulduggery", "stray_stat"}
 
     def test_reseed_is_idempotent(self):
         seed_security_check_content()
@@ -180,6 +200,7 @@ class SecurityCheckSeedTests(TestCase):
         assert CheckType.objects.filter(name="Scrutinize Evidence").count() == 1
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_security_check_content gates on #2698
 class SkulduggeryRenameTests(TestCase):
     """The seed renames a pre-existing Larceny row in place (#1825) — FKs survive."""
 

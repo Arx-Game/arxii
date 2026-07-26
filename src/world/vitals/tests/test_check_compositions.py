@@ -5,11 +5,12 @@ The four resist-style checks previously rolled with zero CheckTypeTrait rows
 intended single-stat leg (tenet-permitted for resist checks).
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.areas.positioning.constants import CATCH_CHECK_TYPE_NAME
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class ResistCheckCompositionTests(TestCase):
     def test_endurance_has_stamina_trait(self):
         from world.vitals.services import _ensure_endurance_check_type

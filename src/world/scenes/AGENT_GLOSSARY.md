@@ -25,6 +25,10 @@ _Avoid_: turn, tick, combat round (for the general case)
 A single IC contribution recorded within a scene — the atomic unit of RP (pose, say, whisper, emit), modelled by `Interaction`. It carries its own privacy tier and target personas for thread derivation.
 _Avoid_: message, post, line, Interaction (at player surfaces)
 
+**Perceived Only** (#2710, ADR-0170):
+An `InteractionVisibility` tier restricting an interaction to its writer and the personas recorded as `InteractionReceiver` rows — the characters who actually perceived the event — while still admitting staff and the scene's GM, so a scene stays runnable. The GM exception is a scene-log read guarantee only (`InteractionQuerySet.visible_to`'s `gm_visible` branch); a non-staff GM is denied on the REST object-access permission (`CanViewInteraction`) and the reaction-witness gate (`can_view_interaction`), both staff-only. Introduced for concealed casts (magic AGENT_GLOSSARY: "Cast Audience"), but the tier itself is a general scenes primitive, not magic-specific. Distinct from `VERY_PRIVATE`, which admits no exception, staff included — the two are not interchangeable.
+_Avoid_: private (ambiguous with `VERY_PRIVATE`), hidden pose.
+
 **Effort Level**:
 The initiator's declared exertion on a social action (`EffortLevel`: very low / low / medium / high / extreme), forwarded at dispatch. It is a check-roll modifier and charges the initiator social fatigue — orthogonal to a technique's power levers. Accumulated social fatigue feeds back as a penalty on subsequent social check rolls (#2241): a character who has flirted several times in a scene sees their composure fatigue rise, penalizing later rolls.
 _Avoid_: intensity, difficulty (effort is the initiator's input, not the target's)

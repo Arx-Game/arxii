@@ -113,6 +113,18 @@ CHARM_CONDITION_NAME: str = "Charmed"
 CALM_CONDITION_NAME: str = "Calm"
 
 
+class BreakFreeMode(models.TextChoices):
+    """How (or whether) a target can shake off this condition (#2706).
+
+    Determines whether a behavior-altering condition (charm, fear, domination)
+    can be broken free from, and how the attempt is triggered.
+    """
+
+    NONE = "none", "No break-free — subtle effect runs its course"
+    SELF_INITIATED = "self_initiated", "Target must choose to resist (player command)"
+    PERIODIC = "periodic", "System auto-rolls break-free on each tick"
+
+
 class Allegiance(models.TextChoices):
     """Behavioral allegiance states used by charm/control effects.
 

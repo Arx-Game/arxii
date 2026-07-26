@@ -32,6 +32,36 @@ class AdvancementOutcome(models.TextChoices):
     ADVANCED = "ADVANCED", "Stage advanced"
 
 
+class BreakFreeOutcome(models.TextChoices):
+    """Outcome label for a break-free attempt (#2706)."""
+
+    SHATTERED = "shattered", "Condition removed entirely"
+    WEAKENED = "weakened", "Severity reduced"
+    HELD = "held", "No change"
+    STRENGTHENED = "strengthened", "Condition grew stronger"
+
+
+@dataclass(frozen=True)
+class BreakFreeResult:
+    """Result returned by attempt_break_free.
+
+    Attributes:
+        attempted: Whether a roll was actually made (False = blocked by
+            rate-limit, awareness gate, or NONE mode).
+        broke_free: Whether the condition was fully removed.
+        outcome: The labeled outcome tier.
+        message: Player-facing description of the result.
+        severity_delta: Net severity change (negative = weakened, positive =
+            strengthened, 0 = unchanged).
+    """
+
+    attempted: bool
+    broke_free: bool
+    outcome: BreakFreeOutcome = BreakFreeOutcome.HELD
+    message: str = ""
+    severity_delta: int = 0
+
+
 class AdvancementResistFailureKind(models.TextChoices):
     """Behavior when severity reaches a stage's threshold."""
 

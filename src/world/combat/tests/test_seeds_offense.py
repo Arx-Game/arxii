@@ -5,7 +5,7 @@ Mirrors world/magic/tests/test_seeds_cast.py's TechniqueCastCatalogSeedTests.
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from actions.constants import Pipeline
 from world.checks.types import CheckResult, ResolutionContext
@@ -18,6 +18,7 @@ from world.combat.seeds_offense import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # wire_melee_attack_action_template gates on #2698
 class MeleeOffenseBasePoolSeedTests(TestCase):
     def test_base_pool_wired_onto_melee_attack_template(self):
         pool = ensure_melee_offense_pool()
@@ -37,6 +38,7 @@ class MeleeOffenseBasePoolSeedTests(TestCase):
         self.assertEqual(get_melee_offense_pool().pk, a.consequence_pool_id)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # wire_melee_attack_action_template gates on #2698
 class MeleeOffenseCatalogSeedTests(TestCase):
     def test_seeds_catalog_pools_as_children_of_base(self):
         templates = ensure_combat_offense_catalog_content()
@@ -76,6 +78,7 @@ class MeleeOffenseCatalogSeedTests(TestCase):
         self.assertEqual(len(by_label), 3)  # no new consequences, only overrides
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # wire_melee_attack_action_template gates on #2698
 class MeleeOffenseStandaloneCastProofTests(TestCase):
     """One standalone-cast proof (#1995): a PHYSICAL technique using
     'Melee Attack: Brutal' resolved through start_action_resolution selects a

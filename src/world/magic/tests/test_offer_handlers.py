@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from actions.definitions.social import EntranceAction
 from actions.factories import ActionTemplateFactory
@@ -89,8 +89,13 @@ class TestResolvePathByName(TestCase):
             _resolve_path_by_name("", paths)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SoulfrayPendingHandlerAcceptEntranceTests(CastScenarioMixin):
-    """accept() re-dispatches an entrance-marked PendingCast through the entrance path (#2183)."""
+    """accept() re-dispatches an entrance-marked PendingCast through the entrance path (#2183).
+
+    The DramaticMomentType is content-repo-owned (#2698); ``SEED_SAMPLE_CONTENT``
+    opts this suite into the sample-seeding path.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
