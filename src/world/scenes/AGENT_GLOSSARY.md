@@ -26,7 +26,7 @@ A single IC contribution recorded within a scene — the atomic unit of RP (pose
 _Avoid_: message, post, line, Interaction (at player surfaces)
 
 **Perceived Only** (#2710, ADR-0167):
-An `InteractionVisibility` tier restricting an interaction to its writer and the personas recorded as `InteractionReceiver` rows — the characters who actually perceived the event — while still admitting staff and the scene's GM, so a scene stays runnable. Introduced for concealed casts (magic AGENT_GLOSSARY: "Cast Audience"), but the tier itself is a general scenes primitive, not magic-specific. Distinct from `VERY_PRIVATE`, which admits no exception, staff included — the two are not interchangeable.
+An `InteractionVisibility` tier restricting an interaction to its writer and the personas recorded as `InteractionReceiver` rows — the characters who actually perceived the event — while still admitting staff and the scene's GM, so a scene stays runnable. The GM exception is a scene-log read guarantee only (`InteractionQuerySet.visible_to`'s `gm_visible` branch); a non-staff GM is denied on the REST object-access permission (`CanViewInteraction`) and the reaction-witness gate (`can_view_interaction`), both staff-only. Introduced for concealed casts (magic AGENT_GLOSSARY: "Cast Audience"), but the tier itself is a general scenes primitive, not magic-specific. Distinct from `VERY_PRIVATE`, which admits no exception, staff included — the two are not interchangeable.
 _Avoid_: private (ambiguous with `VERY_PRIVATE`), hidden pose.
 
 **Effort Level**:

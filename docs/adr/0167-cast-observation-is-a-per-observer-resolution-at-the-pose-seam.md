@@ -53,8 +53,12 @@ the staff branch and the scene-GM branch; `can_view_interaction` denies staff to
 concealed cast worked in a GM's own running scene must stay legible to that GM — a scene
 has to stay runnable, and a magic system a GM cannot see into is a magic system they
 cannot adjudicate. `PERCEIVED_ONLY` is the new, strictly looser tier: writer +
-`InteractionReceiver` rows, **plus** staff and the scene's GM. The two tiers are not
-interchangeable, and nothing about `VERY_PRIVATE`'s semantics changed.
+`InteractionReceiver` rows, **plus** staff and the scene's GM. The GM exception is a
+scene-log read guarantee only (`InteractionQuerySet.visible_to`'s `gm_visible` branch,
+`world/scenes/managers.py`) — a non-staff GM is denied by both `CanViewInteraction` (REST
+object access) and `can_view_interaction` (the reaction-witness gate), which admit staff
+only, same as `VERY_PRIVATE`. The two tiers are not interchangeable, and nothing about
+`VERY_PRIVATE`'s semantics changed.
 
 ## Why capabilities are a bonus into the detection check, never an auto-detect threshold
 

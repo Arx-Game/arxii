@@ -2003,9 +2003,12 @@ room exactly as before #2710.
 **The `PERCEIVED_ONLY` privacy tier** (`world.scenes.constants.InteractionVisibility`)
 is how the resolved audience is persisted. It sits between `DEFAULT` and `VERY_PRIVATE`:
 writer + `InteractionReceiver` rows can read it, **plus staff and the scene's GM** — a
-scene must stay runnable for the person adjudicating it. `VERY_PRIVATE` is stricter and
-admits no exception, staff included; the two tiers are deliberately not interchangeable
-(ADR-0167). `world.scenes.cast_services.create_cast_outcome_pose` writes up to two
+scene must stay runnable for the person adjudicating it. The GM exception is a scene-log
+read guarantee only (`InteractionQuerySet.visible_to`'s `gm_visible` branch); a non-staff
+GM is denied on the REST object-access permission (`CanViewInteraction`) and the
+reaction-witness gate (`can_view_interaction`), both staff-only. `VERY_PRIVATE` is
+stricter and admits no exception, staff included; the two tiers are deliberately not
+interchangeable (ADR-0167). `world.scenes.cast_services.create_cast_outcome_pose` writes up to two
 Narrator OUTCOME poses when concealed — a `full`-tier pose (receivers = `audience.full`)
 and, only if `audience.vague` is non-empty, a second attribution-free `vague`-tier pose
 (no `target_personas`, so the vague line cannot leak who was targeted either).
