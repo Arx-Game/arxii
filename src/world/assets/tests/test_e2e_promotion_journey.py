@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.test import override_settings
 from evennia.utils.test_resources import EvenniaTestCase
 
 from world.assets.content import ensure_asset_promotion_content
@@ -14,6 +15,7 @@ from world.traits.factories import CheckOutcomeFactory
 from world.traits.models import CharacterTraitValue, Trait
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # underlying check-content seeders gate on #2698
 class PromotionJourneyTests(EvenniaTestCase):
     def setUp(self) -> None:
         from evennia import create_object
