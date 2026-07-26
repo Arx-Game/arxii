@@ -721,11 +721,14 @@ def process_damage_consequences(  # noqa: PLR0913 - each param is a distinct sur
     raw_health_pct = vitals.health / vitals.max_health if vitals.max_health > 0 else 0.0
 
     # checks.CheckType is content-repo-owned (#2698) — _ensure_endurance_check_type/
-    # _ensure_death_check_type now look it up rather than invent it unless
+    # _ensure_death_check_type look it up rather than invent it unless
     # SEED_SAMPLE_CONTENT is on. A missing check type degrades exactly like a
     # missing pool below: that tier is skipped rather than crashing combat.
-    endurance_check_type = _ensure_endurance_check_type()
-    death_check_type = _ensure_death_check_type()
+    # Resolved lazily, inside each tier's own guard below (not hoisted to run
+    # unconditionally on every call) — an unconditional call here regressed
+    # resolve_battle_round's per-declaration query budget (#1871's marginal-cost
+    # gate caught it): every STRIKE-fail paid this lookup even on damage events
+    # where no tier ends up firing at all.
 
     # 1. Permanent wound check
     wound_difficulty = calculate_wound_difficulty(
@@ -733,23 +736,26 @@ def process_damage_consequences(  # noqa: PLR0913 - each param is a distinct sur
         max_health=vitals.max_health,
     )
     wound_pool = _wound_pool(damage_type)
-    if wound_difficulty > 0 and wound_pool is not None and endurance_check_type is not None:
-        _apply_wound_tier(
-            character_sheet=character_sheet,
-            result=result,
-            wound_check_type=endurance_check_type,
-            wound_difficulty=wound_difficulty,
-            wound_pool=wound_pool,
-            extra_modifiers=extra_modifiers + saves.wound,
-            combat_interaction_factory=combat_interaction_factory,
-            damage_dealt=damage_dealt,
-        )
+    if wound_difficulty > 0 and wound_pool is not None:
+        endurance_check_type = _ensure_endurance_check_type()
+        if endurance_check_type is not None:
+            _apply_wound_tier(
+                character_sheet=character_sheet,
+                result=result,
+                wound_check_type=endurance_check_type,
+                wound_difficulty=wound_difficulty,
+                wound_pool=wound_pool,
+                extra_modifiers=extra_modifiers + saves.wound,
+                combat_interaction_factory=combat_interaction_factory,
+                damage_dealt=damage_dealt,
+            )
 
     # 2. Death check (health <= 0)
     death_difficulty = calculate_death_difficulty(health_pct=raw_health_pct)
     death_pool = _death_pool(damage_type)
-    if death_difficulty > 0 and death_pool is not None and death_check_type is not None:
-        if _apply_death_tier(
+    if death_difficulty > 0 and death_pool is not None:
+        death_check_type = _ensure_death_check_type()
+        if death_check_type is not None and _apply_death_tier(
             character_sheet=character_sheet,
             result=result,
             death_check_type=death_check_type,
@@ -766,16 +772,18 @@ def process_damage_consequences(  # noqa: PLR0913 - each param is a distinct sur
         health_pct=health_pct,
     )
     knockout_pool = _knockout_pool()
-    if knockout_difficulty > 0 and knockout_pool is not None and endurance_check_type is not None:
-        _apply_knockout_tier(
-            character_sheet=character_sheet,
-            result=result,
-            ko_check_type=endurance_check_type,
-            knockout_difficulty=knockout_difficulty,
-            knockout_pool=knockout_pool,
-            extra_modifiers=extra_modifiers + saves.knockout,
-            combat_interaction_factory=combat_interaction_factory,
-        )
+    if knockout_difficulty > 0 and knockout_pool is not None:
+        endurance_check_type = _ensure_endurance_check_type()
+        if endurance_check_type is not None:
+            _apply_knockout_tier(
+                character_sheet=character_sheet,
+                result=result,
+                ko_check_type=endurance_check_type,
+                knockout_difficulty=knockout_difficulty,
+                knockout_pool=knockout_pool,
+                extra_modifiers=extra_modifiers + saves.knockout,
+                combat_interaction_factory=combat_interaction_factory,
+            )
 
     return result
 
