@@ -98,6 +98,29 @@ class ConfigPrerequisiteTests(TestCase):
         trait_row.refresh_from_db()
         self.assertEqual(trait_row.weight, Decimal("2.50"))
 
+    def test_dream_peril_trait_is_attached_to_a_pre_existing_bare_check_type(self) -> None:
+        """The `if created:` trap, dreams flavor (#2724) — worse than fatigue/fury:
+
+        `_ensure_dream_peril_config` stamps `DreamPerilConfig.resist_check_type` and
+        never revisits it (early return once set), so a skipped attachment here is
+        permanent — there is no later gameplay call site to self-heal it.
+        """
+        from world.checks.models import CheckCategory
+        from world.dreams.models import DreamPerilConfig
+
+        category, _ = CheckCategory.objects.get_or_create(name="Mental")
+        bare = CheckType.objects.create(name="Dream Peril Resolve", category=category)
+        self.assertFalse(CheckTypeTrait.objects.filter(check_type=bare).exists())
+
+        CONFIG_PREREQUISITES["dreams"]()
+
+        self.assertTrue(
+            CheckTypeTrait.objects.filter(check_type=bare).exists(),
+            "Dream Peril Resolve has no trait rows — the check would roll on nothing",
+        )
+        config = DreamPerilConfig.objects.get(pk=1)
+        self.assertEqual(config.resist_check_type_id, bare.pk)
+
 
 class ConfigPrerequisiteFreshDatabaseTests(TestCase):
     """The actual first-Big-Button-press condition: zero Trait rows exist yet.
@@ -142,3 +165,33 @@ class ConfigPrerequisiteFreshDatabaseTests(TestCase):
                 f"fatigue_endurance_{category} composition was not attached "
                 "against a fresh database",
             )
+
+    def test_dreams_prerequisite_alone_creates_missing_trait_and_attaches_composition(
+        self,
+    ) -> None:
+        """Regression for #2724: the dreams entry must not depend on `fatigue` having
+        already run and created `stability`.
+
+        `CONFIG_PREREQUISITES` happens to run `fatigue` before `dreams` today, so
+        iterating the whole dict (as the sibling test above does) would pass even with
+        the bug: fatigue creates `stability` first by accident of dict order. Calling
+        only the `dreams` entry, in isolation, against a Trait-less database is what
+        actually exercises the failure mode — it's what the fix in
+        `world.dreams.conditions._ensure_dream_peril_config` guarantees.
+        """
+        from world.dreams.models import DreamPerilConfig
+
+        self.assertEqual(Trait.objects.count(), 0)
+
+        CONFIG_PREREQUISITES["dreams"]()
+
+        self.assertTrue(
+            Trait.objects.filter(name="stability").exists(),
+            "stability Trait was not created by the dreams prerequisite alone",
+        )
+        config = DreamPerilConfig.objects.get(pk=1)
+        self.assertIsNotNone(config.resist_check_type)
+        self.assertTrue(
+            CheckTypeTrait.objects.filter(check_type=config.resist_check_type).exists(),
+            "Dream Peril Resolve composition was not attached against a fresh database",
+        )

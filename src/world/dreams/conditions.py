@@ -194,11 +194,20 @@ def ensure_dream_conditions() -> None:
 
 
 def _ensure_dream_peril_config() -> None:
-    """Ensure DreamPerilConfig singleton has a resist check type configured."""
+    """Ensure DreamPerilConfig singleton has a resist check type configured.
+
+    `resist_check_type` is stamped once and never revisited (the early return below),
+    so — unlike fatigue/fury's self-healing checks — a config prerequisite (#2724) that
+    ran here before the `stability` Trait existed and skipped attaching it would be
+    permanent: the check would roll on an empty composition forever, with no later
+    gameplay call site to self-heal it. Both the trait attachment and the underlying
+    Trait row are therefore unconditional/ensured here, exactly as fatigue does via
+    `ensure_stat_trait`.
+    """
     from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
     from world.dreams.models import DreamPerilConfig  # noqa: PLC0415
     from world.traits.constants import PrimaryStat  # noqa: PLC0415
-    from world.traits.models import Trait, TraitType  # noqa: PLC0415
+    from world.traits.services import ensure_stat_trait  # noqa: PLC0415
 
     config, _ = DreamPerilConfig.objects.get_or_create(pk=1)
     if config.resist_check_type is not None:
@@ -209,18 +218,20 @@ def _ensure_dream_peril_config() -> None:
         name="Mental",
         defaults={"description": _FOCUS_CHECK_DESCRIPTION, "display_order": 30},
     )
-    check_type, created = CheckType.objects.get_or_create(
+    check_type, _ = CheckType.objects.get_or_create(
         name="Dream Peril Resolve",
         category=category,
         defaults={"description": "Resistance check against Dream Peril collapse."},
     )
-    if created:
-        stability = Trait.objects.filter(
-            name=PrimaryStat.STABILITY.value,
-            trait_type=TraitType.STAT,
-        ).first()
-        if stability is not None:
-            CheckTypeTrait.objects.create(check_type=check_type, trait=stability, weight=1.0)
+    # Unconditional (not gated on `created`) so a pre-existing (e.g. fixture-supplied)
+    # bare CheckType still gets its trait attached (#2724); get_or_create's defaults let
+    # an authored weight survive a re-run. `ensure_stat_trait` also guarantees the
+    # `stability` Trait row itself exists — this can run before the content load
+    # populates the STAT Trait fixtures.
+    stability = ensure_stat_trait(PrimaryStat.STABILITY.value)
+    CheckTypeTrait.objects.get_or_create(
+        check_type=check_type, trait=stability, defaults={"weight": 1.0}
+    )
 
     config.resist_check_type = check_type
     config.save(update_fields=["resist_check_type"])

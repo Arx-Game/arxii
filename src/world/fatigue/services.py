@@ -24,7 +24,6 @@ from world.fatigue.constants import (
     EFFORT_COST_MULTIPLIER,
     EXHAUSTION_DAMAGE_TYPE_NAME,
     FATIGUE_ENDURANCE_STAT,
-    FATIGUE_TRAIT_DEFAULTS,
     MIN_FATIGUE_COST,
     REST_AP_COST,
     WELL_RESTED_MULTIPLIER,
@@ -36,7 +35,7 @@ from world.fatigue.constants import (
 from world.fatigue.models import FatiguePool
 from world.fatigue.types import FatigueCollapseResult, RestResult
 from world.traits.constants import PrimaryStat
-from world.traits.models import Trait
+from world.traits.services import ensure_stat_trait
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -342,7 +341,7 @@ def _ensure_endurance_check_type(category: str) -> CheckType:
     """Ensure the endurance CheckType exists for a fatigue category, creating if needed.
 
     Also ensures the underlying stat Trait (stamina/composure/stability) via
-    FATIGUE_TRAIT_DEFAULTS — a config prerequisite (#2724) may call this before the
+    `ensure_stat_trait` — a config prerequisite (#2724) may call this before the
     content load populates Trait fixtures. Without populated CheckRank/ResultChart
     data, checks default to success_level=0 (treated as failure).
     """
@@ -362,19 +361,9 @@ def _ensure_endurance_check_type(category: str) -> CheckType:
     # bare CheckType still gets its trait attached (#2724); get_or_create's defaults let
     # an authored weight survive a re-run. As a config prerequisite this can run before
     # the content load populates the stat Trait fixtures, so the Trait itself is also
-    # get_or_create'd — never left to lazily self-heal at first gameplay use, which
-    # would reinstate the undeclared-dependency bug #2724 exists to close. The code
-    # default (FATIGUE_TRAIT_DEFAULTS) matches the authored fixture row, so a later
-    # content-fixture upsert is a no-op.
-    trait_default = FATIGUE_TRAIT_DEFAULTS[endurance_stat_name]
-    trait, _ = Trait.objects.get_or_create(
-        name=endurance_stat_name,
-        defaults={
-            "trait_type": trait_default.trait_type,
-            "category": trait_default.category,
-            "description": trait_default.description,
-        },
-    )
+    # ensured here — never left to lazily self-heal at first gameplay use, which would
+    # reinstate the undeclared-dependency bug #2724 exists to close.
+    trait = ensure_stat_trait(endurance_stat_name)
     CheckTypeTrait.objects.get_or_create(
         check_type=check_type, trait=trait, defaults={"weight": 1.0}
     )
@@ -384,7 +373,7 @@ def _ensure_endurance_check_type(category: str) -> CheckType:
 def _ensure_willpower_check_type() -> CheckType:
     """Ensure the willpower power-through CheckType exists, creating if needed.
 
-    Also ensures the underlying willpower Trait via FATIGUE_TRAIT_DEFAULTS — a config
+    Also ensures the underlying willpower Trait via `ensure_stat_trait` — a config
     prerequisite (#2724) may call this before the content load populates Trait
     fixtures. Without populated CheckRank/ResultChart data, checks default to
     success_level=0 (treated as failure).
@@ -402,19 +391,9 @@ def _ensure_willpower_check_type() -> CheckType:
     # bare CheckType still gets its trait attached (#2724); get_or_create's defaults let
     # an authored weight survive a re-run. As a config prerequisite this can run before
     # the content load populates the willpower Trait fixture, so the Trait itself is
-    # also get_or_create'd — never left to lazily self-heal at first gameplay use, which
-    # would reinstate the undeclared-dependency bug #2724 exists to close. The code
-    # default (FATIGUE_TRAIT_DEFAULTS) matches the authored fixture row, so a later
-    # content-fixture upsert is a no-op.
-    trait_default = FATIGUE_TRAIT_DEFAULTS[PrimaryStat.WILLPOWER.value]
-    trait, _ = Trait.objects.get_or_create(
-        name=PrimaryStat.WILLPOWER.value,
-        defaults={
-            "trait_type": trait_default.trait_type,
-            "category": trait_default.category,
-            "description": trait_default.description,
-        },
-    )
+    # also ensured here — never left to lazily self-heal at first gameplay use, which
+    # would reinstate the undeclared-dependency bug #2724 exists to close.
+    trait = ensure_stat_trait(PrimaryStat.WILLPOWER.value)
     CheckTypeTrait.objects.get_or_create(
         check_type=check_type, trait=trait, defaults={"weight": 1.0}
     )

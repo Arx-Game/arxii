@@ -156,6 +156,10 @@ def _ships_rows() -> None:
 
 
 CONFIG_PREREQUISITES: dict[str, Callable[[], None]] = {
+    # Entries must not rely on each other's side effects — each entry ensures its own
+    # dependencies (e.g. any STAT Trait it needs, via world.traits.services
+    # .ensure_stat_trait). Dict order is not a dependency graph; only "technique_cast"
+    # has a real ordering constraint, documented below.
     # FIRST: lore-repo Technique fixtures FK this ActionTemplate by natural key, and
     # load_world_content's deferred-retry loop cannot conjure config rows (#2474).
     "technique_cast": _technique_cast_rows,
