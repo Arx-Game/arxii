@@ -5910,6 +5910,7 @@ Extensions to Evennia models for additional data storage.
 Production-callable seed layer for populating sane defaults on a fresh dev install.
 
 - **Entry Point:** `world.seeds.database.seed_dev_database(*, verbose=False) -> SeedReport` — calls every registered cluster seeder in sequence; idempotent (create-if-missing semantics throughout, never overwrites).
+- **Config prerequisites (#2724, ADR-0171):** `world.seeds.database.load_content_first()` — the pre-cluster half of `seed_dev_database()`, split out so `test_no_content_slop`'s guard can snapshot row counts *between* the content load and the cluster loop — runs `world.seeds.config_prerequisites.CONFIG_PREREQUISITES` (`dict[str, Callable[[], None]]`, shaped like `CLUSTER_SEEDERS`, 12 entries) BEFORE `core_management.content_fixtures.load_world_content()`. Each entry is a row the code names by string literal (e.g. fatigue's `"fatigue_willpower"` CheckType, the shared "Technique Cast" `ActionTemplate` lore `Technique` fixtures FK by natural key) — declaring the dependency here means a lore fixture always wins over the code default (`load_entries` upserts) and the row never lands inside the seeder-guard's measurement window. Registering a helper here does not remove its existing gameplay call site; both stay idempotent. See `docs/systems/magic.md`'s "Content-vs-config boundary" section and `docs/systems/checks.md`'s "Seeded Compositions" section for the two content-model cases this closes.
 - **Cluster registry:** `world.seeds.clusters.CLUSTER_SEEDERS` — `dict[str, Callable]` keyed by cluster name, in seed order: `"checks"` (resolution spine, first), `"magic"`, `"items"`, `"combat"`, `"consent"`, `"character_creation"` (CG-world content, last — after `magic`, which provides the starter-Gift/resonance `finalize_character` picks). Add a new cluster by appending an entry here. `seeded_models()` (flat representative-content list for row-count tracking) and `seeded_models_by_cluster()` (per-cluster inventory for the admin hub) are the two read shapes.
 - **Surfaces:**
   - `arx seed dev` — CLI entry point (management command `src/core_management/management/commands/seed.py`; `--verbose` flag prints per-cluster row deltas).
@@ -6040,6 +6041,22 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `mechanics.propertycategory` — the loader was already dynamic (any `NaturalKeyMixin`
   model can be fixture-loaded); this only widens the **export** allowlist to cover the
   Capabilities & Challenges catalog.
+- **Row-level export filters (#2724, ADR-0171):** `CONTENT_MODELS` is a model-level
+  allowlist — some registered models mix staff/lore-authored rows with per-player rows a
+  service function synthesizes (a personal anima `magic.Ritual`, the per-character
+  `checks.CheckType` `ensure_character_magic_check_type` creates). De-registering the
+  model would also stop exporting the staff-authored rows, so
+  `core_management.content_export.EXPORT_FILTERS` (`dict[str, dict[str, object]]`)
+  applies a row-level predicate on top of the allowlist, via
+  `queryset.filter(**kwargs)`: `magic.ritual` → `author_account__isnull=True`,
+  `checks.checktype` → `owner_sheet__isnull=True`, `checks.checktypetrait` →
+  `check_type__owner_sheet__isnull=True`, `evennia_extensions.media` →
+  `slug__isnull=False` (pre-existing behavior). Plain filter-kwargs rather than
+  `django.db.models.Q`, deliberately — `content_export.py` promises to import cleanly
+  without Django configured, and every predicate here is a single AND-only lookup. See
+  `docs/systems/checks.md`'s "Seeded Compositions" section and `docs/systems/magic.md`'s
+  "Content pipeline" section for the two cases, and ADR-0171 for why this is a real owner
+  column rather than a name-pattern exclusion.
 - **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
   mirroring `game_setup_views.py`'s gate).
 - **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,

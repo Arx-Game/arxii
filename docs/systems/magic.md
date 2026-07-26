@@ -334,17 +334,26 @@ privacy axis beyond the existing WITNESS tags, and no authored `GlimpseTag`/
 authored later) — the flow renders gracefully with an empty catalog (axes with
 no tags simply don't render a step).
 
-### Content-vs-config boundary in the dev seed (#2474, ADR-0142)
+### Content-vs-config boundary in the dev seed (#2474, ADR-0142; generalized #2724, ADR-0171)
 
 `seed_dev_database()` (`world/seeds/database.py`) now sequences: (1) resolve
 `CONTENT_REPO_PATH` via `core_management.content_repo.resolve_content_root()` —
 raises `ContentError` immediately if unset/missing, before anything else runs; (2)
-seed config prerequisites the content fixtures FK by natural key — currently just
-`world.magic.seeds_cast.ensure_technique_cast_content()`, since lore-repo
-`Technique` fixtures FK the shared "Technique Cast" `ActionTemplate` and the
-content load's own deferred-retry loop can't conjure a config row the content/grid
-load itself never creates; (3) `load_world_content()`; (4) the `CLUSTER_SEEDERS`
-loop. NPC trainer seeds (`world/npc_services/seeds.py`) resolve their starter
+run every config prerequisite in `world.seeds.config_prerequisites
+.CONFIG_PREREQUISITES` (`dict[str, Callable[[], None]]`, 12 entries as of #2724,
+shaped like `world.seeds.clusters.CLUSTER_SEEDERS`) — rows the code names by string
+literal, e.g. `world.magic.seeds_cast.ensure_technique_cast_content()`, since
+lore-repo `Technique` fixtures FK the shared "Technique Cast" `ActionTemplate` and
+the content load's own deferred-retry loop can't conjure a config row the
+content/grid load itself never creates; (3) `load_world_content()`; (4) the
+`CLUSTER_SEEDERS` loop. `technique_cast` runs FIRST inside the registry for exactly
+that FK-by-natural-key reason; the other 11 entries (fatigue, fury, spread, vitals,
+conditions, dreams, alterations, locations, combat_stats, projects, ships) cover
+config rows other systems' service functions name by literal — see
+`docs/adr/0171-code-required-content-rows-are-declared-config.md` for the full
+rationale and the rejected alternatives (de-registering the model, a name-pattern
+export filter, a `CONTENT_MODELS`-write linter). NPC trainer seeds
+(`world/npc_services/seeds.py`) resolve their starter
 technique picks as `(gift_name, technique_name)` pairs scoped by gift
 (`Technique.objects.filter(gift__name=..., name=...)`, never a bare `name__in=`
 lookup — see `Technique`'s natural key above) and raise `ContentError` when none of
@@ -376,6 +385,21 @@ per-technique via the FK. Key surfaces:
 Cast resolution (`world/scenes/cast_services.py:_resolve_cast`) passes the caster's personal
 check into `start_action_resolution` via the `check_type` override (optional kwarg added to
 `src/actions/services.py`). No schema migration — all seeded via `ensure_technique_cast_content()`.
+
+**Anima ritual name collisions are resolved silently, not surfaced (#2724).**
+`provision_player_anima_ritual` defaults a player's anima ritual name to
+`"<first name>'s Anima Ritual"`, and `Ritual.name` is `unique=True` — two characters
+sharing a first name used to raise `IntegrityError` and roll back the entire CG
+finalization. `_uniquify_ritual_name(base)` (`services/anima.py`) appends `" (2)"`,
+`" (3)"`, etc. until the candidate is free (truncating the base so the suffixed
+result still fits `max_length`); it does a plain `SELECT` and is NOT race-safe by
+itself (a concurrent finalization can pass the check for the same candidate before
+either commits). `provision_player_anima_ritual` closes that window with a bounded
+retry: up to `_RITUAL_NAME_ATTEMPTS` (5) attempts, each in its own nested
+`transaction.atomic()` savepoint so a losing `IntegrityError` rolls back only that
+savepoint and leaves the surrounding `finalize_magic_data` atomic block usable for
+the next attempt. Exhausting every attempt is deliberately left to raise rather than
+silently skip ritual creation for the player.
 
 **Consequence-pool catalog (#1320) [BUILT & WIRED]** — beyond the single shared "Magic: Technique Cast"
 pool above, a curated **catalog** of pool "flavors" exists as single-depth children of
@@ -1965,6 +1989,20 @@ prerequisite before `load_world_content()` runs, and ADR-0142 for the rationale)
 The deferred-retry loop resolves load-order gaps *within* the content/grid load; it
 cannot conjure a config row the load itself never creates — which is why the config
 prerequisites run first in that sequence.
+
+**`magic.ritual` is content-exportable, but a player's personal anima ritual is not
+(#2724, ADR-0171).** `Ritual` also carries `NaturalKeyMixin` and lives in
+`CONTENT_MODELS` — staff/lore-authored rituals (Sanctification, Homecoming, Covenant
+Formation, etc.) export and import through the same pipeline as the rest of the
+catalog above. But `provision_player_anima_ritual` creates one `Ritual` row per
+player (their personal SCENE_ACTION anima ritual, `author_account` set to the
+provisioning account), and that row must never ship in the content corpus as if
+authored. `core_management.content_export.EXPORT_FILTERS` filters `magic.ritual` on
+`author_account__isnull=True` at export time — a row-level predicate applied on top
+of the model-level `CONTENT_MODELS` allowlist, not a separate model registration.
+See `docs/systems/checks.md`'s "Seeded Compositions" section for the parallel case
+on `checks.checktype`/`checks.checktypetrait` (`owner_sheet`), and ADR-0171 for why
+both use a real owner column rather than a name-pattern exclusion.
 
 ---
 
