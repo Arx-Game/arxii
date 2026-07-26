@@ -2037,7 +2037,13 @@ def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, in
                 continue
 
             modifier = effect.value
-            if instance.current_stage:
+            # effective_severity already folds in the stage multiplier, so scaling
+            # by severity and by the stage are mutually exclusive — if/elif, not two
+            # ifs, mirroring get_capability_status (#2708). Two ifs would double-apply
+            # the stage multiplier for a staged, severity-scaled effect.
+            if effect.scales_with_severity:
+                modifier = int(modifier * instance.effective_severity)
+            elif instance.current_stage:
                 modifier = int(modifier * instance.current_stage.severity_multiplier)
 
             cap_id = effect.capability_id

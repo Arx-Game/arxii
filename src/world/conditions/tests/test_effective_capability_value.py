@@ -20,6 +20,7 @@ from world.conditions.services import (
     get_capability_status,
     get_effective_capability_value,
 )
+from world.conditions.views import _aggregate_capability_effects, _build_effect_lookups
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
@@ -493,3 +494,58 @@ class CapabilityEffectSeverityScalingTests(TestCase):
         # Correct precedence: 10 * 6 = 60. A double-count bug (also applying
         # the stage multiplier on top) would instead produce 10 * 6 * 2 = 120.
         self.assertEqual(status.value, 60)
+
+
+class CapabilityEffectSeverityScalingCrossReaderTests(TestCase):
+    """#2708 Task 7 review: the availability oracle and the character-sheet
+    display aggregation read the SAME ConditionCapabilityEffect rows as the
+    agency oracle (get_capability_status) and must apply the identical
+    scales_with_severity precedence, or they silently diverge from the check
+    that actually resolves.
+
+    - get_all_capability_values feeds the availability oracle
+      (mechanics._get_condition_sources -> action discovery/gating).
+    - views._aggregate_capability_effects feeds CharacterConditionsViewSet.summary,
+      the endpoint a player's capability breakdown display reads.
+
+    Both assertions compare oracle-to-oracle rather than to a hardcoded
+    constant, so the guard survives retuning the curve.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
+
+    def test_availability_oracle_matches_agency_oracle_for_severity_scaled_effect(
+        self,
+    ) -> None:
+        cap = CapabilityTypeFactory(name="sev_scale_availability")
+        condition = ConditionTemplateFactory(name="sev_scale_availability_condition")
+        ConditionCapabilityEffectFactory(
+            condition=condition, capability=cap, value=5, scales_with_severity=True
+        )
+        apply_condition(target=self.character, condition=condition, severity=4)
+
+        agency_value = get_capability_status(self.sheet, cap).value
+        availability_value = get_all_capability_values(self.sheet)[cap.pk]
+
+        self.assertEqual(availability_value, agency_value)
+
+    def test_views_aggregation_matches_agency_oracle_for_severity_scaled_effect(
+        self,
+    ) -> None:
+        cap = CapabilityTypeFactory(name="sev_scale_views")
+        condition = ConditionTemplateFactory(name="sev_scale_views_condition")
+        ConditionCapabilityEffectFactory(
+            condition=condition, capability=cap, value=5, scales_with_severity=True
+        )
+        result = apply_condition(target=self.character, condition=condition, severity=4)
+        assert result.instance is not None
+
+        agency_value = get_capability_status(self.sheet, cap).value
+
+        lookups = _build_effect_lookups([result.instance])
+        summary = _aggregate_capability_effects(lookups)
+
+        self.assertEqual(summary.values[cap.name], agency_value)
