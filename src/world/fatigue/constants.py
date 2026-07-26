@@ -77,6 +77,12 @@ FATIGUE_ENDURANCE_STAT = {
     ActionCategory.MENTAL: "stability",
 }
 
+
+# The willpower/endurance STAT Trait defaults these check types roll on moved to
+# world.traits.constants.STAT_TRAIT_DEFAULTS (#2724) — dreams needs the same shared
+# defaults (Dream Peril Resolve rolls on `stability`), and traits is the neutral home
+# both apps depend on rather than dreams depending on fatigue.
+
 # Collapse risk zones per effort level. Maps effort → minimum zone where collapse triggers.
 # VERY_LOW and LOW never trigger collapse. MEDIUM only at EXHAUSTED. HIGH/EXTREME at OVEREXERTED+.
 COLLAPSE_RISK_ZONES: dict[str, FatigueZone | None] = {

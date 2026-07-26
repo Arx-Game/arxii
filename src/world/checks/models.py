@@ -57,7 +57,12 @@ class CheckCategory(NaturalKeyMixin, SharedMemoryModel):
 
 
 class CheckType(NaturalKeyMixin, SharedMemoryModel):
-    """Staff-defined check type with trait and aspect composition."""
+    """Staff-defined check type with trait and aspect composition.
+
+    A row may instead be synthesized per character (one per CharacterSheet, via
+    ``world.magic.seeds_checks.ensure_character_magic_check_type``) rather than
+    staff-authored — ``owner_sheet`` discriminates the two.
+    """
 
     name = models.CharField(max_length=100)
     category = models.ForeignKey(
@@ -68,6 +73,18 @@ class CheckType(NaturalKeyMixin, SharedMemoryModel):
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     display_order = models.PositiveIntegerField(default=0)
+    # Set for the per-character CheckType `ensure_character_magic_check_type` synthesizes
+    # (one per CharacterSheet). NULL means staff/lore-authored. The export filters on this
+    # so a player's signature check never ships in the content corpus (#2724). Points at
+    # CharacterSheet rather than ObjectDB: this can only ever be a character's row.
+    owner_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="owned_check_types",
+        help_text="Character this synthesized check belongs to. NULL = staff-authored.",
+    )
 
     objects = NaturalKeyManager()
 

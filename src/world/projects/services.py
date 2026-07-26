@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
     from evennia.objects.models import ObjectDB
 
+    from world.achievements.models import StatDefinition
     from world.items.models import ItemInstance
     from world.scenes.models import Persona
     from world.traits.models import CheckOutcome
@@ -280,12 +281,11 @@ def set_contribution_story(
     return contribution
 
 
-def _increment_contribution_stat(persona: Persona) -> None:
-    """Increment the projects.total_contributed StatTracker for this persona.
+def _ensure_contribution_stat_def() -> StatDefinition:
+    """Get or create the projects.total_contributed StatDefinition row (#2724).
 
-    Lazily creates the StatDefinition row if it does not exist yet, matching the
-    pattern used by combat achievement counters. No import-time / app-ready DB
-    queries are performed here.
+    Extracted so both the lazy call site below and the CONFIG_PREREQUISITES
+    registry (`world.seeds.config_prerequisites`) share one literal.
     """
     from world.achievements.models import StatDefinition  # noqa: PLC0415
 
@@ -296,6 +296,17 @@ def _increment_contribution_stat(persona: Persona) -> None:
             "description": "Total contributions made across all projects.",
         },
     )
+    return stat_def
+
+
+def _increment_contribution_stat(persona: Persona) -> None:
+    """Increment the projects.total_contributed StatTracker for this persona.
+
+    Lazily creates the StatDefinition row if it does not exist yet, matching the
+    pattern used by combat achievement counters. No import-time / app-ready DB
+    queries are performed here.
+    """
+    stat_def = _ensure_contribution_stat_def()
     # The stats handler API varies — best to call via the persona's character_sheet.
     # Defensive guard: if the API doesn't exist as assumed, skip silently.
     import contextlib  # noqa: PLC0415

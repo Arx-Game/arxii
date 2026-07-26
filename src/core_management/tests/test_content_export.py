@@ -356,6 +356,97 @@ class ContentExportTests(TestCase):
         technique.gift.refresh_from_db()
         assert technique.gift.resonances.count() == 1
 
+    def test_player_authored_rituals_are_not_exported(self) -> None:
+        """#2724: a player's personal anima ritual must not ship in the corpus."""
+        from evennia_extensions.factories import AccountFactory
+        from world.magic.factories import RitualFactory
+
+        RitualFactory(name="Staff Rite of Kindling")  # author_account=None, staff-authored
+        RitualFactory(name="Alice's Personal Rite", author_account=AccountFactory())
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        ritual_path = self.root / "fixtures" / "magic" / "ritual.json"
+        assert ritual_path.exists()
+        names = {r["fields"]["name"] for r in json.loads(ritual_path.read_text(encoding="utf-8"))}
+        assert "Staff Rite of Kindling" in names
+        assert "Alice's Personal Rite" not in names
+
+    def test_per_character_check_types_are_not_exported(self) -> None:
+        """#2724: one CheckType per character would otherwise grow the corpus per player."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.checks.factories import (
+            CheckCategoryFactory,
+            CheckTypeFactory,
+            CheckTypeTraitFactory,
+        )
+        from world.magic.seeds_checks import ensure_character_magic_check_type
+        from world.skills.factories import SkillFactory
+        from world.traits.factories import TraitFactory
+        from world.traits.models import TraitType
+
+        category = CheckCategoryFactory(name="Mental")
+        authored = CheckTypeFactory(name="Authored Mental Check", category=category)
+        CheckTypeTraitFactory(
+            check_type=authored, trait=TraitFactory(name="composure", trait_type=TraitType.OTHER)
+        )
+
+        sheet = CharacterSheetFactory()
+        stat = TraitFactory(name="willpower", trait_type=TraitType.STAT)
+        skill = SkillFactory(trait__name="ritualism")
+        synthesized = ensure_character_magic_check_type(sheet, stat=stat, skill=skill)
+        owned_trait_names = {t.trait.name for t in synthesized.traits.all()}
+        assert owned_trait_names  # sanity: the synthesized row really carries traits
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        ct_path = self.root / "fixtures" / "checks" / "checktype.json"
+        assert ct_path.exists()
+        ct_names = {r["fields"]["name"] for r in json.loads(ct_path.read_text(encoding="utf-8"))}
+        assert "Authored Mental Check" in ct_names
+        assert synthesized.name not in ct_names
+
+        trait_path = self.root / "fixtures" / "checks" / "checktypetrait.json"
+        assert trait_path.exists()
+        trait_records = json.loads(trait_path.read_text(encoding="utf-8"))
+        # CheckType.NaturalKeyConfig.fields = ["name", "category"], so the FK's
+        # natural key is [check_type_name, category_name] — name comes first.
+        exported_check_type_names = {r["fields"]["check_type"][0] for r in trait_records}
+        # The authored CheckType's trait row survives...
+        assert "Authored Mental Check" in exported_check_type_names
+        # ...but none of the synthesized row's trait rows leak through.
+        assert synthesized.name not in exported_check_type_names
+
+    def test_exported_ritual_count_matches_staff_authored_count(self) -> None:
+        """Tripwire: if a staff authoring surface ever stamps author_account, fail loudly.
+
+        The export predicate assumes staff authoring leaves author_account NULL. This
+        catches the day that stops being true, instead of silently dropping rows (#2724).
+        """
+        from evennia_extensions.factories import AccountFactory
+        from world.magic.factories import RitualFactory
+        from world.magic.models import Ritual
+
+        RitualFactory(name="Tripwire Staff Rite")
+        RitualFactory(name="Tripwire Player Rite", author_account=AccountFactory())
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        ritual_path = self.root / "fixtures" / "magic" / "ritual.json"
+        exported = json.loads(ritual_path.read_text(encoding="utf-8"))
+        assert len(exported) == Ritual.objects.filter(author_account__isnull=True).count()
+
+    def test_export_filters_cover_every_owner_discriminated_model(self) -> None:
+        from core_management.content_export import EXPORT_FILTERS
+
+        self.assertIn("magic.ritual", EXPORT_FILTERS)
+        self.assertIn("checks.checktype", EXPORT_FILTERS)
+        self.assertIn("checks.checktypetrait", EXPORT_FILTERS)
+        self.assertIn("evennia_extensions.media", EXPORT_FILTERS)
+
 
 class MagicCatalogContentExportTests(TestCase):
     """Round-trip coverage for the five magic catalog models (#2474).

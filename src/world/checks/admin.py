@@ -54,7 +54,8 @@ class CheckTypeCapabilityModifierInline(admin.TabularInline):
 
 @admin.register(CheckType)
 class CheckTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "category", "is_active", "display_order"]
+    autocomplete_fields = ["owner_sheet"]
+    list_display = ["name", "category", "is_active", "display_order", "owner_sheet"]
     list_filter = ["category", "is_active"]
     search_fields = ["name", "description"]
     ordering = ["category__display_order", "display_order", "name"]

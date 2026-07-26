@@ -62,6 +62,43 @@ class CharacterMagicCheckTypeTests(TestCase):
         self.assertEqual(a1.pk, a2.pk)
         self.assertNotEqual(a1.pk, b.pk)
 
+    def test_per_character_check_type_records_its_owner(self) -> None:
+        """#2724: the owner FK is what keeps per-character rows out of the export."""
+        check_type = ensure_character_magic_check_type(
+            self.sheet, stat=self.willpower, skill=self.skill
+        )
+        self.assertEqual(check_type.owner_sheet, self.sheet)
+
+    def test_authored_check_types_have_no_owner(self) -> None:
+        from world.checks.models import CheckCategory, CheckType
+
+        category, _ = CheckCategory.objects.get_or_create(name="Mental")
+        authored = CheckType.objects.create(name="Willpower", category=category)
+        self.assertIsNone(authored.owner_sheet)
+
+    def test_pre_existing_null_owner_row_is_repaired(self) -> None:
+        """#2724: rows created before this migration have owner_sheet=NULL and must
+        be repaired on the next `ensure_character_magic_check_type` call, or they
+        keep leaking into the content export forever (get_or_create's `defaults`
+        only apply at creation time)."""
+        from world.checks.models import CheckCategory, CheckType
+
+        category, _ = CheckCategory.objects.get_or_create(
+            name=MAGIC_CHECK_CATEGORY_NAME,
+            defaults={"description": "Checks of magical practice, lore, and endurance."},
+        )
+        name = character_magic_check_type_name(self.sheet)
+        pre_existing = CheckType.objects.create(name=name, category=category, owner_sheet=None)
+        self.assertIsNone(pre_existing.owner_sheet)
+
+        check_type = ensure_character_magic_check_type(
+            self.sheet, stat=self.willpower, skill=self.skill
+        )
+
+        self.assertEqual(check_type.pk, pre_existing.pk)
+        pre_existing.refresh_from_db()
+        self.assertEqual(pre_existing.owner_sheet, self.sheet)
+
 
 _PROVISION_STATS = {
     "strength": 2,

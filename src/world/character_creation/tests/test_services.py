@@ -2017,6 +2017,27 @@ class FinalizeRitualKnowledgeTests(FinalizationTestMixin, TestCase):
             ritual=granted_ritual,
         ).exists(), "Expected CharacterRitualKnowledge for the beginnings-granted ritual"
 
+    def test_two_characters_sharing_a_first_name_both_finalize(self) -> None:
+        """#2724: Ritual.name is unique and defaults to "<first name>'s Anima Ritual".
+
+        Before the uniquifier, the second finalize raised IntegrityError inside
+        finalize_character's atomic block and rolled the whole thing back.
+        """
+        from world.magic.models.rituals import Ritual
+
+        draft_one = self._create_complete_draft()
+        first_character = finalize_character(draft_one, add_to_roster=True)
+
+        # A second player, sharing the same first_name (fixed to "RitualKTest" by
+        # _create_complete_draft), must also be able to finalize.
+        self.account = AccountDB.objects.create(username=f"ritualktest2_{id(self)}")
+        draft_two = self._create_complete_draft()
+        second_character = finalize_character(draft_two, add_to_roster=True)
+
+        assert first_character.pk != second_character.pk
+        rituals = Ritual.objects.filter(name__startswith="RitualKTest's Anima Ritual")
+        assert rituals.count() == 2, "Expected two distinct anima Ritual rows"
+
 
 class FinalizeVitalsTests(FinalizationTestMixin, TestCase):
     """Tests that finalize_character initialises CharacterVitals at full health."""

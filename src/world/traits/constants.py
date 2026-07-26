@@ -4,7 +4,11 @@ Constants for the traits system.
 Defines enums and constant values used throughout the traits system.
 """
 
+from typing import NamedTuple
+
 from django.db import models
+
+from world.traits.models import TraitCategory, TraitType
 
 
 class PrimaryStat(models.TextChoices):
@@ -69,3 +73,41 @@ class PrimaryStat(models.TextChoices):
             ("perception", "meta", "Awareness and reading of people and situations."),
             ("willpower", "meta", "Mental fortitude and determination."),
         ]
+
+
+class TraitDefault(NamedTuple):
+    """Code default for a STAT Trait a config prerequisite (#2724) may need to create."""
+
+    trait_type: str
+    category: str
+    description: str
+
+
+# Code defaults for the STAT Traits multiple config-prerequisite paths roll checks on
+# (fatigue's willpower/endurance checks, dreams' Dream Peril Resolve — see
+# world.seeds.config_prerequisites) before the content load populates the `traits.trait`
+# fixtures. `Trait.category` has no model default and is a required column
+# (world/traits/models.py) — a get_or_create that omits it silently stores "". These
+# values match the authored rows in arx2/fixtures/traits/trait.json exactly, so the
+# later content-fixture upsert (`load_entries`) is a no-op when the lore repo already
+# carries the row. Byte-identical to what was previously the private
+# world.fatigue.constants.FATIGUE_TRAIT_DEFAULTS (#2724) — this is now the only copy;
+# do not fork a second one.
+STAT_TRAIT_DEFAULTS: dict[str, TraitDefault] = {
+    "willpower": TraitDefault(
+        TraitType.STAT, TraitCategory.META, "Mental fortitude and determination."
+    ),
+    "stamina": TraitDefault(
+        TraitType.STAT, TraitCategory.PHYSICAL, "Endurance and resistance to harm."
+    ),
+    "composure": TraitDefault(
+        TraitType.STAT,
+        TraitCategory.SOCIAL,
+        "Social endurance. Poise under social pressure and resistance to embarrassment.",
+    ),
+    "stability": TraitDefault(
+        TraitType.STAT,
+        TraitCategory.MENTAL,
+        "Mental endurance. Sustained focus and resistance to mental strain.",
+    ),
+}

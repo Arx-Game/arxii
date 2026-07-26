@@ -215,6 +215,41 @@ CONTENT_MODELS: frozenset[str] = frozenset(
 )
 
 
+#: Row-level export predicates, ``model_label -> filter kwargs`` applied via
+#: ``queryset.filter(**kwargs)``. Applied on top of the ``CONTENT_MODELS``
+#: allowlist, which is a *model*-level line.
+#:
+#: Some tables hold both authored content and rows that belong to one player —
+#: a personal anima ``Ritual``, the per-character ``CheckType``
+#: ``ensure_character_magic_check_type`` synthesizes. De-registering the model is not
+#: an option (staff rituals and check types must keep exporting), so the boundary is
+#: drawn per row, on a real owner column rather than a name pattern: a renamed pattern
+#: would leak silently, which is the failure this guards against (#2724, ADR-0171).
+#:
+#: Plain kwargs rather than ``django.db.models.Q`` deliberately: this module promises
+#: (see the module docstring, :13-15) to import cleanly without Django configured, and
+#: every predicate below is a single lookup — expressing it as a dict literal needs no
+#: Django import at module scope at all.
+#:
+#: This form expresses AND-of-lookups ONLY. A predicate that needs OR/NOT must switch
+#: to ``django.db.models.Q``, imported INSIDE ``export_to_content_repo`` (never at
+#: module scope — that would break the Django-unconfigured import contract above) —
+#: NOT be bolted on as extra dict keys: ``queryset.filter(**predicate)`` silently ANDs
+#: every key together, so a second key doesn't express OR/NOT, it expresses a stricter
+#: AND — a wrong-but-running filter with no error, the same silent-leak failure class
+#: this whole mechanism exists to close.
+#:
+#: NOTE: each predicate assumes staff authoring leaves the owner column NULL. If a staff
+#: authoring surface ever stamps the acting account, those rows silently stop exporting —
+#: ``test_content_export`` carries a count tripwire for exactly that.
+EXPORT_FILTERS: dict[str, dict[str, object]] = {
+    "evennia_extensions.media": {"slug__isnull": False},  # pre-existing behavior
+    "magic.ritual": {"author_account__isnull": True},
+    "checks.checktype": {"owner_sheet__isnull": True},
+    "checks.checktypetrait": {"check_type__owner_sheet__isnull": True},
+}
+
+
 def _write_markdown_entries(root: Path, spec: dict, serialized: str) -> list[Path]:
     """Write one markdown file per record for a prose domain (#2688).
 
@@ -283,8 +318,9 @@ def export_to_content_repo(content_root: Path | None = None) -> ExportResult:
             continue
 
         queryset = model.objects.all().order_by("pk")
-        if model_label == "evennia_extensions.media":
-            queryset = queryset.filter(slug__isnull=False)
+        predicate = EXPORT_FILTERS.get(model_label)
+        if predicate is not None:
+            queryset = queryset.filter(**predicate)
         count = queryset.count()
         if count == 0:
             result.skipped.append(model_label)
