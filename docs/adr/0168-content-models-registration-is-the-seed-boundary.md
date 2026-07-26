@@ -1,5 +1,7 @@
 # CONTENT_MODELS registration *is* the seed/content boundary; seeders look content up and invent only under SEED_SAMPLE_CONTENT
 
+**Amended by ADR-0171** (#2724) — per-row carve-out for code-required config rows.
+
 ADR-0142 established that the Big Button loads real content from arx2-lore and that
 arxii seeds keep "only non-lore config/lookup tables". It did not say how to decide
 which is which, and in practice the decision was made per-model by shape — is this a
