@@ -153,6 +153,7 @@ class PoisonTickKnockoutTests(TestCase):
 
 
 @tag("postgres")
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
 class PoisonTickBleedOutTests(TestCase):
     """Poison DoT tick crossing the death threshold (health ≤ 0) applies Bleeding-Out.
 

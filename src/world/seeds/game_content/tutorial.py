@@ -260,7 +260,14 @@ def _seed_terminal_route(
     if route is None:
         return None
     for sink, defaults in reward_specs:
-        authored_or_sample(MissionOptionRouteReward, defaults, route=route, sink=sink)
+        # `kind` belongs in the LOOKUP, not `defaults` — it is part of what
+        # identifies a reward line, and it has no model-level default, so
+        # leaving it out silently stores "" and `_route_line` then raises
+        # MissionRewardRoutingError because ("", MONEY) matches no routing
+        # branch. Mirrors game_content/missions.py's sibling call.
+        spec = dict(defaults)
+        kind = spec.pop("kind", DeedRewardKind.IMMEDIATE)
+        authored_or_sample(MissionOptionRouteReward, spec, route=route, kind=kind, sink=sink)
     return route
 
 
@@ -566,6 +573,7 @@ def _ensure_t4_followon_reward(
             "contract_holder_only": True,
         },
         route=route,
+        kind=DeedRewardKind.IMMEDIATE,
         sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
     )
 

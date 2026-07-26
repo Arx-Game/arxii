@@ -1455,10 +1455,39 @@ class EscalationCurveFactory(factory_django.DjangoModelFactory):
         (``authored_or_sample``) and returns ``None`` when SEED_SAMPLE_CONTENT
         is off, which would violate this FK's NOT NULL constraint. A test
         factory must always produce a valid object regardless of that setting.
-        """
-        from world.checks.factories import CheckTypeFactory
 
-        return CheckTypeFactory(name="Escalation Pace")
+        It must also produce a *complete* one: the seed carries a wits leg
+        (#1706 — resist-style checks roll their named stat), and a CheckType
+        with no ``CheckTypeTrait`` rows resolves with zero trait points, so a
+        hollow fixture would silently turn any check rolled through it into a
+        coin flip. Reuses the existing row when one is already present, so a
+        test that seeds and then builds a curve gets one composition, not two.
+        """
+        from decimal import Decimal
+
+        from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
+        from world.traits.models import Trait, TraitCategory, TraitType
+
+        category, _ = CheckCategory.objects.get_or_create(
+            name="Combat", defaults={"description": "Checks involving physical combat."}
+        )
+        check_type, _ = CheckType.objects.get_or_create(
+            name="Escalation Pace",
+            category=category,
+            defaults={"description": "Keep control in pace with rising intensity."},
+        )
+        wits, _ = Trait.objects.get_or_create(
+            name="wits",
+            defaults={
+                "trait_type": TraitType.STAT,
+                "category": TraitCategory.MENTAL,
+                "is_public": True,
+            },
+        )
+        CheckTypeTrait.objects.get_or_create(
+            check_type=check_type, trait=wits, defaults={"weight": Decimal("1.00")}
+        )
+        return check_type
 
 
 def wire_flee_config():
