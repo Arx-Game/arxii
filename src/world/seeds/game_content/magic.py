@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
+import logging
 from typing import TYPE_CHECKING
 
 from world.magic.seeds_checks import MagicCheckContentResult
@@ -38,7 +39,7 @@ if TYPE_CHECKING:
     from actions.models.action_templates import ActionTemplate
     from actions.models.consequence_pools import ConsequencePool
     from world.classes.models import Path
-    from world.conditions.models import CapabilityType, ConditionStage
+    from world.conditions.models import CapabilityType, ConditionStage, ConditionTemplate
     from world.magic.audere import AudereThreshold
     from world.magic.models import (
         Affinity,
@@ -63,6 +64,9 @@ if TYPE_CHECKING:
     from world.mechanics.models import Property
     from world.relationships.models import RelationshipTrack
     from world.seeds.game_content.combat import FleeSeedResult, PenetrationContestResult
+    from world.traits.models import CheckOutcome
+
+logger = logging.getLogger(__name__)
 
 # Maps action_key → technique name (narrative, not mechanical)
 ACTION_TECHNIQUE_MAP: dict[str, str] = {
@@ -707,7 +711,7 @@ _HALLOWED_REACTION_SPECS: list[dict[str, str]] = [
 ]
 
 
-def _seed_hallowed_reaction_conditions() -> None:
+def _seed_hallowed_reaction_conditions() -> dict[str, ConditionTemplate]:
     """Seed the 5 reaction conditions for the Hallowed Threshold pipeline.
 
     These conditions are applied on different check outcomes when an
@@ -720,25 +724,35 @@ def _seed_hallowed_reaction_conditions() -> None:
     Burning may already exist (factory-created in some tests); get_or_create
     reuses an existing row with the same name.
 
-    All writes use get_or_create so re-running on a populated DB is a no-op.
+    ``conditions.ConditionCategory``/``conditions.ConditionTemplate`` are
+    content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. Returns a dict of ``{name: ConditionTemplate}``
+    for whichever of the 5 are actually present (authored, or sampled) — a
+    name absent from the dict means it isn't there yet. Downstream consumers
+    (``_seed_resonance_environment_consequence_pools``,
+    ``_seed_hallowed_achievement_bridge``, ``_seed_hallowed_threshold_story``)
+    key off this dict and skip whatever it's missing rather than raising.
     """
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # Ensure a "Magical" category exists. Reuse if already present.
-    category, _ = ConditionCategory.objects.get_or_create(
-        name="Magical",
-        defaults={
+    category = authored_or_sample(
+        ConditionCategory,
+        {
             "description": "Magical conditions arising from spellcasting and aura interactions.",
             "is_negative": True,
             "display_order": 0,
         },
+        name="Magical",
     )
 
+    conditions: dict[str, ConditionTemplate] = {}
     for spec in _HALLOWED_REACTION_SPECS:
-        ConditionTemplate.objects.get_or_create(
-            name=spec["name"],
-            defaults={
+        template = authored_or_sample(
+            ConditionTemplate,
+            {
                 "category": category,
                 "description": spec["description"],
                 "player_description": spec["player_description"],
@@ -750,7 +764,11 @@ def _seed_hallowed_reaction_conditions() -> None:
                 "has_progression": False,
                 "can_be_dispelled": True,
             },
+            name=spec["name"],
         )
+        if template is not None:
+            conditions[spec["name"]] = template
+    return conditions
 
 
 # ---------------------------------------------------------------------------
@@ -792,6 +810,100 @@ _ABYSSAL_CELESTIAL_POOL_NAME: str = "OPPOSED Backfire: Abyssal caster in Celesti
 _PRIMAL_CELESTIAL_POOL_NAME: str = "OPPOSED Backfire: Primal caster in Celestial place"
 
 
+def _build_hallowed_backfire_pool(
+    pool_name: str,
+    description: str,
+    outcome_map: dict[str, CheckOutcome],
+    cond_map: dict[str, ConditionTemplate],
+) -> ConsequencePool:
+    """Create (or fetch) one OPPOSED backfire pool and wire its Consequence/effect rows.
+
+    Extracted from ``_seed_resonance_environment_consequence_pools`` (a module-level
+    function keeps its branch count off that function's own C901 budget). See that
+    function's docstring for the full dependency/skip-on-missing-condition contract.
+    """
+    from actions.models import ConsequencePool, ConsequencePoolEntry  # noqa: PLC0415
+    from world.checks.constants import EffectType as CheckEffectType  # noqa: PLC0415
+    from world.checks.models import Consequence, ConsequenceEffect  # noqa: PLC0415
+
+    pool, _ = ConsequencePool.objects.get_or_create(
+        name=pool_name,
+        defaults={"description": description},
+    )
+
+    # --- Single-effect outcomes: every tier except Critical Failure ---
+    # Derived inline from the single source of truth (no separate map constant).
+    for outcome_name, condition_name in HALLOWED_REACTION_CONDITION_NAMES.items():
+        if outcome_name == _CRIT_FAIL_TIER:
+            continue
+        condition = cond_map.get(condition_name)
+        if condition is None:
+            continue
+        outcome = outcome_map[outcome_name]
+        # SOFT NATURAL KEY: there is no DB constraint on (outcome_tier, label).
+        # Idempotency relies on ConsequencePool.name being unique=True and the
+        # label embedding that unique pool name, so (outcome_tier, label) is
+        # effectively pool-scoped-unique. A label-format change across runs
+        # would create duplicates (acceptable for seed; do NOT change the model).
+        consequence, _ = Consequence.objects.get_or_create(
+            outcome_tier=outcome,
+            label=f"{pool_name}: {outcome_name}",
+            defaults={
+                "mechanical_description": f"Apply {condition_name}.",
+                "weight": 1,
+                "character_loss": False,
+            },
+        )
+        ConsequencePoolEntry.objects.get_or_create(
+            pool=pool,
+            consequence=consequence,
+        )
+        # SOFT NATURAL KEY: the (consequence, effect_type, condition_template)
+        # triple is functionally unique for this seed but is NOT DB-enforced
+        # (pre-existing model-wide gap affecting all ConsequenceEffect callers;
+        # out of scope for this seed task — tracked as a separate follow-up).
+        ConsequenceEffect.objects.get_or_create(
+            consequence=consequence,
+            effect_type=CheckEffectType.APPLY_CONDITION,
+            condition_template=condition,
+            defaults={"execution_order": 0},
+        )
+
+    # --- Critical Failure: two APPLY_CONDITION effects on one Consequence ---
+    crit_fail_outcome = outcome_map[_CRITICAL_FAILURE]
+    crit_fail_label = f"{pool_name}: Critical Failure"
+    # SOFT NATURAL KEY (same rationale as above): (outcome_tier, label) is not
+    # DB-unique; idempotency relies on the unique pool name embedded in label.
+    crit_fail_consequence, _ = Consequence.objects.get_or_create(
+        outcome_tier=crit_fail_outcome,
+        label=crit_fail_label,
+        defaults={
+            "mechanical_description": "Apply Hallowed Burn and Cast Disrupted.",
+            "weight": 1,
+            "character_loss": False,
+        },
+    )
+    ConsequencePoolEntry.objects.get_or_create(
+        pool=pool,
+        consequence=crit_fail_consequence,
+    )
+    for order, cond_name in enumerate(CRIT_FAIL_CONDITION_NAMES):
+        condition = cond_map.get(cond_name)
+        if condition is None:
+            continue
+        # SOFT NATURAL KEY: (consequence, effect_type, condition_template) is
+        # functionally unique here but NOT DB-enforced (pre-existing model-wide
+        # gap; out of scope for this seed task — tracked separately).
+        ConsequenceEffect.objects.get_or_create(
+            consequence=crit_fail_consequence,
+            effect_type=CheckEffectType.APPLY_CONDITION,
+            condition_template=condition,
+            defaults={"execution_order": order},
+        )
+
+    return pool
+
+
 def _seed_resonance_environment_consequence_pools() -> None:
     """Seed OPPOSED consequence pools for pair #4 (Abyssal→Celestial) and #7 (Primal→Celestial).
 
@@ -810,17 +922,20 @@ def _seed_resonance_environment_consequence_pools() -> None:
     Depends on:
     - seed_canonical_affinities()      (Celestial/Primal/Abyssal must exist)
     - _seed_affinity_interactions()    (9 AffinityInteraction rows)
-    - _seed_hallowed_reaction_conditions() (all 5 ConditionTemplate rows)
+    - _seed_hallowed_reaction_conditions() (all 5 ConditionTemplate rows —
+      content-repo-owned, #2698; any of the 5 may be absent)
     - _seed_endure_hallowed_ground_check() (ensures the resolution-spine
       CheckOutcome rows via seed_check_resolution_tables)
 
     Idempotent: get_or_create keyed on stable names at every layer.  Duplicate
     ConsequencePoolEntry rows are prevented by the (pool, consequence) unique
     constraint; duplicate ConsequenceEffect rows are guarded explicitly.
+
+    ``ConditionTemplate`` is content-repo-owned (#2698); an outcome tier whose
+    condition isn't authored gets its Consequence/ConsequencePoolEntry rows
+    (config) but skips the APPLY_CONDITION effect that would need the missing
+    condition — the pool still seeds, just without teeth for that tier.
     """
-    from actions.models import ConsequencePool, ConsequencePoolEntry  # noqa: PLC0415
-    from world.checks.constants import EffectType as CheckEffectType  # noqa: PLC0415
-    from world.checks.models import Consequence, ConsequenceEffect  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.magic.models.affinity import Affinity  # noqa: PLC0415
     from world.magic.models.resonance_environment import AffinityInteraction  # noqa: PLC0415
@@ -832,116 +947,55 @@ def _seed_resonance_environment_consequence_pools() -> None:
     for name in (_CRITICAL_SUCCESS, "Success", "Failure", _CRITICAL_FAILURE):
         outcome_map[name] = CheckOutcome.objects.get(name=name)
 
-    # --- Fetch injury ConditionTemplates (created by _seed_hallowed_reaction_conditions) ---
-    # Names come from the single source of truth (_HALLOWED_REACTION_SPECS) and are
-    # unique per spec, so no de-dup guard is needed when building this map.
+    # --- Fetch injury ConditionTemplates (created by _seed_hallowed_reaction_conditions,
+    # content-repo-owned #2698) — a name absent from the DB is simply absent from
+    # this map; callers below skip the effect wiring for a missing condition. ---
     cond_map: dict[str, ConditionTemplate] = {
-        spec["name"]: ConditionTemplate.objects.get(name=spec["name"])
-        for spec in _HALLOWED_REACTION_SPECS
+        template.name: template
+        for template in ConditionTemplate.objects.filter(
+            name__in=[spec["name"] for spec in _HALLOWED_REACTION_SPECS]
+        )
     }
 
-    def _build_pool(pool_name: str, description: str) -> ConsequencePool:
-        """Create (or fetch) a pool and wire its 4 Consequence + ConsequenceEffect rows."""
-        pool, _ = ConsequencePool.objects.get_or_create(
-            name=pool_name,
-            defaults={"description": description},
-        )
-
-        # --- Single-effect outcomes: every tier except Critical Failure ---
-        # Derived inline from the single source of truth (no separate map constant).
-        for outcome_name, condition_name in HALLOWED_REACTION_CONDITION_NAMES.items():
-            if outcome_name == _CRIT_FAIL_TIER:
-                continue
-            outcome = outcome_map[outcome_name]
-            condition = cond_map[condition_name]
-            # SOFT NATURAL KEY: there is no DB constraint on (outcome_tier, label).
-            # Idempotency relies on ConsequencePool.name being unique=True and the
-            # label embedding that unique pool name, so (outcome_tier, label) is
-            # effectively pool-scoped-unique. A label-format change across runs
-            # would create duplicates (acceptable for seed; do NOT change the model).
-            consequence, _ = Consequence.objects.get_or_create(
-                outcome_tier=outcome,
-                label=f"{pool_name}: {outcome_name}",
-                defaults={
-                    "mechanical_description": f"Apply {condition_name}.",
-                    "weight": 1,
-                    "character_loss": False,
-                },
-            )
-            ConsequencePoolEntry.objects.get_or_create(
-                pool=pool,
-                consequence=consequence,
-            )
-            # SOFT NATURAL KEY: the (consequence, effect_type, condition_template)
-            # triple is functionally unique for this seed but is NOT DB-enforced
-            # (pre-existing model-wide gap affecting all ConsequenceEffect callers;
-            # out of scope for this seed task — tracked as a separate follow-up).
-            ConsequenceEffect.objects.get_or_create(
-                consequence=consequence,
-                effect_type=CheckEffectType.APPLY_CONDITION,
-                condition_template=condition,
-                defaults={"execution_order": 0},
-            )
-
-        # --- Critical Failure: two APPLY_CONDITION effects on one Consequence ---
-        crit_fail_outcome = outcome_map[_CRITICAL_FAILURE]
-        crit_fail_label = f"{pool_name}: Critical Failure"
-        # SOFT NATURAL KEY (same rationale as above): (outcome_tier, label) is not
-        # DB-unique; idempotency relies on the unique pool name embedded in label.
-        crit_fail_consequence, _ = Consequence.objects.get_or_create(
-            outcome_tier=crit_fail_outcome,
-            label=crit_fail_label,
-            defaults={
-                "mechanical_description": "Apply Hallowed Burn and Cast Disrupted.",
-                "weight": 1,
-                "character_loss": False,
-            },
-        )
-        ConsequencePoolEntry.objects.get_or_create(
-            pool=pool,
-            consequence=crit_fail_consequence,
-        )
-        for order, cond_name in enumerate(CRIT_FAIL_CONDITION_NAMES):
-            # SOFT NATURAL KEY: (consequence, effect_type, condition_template) is
-            # functionally unique here but NOT DB-enforced (pre-existing model-wide
-            # gap; out of scope for this seed task — tracked separately).
-            ConsequenceEffect.objects.get_or_create(
-                consequence=crit_fail_consequence,
-                effect_type=CheckEffectType.APPLY_CONDITION,
-                condition_template=cond_map[cond_name],
-                defaults={"execution_order": order},
-            )
-
-        return pool
-
     # --- Build both pools ---
-    abyssal_celestial_pool = _build_pool(
+    abyssal_celestial_pool = _build_hallowed_backfire_pool(
         _ABYSSAL_CELESTIAL_POOL_NAME,
         "Backfire consequences for an Abyssal caster working magic in a Celestial place.",
+        outcome_map,
+        cond_map,
     )
-    primal_celestial_pool = _build_pool(
+    primal_celestial_pool = _build_hallowed_backfire_pool(
         _PRIMAL_CELESTIAL_POOL_NAME,
         "Backfire consequences for a Primal caster working magic in a Celestial place.",
+        outcome_map,
+        cond_map,
     )
 
     # --- Wire AffinityInteraction.consequence_pool for pair #4 and #7 ---
-    abyssal = Affinity.objects.get(name="Abyssal")
-    primal = Affinity.objects.get(name="Primal")
-    celestial = Affinity.objects.get(name="Celestial")
+    # Affinity is content-repo-owned (#2698); AffinityInteraction depends on
+    # it existing (seeded by _seed_affinity_interactions(), which itself
+    # skips a pairing whose Affinity is absent) — so both are resolved via
+    # filter().first() and this wiring step is skipped rather than raising
+    # when either canonical Affinity or its pairing isn't there.
+    abyssal = Affinity.objects.filter(name="Abyssal").first()
+    primal = Affinity.objects.filter(name="Primal").first()
+    celestial = Affinity.objects.filter(name="Celestial").first()
+    if abyssal is None or primal is None or celestial is None:
+        return
 
-    pair4 = AffinityInteraction.objects.get(
+    pair4 = AffinityInteraction.objects.filter(
         source_affinity=abyssal,
         environment_affinity=celestial,
-    )
-    if pair4.consequence_pool_id != abyssal_celestial_pool.pk:
+    ).first()
+    if pair4 is not None and pair4.consequence_pool_id != abyssal_celestial_pool.pk:
         pair4.consequence_pool = abyssal_celestial_pool
         pair4.save(update_fields=["consequence_pool"])
 
-    pair7 = AffinityInteraction.objects.get(
+    pair7 = AffinityInteraction.objects.filter(
         source_affinity=primal,
         environment_affinity=celestial,
-    )
-    if pair7.consequence_pool_id != primal_celestial_pool.pk:
+    ).first()
+    if pair7 is not None and pair7.consequence_pool_id != primal_celestial_pool.pk:
         pair7.consequence_pool = primal_celestial_pool
         pair7.save(update_fields=["consequence_pool"])
 
@@ -1025,6 +1079,11 @@ def _seed_resonance_alignment_boons() -> None:
 
     Idempotent: get_or_create keyed on stable natural keys (template by name;
     tier by (affinity_interaction, min_magnitude) unique constraint).
+
+    ``ConditionCategory``/``ConditionTemplate`` are content-repo-owned (#2698)
+    — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A
+    band whose template isn't authored has its ``ResonanceAlignmentBoonTier``
+    skipped below (the tier's ``condition_template`` FK is required).
     """
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
@@ -1033,21 +1092,23 @@ def _seed_resonance_alignment_boons() -> None:
         AffinityInteraction,
         ResonanceAlignmentBoonTier,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # --- Positive "Magical Boon" ConditionCategory for buff templates ---
     # MUST be separate from the negative "Magical" category (used by injury conditions).
     # is_negative=False is load-bearing: services/views count and filter positive vs negative
     # conditions by this flag (see conditions/services.py only_negative filter and
     # conditions/views.py positive/negative counting).
-    category, _ = ConditionCategory.objects.get_or_create(
-        name=_MAGICAL_BOON_CATEGORY_NAME,
-        defaults={
+    category = authored_or_sample(
+        ConditionCategory,
+        {
             "description": (
                 "Positive magical conditions from resonance alignment and aura attunement."
             ),
             "is_negative": False,
             "display_order": 10,
         },
+        name=_MAGICAL_BOON_CATEGORY_NAME,
     )
 
     # --- Seed the two boon ConditionTemplates ---
@@ -1055,9 +1116,9 @@ def _seed_resonance_alignment_boons() -> None:
     # movement service on the next move (no inherent expiry timer).
     template_map: dict[str, ConditionTemplate] = {}
     for spec in _ABYSSAL_BOON_SPECS:
-        template, _ = ConditionTemplate.objects.get_or_create(
-            name=spec["name"],
-            defaults={
+        template = authored_or_sample(
+            ConditionTemplate,
+            {
                 "category": category,
                 "description": spec["description"],
                 "player_description": spec["player_description"],
@@ -1069,15 +1130,23 @@ def _seed_resonance_alignment_boons() -> None:
                 "has_progression": False,
                 "can_be_dispelled": False,
             },
+            name=spec["name"],
         )
-        template_map[spec["band"]] = template
+        if template is not None:
+            template_map[spec["band"]] = template
 
     # --- Fetch pair #5: Abyssal → Abyssal (ALIGNED) ---
-    abyssal = Affinity.objects.get(name="Abyssal")
-    pair5 = AffinityInteraction.objects.get(
+    # Affinity is content-repo-owned (#2698); skip the boon tiers rather than
+    # raising when the canonical Affinity or its self-pairing isn't there.
+    abyssal = Affinity.objects.filter(name="Abyssal").first()
+    if abyssal is None:
+        return
+    pair5 = AffinityInteraction.objects.filter(
         source_affinity=abyssal,
         environment_affinity=abyssal,
-    )
+    ).first()
+    if pair5 is None:
+        return
 
     # --- Seed two boon tiers with full_clean() guard before every save() ---
     # full_clean() is MANDATORY here: ResonanceAlignmentBoonTier.clean() validates
@@ -1089,7 +1158,9 @@ def _seed_resonance_alignment_boons() -> None:
         (_ABYSSAL_BOON_HIGH_MIN_MAGNITUDE, "high"),
     ]
     for min_magnitude, band in tier_specs:
-        condition_template = template_map[band]
+        condition_template = template_map.get(band)
+        if condition_template is None:
+            continue
         # get_or_create keyed on the unique (affinity_interaction, min_magnitude) pair.
         # On the CREATE path: build the instance, full_clean(), then save().
         # On the GET path: no save needed; full_clean is already guaranteed on prior run.
@@ -1158,7 +1229,14 @@ def _seed_hallowed_achievement_bridge() -> None:
     the first character earns each Achievement.
 
     Depends on _seed_hallowed_reaction_conditions() having run first to
-    create the ConditionTemplate rows we reference.
+    create the ConditionTemplate rows we reference — content-repo-owned
+    (#2698), so a given spec's condition may not exist; that spec is skipped
+    entirely (stat/rule/achievement all hang off the condition existing).
+
+    ``achievements.StatDefinition`` is ALSO content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A
+    spec whose stat isn't authored/sampled skips its rule/achievement too
+    (``ConditionStatRule.stat`` is a required FK).
     """
     from django.utils.text import slugify  # noqa: PLC0415
 
@@ -1173,18 +1251,24 @@ def _seed_hallowed_achievement_bridge() -> None:
         StatDefinition,
     )
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     for spec in _HALLOWED_ACHIEVEMENT_BRIDGE_SPECS:
-        condition = ConditionTemplate.objects.get(name=spec["condition_name"])
-        stat, _ = StatDefinition.objects.get_or_create(
-            key=spec["stat_key"],
-            defaults={
+        condition = ConditionTemplate.objects.filter(name=spec["condition_name"]).first()
+        if condition is None:
+            continue
+        stat = authored_or_sample(
+            StatDefinition,
+            {
                 "name": spec["stat_name"],
                 "description": (
                     f"Count of times this character has gained {spec['condition_name']}."
                 ),
             },
+            key=spec["stat_key"],
         )
+        if stat is None:
+            continue
         ConditionStatRule.objects.get_or_create(
             stat=stat,
             condition=condition,
@@ -1256,19 +1340,24 @@ def _seed_resonance_environment_rooms() -> None:
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
     from world.magic.models.affinity import Resonance  # noqa: PLC0415
     from world.magic.services.gain import tag_room_resonance  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # ----- Hallowed Rejection marker (flavor condition for the story) -----
-    category, _ = ConditionCategory.objects.get_or_create(
-        name="Magical",
-        defaults={
+    # ConditionCategory/ConditionTemplate are content-repo-owned (#2698) —
+    # looked up rather than invented unless SEED_SAMPLE_CONTENT is on. The
+    # cascade rooms below don't depend on this marker existing.
+    category = authored_or_sample(
+        ConditionCategory,
+        {
             "description": "Magical conditions arising from spellcasting and aura interactions.",
             "is_negative": True,
             "display_order": 0,
         },
+        name="Magical",
     )
-    ConditionTemplate.objects.get_or_create(
-        name="Hallowed Rejection",
-        defaults={
+    authored_or_sample(
+        ConditionTemplate,
+        {
             "category": category,
             "description": (
                 "An Abyssal-aligned soul remembers a wound made by sanctified light. "
@@ -1284,11 +1373,16 @@ def _seed_resonance_environment_rooms() -> None:
             "has_progression": False,
             "can_be_dispelled": False,
         },
+        name="Hallowed Rejection",
     )
 
     # ----- Rooms with cascade resonance -----
-    light = Resonance.objects.get(name="Light")
-    dissolution = Resonance.objects.get(name="Dissolution")
+    # Resonance is content-repo-owned (#2698): skip cascade-room seeding
+    # rather than raising when either canonical Resonance isn't there.
+    light = Resonance.objects.filter(name="Light").first()
+    dissolution = Resonance.objects.filter(name="Dissolution").first()
+    if light is None or dissolution is None:
+        return
 
     room_specs: list[tuple[str, Resonance, int]] = [
         ("The Hallowed Threshold (Low)", light, _CELESTIAL_LOW_MAGNITUDE),
@@ -1353,6 +1447,12 @@ def _seed_hallowed_threshold_story() -> None:
 
     Idempotent via get_or_create throughout. Re-running on a populated DB is a
     no-op; staff edits to existing rows are preserved.
+
+    Every beat below requires one of the 4 reaction ``ConditionTemplate``
+    rows (content-repo-owned, #2698; seeded by ``_seed_hallowed_reaction_conditions``).
+    The whole DAG is skipped — no Story/Chapter/Episode/Beat/Transition rows
+    at all — when any of the 4 isn't authored, rather than building a partial
+    story with beats missing their routing condition.
     """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.stories.constants import (  # noqa: PLC0415
@@ -1369,6 +1469,14 @@ def _seed_hallowed_threshold_story() -> None:
         TransitionRequiredOutcome,
     )
     from world.stories.types import StoryPrivacy, StoryStatus  # noqa: PLC0415
+
+    needed_condition_names = {_TEMPERED_AGAINST_LIGHT, "Singed", "Burning", _HALLOWED_BURN}
+    cond_map: dict[str, ConditionTemplate] = {
+        template.name: template
+        for template in ConditionTemplate.objects.filter(name__in=needed_condition_names)
+    }
+    if not needed_condition_names.issubset(cond_map):
+        return
 
     # --- Story (CHARACTER scope, no character_sheet — used as a template;
     #     the pipeline test wires character_sheet at runtime per playthrough) ---
@@ -1435,7 +1543,7 @@ def _seed_hallowed_threshold_story() -> None:
     ]
     beats_by_condition_name: dict[str, Beat] = {}
     for cond_name, player_resolution_text in beat_specs:
-        condition = ConditionTemplate.objects.get(name=cond_name)
+        condition = cond_map[cond_name]
         beat, _ = Beat.objects.get_or_create(
             episode=source,
             predicate_type=BeatPredicateType.CONDITION_HELD,
@@ -1491,14 +1599,18 @@ def _seed_hallowed_threshold_story() -> None:
 def seed_canonical_affinities() -> None:
     """Seed the 3 canonical magic Affinities (Celestial / Primal / Abyssal).
 
-    Idempotent. Re-running on a populated DB is a no-op for these rows.
-    Other magic content (resonances, room aura, etc.) can depend on these
-    existing — call this before any seed that references Affinity FKs.
+    Content-repo-owned (#2698): looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. Idempotent. Re-running on a populated DB is
+    a no-op for these rows. Other magic content (resonances, room aura, etc.)
+    depends on these existing — every consumer downstream of this (in this
+    module and elsewhere) is written to skip gracefully, never crash, when a
+    canonical Affinity is absent.
     """
     from world.magic.models.affinity import Affinity  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     for name in ("Celestial", "Primal", "Abyssal"):
-        Affinity.objects.get_or_create(name=name)
+        authored_or_sample(Affinity, {}, name=name)
 
 
 def seed_canonical_resonances() -> None:
@@ -1507,26 +1619,27 @@ def seed_canonical_resonances() -> None:
     Celestial: Light / Sanctity / Radiance
     Abyssal: Dissolution
 
-    Depends on seed_canonical_affinities(). Idempotent via get_or_create.
+    Content-repo-owned (#2698): looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. Depends on seed_canonical_affinities()
+    having run — skips a resonance group entirely when its Affinity is
+    absent (rather than raising), since that Affinity is itself
+    content-repo-owned and may not exist.
     The Celestial resonances are used by Hallowed Threshold room cascade rows.
     Dissolution (Abyssal) is used by the Resonant Sanctum room for the
     ALIGNED-pole amplification subtest (an Abyssal caster casting in an Abyssal
     resonance room gets the boon).
     """
     from world.magic.models.affinity import Affinity, Resonance  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    celestial = Affinity.objects.get(name="Celestial")
-    for name in ("Light", "Sanctity", "Radiance"):
-        Resonance.objects.get_or_create(
-            name=name,
-            defaults={"affinity": celestial},
-        )
+    celestial = Affinity.objects.filter(name="Celestial").first()
+    if celestial is not None:
+        for name in ("Light", "Sanctity", "Radiance"):
+            authored_or_sample(Resonance, {"affinity": celestial}, name=name)
 
-    abyssal = Affinity.objects.get(name="Abyssal")
-    Resonance.objects.get_or_create(
-        name="Dissolution",
-        defaults={"affinity": abyssal},
-    )
+    abyssal = Affinity.objects.filter(name="Abyssal").first()
+    if abyssal is not None:
+        authored_or_sample(Resonance, {"affinity": abyssal}, name="Dissolution")
 
 
 # Task RC1 — directed RPS affinity interaction matrix
@@ -1557,6 +1670,10 @@ def _seed_affinity_interactions() -> None:
     enforced even on pre-existing rows via an explicit set-after-get — this avoids the
     get_or_create "defaults dropped when the row already exists" gotcha, while leaving
     the genuinely-tunable fields untouched.
+
+    Affinity is content-repo-owned (#2698): a row missing from
+    ``affinity_cache`` (content repo doesn't author it, sample content off)
+    skips that pairing rather than raising ``KeyError``.
     """
     from decimal import Decimal  # noqa: PLC0415
 
@@ -1569,6 +1686,8 @@ def _seed_affinity_interactions() -> None:
     }
     for row in _AFFINITY_INTERACTION_ROWS:
         src_name, env_name, valence, kind, aggressor, mult_str, defiles = row
+        if src_name not in affinity_cache or env_name not in affinity_cache:
+            continue
         obj, created = AffinityInteraction.objects.get_or_create(
             source_affinity=affinity_cache[src_name],
             environment_affinity=affinity_cache[env_name],
@@ -1681,18 +1800,25 @@ def seed_magic_config() -> MagicConfigResult:
         ensure_magic_check_types,
     )
 
-    resilience_check_type = ensure_magic_check_types()[MAGICAL_ENDURANCE_CHECK_TYPE_NAME]
-    soulfray_config, _ = SoulfrayConfig.objects.get_or_create(
-        pk=1,
-        defaults={
-            "soulfray_threshold_ratio": Decimal("0.30"),
-            "severity_scale": 10,
-            "deficit_scale": 5,
-            "resilience_check_type": resilience_check_type,
-            "base_check_difficulty": 15,
-            "ritual_severity_cost_per_point": 1,
-        },
-    )
+    # checks.CheckType is content-repo-owned (#2698) — ensure_magic_check_types()
+    # omits an entry whose category/row isn't authored. resilience_check_type is
+    # a required FK on SoulfrayConfig (a pk=1 singleton), so the singleton itself
+    # is skipped entirely (never created with a null FK) when the Magical
+    # Endurance CheckType isn't authored and SoulfrayConfig doesn't already exist.
+    resilience_check_type = ensure_magic_check_types().get(MAGICAL_ENDURANCE_CHECK_TYPE_NAME)
+    soulfray_config = SoulfrayConfig.objects.filter(pk=1).first()
+    if soulfray_config is None and resilience_check_type is not None:
+        soulfray_config, _ = SoulfrayConfig.objects.get_or_create(
+            pk=1,
+            defaults={
+                "soulfray_threshold_ratio": Decimal("0.30"),
+                "severity_scale": 10,
+                "deficit_scale": 5,
+                "resilience_check_type": resilience_check_type,
+                "base_check_difficulty": 15,
+                "ritual_severity_cost_per_point": 1,
+            },
+        )
 
     # --- AnimaRitualBudgetAward: one authored row per canonical CheckOutcome tier ---
     # Replaces the old SoulfrayConfig.ritual_budget_critical_success/_success/_partial/
@@ -1774,40 +1900,62 @@ def seed_magic_config() -> MagicConfigResult:
     corruption_config, _ = CorruptionConfig.objects.get_or_create(pk=1, defaults={})
 
     # --- IntensityTier reference rows ---
+    # Content-repo-owned (#2698): looked up rather than invented unless
+    # SEED_SAMPLE_CONTENT is on. A missing tier is simply absent from the
+    # returned dict — nothing downstream in the seeder chain asserts a
+    # specific tier exists.
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
     intensity_tiers: dict[str, IntensityTier] = {}
     for tier_name, threshold, control_mod in _INTENSITY_TIERS:
-        tier, _ = IntensityTier.objects.get_or_create(
-            name=tier_name,
-            defaults={
+        tier = authored_or_sample(
+            IntensityTier,
+            {
                 "threshold": threshold,
                 "control_modifier": control_mod,
                 "description": f"{tier_name} intensity level.",
             },
+            name=tier_name,
         )
+        if tier is None:
+            continue
         intensity_tiers[tier_name] = tier
 
-    major_tier = intensity_tiers["Major"]
+    major_tier = intensity_tiers.get("Major")
 
     # --- Soulfray condition + stages (needed for AudereThreshold.minimum_warp_stage) ---
     # SoulfrayContentFactory() is idempotent — uses get_or_create internally.
+    # conditions.ConditionTemplate/ConditionStage are content-repo-owned (#2698);
+    # soulfray_content.stages is empty when Soulfray isn't authored and
+    # SEED_SAMPLE_CONTENT is off — ripping_stage stays None in that case.
     soulfray_content = SoulfrayContentFactory()
     ripping_stage = next(
-        s
-        for s in soulfray_content.stages
-        if s.name == "Ripping"  # noqa: STRING_LITERAL
+        (
+            s
+            for s in soulfray_content.stages
+            if s.name == "Ripping"  # noqa: STRING_LITERAL
+        ),
+        None,
     )
 
     # --- AudereThreshold (singleton, no get_or_create on factory) ---
-    audere_threshold, _ = AudereThreshold.objects.get_or_create(
-        pk=1,
-        defaults={
-            "minimum_intensity_tier": major_tier,
-            "minimum_warp_stage": ripping_stage,
-            "intensity_bonus": 20,
-            "anima_pool_bonus": 30,
-            "warp_multiplier": 2,
-        },
-    )
+    # Skipped when the "Major" IntensityTier or the Soulfray "Ripping" stage
+    # (both content-repo-owned, #2698) isn't available — check_audere_eligibility()'s
+    # own gate #1 already tolerates a missing AudereThreshold (Audere just stays
+    # inactive), so this degrades the same way a real deploy without the row
+    # authored would.
+    audere_threshold = None
+    if major_tier is not None and ripping_stage is not None:
+        audere_threshold, _ = AudereThreshold.objects.get_or_create(
+            pk=1,
+            defaults={
+                "minimum_intensity_tier": major_tier,
+                "minimum_warp_stage": ripping_stage,
+                "intensity_bonus": 20,
+                "anima_pool_bonus": 30,
+                "warp_multiplier": 2,
+            },
+        )
 
     # --- MishapPoolTier: one catch-all tier (min_deficit=1, max_deficit=None) ---
     mishap_pool, _ = ConsequencePool.objects.get_or_create(
@@ -1868,18 +2016,39 @@ def seed_canonical_rituals() -> RitualSeedResult:
       fresh DB (RitualOfTheDuranceFactory also lazy-creates the companion
       RitualLiturgy row via its post_generation hook).
 
+    Content-repo-owned (#2698): each Ritual is only invented (by calling its
+    factory, preserving side effects like the Durance's companion
+    RitualLiturgy post_generation hook) when it's already authored or
+    ``SEED_SAMPLE_CONTENT`` is on; otherwise it's skipped (logged, ``None``)
+    rather than fabricated.
+
     Returns:
-        RitualSeedResult dataclass with all three ritual instances.
+        RitualSeedResult dataclass with all three ritual instances (a field
+        is ``None`` when its content isn't authored and sample content is off).
     """
     from world.magic.factories import (  # noqa: PLC0415
         AtonementRitualFactory,
         ImbuingRitualFactory,
         RitualOfTheDuranceFactory,
     )
+    from world.magic.models import Ritual  # noqa: PLC0415
+    from world.seeds.sample_content import sample_content_enabled  # noqa: PLC0415
 
-    imbuing = ImbuingRitualFactory()
-    atonement = AtonementRitualFactory()
-    durance = RitualOfTheDuranceFactory()
+    def _authored_ritual_or_sample(factory_cls: type, name: str) -> Ritual | None:
+        if sample_content_enabled() or Ritual.objects.filter(name=name).exists():
+            return factory_cls()
+        logger.warning(
+            "Ritual matching %r is not in the content repo. Skipping. Author the "
+            "row in the content repo and re-press the Big Button, or set "
+            "ARXII_SEED_SAMPLE_CONTENT=1 to have the seeder invent a sample one "
+            "(see #2698).",
+            {"name": name},
+        )
+        return None
+
+    imbuing = _authored_ritual_or_sample(ImbuingRitualFactory, "Rite of Imbuing")
+    atonement = _authored_ritual_or_sample(AtonementRitualFactory, "Rite of Atonement")
+    durance = _authored_ritual_or_sample(RitualOfTheDuranceFactory, "Ritual of the Durance")
     return RitualSeedResult(
         rite_of_imbuing=imbuing,
         rite_of_atonement=atonement,
@@ -1940,17 +2109,24 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
         - VITAL_BONUS (tier=0, min_thread_level=0, vital_bonus_amount=10, MAX_HEALTH)
         - CAPABILITY_GRANT (tier=3, min_thread_level=5, capability=endurance)
 
+    The "Primal (Tideborne)" Affinity and "Tideborne" Resonance are
+    content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. When either is missing, the four
+    ThreadPullEffect rows (which need a real ``resonance`` FK) are skipped
+    and ``canonical_resonance`` is ``None`` on the returned result. The
+    "endurance" ``CapabilityType`` is likewise content-repo-owned (#2698); when
+    it's missing, only the CAPABILITY_GRANT row is skipped — FLAT_BONUS/
+    INTENSITY_BUMP/VITAL_BONUS don't need it.
+
     Returns:
         ThreadPullCatalogResult dataclass with all created/fetched instances.
     """
     from world.conditions.models import CapabilityType  # noqa: PLC0415
     from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget  # noqa: PLC0415
-    from world.magic.factories import (  # noqa: PLC0415
-        AffinityFactory,
-        ResonanceFactory,
-        ThreadPullCostFactory,
-    )
+    from world.magic.factories import ThreadPullCostFactory  # noqa: PLC0415
+    from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.magic.models.threads import ThreadPullEffect  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # --- ThreadPullCost rows (universal defaults; target_kind=None) ---
     pull_costs: dict[int, ThreadPullCost] = {}
@@ -1976,19 +2152,31 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
         label="gift-imbue",
     )
 
-    # --- Canonical resonance (both factory calls use django_get_or_create on name) ---
-    affinity = AffinityFactory(name=_CATALOG_AFFINITY_NAME)
-    resonance = ResonanceFactory(name=_CATALOG_RESONANCE_NAME, affinity=affinity)
+    # --- Canonical resonance — content-repo-owned (#2698) ---
+    affinity = authored_or_sample(Affinity, {}, name=_CATALOG_AFFINITY_NAME)
+    resonance = None
+    if affinity is not None:
+        resonance = authored_or_sample(
+            Resonance, {"affinity": affinity}, name=_CATALOG_RESONANCE_NAME
+        )
 
-    # --- CapabilityType for CAPABILITY_GRANT (get_or_create on name) ---
-    capability, _ = CapabilityType.objects.get_or_create(
+    # --- CapabilityType for CAPABILITY_GRANT — content-repo-owned (#2698) ---
+    capability = authored_or_sample(
+        CapabilityType,
+        {"description": "Endurance capability — used by thread pull catalog."},
         name=_CATALOG_CAPABILITY_NAME,
-        defaults={"description": "Endurance capability — used by thread pull catalog."},
     )
 
     # --- ThreadPullEffect rows (natural key: target_kind, resonance, tier, min_thread_level) ---
     # Using direct ORM get_or_create per task spec to avoid non-idempotent factory calls.
+    # Skipped entirely when the catalog Resonance above isn't available.
     pull_effects: dict[str, ThreadPullEffect] = {}
+    if resonance is None:
+        return ThreadPullCatalogResult(
+            pull_costs=pull_costs,
+            canonical_resonance=None,
+            pull_effects=pull_effects,
+        )
 
     flat_bonus_effect, _ = ThreadPullEffect.objects.get_or_create(
         target_kind=TargetKind.TRAIT,
@@ -2027,17 +2215,18 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
     )
     pull_effects[EffectKind.VITAL_BONUS] = vital_bonus_effect
 
-    capability_grant_effect, _ = ThreadPullEffect.objects.get_or_create(
-        target_kind=TargetKind.TRAIT,
-        resonance=resonance,
-        tier=3,
-        min_thread_level=5,
-        defaults={
-            "effect_kind": EffectKind.CAPABILITY_GRANT,
-            "capability_grant": capability,
-        },
-    )
-    pull_effects[EffectKind.CAPABILITY_GRANT] = capability_grant_effect
+    if capability is not None:
+        capability_grant_effect, _ = ThreadPullEffect.objects.get_or_create(
+            target_kind=TargetKind.TRAIT,
+            resonance=resonance,
+            tier=3,
+            min_thread_level=5,
+            defaults={
+                "effect_kind": EffectKind.CAPABILITY_GRANT,
+                "capability_grant": capability,
+            },
+        )
+        pull_effects[EffectKind.CAPABILITY_GRANT] = capability_grant_effect
 
     return ThreadPullCatalogResult(
         pull_costs=pull_costs,
@@ -2218,6 +2407,13 @@ def ensure_portal_travel_content() -> None:
 
     Idempotent at every layer. Re-running on a populated DB preserves staff
     edits (never ``update_or_create``).
+
+    ``PortalAnchorKind``/``Affinity``/``Resonance``/``Gift``/
+    ``EffectType``/``Technique`` are all content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. When the anchor kind, gift, style, or effect type is unavailable, the
+    Technique (and everything that hangs off it — the GiftUnlock, the starter
+    anchors) is skipped entirely.
     """
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
@@ -2234,51 +2430,64 @@ def ensure_portal_travel_content() -> None:
     )
     from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
     from world.seeds.character_creation import ensure_canonical_fallback_room  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # 1. Anchor kind.
-    mirror_kind, _ = PortalAnchorKind.objects.get_or_create(
-        name=_MIRROR_ANCHOR_KIND_NAME,
-        defaults={
+    mirror_kind = authored_or_sample(
+        PortalAnchorKind,
+        {
             "description": (
                 "A tall, silvered mirror — a threshold to every other mirror open on its network."
             ),
             "arrival_verb": "steps out of",
             "departure_verb": "steps into",
         },
+        name=_MIRROR_ANCHOR_KIND_NAME,
     )
 
     # 2. MINOR Gift + its own dedicated Resonance.
-    celestial, _ = Affinity.objects.get_or_create(name="Celestial")
-    reflection, _ = Resonance.objects.get_or_create(
-        name="Reflection",
-        defaults={
-            "description": "The resonance of thresholds and mirrored passage.",
-            "affinity": celestial,
-        },
+    celestial = authored_or_sample(
+        Affinity,
+        {"description": "The affinity of order, radiance, and the divine."},
+        name="Celestial",
     )
-    gift, _ = Gift.objects.get_or_create(
-        name=_MIRRORWALKING_GIFT_NAME,
-        defaults={
+    reflection = None
+    if celestial is not None:
+        reflection = authored_or_sample(
+            Resonance,
+            {
+                "description": "The resonance of thresholds and mirrored passage.",
+                "affinity": celestial,
+            },
+            name="Reflection",
+        )
+    gift = authored_or_sample(
+        Gift,
+        {
             "description": "Step through an open mirror here and out of its twin elsewhere.",
             "kind": GiftKind.MINOR,
         },
+        name=_MIRRORWALKING_GIFT_NAME,
     )
-    gift.resonances.add(reflection)  # idempotent M2M add
+    if gift is not None and reflection is not None:
+        gift.resonances.add(reflection)  # idempotent M2M add
 
     # 3. Technique — reuse the existing movement-fitting EffectType.
-    effect_type, _ = EffectType.objects.get_or_create(
-        name="Teleport",
-        defaults={
+    effect_type = authored_or_sample(
+        EffectType,
+        {
             "description": "Instant relocation through bent space.",
             "base_power": None,
             "base_anima_cost": 0,
             "has_power_scaling": False,
         },
+        name="Teleport",
     )
-    Technique.objects.get_or_create(
-        name=_MIRRORWALK_TECHNIQUE_NAME,
-        gift=gift,
-        defaults={
+    if mirror_kind is None or gift is None or effect_type is None:
+        return
+    technique = authored_or_sample(
+        Technique,
+        {
             "description": (
                 "Step into an open mirror and out the other side, wherever its "
                 "twin waits open on the network."
@@ -2292,7 +2501,11 @@ def ensure_portal_travel_content() -> None:
             "travel_anchor_kind": mirror_kind,
             "action_template": get_standalone_cast_template(),
         },
+        name=_MIRRORWALK_TECHNIQUE_NAME,
+        gift=gift,
     )
+    if technique is None:
+        return
 
     # 4. XP-gated unlock.
     GiftUnlock.objects.get_or_create(
@@ -2386,13 +2599,18 @@ def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
     thread. Idempotency is guaranteed by ``get_or_create`` semantics keyed on
     ``target_kind=FACET``. The model has no DB-level uniqueness for FACET
     unlocks, but only one global unlock is ever needed (no per-facet variant).
+
+    Content-repo-owned (#2698): looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on.
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
     from world.magic.models.weaving import ThreadWeavingUnlock  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    unlock, _ = ThreadWeavingUnlock.objects.get_or_create(
+    unlock = authored_or_sample(
+        ThreadWeavingUnlock,
+        {"xp_cost": 50},  # baseline cost; staff may tune
         target_kind=TargetKind.FACET,
-        defaults={"xp_cost": 50},  # baseline cost; staff may tune
     )
     return FacetThreadUnlockResult(unlock=unlock)
 
@@ -2413,29 +2631,41 @@ def seed_relationship_track_thread_unlock() -> RelationshipTrackThreadUnlockResu
     catalog (Trust/Respect/Rivalry/Fear, etc.) is separate content-authoring
     work, not framework work.
 
-    Idempotent via ``get_or_create`` on both the track (keyed on ``name``) and
-    the unlock (keyed on the ``unique_threadweaving_unlock_track`` constraint's
-    natural key: ``target_kind`` + ``unlock_track``).
+    Idempotent: the track and the unlock (keyed on the
+    ``unique_threadweaving_unlock_track`` constraint's natural key:
+    ``target_kind`` + ``unlock_track``) are each looked up rather than
+    unconditionally created.
+
+    Both the track and the unlock are content-repo-owned (#2698) — looked up
+    rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    ``ThreadWeavingUnlock.unlock_track`` is a required FK for this kind, so a
+    missing "Devotion" track means there is nothing to hang the unlock off
+    of; this returns a result with both fields ``None`` in that case.
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
     from world.magic.models.weaving import ThreadWeavingUnlock  # noqa: PLC0415
     from world.relationships.constants import TrackSign  # noqa: PLC0415
     from world.relationships.models import RelationshipTrack  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    track, _ = RelationshipTrack.objects.get_or_create(
-        name="Devotion",
-        defaults={
+    track = authored_or_sample(
+        RelationshipTrack,
+        {
             "slug": "devotion",
             "description": (
                 "Depth of bond between two souls — the axis Soul Tether capstones anchor to."
             ),
             "sign": TrackSign.POSITIVE,
         },
+        name="Devotion",
     )
-    unlock, _ = ThreadWeavingUnlock.objects.get_or_create(
+    if track is None:
+        return RelationshipTrackThreadUnlockResult(track=None, unlock=None)
+    unlock = authored_or_sample(
+        ThreadWeavingUnlock,
+        {"xp_cost": 50},  # baseline cost; staff may tune
         target_kind=TargetKind.RELATIONSHIP_TRACK,
         unlock_track=track,
-        defaults={"xp_cost": 50},  # baseline cost; staff may tune
     )
     return RelationshipTrackThreadUnlockResult(track=track, unlock=unlock)
 
@@ -2542,13 +2772,28 @@ def seed_magic_dev() -> MagicDevSeedResult:
         seed_flee_check,
         seed_penetration_contest,
     )
+    from world.seeds.sample_content import sample_content_enabled  # noqa: PLC0415
 
     config = seed_magic_config()
     rituals = seed_canonical_rituals()
     thread_pull_catalog = seed_thread_pull_catalog()
     seed_thread_survivability_tuning()
     author_reference_corruption_content()
-    magic_content = MagicContent.create_all()
+    # MagicContent.create_all() is also a test-fixture builder (called directly
+    # by several test suites), so it stays an unconditional, unchanged content
+    # factory — only THIS production call site is gated (#2698). Its 6 social
+    # techniques + Gift/Affinity/Resonance/TechniqueStyle/EffectType rows are
+    # content-repo-owned; a real deploy needs them authored there.
+    if sample_content_enabled():
+        magic_content = MagicContent.create_all()
+    else:
+        logger.warning(
+            "Social-action MagicContent (Gift 'Social Arts' and its 6 techniques) is "
+            "not in the content repo. Skipping. Author it there and re-press the Big "
+            "Button, or set ARXII_SEED_SAMPLE_CONTENT=1 to have the seeder invent a "
+            "sample one (see #2698)."
+        )
+        magic_content = None
     facet_thread_unlock = seed_facet_thread_unlock()
     relationship_track_thread_unlock = seed_relationship_track_thread_unlock()
     seed_starter_magic_story()

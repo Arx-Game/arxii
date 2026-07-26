@@ -1,6 +1,6 @@
 """Tests for the hated-foe escalation spike leg (#2013, decisions 5-6)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import CombatAllegiance, ParticipantStatus, SurgeTriggerKind
@@ -26,6 +26,7 @@ from world.relationships.models import CharacterRelationship
 from world.scenes.factories import PersonaFactory
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class HatedFoeSpikeTests(TestCase):
     def setUp(self):
         self.curve = EscalationCurveFactory(hated_foe_spike_intensity_amount=6)

@@ -6,7 +6,7 @@ high-stakes encounter -> faster ramp. Also folds in the ALLY_FALLEN
 outcome-delta assertion the grief spike's WIRED-UNPROVEN journey lacked.
 """
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from flows.constants import EventName
 from flows.emit import emit_event
@@ -61,9 +61,15 @@ def _bond(source_sheet, target_sheet, *, sign=TrackSign.POSITIVE, fuels=True, po
     )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 @tag("postgres")
 class DramaticSurgeE2ETests(TestCase):
-    """Bleeding Out is progressive (PG DISTINCT ON) — Postgres tier only."""
+    """Bleeding Out is progressive (PG DISTINCT ON) — Postgres tier only.
+
+    flows.FlowDefinition/TriggerDefinition are content-repo-owned (#2698);
+    wire_escalation_content() only invents them under SEED_SAMPLE_CONTENT — this
+    test drives the real reactive-trigger firing, so it opts in.
+    """
 
     def setUp(self):
         self.curve = EscalationCurveFactory(

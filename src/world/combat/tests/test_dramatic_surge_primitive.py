@@ -1,6 +1,6 @@
 """Tests for the shared apply_dramatic_surge primitive (#2013)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.combat.constants import ParticipantStatus, SurgeTriggerKind
 from world.combat.escalation import apply_dramatic_surge
@@ -15,6 +15,7 @@ from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.services import begin_engagement
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class ApplyDramaticSurgeTests(TestCase):
     def setUp(self):
         self.curve = EscalationCurveFactory(surge_narration="{character}'s power surges.")

@@ -11,9 +11,15 @@ household/org; boosts a dispatched collector). Two check compositions ride them:
 - **Domain Investment** — intellect + Scholarship (+ Economics): improving an
   org's income streams / cracking down on graft.
 
-Mirrors the authoritative wipe-and-rewrite pattern of ``social_checks.py``.
-Weights are PLACEHOLDER (all 1.0). Both skills are flagged into the skill-list
-audit per the provisional-skills rule.
+``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``, and
+``traits.trait`` are content-repo-owned (#2698) — looked up via
+``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+on. ``skills.specialization``/``checks.checktypespecialization`` stay outside
+``CONTENT_MODELS`` and keep seeding unconditionally, but no longer wipe and
+rewrite the composition on each run (#2698 Part 1 — that reverted authored/
+staff-tuned weights on every Big Button press); ``get_or_create`` converges
+instead. Weights are PLACEHOLDER (all 1.0). Both skills are flagged into the
+skill-list audit per the provisional-skills rule.
 """
 
 from __future__ import annotations
@@ -52,16 +58,18 @@ _GOVERNANCE_CHECK_COMPOSITION: dict[str, tuple[str, str, str]] = {
 
 
 def _ensure_governance_category():
+    """Look up (or sample) the Governance CheckCategory — content-repo-owned (#2698)."""
     from world.checks.models import CheckCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = CheckCategory.objects.get_or_create(
-        name="Governance",
-        defaults={
+    return authored_or_sample(
+        CheckCategory,
+        {
             "description": "Checks for running domains, households, and organizations.",
             "display_order": 40,
         },
+        name="Governance",
     )
-    return category
 
 
 def _rename_legacy_organization() -> None:
@@ -79,36 +87,55 @@ def _rename_legacy_organization() -> None:
 
 
 def ensure_governance_skills() -> dict[str, object]:
-    """Seed the Scholarship + Organization Skill rows (+ their backing SKILL Traits)."""
+    """Look up (or sample) the Scholarship + Leadership Skill rows + backing Traits.
+
+    ``skills.Skill``/``traits.Trait`` are content-repo-owned (#2698). A skill
+    whose Trait or Skill row isn't authored is omitted from the returned dict.
+    """
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
     skills: dict[str, object] = {}
     for order, (name, tooltip, category) in enumerate(_GOVERNANCE_SKILLS):
-        trait, _ = Trait.objects.get_or_create(
-            name=name,
-            defaults={
+        trait = authored_or_sample(
+            Trait,
+            {
                 "trait_type": TraitType.SKILL,
                 "category": category,
                 "is_public": True,
             },
+            name=name,
         )
-        skill, _ = Skill.objects.get_or_create(
+        if trait is None:
+            continue
+        skill = authored_or_sample(
+            Skill,
+            {"tooltip": tooltip, "display_order": 20 + order, "is_active": True},
             trait=trait,
-            defaults={"tooltip": tooltip, "display_order": 20 + order, "is_active": True},
         )
+        if skill is None:
+            continue
         skills[name] = skill
     return skills
 
 
 def ensure_governance_specializations(skills: dict[str, object]) -> dict[str, object]:
-    """Seed Economics + Stewardship under their parent skills."""
+    """Seed Economics + Stewardship under their parent skills.
+
+    ``skills.Specialization`` is not content-repo-owned — stays unconditional.
+    Skipped when the parent skill is missing (its ``parent_skill`` FK is
+    required).
+    """
     from world.skills.models import Specialization  # noqa: PLC0415
 
     specs: dict[str, object] = {}
     for order, (name, parent_name) in enumerate(_GOVERNANCE_SPECIALIZATIONS):
+        parent_skill = skills.get(parent_name)
+        if parent_skill is None:
+            continue
         spec, _ = Specialization.objects.get_or_create(
-            parent_skill=skills[parent_name],
+            parent_skill=parent_skill,
             name=name,
             defaults={"display_order": order, "is_active": True},
         )
@@ -117,50 +144,67 @@ def ensure_governance_specializations(skills: dict[str, object]) -> dict[str, ob
 
 
 def _ensure_stat_trait(name: str):
+    """Look up (or sample) a MENTAL stat Trait — content-repo-owned (#2698)."""
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    trait, _ = Trait.objects.get_or_create(
-        name=name,
-        defaults={
+    return authored_or_sample(
+        Trait,
+        {
             "trait_type": TraitType.STAT,
             "category": TraitCategory.MENTAL,
             "is_public": True,
         },
+        name=name,
     )
-    return trait
 
 
 def ensure_governance_check_compositions(
     skills: dict[str, object], specs: dict[str, object]
 ) -> dict[str, object]:
-    """Set each governance CheckType's stat + skill + spec composition (authoritative)."""
+    """Set each governance CheckType's stat + skill + spec composition.
+
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    No longer wipes and rewrites the composition on each run (#2698 Part 1 — that
+    reverted authored/staff-tuned weights on every Big Button press);
+    ``get_or_create``/``authored_or_sample`` converge instead.
+    """
     from world.checks.models import (  # noqa: PLC0415
         CheckType,
         CheckTypeSpecialization,
         CheckTypeTrait,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     category = _ensure_governance_category()
     weight = Decimal("1.0")  # PLACEHOLDER magnitudes
     check_types: dict[str, object] = {}
+    if category is None:
+        return check_types
 
     for ct_name, (stat_name, skill_name, spec_name) in _GOVERNANCE_CHECK_COMPOSITION.items():
-        check_type, _ = CheckType.objects.get_or_create(
-            name=ct_name, category=category, defaults={"is_active": True}
+        check_type = authored_or_sample(
+            CheckType, {"is_active": True}, name=ct_name, category=category
         )
-        # Authoritative: wipe the prior composition, then rewrite it.
-        CheckTypeTrait.objects.filter(check_type=check_type).delete()
-        CheckTypeSpecialization.objects.filter(check_type=check_type).delete()
+        if check_type is None:
+            continue
 
-        CheckTypeTrait.objects.create(
-            check_type=check_type, trait=_ensure_stat_trait(stat_name), weight=weight
-        )
-        CheckTypeTrait.objects.create(
-            check_type=check_type, trait=skills[skill_name].trait, weight=weight
-        )
-        CheckTypeSpecialization.objects.create(
-            check_type=check_type, specialization=specs[spec_name], weight=weight
-        )
+        stat_trait = _ensure_stat_trait(stat_name)
+        if stat_trait is not None:
+            authored_or_sample(
+                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=stat_trait
+            )
+        skill = skills.get(skill_name)
+        if skill is not None:
+            authored_or_sample(
+                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill.trait
+            )
+        spec = specs.get(spec_name)
+        if spec is not None:
+            CheckTypeSpecialization.objects.get_or_create(
+                check_type=check_type, specialization=spec, defaults={"weight": weight}
+            )
         check_types[ct_name] = check_type
     return check_types
 

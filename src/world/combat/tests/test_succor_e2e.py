@@ -39,7 +39,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from actions.constants import ActionBackend
 from actions.player_interface import dispatch_player_action
@@ -71,6 +71,7 @@ def _make_vitals(participant, health: int = 100, max_health: int = 100) -> Chara
 
 
 @tag("postgres")  # apply_condition (Sunlight Exposure + capability grant) uses DISTINCT ON
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_succor_content gates on #2698
 class SuccorCombatE2ETests(TestCase):
     def setUp(self) -> None:
         from evennia import create_object

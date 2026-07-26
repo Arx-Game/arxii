@@ -507,8 +507,13 @@ def _resolve_contributor_persona(
     instance = deed.instance
     if instance.accepted_as_persona_id is not None:
         return instance.accepted_as_persona
+    # `recipient` IS the CharacterSheet (#2608 tranche 2 retargeted it off
+    # ObjectDB), so match the FK directly rather than traversing
+    # `character_sheet__character`. That traversal is correct — PK-sharing means
+    # Django resolves the sheet to the same id — but it reads as a type error and
+    # joins objects_objectdb to reach a value the FK already holds.
     return Persona.objects.filter(
-        character_sheet__character=line.recipient,
+        character_sheet=line.recipient,
         persona_type=PersonaType.PRIMARY,
     ).first()
 

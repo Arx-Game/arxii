@@ -95,9 +95,16 @@ def ensure_foundational_capabilities() -> None:
     ``can_act`` treats a missing awareness CapabilityType as "capability
     system unseeded" and returns True for everyone — so this row is what
     makes Unconscious actually stop a character from acting in production.
+
+    ``conditions.CapabilityType`` is content-repo-owned (#2698) — looked up
+    rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A real deploy
+    without these rows authored degrades exactly like an unseeded capability
+    system always has: ``can_act`` falls back to True for everyone (the
+    pre-existing, documented degrade path — see the module docstring).
     """
     from world.conditions.constants import FoundationalCapability  # noqa: PLC0415
     from world.conditions.models import CapabilityType  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     specs = [
         (FoundationalCapability.AWARENESS, "Basic consciousness; unconscious zeroes it."),
@@ -105,12 +112,13 @@ def ensure_foundational_capabilities() -> None:
         (FoundationalCapability.LIMB_USE, "Using arms and hands; bound reduces it."),
     ]
     for name, description in specs:
-        capability, created = CapabilityType.objects.get_or_create(
-            name=name,
+        capability = authored_or_sample(
+            CapabilityType,
             # 5 = the capability ladder's unimpaired-mortal anchor (ADR-0164).
-            defaults={"innate_baseline": 5, "description": description},
+            {"innate_baseline": 5, "description": description},
+            name=name,
         )
-        if not created and capability.innate_baseline < 1:
+        if capability is not None and capability.innate_baseline < 1:
             # Foundational rows are code-owned: a zero baseline here means every
             # character is permanently incapacitated, so correct it on re-seed.
             # This guard only ever raises a too-low baseline, so it never fights
@@ -119,8 +127,15 @@ def ensure_foundational_capabilities() -> None:
             capability.save(update_fields=["innate_baseline"])
 
 
-def ensure_unconscious_condition() -> ConditionTemplate:
-    """Ensure the Unconscious condition + its capability-zeroing effects."""
+def ensure_unconscious_condition() -> ConditionTemplate | None:
+    """Ensure the Unconscious condition + its capability-zeroing effects.
+
+    ``ConditionTemplate``/``ConditionCapabilityEffect`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the template isn't authored and sampling is off;
+    callers must skip the dependent knockout-pool wiring rather than fall back
+    to creating it.
+    """
     from world.conditions.constants import (  # noqa: PLC0415
         UNCONSCIOUS_CONDITION_NAME,
         DurationType,
@@ -131,13 +146,14 @@ def ensure_unconscious_condition() -> ConditionTemplate:
         ConditionCapabilityEffect,
         ConditionTemplate,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     ensure_foundational_capabilities()
     category = _ensure_peril_category()
 
-    template, _ = ConditionTemplate.objects.get_or_create(
-        name=UNCONSCIOUS_CONDITION_NAME,
-        defaults={
+    template = authored_or_sample(
+        ConditionTemplate,
+        {
             "category": category,
             "description": "Completely incapacitated. Cannot take any actions, defenseless.",
             "player_description": (
@@ -148,26 +164,36 @@ def ensure_unconscious_condition() -> ConditionTemplate:
             "default_duration_value": 0,
             "is_visible_to_others": True,
         },
+        name=UNCONSCIOUS_CONDITION_NAME,
     )
+    if template is None:
+        return None
 
     for capability_name in (FoundationalCapability.AWARENESS, FoundationalCapability.MOVEMENT):
-        capability = CapabilityType.objects.get(name=capability_name)
-        ConditionCapabilityEffect.objects.get_or_create(
+        capability = CapabilityType.objects.filter(name=capability_name).first()
+        if capability is None:
+            continue
+        authored_or_sample(
+            ConditionCapabilityEffect,
+            {"value": -100},
             condition=template,
             stage=None,
             capability=capability,
-            defaults={"value": -100},
         )
     return template
 
 
-def ensure_sleeping_condition() -> ConditionTemplate:
+def ensure_sleeping_condition() -> ConditionTemplate | None:
     """Ensure the Sleeping condition for voluntary dream entry (#2290).
 
     Mirrors Unconscious's capability-zeroing (awareness, movement, limb_use → 0)
     but is voluntarily applied by SleepAction and has no guaranteed-wake
     deadline — the character wakes when they choose (via ``wake``), unless
     dream-engaged (an active scene round in the dream room stamps a deadline).
+
+    ``ConditionTemplate``/``ConditionCapabilityEffect`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the template isn't authored and sampling is off.
     """
     from world.conditions.constants import (  # noqa: PLC0415
         DurationType,
@@ -178,13 +204,14 @@ def ensure_sleeping_condition() -> ConditionTemplate:
         ConditionCapabilityEffect,
         ConditionTemplate,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     ensure_foundational_capabilities()
     category = _ensure_peril_category()
 
-    template, _ = ConditionTemplate.objects.get_or_create(
-        name=SLEEPING_CONDITION_NAME,
-        defaults={
+    template = authored_or_sample(
+        ConditionTemplate,
+        {
             "category": category,
             "description": ("Asleep and dreaming. Cannot take any actions in the waking world."),
             "player_description": (
@@ -195,24 +222,30 @@ def ensure_sleeping_condition() -> ConditionTemplate:
             "default_duration_value": 0,
             "is_visible_to_others": True,
         },
+        name=SLEEPING_CONDITION_NAME,
     )
+    if template is None:
+        return None
 
     for capability_name in (
         FoundationalCapability.AWARENESS,
         FoundationalCapability.MOVEMENT,
         FoundationalCapability.LIMB_USE,
     ):
-        capability = CapabilityType.objects.get(name=capability_name)
-        ConditionCapabilityEffect.objects.get_or_create(
+        capability = CapabilityType.objects.filter(name=capability_name).first()
+        if capability is None:
+            continue
+        authored_or_sample(
+            ConditionCapabilityEffect,
+            {"value": -100},
             condition=template,
             stage=None,
             capability=capability,
-            defaults={"value": -100},
         )
     return template
 
 
-def ensure_bleeding_out_condition() -> ConditionTemplate:
+def ensure_bleeding_out_condition() -> ConditionTemplate | None:
     """Ensure the Bleeding Out staged condition (template + 3 stages).
 
     The death tier applies this condition instead of killing outright
@@ -220,20 +253,26 @@ def ensure_bleeding_out_condition() -> ConditionTemplate:
     the terminal stage resolves through the guarded ``bleed_out_terminal``
     pool. Stage resists use Mortal Resolve (willpower), matching the death
     check the tier itself rolls.
+
+    ``ConditionTemplate``/``ConditionStage`` are content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    Returns ``None`` when the template isn't authored and sampling is off;
+    callers must skip the dependent default-death-pool wiring.
     """
     from world.conditions.constants import (  # noqa: PLC0415
         BLEED_OUT_CONDITION_NAME,
         DurationType,
     )
     from world.conditions.models import ConditionStage, ConditionTemplate  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.vitals.services import _ensure_death_check_type  # noqa: PLC0415
 
     check_type = _ensure_death_check_type()
     category = _ensure_peril_category()
 
-    template, _ = ConditionTemplate.objects.get_or_create(
-        name=BLEED_OUT_CONDITION_NAME,
-        defaults={
+    template = authored_or_sample(
+        ConditionTemplate,
+        {
             "category": category,
             "has_progression": True,
             "description": "Dying: life is draining away without intervention.",
@@ -245,46 +284,65 @@ def ensure_bleeding_out_condition() -> ConditionTemplate:
             "default_duration_value": 0,
             "is_visible_to_others": True,
         },
+        name=BLEED_OUT_CONDITION_NAME,
     )
+    if template is None:
+        return None
 
     for order, name, difficulty, rounds_to_next in BLEED_OUT_STAGE_SPECS:
-        ConditionStage.objects.get_or_create(
-            condition=template,
-            stage_order=order,
-            defaults={
+        authored_or_sample(
+            ConditionStage,
+            {
                 "name": name,
                 "description": f"PLACEHOLDER: {name} — the dying deepens.",
                 "resist_check_type": check_type,
                 "resist_difficulty": difficulty,
                 "rounds_to_next": rounds_to_next,
             },
+            condition=template,
+            stage_order=order,
         )
     return template
 
 
-def _ensure_wound_category() -> ConditionCategory:
-    """Return the ConditionCategory grouping the three mechanical wound conditions."""
-    from world.conditions.models import ConditionCategory  # noqa: PLC0415
+def _ensure_wound_category() -> ConditionCategory | None:
+    """Return the ConditionCategory grouping the three mechanical wound conditions.
 
-    obj, _ = ConditionCategory.objects.get_or_create(
-        name="Wound",
-        defaults={
+    Content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` when it isn't authored
+    and sampling is off.
+    """
+    from world.conditions.models import ConditionCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    return authored_or_sample(
+        ConditionCategory,
+        {
             "description": (
                 "Permanent-wound conditions from grievous damage — cleansable "
                 "(severity decay/dispel) and treatable (bounded HP mend), #2644."
             ),
             "is_negative": True,
         },
+        name="Wound",
     )
-    return obj
 
 
-def ensure_wound_conditions() -> tuple[ConditionTemplate, ConditionTemplate, ConditionTemplate]:
+def ensure_wound_conditions() -> tuple[
+    ConditionTemplate | None, ConditionTemplate | None, ConditionTemplate | None
+]:
     """Ensure the three mechanical wound ConditionTemplates (#2644).
 
     Mechanics vocabulary, not lore content (mirrors ensure_bleeding_out_condition) —
     severity is stamped by the wound-pool outcome tier that applies each one.
     Returns (lingering_ache, crippling_wound, bleeding_wound).
+
+    ``ConditionTemplate``/``ConditionCheckModifier``/``ConditionCapabilityEffect``/
+    ``ConditionDamageOverTime``/``DamageType`` are content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. Any
+    entry of the returned tuple may be ``None`` when its template isn't
+    authored and sampling is off; callers must skip the dependent wiring for
+    a ``None`` entry rather than fall back to creating it.
 
     - Lingering Ache (partial-tier default): modest Endurance check penalty.
     - Crippling Wound (failure-tier default): modest limb_use capability penalty.
@@ -311,6 +369,7 @@ def ensure_wound_conditions() -> tuple[ConditionTemplate, ConditionTemplate, Con
         ConditionTemplate,
         DamageType,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.vitals.services import _ensure_endurance_check_type  # noqa: PLC0415
 
     ensure_foundational_capabilities()
@@ -322,62 +381,73 @@ def ensure_wound_conditions() -> tuple[ConditionTemplate, ConditionTemplate, Con
         "is_visible_to_others": True,
     }
 
-    lingering_ache, _ = ConditionTemplate.objects.get_or_create(
-        name=WOUND_LINGERING_ACHE_NAME,
-        defaults={
+    lingering_ache = authored_or_sample(
+        ConditionTemplate,
+        {
             **common_defaults,
             "description": "A wound that never fully healed; it aches with exertion.",
             "player_description": "An old wound aches, sapping your stamina.",
             "observer_description": "moves with a faint, guarded stiffness.",
         },
+        name=WOUND_LINGERING_ACHE_NAME,
     )
-    endurance_check = _ensure_endurance_check_type()
-    ConditionCheckModifier.objects.get_or_create(
-        condition=lingering_ache,
-        stage=None,
-        check_type=endurance_check,
-        defaults={"modifier_value": -5, "scales_with_severity": False},
-    )
+    if lingering_ache is not None:
+        endurance_check = _ensure_endurance_check_type()
+        authored_or_sample(
+            ConditionCheckModifier,
+            {"modifier_value": -5, "scales_with_severity": False},
+            condition=lingering_ache,
+            stage=None,
+            check_type=endurance_check,
+        )
 
-    crippling_wound, _ = ConditionTemplate.objects.get_or_create(
-        name=WOUND_CRIPPLING_NAME,
-        defaults={
+    crippling_wound = authored_or_sample(
+        ConditionTemplate,
+        {
             **common_defaults,
             "description": "A grievous wound that never set right; the limb answers poorly.",
             "player_description": "The wound left you crippled — the limb won't fully answer.",
             "observer_description": "favors a limb that no longer moves quite right.",
         },
+        name=WOUND_CRIPPLING_NAME,
     )
-    limb_use = CapabilityType.objects.get(name=FoundationalCapability.LIMB_USE)
-    ConditionCapabilityEffect.objects.get_or_create(
-        condition=crippling_wound,
-        stage=None,
-        capability=limb_use,
-        defaults={"value": -15},
-    )
+    if crippling_wound is not None:
+        limb_use = CapabilityType.objects.filter(name=FoundationalCapability.LIMB_USE).first()
+        if limb_use is not None:
+            authored_or_sample(
+                ConditionCapabilityEffect,
+                {"value": -15},
+                condition=crippling_wound,
+                stage=None,
+                capability=limb_use,
+            )
 
-    bleeding_wound, _ = ConditionTemplate.objects.get_or_create(
-        name=WOUND_BLEEDING_NAME,
-        defaults={
+    bleeding_wound = authored_or_sample(
+        ConditionTemplate,
+        {
             **common_defaults,
             "description": "An open wound that won't stop bleeding without care.",
             "player_description": "Your wound won't stop bleeding.",
             "observer_description": "is bleeding steadily from an open wound.",
         },
+        name=WOUND_BLEEDING_NAME,
     )
-    physical_damage, _ = DamageType.objects.get_or_create(name="Physical")
-    ConditionDamageOverTime.objects.get_or_create(
-        condition=bleeding_wound,
-        stage=None,
-        damage_type=physical_damage,
-        defaults={
-            "base_damage": 1,
-            "scales_with_severity": True,
-            "scales_with_stacks": False,
-            "tick_timing": DamageTickTiming.END_OF_ROUND,
-            "is_long_term": False,
-        },
-    )
+    if bleeding_wound is not None:
+        physical_damage = authored_or_sample(DamageType, {}, name="Physical")
+        if physical_damage is not None:
+            authored_or_sample(
+                ConditionDamageOverTime,
+                {
+                    "base_damage": 1,
+                    "scales_with_severity": True,
+                    "scales_with_stacks": False,
+                    "tick_timing": DamageTickTiming.END_OF_ROUND,
+                    "is_long_term": False,
+                },
+                condition=bleeding_wound,
+                stage=None,
+                damage_type=physical_damage,
+            )
 
     return lingering_ache, crippling_wound, bleeding_wound
 
@@ -405,7 +475,12 @@ def _ensure_apply_condition_effect(
 
 
 def ensure_knockout_pool() -> ConsequencePool:
-    """Ensure the global knockout pool: failed low-health checks apply Unconscious."""
+    """Ensure the global knockout pool: failed low-health checks apply Unconscious.
+
+    The APPLY_CONDITION effect wiring is skipped when the Unconscious template
+    isn't authored (content-repo-owned, #2698) — the pool/consequence rows
+    (config, not content) still seed, they just carry no condition effect yet.
+    """
     from actions.models import ConsequencePool  # noqa: PLC0415
     from world.checks.models import Consequence  # noqa: PLC0415
 
@@ -432,14 +507,19 @@ def ensure_knockout_pool() -> ConsequencePool:
             (failure, "knocked_out_cold", 2, False),
         ],
     )
-    for label in ("knocked_out", "knocked_out_cold"):
-        consequence = Consequence.objects.get(label=label)
-        _ensure_apply_condition_effect(consequence, unconscious)
+    if unconscious is not None:
+        for label in ("knocked_out", "knocked_out_cold"):
+            consequence = Consequence.objects.get(label=label)
+            _ensure_apply_condition_effect(consequence, unconscious)
     return pool
 
 
 def ensure_default_death_pool() -> ConsequencePool:
-    """Ensure the default death pool: a failed death check applies Bleeding Out."""
+    """Ensure the default death pool: a failed death check applies Bleeding Out.
+
+    The APPLY_CONDITION effect wiring is skipped when Bleeding Out isn't
+    authored (content-repo-owned, #2698) — the pool still seeds.
+    """
     from actions.models import ConsequencePool  # noqa: PLC0415
     from world.checks.models import Consequence  # noqa: PLC0415
 
@@ -467,8 +547,9 @@ def ensure_default_death_pool() -> ConsequencePool:
             (failure, "mortal_blow", 2, False),
         ],
     )
-    consequence = Consequence.objects.get(label="mortal_blow")
-    _ensure_apply_condition_effect(consequence, bleeding_out)
+    if bleeding_out is not None:
+        consequence = Consequence.objects.get(label="mortal_blow")
+        _ensure_apply_condition_effect(consequence, bleeding_out)
     return pool
 
 
@@ -524,10 +605,14 @@ def ensure_default_wound_pool() -> ConsequencePool:
             (failure, "lasting_scar", 2, False),
         ],
     )
-    consequence = Consequence.objects.get(label="lasting_ache")
-    _ensure_apply_condition_effect(consequence, lingering_ache, severity=1)
-    consequence = Consequence.objects.get(label="lasting_scar")
-    _ensure_apply_condition_effect(consequence, crippling_wound, severity=2)
+    # APPLY_CONDITION wiring is skipped per-tier when its wound ConditionTemplate
+    # isn't authored (content-repo-owned, #2698) — the pool still seeds.
+    if lingering_ache is not None:
+        consequence = Consequence.objects.get(label="lasting_ache")
+        _ensure_apply_condition_effect(consequence, lingering_ache, severity=1)
+    if crippling_wound is not None:
+        consequence = Consequence.objects.get(label="lasting_scar")
+        _ensure_apply_condition_effect(consequence, crippling_wound, severity=2)
     return pool
 
 
@@ -557,6 +642,11 @@ def ensure_wound_treatment_content() -> None:
 
     lingering_ache, crippling_wound, bleeding_wound = ensure_wound_conditions()
     check_type = _ensure_endurance_check_type()
+    if check_type is None:
+        # checks.CheckType is content-repo-owned (#2698); check_type is a
+        # required FK on TreatmentTemplate, so every treatment template is
+        # skipped entirely when the Endurance CheckType isn't authored.
+        return
 
     specs = [
         ("treat_lingering_ache", "Tend Lingering Ache", lingering_ache),
@@ -564,6 +654,11 @@ def ensure_wound_treatment_content() -> None:
         ("treat_bleeding_wound", "Tend Bleeding Wound", bleeding_wound),
     ]
     for key, name, wound_template in specs:
+        # wound_template is None when its ConditionTemplate isn't authored
+        # (content-repo-owned, #2698) — skip this TreatmentTemplate entirely
+        # rather than crash on wound_template.name below.
+        if wound_template is None:
+            continue
         TreatmentTemplate.objects.get_or_create(
             key=key,
             defaults={

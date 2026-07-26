@@ -8,11 +8,15 @@ Stands up the ``Melee Combat`` parent skill (Trait-backed,
 (+ owned weapon specialization)``. Mirrors ``world/seeds/social_checks.py``
 (#1689).
 
-Authoritative + idempotent: the ``Melee Attack`` composition is rewritten on
-each run (delete + recreate ``CheckTypeTrait`` / ``CheckTypeSpecialization``)
-so a re-seed converges, while ``Skill`` / ``Specialization`` / ``Trait`` rows
-use ``get_or_create`` (preserving staff edits). Weights are PLACEHOLDER (1.00)
-per "build the mechanism, defer the magnitudes".
+``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``,
+and ``traits.trait`` are content-repo-owned (#2698) — looked up via
+``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT``
+is on. ``skills.specialization``/``checks.checktypespecialization`` stay
+outside ``CONTENT_MODELS`` and keep seeding unconditionally via
+``get_or_create``, but the composition is no longer wiped and rewritten on
+each run (#2698 Part 1) — a re-seed converges via ``get_or_create``, so
+authored/staff-edited weights survive. Weights are PLACEHOLDER (1.00) per
+"build the mechanism, defer the magnitudes".
 """
 
 from __future__ import annotations
@@ -28,43 +32,55 @@ _MELEE_SKILL_TOOLTIP = "Fighting with melee weapons — the trained combat skill
 
 
 def _ensure_combat_category():
-    """Get or create the Combat CheckCategory."""
+    """Look up (or, under SEED_SAMPLE_CONTENT, sample) the Combat CheckCategory."""
     from world.checks.models import CheckCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = CheckCategory.objects.get_or_create(
-        name="Combat",
-        defaults={
+    return authored_or_sample(
+        CheckCategory,
+        {
             "description": "Checks involving physical combat.",
             "display_order": 20,
         },
+        name="Combat",
     )
-    return category
 
 
 def ensure_melee_combat_skill():
-    """Seed the Melee Combat Skill + its backing SKILL Trait (idempotent)."""
+    """Look up (or sample) the Melee Combat Skill + its backing SKILL Trait."""
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    trait, _ = Trait.objects.get_or_create(
-        name=_MELEE_SKILL_NAME,
-        defaults={
+    trait = authored_or_sample(
+        Trait,
+        {
             "trait_type": TraitType.SKILL,
             "category": TraitCategory.COMBAT,
             "is_public": True,
         },
+        name=_MELEE_SKILL_NAME,
     )
-    skill, _ = Skill.objects.get_or_create(
+    if trait is None:
+        return None
+    return authored_or_sample(
+        Skill,
+        {"tooltip": _MELEE_SKILL_TOOLTIP, "display_order": 0, "is_active": True},
         trait=trait,
-        defaults={"tooltip": _MELEE_SKILL_TOOLTIP, "display_order": 0, "is_active": True},
     )
-    return skill
 
 
 def ensure_weapon_specializations(skill) -> dict:
-    """Seed the three weapon-class Specializations under Melee Combat (idempotent)."""
+    """Seed the three weapon-class Specializations under Melee Combat (idempotent).
+
+    ``skills.specialization`` is not content-repo-owned — stays unconditional.
+    Skipped entirely when ``skill`` is absent (its ``parent_skill`` FK is
+    required).
+    """
     from world.skills.models import Specialization  # noqa: PLC0415
 
+    if skill is None:
+        return {}
     specs: dict[str, object] = {}
     for order, name in enumerate(_WEAPON_SPECIALIZATIONS):
         spec, _ = Specialization.objects.get_or_create(
@@ -76,44 +92,52 @@ def ensure_weapon_specializations(skill) -> dict:
     return specs
 
 
-def ensure_melee_attack_check_type(skill, specs) -> object:
-    """Seed the Melee Attack CheckType: strength + Melee Combat (+ weapon specs).
+def ensure_melee_attack_check_type(skill, specs) -> object | None:
+    """Look up (or sample) the Melee Attack CheckType: strength + Melee Combat.
 
-    Authoritative rewrite (mirrors social_checks.py) — clears the type's prior
-    composition then writes the stat + skill legs, so a re-seed converges. The
-    weapon-class specializations fold in only when the character owns them
-    (#1688 engine).
+    ``checks.checktype``/``checktypetrait`` are content-repo-owned (#2698) —
+    returns ``None`` (logged by ``authored_or_sample``) when the category or
+    the check type itself isn't authored. The skill's trait leg is skipped
+    (not fatal) when ``skill`` is ``None`` — the CheckType may still be
+    authored content the lore repo composes with its own trait rows.
     """
     from world.checks.models import (  # noqa: PLC0415
         CheckType,
         CheckTypeSpecialization,
         CheckTypeTrait,
     )
-    from world.traits.factories import StatTraitFactory  # noqa: PLC0415
-    from world.traits.models import TraitCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    check_type, _ = CheckType.objects.get_or_create(
+    category = _ensure_combat_category()
+    if category is None:
+        return None
+    check_type = authored_or_sample(
+        CheckType,
+        {"description": "A melee attack roll: strength + Melee Combat."},
         name=_MELEE_ATTACK_CHECK_TYPE_NAME,
-        category=_ensure_combat_category(),
-        defaults={"description": "A melee attack roll: strength + Melee Combat."},
+        category=category,
     )
-    CheckTypeTrait.objects.filter(check_type=check_type).delete()
-    CheckTypeSpecialization.objects.filter(check_type=check_type).delete()
+    if check_type is None:
+        return None
 
-    CheckTypeTrait.objects.create(
-        check_type=check_type,
-        trait=StatTraitFactory(name="strength", category=TraitCategory.PHYSICAL),
-        weight=Decimal("1.00"),
-    )
-    CheckTypeTrait.objects.create(
-        check_type=check_type,
-        trait=skill.trait,
-        weight=Decimal("1.00"),
-    )
     weight = Decimal("1.00")
+    strength = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL, "is_public": True},
+        name="strength",
+    )
+    if strength is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=strength
+        )
+    if skill is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill.trait
+        )
     for spec in specs.values():
-        CheckTypeSpecialization.objects.create(
-            check_type=check_type, specialization=spec, weight=weight
+        CheckTypeSpecialization.objects.get_or_create(
+            check_type=check_type, specialization=spec, defaults={"weight": weight}
         )
     return check_type
 
@@ -121,46 +145,50 @@ def ensure_melee_attack_check_type(skill, specs) -> object:
 _MELEE_DEFENSE_CHECK_TYPE_NAME = "Melee Defense"
 
 
-def ensure_melee_defense_check_type(skill, specs) -> object:
-    """Seed the Melee Defense CheckType: agility + Melee Combat (+ weapon specs).
+def ensure_melee_defense_check_type(skill, specs) -> object | None:
+    """Look up (or sample) the Melee Defense CheckType: agility + Melee Combat.
 
     Mirrors ``ensure_melee_attack_check_type`` but with ``agility`` as the stat
     (evasion) instead of ``strength`` (attack). Reuses the same ``Melee Combat``
     skill + weapon specializations from #1706 — one skill investment covers
-    offense and defense.
-
-    Authoritative rewrite (delete + recreate CheckTypeTrait /
-    CheckTypeSpecialization) so a re-seed converges, matching the offense seed.
+    offense and defense. See ``ensure_melee_attack_check_type`` for the
+    skip-on-missing-content contract.
     """
     from world.checks.models import (  # noqa: PLC0415
         CheckType,
         CheckTypeSpecialization,
         CheckTypeTrait,
     )
-    from world.traits.factories import StatTraitFactory  # noqa: PLC0415
-    from world.traits.models import TraitCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    check_type, _ = CheckType.objects.get_or_create(
+    category = _ensure_combat_category()
+    if category is None:
+        return None
+    check_type = authored_or_sample(
+        CheckType,
+        {"description": "A melee defense roll: agility + Melee Combat."},
         name=_MELEE_DEFENSE_CHECK_TYPE_NAME,
-        category=_ensure_combat_category(),
-        defaults={"description": "A melee defense roll: agility + Melee Combat."},
+        category=category,
     )
-    CheckTypeTrait.objects.filter(check_type=check_type).delete()
-    CheckTypeSpecialization.objects.filter(check_type=check_type).delete()
+    if check_type is None:
+        return None
 
-    CheckTypeTrait.objects.create(
-        check_type=check_type,
-        trait=StatTraitFactory(name="agility", category=TraitCategory.PHYSICAL),
-        weight=Decimal("1.00"),
+    weight = Decimal("1.00")
+    agility = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL, "is_public": True},
+        name="agility",
     )
-    CheckTypeTrait.objects.create(
-        check_type=check_type,
-        trait=skill.trait,
-        weight=Decimal("1.00"),
-    )
+    if agility is not None:
+        authored_or_sample(CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=agility)
+    if skill is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill.trait
+        )
     for spec in specs.values():
-        CheckTypeSpecialization.objects.create(
-            check_type=check_type, specialization=spec, weight=Decimal("1.00")
+        CheckTypeSpecialization.objects.get_or_create(
+            check_type=check_type, specialization=spec, defaults={"weight": weight}
         )
     return check_type
 

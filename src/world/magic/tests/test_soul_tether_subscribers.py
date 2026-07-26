@@ -29,7 +29,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import ObjectDBFactory
@@ -187,6 +187,7 @@ def _sinner_corruption_current(sinner: object, resonance: object) -> int:
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class FullAbsorptionTests(TestCase):
     """Hollow absorbs the full accrual — Sinner's corruption_current stays at 0."""
 
@@ -259,6 +260,7 @@ class FullAbsorptionTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PartialAbsorptionTests(TestCase):
     """Hollow absorbs what it can; overflow falls through to Sinner."""
 
@@ -330,6 +332,7 @@ class PartialAbsorptionTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class NoTetherPassthroughTests(TestCase):
     """Sinner has no active tether → accrual proceeds normally (no absorption)."""
 
@@ -377,6 +380,7 @@ class NoTetherPassthroughTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class MultiTetherPriorityTests(TestCase):
     """Sinner has 2 tethers; highest-level Thread drains first."""
 
@@ -475,6 +479,7 @@ class MultiTetherPriorityTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResonanceMismatchTests(TestCase):
     """Sinner's Thread is Primal-resonance but accrual is Abyssal → no absorption."""
 
@@ -586,6 +591,7 @@ def _make_check_result(success_level: int) -> object:
     return result
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class StageAdvancePromptFiresWhenSineaterInSceneTests(TestCase):
     """7.1 — PROMPT fires when Sineater is in same room as Sinner (Spec B §8.1)."""
 
@@ -673,6 +679,7 @@ class StageAdvancePromptFiresWhenSineaterInSceneTests(TestCase):
         self.assertIn("SOUL TETHER", call_text)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class StageAdvancePromptNoSineaterInSceneTests(TestCase):
     """7.4 — No offer fires when no Sineater is in the same room (Spec B §8.1)."""
 
@@ -729,6 +736,7 @@ class StageAdvancePromptNoSineaterInSceneTests(TestCase):
         mock_check.assert_called_once()
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class StageAdvancePromptNonCorruptionConditionTests(TestCase):
     """7.4 (variant) — Non-Corruption conditions are skipped by the handler."""
 
@@ -795,6 +803,7 @@ class StageAdvancePromptNonCorruptionConditionTests(TestCase):
 
 
 @tag("postgres")
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class StageAdvanceBonusAcceptTests(TestCase):
     """7.2 — Accept path: resolve_stage_advance_prompt drains Hollow + adds Strain."""
 
@@ -891,6 +900,7 @@ class StageAdvanceBonusAcceptTests(TestCase):
         self.assertEqual(result.hollow_drained, 8)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class StageAdvanceBonusDeclineTests(TestCase):
     """7.3 — Decline path: units_committed=0 → no Hollow drain, no Strain, declined=True."""
 

@@ -2,7 +2,7 @@
 
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import ParticipantStatus
@@ -31,6 +31,7 @@ def _fake_check(success_level):
     return check_fn
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory's pace_check_type gates
 class EscalationTickTests(TestCase):
     def setUp(self):
         self.curve = EscalationCurveFactory(

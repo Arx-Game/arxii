@@ -11,12 +11,16 @@ one-shot detonation.
 Mirrors ``world.combat.interpose_content.ensure_interpose_content``'s idiom:
 self-contained, ``get_or_create`` throughout, safe to call repeatedly. Doubles
 as integration-test setup and staff seed data.
+
+``conditions.DamageType`` is content-repo-owned (#2698) — looked up rather
+than invented unless ``SEED_SAMPLE_CONTENT`` is on.
 """
 
 from world.checks.constants import EffectType
 from world.checks.models import Consequence, ConsequenceEffect
 from world.conditions.models import DamageType
 from world.mechanics.models import Property, PropertyCategory, PropertyDetonation
+from world.seeds.sample_content import authored_or_sample
 from world.traits.models import CheckOutcome
 
 VOLATILE_POWDER_PROPERTY_NAME: str = "Volatile (Powder)"
@@ -24,7 +28,7 @@ _DETONATION_POOL_NAME: str = "Volatile Powder Detonation"
 _DETONATION_DAMAGE_AMOUNT: int = 15
 
 
-def ensure_redirect_content() -> Property:
+def ensure_redirect_content() -> Property | None:
     """Idempotently seed the "Volatile (Powder)" example volatile Property.
 
     Seeds a "Hazard" ``PropertyCategory``, the Property itself, a
@@ -32,25 +36,34 @@ def ensure_redirect_content() -> Property:
     ``Consequence``, and the ``PropertyDetonation`` sidecar linking them.
     Returns the seeded Property (the caller attaches an ``ObjectProperty`` to
     make a specific object volatile).
+
+    ``mechanics.Property``/``PropertyCategory`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT``
+    is on. The consequence/pool/detonation config below is skipped entirely
+    when the Property isn't authored — there's nothing to attach it to.
     """
     from actions.models.consequence_pools import (  # noqa: PLC0415
         ConsequencePool,
         ConsequencePoolEntry,
     )
 
-    category, _ = PropertyCategory.objects.get_or_create(
+    category = authored_or_sample(
+        PropertyCategory,
+        {"description": "Properties describing environmental hazards."},
         name="Hazard",
-        defaults={"description": "Properties describing environmental hazards."},
     )
-    volatile_property, _ = Property.objects.get_or_create(
-        name=VOLATILE_POWDER_PROPERTY_NAME,
-        defaults={
+    volatile_property = authored_or_sample(
+        Property,
+        {
             "description": (
                 "A cache of alchemical powder, primed to detonate if struck or ignited."
             ),
             "category": category,
         },
+        name=VOLATILE_POWDER_PROPERTY_NAME,
     )
+    if volatile_property is None:
+        return None
 
     outcome, _ = CheckOutcome.objects.get_or_create(
         name="Detonation",
@@ -68,18 +81,23 @@ def ensure_redirect_content() -> Property:
             "character_loss": False,
         },
     )
-    damage_type, _ = DamageType.objects.get_or_create(
+    # conditions.DamageType is content-repo-owned (#2698); skip the DEAL_DAMAGE
+    # effect entirely rather than create one with no damage_type when "Fire"
+    # isn't authored — the pool/PropertyDetonation below still seed.
+    damage_type = authored_or_sample(
+        DamageType,
+        {"description": "Heat and flame damage."},
         name="Fire",
-        defaults={"description": "Heat and flame damage."},
     )
-    ConsequenceEffect.objects.get_or_create(
-        consequence=consequence,
-        effect_type=EffectType.DEAL_DAMAGE,
-        defaults={
-            "damage_amount": _DETONATION_DAMAGE_AMOUNT,
-            "damage_type": damage_type,
-        },
-    )
+    if damage_type is not None:
+        ConsequenceEffect.objects.get_or_create(
+            consequence=consequence,
+            effect_type=EffectType.DEAL_DAMAGE,
+            defaults={
+                "damage_amount": _DETONATION_DAMAGE_AMOUNT,
+                "damage_type": damage_type,
+            },
+        )
 
     pool, _ = ConsequencePool.objects.get_or_create(
         name=_DETONATION_POOL_NAME,

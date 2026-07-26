@@ -822,7 +822,25 @@ class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
       - Wounded gives -5 to all physical checks
     """
 
-    check_type = models.ForeignKey("checks.CheckType", on_delete=models.CASCADE)
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="Specific check type. Mutually exclusive with check_category.",
+    )
+    check_category = models.ForeignKey(
+        "checks.CheckCategory",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="condition_check_modifiers",
+        help_text=(
+            "When set (and check_type is null), this modifier applies to ANY check "
+            "in this category — including per-character checks like the signature "
+            "magic check. Mutually exclusive with check_type."
+        ),
+    )
     modifier_value = models.IntegerField(
         help_text="Flat modifier (positive = bonus, negative = penalty)",
     )
@@ -830,36 +848,76 @@ class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
-        fields = ["condition", "stage", "check_type"]
+        fields = ["condition", "stage", "check_type", "check_category"]
         dependencies = [
             _CONDITION_TEMPLATE_FK,
             _CONDITION_STAGE_FK,
             "checks.CheckType",
+            "checks.CheckCategory",
         ]
 
     class Meta(ConditionOrStageEffect.Meta):
         constraints = [
             *ConditionOrStageEffect.Meta.constraints,
+            models.CheckConstraint(
+                check=(
+                    Q(check_type__isnull=False, check_category__isnull=True)
+                    | Q(check_type__isnull=True, check_category__isnull=False)
+                ),
+                name="check_modifier_exactly_one_check_target",
+            ),
             models.UniqueConstraint(
                 fields=["condition", "check_type"],
-                condition=Q(condition__isnull=False),
+                condition=Q(condition__isnull=False, check_type__isnull=False),
                 name="check_modifier_unique_condition",
             ),
             models.UniqueConstraint(
                 fields=["stage", "check_type"],
-                condition=Q(stage__isnull=False),
+                condition=Q(stage__isnull=False, check_type__isnull=False),
                 name="check_modifier_unique_stage",
+            ),
+            models.UniqueConstraint(
+                fields=["condition", "check_category"],
+                condition=Q(condition__isnull=False, check_category__isnull=False),
+                name="check_modifier_unique_condition_category",
+            ),
+            models.UniqueConstraint(
+                fields=["stage", "check_category"],
+                condition=Q(stage__isnull=False, check_category__isnull=False),
+                name="check_modifier_unique_stage_category",
             ),
         ]
 
+    def clean(self) -> None:
+        """Validate exactly-one of check_type / check_category is set."""
+        super().clean()
+        has_check_type = self.check_type_id is not None
+        has_check_category = self.check_category_id is not None
+        if has_check_type and has_check_category:
+            from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+            msg = "check_type and check_category are mutually exclusive — set exactly one."
+            raise ValidationError(msg)
+        if not has_check_type and not has_check_category:
+            from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+            msg = "Exactly one of check_type or check_category must be set."
+            raise ValidationError(msg)
+
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
+        target = (
+            f"{self.check_category.name} (category)"
+            if self.check_category_id
+            else self.check_type.name
+        )
         if self.stage:
             return (
                 f"{self.stage.condition.name} ({self.stage.name}): "
-                f"{sign}{self.modifier_value} to {self.check_type.name}"
+                f"{sign}{self.modifier_value} to {target}"
             )
-        return f"{self.condition.name}: {sign}{self.modifier_value} to {self.check_type.name}"
+        condition_name = self.condition.name if self.condition else self.stage.condition.name
+        return f"{condition_name}: {sign}{self.modifier_value} to {target}"
 
 
 class ConditionResistanceModifier(NaturalKeyMixin, ConditionOrStageEffect):

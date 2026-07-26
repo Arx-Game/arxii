@@ -205,6 +205,10 @@ from world.magic.models.technique_draft import (
     TechniqueDraftTreatment,
 )
 from world.magic.models.technique_grant import TechniqueGrant
+from world.magic.models.technique_progress import (
+    TechniqueProgress,
+    TechniqueProgressWeekly,
+)
 from world.magic.models.techniques import (
     CharacterTechnique,
     EffectType,
@@ -438,6 +442,8 @@ __all__ = [
     "TechniqueFunctionTagManager",
     "TechniqueGrant",
     "TechniqueOutcomeModifier",
+    "TechniqueProgress",
+    "TechniqueProgressWeekly",
     "TechniqueRemovedCondition",
     "TechniqueStyle",
     "TechniqueStyleManager",

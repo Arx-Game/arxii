@@ -34,6 +34,10 @@ as per-round DoT.
 ``world.areas.positioning.plummet_content.ensure_fall_content`` and is safe to
 call repeatedly: every write goes through ``get_or_create``. It doubles as
 integration-test setup and staff seed data.
+
+``conditions.ConditionCategory``/``ConditionTemplate``/``DamageType`` are
+content-repo-owned (#2698) — looked up rather than invented unless
+``SEED_SAMPLE_CONTENT`` is on.
 """
 
 from __future__ import annotations
@@ -41,6 +45,7 @@ from __future__ import annotations
 from world.areas.positioning.constants import FALLING_CATEGORY_NAME
 from world.conditions.constants import DurationType
 from world.conditions.models import ConditionCategory, ConditionTemplate, DamageType
+from world.seeds.sample_content import authored_or_sample
 
 # ---------------------------------------------------------------------------
 # Identity keys
@@ -56,19 +61,17 @@ SENT_FLYING_CONDITION_NAME: str = "Sent Flying"
 SENT_FLYING_IMPACT_DAMAGE_TYPE_NAME: str = "Physical"
 
 
-def _ensure_sent_flying_impact_damage_type() -> DamageType:
+def _ensure_sent_flying_impact_damage_type() -> DamageType | None:
     """Idempotently seed the sent-flying hard-landing impact DamageType.
 
     Leaves the consequence pools null so the config-default survivability
     fallback applies (the same idiom as the fall/poison/exhaustion DamageTypes).
     """
-    obj, _ = DamageType.objects.get_or_create(
+    return authored_or_sample(
+        DamageType,
+        {"description": "Blunt physical trauma from a hard, unassisted landing."},
         name=SENT_FLYING_IMPACT_DAMAGE_TYPE_NAME,
-        defaults={
-            "description": "Blunt physical trauma from a hard, unassisted landing.",
-        },
     )
-    return obj
 
 
 def ensure_sent_flying_content() -> None:
@@ -79,18 +82,19 @@ def ensure_sent_flying_content() -> None:
     own Falling ConditionCategory. Safe to call repeatedly — every write goes
     through get_or_create.
     """
-    category, _ = ConditionCategory.objects.get_or_create(
-        name=FALLING_CATEGORY_NAME,
-        defaults={
+    category = authored_or_sample(
+        ConditionCategory,
+        {
             "description": "Uncontrolled descent through the air toward an impact.",
             "is_negative": True,
         },
+        name=FALLING_CATEGORY_NAME,
     )
     _ensure_sent_flying_impact_damage_type()
 
-    ConditionTemplate.objects.get_or_create(
-        name=SENT_FLYING_CONDITION_NAME,
-        defaults={
+    authored_or_sample(
+        ConditionTemplate,
+        {
             "category": category,
             "description": (
                 "A devastating blow has launched this character airborne — someone "
@@ -102,4 +106,5 @@ def ensure_sent_flying_content() -> None:
             "is_stackable": False,
             "default_duration_type": DurationType.PERMANENT,
         },
+        name=SENT_FLYING_CONDITION_NAME,
     )

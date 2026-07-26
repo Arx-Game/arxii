@@ -6,11 +6,12 @@ by ``world.seeds.combat_checks``; these tests exercise the combat factories'
 compositions against it.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.seeds.combat_checks import ensure_melee_combat_skill
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # wire_penetration/flee_check_type gate on #2698
 class PenetrationFleeSkillLegTests(TestCase):
     """#1706 — penetration + flee gain a Melee Combat skill leg."""
 

@@ -1,6 +1,6 @@
 """SmearAction (#1825) — the one-move L1 smear through the action seam."""
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
@@ -28,6 +28,7 @@ def _set_character_location(character, room):
 
 
 @tag("postgres")  # hub/region resolution walks the AreaClosure materialized view
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_social_check_content gates on #2698
 class SmearActionTests(TestCase):
     @classmethod
     def setUpTestData(cls):

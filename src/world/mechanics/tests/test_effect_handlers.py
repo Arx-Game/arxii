@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.captivity.constants import CaptivityStatus
@@ -84,6 +84,7 @@ class MagicalScarsHandlerTests(TestCase):
         assert result.skip_reason is not None
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class DealDamageHandlerTests(TestCase):
     """Tests for the DEAL_DAMAGE effect handler."""
 

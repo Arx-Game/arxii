@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import VitalBonusTarget
@@ -14,6 +14,7 @@ from world.vitals.factories import CharacterVitalsFactory
 from world.vitals.services import process_damage_consequences
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
 class ThreadSavesWiringTests(TestCase):
     """Verify that thread survivability saves reach the damage-consequence tiers (#1250)."""
 

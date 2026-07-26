@@ -165,8 +165,11 @@ class AcceptTechniqueOfferViewTests(APITestCase):
         response = self.client.post(self._url(), {"offer_id": self.offer.pk}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        # Meter created, not CharacterTechnique (#2711)
+        from world.magic.models import TechniqueProgress
+
         self.assertTrue(
-            CharacterTechnique.objects.filter(
-                character=self.sheet, technique=self.technique
+            TechniqueProgress.objects.filter(
+                character_sheet=self.sheet, technique=self.technique
             ).exists()
         )

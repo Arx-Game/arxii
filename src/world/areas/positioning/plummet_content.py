@@ -55,38 +55,40 @@ from world.mechanics.models import (
     Property,
     PropertyCategory,
 )
+from world.seeds.sample_content import authored_or_sample
 from world.traits.models import CheckOutcome
 
 
-def _ensure_falling_category() -> ConditionCategory:
+def _ensure_falling_category() -> ConditionCategory | None:
     """Idempotently seed the Falling ConditionCategory.
 
     ConditionTemplate.category is a non-null PROTECT FK, so the Plummeting
-    template needs a stable category row to point at.
+    template needs a stable category row to point at. Content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
     """
-    obj, _ = ConditionCategory.objects.get_or_create(
-        name=FALLING_CATEGORY_NAME,
-        defaults={
+    return authored_or_sample(
+        ConditionCategory,
+        {
             "description": "Uncontrolled descent through the air toward an impact.",
             "is_negative": True,
         },
+        name=FALLING_CATEGORY_NAME,
     )
-    return obj
 
 
-def _ensure_fall_damage_type() -> DamageType:
+def _ensure_fall_damage_type() -> DamageType | None:
     """Idempotently seed the fall-impact DamageType.
 
     Leaves the consequence pools null so the config-default survivability
     fallback applies (the same idiom as the poison/exhaustion DamageTypes).
+    Content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on.
     """
-    obj, _ = DamageType.objects.get_or_create(
+    return authored_or_sample(
+        DamageType,
+        {"description": "Blunt impact damage from striking the ground after a fall."},
         name=FALL_DAMAGE_TYPE_NAME,
-        defaults={
-            "description": "Blunt impact damage from striking the ground after a fall.",
-        },
     )
-    return obj
 
 
 def ensure_fall_content() -> None:
@@ -102,9 +104,9 @@ def ensure_fall_content() -> None:
     _ensure_fall_damage_type()
     ensure_catch_content()
 
-    ConditionTemplate.objects.get_or_create(
-        name=PLUMMETING_CONDITION_NAME,
-        defaults={
+    authored_or_sample(
+        ConditionTemplate,
+        {
             "category": category,
             "description": (
                 "A character is falling through the air, descending deeper each "
@@ -119,6 +121,7 @@ def ensure_fall_content() -> None:
             "is_stackable": False,
             "default_duration_type": DurationType.PERMANENT,
         },
+        name=PLUMMETING_CONDITION_NAME,
     )
 
 
@@ -165,57 +168,68 @@ _CATCH_CAPABILITIES: tuple[tuple[str, str, str, str], ...] = (
 )
 
 
-def _ensure_catch_property() -> Property:
-    """Idempotently seed the shared 'catchable' target Property.
+def _ensure_catch_property() -> Property | None:
+    """Idempotently look up the shared 'catchable' target Property.
 
     Every catch Application addresses this single Property; the challenge
     template carries it too so its approaches surface in ``_match_approaches``
     (which gates an approach on the challenge holding the Application's target
-    property).
+    property). mechanics.Property/PropertyCategory are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
     """
-    category, _ = PropertyCategory.objects.get_or_create(
+    category = authored_or_sample(
+        PropertyCategory,
+        {"description": "Physical state of a target or environment."},
         name="Physical",
-        defaults={"description": "Physical state of a target or environment."},
     )
-    obj, _ = Property.objects.get_or_create(
-        name=CATCHABLE_PROPERTY_NAME,
-        defaults={
+    return authored_or_sample(
+        Property,
+        {
             "description": "A falling body that another character may attempt to catch.",
             "category": category,
         },
+        name=CATCHABLE_PROPERTY_NAME,
     )
-    return obj
 
 
-def _ensure_catch_check_type() -> CheckType:
-    """Idempotently seed the Reflexes CheckType reused by every catch approach.
+def _ensure_catch_check_type() -> CheckType | None:
+    """Look up (or sample) the Reflexes CheckType reused by every catch approach.
 
     A single shared check type — the fiction differs per capability, but the
     mechanical roll (split-second reaction) is the same, so no per-capability
     CheckType is authored. The single ``wits`` stat leg is the tenet-permitted
-    resist composition (#1706); idempotent ``get_or_create`` preserves any
-    existing staff weight edit. Shared by plummet-catch and interpose (both
-    ``get_or_create`` this row).
+    resist composition (#1706). Shared by plummet-catch and interpose (both
+    look this row up by name).
+
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` and
+    ``traits.Trait`` are content-repo-owned (#2698) — looked up rather than
+    invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` when the
+    category or the check type itself isn't authored.
     """
     from decimal import Decimal  # noqa: PLC0415
 
     from world.checks.models import CheckTypeTrait  # noqa: PLC0415
-    from world.traits.factories import StatTraitFactory  # noqa: PLC0415
-    from world.traits.models import TraitCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    category, _ = CheckCategory.objects.get_or_create(name="Exploration")
-    obj, _ = CheckType.objects.get_or_create(
+    category = authored_or_sample(CheckCategory, {}, name="Exploration")
+    if category is None:
+        return None
+    obj = authored_or_sample(
+        CheckType,
+        {"description": "A split-second reaction to arrest a falling body."},
         name=CATCH_CHECK_TYPE_NAME,
         category=category,
-        defaults={
-            "description": "A split-second reaction to arrest a falling body.",
-        },
     )
-    CheckTypeTrait.objects.get_or_create(
-        check_type=obj,
-        trait=StatTraitFactory(name="wits", category=TraitCategory.MENTAL),
-        defaults={"weight": Decimal("1.00")},
+    if obj is None:
+        return None
+    wits = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.MENTAL, "is_public": True},
+        name="wits",
     )
+    if wits is not None:
+        authored_or_sample(CheckTypeTrait, {"weight": Decimal("1.00")}, check_type=obj, trait=wits)
     return obj
 
 
@@ -263,17 +277,29 @@ def ensure_catch_content() -> None:
     Adding a new catch capability later is pure data: a new
     ``CapabilityType`` + ``Application(target_property=catch property)`` +
     ``ChallengeApproach`` row surfaces with no engine change.
+
+    ``mechanics.Property``/``PropertyCategory``/``ChallengeCategory``/
+    ``ChallengeTemplate``/``Application``/``ChallengeApproach`` are all
+    content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. The whole challenge is skipped when the
+    anchor Property or ChallengeCategory/ChallengeTemplate aren't authored —
+    there is nothing left to hang approaches on.
     """
     catch_property = _ensure_catch_property()
+    if catch_property is None:
+        return
     check_type = _ensure_catch_check_type()
 
-    challenge_category, _ = ChallengeCategory.objects.get_or_create(
+    challenge_category = authored_or_sample(
+        ChallengeCategory,
+        {"description": "Hazards arising from the surroundings."},
         name="Environmental",
-        defaults={"description": "Hazards arising from the surroundings."},
     )
-    template, _ = ChallengeTemplate.objects.get_or_create(
-        name=CATCH_THE_FALLER_NAME,
-        defaults={
+    if challenge_category is None:
+        return
+    template = authored_or_sample(
+        ChallengeTemplate,
+        {
             "description_template": (
                 "{faller} is plummeting — someone with the means may try to "
                 "catch them before they strike the ground."
@@ -283,7 +309,10 @@ def ensure_catch_content() -> None:
             "category": challenge_category,
             "challenge_type": ChallengeType.THREAT,
         },
+        name=CATCH_THE_FALLER_NAME,
     )
+    if template is None:
+        return
 
     # The challenge holds the catch property so its approaches surface in
     # _match_approaches (an approach is offered iff the challenge carries the
@@ -297,21 +326,30 @@ def ensure_catch_content() -> None:
     _ensure_clean_catch_consequence(template)
 
     for capability_name, application_name, display_name, fiction in _CATCH_CAPABILITIES:
-        capability, _ = CapabilityType.objects.get_or_create(name=capability_name)
-        application, _ = Application.objects.get_or_create(
-            name=application_name,
-            defaults={
+        # conditions.CapabilityType is content-repo-owned (#2698) — looked up
+        # rather than invented unless SEED_SAMPLE_CONTENT is on. Skip this
+        # capability's approach entirely when it isn't authored.
+        capability = authored_or_sample(CapabilityType, {}, name=capability_name)
+        if capability is None:
+            continue
+        application = authored_or_sample(
+            Application,
+            {
                 "capability": capability,
                 "target_property": catch_property,
                 "description": f"Catch a falling character using {capability_name}.",
             },
+            name=application_name,
         )
-        ChallengeApproach.objects.get_or_create(
-            challenge_template=template,
-            application=application,
-            defaults={
+        if application is None or check_type is None:
+            continue
+        authored_or_sample(
+            ChallengeApproach,
+            {
                 "check_type": check_type,
                 "display_name": display_name,
                 "custom_description": fiction,
             },
+            challenge_template=template,
+            application=application,
         )

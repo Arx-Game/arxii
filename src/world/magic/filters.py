@@ -49,7 +49,13 @@ class ConsequencePoolCatalogFilter(django_filters.FilterSet):
         if value not in valid:
             raise ValidationError({"action_category": "Invalid action category."})
         if value == ActionCategory.PHYSICAL:
-            return queryset.filter(parent=get_melee_offense_pool())
+            # checks.CheckType is content-repo-owned (#2698) — the base pool is
+            # None when the 'Melee Attack' CheckType isn't authored; nothing to
+            # filter by, so the catalog is empty rather than crashing.
+            pool = get_melee_offense_pool()
+            if pool is None:
+                return queryset.none()
+            return queryset.filter(parent=pool)
         return queryset.filter(parent=get_standalone_cast_pool())
 
 

@@ -20,7 +20,7 @@ and ``world.character_creation.tests.test_traditions.UnboundTraditionSelectionTe
 for the CG select-tradition endpoint behavior this gate produces.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
@@ -46,8 +46,14 @@ from world.seeds.character_creation import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class WireStartingTechniquePicksTargetTests(TestCase):
-    """First-call + idempotency assertions for the ModifierTarget row."""
+    """First-call + idempotency assertions for the ModifierTarget row.
+
+    mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    wire_starting_technique_picks_target() only invents them under
+    SEED_SAMPLE_CONTENT — this test needs the real row, so it opts in.
+    """
 
     def test_creates_modifier_target_in_character_creation_category(self) -> None:
         from world.mechanics.models import ModifierCategory, ModifierTarget
@@ -71,9 +77,15 @@ class WireStartingTechniquePicksTargetTests(TestCase):
         self.assertEqual(first.pk, second.pk)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class WireMagicLearningApCostTargetTests(TestCase):
     """First-call + idempotency assertions for the 'magic_learning_ap_cost'
-    ModifierTarget row (#2442)."""
+    ModifierTarget row (#2442).
+
+    mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    wire_magic_learning_ap_cost_target() only invents them under
+    SEED_SAMPLE_CONTENT — this test needs the real row, so it opts in.
+    """
 
     def test_creates_modifier_target_in_magic_category(self) -> None:
         from world.magic.constants import (
@@ -104,8 +116,15 @@ class WireMagicLearningApCostTargetTests(TestCase):
         self.assertEqual(first.pk, second.pk)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsureTraditionTrainingDistinctionTests(TestCase):
-    """First-call, idempotency, edit-preservation, and end-to-end wiring."""
+    """First-call, idempotency, edit-preservation, and end-to-end wiring.
+
+    mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    the target the DistinctionEffect wires to only invents under
+    SEED_SAMPLE_CONTENT — this test asserts on the real effect/target, so it
+    opts in.
+    """
 
     def test_creates_distinction_with_expected_shape(self) -> None:
         from world.distinctions.models import Distinction, DistinctionEffect
@@ -160,9 +179,16 @@ class EnsureTraditionTrainingDistinctionTests(TestCase):
         self.assertEqual(draft.starting_technique_picks, 3)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsureUnboundDrawbackDistinctionTests(TestCase):
     """First-call, idempotency, edit-preservation, and the +50% AP effect
-    shape for the 'Unbound' drawback distinction (#2442)."""
+    shape for the 'Unbound' drawback distinction (#2442).
+
+    mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    the target the DistinctionEffect wires to only invents under
+    SEED_SAMPLE_CONTENT — this test asserts on the real effect/target, so it
+    opts in.
+    """
 
     def test_creates_distinction_with_expected_shape(self) -> None:
         from world.distinctions.models import Distinction, DistinctionEffect
@@ -205,6 +231,7 @@ class EnsureUnboundDrawbackDistinctionTests(TestCase):
         self.assertEqual(db_value["description"], "staff-edited description")
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedBeginningTraditionsTests(TestCase):
     """Tests for ``seed_beginning_traditions()`` (#2426 whole-branch-review fix).
 
@@ -214,6 +241,11 @@ class SeedBeginningTraditionsTests(TestCase):
     ``test_playable_slice.py::TestSeededCharacterCreation`` assertions for the
     end-to-end (real-endpoint) proof; these tests cover the seeder function
     directly: creation, idempotency, and the defensive missing-Tradition skip.
+
+    distinctions.distinction/distinctioncategory are content-repo-owned
+    (#2698); ``ensure_unbound_drawback_distinction()`` only invents the
+    "Unbound" drawback under SEED_SAMPLE_CONTENT — several tests here assert
+    ``required_distinction`` is the real row, so the class opts in.
     """
 
     def test_creates_beginning_tradition_for_unbound(self) -> None:
@@ -347,8 +379,15 @@ class EnsureShroudwatchAcademyTests(TestCase):
         self.assertEqual(db_value["description"], "staff-edited description")
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsureOrphanedTraditionDistinctionTests(TestCase):
-    """First-call, idempotency, edit-preservation for the drawback distinction (#2428)."""
+    """First-call, idempotency, edit-preservation for the drawback distinction (#2428).
+
+    distinctions.distinction/distinctioncategory are content-repo-owned
+    (#2698); ensure_orphaned_tradition_distinction() only invents them under
+    SEED_SAMPLE_CONTENT — this test asserts on the real distinction, so it
+    opts in.
+    """
 
     def test_creates_distinction_with_expected_shape(self) -> None:
         from world.distinctions.models import Distinction, DistinctionEffect
@@ -392,6 +431,7 @@ class EnsureOrphanedTraditionDistinctionTests(TestCase):
         self.assertEqual(db_value["description"], "staff-edited description")
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedMetallicOrderTraditionTests(TestCase):
     """Tests for ``seed_metallic_order_tradition()`` (#2428 Task 5).
 
@@ -400,6 +440,11 @@ class SeedMetallicOrderTraditionTests(TestCase):
     Arx-scoped BeginningTradition rows gated by the orphaned drawback),
     idempotency, and that seeding Metallic Order never touches Unbound's own
     rows.
+
+    distinctions.distinction/distinctioncategory are content-repo-owned
+    (#2698); ``ensure_orphaned_tradition_distinction()`` only invents the
+    "Orphaned Tradition" drawback under SEED_SAMPLE_CONTENT — several tests
+    here assert on the real row, so the class opts in.
     """
 
     def _seed_unbound_with_starter_grants(self, gift_count: int = 5):
@@ -538,8 +583,15 @@ class SeedMetallicOrderTraditionTests(TestCase):
         self.assertEqual(unbound_bt.required_distinction.slug, "unbound")
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsureSomehowAlwaysBrokeDistinctionTests(TestCase):
-    """Shape, the drain sidecar, idempotency, and staff-edit survival (#2613)."""
+    """Shape, the drain sidecar, idempotency, and staff-edit survival (#2613).
+
+    distinctions.distinction/distinctioncategory are content-repo-owned
+    (#2698); ensure_somehow_always_broke_distinction() only invents them under
+    SEED_SAMPLE_CONTENT — this test asserts on the real distinction, so it
+    opts in.
+    """
 
     def test_creates_distinction_and_drain_with_expected_shape(self) -> None:
         from world.currency.models import DistinctionPurseDrain

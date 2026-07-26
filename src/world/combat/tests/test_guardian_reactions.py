@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from world.combat.constants import CombatManeuver, ParticipantStatus
 from world.combat.factories import (
@@ -64,6 +64,7 @@ def _make_vitals(participant, health: int = 100, max_health: int = 100) -> Chara
 
 
 @tag("postgres")  # apply_condition (capability grant) uses DISTINCT ON (PG-only)
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class InterposeBestOfCheckRealPathTest(TestCase):
     """The Melee-Defense twin is reachable through a condition-granted guardian.
 
@@ -264,6 +265,7 @@ class InterposeBestOfCheckRealPathTest(TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class TechniqueGuardianBarrierResolutionTest(TestCase):
     """Journey test: a technique guardian's BARRIER resolution (#2207 Task 3).
 

@@ -572,7 +572,7 @@ def run_train_offer(  # noqa: PLR0911 - one distinct business-rule return per ga
     try:
         with transaction.atomic():
             token = _resolve_unredeemed_hare(sheet, academy)
-            character_technique = charge_and_learn(
+            progress = charge_and_learn(
                 sheet,
                 technique,
                 base_ap_cost=details.learn_ap_cost,
@@ -602,7 +602,7 @@ def run_train_offer(  # noqa: PLR0911 - one distinct business-rule return per ga
     except ValidationError:
         # redeem_favor_token lost the race after charge_and_learn already
         # ran in this transaction's savepoint — the whole atomic block above
-        # rolled back (AP, coin, and the CharacterTechnique are all undone).
+        # rolled back (AP, coin, and the TechniqueProgress are all undone).
         return EffectResult(
             kind=OfferKind.TRAIN.value,
             message="Someone else called in that Hare before you finished.",
@@ -611,11 +611,14 @@ def run_train_offer(  # noqa: PLR0911 - one distinct business-rule return per ga
 
     return EffectResult(
         kind=OfferKind.TRAIN.value,
-        object_pk=character_technique.pk,
+        object_pk=progress.pk,
         object_label=technique.name,
-        message=f"{academy.name}'s trainer walks you through {technique.name}.",
+        message=(
+            f"{academy.name}'s trainer begins your training in {technique.name}. "
+            f"Progress: {progress.points_accumulated}/{progress.total_required}."
+        ),
         payload={
-            "character_technique_pk": character_technique.pk,
+            "technique_progress_pk": progress.pk,
             "organization_pk": academy.pk,
             "favor_token_pk": token.pk,
         },

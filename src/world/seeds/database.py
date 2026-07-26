@@ -48,15 +48,19 @@ _MISSING_CONTENT_ROOT_MSG = (
 )
 
 
-def seed_dev_database(*, verbose: bool = False) -> SeedReport:
-    """Seed every cluster's sane defaults. Idempotent; never overwrites.
+def load_content_first() -> int:
+    """Run the config prerequisite, then load the content repo. Returns rows touched.
 
-    Loads the arx2-lore content repo before running any cluster seeder (see
-    module docstring); raises ``ContentError`` loudly when
-    ``CONTENT_REPO_PATH`` is unset/invalid, before any cluster seeder runs.
+    The pre-cluster half of :func:`seed_dev_database`, split out so the
+    seeders-create-no-content guard (#2698,
+    ``world.seeds.tests.test_no_content_slop``) can snapshot row counts
+    *between* the content load and the cluster loop. Measuring across the
+    whole call would score the content repo's own rows as seeder growth, so
+    every model the stub content root carries would look like slop and the
+    ratchet could never reach zero.
+
+    Raises ``ContentError`` when ``CONTENT_REPO_PATH`` is unset or invalid.
     """
-    report = SeedReport()
-
     # Fail loud BEFORE writing anything (Decision 5) — checked first so the
     # config prerequisite below never runs on a call that's about to raise.
     content_root = resolve_content_root()
@@ -72,7 +76,19 @@ def seed_dev_database(*, verbose: bool = False) -> SeedReport:
     ensure_technique_cast_content()
 
     content_result = load_world_content(content_root)
-    report.clusters["content"] = content_result.created + content_result.updated
+    return content_result.created + content_result.updated
+
+
+def seed_dev_database(*, verbose: bool = False) -> SeedReport:
+    """Seed every cluster's sane defaults. Idempotent; never overwrites.
+
+    Loads the arx2-lore content repo before running any cluster seeder (see
+    module docstring); raises ``ContentError`` loudly when
+    ``CONTENT_REPO_PATH`` is unset/invalid, before any cluster seeder runs.
+    """
+    report = SeedReport()
+
+    report.clusters["content"] = load_content_first()
     if verbose:
         print(f"  content: +{report.clusters['content']} rows")
 

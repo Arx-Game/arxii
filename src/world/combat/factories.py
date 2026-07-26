@@ -1017,13 +1017,16 @@ class BossFightScenarioFactory:
 
 
 def wire_penetration_check_type():
-    """Seed the 'penetration' CheckType for the ward contest (#639, #767, #1706).
+    """Look up (or sample) the 'penetration' CheckType for the ward contest (#639, #767, #1706).
 
-    Idempotent — uses CheckTypeFactory's django_get_or_create on (name,
-    category); the trait composition is an authoritative rewrite (delete +
-    recreate) so a re-seed corrects the prior stat+stat seed and converges.
-    Staff weight edits are reset on re-seed (mirrors social_checks.py). The
-    check resolves through the shared rank/chart pipeline
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` and
+    ``traits.Trait`` are content-repo-owned (#2698) — looked up via
+    ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT``
+    is on. No longer wipes and rewrites the composition on each run (#2698
+    Part 1 — that reverted authored/staff-tuned weights on every Big Button
+    press); ``authored_or_sample`` converges instead. Returns ``None`` when
+    the category or the check type itself isn't authored. The check resolves
+    through the shared rank/chart pipeline
     (ResultChart.get_chart_for_difference), so no per-CheckType chart row is
     needed; tests that need a concrete success level force it via
     force_check_outcome or an offense_check_fn override.
@@ -1035,61 +1038,96 @@ def wire_penetration_check_type():
     """
     from decimal import Decimal
 
-    from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
-    from world.checks.models import CheckTypeTrait
+    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
     from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
     from world.seeds.combat_checks import ensure_melee_combat_skill
-    from world.traits.factories import StatTraitFactory
-    from world.traits.models import TraitCategory
+    from world.seeds.sample_content import authored_or_sample
+    from world.traits.models import Trait, TraitCategory, TraitType
 
-    check_type = CheckTypeFactory(
+    category = authored_or_sample(CheckCategory, {}, name="Combat")
+    if category is None:
+        return None
+    check_type = authored_or_sample(
+        CheckType,
+        {"description": "Penetrate a warded target's barrier (#639)."},
         name=PENETRATION_CHECK_TYPE_NAME,
-        category=CheckCategoryFactory(name="Combat"),
-        description="Penetrate a warded target's barrier (#639).",
+        category=category,
     )
+    if check_type is None:
+        return None
     skill = ensure_melee_combat_skill()
-    composition = [
-        (StatTraitFactory(name="willpower", category=TraitCategory.META), Decimal("1.00")),
-        (StatTraitFactory(name="intellect", category=TraitCategory.MENTAL), Decimal("0.50")),
-        (skill.trait, Decimal("0.50")),
-    ]
-    CheckTypeTrait.objects.filter(check_type=check_type).delete()
-    for trait, weight in composition:
-        CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=weight)
+    weight = Decimal("1.00")
+    willpower = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.META, "is_public": True},
+        name="willpower",
+    )
+    if willpower is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=willpower
+        )
+    intellect = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.MENTAL, "is_public": True},
+        name="intellect",
+    )
+    if intellect is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": Decimal("0.50")}, check_type=check_type, trait=intellect
+        )
+    if skill is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": Decimal("0.50")}, check_type=check_type, trait=skill.trait
+        )
     return check_type
 
 
 def wire_penetration_modifier_target():
-    """Seed the check-scoped 'penetration' ModifierTarget (#767).
+    """Look up the check-scoped 'penetration' ModifierTarget (#767).
 
     Links the mechanics ModifierTarget to the penetration CheckType through
     the target_check_type OneToOne, so "+penetration vs warded foes" buffs
     are ordinary CharacterModifier rows picked up by the CHARACTER source in
-    collect_check_modifiers. Idempotent via django_get_or_create on
-    (category, name); the FK link lands on first create and is preserved
-    (never overwritten) on re-runs.
+    collect_check_modifiers.
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. The penetration ``CheckType`` itself is unaffected — always seeded —
+    since ``checks.CheckType`` is out of scope for this slice. Returns
+    ``None`` when the ModifierCategory isn't authored.
     """
     from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
     from world.mechanics.constants import CHECK_CATEGORY_NAME
-    from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+    from world.mechanics.models import ModifierCategory, ModifierTarget
+    from world.seeds.sample_content import authored_or_sample
 
-    return ModifierTargetFactory(
+    check_type = wire_penetration_check_type()
+    category = authored_or_sample(ModifierCategory, {}, name=CHECK_CATEGORY_NAME)
+    if category is None:
+        return None
+    return authored_or_sample(
+        ModifierTarget,
+        {
+            "description": "Caster-side bonus to the penetration check vs warded targets.",
+            "target_check_type": check_type,
+            "is_active": True,
+        },
+        category=category,
         name=PENETRATION_CHECK_TYPE_NAME,
-        category=ModifierCategoryFactory(name=CHECK_CATEGORY_NAME),
-        description="Caster-side bonus to the penetration check vs warded targets.",
-        target_check_type=wire_penetration_check_type(),
-        is_active=True,
     )
 
 
 def wire_flee_check_type():
-    """Seed the 'flee' CheckType for the flee-attempt check (#878, #1706).
+    """Look up (or sample) the 'flee' CheckType for the flee-attempt check (#878, #1706).
 
-    Idempotent — uses CheckTypeFactory's django_get_or_create on (name,
-    category); the trait composition is an authoritative rewrite (delete +
-    recreate) so a re-seed corrects the prior stat+stat seed and converges.
-    Staff weight edits are reset on re-seed (mirrors social_checks.py). The
-    check resolves through the shared rank/chart pipeline
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` and
+    ``traits.Trait`` are content-repo-owned (#2698) — looked up via
+    ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT``
+    is on. No longer wipes and rewrites the composition on each run (#2698
+    Part 1 — that reverted authored/staff-tuned weights on every Big Button
+    press); ``authored_or_sample`` converges instead. Returns ``None`` when
+    the category or the check type itself isn't authored. The check resolves
+    through the shared rank/chart pipeline
     (ResultChart.get_chart_for_difference), so no per-CheckType chart row is
     needed.
 
@@ -1102,50 +1140,81 @@ def wire_flee_check_type():
     """
     from decimal import Decimal
 
-    from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
-    from world.checks.models import CheckTypeTrait
+    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
     from world.combat.constants import FLEE_CHECK_TYPE_NAME
     from world.seeds.combat_checks import ensure_melee_combat_skill
-    from world.traits.factories import StatTraitFactory
-    from world.traits.models import TraitCategory
+    from world.seeds.sample_content import authored_or_sample
+    from world.traits.models import Trait, TraitCategory, TraitType
 
-    check_type = CheckTypeFactory(
+    category = authored_or_sample(CheckCategory, {}, name="Combat")
+    if category is None:
+        return None
+    check_type = authored_or_sample(
+        CheckType,
+        {"description": "Flee-attempt check rolled when a PC declares flee (#878)."},
         name=FLEE_CHECK_TYPE_NAME,
-        category=CheckCategoryFactory(name="Combat"),
-        description="Flee-attempt check rolled when a PC declares flee (#878).",
+        category=category,
     )
+    if check_type is None:
+        return None
     skill = ensure_melee_combat_skill()
-    composition = [
-        (StatTraitFactory(name="agility", category=TraitCategory.PHYSICAL), Decimal("1.00")),
-        (StatTraitFactory(name="wits", category=TraitCategory.MENTAL), Decimal("0.50")),
-        (skill.trait, Decimal("0.50")),
-    ]
-    CheckTypeTrait.objects.filter(check_type=check_type).delete()
-    for trait, weight in composition:
-        CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=weight)
+    agility = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL, "is_public": True},
+        name="agility",
+    )
+    if agility is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": Decimal("1.00")}, check_type=check_type, trait=agility
+        )
+    wits = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.MENTAL, "is_public": True},
+        name="wits",
+    )
+    if wits is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": Decimal("0.50")}, check_type=check_type, trait=wits
+        )
+    if skill is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": Decimal("0.50")}, check_type=check_type, trait=skill.trait
+        )
     return check_type
 
 
 def wire_flee_modifier_target():
-    """Seed the check-scoped 'flee' ModifierTarget (#878).
+    """Look up the check-scoped 'flee' ModifierTarget (#878).
 
     Links the mechanics ModifierTarget to the flee CheckType through
     the target_check_type OneToOne, so "+flee" buffs are ordinary
     CharacterModifier rows picked up by the CHARACTER source in
-    collect_check_modifiers. Idempotent via django_get_or_create on
-    (category, name); the FK link lands on first create and is preserved
-    (never overwritten) on re-runs.
+    collect_check_modifiers.
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. The flee ``CheckType`` itself is unaffected — always seeded — since
+    ``checks.CheckType`` is out of scope for this slice. Returns ``None`` when
+    the ModifierCategory isn't authored.
     """
     from world.combat.constants import FLEE_CHECK_TYPE_NAME
     from world.mechanics.constants import CHECK_CATEGORY_NAME
-    from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+    from world.mechanics.models import ModifierCategory, ModifierTarget
+    from world.seeds.sample_content import authored_or_sample
 
-    return ModifierTargetFactory(
+    check_type = wire_flee_check_type()
+    category = authored_or_sample(ModifierCategory, {}, name=CHECK_CATEGORY_NAME)
+    if category is None:
+        return None
+    return authored_or_sample(
+        ModifierTarget,
+        {
+            "description": "Character-side bonus to the flee check (cover, boons, conditions).",
+            "target_check_type": check_type,
+            "is_active": True,
+        },
+        category=category,
         name=FLEE_CHECK_TYPE_NAME,
-        category=ModifierCategoryFactory(name=CHECK_CATEGORY_NAME),
-        description="Character-side bonus to the flee check (cover, boons, conditions).",
-        target_check_type=wire_flee_check_type(),
-        is_active=True,
     )
 
 
@@ -1161,23 +1230,35 @@ def wire_melee_attack_action_template():
     melee cast with no flavor chosen still resolves graded consequences rather
     than short-circuiting to check-only. Idempotent — ``get_or_create`` on the
     name; FK re-wiring ensures both links land even on a pre-existing row.
+
+    ``checks.CheckCategory``/``CheckType`` are content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. When
+    neither the authored composition seed (``ensure_melee_attack_check_type``)
+    nor the category/CheckType itself is available, the ActionTemplate is
+    skipped entirely (returns ``None``) — ``check_type`` is a required FK.
     """
     from actions.constants import ActionTargetType, Pipeline
     from actions.models import ActionTemplate
     from world.checks.models import CheckCategory, CheckType
     from world.combat.seeds_offense import ensure_melee_offense_pool
+    from world.seeds.sample_content import authored_or_sample
 
     # Resolve the 'Melee Attack' CheckType: prefer the authored seed
     # (seed_combat_check_content writes the full composition); fall back to a
-    # minimal get_or_create so the wire function is self-sufficient in test
-    # setups that haven't run the combat_checks seed (mirrors how
+    # gated lookup so the wire function is self-sufficient in test setups
+    # that haven't run the combat_checks seed (mirrors how
     # get_standalone_cast_template self-seeds the magic template).
-    category, _ = CheckCategory.objects.get_or_create(name="Combat")
-    check_type, _ = CheckType.objects.get_or_create(
+    category = authored_or_sample(CheckCategory, {}, name="Combat")
+    if category is None:
+        return None
+    check_type = authored_or_sample(
+        CheckType,
+        {"description": "A melee attack roll: strength + Melee Combat."},
         name="Melee Attack",
         category=category,
-        defaults={"description": "A melee attack roll: strength + Melee Combat."},
     )
+    if check_type is None:
+        return None
     pool = ensure_melee_offense_pool()
     template, _ = ActionTemplate.objects.get_or_create(
         name="Melee Attack",
@@ -1309,27 +1390,41 @@ class LethalDuelFactory:
         return create_lethal_duel(pc_sheet, opponent_kwargs, room, tier=tier)
 
 
-def ensure_escalation_pace_check_type() -> object:
-    """Get-or-create the 'Escalation Pace' CheckType (#872, extracted for #2013 reuse)."""
+def ensure_escalation_pace_check_type() -> object | None:
+    """Look up (or sample) the 'Escalation Pace' CheckType (#872, extracted for #2013 reuse).
+
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` and
+    ``traits.Trait`` are content-repo-owned (#2698) — looked up rather than
+    invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` when the
+    category or the check type itself isn't authored.
+    """
     from decimal import Decimal
 
     from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
-    from world.traits.factories import StatTraitFactory
-    from world.traits.models import TraitCategory
+    from world.seeds.sample_content import authored_or_sample
+    from world.traits.models import Trait, TraitCategory, TraitType
 
-    category, _ = CheckCategory.objects.get_or_create(name="Combat")
-    check, _ = CheckType.objects.get_or_create(
+    category = authored_or_sample(CheckCategory, {}, name="Combat")
+    if category is None:
+        return None
+    check = authored_or_sample(
+        CheckType,
+        {"description": "Keep control in pace with rising intensity."},
         name="Escalation Pace",
         category=category,
-        defaults={"description": "Keep control in pace with rising intensity."},
     )
+    if check is None:
+        return None
     # #1706 — seed the Escalation Pace check's wits stat leg (split-second
-    # reading of rising combat intensity). Idempotent get_or_create.
-    CheckTypeTrait.objects.get_or_create(
-        check_type=check,
-        trait=StatTraitFactory(name="wits", category=TraitCategory.MENTAL),
-        defaults={"weight": Decimal("1.00")},
+    # reading of rising combat intensity).
+    wits = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.MENTAL, "is_public": True},
+        name="wits",
     )
+    if wits is None:
+        return check
+    authored_or_sample(CheckTypeTrait, {"weight": Decimal("1.00")}, check_type=check, trait=wits)
     return check
 
 
@@ -1354,7 +1449,45 @@ class EscalationCurveFactory(factory_django.DjangoModelFactory):
 
     @factory.lazy_attribute
     def pace_check_type(self) -> object:
-        return ensure_escalation_pace_check_type()
+        """Factory-owned CheckType — not the gated #872 seed (#2698).
+
+        ``ensure_escalation_pace_check_type()`` is content-repo-gated
+        (``authored_or_sample``) and returns ``None`` when SEED_SAMPLE_CONTENT
+        is off, which would violate this FK's NOT NULL constraint. A test
+        factory must always produce a valid object regardless of that setting.
+
+        It must also produce a *complete* one: the seed carries a wits leg
+        (#1706 — resist-style checks roll their named stat), and a CheckType
+        with no ``CheckTypeTrait`` rows resolves with zero trait points, so a
+        hollow fixture would silently turn any check rolled through it into a
+        coin flip. Reuses the existing row when one is already present, so a
+        test that seeds and then builds a curve gets one composition, not two.
+        """
+        from decimal import Decimal
+
+        from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
+        from world.traits.models import Trait, TraitCategory, TraitType
+
+        category, _ = CheckCategory.objects.get_or_create(
+            name="Combat", defaults={"description": "Checks involving physical combat."}
+        )
+        check_type, _ = CheckType.objects.get_or_create(
+            name="Escalation Pace",
+            category=category,
+            defaults={"description": "Keep control in pace with rising intensity."},
+        )
+        wits, _ = Trait.objects.get_or_create(
+            name="wits",
+            defaults={
+                "trait_type": TraitType.STAT,
+                "category": TraitCategory.MENTAL,
+                "is_public": True,
+            },
+        )
+        CheckTypeTrait.objects.get_or_create(
+            check_type=check_type, trait=wits, defaults={"weight": Decimal("1.00")}
+        )
+        return check_type
 
 
 def wire_flee_config():
@@ -1430,15 +1563,23 @@ def wire_flee_config():
         )
 
     # --- FleeConfig singleton ---
+    # checks.CheckType is content-repo-owned (#2698); check_type is a required
+    # FK, so the singleton is skipped entirely (never created with a null FK)
+    # when the "flee" CheckType isn't authored and FleeConfig doesn't already
+    # exist. FleeConfig's own docstring already anticipates a missing
+    # singleton — "services use cached_singleton() and let DoesNotExist
+    # propagate loudly" — so callers are expected to handle its absence.
     check_type = wire_flee_check_type()
-    config, _ = FleeConfig.objects.get_or_create(
-        pk=1,
-        defaults={
-            "check_type": check_type,
-            "base_difficulty": FLEE_BASE_DIFFICULTY,
-            "consequence_pool": pool,
-        },
-    )
+    config = FleeConfig.objects.filter(pk=1).first()
+    if config is None and check_type is not None:
+        config, _ = FleeConfig.objects.get_or_create(
+            pk=1,
+            defaults={
+                "check_type": check_type,
+                "base_difficulty": FLEE_BASE_DIFFICULTY,
+                "consequence_pool": pool,
+            },
+        )
 
     # --- Tier modifier rows ---
     for tier, modifier in [
@@ -1463,22 +1604,32 @@ _PAYLOAD_PARAM = "@payload"
 
 
 def _build_escalation_spike_flow() -> object:
-    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the spike handler.
+    """Look up the FlowDefinition with one CALL_SERVICE_FUNCTION step for the spike handler.
 
     The step calls ``relationship_spike_handler`` with the event payload.
     Shared by both escalation spike TriggerDefinitions (#872).
+
+    ``flows.FlowDefinition``/``FlowStepDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the FlowDefinition isn't authored.
     """
     from flows.consts import FlowActionChoices
-    from flows.factories import FlowStepDefinitionFactory
-    from flows.models import FlowDefinition
+    from flows.models import FlowDefinition, FlowStepDefinition
+    from world.seeds.sample_content import authored_or_sample
 
-    flow, _ = FlowDefinition.objects.get_or_create(name="escalation_relationship_spike")
+    flow = authored_or_sample(FlowDefinition, {}, name="escalation_relationship_spike")
+    if flow is None:
+        return None
     if not flow.steps.exists():
-        FlowStepDefinitionFactory(
+        authored_or_sample(
+            FlowStepDefinition,
+            {
+                "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                "parameters": {"payload": _PAYLOAD_PARAM},
+            },
             flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="world.combat.escalation.relationship_spike_handler",
-            parameters={"payload": _PAYLOAD_PARAM},
+            parent=None,
         )
     return flow
 
@@ -1516,18 +1667,29 @@ class EscalationSpikeOnKilledTriggerDefinitionFactory(factory_django.DjangoModel
 
 
 def _build_peril_spike_flow() -> object:
-    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the peril handler (#2013)."""
-    from flows.consts import FlowActionChoices
-    from flows.factories import FlowStepDefinitionFactory
-    from flows.models import FlowDefinition
+    """Look up the FlowDefinition with one CALL_SERVICE_FUNCTION step for the peril handler (#2013).
 
-    flow, _ = FlowDefinition.objects.get_or_create(name="escalation_peril_spike")
+    ``flows.FlowDefinition``/``FlowStepDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the FlowDefinition isn't authored.
+    """
+    from flows.consts import FlowActionChoices
+    from flows.models import FlowDefinition, FlowStepDefinition
+    from world.seeds.sample_content import authored_or_sample
+
+    flow = authored_or_sample(FlowDefinition, {}, name="escalation_peril_spike")
+    if flow is None:
+        return None
     if not flow.steps.exists():
-        FlowStepDefinitionFactory(
+        authored_or_sample(
+            FlowStepDefinition,
+            {
+                "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                "parameters": {"payload": _PAYLOAD_PARAM},
+            },
             flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="world.combat.escalation.peril_spike_handler",
-            parameters={"payload": _PAYLOAD_PARAM},
+            parent=None,
         )
     return flow
 
@@ -1552,23 +1714,33 @@ class EscalationSpikeOnMortalPerilTriggerDefinitionFactory(factory_django.Django
 
 
 def _build_encounter_beat_flow() -> object:
-    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the beat handler.
+    """Look up the FlowDefinition with one CALL_SERVICE_FUNCTION step for the beat handler.
 
     The step calls ``encounter_completed_beat_handler`` with the ENCOUNTER_COMPLETED
     payload. Drives the combat → story-beat auto-wire (#1746).
+
+    ``flows.FlowDefinition``/``FlowStepDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the FlowDefinition isn't authored.
     """
     from flows.consts import FlowActionChoices
-    from flows.factories import FlowStepDefinitionFactory
-    from flows.models import FlowDefinition
+    from flows.models import FlowDefinition, FlowStepDefinition
     from world.combat.beat_wiring import ENCOUNTER_BEAT_TRIGGER_NAME
+    from world.seeds.sample_content import authored_or_sample
 
-    flow, _ = FlowDefinition.objects.get_or_create(name=ENCOUNTER_BEAT_TRIGGER_NAME)
+    flow = authored_or_sample(FlowDefinition, {}, name=ENCOUNTER_BEAT_TRIGGER_NAME)
+    if flow is None:
+        return None
     if not flow.steps.exists():
-        FlowStepDefinitionFactory(
+        authored_or_sample(
+            FlowStepDefinition,
+            {
+                "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                "parameters": {"payload": _PAYLOAD_PARAM},
+            },
             flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="world.combat.beat_wiring.encounter_completed_beat_handler",
-            parameters={"payload": _PAYLOAD_PARAM},
+            parent=None,
         )
     return flow
 
@@ -1633,30 +1805,41 @@ def wire_armor_soak_modifier_target():
 
 
 def wire_elevation_advantage_modifier_target():
-    """Seed the 'elevation_advantage' ModifierTarget (#2011).
+    """Look up the 'elevation_advantage' ModifierTarget (#2011).
 
     A flat stat-category bonus read positionally at combat time: when an
     attacker is ELEVATED/AERIAL and the target is not, the bonus feeds into
     the combat check's extra_modifiers. Offensive-only — no penalty for
     firing up. Staff authors CharacterModifier rows against this target to
-    set the magnitude. Idempotent via django_get_or_create on (category, name).
+    set the magnitude.
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the ModifierCategory isn't authored.
     """
     from world.combat.constants import ELEVATION_ADVANTAGE_TARGET_NAME
     from world.mechanics.constants import STAT_CATEGORY_NAME
-    from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+    from world.mechanics.models import ModifierCategory, ModifierTarget
+    from world.seeds.sample_content import authored_or_sample
 
-    return ModifierTargetFactory(
+    category = authored_or_sample(ModifierCategory, {}, name=STAT_CATEGORY_NAME)
+    if category is None:
+        return None
+    return authored_or_sample(
+        ModifierTarget,
+        {
+            "description": "Offensive-only elevation bonus (ELEVATED/AERIAL attacker firing down).",
+            "is_active": True,
+        },
+        category=category,
         name=ELEVATION_ADVANTAGE_TARGET_NAME,
-        category=ModifierCategoryFactory(name=STAT_CATEGORY_NAME),
-        description="Offensive-only elevation bonus (ELEVATED/AERIAL attacker firing down).",
-        is_active=True,
     )
 
 
 def wire_escalation_content() -> None:
     """Seed the escalation spike trigger definitions (idempotent).
 
-    Creates (get_or_create):
+    Looks up:
     - "escalation_relationship_spike" FlowDefinition (one CALL_SERVICE_FUNCTION
       step -> world.combat.escalation.relationship_spike_handler)
     - "escalation_spike_on_incapacitated" TriggerDefinition
@@ -1664,12 +1847,55 @@ def wire_escalation_content() -> None:
     - "escalation_peril_spike" FlowDefinition + "escalation_spike_on_mortal_peril"
       TriggerDefinition (#2013)
 
+    ``flows.FlowDefinition``/``FlowStepDefinition``/``TriggerDefinition`` are
+    all content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. Each TriggerDefinition is skipped
+    individually when its backing FlowDefinition isn't authored — the reactive
+    subscriber it would install just doesn't exist for this deployment.
+    ``install_escalation_room_triggers`` already tolerates a missing
+    TriggerDefinition.
+
     Doubles as integration-test setup and staff seed content. Safe to call
     multiple times — does not create duplicates.
     """
-    EscalationSpikeOnIncapacitatedTriggerDefinitionFactory()
-    EscalationSpikeOnKilledTriggerDefinitionFactory()
-    EscalationSpikeOnMortalPerilTriggerDefinitionFactory()
+    from flows.models import TriggerDefinition
+    from world.seeds.sample_content import authored_or_sample
+
+    relationship_spike_flow = _build_escalation_spike_flow()
+    if relationship_spike_flow is not None:
+        authored_or_sample(
+            TriggerDefinition,
+            {
+                "event_name": "character_incapacitated",
+                "flow_definition": relationship_spike_flow,
+                "priority": 50,
+                "base_filter_condition": None,
+            },
+            name="escalation_spike_on_incapacitated",
+        )
+        authored_or_sample(
+            TriggerDefinition,
+            {
+                "event_name": "character_killed",
+                "flow_definition": relationship_spike_flow,
+                "priority": 50,
+                "base_filter_condition": None,
+            },
+            name="escalation_spike_on_killed",
+        )
+
+    peril_spike_flow = _build_peril_spike_flow()
+    if peril_spike_flow is not None:
+        authored_or_sample(
+            TriggerDefinition,
+            {
+                "event_name": "condition_applied",
+                "flow_definition": peril_spike_flow,
+                "priority": 50,
+                "base_filter_condition": None,
+            },
+            name="escalation_spike_on_mortal_peril",
+        )
 
 
 class ThreatRecordFactory(factory_django.DjangoModelFactory):

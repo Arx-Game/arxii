@@ -26,7 +26,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from flows.models.triggers import Trigger
 from world.character_sheets.factories import CharacterSheetFactory
@@ -168,6 +168,7 @@ def _make_active_relationship(source: object, target: object) -> object:
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class AcceptSoulTetherAffinityGateTests(TestCase):
     """Spec B §3 affinity gate validation."""
 
@@ -243,6 +244,7 @@ class AcceptSoulTetherAffinityGateTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class AcceptSoulTetherUnlockTests(TestCase):
     """Spec B §12.4 step: Sinner must have RELATIONSHIP_TRACK ThreadWeavingUnlock."""
 
@@ -295,6 +297,7 @@ class AcceptSoulTetherUnlockTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class AcceptSoulTetherHappyPathTests(TestCase):
     """Full formation flow — Spec B §12.4."""
 
@@ -392,6 +395,7 @@ class AcceptSoulTetherHappyPathTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class AcceptSoulTetherIdempotencyTests(TestCase):
     """Second formation between same pair raises SoulTetherFormationError."""
 
@@ -430,6 +434,7 @@ class AcceptSoulTetherIdempotencyTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class AcceptSoulTetherMultiTetherTests(TestCase):
     """Sinner forming a second tether reuses the SoulTetherActiveTemplate ConditionInstance."""
 
@@ -593,6 +598,7 @@ def _make_sineating_offer(  # noqa: PLR0913
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class RequestSineatingValidationTests(TestCase):
     """Spec B §7.2 — validation gates for request_sineating."""
 
@@ -712,6 +718,7 @@ class RequestSineatingValidationTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResolveSineatingHappyPathTests(TestCase):
     """Spec B §7.2 — accepted Sineating deducts costs, increments state, writes audit row."""
 
@@ -840,6 +847,7 @@ class ResolveSineatingHappyPathTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResolveSineatingDeclineTests(TestCase):
     """Spec B §7.2 — declined Sineating writes audit row with units_accepted=0, no state changes."""
 
@@ -924,6 +932,7 @@ class ResolveSineatingDeclineTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PerSceneCapTests(TestCase):
     """Spec B §7.3 — per-scene cap limits max_units_offered in the offer.
 
@@ -1123,6 +1132,7 @@ def _make_tethered_pair_with_corruption(
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 @tag("postgres")
 class PerformSoulTetherRescueStage3Tests(TestCase):
     """Phase 8 §9.4 — stage-3 rescue happy path."""
@@ -1222,6 +1232,7 @@ class PerformSoulTetherRescueStage3Tests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 @tag("postgres")
 class PerformSoulTetherRescueStage5Tests(TestCase):
     """Phase 8 §9.4 — stage-5 rescue lifts protagonism_lock when dropping below stage 5."""
@@ -1285,6 +1296,7 @@ class PerformSoulTetherRescueStage5Tests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PerformSoulTetherRescueGateTests(TestCase):
     """Phase 8 §9.2 — gate failures raise RescueValidationError."""
 
@@ -1546,6 +1558,7 @@ def _form_tether_and_resolve(
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class DissolveSoulTetherSingleTests(TestCase):
     """Phase 10 §13 — dissolve_soul_tether flips flags + soft-retires Threads.
 
@@ -1715,6 +1728,7 @@ class DissolveSoulTetherSingleTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class DissolveSoulTetherMultiTetherTests(TestCase):
     """Phase 10 §13 — marker ConditionInstance retained until last tether dissolves."""
 
@@ -1860,6 +1874,7 @@ class DissolveSoulTetherMultiTetherTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class DissolveSoulTetherEmitTests(TestCase):
     """Phase 15 — dissolve_soul_tether emits SOUL_TETHER_DISSOLVED with correct payload."""
 

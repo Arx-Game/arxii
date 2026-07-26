@@ -120,6 +120,7 @@ result.outcome_name    # "Success", "Catastrophic Failure", etc.
 result.success_level   # -10 to +10
 result.trait_points    # Points from character's traits
 result.aspect_bonus    # Bonus from path aspects
+result.level_points    # LEVEL_POINTS_PER_LEVEL x class level, on every check (#2707)
 result.total_points    # Final total
 ```
 
@@ -132,6 +133,70 @@ from world.checks.services import get_rollmod
 # Returns 0 for missing relations
 rollmod = get_rollmod(character)
 ```
+
+### Opposed checks — two mutually exclusive answers for the opposing side (#2707, ADR-0166)
+
+`compute_check_rating(character, check_type, extra_modifiers=0) -> int` is the one
+answer for "what does this character bring to this check, with no dice roll" — it
+wraps `_compute_check_breakdown` (the same pipeline `perform_check` uses) and
+returns `total_points`.
+
+Two callers build opposed-check difficulty on top of it, and are deliberately
+**exclusive** — a call site uses one or the other, never both, because an active
+resistance rating already contains the defender's level points:
+
+```python
+from world.checks.services import compute_resist_increment, level_opposition
+
+# ACTIVE: the defender spends a defence check of their own (e.g. Composure).
+# Routes through compute_check_rating, so it carries the defender's full
+# rating — trait, specialization, aspect, and capability points (NOT perk
+# points: compute_check_rating takes no situation_ctx, so
+# _situational_perk_check_bonus short-circuits to 0 rather than firing its
+# announcement side effect) — plus the effort-level modifier. Clamped >= 0.
+increment = compute_resist_increment(defender_character, resist_effort_level="high")
+
+# level_override (whole-branch-review fix, #2707): compute_check_rating /
+# compute_resist_increment resolve level from the defender's own objectdb by
+# default (get_character_path_level's CharacterClassLevel rows) -- a gap for an
+# ephemeral CombatOpponent, which has none. level_override SUBSTITUTES for that
+# resolved level (never adds to it) in both the level_points term and the
+# aspect-bonus level scaling. None (the default) is byte-identical to before.
+increment = compute_resist_increment(
+    target.objectdb, effort_level, level_override=target.level
+)
+
+# PASSIVE: the defender contributes nothing beyond existing. LEVEL_POINTS_PER_LEVEL
+# * level always; plus, when a character is given, the acting check's aspects
+# scored against the DEFENDER's Path (their wheelhouse protects them). A
+# character=None (an ephemeral NPC with no sheet) contributes level alone.
+difficulty = level_opposition(check_type, level=defender_level, character=defender_character)
+```
+
+`_social_combat_difficulty` (`world/combat/services.py`, backing the Demoralize/Taunt/
+Parley combat verbs) is the one caller of `compute_resist_increment` that passes
+`level_override` — it opposes a `CombatOpponent`, whose authored `level` field isn't
+reachable through its `objectdb`'s class-level rows (an ephemeral NPC has none). Without
+the override, a boss's morale defense always floored at level 1 even though the same
+opponent's offense already opposed PC checks at its real level via `level_opposition`.
+
+`resolve_target_difficulty` (`actions/effects/base.py`) also uses
+`compute_check_rating` directly to get a target's resistance rating for
+`target_difficulty` — replacing an earlier version that rolled a throwaway
+`perform_check` and discarded the outcome, which had the side effect of
+silently burning the target's rollmod.
+
+Combat wires `level_opposition` at three call sites — offense (`focused_opponent_target
+.level`), penetration (`target.level`, additive on top of the authored `barrier_strength`,
+never replacing it), and NPC-attack defense (`opponent_action.opponent.level`, the
+inverse direction: the attacking NPC's level sets the defending PC's difficulty). See
+`docs/systems/COMBAT_DEFENSES.md`.
+
+**Clash is the deliberate exception.** `world/combat/clash.py`'s clash-contribution roll
+still passes `target_difficulty=0` — a clash is a symmetric contest (both sides roll their
+own check and the results are compared, the same shape as `_resolve_joust_pass`'s
+`success_level` gap), so each side's level already rides its own roll and an opposition
+term would double-count it. See ADR-0166.
 
 ---
 
@@ -148,6 +213,12 @@ rollmod = get_rollmod(character)
    latest_path = CharacterPathHistory (most recent)
    For each CheckTypeAspect with matching PathAspect:
      bonus += int(check_aspect_weight * path_aspect_weight * character_level)
+
+2.4. Level points (#2707): LEVEL_POINTS_PER_LEVEL x character_level, on EVERY check.
+   Level was previously only reachable through the aspect bonus above, which is zero
+   unless the CheckType has an authored CheckTypeAspect matching the character's Path
+   -- so on most checks level did nothing. This is a guaranteed floor, additive with
+   (not a replacement for) the aspect bonus.
 
 2.5. Capability points from authored CheckTypeCapabilityModifier rows (#2505)
    No authored rows on check_type -> 0, capability oracle never called (curated gate).
@@ -167,7 +238,8 @@ rollmod = get_rollmod(character)
    # (now handling mixed-sign rows), so recorded contributions always sum to
    # exactly capability_points (#2505 fix).
 
-3. Total = trait_points + specialization_points + aspect_bonus + capability_points + extra_modifiers
+3. Total = trait_points + specialization_points + aspect_bonus + level_points + capability_points
+   + extra_modifiers
 
 4. Total points -> CheckRank.get_rank_for_points()
    Target difficulty -> CheckRank.get_rank_for_points()
@@ -208,8 +280,9 @@ _calculate_capability_points(character, check_type) -> int
 # (provenance path, in collect_check_modifiers) computes this, so the two paths cannot drift.
 _capability_point_allocation(character_sheet, capability_modifiers) -> tuple[int, list[int]]
 
-# Get character's primary class level (or highest, or default 1)
-_get_character_level(character) -> int
+# Get character's primary class level (or highest, or default 1) — shared with
+# progression (#2707); world.checks.services no longer declares its own copy
+world.progression.services.skill_development.get_character_path_level(character) -> int
 
 # Look up ResultChartOutcome for a roll value on a chart
 _get_outcome_for_roll(chart, roll) -> CheckOutcome | None
@@ -238,8 +311,15 @@ All models registered with appropriate admin interfaces:
 ## Integration Points
 
 - **Traits app**: Uses `PointConversionRange`, `CheckRank`, `ResultChart`, `CheckOutcome` for the resolution pipeline
-- **Classes app**: Uses `Aspect` and `PathAspect` for aspect bonus calculation, `CharacterClassLevel` for character level
-- **Progression app**: Uses `CharacterPathHistory` for current path lookup
+- **Classes app**: Uses `Aspect` and `PathAspect` for aspect bonus calculation
+- **Progression app**: Uses `CharacterPathHistory` for current path lookup; `get_character_path_level`
+  (`world.progression.services.skill_development`) is the sole source of a character's class level (#2707)
+  -- both the level-points term and the aspect bonus's level scaling read it
+- **Combat app** (#2707): `CombatOpponent.level` is the authority for how sturdy an opponent is on BOTH
+  sides — read directly by `level_opposition` at the offense/penetration/NPC-attack-defense sites, and
+  passed as `compute_resist_increment(..., level_override=opponent.level)` for the social verbs, so an
+  ephemeral NPC (which has no `CharacterClassLevel` rows behind its `objectdb`) no longer resists at
+  level 1 while opposing a stab at its authored level
 - **Conditions app** (#2505): `get_effective_capability_value(sheet, capability)` (the agency oracle —
   innate baseline + CharacterModifier total + condition contributions + passive-grant floor + best
   (MAX) technique-grant value, floored at 0) is the sole source `_capability_point_allocation` reads
@@ -286,7 +366,9 @@ Gated by `IsSceneGMPrerequisite` (`actions/prerequisites.py` — staff bypass, e
 
 ## Seeded Compositions
 
-Check compositions are authored as seed data (the design tenet: **stat + skill (+ specialization)**, rarely stat+stat). The seed clusters live in `world/seeds/`:
+Check compositions are authored as seed data (the design tenet: **stat + skill (+ specialization)**, rarely stat+stat). The seed clusters live in `world/seeds/`.
+
+**`CheckCategory`/`CheckType`/`CheckTypeTrait` (+ `skills.Skill`/`traits.Trait`/`classes.Aspect`/`classes.PathAspect`) are content-repo-owned (#2698, ADR-0168)** — every cluster below looks its rows up via `world.seeds.sample_content.authored_or_sample()` rather than inventing them; a row is only invented when `SEED_SAMPLE_CONTENT` is on (a third-party clone with no content repo). Maintainers author these in the content repo, and the composition table below describes what the content repo is expected to carry, not what a bare Big Button press creates. `skills.Specialization`/`checks.CheckTypeSpecialization`/`checks.CheckTypeAspect` are NOT content-repo-owned and keep seeding unconditionally. A reseed no longer wipes and rewrites a CheckType's composition (the pre-#2698 "authoritative rewrite" idiom silently reverted any content-repo/staff-tuned weight on every Big Button press) — `get_or_create`/`authored_or_sample` converge instead, so an edited weight survives.
 
 | Cluster | Checks | Composition |
 |---------|--------|-------------|
@@ -302,7 +384,7 @@ Check compositions are authored as seed data (the design tenet: **stat + skill (
 | `investigation` (#1705) | `Search` | perception + Investigation |
 | `governance` (#930) | Tax/Investment checks | stat + Scholarship/Economics |
 | `stealth` (#1464) | `Stealth` | agility + Stealth |
-| `security` (#2180) | `Lockpick` / `Break and Enter` / `Escape Through Window` / `Guard Detection` | wits+Larceny / strength+Athletics / agility+Athletics / perception+Investigation |
+| `security` (#2180) | `Lockpick` / `Break and Enter` / `Escape Through Window` / `Guard Detection` | wits+Skulduggery / strength+Athletics / agility+Athletics / perception+Investigation |
 
 **Resist checks** (Reflexes, Escalation Pace, Endurance, Mortal Resolve) are the tenet-permitted single-stat exception — they seed exactly one `CheckTypeTrait`. The `Melee Combat` skill catalog (with weapon-class specializations aligned to `progression.services.scene_integration`'s `weapon_map`) is seeded by the `combat_checks` cluster; the penetration/flee retrofits depend on it.
 
@@ -318,7 +400,7 @@ Five security-domain check types seeded via the `"security"` cluster
 | CheckType | Category | Composition | Used by |
 |---|---|---|---|
 | Stealth | Physical | agility + Stealth | Sneaking past guards (reuses #1464 seed) |
-| Lockpick | Physical | wits + Larceny (+ Lockpicking) | Picking locks (#2176) |
+| Lockpick | Physical | wits + Skulduggery (+ Lockpicking) | Picking locks (#2176, renamed from Larceny #1825) |
 | Break and Enter | Physical | strength + Athletics | Forcing barriers (#2176) |
 | Escape Through Window | Physical | agility + Athletics (+ Climbing) | Fleeing via window (#2175) |
 | Guard Detection | Exploration | perception + Investigation | Guard NPC spotting intruders (#2178) |

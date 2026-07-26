@@ -6,7 +6,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0126_remove_technique_style_remove_techniquedraft_style_and_more"),
+        ("magic", "0128_technique_progress_models"),
     ]
 
     operations = [

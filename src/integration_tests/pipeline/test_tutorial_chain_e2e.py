@@ -72,7 +72,7 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from evennia.utils.idmapper import models as idmapper_models
 
 from actions.definitions.npc_services import resolve_npc_offer, start_npc_interaction
@@ -132,6 +132,7 @@ def _said(caller: object) -> str:
     return "\n".join(chunks)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # missions.* tutorial-chain content gates on #2698
 class TutorialChainJourneyE2ETests(TestCase):
     """Walk the seeded T1-T7 tutorial chain end to end over the telnet seam."""
 

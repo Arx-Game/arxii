@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from django.test import override_settings
+
 from actions.definitions.social import EntranceAction
 from actions.factories import ActionTemplateFactory
 from world.combat.constants import OpponentStatus, ParticipantStatus, RiskLevel
@@ -77,8 +79,13 @@ def _make_protective_technique():
     return technique
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EntranceTechniqueActionTests(CastScenarioMixin):
-    """EntranceAction._execute_technique_entrance: the technique-driven entrance path."""
+    """EntranceAction._execute_technique_entrance: the technique-driven entrance path.
+
+    The "Grand Entrance" DramaticMomentType is content-repo-owned (#2698);
+    ``SEED_SAMPLE_CONTENT`` opts this suite into the sample-seeding path.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:

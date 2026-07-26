@@ -60,10 +60,14 @@ Character creation is a multi-stage process that guides players through creating
 - Seeded via `CG_EXPLANATION_COPY` + `_seed_cg_explanations()` in
   `world/seeds/character_creation.py` (#2162), called from
   `seed_character_creation_dev()` as part of the `character_creation` cluster on
-  the Big Button. Each row is upserted with `update_or_create`, so re-running the
-  seeder (e.g. after a prose fix in this repo) propagates updated copy to
-  already-seeded deploys without clobbering unrelated fields — and staff can still
-  hand-edit any row in admin between seeder runs.
+  the Big Button. `CGExplanation` is content-repo-owned (`CONTENT_MODELS`, #2698):
+  each key is looked up via `world.seeds.sample_content.authored_or_sample()` and
+  invented only under `SEED_SAMPLE_CONTENT` (default off) — most keys already have
+  an authored counterpart in the content repo; the `*_lore_intro`/
+  `path_lore_durance` keys currently don't and are skipped (logged) until the
+  content repo authors them. A staff edit to an already-seeded row survives a
+  re-run (get_or_create, not update_or_create — a resync would silently revert a
+  staff/content edit on every Big Button press).
 
 ### CharacterDraft
 - Stores in-progress character creation state

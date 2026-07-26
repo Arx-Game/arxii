@@ -96,9 +96,12 @@ class GiftAcquisitionActionE2ETest(TestCase):
         )
         self.assertTrue(accept_result.success, accept_result.message)
 
+        # Meter created, not CharacterTechnique (#2711)
+        from world.magic.models import TechniqueProgress
+
         self.assertTrue(
-            CharacterTechnique.objects.filter(
-                character=self.sheet, technique=self.technique
+            TechniqueProgress.objects.filter(
+                character_sheet=self.sheet, technique=self.technique
             ).exists()
         )
         self.assertTrue(CharacterGift.objects.filter(character=self.sheet, gift=self.gift).exists())

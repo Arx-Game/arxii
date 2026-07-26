@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from commands.social.gossip import CmdGossip
 from world.areas.constants import AreaLevel
@@ -59,6 +59,7 @@ def _run(caller: object, args: str = "") -> CmdGossip:
 
 
 @tag("postgres")
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_social_check_content gates on #2698
 class GossipTelnetE2EJourneyTest(TestCase):
     """list → plant → suppress → seek through telnet CmdGossip."""
 

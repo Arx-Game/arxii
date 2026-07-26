@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from actions.factories import ActionTemplateFactory
 from integration_tests.pipeline.test_battle_telnet_e2e import (
@@ -23,6 +23,7 @@ from world.traits.models import CheckOutcome
 from world.vitals.factories import ensure_surrounded_content
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_surrounded_content gates on #2698
 class BattlePerilRescueE2EJourneyTest(TestCase):
     """Full Surrounded peril lifecycle journey through telnet CmdBattle.
 

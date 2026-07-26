@@ -46,8 +46,9 @@ CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactor
 
 if TYPE_CHECKING:
     from world.checks.models import CheckType
-    from world.conditions.models import CapabilityType
+    from world.conditions.models import CapabilityType, ConditionTemplate
     from world.magic.models import Resonance, ThreadPullEffect
+    from world.mechanics.models import ModifierCategory
 
 
 class CovenantRoleFactory(factory_django.DjangoModelFactory):
@@ -493,7 +494,58 @@ def seed_resonance_subrole_slice(
     return subroles
 
 
-def wire_covenant_rite_content() -> CovenantRite:
+def _wire_stat_modifier_effect(
+    condition: "ConditionTemplate",
+    stat_cat: "ModifierCategory | None",
+    stat_name: str,
+    value: int,
+) -> None:
+    """Wire one stat-scoped ConditionModifierEffect onto *condition* (#753 Task 10).
+
+    Extracted from ``wire_covenant_rite_content`` to keep that function's
+    cyclomatic complexity under the C901 budget once the #2698 skip-on-missing
+    branches were added.
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` and
+    ``conditions.ConditionModifierEffect`` are content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    No-ops when the ``ModifierCategory`` (*stat_cat*) or the named stat's
+    ``ModifierTarget`` isn't authored — there's nothing to attach the effect to.
+    """
+    from world.conditions.models import ConditionModifierEffect
+    from world.mechanics.models import ModifierTarget
+    from world.seeds.sample_content import authored_or_sample
+    from world.traits.models import Trait
+
+    if stat_cat is None:
+        return
+    trait = Trait.get_by_name(stat_name)
+    target = authored_or_sample(
+        ModifierTarget,
+        {
+            "description": f"{stat_name.capitalize()} stat modifier target.",
+            "is_active": True,
+            "target_trait": trait,
+        },
+        category=stat_cat,
+        name=stat_name,
+    )
+    if target is None:
+        return
+    # Backfill linkage on a pre-existing orphan row (defaults only apply on create).
+    if target.target_trait_id is None and trait is not None:
+        target.target_trait = trait
+        target.save(update_fields=["target_trait"])
+    authored_or_sample(
+        ConditionModifierEffect,
+        {"value": value, "scales_with_severity": True},
+        condition=condition,
+        modifier_target=target,
+        stage=None,
+    )
+
+
+def wire_covenant_rite_content() -> CovenantRite | None:
     """Idempotent seed helper: create the Renew the Oath ritual + CovenantRite row.
 
     Also seeds the default and role/level-band stat packages (#753 Task 10):
@@ -506,16 +558,46 @@ def wire_covenant_rite_content() -> CovenantRite:
     All effect rows use scales_with_severity=True.
 
     Safe to call as both integration-test setUp and staff/seed scripts — uses
-    get_or_create semantics at each step so no duplicate rows are created.
+    ``authored_or_sample()`` at each content-model step so no duplicate rows
+    are created and nothing is invented outside ``SEED_SAMPLE_CONTENT``.
 
-    Returns the CovenantRite instance (whether newly created or already present).
+    The "Renew the Oath" Ritual is content-repo-owned (#2698) — looked up
+    rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. When it isn't
+    authored, this returns ``None`` and skips every dependent row below
+    (CovenantRite, its roles/role packages, and their condition/modifier
+    content) — they all hang off this Ritual and have nothing to attach to
+    without it.
+
+    The five "Oathbound *" ``ConditionTemplate`` rows (+ their
+    ``ConditionModifierEffect`` rows) are ALSO content-repo-owned (#2698,
+    ``conditions.ConditionCategory``/``ConditionTemplate``/
+    ``ConditionModifierEffect``) — each is looked up rather than invented
+    unless ``SEED_SAMPLE_CONTENT`` is on. The default ("Oathbound Resolve")
+    is required by ``CovenantRite.granted_condition``, so a missing default
+    condition returns ``None`` just like a missing Ritual. Each role-band
+    condition (Fury I/II, Bulwark, Grace) is independent of the others — a
+    missing one skips only that band's ``CovenantRiteRolePackage`` row
+    (``condition_template`` is a required FK there).
+
+    ``covenants.CovenantRite``, ``covenants.CovenantRole`` (the
+    "Oath Rite: Sword/Shield/Crown Role" reference roles), and
+    ``covenants.CovenantRiteRolePackage`` are ALSO content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT``
+    is on. A missing ``CovenantRite`` row returns ``None`` the same as a
+    missing Ritual/default condition; a missing role skips only that role's
+    bands (``covenant_role`` is a required FK on the package row).
+
+    Returns the CovenantRite instance (whether newly created or already
+    present), or ``None`` when the Ritual, the default condition, or the
+    CovenantRite row itself isn't available.
     """
     from world.magic.constants import ParticipationRule, RitualExecutionKind
     from world.magic.models import Ritual
+    from world.seeds.sample_content import authored_or_sample
 
-    ritual, _ = Ritual.objects.get_or_create(
-        name="Renew the Oath",
-        defaults={
+    ritual = authored_or_sample(
+        Ritual,
+        {
             "description": (
                 "A covenant rite performed by engaged members in the heat of battle. "
                 "By reaffirming their sacred oath together, participants renew the bond "
@@ -533,68 +615,79 @@ def wire_covenant_rite_content() -> CovenantRite:
             "flow": None,
             "participation_rule": ParticipationRule.FORMATION,
         },
+        name="Renew the Oath",
+    )
+    if ritual is None:
+        return None
+
+    from world.conditions.constants import DurationType
+    from world.conditions.models import ConditionCategory, ConditionTemplate
+    from world.mechanics.models import ModifierCategory
+
+    # Shared category for the "Oathbound *" buff family (content-repo-owned, #2698).
+    oath_category = authored_or_sample(
+        ConditionCategory,
+        {"description": "Buffs granted by covenant oath rites.", "is_negative": False},
+        name="Covenant Oath",
     )
 
-    from world.conditions.factories import (
-        OathboundBulwarkConditionFactory,
-        OathboundFuryIConditionFactory,
-        OathboundFuryIIConditionFactory,
-        OathboundGraceConditionFactory,
-        OathboundResolveConditionFactory,
-    )
-    from world.conditions.models import ConditionModifierEffect
-    from world.mechanics.models import ModifierCategory, ModifierTarget
-
-    # ------------------------------------------------------------------
-    # Ensure the 'stat' ModifierCategory and the named stat targets exist.
-    # All pattern: get_or_create keyed on (category, name) so repeated
-    # calls never produce duplicates.
-    # ------------------------------------------------------------------
-    stat_cat, _ = ModifierCategory.objects.get_or_create(
-        name="stat",
-        defaults={"description": "Primary character statistics.", "display_order": 10},
-    )
-
-    from world.traits.models import Trait
-
-    def _stat(name: str) -> ModifierTarget:
-        trait = Trait.get_by_name(name)
-        target, _ = ModifierTarget.objects.get_or_create(
-            category=stat_cat,
-            name=name,
-            defaults={
-                "description": f"{name.capitalize()} stat modifier target.",
-                "is_active": True,
-                "target_trait": trait,
+    def _oath_condition(
+        name: str, description: str, *, can_be_dispelled: bool
+    ) -> ConditionTemplate | None:
+        """Look up (or, under SEED_SAMPLE_CONTENT, invent) one Oathbound-family condition."""
+        return authored_or_sample(
+            ConditionTemplate,
+            {
+                "category": oath_category,
+                "description": description,
+                "default_duration_type": DurationType.UNTIL_END_OF_COMBAT,
+                "is_stackable": False,
+                "max_stacks": 1,
+                "has_progression": False,
+                "can_be_dispelled": can_be_dispelled,
             },
+            name=name,
         )
-        # Backfill linkage on a pre-existing orphan row (get_or_create only
-        # sets defaults on create).
-        if target.target_trait_id is None and trait is not None:
-            target.target_trait = trait
-            target.save(update_fields=["target_trait"])
-        return target
+
+    # ------------------------------------------------------------------
+    # Look up the 'stat' ModifierCategory. mechanics.ModifierCategory/
+    # ModifierTarget are content-repo-owned (#2698) — looked up rather than
+    # invented unless SEED_SAMPLE_CONTENT is on. ``_wire_stat_modifier_effect``
+    # (module-level, extracted to keep this function's complexity down)
+    # no-ops when the category or a named stat's target isn't authored.
+    # ------------------------------------------------------------------
+    stat_cat = authored_or_sample(
+        ModifierCategory,
+        {"description": "Primary character statistics.", "display_order": 10},
+        name="stat",
+    )
 
     # ------------------------------------------------------------------
     # Default condition ("Oathbound Resolve") + its modifier effects.
+    # Required by CovenantRite.granted_condition — nothing below can proceed
+    # without it.
     # ------------------------------------------------------------------
-    default_condition = OathboundResolveConditionFactory()
+    default_condition = _oath_condition(
+        "Oathbound Resolve",
+        "Renewed by oath and comradeship, this character fights with heightened resolve. "
+        "The bond of covenant fortifies them against doubt and fatigue.",
+        can_be_dispelled=True,
+    )
+    if default_condition is None:
+        return None
 
     for stat_name in ("willpower", "composure", "stability"):
-        target = _stat(stat_name)
-        ConditionModifierEffect.objects.get_or_create(
-            condition=default_condition,
-            modifier_target=target,
-            stage=None,
-            defaults={"value": 5, "scales_with_severity": True},
-        )
+        _wire_stat_modifier_effect(default_condition, stat_cat, stat_name, 5)
 
     # ------------------------------------------------------------------
-    # CovenantRite row (keyed on ritual; idempotent).
+    # CovenantRite row (keyed on ritual). ``covenants.CovenantRite`` is
+    # content-repo-owned (#2698) — looked up rather than invented unless
+    # SEED_SAMPLE_CONTENT is on; a missing row means nothing below (its role
+    # packages, their conditions/modifiers) has a rite to attach to.
     # ------------------------------------------------------------------
-    rite, _ = CovenantRite.objects.get_or_create(
-        ritual=ritual,
-        defaults={
+    rite = authored_or_sample(
+        CovenantRite,
+        {
             "granted_condition": default_condition,
             "covenant_type": CovenantType.DURANCE,
             "min_covenant_level": 2,
@@ -604,116 +697,139 @@ def wire_covenant_rite_content() -> CovenantRite:
             "max_severity": None,
             "duration_rounds": None,
         },
+        ritual=ritual,
     )
+    if rite is None:
+        return None
 
     # ------------------------------------------------------------------
-    # Reference-rite DURANCE roles, built via CovenantRoleFactory with a
-    # fixed ``slug=`` (its ``django_get_or_create`` key) so repeated calls
-    # stay idempotent. Formerly hardcoded ``sword-vanguard``/``shield-bulwark``/
-    # ``crown-luminary`` (mirroring world/seeds/game_content/items.py) — those
-    # placeholder slugs/names collided with the 13 real Durance covenant vows
-    # once they became lore-repo content (unique on (covenant_type, name); e.g.
+    # Reference-rite DURANCE roles, keyed on a fixed ``slug=``. Formerly
+    # hardcoded ``sword-vanguard``/``shield-bulwark``/``crown-luminary``
+    # (mirroring world/seeds/game_content/items.py) — those placeholder
+    # slugs/names collided with the 13 real Durance covenant vows once they
+    # became lore-repo content (unique on (covenant_type, name); e.g.
     # placeholder "Bulwark" blocked the real "Bulwark" row). Renamed to
     # obviously-scaffolding names that cannot collide with authored vow titles.
+    #
+    # ``covenants.CovenantRole`` is content-repo-owned (#2698) — looked up
+    # rather than invented unless SEED_SAMPLE_CONTENT is on. ``_wire_role_band``
+    # below no-ops (skips just that band's CovenantRiteRolePackage) when its
+    # role wasn't authored.
     # ------------------------------------------------------------------
-    sword_role = CovenantRoleFactory(
+    sword_role = authored_or_sample(
+        CovenantRole,
+        {
+            "name": "Oath Rite: Sword Role",
+            "covenant_type": CovenantType.DURANCE,
+            "sword_weight": 1,
+            "shield_weight": 0,
+            "crown_weight": 0,
+            "speed_rank": 2,
+        },
         slug="oath-rite-sword-role",
-        name="Oath Rite: Sword Role",
-        covenant_type=CovenantType.DURANCE,
-        sword_weight=1,
-        shield_weight=0,
-        crown_weight=0,
-        speed_rank=2,
     )
-    shield_role = CovenantRoleFactory(
+    shield_role = authored_or_sample(
+        CovenantRole,
+        {
+            "name": "Oath Rite: Shield Role",
+            "covenant_type": CovenantType.DURANCE,
+            "sword_weight": 0,
+            "shield_weight": 1,
+            "crown_weight": 0,
+            "speed_rank": 3,
+        },
         slug="oath-rite-shield-role",
-        name="Oath Rite: Shield Role",
-        covenant_type=CovenantType.DURANCE,
-        sword_weight=0,
-        shield_weight=1,
-        crown_weight=0,
-        speed_rank=3,
     )
-    crown_role = CovenantRoleFactory(
+    crown_role = authored_or_sample(
+        CovenantRole,
+        {
+            "name": "Oath Rite: Crown Role",
+            "covenant_type": CovenantType.DURANCE,
+            "sword_weight": 0,
+            "shield_weight": 0,
+            "crown_weight": 1,
+            "speed_rank": 1,
+        },
         slug="oath-rite-crown-role",
-        name="Oath Rite: Crown Role",
-        covenant_type=CovenantType.DURANCE,
-        sword_weight=0,
-        shield_weight=0,
-        crown_weight=1,
-        speed_rank=1,
     )
 
     # ------------------------------------------------------------------
-    # Role-package conditions + modifier effects.
+    # Role-package conditions + modifier effects + CovenantRiteRolePackage.
+    # condition_template AND covenant_role are required FKs — a band whose
+    # condition or role isn't authored (content-repo-owned, #2698, for both
+    # the ConditionTemplate and the CovenantRole itself) skips just that
+    # band's package row. ``covenants.CovenantRiteRolePackage`` is likewise
+    # content-repo-owned — looked up rather than invented unless
+    # SEED_SAMPLE_CONTENT is on.
     # ------------------------------------------------------------------
+    def _wire_role_band(
+        covenant_role: CovenantRole | None,
+        min_covenant_level: int,
+        spec: tuple[str, str, tuple[str, ...], int],
+    ) -> None:
+        if covenant_role is None:
+            return
+        name, description, stat_names, modifier_value = spec
+        condition = _oath_condition(name, description, can_be_dispelled=False)
+        if condition is None:
+            return
+        for stat_name in stat_names:
+            _wire_stat_modifier_effect(condition, stat_cat, stat_name, modifier_value)
+        authored_or_sample(
+            CovenantRiteRolePackage,
+            {"condition_template": condition},
+            rite=rite,
+            covenant_role=covenant_role,
+            min_covenant_level=min_covenant_level,
+        )
 
     # Sword level-1 band: strength, presence
-    fury_i = OathboundFuryIConditionFactory()
-    for stat_name in ("strength", "presence"):
-        ConditionModifierEffect.objects.get_or_create(
-            condition=fury_i,
-            modifier_target=_stat(stat_name),
-            stage=None,
-            defaults={"value": 5, "scales_with_severity": True},
-        )
-
+    _wire_role_band(
+        sword_role,
+        1,
+        (
+            "Oathbound Fury I",
+            "The covenant's oath sharpens the Sword's edge. This character strikes harder "
+            "and commands the field with renewed purpose.",
+            ("strength", "presence"),
+            5,
+        ),
+    )
     # Sword level-4 band: strength, presence, wits
-    fury_ii = OathboundFuryIIConditionFactory()
-    for stat_name in ("strength", "presence", "wits"):
-        ConditionModifierEffect.objects.get_or_create(
-            condition=fury_ii,
-            modifier_target=_stat(stat_name),
-            stage=None,
-            defaults={"value": 7, "scales_with_severity": True},
-        )
-
+    _wire_role_band(
+        sword_role,
+        4,
+        (
+            "Oathbound Fury II",
+            "A veteran Sword's oath burns brighter still. Strength, commanding presence, "
+            "and razor-sharp instincts combine into a formidable battlefield force.",
+            ("strength", "presence", "wits"),
+            7,
+        ),
+    )
     # Shield level-1 band: stability, stamina
-    bulwark = OathboundBulwarkConditionFactory()
-    for stat_name in ("stability", "stamina"):
-        ConditionModifierEffect.objects.get_or_create(
-            condition=bulwark,
-            modifier_target=_stat(stat_name),
-            stage=None,
-            defaults={"value": 5, "scales_with_severity": True},
-        )
-
+    _wire_role_band(
+        shield_role,
+        1,
+        (
+            "Oathbound Bulwark",
+            "The covenant's oath fortifies the Shield's resolve. This character endures more, "
+            "holds the line longer, and resists punishment that would fell lesser warriors.",
+            ("stability", "stamina"),
+            5,
+        ),
+    )
     # Crown level-1 band: composure, charm
-    grace = OathboundGraceConditionFactory()
-    for stat_name in ("composure", "charm"):
-        ConditionModifierEffect.objects.get_or_create(
-            condition=grace,
-            modifier_target=_stat(stat_name),
-            stage=None,
-            defaults={"value": 5, "scales_with_severity": True},
-        )
-
-    # ------------------------------------------------------------------
-    # CovenantRiteRolePackage rows (get_or_create on the unique triple).
-    # ------------------------------------------------------------------
-    CovenantRiteRolePackage.objects.get_or_create(
-        rite=rite,
-        covenant_role=sword_role,
-        min_covenant_level=1,
-        defaults={"condition_template": fury_i},
-    )
-    CovenantRiteRolePackage.objects.get_or_create(
-        rite=rite,
-        covenant_role=sword_role,
-        min_covenant_level=4,
-        defaults={"condition_template": fury_ii},
-    )
-    CovenantRiteRolePackage.objects.get_or_create(
-        rite=rite,
-        covenant_role=shield_role,
-        min_covenant_level=1,
-        defaults={"condition_template": bulwark},
-    )
-    CovenantRiteRolePackage.objects.get_or_create(
-        rite=rite,
-        covenant_role=crown_role,
-        min_covenant_level=1,
-        defaults={"condition_template": grace},
+    _wire_role_band(
+        crown_role,
+        1,
+        (
+            "Oathbound Grace",
+            "The covenant's oath lends the Crown a serene authority. This character steadies "
+            "allies with poise and draws their trust in the heat of battle.",
+            ("composure", "charm"),
+            5,
+        ),
     )
 
     return rite

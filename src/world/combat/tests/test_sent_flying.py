@@ -22,7 +22,7 @@ deepcopy.
 
 from __future__ import annotations
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME, PositionKind
 from world.areas.positioning.factories import wire_fall_triggers
@@ -74,6 +74,7 @@ def _make_vitals(participant: CombatParticipant, *, health: int = 1000, max_heal
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_sent_flying_content gates on #2698
 class SentFlyingContentTests(TestCase):
     def test_seeds_impact_damage_type(self) -> None:
         ensure_sent_flying_content()
@@ -113,6 +114,7 @@ class SentFlyingContentTests(TestCase):
 
 
 @tag("postgres")  # apply_condition (marker application) uses DISTINCT ON (PG-only)
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_sent_flying_content gates on #2698
 class SentFlyingTriggerTests(TestCase):
     def setUp(self) -> None:
         ensure_sent_flying_content()
@@ -266,6 +268,7 @@ class SentFlyingCatchSeamTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_sent_flying_content gates on #2698
 class SentFlyingUnansweredImpactTests(TestCase):
     def setUp(self) -> None:
         ensure_sent_flying_content()
@@ -320,6 +323,7 @@ class SentFlyingUnansweredImpactTests(TestCase):
 
 
 @tag("postgres")  # begin_plummet -> apply_condition uses DISTINCT ON (PG-only)
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_sent_flying_content gates on #2698
 class SentFlyingPlummetChainTests(TestCase):
     def setUp(self) -> None:
         from evennia import create_object
@@ -376,6 +380,7 @@ class SentFlyingPlummetChainTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_sent_flying_content gates on #2698
 class SendsFlyingFalseNeverTriggersTests(TestCase):
     def test_normal_attack_never_applies_the_marker(self) -> None:
         ensure_sent_flying_content()

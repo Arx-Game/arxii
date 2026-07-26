@@ -1,6 +1,6 @@
 """Tests for DreamwalkAction and the escape lever (#2290)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.services import create_character_with_sheet
@@ -14,8 +14,14 @@ from world.vitals.seeds import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class DreamwalkActionTests(TestCase):
-    """Tests for DreamwalkAction and the escape lever."""
+    """Tests for DreamwalkAction and the escape lever.
+
+    ``ensure_sleeping_condition``/``ensure_foundational_capabilities`` gate their
+    ConditionTemplate/CapabilityType creation behind SEED_SAMPLE_CONTENT (#2698) —
+    this test drives the real Sleeping condition through the dreamwalk service.
+    """
 
     def setUp(self):
         ensure_foundational_capabilities()

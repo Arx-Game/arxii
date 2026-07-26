@@ -6,12 +6,15 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
+from actions.effects.base import resolve_target_difficulty
 from actions.effects.conditions import handle_condition_on_check
 from actions.effects.kwargs import handle_modify_kwargs
 from actions.effects.modifiers import handle_add_modifier
 from actions.models import AddModifierConfig, ConditionOnCheckConfig, ModifyKwargsConfig
 from actions.types import ActionContext, ActionResult
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+from world.checks.services import compute_check_rating
 from world.checks.types import CheckResult
 from world.conditions.factories import ConditionTemplateFactory
 
@@ -239,6 +242,75 @@ class ConditionOnCheckHandlerTests(TestCase):
 
         # Should not raise
         handle_condition_on_check(context, config)
+
+
+class ResolveTargetDifficultyTests(TestCase):
+    """fallback_difficulty is an authored floor, not just a missing-check-type fallback.
+
+    #2707 review: compute_check_rating now always returns at least
+    LEVEL_POINTS_PER_LEVEL (level floors at 1, nothing on this path goes negative), so
+    the old `if total_points > 0: return total_points` made fallback_difficulty
+    unreachable whenever resistance_check_type was set -- a statless synthetic NPC
+    authored to resist at a fixed target_difficulty (e.g.
+    ConditionOnCheckConfig(resistance_check_type=Composure, target_difficulty=60))
+    silently resisted at 5 instead of 60.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.check_category = CheckCategoryFactory(name="ResolveTargetDifficulty")
+        cls.check_type = CheckTypeFactory(
+            name="resolve_target_difficulty_check",
+            category=cls.check_category,
+        )
+        # No CheckTypeTrait/Aspect/Specialization/Capability rows authored on this
+        # CheckType, and no CharacterClassLevel row -- get_character_path_level
+        # floors at 1, so compute_check_rating(cls.statless_target, cls.check_type)
+        # is exactly LEVEL_POINTS_PER_LEVEL (5): a "statless NPC" stand-in.
+        cls.statless_target = CharacterSheetFactory().character
+
+    def test_authored_fallback_still_wins_over_the_guaranteed_level_floor(self) -> None:
+        """The regression: fallback_difficulty=60 must not be shadowed by rating=5."""
+        rating = compute_check_rating(self.statless_target, self.check_type)
+        assert rating < 60  # sanity: the guaranteed level floor alone is small
+
+        result = resolve_target_difficulty(
+            self.statless_target,
+            resistance_check_type=self.check_type,
+            fallback_difficulty=60,
+        )
+
+        assert result == 60
+
+    def test_rating_still_wins_when_it_exceeds_the_fallback(self) -> None:
+        """A real rating higher than the authored floor is used, not clamped down."""
+        result = resolve_target_difficulty(
+            self.statless_target,
+            resistance_check_type=self.check_type,
+            fallback_difficulty=1,
+        )
+
+        rating = compute_check_rating(self.statless_target, self.check_type)
+        assert result == rating
+        assert result > 1
+
+    def test_no_resistance_check_type_uses_fallback(self) -> None:
+        result = resolve_target_difficulty(
+            self.statless_target,
+            resistance_check_type=None,
+            fallback_difficulty=42,
+        )
+
+        assert result == 42
+
+    def test_no_fallback_and_no_resistance_check_type_is_zero(self) -> None:
+        result = resolve_target_difficulty(
+            self.statless_target,
+            resistance_check_type=None,
+            fallback_difficulty=None,
+        )
+
+        assert result == 0
 
 
 class ApplyEffectsDispatchTests(TestCase):

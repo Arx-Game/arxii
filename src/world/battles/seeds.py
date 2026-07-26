@@ -16,6 +16,12 @@ def seed_war_funding_contribution_methods() -> None:
     update existing rows and staff edits survive a re-seed. Each method
     references an already-seeded CheckType; the relevant seed function is
     called if the CheckType is missing (mirroring ``buildings/seeds.py``).
+
+    ``checks.CheckType`` is content-repo-owned (#2698) — the check-content
+    seed functions above now only invent a CheckType under
+    ``SEED_SAMPLE_CONTENT``, so a method whose backing CheckType still isn't
+    authored is skipped rather than crashing the whole cluster loop with
+    ``CheckType.DoesNotExist``.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.projects.constants import ProjectKind  # noqa: PLC0415
@@ -24,11 +30,11 @@ def seed_war_funding_contribution_methods() -> None:
     from world.seeds.investigation_checks import seed_investigation_check_content  # noqa: PLC0415
     from world.seeds.stealth_checks import seed_stealth_check_content  # noqa: PLC0415
 
-    def _get_check_type(name: str, seeder: object) -> CheckType:
+    def _get_check_type(name: str, seeder: object) -> CheckType | None:
         ct = CheckType.objects.filter(name=name).first()
         if ct is None:
             seeder()
-            ct = CheckType.objects.get(name=name)
+            ct = CheckType.objects.filter(name=name).first()
         return ct
 
     methods = [
@@ -54,6 +60,8 @@ def seed_war_funding_contribution_methods() -> None:
 
     for method_name, check_type_name, seeder, description in methods:
         check_type = _get_check_type(check_type_name, seeder)
+        if check_type is None:
+            continue
         ContributionMethod.objects.update_or_create(
             kind=ProjectKind.WAR_FUNDING,
             name=method_name,

@@ -1,6 +1,6 @@
 """Tests for combat damage resolution service functions."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from evennia.objects.models import ObjectDB
 from evennia.utils.test_resources import EvenniaTestCase
 
@@ -463,6 +463,7 @@ class ApplyDamageToParticipantResistanceTests(EvenniaTestCase):
         self.assertEqual(result.damage_dealt, 4)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
 class NpcActionInteractionLazyCreationTests(TestCase):
     """Tests that the NPC-action Interaction is created lazily (only when a
     survivability tier fires) rather than eagerly before the per-target loop.

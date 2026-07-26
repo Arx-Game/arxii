@@ -5,7 +5,7 @@ End-to-end through emit_event: seeded TriggerDefinitions (wire_escalation_conten
 pipeline calling relationship_spike_handler via CALL_SERVICE_FUNCTION.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from flows.constants import EventName
 from flows.emit import emit_event
@@ -35,8 +35,14 @@ from world.relationships.factories import (
 from world.vitals.models import CharacterVitals
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EscalationSpikeTests(TestCase):
-    """Bonded co-combatants spike intensity when a character falls."""
+    """Bonded co-combatants spike intensity when a character falls.
+
+    flows.FlowDefinition/TriggerDefinition are content-repo-owned (#2698);
+    wire_escalation_content() only invents them under SEED_SAMPLE_CONTENT — this
+    test drives the real reactive-trigger firing, so it opts in.
+    """
 
     def setUp(self):
         self.curve = EscalationCurveFactory(

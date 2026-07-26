@@ -1,5 +1,5 @@
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -507,6 +507,7 @@ class DistinctionSyncClearsTraditionTests(TestCase):
         assert draft.selected_tradition == self.tradition
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class OrphanedTraditionSelectionTests(TestCase):
     """End-to-end: the seeded 'Metallic Order' example is gated by the real
     'Orphaned Tradition' drawback distinction through the real select-tradition
@@ -517,6 +518,11 @@ class OrphanedTraditionSelectionTests(TestCase):
     tradition wiring itself: ``seed_metallic_order_tradition()`` produces a
     tradition + BeginningTradition row that actually enforces the gate end to
     end, not just that the gate mechanism works in the abstract.
+
+    distinctions.distinction/distinctioncategory are content-repo-owned
+    (#2698); ensure_orphaned_tradition_distinction() only invents them under
+    SEED_SAMPLE_CONTENT — this test asserts on the real distinction, so it
+    opts in.
     """
 
     @classmethod
@@ -607,6 +613,7 @@ class OrphanedTraditionSelectionTests(TestCase):
         assert draft.selected_tradition == self.tradition
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class UnboundTraditionSelectionTests(TestCase):
     """End-to-end: the seeded Unbound tradition carries its own "Unbound"
     drawback distinction, auto-added by the real select-tradition endpoint

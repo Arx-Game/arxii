@@ -82,7 +82,7 @@ The magic system for Arx II. Power flows from identity and connection.
   (`unique_technique_gift_name`), so authoring a duplicate raises
   `DuplicateTechniqueName` (clean 400) instead of an `IntegrityError`. See
   `docs/systems/magic.md`'s "Content pipeline" section for the full model list.
-- `TechniqueStyle` - How a **practitioner** works magic (Manifestation, Subtle, Performance, Prayer, Incantation). A property of the caster's `Path` (`classes.Path.style`), NOT of the technique (#2700, ADR-0164). `StyleCapabilityRequirement` rows let a style gate casting on the caster's capabilities (an Incantation caster who cannot speak cannot incant), evaluated by `technique_performable`.
+- `TechniqueStyle` - How a **practitioner** works magic (Manifestation, Subtle, Performance, Prayer, Incantation). A property of the caster's `Path` (`classes.Path.style`), NOT of the technique (#2700, ADR-0167). `StyleCapabilityRequirement` rows let a style gate casting on the caster's capabilities (an Incantation caster who cannot speak cannot incant), evaluated by `technique_performable`.
 - `EffectType` - Types of magical effects (Attack, Defense, Movement, etc.)
 - `Restriction` - Limitations that grant power bonuses (Touch Range, etc.)
 - `IntensityTier` - Configurable thresholds for power intensity (Minor, Moderate, Major)
@@ -308,33 +308,48 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
   `Technique` to an `ItemTemplate` (on-use delivery) or `Ritual` (SERVICE delivery).
   Exactly one vehicle enforced by `clean()` + partial UniqueConstraints.
 - `learn_technique(learner, technique, *, source, ap_cost=0, xp_cost=0)` — shared
-  commit seam in `services/technique_acquisition.py`. Runs gift-owned →
-  cap → AP spend → mint → announce. Called by `UseItemAction` (item path) and
-  `learn_technique_from_ritual` (ritual SERVICE path). `accept_technique_offer`
-  delegates its mint step here.
+  commit seam in `services/technique_acquisition.py`. When `ap_cost > 0`, creates
+  a `TechniqueProgress` meter instead of minting immediately (#2711); the learner
+  fills the meter via `contribute_to_technique_progress` in subsequent sessions.
+  When `ap_cost == 0`, mints `CharacterTechnique` immediately (the meter-completion
+  path or a free grant). Runs gift-owned → cap → (meter-or-mint) → announce.
+- **Technique progress meter (#2711).** `TechniqueProgress`
+  (`models/technique_progress.py`) — per-(character × technique) development
+  meter. `TechniqueProgressWeekly` — per-week cap tracker mirroring
+  `WeeklySkillUsage`. `contribute_to_technique_progress(sheet, progress, amount)`
+  (`services/technique_progress.py`) — the per-session training function: spends
+  AP (with Unbound surcharge applied per-session, not to the meter total), adds
+  meter-progress points, enforces the weekly cap, mints on completion.
+  `is_cross_path_learning(teacher_tenure, learner_sheet)` — the style-comparison
+  helper used at meter creation.
+- **Cross-path friction (#2711).** When the teacher's `Path.style` differs from
+  the learner's, the meter total is multiplied by
+  `GiftAcquisitionConfig.cross_path_cost_multiplier` (default 2.0). Null style on
+  either side = no surcharge (fail-open, mirroring ADR-0164).
+  `GiftAcquisitionConfig.weekly_training_cap` (default 50) — max meter-progress
+  points per game week. `cross_path_cap_divisor` (default 1) — optionally lowers
+  the cap for cross-path learning.
 - **No path-style learn gate (#2700).** `can_learn_technique` /
   `TechniqueStyleForbidden` are deleted. Gift ownership plus
   `PathGiftGrant`/`TraditionGiftGrant` curation is the gate, at technique
   granularity; style now gates *casting* (via `StyleCapabilityRequirement`), not
-  learning. See ADR-0164.
+  learning. See ADR-0167.
 - `GiftAcquisitionConfig.major_gift_ap_multiplier` — staff-tunable AP multiplier
   for MAJOR-gift techniques on the `has_gift` branch of `accept_technique_offer`.
+  Applies to the meter total at creation (#2711).
 - `GiftAcquisitionConfig.imbue_ap_cost` — staff-tunable flat AP cost per Rite of
   Imbuing (#2467). The Unbound +50% surcharge applies on top via
   `magic_learning_ap_cost_surcharge_percent`. Default 2 (cheaper than the
   technique-learning base of 5).
 - `charge_and_learn(learner, technique, *, base_ap_cost, source, gold_cost=0,
   gold_treasury=None, teacher_tenure=None, teacher_banked_ap=0)`
-  (`services/gift_acquisition.py`, #2440) — the shared charge+acquire core
-  extracted from `accept_technique_offer`: duplicate gate →
-  has-gift/major-gift AP multiplier → implicit gift acquisition → cap check →
-  AP spend (+ teacher banked-AP consumption when `teacher_tenure` is set) →
-  gold spend (learner purse → `gold_treasury`, when `gold_cost` > 0) → mint +
-  announce via `learn_technique`. Two front doors: `accept_technique_offer`
-  (player-to-player teaching, `teacher_tenure` set, no gold) and the Academy
-  TRAIN offer handler (`world.npc_services.effects.run_train_offer`, AP + gold
-  + a Golden Hare, no `teacher_tenure`) — one seam, never a forked acquisition
-  path.
+  (`services/gift_acquisition.py`, #2440, #2711) — the shared charge+acquire
+  core: duplicate gate → has-gift/major-gift multiplier → cross-path multiplier
+  → implicit gift acquisition → cap check → teacher banked-AP consumption →
+  gold spend → creates `TechniqueProgress` meter (does NOT mint immediately).
+  Two front doors: `accept_technique_offer` (player-to-player teaching) and the
+  Academy TRAIN offer handler (`world.npc_services.effects.run_train_offer`).
+  Returns `TechniqueProgress`, not `CharacterTechnique`.
 - `AccessChangeSource.TECHNIQUE_GRANT` — provenance value for non-teaching
   technique acquisition.
 - Ritual SERVICE dispatch (`_dispatch_service` in `actions/definitions/ritual.py`)

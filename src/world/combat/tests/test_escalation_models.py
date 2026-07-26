@@ -1,8 +1,9 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.combat.factories import CombatEncounterFactory, EscalationCurveFactory
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class EscalationCurveModelTests(TestCase):
     def test_curve_defaults(self):
         curve = EscalationCurveFactory()

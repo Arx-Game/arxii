@@ -833,7 +833,7 @@ class RemoveFixtureAction(_RoomBuilderAction):
             return ActionResult(success=False, message=_no_room_message(kwargs))
         kind_name = (kwargs.get("kind") or "").strip()
         decoration = (
-            RoomDecoration.objects.filter(room_profile__objectdb=room, kind__name__iexact=kind_name)
+            RoomDecoration.objects.filter(room_profile_id=room.pk, kind__name__iexact=kind_name)
             .order_by("-placed_at")
             .first()
             if kind_name

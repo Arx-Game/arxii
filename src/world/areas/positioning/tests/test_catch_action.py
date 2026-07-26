@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from world.areas.positioning.constants import (
     PLUMMETING_CONDITION_NAME,
@@ -53,6 +53,7 @@ from world.traits.factories import CheckOutcomeFactory
 
 
 @tag("postgres")  # apply_condition (plummet + capability setup) uses DISTINCT ON (PG-only)
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_fall_content gates on #2698
 class CatchActionTests(TestCase):
     def setUp(self) -> None:
         from evennia import create_object

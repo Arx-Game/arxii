@@ -16,7 +16,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from evennia import create_object
 
 from world.areas.positioning.factories import PositionFactory
@@ -58,6 +58,7 @@ def _fake_perform_check(success_level: int):
     return _inner
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # gates on #2698
 class RedirectDeclarationTest(TestCase):
     """declare_interpose accepts a REDIRECT-flavor technique + validates destinations."""
 
@@ -120,6 +121,7 @@ class RedirectDeclarationTest(TestCase):
         self.assertEqual(action.redirect_object_target_id, keg.pk)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # gates on #2698
 class _RedirectResolutionTestBase(TestCase):
     """Shared setup: a guardian knows Mirror Ward, wards a specific ally."""
 
@@ -299,6 +301,7 @@ class RedirectVolatileObjectResolutionTest(_RedirectResolutionTestBase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # gates on #2698
 class VolatileObjectsSerializerTest(TestCase):
     """EncounterDetailSerializer.volatile_objects lists volatile objects in the room (#2210)."""
 

@@ -68,7 +68,7 @@ class CmdEvidence(ArxCommand):
         return list(
             CrimeEvidence.objects.filter(
                 state=EvidenceState.AT_SCENE,
-                room_profile__objectdb=room,
+                room_profile_id=room.pk,
                 deed__persona__character_sheet=sheet,
             )
         )

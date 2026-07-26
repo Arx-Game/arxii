@@ -1,6 +1,6 @@
 """Tests for the character-creation seed data (FormTrait, Heritage, Pronouns, Family)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.models import Gender, Heritage, Pronouns
 from world.forms.models import FormTrait, FormTraitOption, SpeciesFormTrait
@@ -9,8 +9,14 @@ from world.seeds.character_creation import seed_character_creation_dev
 from world.species.models import Species
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class FormTraitSeedTests(TestCase):
-    """Tests for FormTrait / FormTraitOption / SpeciesFormTrait seeding."""
+    """Tests for FormTrait / FormTraitOption / SpeciesFormTrait seeding.
+
+    forms.formtrait/formtraitoption/speciesformtrait and species.species are
+    content-repo-owned (#2698); the seeder only invents them under
+    SEED_SAMPLE_CONTENT — these tests assert on the real rows, so they opt in.
+    """
 
     def test_form_traits_created(self):
         """Seed creates FormTrait rows for hair_color, eye_color, skin_tone."""
@@ -55,6 +61,7 @@ class FormTraitSeedTests(TestCase):
             )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class RealmAndAreaSeedTests(TestCase):
     """Tests for realm, starting area, beginnings, and species seeding."""
 
@@ -157,8 +164,15 @@ class HeritageSeedTests(TestCase):
         self.assertEqual(Heritage.objects.filter(name="Normal").count(), 1)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PronounsSeedTests(TestCase):
-    """Tests for Pronouns seeding."""
+    """Tests for Pronouns seeding.
+
+    character_sheets.Gender is content-repo-owned (#2698); the seeder only
+    invents it under SEED_SAMPLE_CONTENT — test_genders_created asserts on the
+    real rows, so the whole class opts in (harmless for the Pronouns-only
+    tests, which aren't gated).
+    """
 
     def test_pronouns_created(self):
         """Seed creates he/him, she/her, they/them."""
@@ -192,6 +206,7 @@ class PronounsSeedTests(TestCase):
         self.assertEqual(Pronouns.objects.filter(key="he_him").count(), 1)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class CommonerFamilySeedTests(TestCase):
     """Tests for commoner Family seeding."""
 

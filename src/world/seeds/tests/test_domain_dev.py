@@ -1,6 +1,6 @@
 """Dev domain slice (#930/#1464): the books loop is walkable on a seeded DB."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.npc_services.constants import OfferKind
 from world.npc_services.models import NPCRole, NPCServiceOffer
@@ -8,7 +8,12 @@ from world.seeds.domain_dev import DEV_HOUSE_NAME, STEWARD_ROLE_NAME, ensure_dev
 from world.societies.models import Organization, PhilosophicalArchetype
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class DomainDevSeedTests(TestCase):
+    """``realms.Realm`` is content-repo-owned (#2698); SEED_SAMPLE_CONTENT
+    opts this suite into the sample-seeding path so the "Arx" realm (and
+    everything downstream of it — Society/Organization) actually seeds."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         ensure_dev_domain()

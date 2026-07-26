@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from actions.definitions.sanctum import SanctumInstallAction
 from commands.sanctum import CmdSanctum
@@ -37,6 +37,7 @@ def _mock_check_success() -> object:
     return type("CheckResult", (), {"outcome": outcome})()
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SanctificationTouchstoneJourneyTests(TestCase):
     """Mirrors test_sanctum_journey_e2e.py's working fixture shape.
 
@@ -132,6 +133,7 @@ def _build_cmd(cmd_cls: type, caller: object, args: str = "") -> object:
     return cmd
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SanctumInstallTelnetComponentsE2ETests(TestCase):
     """Step 4a (#707): ``sanctum install`` via the real CmdSanctum command surface.
 

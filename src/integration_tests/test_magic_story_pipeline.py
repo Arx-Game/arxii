@@ -67,6 +67,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import MagicMock
 
+from django.test import override_settings
 from evennia.utils.test_resources import EvenniaTestCase
 from parameterized import parameterized
 
@@ -88,6 +89,7 @@ from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.traits.models import CheckOutcome
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # hallowed-threshold ConditionTemplates gate on #2698
 class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
     """Full pipeline: Abyssal caster + Abyssal technique → OPPOSED resonance backfire
     via Step 10 in use_technique orchestrator → condition → beat → story → achievement.

@@ -7,7 +7,7 @@ placeholder values, plus idempotency (re-running is a no-op).
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.projects.constants import ProjectKind
 from world.projects.models import ContributionMethod
@@ -15,6 +15,7 @@ from world.seeds.database import seed_dev_database
 from world.seeds.tests.content_stub import stub_content_root
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # backing check-content seeds gate on #2698
 class SeedWarFundingContributionMethodsTests(TestCase):
     """The WAR_FUNDING ContributionMethod seed row shape and idempotency."""
 

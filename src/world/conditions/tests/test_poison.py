@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -23,7 +23,12 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
     DamageTypeFactory,
 )
-from world.conditions.models import ConditionStage, ConditionTemplate, DamageType
+from world.conditions.models import (
+    ConditionDamageOverTime,
+    ConditionStage,
+    ConditionTemplate,
+    DamageType,
+)
 from world.conditions.services import (
     _process_round_tick,
     apply_condition,
@@ -269,6 +274,7 @@ class PoisonStagingScalesDotTests(TestCase):
 
 
 @tag("postgres")
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
 class AcutePoisonCrossesDeathThresholdTests(TestCase):
     """Test C — acute poison crossing the death threshold applies Bleeding-Out (#523).
 
@@ -342,6 +348,37 @@ class ChronicPoisonTickTests(TestCase):
         vitals.refresh_from_db()
         self.assertLess(vitals.health, 100)
         self.assertEqual(summary.ticked, 1)
+
+    def test_dot_rows_are_fetched_once_not_per_sufferer(self) -> None:
+        """DoT rows hang off the shared template, so cost must not scale per victim.
+
+        Everyone poisoned by the same condition reads the same handful of
+        ConditionDamageOverTime rows; fetching them per instance re-reads them
+        once per afflicted character. Asserting the slope between one and four
+        sufferers pins that, without pinning the tick's fixed overhead.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        def dot_queries(ctx: CaptureQueriesContext) -> int:
+            table = ConditionDamageOverTime._meta.db_table
+            return sum(1 for q in ctx.captured_queries if table in q["sql"])
+
+        self._slow_poisoned(health=100)
+        with CaptureQueriesContext(connection) as one:
+            batch_chronic_effect_tick()
+
+        for _ in range(3):
+            self._slow_poisoned(health=100)
+        with CaptureQueriesContext(connection) as four:
+            summary = batch_chronic_effect_tick()
+        self.assertEqual(summary.ticked, 4)
+
+        # Two statements mention the table either way: the instance queryset
+        # joins it to find long-term conditions, plus the single batched fetch.
+        # What matters is that the number is CONSTANT — per-instance fetching
+        # would add one more for every additional sufferer.
+        self.assertEqual(dot_queries(four), dot_queries(one))
 
     def test_cap_never_kills_or_knocks_out(self) -> None:
         _sheet, character, vitals = self._slow_poisoned(health=25)

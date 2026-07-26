@@ -1,6 +1,6 @@
 """Tests for seed_penetration_contest() (#767)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from integration_tests.game_content.combat import seed_penetration_contest
 from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
@@ -9,7 +9,13 @@ from world.conditions.models import PenetrationOutcomeFactor
 from world.mechanics.models import ModifierTarget
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedPenetrationContestTests(TestCase):
+    """mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    wire_penetration_modifier_target() only invents them under
+    SEED_SAMPLE_CONTENT — this test asserts on the real target, so it opts in.
+    """
+
     def test_seeds_full_contest_content(self) -> None:
         result = seed_penetration_contest()
 

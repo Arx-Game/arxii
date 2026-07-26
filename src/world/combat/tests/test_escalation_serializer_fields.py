@@ -9,7 +9,7 @@ encounter's escalation_curve FK (writable) plus read-only curve metadata
 
 from unittest.mock import PropertyMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
@@ -133,6 +133,7 @@ class ParticipantEscalationFieldTests(TestCase):
         self.assertIsNone(result)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class EncounterEscalationCurveFieldTests(TestCase):
     """EncounterDetailSerializer exposes the escalation curve + metadata."""
 
@@ -236,6 +237,7 @@ class EncounterEscalationCurveFieldTests(TestCase):
         self.assertIsNone(self.encounter.escalation_curve_id)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class SurgeBeatsSerializerFieldTests(TestCase):
     """EncounterDetailSerializer.surge_beats: generic line for everyone, owner/GM-scoped
     provenance for the surging participant + staff/GM (#2013).

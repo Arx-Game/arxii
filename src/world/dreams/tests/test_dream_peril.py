@@ -1,6 +1,6 @@
 """Tests for Dream Peril collapse resolution (#2290)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.services import create_character_with_sheet
 from world.dreams.conditions import ensure_dream_conditions
@@ -20,8 +20,14 @@ class DreamPerilConfigTests(TestCase):
         assert config.resist_difficulty > 0
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class DreamPerilCollapseTests(TestCase):
-    """Tests for resolve_dream_peril_collapse()."""
+    """Tests for resolve_dream_peril_collapse().
+
+    ``seed_survivability_content`` gates its ConditionTemplate/CapabilityType
+    creation behind SEED_SAMPLE_CONTENT (#2698) — this test drives the real
+    Unconscious/Bleeding Out conditions through collapse resolution.
+    """
 
     def setUp(self):
         seed_survivability_content()

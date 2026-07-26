@@ -1,6 +1,6 @@
 """Investigation Search-check seed — perception + Investigation (#1705)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.checks.models import CheckType, CheckTypeTrait
 from world.clues.constants import SEARCH_CHECK_TYPE_NAME
@@ -10,6 +10,7 @@ from world.skills.models import Skill
 from world.traits.models import Trait, TraitType
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_investigation_check_content gates on #2698
 class InvestigationCheckSeedTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
@@ -38,6 +39,7 @@ class InvestigationCheckSeedTests(TestCase):
         self.assertEqual(CheckTypeTrait.objects.filter(check_type=search).count(), 2)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_investigation_check_content gates on #2698
 class LockpickingCheckSeedTests(TestCase):
     """Lockpicking CheckType seed — wits + Skulduggery (#2176)."""
 

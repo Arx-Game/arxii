@@ -213,19 +213,30 @@ _PAYLOAD_PARAM = "@payload"
 
 
 def _build_champion_duel_outcome_flow() -> object:
-    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the outcome handler."""
-    from flows.consts import FlowActionChoices
-    from flows.factories import FlowStepDefinitionFactory
-    from flows.models import FlowDefinition
-    from world.battles.duel_wiring import CHAMPION_DUEL_TRIGGER_NAME
+    """Look up the FlowDefinition with one CALL_SERVICE_FUNCTION step for the outcome handler.
 
-    flow, _ = FlowDefinition.objects.get_or_create(name=CHAMPION_DUEL_TRIGGER_NAME)
+    ``flows.FlowDefinition``/``FlowStepDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the FlowDefinition isn't authored.
+    """
+    from flows.consts import FlowActionChoices
+    from flows.models import FlowDefinition, FlowStepDefinition
+    from world.battles.duel_wiring import CHAMPION_DUEL_TRIGGER_NAME
+    from world.seeds.sample_content import authored_or_sample
+
+    flow = authored_or_sample(FlowDefinition, {}, name=CHAMPION_DUEL_TRIGGER_NAME)
+    if flow is None:
+        return None
     if not flow.steps.exists():
-        FlowStepDefinitionFactory(
+        authored_or_sample(
+            FlowStepDefinition,
+            {
+                "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                "parameters": {"payload": _PAYLOAD_PARAM},
+            },
             flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="world.battles.duel_wiring.apply_champion_duel_outcome",
-            parameters={"payload": _PAYLOAD_PARAM},
+            parent=None,
         )
     return flow
 
@@ -251,19 +262,30 @@ class BattleDuelOutcomeTriggerDefinitionFactory(factory_django.DjangoModelFactor
 
 
 def _build_place_encounter_outcome_flow() -> object:
-    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the outcome handler."""
-    from flows.consts import FlowActionChoices
-    from flows.factories import FlowStepDefinitionFactory
-    from flows.models import FlowDefinition
-    from world.battles.place_encounter_wiring import PLACE_ENCOUNTER_TRIGGER_NAME
+    """Look up the FlowDefinition with one CALL_SERVICE_FUNCTION step for the outcome handler.
 
-    flow, _ = FlowDefinition.objects.get_or_create(name=PLACE_ENCOUNTER_TRIGGER_NAME)
+    ``flows.FlowDefinition``/``FlowStepDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the FlowDefinition isn't authored.
+    """
+    from flows.consts import FlowActionChoices
+    from flows.models import FlowDefinition, FlowStepDefinition
+    from world.battles.place_encounter_wiring import PLACE_ENCOUNTER_TRIGGER_NAME
+    from world.seeds.sample_content import authored_or_sample
+
+    flow = authored_or_sample(FlowDefinition, {}, name=PLACE_ENCOUNTER_TRIGGER_NAME)
+    if flow is None:
+        return None
     if not flow.steps.exists():
-        FlowStepDefinitionFactory(
+        authored_or_sample(
+            FlowStepDefinition,
+            {
+                "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                "parameters": {"payload": _PAYLOAD_PARAM},
+            },
             flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="world.battles.place_encounter_wiring.apply_place_encounter_outcome",
-            parameters={"payload": _PAYLOAD_PARAM},
+            parent=None,
         )
     return flow
 

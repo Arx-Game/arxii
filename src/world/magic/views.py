@@ -235,7 +235,15 @@ class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
         from world.combat.seeds_offense import get_melee_offense_pool  # noqa: PLC0415
         from world.magic.seeds_cast import get_standalone_cast_pool  # noqa: PLC0415
 
-        base_pools = [get_standalone_cast_pool(), get_melee_offense_pool()]
+        # checks.CheckType is content-repo-owned (#2698) — get_melee_offense_pool()
+        # is None when the 'Melee Attack' CheckType isn't authored; drop it
+        # rather than passing None into __in (which would wrongly also match
+        # every top-level, parent-less pool).
+        base_pools = [
+            pool
+            for pool in (get_standalone_cast_pool(), get_melee_offense_pool())
+            if pool is not None
+        ]
         return ConsequencePool.objects.filter(parent__in=base_pools).order_by("name")
 
 

@@ -253,7 +253,7 @@ class SkipSpeakerAction(Action):
         from world.scenes.models import Persona  # noqa: PLC0415
 
         target_persona = Persona.objects.filter(
-            character_sheet__character=target,
+            character_sheet_id=target.pk,
         ).first()
         if target_persona is None:
             return ActionResult(success=False, message=f"{target_name} is not in line.")

@@ -13,7 +13,7 @@ the wrong side. See ``apply_place_encounter_outcome`` / ``apply_champion_duel_ou
 for the ``encounter_type`` guards that fix this.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from evennia import create_object
 
 from world.battles.constants import BattleSideRole, BattleUnitStatus
@@ -46,8 +46,14 @@ from world.military.factories import MilitaryUnitFactory
 from world.scenes.constants import RoundStatus
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class OutcomeTriggerCoexistenceTests(TestCase):
-    """One battle, two fronts, both outcome triggers installed on the shared room."""
+    """One battle, two fronts, both outcome triggers installed on the shared room.
+
+    flows.FlowDefinition/TriggerDefinition are content-repo-owned (#2698); the
+    wire_*_trigger() helpers only invent them under SEED_SAMPLE_CONTENT — this
+    test drives the real reactive-trigger firing, so it opts in.
+    """
 
     @classmethod
     def setUpTestData(cls):

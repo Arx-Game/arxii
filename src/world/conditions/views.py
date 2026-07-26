@@ -220,8 +220,10 @@ def _aggregate_capability_effects(lookups: EffectLookups) -> CapabilitySummary:
 def _aggregate_check_modifiers(lookups: EffectLookups) -> dict[str, int]:
     """Batch query check modifiers and aggregate by check type name."""
     result: dict[str, int] = {}
-    for mod in ConditionCheckModifier.objects.filter(lookups.effect_filter).select_related(
-        "check_type"
+    for mod in (
+        ConditionCheckModifier.objects.filter(lookups.effect_filter)
+        .filter(Q(check_type__isnull=False) | Q(check_category__isnull=False))
+        .select_related("check_type", "check_category")
     ):
         inst = _resolve_instance(mod, lookups)
         if not inst:
@@ -231,7 +233,11 @@ def _aggregate_check_modifiers(lookups: EffectLookups) -> dict[str, int]:
             modifier_value = modifier_value * inst.effective_severity
         if inst.current_stage:
             modifier_value = int(modifier_value * inst.current_stage.severity_multiplier)
-        check_name = mod.check_type.name
+        check_name = (
+            f"{mod.check_category.name} (category)"
+            if mod.check_category_id
+            else mod.check_type.name
+        )
         result[check_name] = result.get(check_name, 0) + modifier_value
     return {k: v for k, v in result.items() if v != 0}
 

@@ -18,7 +18,7 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
@@ -237,6 +237,7 @@ def _make_check_result(success_level: int) -> object:
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PendingStageAdvanceOfferUniquenessTests(TestCase):
     """PendingStageAdvanceOffer.one_pending_stage_advance_per_pair constraint."""
 
@@ -302,6 +303,7 @@ class PendingStageAdvanceOfferUniquenessTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
     """soul_tether_stage_advance_prompt writes a PendingStageAdvanceOffer row (Task 1.7 Step 3)."""
 
@@ -454,6 +456,7 @@ class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SoulTetherStageAdvancePromptNoSharedSceneTests(TestCase):
     """When no shared active scene exists, soul_tether_stage_advance_prompt must not
     write a PendingStageAdvanceOffer row (scene FK is NOT NULL; co-location check
@@ -561,6 +564,7 @@ class SoulTetherStageAdvancePromptNoSharedSceneTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResolveStageAdvanceFromDbHappyPathTests(TestCase):
     """Happy path: co-located + within TTL (Task 1.7 Step 4)."""
 
@@ -645,6 +649,7 @@ class ResolveStageAdvanceFromDbHappyPathTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResolveStageAdvanceFromDbTTLStalenessTests(TestCase):
     """resolve_stage_advance_prompt_from_db raises StageAdvanceBonusError when offer expired."""
 
@@ -730,6 +735,7 @@ class ResolveStageAdvanceFromDbTTLStalenessTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResolveStageAdvanceFromDbSineaterDepartedTests(TestCase):
     """Stale when Sineater left scene: raises StageAdvanceBonusError."""
 
@@ -789,6 +795,7 @@ class ResolveStageAdvanceFromDbSineaterDepartedTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResolveStageAdvanceFromDbSinnerDepartedTests(TestCase):
     """resolve_stage_advance_prompt_from_db raises StageAdvanceBonusError when Sinner left scene."""
 
@@ -847,6 +854,7 @@ class ResolveStageAdvanceFromDbSinnerDepartedTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResolveStageAdvanceFromDbNoPendingOfferTests(TestCase):
     """resolve_stage_advance_prompt_from_db raises StageAdvanceBonusError when no row found."""
 
@@ -873,8 +881,13 @@ class ResolveStageAdvanceFromDbNoPendingOfferTests(TestCase):
 # =============================================================================
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PendingStageAdvanceOfferViewSetTests(APITestCase):
-    """GET /api/magic/soul-tether/stage-advance/pending/ — scoped to caller as Sineater."""
+    """GET /api/magic/soul-tether/stage-advance/pending/ — scoped to caller as Sineater.
+
+    The accept_soul_tether Ritual is content-repo-owned (#2698);
+    ``SEED_SAMPLE_CONTENT`` opts this suite into the sample-seeding path.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:

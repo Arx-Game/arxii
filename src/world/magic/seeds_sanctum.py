@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from world.magic.constants import ParticipationRule, RitualExecutionKind
 from world.magic.models import Ritual
+from world.seeds.sample_content import authored_or_sample
 
 HOMECOMING_RITUAL_NAME = "Ritual of Homecoming"
 PURGING_RITUAL_NAME = "Ritual of Purging"
@@ -23,16 +24,17 @@ SANCTIFICATION_COVENANT_RITUAL_NAME = "Ritual of Blood Covenant Sanctification"
 DISSOLUTION_RITUAL_NAME = "Ritual of Dissolution"
 
 
-def ensure_homecoming_ritual() -> Ritual:
-    """Get-or-create the Ritual of Homecoming row.
+def ensure_homecoming_ritual() -> Ritual | None:
+    """Look up (or, under ``SEED_SAMPLE_CONTENT``, invent) the Ritual of Homecoming row.
 
     Dispatches via ``world.magic.services.sanctum_rituals.perform_homecoming_ritual``
     at perform time. Single-actor (the leader) — covenant manager / personal
-    owner per the service's own validation.
+    owner per the service's own validation. Content-repo-owned (#2698): returns
+    ``None`` when the row isn't authored and sample content is off.
     """
-    ritual, _ = Ritual.objects.get_or_create(
-        name=HOMECOMING_RITUAL_NAME,
-        defaults={
+    return authored_or_sample(
+        Ritual,
+        {
             "description": (
                 "Consecrate a Sanctum by sacrificing your own resonance into "
                 "its grown reservoir. The Sanctum's per-day income to woven "
@@ -53,20 +55,20 @@ def ensure_homecoming_ritual() -> Ritual:
             "participation_rule": ParticipationRule.SINGLE_ACTOR,
             "client_hosted": True,
         },
+        name=HOMECOMING_RITUAL_NAME,
     )
-    return ritual
 
 
-def ensure_purging_ritual() -> Ritual:
-    """Get-or-create the Ritual of Purging row.
+def ensure_purging_ritual() -> Ritual | None:
+    """Look up (or, under ``SEED_SAMPLE_CONTENT``, invent) the Ritual of Purging row.
 
     Dispatches via ``world.magic.services.sanctum_rituals.perform_purging_ritual``.
     Changes the Sanctum's consecrated resonance type, draining grown
-    resonance to a retention fraction.
+    resonance to a retention fraction. Content-repo-owned (#2698).
     """
-    ritual, _ = Ritual.objects.get_or_create(
-        name=PURGING_RITUAL_NAME,
-        defaults={
+    return authored_or_sample(
+        Ritual,
+        {
             "description": (
                 "Re-consecrate a Sanctum to a different resonance type. "
                 "Half of the imbued reservoir is destroyed; surviving threads "
@@ -86,22 +88,22 @@ def ensure_purging_ritual() -> Ritual:
             "participation_rule": ParticipationRule.SINGLE_ACTOR,
             "client_hosted": True,
         },
+        name=PURGING_RITUAL_NAME,
     )
-    return ritual
 
 
-def ensure_sanctification_personal_ritual() -> Ritual:
-    """Get-or-create ``Ritual of Thine Own Sanctum`` (Personal Sanctification).
+def ensure_sanctification_personal_ritual() -> Ritual | None:
+    """Look up (or invent under the sample flag) ``Ritual of Thine Own Sanctum``.
 
     PLACEHOLDER prose throughout — author replaces in their voice.
     SERVICE-dispatched to
     ``world.magic.services.sanctum_install.perform_sanctification``;
     the service function sets ``owner_mode=PERSONAL`` from this ritual's
-    invocation context.
+    invocation context. Content-repo-owned (#2698).
     """
-    ritual, _ = Ritual.objects.get_or_create(
-        name=SANCTIFICATION_PERSONAL_RITUAL_NAME,
-        defaults={
+    return authored_or_sample(
+        Ritual,
+        {
             "description": (
                 "PLACEHOLDER — Personal Sanctification: the witch declares a "
                 "room as their own home and consecrates it."
@@ -116,20 +118,21 @@ def ensure_sanctification_personal_ritual() -> Ritual:
             "participation_rule": ParticipationRule.SINGLE_ACTOR,
             "client_hosted": True,
         },
+        name=SANCTIFICATION_PERSONAL_RITUAL_NAME,
     )
-    return ritual
 
 
-def ensure_sanctification_covenant_ritual() -> Ritual:
-    """Get-or-create ``Ritual of Blood Covenant Sanctification``.
+def ensure_sanctification_covenant_ritual() -> Ritual | None:
+    """Look up (or invent under the sample flag) ``Ritual of Blood Covenant Sanctification``.
 
     SERVICE-dispatched; service function sets ``owner_mode=COVENANT``.
     Interim leader gate (any active covenant member) lives at the
     service layer until #708 ships proper org-ritual permissions.
+    Content-repo-owned (#2698).
     """
-    ritual, _ = Ritual.objects.get_or_create(
-        name=SANCTIFICATION_COVENANT_RITUAL_NAME,
-        defaults={
+    return authored_or_sample(
+        Ritual,
+        {
             "description": (
                 "PLACEHOLDER — Covenant Sanctification: a covenant rite "
                 "consecrating a room as their sacred ground."
@@ -144,20 +147,20 @@ def ensure_sanctification_covenant_ritual() -> Ritual:
             "participation_rule": ParticipationRule.FORMATION,
             "client_hosted": True,
         },
+        name=SANCTIFICATION_COVENANT_RITUAL_NAME,
     )
-    return ritual
 
 
-def ensure_dissolution_ritual() -> Ritual:
-    """Get-or-create ``Ritual of Dissolution``.
+def ensure_dissolution_ritual() -> Ritual | None:
+    """Look up (or invent under the sample flag) ``Ritual of Dissolution``.
 
     SERVICE-dispatched. Service function rolls a ``Sanctum Dissolution``
     magical check (seeded via ``world.magic.seeds_checks``). Outcome tier
-    determines fraction of imbued reservoir recovered.
+    determines fraction of imbued reservoir recovered. Content-repo-owned (#2698).
     """
-    ritual, _ = Ritual.objects.get_or_create(
-        name=DISSOLUTION_RITUAL_NAME,
-        defaults={
+    return authored_or_sample(
+        Ritual,
+        {
             "description": (
                 "PLACEHOLDER — Dissolution: tear down a Sanctum, recovering "
                 "a fraction of its imbued resonance as the witch's own."
@@ -170,12 +173,18 @@ def ensure_dissolution_ritual() -> Ritual:
             "participation_rule": ParticipationRule.SINGLE_ACTOR,
             "client_hosted": True,
         },
+        name=DISSOLUTION_RITUAL_NAME,
     )
-    return ritual
 
 
-def _link_install_ritual_to_sanctum(ritual: Ritual, variant_label: str) -> None:
-    """Idempotent RoomFeatureKindInstallRitual link from the magic side."""
+def _link_install_ritual_to_sanctum(ritual: Ritual | None, variant_label: str) -> None:
+    """Idempotent RoomFeatureKindInstallRitual link from the magic side.
+
+    No-ops when ``ritual`` is ``None`` — the content repo hasn't authored it
+    and sample content is off (#2698); there's nothing to link yet.
+    """
+    if ritual is None:
+        return
     from world.room_features.models import (  # noqa: PLC0415
         RoomFeatureKind,
         RoomFeatureKindInstallRitual,
@@ -200,6 +209,11 @@ def ensure_sanctum_rituals() -> None:
     the touchstone/reagent ``RitualComponentRequirement`` rows (#707) to both
     Sanctification rituals, then calls ``seeds_checks.ensure_ritual_check_configs()``
     to bind CheckType/RitualCheckConfig rows for all five rituals.
+
+    Every Ritual row is content-repo-owned (#2698): each ``ensure_*_ritual()``
+    call returns ``None`` (after logging) when the content repo hasn't authored
+    it and ``SEED_SAMPLE_CONTENT`` is off, and the config wired to a missing
+    ritual (its install link + component requirements) is skipped in step.
     """
     ensure_homecoming_ritual()
     ensure_purging_ritual()
@@ -213,8 +227,10 @@ def ensure_sanctum_rituals() -> None:
         ensure_sanctification_requirements,
     )
 
-    ensure_sanctification_requirements(personal)
-    ensure_sanctification_requirements(covenant)
+    if personal is not None:
+        ensure_sanctification_requirements(personal)
+    if covenant is not None:
+        ensure_sanctification_requirements(covenant)
 
     from world.magic.seeds_checks import ensure_ritual_check_configs  # noqa: PLC0415
 

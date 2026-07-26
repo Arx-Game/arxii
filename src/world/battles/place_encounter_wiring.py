@@ -115,12 +115,30 @@ def install_place_encounter_trigger(encounter: CombatEncounter) -> None:
 def wire_place_encounter_trigger() -> None:
     """Seed the ENCOUNTER_COMPLETED -> place-encounter-outcome TriggerDefinition (idempotent).
 
-    Creates (get_or_create) the encounter_completed_place_encounter_outcome
-    FlowDefinition (one CALL_SERVICE_FUNCTION step -> apply_place_encounter_outcome)
-    and its TriggerDefinition. Safe to call repeatedly.
-    """
-    from world.battles.factories import (  # noqa: PLC0415
-        BattlePlaceEncounterOutcomeTriggerDefinitionFactory,
-    )
+    Looks up the encounter_completed_place_encounter_outcome FlowDefinition
+    (one CALL_SERVICE_FUNCTION step -> apply_place_encounter_outcome) and its
+    TriggerDefinition. Safe to call repeatedly.
 
-    BattlePlaceEncounterOutcomeTriggerDefinitionFactory()
+    ``flows.FlowDefinition``/``FlowStepDefinition``/``TriggerDefinition`` are
+    all content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. No-ops when the FlowDefinition isn't
+    authored — ``install_place_encounter_trigger`` already tolerates a missing
+    TriggerDefinition.
+    """
+    from flows.models import TriggerDefinition  # noqa: PLC0415
+    from world.battles.factories import _build_place_encounter_outcome_flow  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    flow = _build_place_encounter_outcome_flow()
+    if flow is None:
+        return
+    authored_or_sample(
+        TriggerDefinition,
+        {
+            "event_name": "encounter_completed",
+            "flow_definition": flow,
+            "priority": 40,
+            "base_filter_condition": None,
+        },
+        name=PLACE_ENCOUNTER_TRIGGER_NAME,
+    )

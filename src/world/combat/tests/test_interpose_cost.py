@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from world.combat.constants import (
     INTERPOSE_BASE_FATIGUE_COST,
@@ -70,6 +70,7 @@ def _guardian_fatigue(guardian_participant) -> int:
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class InterposeArmedButNotFiredCostsNothingTest(TestCase):
     """An INTERPOSE declaration that never fires must not accrue fatigue.
 
@@ -123,6 +124,7 @@ class InterposeArmedButNotFiredCostsNothingTest(TestCase):
 
 
 @tag("postgres")  # get_available_actions uses DISTINCT ON → PG-only
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class InterposeFiredChargesFatigueTest(TestCase):
     """A fired INTERPOSE charges the interposer's physical fatigue pool.
 
@@ -257,6 +259,7 @@ class InterposeFiredChargesFatigueTest(TestCase):
 
 
 @tag("postgres")  # apply_condition uses DISTINCT ON → PG-only
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class DefendAndInterposeBothReduceDamageTest(TestCase):
     """DEFEND (Shielded × 0.5) and a fired INTERPOSE both reduce damage on the same hit.
 

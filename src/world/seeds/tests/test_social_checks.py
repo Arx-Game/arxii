@@ -1,6 +1,8 @@
 """Social-check seed — stat + skill + specialization compositions (#1688 slice 2)."""
 
-from django.test import TestCase
+from decimal import Decimal
+
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.models import CheckType, CheckTypeSpecialization, CheckTypeTrait
@@ -12,6 +14,7 @@ from world.skills.models import Skill, Specialization
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_social_check_content gates on #2698
 class SocialCheckSeedTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -66,8 +69,22 @@ class SocialCheckSeedTests(TestCase):
         persuasion = CheckType.objects.get(name="Persuasion")
         assert not CheckTypeSpecialization.objects.filter(check_type=persuasion).exists()
 
-    def test_reseed_is_authoritative(self):
-        # A stray placeholder trait must be wiped by a reseed — the seed owns the composition.
+    def test_reseed_preserves_an_existing_weight(self):
+        # #2698 Part 1: seeders run AFTER the content load, so a reseed must
+        # never revert an authored/staff-tuned weight — get_or_create converges
+        # instead of wiping and recreating the composition.
+        seduction = CheckType.objects.get(name="Seduction")
+        charm = Trait.objects.get(name="charm")
+        row = CheckTypeTrait.objects.get(check_type=seduction, trait=charm)
+        row.weight = Decimal("3.50")
+        row.save(update_fields=["weight"])
+        seed_social_check_content()
+        row.refresh_from_db()
+        assert row.weight == Decimal("3.50")
+
+    def test_reseed_does_not_remove_an_unrelated_trait_row(self):
+        # A row the seed doesn't know about (e.g. staff-added) must survive a
+        # reseed too — the composition is no longer wiped wholesale (#2698).
         seduction = CheckType.objects.get(name="Seduction")
         stray = Trait.objects.create(name="stray_placeholder_stat", trait_type=TraitType.STAT)
         CheckTypeTrait.objects.create(check_type=seduction, trait=stray)
@@ -77,7 +94,7 @@ class SocialCheckSeedTests(TestCase):
                 "trait__name", flat=True
             )
         )
-        assert trait_names == {"charm", "Persuasion"}
+        assert trait_names == {"charm", "Persuasion", "stray_placeholder_stat"}
 
     def test_owned_seduction_spec_contributes_to_the_check(self):
         sheet = CharacterSheetFactory()

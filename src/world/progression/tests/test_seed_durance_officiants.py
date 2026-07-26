@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.classes.factories import CharacterClassFactory
 from world.classes.models import Path, PathStage
@@ -39,7 +39,10 @@ class SeedDurancePrerequisitesTests(TestCase):
     """seed_dev_database() (magic + progression clusters) content shape."""
 
     @stub_content_root()
+    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_ritual_of_the_durance_is_seeded_by_name(self) -> None:
+        """ "Ritual of the Durance" is content-repo-owned (#2698) — sample
+        content must be on for the stub root to yield the row this asserts."""
         seed_dev_database()
         self.assertTrue(Ritual.objects.filter(name="Ritual of the Durance").exists())
 
@@ -82,8 +85,14 @@ class SeedDurationOfficiantsIdempotencyTests(TestCase):
         self.assertEqual(site.officiant.current_level, 20)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class FirstDuranceWithNoLiveOfficiantTests(TestCase):
-    """The symptom fix: the first-ever Durance needs no live higher-level PC (#2121)."""
+    """The symptom fix: the first-ever Durance needs no live higher-level PC (#2121).
+
+    "Ritual of the Durance" is content-repo-owned (#2698); ``SEED_SAMPLE_CONTENT``
+    opts this suite into the sample-seeding path so ``convene_durance_at_site``
+    has a real Ritual row to fire.
+    """
 
     @stub_content_root()
     def setUp(self) -> None:

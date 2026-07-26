@@ -5,7 +5,9 @@ NULL and opt-in (passive_decay_per_day > 0). Honors
 passive_decay_blocked_in_engagement and passive_decay_max_severity.
 """
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from evennia_extensions.factories import ObjectDBFactory
 from world.conditions.factories import (
@@ -141,26 +143,43 @@ class DecayAllConditionsTickTests(TestCase):
         self.assertEqual(summary.engagement_blocked, 0)
         self.assertEqual(summary.examined, 1)
 
-    def test_n_instances_bounded_query_count(self):
-        """Query count grows linearly with instances, not exponentially.
+    def _tick_queries(self, *, add: int, expect_ticked: int) -> int:
+        """Add ``add`` decaying instances, run the tick, return queries executed.
 
-        With 10 instances the cost is 1 outer SELECT + 5 queries per instance
-        (engagement check, stage lookup, savepoint, update, release savepoint) =
-        51 queries. This is acceptable for a daily scheduler tick — not a hot
-        path. The key assertion is linearity: doubling instances should not
-        more than double queries.
+        Instances persist across calls within a test, so ``expect_ticked`` is the
+        running total — that is what lets two successive calls measure the
+        per-instance slope.
         """
         template = ConditionTemplateFactory(passive_decay_per_day=1)
         stage = ConditionStageFactory(condition=template, severity_threshold=1)
-        for _ in range(10):
+        for _ in range(add):
             ConditionInstanceFactory(
                 condition=template,
                 current_stage=stage,
                 severity=3,
             )
-
-        with self.assertNumQueries(51):
+        with CaptureQueriesContext(connection) as ctx:
             summary = decay_all_conditions_tick()
+        self.assertEqual(summary.ticked, expect_ticked)
+        self.assertEqual(summary.examined, expect_ticked)
+        return len(ctx)
 
-        self.assertEqual(summary.ticked, 10)
-        self.assertEqual(summary.examined, 10)
+    def test_n_instances_bounded_query_count(self):
+        """Per-instance cost is 4 queries: stage lookup, savepoint, update, release.
+
+        The engagement gate used to add a fifth (one ``CharacterEngagement``
+        ``.exists()`` per instance); it is now hoisted into a single batched
+        lookup, mirroring ``_apply_ap_regen``'s locked_character_ids set.
+        """
+        self.assertEqual(self._tick_queries(add=10, expect_ticked=10), 42)
+
+    def test_engagement_gate_does_not_scale_with_instance_count(self):
+        """The slope is what matters — a reintroduced N+1 would push it to 5.
+
+        Asserting the *difference* between two sizes rather than a single total
+        pins the invariant without re-pinning whatever fixed overhead the tick
+        happens to carry, so unrelated setup changes don't churn this test.
+        """
+        ten = self._tick_queries(add=10, expect_ticked=10)
+        twenty = self._tick_queries(add=10, expect_ticked=20)
+        self.assertEqual(twenty - ten, 4 * 10)

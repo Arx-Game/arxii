@@ -1,7 +1,7 @@
 """Tests for the houses system (#1884): naming, recognition, succession,
 fealty, pacts, domains, and the house feed."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.areas.factories import AreaFactory
 from world.character_sheets.factories import GenderFactory
@@ -496,8 +496,14 @@ class DomainTests(TestCase):
         self.assertEqual(domain.prosperity, 50)  # untouched on failure
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class HousesSeedTests(TestCase):
-    """The houses demo cluster is idempotent and walkable (#1884)."""
+    """The houses demo cluster is idempotent and walkable (#1884).
+
+    ``realms.Realm`` is content-repo-owned (#2698); SEED_SAMPLE_CONTENT opts
+    this suite into the sample-seeding path so "Arx" (and everything
+    downstream of it in seed_houses_demo) actually seeds.
+    """
 
     def test_seed_idempotent_and_walkable(self):
         from world.seeds.houses import CROWN_ORG_NAME, HOUSE_ORG_NAME, seed_houses_demo

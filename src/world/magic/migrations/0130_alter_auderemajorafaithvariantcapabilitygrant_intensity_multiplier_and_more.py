@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0127_capabilitypowerconfig_and_more"),
+        ("magic", "0129_capabilitypowerconfig_and_more"),
     ]
 
     operations = [

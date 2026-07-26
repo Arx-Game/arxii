@@ -7,7 +7,7 @@ full shared seam, not just the service call.
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from actions.definitions.combat_maneuvers import (
     CoverAction,
@@ -123,6 +123,7 @@ class CoverInterposeActionTest(CombatManeuverActionTestBase):
         self.assertFalse(result.success)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class InterposeRedirectDispatchSeamTest(CombatManeuverActionTestBase):
     """Declare + resolve one REDIRECT round through the real Action.run() seam (#2210).
 

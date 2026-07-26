@@ -1,6 +1,6 @@
 """Tests for the survivability seed cluster (#2287)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.conditions.constants import (
     BLEED_OUT_CONDITION_NAME,
@@ -17,8 +17,14 @@ from world.vitals.models import VitalsConsequenceConfig
 from world.vitals.seeds import seed_survivability_content
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SurvivabilitySeedTests(TestCase):
-    """The seed cluster is idempotent and wires the config singleton."""
+    """The seed cluster is idempotent and wires the config singleton.
+
+    Gates on SEED_SAMPLE_CONTENT (#2698) — every test here asserts on the
+    actual ConditionTemplate/CapabilityType rows ``seed_survivability_content``
+    invents, which are content-repo-owned and only invented under this flag.
+    """
 
     def test_seed_survivability_idempotent(self) -> None:
         from actions.models import ConsequencePool, ConsequencePoolEntry
