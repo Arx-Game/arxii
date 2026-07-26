@@ -6,6 +6,8 @@ tests assert the tier from the reader's side — what each viewer's scene log re
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
@@ -18,6 +20,7 @@ from world.scenes.constants import (
     ScenePrivacyMode,
 )
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.scenes.interaction_permissions import CanViewInteraction
 from world.scenes.interaction_services import can_view_interaction, create_interaction
 from world.scenes.models import Interaction
 from world.scenes.reaction_services import (
@@ -137,3 +140,71 @@ class PerceivedOnlyReactionGateTests(TestCase):
     def test_staff_passes_can_view_interaction(self) -> None:
         """``react_to_window`` has no staff concept -- exercise the gate directly."""
         self.assertTrue(can_view_interaction(self.interaction, self.bystander, is_staff=True))
+
+
+def _can_view_object(interaction, persona, *, is_staff: bool = False) -> bool:
+    """Ask ``CanViewInteraction`` directly, bypassing the queryset-level ``visible_to`` filter.
+
+    ``InteractionViewSet.get_queryset`` already filters through ``visible_to`` before
+    this permission class ever runs on the live ``interaction-detail`` endpoint, so a
+    REST client call can't distinguish the ordering bug (#2710 review) from the fix --
+    unit-testing the permission class directly, like ``test_action_delivery.py``'s
+    ``_can_view`` helper, is the only way to prove it.
+    """
+    request = MagicMock()
+    request.user.is_staff = is_staff
+    request.user.is_authenticated = True
+    with patch(
+        "world.scenes.interaction_permissions.get_account_personas",
+        return_value=[persona.pk],
+    ):
+        return CanViewInteraction().has_object_permission(request, MagicMock(), interaction)
+
+
+class CanViewInteractionPublicSceneOrderingTests(TestCase):
+    """#2710 review: ``_requires_receiver_check`` must run before the public-scene branch.
+
+    Directed and escalated-visibility content (whisper, place-scoped table talk,
+    PERCEIVED_ONLY) is not made public merely because its scene is public -- and a
+    concealed cast happening in a PUBLIC scene is the common case. Before this fix,
+    ``CanViewInteraction.has_object_permission`` checked "public scene -> everyone"
+    BEFORE ``_requires_receiver_check``, so that branch always won first and every one
+    of these tiers was dead code for any interaction sitting in a public scene.
+    """
+
+    def setUp(self) -> None:
+        self.scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC)
+        self.writer_account, self.writer = _played_persona()
+        self.receiver_account, self.receiver = _played_persona()
+        self.outsider_account, self.outsider = _played_persona()
+        self.perceived_only = create_interaction(
+            persona=self.writer,
+            content="Ilyra works something subtle.",
+            mode=InteractionMode.OUTCOME,
+            scene=self.scene,
+            receivers=[self.receiver],
+            visibility=InteractionVisibility.PERCEIVED_ONLY,
+        )
+        self.whisper = create_interaction(
+            persona=self.writer,
+            content="Psst -- did you see that?",
+            mode=InteractionMode.WHISPER,
+            scene=self.scene,
+            receivers=[self.receiver],
+        )
+
+    def test_perceived_only_denied_to_non_receiver(self) -> None:
+        self.assertFalse(_can_view_object(self.perceived_only, self.outsider))
+
+    def test_perceived_only_allowed_to_receiver(self) -> None:
+        self.assertTrue(_can_view_object(self.perceived_only, self.receiver))
+
+    def test_perceived_only_allowed_to_writer(self) -> None:
+        self.assertTrue(_can_view_object(self.perceived_only, self.writer))
+
+    def test_perceived_only_allowed_to_staff(self) -> None:
+        self.assertTrue(_can_view_object(self.perceived_only, self.outsider, is_staff=True))
+
+    def test_whisper_in_public_scene_denied_to_outsider(self) -> None:
+        """Regression: the pre-existing bug this review found -- same leak class."""
+        self.assertFalse(_can_view_object(self.whisper, self.outsider))
