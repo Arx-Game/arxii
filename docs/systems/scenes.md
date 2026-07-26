@@ -107,6 +107,33 @@ Interaction.objects.visible_to(account, persona_ids=persona_ids, since=since)
 - `SceneViewSet.highlight_reel()` calls `Interaction.objects.visible_to(...)` so the reel
   can never surface a pose the viewer cannot see — not even as a sealed slot (#1241).
 
+### `InteractionVisibility` tiers
+
+`Interaction.visibility` (`world.scenes.constants.InteractionVisibility`) is a per-row
+privacy override that can only escalate, never reduce. Three tiers, three enforcement
+surfaces per tier: `InteractionQuerySet.visible_to` (queryset reads — the scene log),
+`CanViewInteraction` (`world/scenes/interaction_permissions.py` — REST object-detail
+access), and `can_view_interaction` (`world/scenes/interaction_services.py` — the IC
+scene-reaction witness gate, "did this persona actually perceive the event").
+
+| Tier | Admits | Enforcement notes |
+|------|--------|--------------------|
+| `DEFAULT` | Room-heard: everyone who could plausibly witness the pose (subject to the usual scene/room read rules) | Baseline — no receiver-row restriction. |
+| `PERCEIVED_ONLY` (#2710, ADR-0167) | Writer + `InteractionReceiver` rows (the personas who actually perceived the event), plus staff, plus — **on the scene-log read only** — a non-staff GM of that scene | `visible_to`'s `gm_visible` branch is the *only* surface that admits a non-staff GM. `CanViewInteraction` and `can_view_interaction` both admit **staff only** for this tier — a non-staff GM is denied on REST object access and on the reaction-witness gate, same as `VERY_PRIVATE`. |
+| `VERY_PRIVATE` | Writer + `InteractionReceiver` rows only | No exception on any of the three surfaces — not even staff. The strictest tier; deliberately not interchangeable with `PERCEIVED_ONLY`. |
+
+`PERCEIVED_ONLY` was introduced for concealed spellcasting (`world.magic.services
+.cast_observation.resolve_cast_audience`, see `docs/systems/magic.md`) but the tier
+itself is a general scenes primitive, not magic-specific — any future feature needing
+"only the characters who actually perceived this" can reuse it directly.
+
+**Not perception-gated:** favoriting (`InteractionFavoriteViewSet`) and emoji-reacting
+(`InteractionReactionViewSet`) to an interaction — the OOC reader-appreciation layer
+from #1341 — are a private bookmark and an account-keyed emoji reaction, not a claim of
+in-character presence. Being able to react to a scene your character wasn't present for
+is intentional product behavior. Only `react_to_window` (the IC reaction-window system,
+`world/scenes/reaction_services.py`) is perception-gated.
+
 ### SceneMessage
 
 ```python
