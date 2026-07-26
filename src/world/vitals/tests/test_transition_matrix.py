@@ -268,6 +268,7 @@ class TrapHitKnockoutTests(TestCase):
 
 
 @tag("postgres")
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
 class TrapHitBleedOutTests(TestCase):
     """Trap hit crossing the death threshold (health ≤ 0) applies Bleeding-Out.
 
@@ -376,6 +377,7 @@ class ExhaustionStrainKnockoutTests(TestCase):
 
 
 @tag("postgres")
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
 class ExhaustionStrainBleedOutTests(TestCase):
     """Exhaustion strain crossing the death threshold (health ≤ 0) applies Bleeding-Out.
 
