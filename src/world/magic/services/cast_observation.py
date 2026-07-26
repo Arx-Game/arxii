@@ -46,7 +46,11 @@ class CastAudience:
     vague: list[Persona]
 
 
-def _concealment_for(caster: ObjectDB, *, cast_openly: bool) -> int:  # noqa: OBJECTDB_PARAM
+def _concealment_for(
+    caster: ObjectDB,  # noqa: OBJECTDB_PARAM — same caster the public entrypoint takes
+    *,
+    cast_openly: bool,
+) -> int:
     """The caster's style concealment rating; 0 when overt, pathless, or cast openly."""
     if cast_openly:
         return 0
@@ -64,7 +68,9 @@ def _detection_check_type() -> CheckType | None:
     return CheckType.objects.filter(name=DETECT_CAST_CHECK_NAME, is_active=True).first()
 
 
-def _observers_in_room(caster: ObjectDB) -> list[ObjectDB]:  # noqa: OBJECTDB_PARAM
+def _observers_in_room(
+    caster: ObjectDB,  # noqa: OBJECTDB_PARAM — walks raw room contents (mixed object types)
+) -> list[ObjectDB]:  # noqa: OBJECTDB_PARAM — returns raw room contents, same reasoning
     """Characters co-located with the caster, excluding the caster."""
     location = caster.location
     if location is None:
@@ -72,7 +78,9 @@ def _observers_in_room(caster: ObjectDB) -> list[ObjectDB]:  # noqa: OBJECTDB_PA
     return [obj for obj in location.contents if obj.pk != caster.pk]
 
 
-def _persona_for(character: ObjectDB) -> Persona | None:  # noqa: OBJECTDB_PARAM
+def _persona_for(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM — called for the caster and any observer
+) -> Persona | None:
     """The face this character is currently presenting, or None if it has no sheet."""
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
@@ -137,6 +145,10 @@ def resolve_cast_audience(
         character=caster,
     )
 
+    # Per-observer query-in-a-loop, by the letter of the standing rule (django_notes.md)
+    # -- but each observer needs their OWN independent roll, so this can't collapse into
+    # a single batched query without breaking per-observer independence. Bounded by room
+    # population; do not "optimize" this into one query.
     for observer in _observers_in_room(caster):
         persona = _persona_for(observer)
         if persona is None:
