@@ -46,49 +46,45 @@ from world.scenes.tests.cast_test_helpers import (
 )
 from world.scenes.tests.test_reaction_windows import make_participant
 
-# Per-persona account cache for _account_playing (module-level so repeated calls
-# within a test — or across tests sharing a persona via setUpTestData — return the
-# same account instead of minting a fresh one each time).
-#
-# Keyed on persona.pk deliberately, NOT id(persona): Django's TestCase deep-copies
-# every setUpTestData()-assigned class attribute the first time each test method
-# accesses it (`self.bystander` is NOT the same object as `cls.bystander` — see
-# Django's TestData wrapper), so id(persona) differs between the setUpTestData loop
-# and every later self.<persona> access even within the SAME class. pk survives that
-# copy unchanged, which is what makes the cache hit across test methods at all.
-#
-# The tradeoff (#2710 task 5): this cache is now shared by two sibling TestCase
-# classes in this module (ConcealedCastJourneyTests and
-# ConcealedCastRequestLeakTests), each with its own class-scoped setUpTestData
-# transaction rolled back at teardown. SQLite reassigns rowids from the freed range
-# after a rollback, so a later class's fresh PersonaFactory() row can land on the
-# exact pk an earlier, already-torn-down sibling class used — a pk hit would then
-# hand back a stale AccountFactory wired to that earlier persona's roster tenure,
-# leaving the current persona with no roster wiring at all and silently emptying
-# every listing endpoint for it. Every class whose setUpTestData mints its own
-# fresh personas via this helper must clear the cache first (see
-# ConcealedCastRequestLeakTests.setUpTestData) so it starts from an empty cache
-# rather than one instance a torn-down sibling class populated a moment ago.
-_PERSONA_ACCOUNTS: dict[int, AccountFactory] = {}
 
-
-def _account_playing(persona):
+def _account_playing(persona, accounts: dict[int, AccountFactory]):
     """The account currently playing *persona*, creating the roster wiring on first ask.
 
     Mints an ``AccountFactory`` + ``PlayerDataFactory`` + a current (``end_date=None``)
     ``RosterTenureFactory`` bound to *persona*'s existing ``RosterEntry`` — or creates
-    that ``RosterEntry`` too, since ``PersonaFactory`` does not provision one. Cached
-    per persona pk so repeated calls return the same account (see the cache's
-    module-level docstring for the pk-vs-identity tradeoff and the per-class
-    clear-on-setup contract this relies on).
+    that ``RosterEntry`` too, since ``PersonaFactory`` does not provision one. Cached in
+    *accounts* per persona pk so repeated calls (within a test, or across tests sharing a
+    persona via setUpTestData) return the same account instead of minting a fresh one.
+
+    *accounts* is deliberately caller-supplied rather than a module-level global (#2710
+    task 5 review): each ``TestCase`` class using this helper owns its own
+    ``cls._persona_accounts`` dict, set fresh in that class's own ``setUpTestData`` (see
+    ``ConcealedCastJourneyTests.setUpTestData``, which every caller of this helper in this
+    module descends from). A single shared module-level dict was tried first and reverted —
+    each ``TestCase`` class's ``setUpTestData`` runs inside its own class-scoped transaction,
+    rolled back at teardown, and SQLite reassigns rowids from the freed range after a
+    rollback: a later class's fresh ``PersonaFactory()`` row can land on the exact pk an
+    earlier, already-torn-down sibling class used, so a pk hit against a *shared* cache could
+    hand back a stale account wired to that earlier (nonexistent) persona's roster tenure.
+    That failure mode is order-dependent (which class runs first) rather than deterministic,
+    so it can flip direction or vanish under a different test runner/shard/ordering — a
+    per-class dict removes the sharing entirely, so no class can observe another's entries
+    regardless of run order.
+
+    Cached per persona pk, not ``id(persona)``: Django's ``TestCase`` deep-copies every
+    ``setUpTestData()``-assigned class attribute the first time each test method accesses it
+    (``self.bystander`` is not the same object as ``cls.bystander`` — see Django's
+    ``TestData`` wrapper), so ``id(persona)`` differs between the ``setUpTestData`` loop and
+    every later ``self.<persona>`` access even within the same class. pk survives that copy
+    unchanged, which is what makes the cache hit at all.
     """
-    if persona.pk in _PERSONA_ACCOUNTS:
-        return _PERSONA_ACCOUNTS[persona.pk]
+    if persona.pk in accounts:
+        return accounts[persona.pk]
     account = AccountFactory()
     player_data = PlayerDataFactory(account=account)
     roster_entry = RosterEntryFactory(character_sheet=persona.character_sheet)
     RosterTenureFactory(player_data=player_data, roster_entry=roster_entry, end_date=None)
-    _PERSONA_ACCOUNTS[persona.pk] = account
+    accounts[persona.pk] = account
     return account
 
 
@@ -277,9 +273,15 @@ class ConcealedCastJourneyTests(CastScenarioMixin):
     audience it was given, and nothing to anyone else.
     """
 
+    _persona_accounts: dict[int, AccountFactory]
+
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
+        # Own cache, not shared across sibling classes -- see _account_playing's
+        # docstring for why a module-level version was tried and reverted (#2710
+        # task 5 review: order-dependent stale-account collisions across classes).
+        cls._persona_accounts = {}
         room = cls.scene.location
         cls.detector = PersonaFactory()
         cls.marginal = PersonaFactory()
@@ -296,7 +298,7 @@ class ConcealedCastJourneyTests(CastScenarioMixin):
             # later, inside _log_for, would leave the receiver row's account_id NULL
             # and the reader-side party filter (receivers__account_id=) would never
             # match it.
-            _account_playing(persona)
+            _account_playing(persona, cls._persona_accounts)
         cls.technique = make_benign_castable_technique()
         grant_technique(cls.caster, cls.technique)
 
@@ -314,7 +316,7 @@ class ConcealedCastJourneyTests(CastScenarioMixin):
 
     def _log_for(self, persona) -> list[Interaction]:
         """What this persona's scene log actually returns — the reader's side."""
-        account = _account_playing(persona)
+        account = _account_playing(persona, self._persona_accounts)
         return list(
             Interaction.objects.visible_to(account, persona_ids=[persona.pk]).filter(
                 scene=self.scene
@@ -402,20 +404,19 @@ class ConcealedCastRequestLeakTests(APITestCase, ConcealedCastJourneyTests):
     ``alters_behavior=False`` (the factory default) makes the cast legal without
     also routing it into the consent (PENDING) path.
 
-    Clears ``_PERSONA_ACCOUNTS`` before minting its own personas — see that cache's
-    module-level docstring: without this, a pk this class's fresh ``PersonaFactory()``
-    rows land on can collide with one ``ConcealedCastJourneyTests`` already used and
-    rolled back, silently handing back an account wired to nothing this class created.
+    Inherits ``ConcealedCastJourneyTests.setUpTestData``'s ``cls._persona_accounts = {}``
+    reset (via ``super().setUpTestData()``) — this class's own fresh personas get their
+    own cache, never one a sibling class populated and tore down. See
+    ``_account_playing``'s docstring for why that matters regardless of class run order.
     """
 
     @classmethod
     def setUpTestData(cls) -> None:
-        _PERSONA_ACCOUNTS.clear()
         super().setUpTestData()
         character = cls.target.character_sheet.character
         character.location = cls.scene.location
         character.save()
-        _account_playing(cls.target)
+        _account_playing(cls.target, cls._persona_accounts)
         TechniqueAppliedConditionFactory(
             technique=cls.technique,
             condition=ConditionTemplateFactory(),
@@ -424,7 +425,7 @@ class ConcealedCastRequestLeakTests(APITestCase, ConcealedCastJourneyTests):
         )
 
     def _request_ids_visible_to(self, persona) -> set[int]:
-        self.client.force_authenticate(user=_account_playing(persona))
+        self.client.force_authenticate(user=_account_playing(persona, self._persona_accounts))
         response = self.client.get(reverse("sceneactionrequest-list"))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         return {row["id"] for row in response.data["results"]}
