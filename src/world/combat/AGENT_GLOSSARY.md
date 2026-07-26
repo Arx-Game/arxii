@@ -148,10 +148,12 @@ wrong** bands (off by 1–3 steps), not silence — the player can't distinguish
 accurate from inaccurate readings. One cached reading per (participant, opponent)
 per encounter — no re-rolls (`ConsiderReading` model). An enhancement capability
 (`CovenantRole.enhances_assessment`, initially the Sage role) grants finer 9-band
-readings + health/condition axes; the check still gates accuracy. A
-`bias_direction()` seam exists for the future Overconfident distinction (always
-underestimates). Web-first REST endpoint on `CombatEncounterViewSet`; telnet
-`consider` command follows.
+readings + health/condition axes; the check still gates accuracy. The
+`bias_direction()` seam is wired to the Overconfident distinction (always
+underestimates); the distinction also applies a -2 check penalty via a
+consider-scoped `ModifierTarget`, and `consider_opponent` routes through
+`collect_check_modifiers` (the central aggregator). Web-first REST endpoint on
+`CombatEncounterViewSet`; telnet `consider` command follows.
 _Avoid_: assess, appraise, threat-level (use **consider**), accuracy rating
 
 **Lieutenant** (#2642):
