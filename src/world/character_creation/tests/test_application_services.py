@@ -41,6 +41,7 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
+from world.roster.seeds import ensure_rosters
 from world.skills.factories import SkillFactory
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
@@ -309,6 +310,9 @@ class ApproveApplicationTests(TestCase):
     def setUpTestData(cls):
         cls.staff = AccountFactory(is_staff=True)
         cls.account = AccountFactory()
+        # finalize_character is mocked below, but approve_application's own
+        # Roster.objects.get(roster_type=ACTIVE) lookup (#2728) is not — seed it.
+        ensure_rosters()
 
     @patch("world.character_creation.services.RosterTenure")
     @patch("world.character_creation.services.finalize_character")
@@ -623,6 +627,10 @@ class ApproveApplicationIntegrationTests(TestCase):
 
         cls.staff = AccountFactory(is_staff=True)
 
+        # finalize_character()/approve_application() look up seeded rosters by
+        # roster_type (Roster.objects.get — #2728) rather than lazily creating them.
+        ensure_rosters()
+
         cls.realm = Realm.objects.create(
             name="Approve Integration Realm",
             description="Test realm",
@@ -795,6 +803,7 @@ class ApproveApplicationIntegrationTests(TestCase):
     def test_approve_moves_to_active_roster(self):
         """Approval moves the RosterEntry from Pending to the Active roster."""
         from world.roster.models import RosterEntry
+        from world.roster.models.choices import RosterType
 
         app = self._create_approved_application()
         approve_application(app, reviewer=self.staff)
@@ -803,7 +812,8 @@ class ApproveApplicationIntegrationTests(TestCase):
             character_sheet__character__db_key__startswith="ApproveTest",
         ).first()
         self.assertIsNotNone(entry)
-        self.assertEqual(entry.roster.name, "Active")
+        # Match the typed key (#2728), never the display label.
+        self.assertEqual(entry.roster.roster_type, RosterType.ACTIVE)
         self.assertTrue(entry.roster.is_active)
 
     def test_approve_creates_character_with_tenure(self):

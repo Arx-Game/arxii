@@ -19,7 +19,7 @@ from world.roster.factories import (
     TenureGalleryFactory,
     TenureMediaFactory,
 )
-from world.roster.models import TenureMedia
+from world.roster.models import RosterType, TenureMedia
 from world.roster.services import CloudinaryGalleryService
 
 
@@ -29,7 +29,7 @@ class TestCloudinaryGalleryService(TestCase):
     def setUp(self):
         """Set up test data."""
         self.character = CharacterFactory()
-        self.roster = RosterFactory(is_active=True)
+        self.roster = RosterFactory(roster_type=RosterType.ACTIVE, is_active=True)
         self.roster_entry = RosterEntryFactory(
             character_sheet__character=self.character,
             roster=self.roster,

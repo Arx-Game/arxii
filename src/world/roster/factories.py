@@ -22,6 +22,7 @@ from world.roster.models import (
     RosterApplication,
     RosterEntry,
     RosterTenure,
+    RosterType,
     TenureDisplaySettings,
     TenureGallery,
     TenureMedia,
@@ -121,8 +122,22 @@ class RosterFactory(factory_django.DjangoModelFactory):
 
     class Meta:
         model = Roster
+        # roster_type (#2728) is unique + required — at most 7 rows can ever exist, one
+        # per RosterType. get_or_create on it means a RosterFactory() call reuses the
+        # canonical row when ensure_rosters() already seeded it (e.g. via
+        # finalize_character in the same test) instead of colliding on insert. Note the
+        # standard django_get_or_create caveat: on reuse, every other field below is
+        # NOT applied to the pre-existing row — pass roster_type= explicitly when a test
+        # needs a guaranteed-fresh row with specific field values.
+        django_get_or_create = ("roster_type",)
 
     name = factory.Sequence(lambda n: f"Roster_{n}")
+    # Pinned, NOT an Iterator. factory.Iterator advances off a process-global counter,
+    # so a bare RosterFactory() would land on a different shelf depending on how many
+    # other tests ran first — nondeterminism on a *unique* column, which is a latent
+    # flake generator (#2728). A character with no stated shelf belongs on Active, and
+    # any test that cares which shelf it gets passes roster_type= explicitly.
+    roster_type = RosterType.ACTIVE
     description = factory.LazyAttribute(lambda obj: f"Description for {obj.name}")
     is_active = True
     allow_applications = True

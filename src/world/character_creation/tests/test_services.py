@@ -28,7 +28,7 @@ from world.magic.factories import (
     TraditionGiftGrantFactory,
 )
 from world.realms.models import Realm
-from world.roster.models import Roster
+from world.roster.seeds import ensure_rosters
 from world.skills.factories import SkillFactory
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
@@ -71,6 +71,12 @@ class FinalizationTestMixin:
         height_band, build, path, effect_type, resonance, tradition.
         """
         slug = prefix.lower().replace(" ", "_")
+
+        # finalize_character()/approve_application() now look up seeded rosters by
+        # roster_type (Roster.objects.get — #2728) instead of lazily creating them
+        # via ensure_rosters(). Seed all seven shelves here so any finalization test
+        # can add_to_roster=True/False or approve without a Roster.DoesNotExist.
+        ensure_rosters()
 
         target.realm = Realm.objects.create(name=f"{prefix} Realm", description="Test")
         target.area = StartingArea.objects.create(
@@ -118,7 +124,6 @@ class FinalizationTestMixin:
                 name=stat_name,
                 defaults={"trait_type": TraitType.STAT, "description": stat_name},
             )
-        Roster.objects.get_or_create(name="Available Characters")
         target.path = PathFactory(name=f"{prefix} Path", stage=PathStage.PROSPECT, minimum_level=1)
         target.effect_type = EffectTypeFactory()
         target.resonance = ResonanceFactory()
@@ -1764,6 +1769,8 @@ class FinalizeGMCharacterTests(TestCase):
     def setUpTestData(cls) -> None:
         from world.gm.factories import GMProfileFactory, GMTableFactory
 
+        # finalize_gm_character() looks up a seeded roster by roster_type (#2728).
+        ensure_rosters()
         cls.gm = GMProfileFactory()
         cls.table = GMTableFactory(gm=cls.gm)
 
@@ -1786,11 +1793,13 @@ class FinalizeGMCharacterTests(TestCase):
 
     def test_creates_roster_entry_on_available(self) -> None:
         from world.character_creation.services import finalize_gm_character
+        from world.roster.models.choices import RosterType
 
         draft = self._make_gm_draft()
         entry, _ = finalize_gm_character(draft)
         assert entry.pk is not None
-        assert entry.roster.name == "Available"
+        # Match the typed key (#2728), never the display label.
+        assert entry.roster.roster_type == RosterType.AVAILABLE
 
     def test_stamps_gm_table_provenance(self) -> None:
         """The roster entry records GM_TABLE provenance + the authoring GM + table (#1506)."""

@@ -30,7 +30,7 @@ from world.magic.seeds_checks import (
     ensure_character_magic_check_type,
 )
 from world.realms.models import Realm
-from world.roster.models import Roster
+from world.roster.seeds import ensure_rosters
 from world.skills.factories import SkillFactory
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
@@ -121,12 +121,13 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        # finalize_character() looks up a seeded roster by roster_type (#2728).
+        ensure_rosters()
         for stat_name in _PROVISION_STATS:
             Trait.objects.get_or_create(
                 name=stat_name,
                 defaults={"trait_type": TraitType.STAT, "description": stat_name},
             )
-        Roster.objects.get_or_create(name="Available Characters")
 
         realm = Realm.objects.create(name="ProvisionCheck Realm", description="Test")
         area = StartingArea.objects.create(
@@ -264,12 +265,13 @@ class GetCharacterCastCheckTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        # finalize_character() looks up a seeded roster by roster_type (#2728).
+        ensure_rosters()
         for stat_name in _PROVISION_STATS:
             Trait.objects.get_or_create(
                 name=stat_name,
                 defaults={"trait_type": TraitType.STAT, "description": stat_name},
             )
-        Roster.objects.get_or_create(name="Available Characters")
 
         realm = Realm.objects.create(name="CastCheck Realm", description="Test")
         area = StartingArea.objects.create(

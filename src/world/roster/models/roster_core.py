@@ -18,7 +18,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.roster.managers import RosterEntryManager
-from world.roster.models.choices import ActivityRequirement, CreationProvenance
+from world.roster.models.choices import ActivityRequirement, CreationProvenance, RosterType
 
 
 class Roster(NaturalKeyMixin, SharedMemoryModel):
@@ -30,6 +30,15 @@ class Roster(NaturalKeyMixin, SharedMemoryModel):
         max_length=50,
         unique=True,
         help_text="e.g., Active, Inactive, Available",
+    )
+    roster_type = models.CharField(
+        max_length=16,
+        choices=RosterType.choices,
+        unique=True,
+        help_text=(
+            "The shelf this roster IS — the key code matches on (#2728). `name` is"
+            " a display label only."
+        ),
     )
     description = models.TextField(
         blank=True,
@@ -62,13 +71,19 @@ class Roster(NaturalKeyMixin, SharedMemoryModel):
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
-        fields = ["name"]
+        fields = ["roster_type"]
 
     def __str__(self) -> str:
         return self.name
 
     class Meta:
         ordering: ClassVar[list[str]] = ["sort_order", "name"]
+        constraints: ClassVar[list[models.BaseConstraint]] = [
+            models.CheckConstraint(
+                condition=models.Q(roster_type__in=RosterType.values),
+                name="roster_roster_type_in_vocabulary",
+            ),
+        ]
 
 
 class RosterEntry(SharedMemoryModel):

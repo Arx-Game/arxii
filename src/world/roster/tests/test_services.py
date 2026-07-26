@@ -12,6 +12,7 @@ from world.roster.factories import (
     RosterFactory,
 )
 from world.roster.models import RosterApplication
+from world.roster.models.choices import RosterType
 
 
 class PlayerDataServiceTestCase(TestCase):
@@ -21,7 +22,7 @@ class PlayerDataServiceTestCase(TestCase):
         """Set up test data for each test"""
         self.player_data = PlayerDataFactory()
         self.character = CharacterSheetFactory().character
-        self.roster = RosterFactory(is_active=True)
+        self.roster = RosterFactory(roster_type=RosterType.ACTIVE, is_active=True)
         self.roster_entry = RosterEntryFactory(
             character_sheet__character=self.character,
             roster=self.roster,
@@ -70,7 +71,7 @@ class PlayerDataServiceTestCase(TestCase):
 
         # Create character with roster entry in inactive roster
         non_roster_char = CharacterFactory()
-        inactive_roster = RosterFactory(is_active=False)
+        inactive_roster = RosterFactory(roster_type=RosterType.INACTIVE, is_active=False)
         non_roster_entry = RosterEntryFactory(
             character_sheet__character=non_roster_char,
             roster=inactive_roster,
@@ -143,15 +144,25 @@ class RosterPolicyServiceTestCase(TestCase):
         """Set up test data for each test"""
         self.player_data = PlayerDataFactory()
 
-        # Create different roster types for testing
-        self.active_roster = RosterFactory(name="Active", is_active=True, sort_order=1)
+        # Create different roster types for testing. roster_type (#2728) is what the
+        # policy gate matches on now, not name — set it explicitly on every row here
+        # (not just the restricted one) so this test's outcome never depends on
+        # RosterFactory's cycling default landing on RosterType.RESTRICTED by chance.
+        self.active_roster = RosterFactory(
+            name="Active",
+            roster_type=RosterType.ACTIVE,
+            is_active=True,
+            sort_order=1,
+        )
         self.restricted_roster = RosterFactory(
             name="Restricted",
+            roster_type=RosterType.RESTRICTED,
             is_active=True,
             sort_order=2,
         )
         self.inactive_roster = RosterFactory(
             name="Inactive",
+            roster_type=RosterType.INACTIVE,
             is_active=False,
             sort_order=3,
         )

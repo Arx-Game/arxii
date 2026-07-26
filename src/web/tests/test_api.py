@@ -19,7 +19,7 @@ from world.roster.factories import (
     RosterTenureFactory,
     TenureDisplaySettingsFactory,
 )
-from world.roster.models import Roster, RosterEntry
+from world.roster.models import Roster, RosterEntry, RosterType
 
 
 class WebAPITests(TestCase):
@@ -44,7 +44,7 @@ class WebAPITests(TestCase):
         sheet, _ = CharacterSheet.objects.get_or_create(character=character)
         entry = RosterEntry.objects.create(
             character_sheet=sheet,
-            roster=Roster.objects.create(name="Active"),
+            roster=Roster.objects.create(name="Active", roster_type=RosterType.ACTIVE),
         )
         entry.last_puppeted = timezone.now()
         entry.save()
@@ -124,7 +124,7 @@ class WebAPITests(TestCase):
             db_key="Hero",
             db_typeclass_path="typeclasses.characters.Character",
         )
-        roster = Roster.objects.create(name="Active")
+        roster = Roster.objects.create(name="Active", roster_type=RosterType.ACTIVE)
         from world.character_sheets.models import CharacterSheet
 
         sheet, _ = CharacterSheet.objects.get_or_create(character=character)
@@ -151,7 +151,7 @@ class WebAPITests(TestCase):
             db_key="Hero",
             db_typeclass_path="typeclasses.characters.Character",
         )
-        roster = Roster.objects.create(name="Active")
+        roster = Roster.objects.create(name="Active", roster_type=RosterType.ACTIVE)
         from world.character_sheets.models import CharacterSheet
 
         sheet, _ = CharacterSheet.objects.get_or_create(character=character)

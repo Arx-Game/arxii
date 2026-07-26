@@ -63,8 +63,8 @@ from world.missions.models import (
     MissionTemplate,
 )
 from world.realms.models import Realm
-from world.roster.models import Roster
 from world.roster.models.families import Family
+from world.roster.seeds import ensure_rosters
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
@@ -1029,8 +1029,10 @@ def seed_character_creation_dev() -> None:
             {"trait_type": TraitType.STAT, "description": stat_name},
             name=stat_name,
         )
-    Roster.objects.get_or_create(name="Available Characters")
-    Roster.objects.get_or_create(name="Active Characters")
+    # Rosters are keyed by roster_type, never by name (#2728) — and creating them
+    # by name alone would now violate the NOT NULL + vocabulary CheckConstraint on
+    # roster_type. ensure_rosters() creates all seven canonical shelves idempotently.
+    ensure_rosters()
     _seed_cg_explanations()
     ensure_tradition_training_distinction()
     ensure_somehow_always_broke_distinction()

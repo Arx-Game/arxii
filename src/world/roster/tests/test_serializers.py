@@ -17,6 +17,7 @@ from world.roster.factories import (
     TenureMediaFactory,
 )
 from world.roster.models import ApplicationStatus, RosterApplication
+from world.roster.models.choices import RosterType
 from world.roster.serializers import MyRosterEntrySerializer, RosterEntrySerializer
 
 
@@ -406,7 +407,10 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
             },
             {
                 "name": "roster not accepting applications",
+                # Name the shelf: roster_type is the get_or_create key, so a bare
+                # roster__allow_applications=False would be discarded onto Active.
                 "setup": lambda: RosterEntryFactory(
+                    roster__roster_type=RosterType.RESTRICTED,
                     roster__allow_applications=False,
                 ).character_sheet.character,
                 "character_attr": "setup_result",
@@ -455,8 +459,9 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
                     context={"request": request},
                 )
 
-                # Verify rejection
-        assert not serializer.is_valid(), f"Expected validation failure for {case['name']}"
+                # Verify rejection. This assert must stay inside the subTest —
+                # dedented to the outer level it only ever checked the final case.
+                assert not serializer.is_valid(), f"Expected validation failure for {case['name']}"
 
 
 class RosterEntrySerializerTestCase(TestCase):

@@ -15,6 +15,7 @@ from world.character_creation.services import (
     request_revisions,
     submit_draft_for_review,
 )
+from world.roster.seeds import ensure_rosters
 
 
 class CGEmailTests(TestCase):
@@ -24,6 +25,9 @@ class CGEmailTests(TestCase):
     def setUpTestData(cls):
         cls.account = AccountFactory(email="applicant@example.com")
         cls.staff = AccountFactory(is_staff=True)
+        # finalize_character is mocked below, but approve_application's own
+        # Roster.objects.get(roster_type=ACTIVE) lookup (#2728) is not — seed it.
+        ensure_rosters()
 
     def _make_application(self, status=ApplicationStatus.IN_REVIEW):
         draft = CharacterDraftFactory(account=self.account)

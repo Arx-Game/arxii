@@ -9,6 +9,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from evennia_extensions.factories import AccountFactory
 from world.roster.factories import (
     ArtistFactory,
     CharacterFactory,
@@ -23,6 +24,7 @@ from world.roster.factories import (
 from world.roster.models import (
     ApplicationStatus,
     RosterApplication,
+    RosterType,
     TenureGallery,
     TenureMedia,
 )
@@ -37,6 +39,7 @@ class TestRosterViewSet(TestCase):
 
         # Create test rosters
         self.active_roster = RosterFactory(
+            roster_type=RosterType.ACTIVE,
             name="Noble Houses",
             description="Characters from noble families",
             is_active=True,
@@ -44,6 +47,7 @@ class TestRosterViewSet(TestCase):
         )
 
         self.inactive_roster = RosterFactory(
+            roster_type=RosterType.INACTIVE,
             name="Inactive Roster",
             description="Not currently in play",
             is_active=False,
@@ -136,6 +140,7 @@ class TestRosterViewSet(TestCase):
         """Test that rosters are ordered by sort_order then name."""
         # Create another active roster with different sort_order
         RosterFactory(
+            roster_type=RosterType.AVAILABLE,
             name="Commoners",
             is_active=True,
             sort_order=0,  # Lower sort_order, should come first
@@ -195,6 +200,41 @@ class TestRosterViewSet(TestCase):
         # Should still return count for anonymous users
         assert "available_count" in roster_data
         assert isinstance(roster_data["available_count"], int)
+
+    def test_anonymous_caller_does_not_see_non_public_roster(self):
+        """is_public gates listing (#2728) — FROZEN/NPC are is_active but not public."""
+        RosterFactory(
+            roster_type=RosterType.NPC,
+            name="NPCs",
+            is_active=True,
+            is_public=False,
+        )
+
+        url = reverse("roster:rosters-list")
+        response = self.client.get(url)
+
+        assert response.status_code == 200
+        names = [row["name"] for row in response.json()]
+        assert "NPCs" not in names
+        assert "Noble Houses" in names
+
+    def test_staff_caller_sees_non_public_roster(self):
+        """Staff callers see every active roster, public or not."""
+        RosterFactory(
+            roster_type=RosterType.NPC,
+            name="NPCs",
+            is_active=True,
+            is_public=False,
+        )
+        staff_account = AccountFactory(is_staff=True)
+        self.client.force_authenticate(user=staff_account)
+
+        url = reverse("roster:rosters-list")
+        response = self.client.get(url)
+
+        assert response.status_code == 200
+        names = [row["name"] for row in response.json()]
+        assert "NPCs" in names
 
 
 class TestMediaViewSet(TestCase):

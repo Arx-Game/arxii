@@ -41,13 +41,19 @@ class CreationProvenance(models.TextChoices):
 
 
 class RosterType(models.TextChoices):
-    """Common roster type names for validation"""
+    """The shelf a character sits on — the single key for roster identity (#2728).
+
+    ``Roster.roster_type`` stores one of these; ``Roster.name`` is a display
+    label only. Anything matching a roster in code matches on this.
+    """
 
     ACTIVE = "Active", "Active"
     INACTIVE = "Inactive", "Inactive"
     AVAILABLE = "Available", "Available"
     RESTRICTED = "Restricted", "Restricted"  # Characters requiring special approval
     FROZEN = "Frozen", "Frozen"
+    PENDING = "Pending", "Pending"  # Awaiting staff approval
+    NPC = "NPC", "NPC"  # Never claimable, never swept (#2728 §10)
 
 
 class ActivityRequirement(models.TextChoices):

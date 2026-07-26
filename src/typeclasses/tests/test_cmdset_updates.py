@@ -9,7 +9,7 @@ from evennia_extensions.factories import (
     CharacterFactory,
     ObjectDBFactory,
 )
-from world.roster.models import Roster, RosterEntry
+from world.roster.models import Roster, RosterEntry, RosterType
 
 
 class CommandUpdateTests(TestCase):
@@ -59,7 +59,7 @@ class CommandUpdateTests(TestCase):
     def test_at_post_puppet_updates_last_puppeted(self):
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         char = CharacterFactory(location=room)
-        roster = Roster.objects.create(name="Active")
+        roster = Roster.objects.create(name="Active", roster_type=RosterType.ACTIVE)
         from world.character_sheets.models import CharacterSheet
 
         sheet, _ = CharacterSheet.objects.get_or_create(character=char)

@@ -18,6 +18,7 @@ from world.roster.factories import (
     RosterTenureFactory,
 )
 from world.roster.models import ApplicationStatus, RosterApplication
+from world.roster.models.choices import RosterType
 
 
 class RosterApplicationModelTestCase(TestCase):
@@ -192,7 +193,12 @@ class RosterEntryModelTestCase(TestCase):
         del entry.cached_tenures
         assert not entry.accepts_applications
 
-        disallowed = RosterEntryFactory(roster__allow_applications=False)
+        # Name the shelf: roster_type is the get_or_create key, so a bare
+        # roster__allow_applications=False would be discarded onto the Active row.
+        disallowed = RosterEntryFactory(
+            roster__roster_type=RosterType.RESTRICTED,
+            roster__allow_applications=False,
+        )
         assert not disallowed.accepts_applications
 
 
