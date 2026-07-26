@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from world.magic.models import CharacterAnima
 from world.magic.types.ritual import AnimaRegenTickSummary, RitualOutcome
@@ -259,6 +259,12 @@ def _uniquify_ritual_name(base: str) -> str:
 
     Terminates because each candidate is distinct and only finitely many rows exist.
     Truncates the base so a suffixed result still fits ``max_length``.
+
+    NOT race-safe by itself: this does a plain ``SELECT`` and returns — the actual
+    ``INSERT`` happens later, in a separate statement, so two concurrent callers can
+    both pass this check for the same candidate before either commits (TOCTOU under
+    PostgreSQL READ COMMITTED). The retry loop in `provision_player_anima_ritual`'s
+    caller is what closes that window; this function only narrows it.
     """
     from world.magic.models.rituals import Ritual  # noqa: PLC0415
 
@@ -274,6 +280,17 @@ def _uniquify_ritual_name(base: str) -> str:
         if not Ritual.objects.filter(name=candidate).exists():
             return candidate
         attempt += 1
+
+
+# Cap on create-Ritual retries after a name-uniqueness race (#2724 follow-up). Each
+# attempt re-samples _uniquify_ritual_name inside its own savepoint (nested
+# transaction.atomic()); on IntegrityError the savepoint rolls back cleanly so the
+# surrounding finalize_magic_data atomic block stays usable, and the next attempt
+# tries again against the now-updated row set. Exhausting every attempt means
+# max_length-truncated candidates are colliding faster than we can resolve them — no
+# longer "routine" — so the final IntegrityError is deliberately left to propagate
+# (see the raise below) rather than silently skipping ritual creation for the player.
+_RITUAL_NAME_ATTEMPTS = 5
 
 
 @transaction.atomic
@@ -353,17 +370,38 @@ def provision_player_anima_ritual(  # noqa: PLR0913
 
     # 3. Create the Ritual row (no service_function_path, no flow — SCENE_ACTION).
     # Description and narrative prose are placeholder text editable post-CG.
-    ritual = Ritual.objects.create(
-        name=_uniquify_ritual_name(ritual_name),
-        description=(
-            "A personal ritual for restoring anima. "
-            "Edit this description to match your character's practice."
-        ),
-        narrative_prose=f"{ritual_name} is performed to restore anima.",
-        execution_kind=RitualExecutionKind.SCENE_ACTION,
-        service_function_path="",
-        author_account=account,
-    )
+    # _uniquify_ritual_name's uniqueness check and this create() are two separate
+    # statements, so a concurrent request can pass the check for the same candidate
+    # before either commits (#2724 follow-up). Each attempt runs in its own nested
+    # transaction.atomic() (a savepoint): a losing IntegrityError rolls back just that
+    # savepoint, leaving the outer finalize_magic_data atomic block usable for the next
+    # attempt — a bare try/except here would instead poison the whole outer transaction
+    # (any further query would raise TransactionManagementError).
+    ritual: Ritual | None = None
+    for attempt in range(_RITUAL_NAME_ATTEMPTS):
+        try:
+            with transaction.atomic():
+                ritual = Ritual.objects.create(
+                    name=_uniquify_ritual_name(ritual_name),
+                    description=(
+                        "A personal ritual for restoring anima. "
+                        "Edit this description to match your character's practice."
+                    ),
+                    narrative_prose=f"{ritual_name} is performed to restore anima.",
+                    execution_kind=RitualExecutionKind.SCENE_ACTION,
+                    service_function_path="",
+                    author_account=account,
+                )
+            break
+        except IntegrityError:
+            if attempt == _RITUAL_NAME_ATTEMPTS - 1:
+                # Every retry raced and lost the same name-uniqueness race — deliberately
+                # not swallowed: raising is safer than silently skipping ritual creation.
+                raise
+            continue
+    # Unreachable with ritual still None: every loop exit is either `break` (ritual
+    # just assigned) or `raise` (propagates, skipping everything below).
+    assert ritual is not None  # noqa: S101  # type narrowing for mypy/ty
 
     # 4. Synthesize the character's personal magic check (#1306) — rolled by this
     # ritual AND by the character's technique casts. Idempotent.
