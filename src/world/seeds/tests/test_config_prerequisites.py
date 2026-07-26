@@ -24,6 +24,24 @@ class ConfigPrerequisiteTests(TestCase):
         for name, fn in CONFIG_PREREQUISITES.items():
             self.assertTrue(callable(fn), f"{name} is not callable")
 
+    def test_registry_covers_every_triaged_module(self) -> None:
+        expected = {
+            "technique_cast",
+            "fatigue",
+            "fury",
+            "spread",
+            "vitals",
+            "conditions",
+            "dreams",
+            "alterations",
+            "locations",
+            "combat_stats",
+            "projects",
+            "ships",
+        }
+        missing = expected - set(CONFIG_PREREQUISITES)
+        self.assertFalse(missing, f"unregistered prerequisites: {sorted(missing)}")
+
     def test_running_every_prerequisite_is_idempotent(self) -> None:
         for fn in CONFIG_PREREQUISITES.values():
             fn()
