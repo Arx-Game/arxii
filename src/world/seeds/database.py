@@ -19,24 +19,30 @@ parallel exception type). Path resolution reuses
 ``.env`` lookup) rather than re-parsing the environment here.
 
 Config prerequisites come before EVEN the content load (#2474 first-run gap
-fix): lore-repo ``Technique`` fixtures FK an ``ActionTemplate`` by natural
-key (``["Technique Cast"]``), but that row is pure config seeded by
-``world.magic.seeds_cast.ensure_technique_cast_content()`` — which used to
-run only later, inside the cluster-seeder loop below. On a fresh database
-``load_world_content``'s deferred-retry loop (which only retries against
-rows the content/grid load itself creates) can never resolve that FK, so
-every Technique row was silently skipped on the very first run. The fix:
-config/lookup rows that content fixtures FK by natural key must exist
-BEFORE the content load runs; content itself never lives here — only the
-narrow, idempotent config prerequisite. See issue #2474 Decision 5.
+fix; generalised into a registry in #2724): rows the code names by string
+literal — e.g. lore-repo ``Technique`` fixtures FK an ``ActionTemplate`` by
+natural key (``["Technique Cast"]``) — are pure config, not authored content,
+yet used to be seeded only later, inside the cluster-seeder loop below (or,
+for ``fatigue_willpower``/the fury check/the spread skills, only lazily on
+first gameplay use). On a fresh database ``load_world_content``'s
+deferred-retry loop (which only retries against rows the content/grid load
+itself creates) can never resolve a config FK, so a Technique row could be
+silently skipped on the very first run, and an undeclared config row (e.g.
+``fatigue_willpower``) could be tidied out of a fixture with nothing to
+notice. The fix: every such row is declared in
+``world.seeds.config_prerequisites.CONFIG_PREREQUISITES`` and run BEFORE the
+content load, so a lore fixture always wins over the code default and the
+rows land outside ``test_no_content_slop``'s measurement window; content
+itself never lives here — only the narrow, idempotent config prerequisites.
+See issue #2474 Decision 5 and #2724.
 """
 
 from __future__ import annotations
 
 from core_management.content_fixtures import ContentError, load_world_content
 from core_management.content_repo import resolve_content_root
-from world.magic.seeds_cast import ensure_technique_cast_content
 from world.seeds.clusters import CLUSTER_SEEDERS, seeded_models
+from world.seeds.config_prerequisites import CONFIG_PREREQUISITES
 from world.seeds.types import SeedReport
 
 _MISSING_CONTENT_ROOT_MSG = (
@@ -67,13 +73,11 @@ def load_content_first() -> int:
     if content_root is None:
         raise ContentError(_MISSING_CONTENT_ROOT_MSG)
 
-    # Config prerequisite (#2474 first-run gap fix): the shared "Technique Cast"
-    # ActionTemplate (+ its CheckType/ConsequencePool) must exist before the
-    # content load, since lore-repo Technique fixtures FK it by natural key and
-    # the content load's own deferred-retry loop cannot conjure config rows the
-    # content/grid load never creates. Idempotent; not content — see the module
-    # docstring's "Config prerequisites" section.
-    ensure_technique_cast_content()
+    # Config prerequisites (#2474 first-run gap fix, generalised in #2724): rows the
+    # code names by string literal must exist BEFORE the content load, so lore fixtures
+    # can FK them by natural key and so an authored value upserts over the code default.
+    for prerequisite in CONFIG_PREREQUISITES.values():
+        prerequisite()
 
     content_result = load_world_content(content_root)
     return content_result.created + content_result.updated
