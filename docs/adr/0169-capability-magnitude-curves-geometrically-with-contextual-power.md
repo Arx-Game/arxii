@@ -72,6 +72,18 @@ see, can they still speak) must not flicker based on whether a combat encounter 
 to be running right now — capability is a standing fact about the character, not a
 combat-round variable.
 
+This holds exactly on the ambient default, not universally: `_technique_capability_values`
+(the agency oracle, `world.conditions.services`) accepts an optional `action_ctx` and
+threads its `involved_traits` through to `contextual_thread_power`, while
+`_get_technique_sources` (the availability oracle, `world.mechanics.services`) has no
+`action_ctx` parameter at all and always builds the bare ambient context. So a TRAIT-kind
+thread's tier-0 bump can light up the agency oracle's answer during a real climbing
+action while the availability oracle never sees it. This is the intended climbing case
+(D4) working as designed — the two oracles diverge exactly when a caller supplies a real
+action context, which only the agency oracle's call sites currently do — not a bug, but
+the "same power figure" claim above is scoped to the shared ambient-default case, not a
+blanket guarantee across both oracles' full call surface.
+
 ## Rejected alternatives
 
 - **Linear scaling** (the pre-#2708 shape). Rejected: a linear bump never reaches a

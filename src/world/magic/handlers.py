@@ -454,6 +454,38 @@ class CharacterThreadHandler:
         dozen queries, and the agency oracle sweeps every known technique. One derivation
         per character per request keeps that sweep constant-query. Cleared by
         ``invalidate()`` alongside ``_all``.
+
+        **STALENESS CONTRACT (#2708 C1 review, I2 — read before adding a POWER source):**
+        this ``cached_property`` lives on ``CharacterThreadHandler``, which hangs off
+        ``character.threads`` — a ``cached_property`` on the ``Character`` typeclass, so
+        it survives as long as the underlying ``ObjectDB`` stays resident in the
+        SharedMemoryModel idmapper, NOT just one request. ``invalidate()`` is called only
+        from ~6 thread/covenant/gift mutation sites (``world/covenants/services.py``,
+        ``world/magic/specialization/services.py``, ``world/magic/services/crossing.py``,
+        ``world/magic/services/signature.py``, ``world/magic/services/threads.py``). But
+        the value this method derives now depends on ``get_modifier_breakdown`` +
+        ``get_condition_modifier_breakdown`` (null-scoped POWER contributions from
+        distinctions/species/equipment AND conditions) and, via the power-term providers,
+        ``sheet.current_level``. NOTHING in ``world.conditions`` (applying/removing a
+        POWER-boosting condition), ``world.progression`` (leveling), or
+        ``world.distinctions`` (granting/revoking a POWER-scoped distinction) calls
+        ``threads.invalidate()``. A character who gains such a condition, levels, or
+        gains a distinction after this property is first read keeps the STALE value —
+        and, symmetrically, keeps an inflated value after a boosting condition expires —
+        until something on the thread/covenant/gift list happens to invalidate the whole
+        handler. Pre-#2708 this cache held only thread-derived data, so its invalidation
+        contract was exactly right; #2708 widened what it depends on without widening who
+        clears it. Fixing this needs either (a) invalidating from every condition/
+        progression/distinction write path that touches a POWER-category
+        ``ModifierTarget`` (broad, cross-app, real risk of missing a site — the same
+        failure shape that created this gap), or (b) narrowing this cache's scope so it
+        cannot outlive the state it reads (conflicts with the O(1)-sweep reason it's
+        memoized here at all, per the ``_technique_capability_values``/
+        ``_get_technique_sources`` query-count regression tests). Neither is safely
+        scoped to a fold-in fix; this docstring is the deliberate (c) — flag it loudly
+        for whoever turns the curve on (i.e. creates the first ``CapabilityPowerConfig``
+        row), since that is the moment this staleness starts actually moving capability
+        magnitudes rather than being inert.
         """
         from world.magic.services.techniques import _derive_power  # noqa: PLC0415
 

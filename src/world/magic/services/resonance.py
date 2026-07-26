@@ -596,6 +596,13 @@ def _anchor_ambiently_active(  # noqa: PLR0911 — one arm per TargetKind, flat 
     *set* instead of this mapping was the unsound shape that made that leak possible). A
     lone call (e.g. from tests) omits the kwarg and :func:`_gift_in_action` computes the
     mapping internally — single-call correctness is preserved.
+
+    ``ctx.excluded_kinds`` (#1919) is honoured ONLY via the COVENANT_ROLE arm, which
+    delegates straight to :func:`_anchor_in_action` (the function that actually checks
+    it). Every other arm below ignores it entirely — harmless today because no caller of
+    this function currently populates ``excluded_kinds`` on a context it also threads
+    through here, but the next arm author (or the first caller to do so) should not
+    assume exclusion is honoured uniformly across kinds without checking each arm.
     """
     if thread.target_kind == TargetKind.COVENANT_ROLE:
         # Identical to the pull predicate: engagement is already demonstrable.

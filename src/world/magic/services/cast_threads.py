@@ -64,6 +64,18 @@ def build_applicable_threads(
     ``ambient=False`` (default) uses ``_anchor_in_action`` — the paid-pull predicate, the
     behaviour every pre-#2708 caller relies on. ``ambient=True`` uses
     ``_anchor_ambiently_active``, the stricter passive predicate (#2708).
+
+    **``ambient=True`` has no production caller** (#2708 C1 review, M4):
+    ``build_cast_applicable_threads`` — the only production wrapper — always passes
+    ``ambient=False``. The capability magnitude curve's own ambient sweep
+    (``_technique_capability_values`` / ``_get_technique_sources``) reads
+    ``CharacterThreadHandler.contextual_thread_power`` directly instead of going through
+    this function. ``ambient=True`` is kept deliberately (not dead code to delete) as a
+    standalone-testability seam for ``_anchor_ambiently_active``'s merge-into-
+    ``ApplicableThread`` behaviour, independent of the capability oracles' own tests —
+    see ``world/magic/tests/test_cast_threads.py``. If a future caller needs the ambient
+    predicate merged into an ``ApplicableThread`` list outside a test, this is where it
+    should reach; until then, do not treat the branch as unreachable/removable.
     """
     by_thread: dict[int, int] = {}
     threads = list(
