@@ -103,7 +103,7 @@ def sweep_activity_states() -> dict[str, int]:
     ).select_related("roster_entry__roster")
 
     inactive_tiers = {
-        DecayTier.INACTIVE,
+        DecayTier.SHORT_INACTIVE,
         DecayTier.LONG_INACTIVE,
         DecayTier.DORMANT,
     }

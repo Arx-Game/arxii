@@ -334,7 +334,12 @@ class LifecycleState(models.TextChoices):
     """
 
     ALIVE = "ALIVE", "Alive"
-    CAPTURED = "CAPTURED", "Captured / Unknown"
+    CAPTURED = "CAPTURED", "Captured"
+    # Split from CAPTURED (#2728 §2). "Captured" means someone is holding them —
+    # the captivity system drives it. "Unknown" means their whereabouts are
+    # genuinely unknown in-world, which is a mystery investigation can resolve.
+    # Smashing the two together made the state unusable for anyone searching.
+    UNKNOWN = "UNKNOWN", "Whereabouts unknown"
     COMA = "COMA", "Coma"
     RETIRED = "RETIRED", "Retired"
     DEAD = "DEAD", "Dead"
@@ -350,7 +355,10 @@ class DecayTier(models.TextChoices):
     """
 
     RECENT_INACTIVE = "RECENT_INACTIVE", "Recently inactive (14+ days)"
-    INACTIVE = "INACTIVE", "Inactive (30+ days)"
+    # Named SHORT_INACTIVE, not INACTIVE (#2728 §3): a bare ``INACTIVE`` here
+    # collides with ActivityState.INACTIVE, and the two mean different things —
+    # this is a day-count tier, that is the flag a sweep sets.
+    SHORT_INACTIVE = "SHORT_INACTIVE", "Short inactive (30+ days)"
     LONG_INACTIVE = "LONG_INACTIVE", "Long inactive (90+ days)"
     DORMANT = "DORMANT", "Dormant (365+ days)"
 
@@ -358,7 +366,7 @@ class DecayTier(models.TextChoices):
 DECAY_TIER_THRESHOLDS_DAYS = {
     DecayTier.DORMANT: 365,
     DecayTier.LONG_INACTIVE: 90,
-    DecayTier.INACTIVE: 30,
+    DecayTier.SHORT_INACTIVE: 30,
     DecayTier.RECENT_INACTIVE: 14,
 }
 """Tier → minimum days-since-signal. Walked in descending-threshold order so the

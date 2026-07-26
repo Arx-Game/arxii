@@ -26324,13 +26324,14 @@ export interface components {
     LocationModeEnum: 'anywhere' | 'anchor' | 'rooms' | 'instance' | 'area';
     /**
      * @description * `ALIVE` - Alive
-     *     * `CAPTURED` - Captured / Unknown
+     *     * `CAPTURED` - Captured
+     *     * `UNKNOWN` - Whereabouts unknown
      *     * `COMA` - Coma
      *     * `RETIRED` - Retired
      *     * `DEAD` - Dead
      * @enum {string}
      */
-    MachineMatchLifecycleStateEnum: 'ALIVE' | 'CAPTURED' | 'COMA' | 'RETIRED' | 'DEAD';
+    MachineMatchLifecycleStateEnum: 'ALIVE' | 'CAPTURED' | 'UNKNOWN' | 'COMA' | 'RETIRED' | 'DEAD';
     /** @description Validate input for creating a training allocation. */
     ManageTrainingAddRequest: {
       skill_id?: number | null;
@@ -32139,7 +32140,8 @@ export interface components {
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
        *     * `ALIVE` - Alive
-       *     * `CAPTURED` - Captured / Unknown
+       *     * `CAPTURED` - Captured
+       *     * `UNKNOWN` - Whereabouts unknown
        *     * `COMA` - Coma
        *     * `RETIRED` - Retired
        *     * `DEAD` - Dead
@@ -32151,7 +32153,8 @@ export interface components {
        * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
        *
        *     * `ALIVE` - Alive
-       *     * `CAPTURED` - Captured / Unknown
+       *     * `CAPTURED` - Captured
+       *     * `UNKNOWN` - Whereabouts unknown
        *     * `COMA` - Coma
        *     * `RETIRED` - Retired
        *     * `DEAD` - Dead
@@ -35049,13 +35052,14 @@ export interface components {
     };
     /**
      * @description * `ALIVE` - Alive
-     *     * `CAPTURED` - Captured / Unknown
+     *     * `CAPTURED` - Captured
+     *     * `UNKNOWN` - Whereabouts unknown
      *     * `COMA` - Coma
      *     * `RETIRED` - Retired
      *     * `DEAD` - Dead
      * @enum {string}
      */
-    SetsSubjectLifecycleEnum: 'ALIVE' | 'CAPTURED' | 'COMA' | 'RETIRED' | 'DEAD';
+    SetsSubjectLifecycleEnum: 'ALIVE' | 'CAPTURED' | 'UNKNOWN' | 'COMA' | 'RETIRED' | 'DEAD';
     /**
      * @description * `funeral` - Funeral
      *     * `reading` - Will Reading
@@ -35804,7 +35808,8 @@ export interface components {
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
        *     * `ALIVE` - Alive
-       *     * `CAPTURED` - Captured / Unknown
+       *     * `CAPTURED` - Captured
+       *     * `UNKNOWN` - Whereabouts unknown
        *     * `COMA` - Coma
        *     * `RETIRED` - Retired
        *     * `DEAD` - Dead
@@ -35816,7 +35821,8 @@ export interface components {
        * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
        *
        *     * `ALIVE` - Alive
-       *     * `CAPTURED` - Captured / Unknown
+       *     * `CAPTURED` - Captured
+       *     * `UNKNOWN` - Whereabouts unknown
        *     * `COMA` - Coma
        *     * `RETIRED` - Retired
        *     * `DEAD` - Dead
@@ -35869,7 +35875,8 @@ export interface components {
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
        *     * `ALIVE` - Alive
-       *     * `CAPTURED` - Captured / Unknown
+       *     * `CAPTURED` - Captured
+       *     * `UNKNOWN` - Whereabouts unknown
        *     * `COMA` - Coma
        *     * `RETIRED` - Retired
        *     * `DEAD` - Dead
@@ -35881,7 +35888,8 @@ export interface components {
        * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
        *
        *     * `ALIVE` - Alive
-       *     * `CAPTURED` - Captured / Unknown
+       *     * `CAPTURED` - Captured
+       *     * `UNKNOWN` - Whereabouts unknown
        *     * `COMA` - Coma
        *     * `RETIRED` - Retired
        *     * `DEAD` - Dead

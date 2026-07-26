@@ -46341,13 +46341,15 @@ components:
       enum:
       - ALIVE
       - CAPTURED
+      - UNKNOWN
       - COMA
       - RETIRED
       - DEAD
       type: string
       description: |-
         * `ALIVE` - Alive
-        * `CAPTURED` - Captured / Unknown
+        * `CAPTURED` - Captured
+        * `UNKNOWN` - Whereabouts unknown
         * `COMA` - Coma
         * `RETIRED` - Retired
         * `DEAD` - Dead
@@ -56315,7 +56317,8 @@ components:
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
 
             * `ALIVE` - Alive
-            * `CAPTURED` - Captured / Unknown
+            * `CAPTURED` - Captured
+            * `UNKNOWN` - Whereabouts unknown
             * `COMA` - Coma
             * `RETIRED` - Retired
             * `DEAD` - Dead
@@ -56327,7 +56330,8 @@ components:
             On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
 
             * `ALIVE` - Alive
-            * `CAPTURED` - Captured / Unknown
+            * `CAPTURED` - Captured
+            * `UNKNOWN` - Whereabouts unknown
             * `COMA` - Coma
             * `RETIRED` - Retired
             * `DEAD` - Dead
@@ -62211,13 +62215,15 @@ components:
       enum:
       - ALIVE
       - CAPTURED
+      - UNKNOWN
       - COMA
       - RETIRED
       - DEAD
       type: string
       description: |-
         * `ALIVE` - Alive
-        * `CAPTURED` - Captured / Unknown
+        * `CAPTURED` - Captured
+        * `UNKNOWN` - Whereabouts unknown
         * `COMA` - Coma
         * `RETIRED` - Retired
         * `DEAD` - Dead
@@ -63794,7 +63800,8 @@ components:
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
 
             * `ALIVE` - Alive
-            * `CAPTURED` - Captured / Unknown
+            * `CAPTURED` - Captured
+            * `UNKNOWN` - Whereabouts unknown
             * `COMA` - Coma
             * `RETIRED` - Retired
             * `DEAD` - Dead
@@ -63806,7 +63813,8 @@ components:
             On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
 
             * `ALIVE` - Alive
-            * `CAPTURED` - Captured / Unknown
+            * `CAPTURED` - Captured
+            * `UNKNOWN` - Whereabouts unknown
             * `COMA` - Coma
             * `RETIRED` - Retired
             * `DEAD` - Dead
@@ -63888,7 +63896,8 @@ components:
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
 
             * `ALIVE` - Alive
-            * `CAPTURED` - Captured / Unknown
+            * `CAPTURED` - Captured
+            * `UNKNOWN` - Whereabouts unknown
             * `COMA` - Coma
             * `RETIRED` - Retired
             * `DEAD` - Dead
@@ -63900,7 +63909,8 @@ components:
             On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
 
             * `ALIVE` - Alive
-            * `CAPTURED` - Captured / Unknown
+            * `CAPTURED` - Captured
+            * `UNKNOWN` - Whereabouts unknown
             * `COMA` - Coma
             * `RETIRED` - Retired
             * `DEAD` - Dead

@@ -34,6 +34,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.descriptors import ReverseOneToOneOrNone
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.character_creation.constants import OriginStoryState
+from world.character_sheets.managers import CharacterSheetManager
 from world.character_sheets.types import (
     DECAY_TIER_THRESHOLDS_DAYS,
     ActivityState,
@@ -263,6 +264,11 @@ class CharacterSheet(SharedMemoryModel):
     Replaces Arx I's CharacterSheet model and item_data attribute system
     with proper Django model fields for better data integrity and querying.
     """
+
+    # The shared absence vocabulary (#2728 §5) — .active() / .claimable() /
+    # .dormant() / .inactive_at_least(tier). Consumers ask these instead of
+    # each deriving "is this character absent?" from raw timestamps or flags.
+    objects = CharacterSheetManager()
 
     # ObjectDB by design (#2608): THE canonical character↔ObjectDB anchor. PK-sharing
     # means sheet.pk == character ObjectDB pk; every character-scoped model FKs this
@@ -500,7 +506,9 @@ class CharacterSheet(SharedMemoryModel):
         choices=LifecycleState.choices,
         default=LifecycleState.ALIVE,
         help_text=(
-            "IC condition. ALIVE / CAPTURED / COMA / RETIRED / DEAD. Orthogonal to"
+            "IC condition. ALIVE / CAPTURED / UNKNOWN / COMA / RETIRED / DEAD."
+            " CAPTURED means someone is holding them; UNKNOWN means their"
+            " whereabouts are genuinely unknown in-world (#2728). Orthogonal to"
             " activity_state — both must be ALIVE+ACTIVE for the character to count"
             " as 'present and playing' to consumer systems."
         ),
