@@ -356,6 +356,42 @@ known technique failed requirement checks a condition or innate baseline would h
 
 ---
 
+## Capability magnitude curve — geometric scaling with contextual power (#2708 — BUILT, 2026-07-26)
+
+Before #2708, every capability grant's magnitude was flat or linear with respect to
+power: `TechniqueCapabilityGrant.calculate_value()` only ever added
+`intensity_multiplier * technique.intensity`, and thread-passive tier-0
+`CAPABILITY_GRANT` rows were worth a hardcoded `1` regardless of the granting thread's
+level. Neither could cross an ADR-0164 ladder tier boundary at any realistic power
+figure — the ladder's own tier anchors (5/~10/25/100) are roughly geometric, so a linear
+bump never lands where the ladder's own tiers actually sit.
+
+- **Geometric curve, uncapped, staff-gated by a config singleton**: both grant types now
+  compute `round(base * 2 ** (sensitivity * power / power_per_doubling))` via
+  `world.magic.services.capability_curve.apply_capability_curve`, driven by a new
+  `CapabilityPowerConfig` singleton. No config row = every consumer's pre-#2708 number,
+  bit-for-bit — the feature is turned on by staff tuning, not by this code deploying.
+- **`intensity_multiplier` retired as additive, repurposed as sensitivity** — a grant
+  authored at the default `0` (every pre-#2708 row) stays inert under the curve.
+- **`ConditionCapabilityEffect.scales_with_severity` now honoured** by all three
+  value-aggregating readers (`get_capability_status`, `get_all_capability_values`,
+  `conditions.views._aggregate_capability_effects`) — the column existed since
+  migration `conditions/0007` but every reader silently ignored it until this fix.
+- **A new ambient-activation predicate** (`_anchor_ambiently_active`,
+  `world/magic/services/resonance.py`) gates the contextual-power term feeding the
+  technique-grant curve: a free passive contribution requires demonstrable real state
+  (actual equipped items, actual current room, actual involved technique/trait), not
+  player assertion — deliberately a separate function from the paid-pull predicate
+  (`_anchor_in_action`), which does allow assertion because a pull is paid for.
+- **`get_effective_capability_value` gained an optional `action_ctx` param** (Task 8;
+  keyword-only, `None`-default, ~13 pre-existing call sites unaffected) so a real action
+  context can light up more thread kinds' contextual power than the ambient default can.
+- Full detail: `docs/systems/conditions.md`'s "Capability magnitude curve" section,
+  `docs/systems/magic.md`'s "Capability Magnitude Curve — Technique & Thread Grants"
+  section, and `docs/adr/0169-capability-magnitude-curves-geometrically-with-contextual-power.md`.
+
+---
+
 ## Deeper design & history
 
 - Scope-by-scope build record: [`magic-build-history.md`](magic-build-history.md)

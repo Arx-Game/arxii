@@ -2022,7 +2022,82 @@ pulled_hp = character.combat_pulls.active_pull_vital_bonuses("MAX_HEALTH")
 character.threads.invalidate()
 character.resonances.invalidate()
 character.combat_pulls.invalidate()
+
+# Capability magnitude curve (#2708, ADR-0169) — see docs/systems/conditions.md's
+# "Capability magnitude curve" section for the full formula/oracle detail.
+context_free_power = character.threads.context_free_power  # int, memoized
+contextual_power = character.threads.contextual_thread_power(action_ctx)  # int
 ```
+
+### Capability Magnitude Curve — Technique & Thread Grants (#2708, ADR-0169) [BUILT & WIRED]
+
+Both `TechniqueCapabilityGrant.calculate_value()` (`world/magic/models/techniques.py`)
+and thread-passive tier-0 `CAPABILITY_GRANT` rows (`CharacterThreadHandler
+._passive_capability_grants_cache`, `world/magic/handlers.py`) curve their authored
+`base_value`/`capability_grant_value` geometrically by the caster's real power, via the
+shared `world.magic.services.capability_curve.apply_capability_curve` helper:
+
+```
+value = round(base * 2 ** (sensitivity * power / power_per_doubling))
+```
+
+Gated on the `CapabilityPowerConfig` singleton (pk=1, `power_per_doubling` — power
+required to double the value, default 10) existing at all — no row means every consumer
+returns its pre-#2708 number unchanged, so the migration that ships the model is inert
+on landing. `intensity_multiplier` (technique grants) / `thread_level_multiplier(level)`
+(thread grants) is the curve's exponent sensitivity, not an additive term — a grant
+authored at sensitivity `0` (every pre-#2708 row) is inert under the curve regardless of
+config-row existence. Never returns less than `base` — the curve is a pure empowerment
+axis; a negative `ConditionCapabilityEffect` is still how impairment works.
+
+**Power inputs, by grant type:**
+
+- **Technique grants** — `world.conditions.services._technique_capability_values`
+  derives power as `technique.intensity + context_free_power + contextual_thread_power`,
+  computed fresh per known technique and fed to `calculate_value(effective_power=...)`.
+  `context_free_power` (`CharacterThreadHandler`, memoized `@cached_property`) is
+  `_derive_power(channeled_intensity=0, technique=None, applicable_threads=[]).total` —
+  the character-level term plus globally-scoped condition/character modifiers, nothing
+  technique- or thread-contextual. `contextual_thread_power(ctx)` sums the batched,
+  level-scaled tier-0 `INTENSITY_BUMP` of every owned thread that
+  `_anchor_ambiently_active` (below) confirms is genuinely engaged by `ctx` right now.
+  **Deliberately excludes combat's `eff_intensity`** — a character's capability standing
+  must not flicker based on whether combat happens to be running.
+- **Thread-passive `CAPABILITY_GRANT` rows** — sensitivity is
+  `thread_level_multiplier(thread.level)` (the same #1718 level-bucketing helper pull
+  resolution uses); power is the same `context_free_power` + `contextual_thread_power`
+  figure. Multiple threads granting the same capability fold by **MAX**, mirroring
+  ADR-0034 individuation on the technique-grant side — never sum.
+
+**Ambient activation** — `world.magic.services.resonance._anchor_ambiently_active` —
+is the demonstrable-activation gate for the contextual thread-power term: the passive
+sibling of `_anchor_in_action` (the paid-pull predicate), and deliberately a **separate
+function**, not a shared one with an `ambient=` flag. A pull is paid for, so
+`_anchor_in_action` lets a player *assert* involvement for anchor kinds with no anchor in
+the action graph (GIFT, RELATIONSHIP_*); a free passive contribution costs nothing, so
+every arm of `_anchor_ambiently_active` tests real state instead — a GIFT arm checks the
+involved technique's actual gift, a SANCTUM arm checks the character's actual current
+room, a FACET arm checks actually-worn items. Nine arms total (COVENANT_ROLE, TECHNIQUE,
+GIFT, TRAIT, SANCTUM, RELATIONSHIP_TRACK, RELATIONSHIP_CAPSTONE, FACET, MANTLE);
+`ORGANIZATION` deliberately returns `False` (needs-design follow-up — `PullActionContext`
+carries no org/mission marker yet). The canonical case this predicate exists to catch: a
+pyromancer's fire-gift thread must not raise their ability to climb a wall.
+
+`get_effective_capability_value(sheet, capability, *, action_ctx=None)` (the agency
+oracle, `world/conditions/services.py`) threads an optional real `PullActionContext`
+through to the technique-grant power derivation above. Full detail (severity-scaling fix
+on `ConditionCapabilityEffect`, the ambient-default fallback and its `TRAIT`-thread
+limitation, the ORGANIZATION deferral, the two-grant-path disambiguation) lives in
+`docs/systems/conditions.md`'s "Capability magnitude curve" section and
+`docs/adr/0169-capability-magnitude-curves-geometrically-with-contextual-power.md`.
+
+**Not the same mechanism as a paid pull's `CAPABILITY_GRANT`.** `resolve_pull_effects`
+(tiers 0-3, feeding `CombatPull`/`CombatPullResolvedEffect` — see "Thread Pull —
+Declaration Modifier" below) still treats `CAPABILITY_GRANT` as binary, gated only by
+`min_thread_level`; it does not read `capability_grant_value` and is unaffected by this
+curve. The two paths answer different questions from the same authored row: "is the
+capability granted for this committed pull" (pull-commit) vs. "what is this capability's
+standing value right now" (the oracle read above).
 
 ### Technique
 

@@ -25,7 +25,7 @@ Periodic damage dealt by a condition (`ConditionDamageOverTime`: damage type, ba
 _Avoid_: damage tick, bleed, poison (for the general mechanism)
 
 **Capability effect channel**:
-The condition effect that adds to or subtracts from a target's capability value (`ConditionCapabilityEffect`: additive integer, floored at zero). It governs what a character CAN do — movement, flight, casting — distinct from check or resistance modifiers.
+The condition effect that adds to or subtracts from a target's capability value (`ConditionCapabilityEffect`: additive integer, floored at zero, plus `scales_with_severity` — honoured by all three value-aggregating readers as of #2708, ADR-0169). It governs what a character CAN do — movement, flight, casting — distinct from check or resistance modifiers.
 _Avoid_: ability modifier, stat effect
 
 **Agency oracle** (`get_effective_capability_value`; note `get_all_capability_values` is NOT part of it —
@@ -43,6 +43,14 @@ prerequisite is target-contextual, so it stays availability-only) — folding mu
 the same capability as MAX, never a sum (ADR-0034 individuation; see ADR-0144). `TraitCapabilityDerivation`
 deliberately does NOT fold into the agency oracle — that asymmetry is intentional (availability-only), not
 an oversight.
+**Capability magnitude curve (#2708, ADR-0169):** `get_effective_capability_value` gained an optional
+keyword-only `action_ctx: PullActionContext | None` param (~13 pre-existing call sites unaffected by the
+`None` default). When supplied, it flows into `_technique_capability_values`'s power derivation, letting more
+thread kinds demonstrate real activation (via `magic`'s **Ambient Activation** — see that app's glossary) for
+the power figure that curves each `TechniqueCapabilityGrant`. Omitted, an ambient default is built from the
+character's current room alone — `TRAIT`-kind threads stay dark under that default (no way to know which
+trait, if any, is in play from a bare read). Full detail: `docs/systems/conditions.md`'s "Capability
+magnitude curve" section.
 _Avoid_: "the capability system" (there are two oracles, not one; name which)
 
 **Check effect channel**:

@@ -851,9 +851,12 @@ class AbstractDamageProfile(SharedMemoryModel):
 
 class TechniqueCapabilityGrant(NaturalKeyMixin, AbstractCapabilityGrant):
     """
-    A Capability granted by a Technique, with value derived from intensity.
+    A Capability granted by a Technique, with value derived from power.
 
-    effective_value = base_value + (intensity_multiplier * technique.intensity)
+    See ``calculate_value()`` for the exact formula (ADR-0169): a geometric curve
+    driven by the caster's real power when a ``CapabilityPowerConfig`` row exists,
+    falling back to the pre-#2708 additive shape (``base_value +
+    intensity_multiplier * power``) when it doesn't.
 
     A single Technique typically grants 2-4 Capabilities.
     """

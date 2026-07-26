@@ -72,7 +72,7 @@ Effects use mutually exclusive FKs: `condition` (all stages) OR `stage` (stage-s
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ConditionCapabilityEffect` | How a condition affects a capability | `capability`, `value` (additive integer; negative reduces, positive enhances) |
+| `ConditionCapabilityEffect` | How a condition affects a capability | `capability`, `value` (additive integer; negative reduces, positive enhances), `scales_with_severity` (inherited from `ConditionOrStageEffect`; honoured by all three readers as of #2708 — see "Capability magnitude curve" below) |
 | `ConditionCheckModifier` | How a condition modifies checks | `check_type`, `modifier_value`, `scales_with_severity` |
 | `ConditionResistanceModifier` | How a condition modifies damage resistance | `damage_type` (null = ALL), `modifier_value` |
 | `ConditionDamageOverTime` | Periodic damage from a condition | `damage_type`, `base_damage`, `scales_with_severity`, `scales_with_stacks`, `tick_timing` |
@@ -291,6 +291,103 @@ The `world.checks` app's `CheckTypeCapabilityModifier` reads this ladder through
 different lens for check-roll contribution — see `docs/systems/checks.md`'s
 "Authoring guardrail" and "Weight calibration" sections for the deviation-from-
 baseline scoring (D3) and the weight-calibration rule (D4).
+
+### Capability magnitude curve — geometric scaling with contextual power (#2708, ADR-0169) [BUILT & WIRED]
+
+Two independent things changed on top of the ADR-0164 ladder above: (1) condition
+capability effects now honour a severity flag that previously existed but was silently
+ignored, and (2) both the technique-grant and thread-passive-grant magnitude formulas
+became power-driven curves instead of flat/linear arithmetic. See
+`docs/adr/0169-capability-magnitude-curves-geometrically-with-contextual-power.md` for
+the full decision record, the rejected alternatives, and the stark-power design intent.
+
+**Severity now honoured (fix, not a new feature).** `ConditionCapabilityEffect
+.scales_with_severity` (inherited from the shared `ConditionOrStageEffect` abstract
+base, migration `conditions/0007`) always existed as a column, but before #2708 every
+reader of `ConditionCapabilityEffect` ignored it. Now all three value-aggregating
+readers honour it identically — `effect.value * instance.effective_severity` when the
+flag is set, else the pre-existing `effect.value * current_stage.severity_multiplier`
+fallback for a staged condition (never both — `effective_severity` already folds the
+stage multiplier in):
+
+- `get_capability_status` (single-capability read, `condition_contributions` breakdown)
+- `get_all_capability_values` (bulk read; the availability oracle's source-enumeration
+  consumer)
+- `conditions.views._aggregate_capability_effects` (the character-summary API endpoint)
+
+**Technique capability grants curve geometrically.**
+`TechniqueCapabilityGrant.calculate_value(*, effective_power=None, config=_UNSET)`
+(`world/magic/models/techniques.py`) computes:
+
+```
+value = round(base_value * 2 ** (intensity_multiplier * power / power_per_doubling))
+```
+
+when a `CapabilityPowerConfig` singleton (`world/magic/models/power_config.py`, pk=1,
+`power_per_doubling` default 10) exists, via
+`world.magic.services.capability_curve.apply_capability_curve`. With **no config row**,
+`calculate_value` falls back unchanged to the pre-#2708 additive shape (`base_value +
+intensity_multiplier * power`) — the feature is turned on by staff tuning a config row
+into existence, not by this code deploying. `intensity_multiplier` is **retired as an
+additive term** and repurposed as the curve's exponent sensitivity; a grant authored at
+the default `0` is inert under the curve (`2**0 == 1`) and stays byte-identical to its
+pre-#2708 value. `apply_capability_curve` never returns less than `base_value` — power
+is a pure empowerment axis; impairment stays the conditions layer's job (a negative
+`ConditionCapabilityEffect`), never this curve's.
+
+**Thread-passive tier-0 CAPABILITY_GRANT rows curve the same way**, via
+`ThreadPullEffect.capability_grant_value` (new field, #2708; default `1` reproduces the
+pre-#2708 flat grant) and `CharacterThreadHandler._passive_capability_grants_cache`
+(`world/magic/handlers.py`), sensitivity = `thread_level_multiplier(thread.level)`. When
+several owned threads grant the same capability, the fold is **MAX**, matching the
+technique-grant fold (ADR-0034 individuation) — stacking never sums. **This is a
+different mechanism from the paid-pull CAPABILITY_GRANT path** (`resolve_pull_effects`,
+tiers 0-3, feeding `CombatPull`) — see `docs/architecture/resonance-threads.md`'s §5.4
+step 3 note for the disambiguation; that path still treats CAPABILITY_GRANT as binary,
+gated only by `min_thread_level`.
+
+**Where the `power` figure comes from.** For technique grants,
+`world.conditions.services._technique_capability_values` derives power as
+`technique.intensity + context_free_power + contextual_thread_power(...)` —
+`CharacterThreadHandler.context_free_power` (character-level + globally-scoped
+condition/character modifiers, `technique=None`) plus
+`CharacterThreadHandler.contextual_thread_power(ctx)` (batched tier-0 `INTENSITY_BUMP`
+from threads `_anchor_ambiently_active` confirms are genuinely engaged). **Deliberately
+excludes combat's `eff_intensity`** (spec decision 9) — a character's capability
+standing must not flicker based on whether combat happens to be running right now.
+
+**Ambient activation — the passive sibling of the pull predicate.**
+`world.magic.services.resonance._anchor_ambiently_active` is the demonstrable-activation
+gate for a thread's contextual power contribution — the passive counterpart to
+`_anchor_in_action` (the paid-pull predicate). The two are deliberately **separate
+functions**, not one function with an `ambient=` flag: `_anchor_in_action` lets a player
+*assert* involvement for anchor kinds with no anchor in the action graph (GIFT,
+RELATIONSHIP_*) because a pull is paid for; a free passive contribution costs nothing,
+so assertion is not enough — every arm of `_anchor_ambiently_active` tests real state.
+Nine arms: COVENANT_ROLE (delegates to `_anchor_in_action` — engagement is already
+demonstrable), TECHNIQUE, GIFT (via `_gift_in_action`, narrowed per-call to
+`ctx.involved_techniques`), TRAIT, SANCTUM (character's actual current room),
+RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE (`_relationship_target_present`), FACET
+(actually-worn items via `character.equipped_items.item_facets_for`), and MANTLE
+(`_mantle_worn`). **ORGANIZATION deliberately returns `False`** — its ratified rule
+("tied to organization missions or activities") needs a marker `PullActionContext` does
+not carry; a needs-design follow-up off #2708, not a gap. The canonical failure this
+predicate prevents: a pyromancer's fire-gift thread must never raise their ability to
+climb a wall.
+
+**`action_ctx` on the agency oracle (Task 8).** `get_effective_capability_value(sheet,
+capability, *, action_ctx=None)` threads an optional real `PullActionContext` down to
+`_technique_capability_values`. Every one of the ~13 pre-#2708 call sites is unaffected
+(keyword-only, `None` default). When omitted, an **ambient default** is built from
+`character_sheet.character.location` alone (no traits, no techniques) —
+**`TRAIT`-kind threads stay dark under this default**: a bare capability read has no way
+to know which trait, if any, the character is exercising right now, so a TRAIT thread's
+tier-0 `INTENSITY_BUMP` only contributes when a supplied `action_ctx` names the trait in
+`involved_traits`. This is a known, deliberate limitation, not a gap.
+
+**A thread may move a capability's value only if it GRANTS that specific capability** —
+the curved contribution is keyed to `ThreadPullEffect.capability_grant_id`, so a
+fire-gift thread can never inflate an unrelated capability's number.
 
 ### Querying Modifiers
 
