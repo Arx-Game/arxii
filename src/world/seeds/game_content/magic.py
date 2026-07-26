@@ -2546,6 +2546,103 @@ class RelationshipTrackThreadUnlockResult:
     unlock: ThreadWeavingUnlock
 
 
+def ensure_technique_training_content():
+    """Seed the Arcane Theory skill + Technique Training CheckType + award rows (#2727).
+
+    Idempotent. Seeds:
+    - The "Arcane Theory" Skill + backing SKILL Trait (category MAGIC).
+    - The "intellect" STAT Trait (if not already present from CG seed).
+    - The "Technique Training" CheckType composing intellect + Arcane Theory.
+    - TrainingOutcomeAward rows for the 5 canonical CheckOutcome tiers.
+
+    Without this, resolve_training_check has no CheckType to resolve and no
+    award rows to map outcomes to multipliers — the check-based training
+    layer is unreachable in a live game.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
+    from world.magic.models import TrainingOutcomeAward  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import (  # noqa: PLC0415
+        CheckOutcome,
+        Trait,
+        TraitCategory,
+        TraitType,
+    )
+
+    # 1. Arcane Theory skill + backing trait.
+    arcane_trait, _ = Trait.objects.get_or_create(
+        name="Arcane Theory",
+        defaults={
+            "trait_type": TraitType.SKILL,
+            "category": TraitCategory.MAGIC,
+            "is_public": True,
+        },
+    )
+    Skill.objects.get_or_create(
+        trait=arcane_trait,
+        defaults={
+            "tooltip": "Understanding the theoretical underpinnings of magical techniques.",
+            "display_order": 0,
+            "is_active": True,
+        },
+    )
+
+    # 2. intellect stat trait (may already exist from CG seed).
+    intellect_trait, _ = Trait.objects.get_or_create(
+        name="intellect",
+        defaults={
+            "trait_type": TraitType.STAT,
+            "category": TraitCategory.MENTAL,
+            "is_public": True,
+        },
+    )
+
+    # 3. Magic check category.
+    category, _ = CheckCategory.objects.get_or_create(
+        name="Magic",
+        defaults={
+            "description": "Checks involving magical theory and practice.",
+            "display_order": 40,
+        },
+    )
+
+    # 4. Technique Training CheckType.
+    check_type, _ = CheckType.objects.get_or_create(
+        name="Technique Training",
+        category=category,
+        defaults={"is_active": True, "display_order": 10},
+    )
+    weight = Decimal("1.0")
+    CheckTypeTrait.objects.update_or_create(
+        check_type=check_type,
+        trait=intellect_trait,
+        defaults={"weight": weight},
+    )
+    CheckTypeTrait.objects.update_or_create(
+        check_type=check_type,
+        trait=arcane_trait,
+        defaults={"weight": weight},
+    )
+
+    # 5. TrainingOutcomeAward rows (5 canonical tiers).
+    award_defaults = {
+        "Critical Failure": Decimal("0.00"),
+        "Failure": Decimal("0.00"),
+        "Partial Success": Decimal("0.50"),
+        "Success": Decimal("1.00"),
+        "Critical Success": Decimal("1.50"),
+    }
+    for name, mult in award_defaults.items():
+        outcome = CheckOutcome.objects.filter(name=name).first()
+        if outcome is not None:
+            TrainingOutcomeAward.objects.update_or_create(
+                outcome_tier=outcome,
+                defaults={"dev_point_multiplier": mult},
+            )
+
+
 @dataclass
 class MagicDevSeedResult:
     """Returned by seed_magic_dev().
@@ -2839,6 +2936,8 @@ def seed_magic_dev() -> MagicDevSeedResult:
     # #2643 — mechanics config (not authored content, see the factory docstring),
     # so it's seeded directly here rather than deferred to lore-repo content.
     ensure_team_damage_percent_target()
+
+    ensure_technique_training_content()
 
     return MagicDevSeedResult(
         config=config,
