@@ -5,6 +5,7 @@ from django.test import TestCase
 from world.checks.models import CheckType, CheckTypeTrait
 from world.seeds.config_prerequisites import CONFIG_PREREQUISITES
 from world.traits.factories import StatTraitFactory
+from world.traits.models import Trait
 
 
 class ConfigPrerequisiteTests(TestCase):
@@ -78,3 +79,48 @@ class ConfigPrerequisiteTests(TestCase):
 
         trait_row.refresh_from_db()
         self.assertEqual(trait_row.weight, Decimal("2.50"))
+
+
+class ConfigPrerequisiteFreshDatabaseTests(TestCase):
+    """The actual first-Big-Button-press condition: zero Trait rows exist yet.
+
+    Deliberately no `setUpTestData` pre-creating Traits — that setup is what let the
+    original fix (a tolerant `.filter().first()` skip) mask the real bug: on a genuinely
+    fresh database, `CONFIG_PREREQUISITES` runs inside `load_content_first()` *before*
+    `load_world_content()` populates the `traits.trait` content fixtures, so the stat
+    Traits fatigue's checks roll on do not exist yet either (#2724).
+    """
+
+    def test_prerequisites_create_missing_traits_and_attach_composition(self) -> None:
+        self.assertEqual(Trait.objects.count(), 0)
+
+        for fn in CONFIG_PREREQUISITES.values():
+            fn()
+
+        for stat_name in ("stamina", "composure", "stability", "willpower"):
+            self.assertTrue(
+                Trait.objects.filter(name=stat_name).exists(),
+                f"{stat_name} Trait was not created by a config prerequisite",
+            )
+
+        willpower_check = CheckType.objects.get(name="fatigue_willpower")
+        self.assertTrue(
+            CheckTypeTrait.objects.filter(
+                check_type=willpower_check, trait__name="willpower"
+            ).exists(),
+            "fatigue_willpower composition was not attached against a fresh database",
+        )
+
+        for category, stat_name in (
+            ("physical", "stamina"),
+            ("social", "composure"),
+            ("mental", "stability"),
+        ):
+            endurance_check = CheckType.objects.get(name=f"fatigue_endurance_{category}")
+            self.assertTrue(
+                CheckTypeTrait.objects.filter(
+                    check_type=endurance_check, trait__name=stat_name
+                ).exists(),
+                f"fatigue_endurance_{category} composition was not attached "
+                "against a fresh database",
+            )
