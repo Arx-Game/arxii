@@ -1,10 +1,13 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.conditions.models import ConditionCategory, ConditionTemplate
 from world.seeds.perception_conditions import seed_perception_condition_content
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedPerceptionConditionsTests(TestCase):
+    """Gates on SEED_SAMPLE_CONTENT (#2698) — drives the sample invention path."""
+
     def test_seeds_concealed_category_and_template(self) -> None:
         seed_perception_condition_content()
 

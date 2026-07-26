@@ -3,7 +3,7 @@
 Tests that Soul Tether services fire correct stat increments.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.achievements.models import StatDefinition, StatTracker
 from world.character_sheets.factories import CharacterSheetFactory
@@ -11,8 +11,13 @@ from world.magic.factories import wire_soul_tether_content
 from world.magic.services.soul_tether import _increment_stat_safe
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SoulTetherStatDefinitionsTestCase(TestCase):
-    """Test that all required stat definitions are seeded."""
+    """Test that all required stat definitions are seeded.
+
+    ``achievements.StatDefinition`` is content-repo-owned (#2698);
+    ``SEED_SAMPLE_CONTENT`` opts this suite into the sample-seeding path.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -105,8 +110,13 @@ class StatIncrementSafetyTestCase(TestCase):
         tracker = StatTracker.objects.get(character_sheet=sheet, stat=stat_def)
         self.assertEqual(tracker.value, 5)
 
+    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_increment_stat_safe_with_factory_created_stats(self) -> None:
-        """Test that _increment_stat_safe works with factory-created stats."""
+        """Test that _increment_stat_safe works with factory-created stats.
+
+        ``achievements.StatDefinition`` is content-repo-owned (#2698);
+        ``SEED_SAMPLE_CONTENT`` opts this test into the sample-seeding path.
+        """
         wire_soul_tether_content()  # Creates all 7 stats
         sheet = CharacterSheetFactory()
 

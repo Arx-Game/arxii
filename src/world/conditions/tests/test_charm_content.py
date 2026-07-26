@@ -1,11 +1,15 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.conditions.charm_content import ensure_charm_content
 from world.conditions.constants import CALM_CONDITION_NAME, CHARM_CONDITION_NAME
 from world.conditions.models import ConditionCategory, ConditionTemplate
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsureCharmContentTest(TestCase):
+    """``ensure_charm_content`` gates its ConditionCategory/ConditionTemplate
+    creation behind SEED_SAMPLE_CONTENT (#2698); this test drives the sample path."""
+
     def test_creates_charm_category_with_alters_behavior(self):
         ensure_charm_content()
         cat = ConditionCategory.objects.get(name="Charm")

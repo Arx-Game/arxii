@@ -6,7 +6,7 @@ apply_condition, which uses a PG-only DISTINCT ON query path).
 
 from datetime import timedelta
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -56,6 +56,7 @@ class CalculateWakeDifficultyTests(TestCase):
         self.assertEqual(difficulty, 0)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
 class AttemptWakeTests(TestCase):
     """attempt_wake: roll gating, success/failure, deadline, rate limit."""
 

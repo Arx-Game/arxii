@@ -14,7 +14,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from evennia.utils.test_resources import EvenniaTestCase
 
 from actions.factories import ActionTemplateFactory
@@ -241,12 +241,14 @@ class SeedOrFeedEncounterFromCastEntranceMarkerTests(EvenniaTestCase):
         self.assertFalse(action.from_entrance)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EntranceDeclarationSuggestsOnResolutionTests(TestCase):
     """A ``from_entrance=True`` declared cast fires the suggestion at round resolution.
 
     Mirrors the proven 1-PC / 1-mook setup in ``test_outcome_broadcast.py``; the only
     addition is the ``from_entrance`` marker and the Grand-Entrance dramatic-moment
-    content + claimed resonance.
+    content + claimed resonance. The DramaticMomentType is content-repo-owned
+    (#2698); ``SEED_SAMPLE_CONTENT`` opts this suite into the sample-seeding path.
     """
 
     @classmethod

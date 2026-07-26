@@ -72,11 +72,19 @@ def get_technique_cast_catalog():
 
 
 def get_combat_offense_catalog():
-    """Curated catalog: children of the base 'Combat: Melee Offense' ConsequencePool (#1995)."""
+    """Curated catalog: children of the base 'Combat: Melee Offense' ConsequencePool (#1995).
+
+    ``checks.CheckType`` is content-repo-owned (#2698) — returns an empty
+    queryset when the base pool is ``None`` (the 'Melee Attack' CheckType
+    isn't authored) rather than crashing.
+    """
     from actions.models import ConsequencePool  # noqa: PLC0415
     from world.combat.seeds_offense import get_melee_offense_pool  # noqa: PLC0415
 
-    return ConsequencePool.objects.filter(parent=get_melee_offense_pool()).order_by("name")
+    pool = get_melee_offense_pool()
+    if pool is None:
+        return ConsequencePool.objects.none()
+    return ConsequencePool.objects.filter(parent=pool).order_by("name")
 
 
 def _resolve_catalog_template(consequence_pool_id: int, catalog):

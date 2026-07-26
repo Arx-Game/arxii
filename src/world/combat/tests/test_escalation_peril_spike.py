@@ -4,7 +4,7 @@ End-to-end through emit_event, mirroring test_escalation_spikes.py's shape
 for the existing grief spike.
 """
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from world.combat.constants import ParticipantStatus, SurgeTriggerKind
 from world.combat.escalation import install_escalation_room_triggers
@@ -27,12 +27,17 @@ from world.relationships.factories import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 @tag("postgres")
 class EscalationPerilSpikeTests(TestCase):
     """Bonded co-combatants spike intensity when an ally enters mortal peril.
 
     Bleeding Out is progressive — apply_condition uses PG DISTINCT ON — so
     this class requires Postgres (see test_resolution.py's precedent).
+
+    flows.FlowDefinition/TriggerDefinition are content-repo-owned (#2698);
+    wire_escalation_content() only invents them under SEED_SAMPLE_CONTENT — this
+    test drives the real reactive-trigger firing, so it opts in.
     """
 
     def setUp(self):

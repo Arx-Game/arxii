@@ -1,6 +1,6 @@
 """Tests for SleepAction and extended WakeAction (#2290)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.services import create_character_with_sheet
 from world.vitals.seeds import (
@@ -11,8 +11,12 @@ from world.vitals.seeds import (
 from world.vitals.services import perceives_dreamside
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SleepActionTests(TestCase):
-    """Tests for SleepAction and extended WakeAction."""
+    """Tests for SleepAction and extended WakeAction.
+
+    Gates on SEED_SAMPLE_CONTENT (#2698) — drives the real Sleeping condition.
+    """
 
     def setUp(self):
         ensure_foundational_capabilities()

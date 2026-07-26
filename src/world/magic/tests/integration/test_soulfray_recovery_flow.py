@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -65,6 +65,7 @@ def _make_check_result(success_level: int) -> MagicMock:
     return result
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # SoulfrayContentFactory gates on #2698
 @patch(_CONDITIONS_SCENE_PARTICIPANT_PATH, return_value=True)
 @patch(_ANIMA_SCENE_PARTICIPANT_PATH, return_value=True)
 class SoulfrayRecoveryFlowIntegrationTests(TestCase):

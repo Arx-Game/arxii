@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -178,6 +178,7 @@ class LVMHelpersTests(TestCase):
         self.assertEqual(row.resonance_id, new_resonance.pk)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class HomecomingRitualTests(TestCase):
     """Existing Homecoming tests — patched to a deterministic SUCCESS so assertions are stable."""
 
@@ -248,6 +249,7 @@ class HomecomingRitualTests(TestCase):
             perform_homecoming_ritual(sanctum, owner, resonance_sacrificed=100)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PurgingRitualTests(TestCase):
     """Existing Purging tests — patched to a deterministic SUCCESS so assertions are stable."""
 
@@ -485,6 +487,7 @@ class CronTickTests(TestCase):
         self.assertEqual(payout.total_pending(), SANCTUM_PENDING_PAYOUT_CAP)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedsTests(TestCase):
     def test_seeds_idempotent(self) -> None:
         ensure_sanctum_rituals()
@@ -550,6 +553,7 @@ def _setup_graded_purging(*, balance: int = 1000):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class HomecomingGradedCheckTests(TestCase):
     """Homecoming applies the SanctumHomecomingGainAward multiplier to the base gain."""
 
@@ -626,6 +630,7 @@ class HomecomingGradedCheckTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class PurgingGradedCheckTests(TestCase):
     """Purging applies the SanctumPurgingRetentionAward modifier to the effective retention."""
 

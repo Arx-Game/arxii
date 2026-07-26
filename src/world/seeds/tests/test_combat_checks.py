@@ -1,10 +1,11 @@
 """Melee Combat skill catalog + Melee Attack check composition (#1706)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.seeds.combat_checks import seed_combat_check_content
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_combat_check_content gates on #2698
 class CombatCheckSeedTests(TestCase):
     def test_melee_combat_skill_seeded(self):
         from world.skills.models import Skill

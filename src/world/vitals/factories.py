@@ -84,17 +84,24 @@ def _get_or_create_outcome(name: str, success_level: int):
 
 
 def _ensure_peril_category():
-    """Return a ConditionCategory for incapacitation/peril conditions."""
-    from world.conditions.models import ConditionCategory
+    """Return the "Incapacitation" ConditionCategory for peril conditions.
 
-    obj, _ = ConditionCategory.objects.get_or_create(
-        name="Incapacitation",
-        defaults={
+    ``conditions.ConditionCategory`` is content-repo-owned (#2698) — looked up
+    rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns ``None``
+    (after logging) when it isn't authored and sampling is off; callers must
+    skip the dependent condition content rather than invent a category.
+    """
+    from world.conditions.models import ConditionCategory
+    from world.seeds.sample_content import authored_or_sample
+
+    return authored_or_sample(
+        ConditionCategory,
+        {
             "description": ("Acute peril states: incapacitation that may escalate to death."),
             "is_negative": True,
         },
+        name="Incapacitation",
     )
-    return obj
 
 
 def _seed_pool_consequences(pool, consequence_specs) -> None:
@@ -363,22 +370,31 @@ def ensure_surrounded_content() -> dict[str, object]:
     Returns a dict with keys "condition" (ConditionTemplate), "stages" (list of
     the 3 ConditionStage rows ordered by stage_order), and "pools" (dict of the 3
     ConsequencePool rows keyed by name).
+
+    ``ConditionTemplate``/``ConditionStage`` are content-repo-owned (#2698) —
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. When
+    the "Surrounded" template isn't authored, the three consequence pools
+    below are still seeded (they're config, not content) but "condition" and
+    "stages" come back empty/``None`` — nothing in this cluster's own callers
+    reads them synchronously to apply the condition at seed time.
     """
     from actions.models import ConsequencePool
     from world.conditions.constants import SURROUNDED_CONDITION_NAME
     from world.conditions.models import ConditionStage, ConditionTemplate
+    from world.seeds.sample_content import authored_or_sample
     from world.vitals.services import _ensure_endurance_check_type
 
     check_type = _ensure_endurance_check_type()
     category = _ensure_peril_category()
 
-    condition, _ = ConditionTemplate.objects.get_or_create(
-        name=SURROUNDED_CONDITION_NAME,
-        defaults={
+    condition = authored_or_sample(
+        ConditionTemplate,
+        {
             "category": category,
             "has_progression": True,
             "description": "Cut off from allies, facing mounting attack pressure.",
         },
+        name=SURROUNDED_CONDITION_NAME,
     )
 
     stage_specs = [
@@ -387,19 +403,22 @@ def ensure_surrounded_content() -> dict[str, object]:
         (3, "Being Cut Down", 35),
     ]
     stages = []
-    for order, name, difficulty in stage_specs:
-        stage, _ = ConditionStage.objects.get_or_create(
-            condition=condition,
-            stage_order=order,
-            defaults={
-                "name": name,
-                "description": f"{name} — resisting being surrounded.",
-                "resist_check_type": check_type,
-                "resist_difficulty": difficulty,
-                "rounds_to_next": 1,
-            },
-        )
-        stages.append(stage)
+    if condition is not None:
+        for order, name, difficulty in stage_specs:
+            stage = authored_or_sample(
+                ConditionStage,
+                {
+                    "name": name,
+                    "description": f"{name} — resisting being surrounded.",
+                    "resist_check_type": check_type,
+                    "resist_difficulty": difficulty,
+                    "rounds_to_next": 1,
+                },
+                condition=condition,
+                stage_order=order,
+            )
+            if stage is not None:
+                stages.append(stage)
 
     failure = _get_or_create_outcome(_OUTCOME_FAILURE, success_level=-1)
     partial = _get_or_create_outcome(_OUTCOME_PARTIAL, success_level=0)

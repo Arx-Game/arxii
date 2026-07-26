@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.assets.content import ensure_asset_promotion_content
 from world.npc_services.constants import OfferKind
 from world.npc_services.models import NPCServiceOffer
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # underlying check-content seeds gate on #2698
 class EnsureAssetPromotionContentTests(TestCase):
     def test_seeds_seven_offers_on_one_role(self) -> None:
         role = ensure_asset_promotion_content()

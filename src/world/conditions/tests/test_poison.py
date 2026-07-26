@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -274,6 +274,7 @@ class PoisonStagingScalesDotTests(TestCase):
 
 
 @tag("postgres")
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
 class AcutePoisonCrossesDeathThresholdTests(TestCase):
     """Test C — acute poison crossing the death threshold applies Bleeding-Out (#523).
 

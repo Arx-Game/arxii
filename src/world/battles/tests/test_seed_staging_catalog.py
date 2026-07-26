@@ -11,7 +11,7 @@ it (cluster ordering in ``world.seeds.clusters``).
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.battles.constants import BattleSideRole, FortificationKind, UnitQuality
 from world.battles.models import (
@@ -61,8 +61,17 @@ class SeedBattleStagingCatalogTests(TestCase):
         self.assertFalse(places["Gate Approach"].fortifications.exists())
         self.assertFalse(places["Inner Court"].fortifications.exists())
 
+    @override_settings(SEED_SAMPLE_CONTENT=True)
     @stub_content_root()
     def test_seeds_three_unit_templates_with_distinct_quality(self) -> None:
+        """mechanics.Property/PropertyCategory and conditions.CapabilityType are
+        content-repo-owned (#2698); neither is authored in the stub content root,
+        so this test — which proves the seeded shape carries at least one of
+        each — opts into SEED_SAMPLE_CONTENT to invent them. Pre-existing gap:
+        the CapabilityType half of this was already unauthored-in-stub before
+        this slice (conditions.* landed first); the assertion was silently
+        never reached because it followed the now-also-gated property check.
+        """
         seed_dev_database()
 
         names = ["Levy Spears", "Veteran Pikemen", "Raider Skirmishers"]

@@ -1,6 +1,6 @@
 """Tests for the CG house creator (#1884 Phase D): gates, review, materialization."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import AccountFactory
 from world.areas.factories import AreaFactory
@@ -213,7 +213,11 @@ class MaterializationTests(HouseCreatorTestData):
         # No accidental auto-membership rows beyond the rank ladder.
         self.assertEqual(OrganizationMembership.objects.filter(organization=org).count(), 0)
 
+    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_seed_creator_rows_exist(self):
+        """``realms.Realm`` is content-repo-owned (#2698); SEED_SAMPLE_CONTENT
+        opts this test into the sample-seeding path so "Arx" (and everything
+        downstream of it in seed_houses_demo) actually seeds."""
         from world.seeds.houses import (
             CLAIMABLE_TITLE_NAME,
             TEMPLATE_NAME,

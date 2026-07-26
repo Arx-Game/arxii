@@ -15,7 +15,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.db import connection
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 
 from actions.factories import ActionTemplateFactory
@@ -54,6 +54,7 @@ from world.military.models import MilitaryUnitCapability
 from world.vitals.factories import CharacterVitalsFactory, ensure_surrounded_content
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_surrounded_content gates on #2698
 class ResolveBattleRoundQueryScalingTests(TestCase):
     """Assert marginal per-declaration query cost stays bounded.
 

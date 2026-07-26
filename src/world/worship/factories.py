@@ -75,38 +75,60 @@ def wire_miracle_content() -> None:
     """Seed TriggerDefinition, FlowDefinition, config, ConditionTemplate, example miracles.
 
     Idempotent. Called from ``seed_worship_content()``.
+
+    ``conditions.ConditionTemplate`` and ``flows.FlowDefinition``/
+    ``FlowStepDefinition``/``TriggerDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. The divine-intervention Trigger is skipped entirely when the backing
+    FlowDefinition isn't authored; the reader (``world.worship.services``)
+    already tolerates a missing TriggerDefinition.
     """
     from flows.consts import FlowActionChoices
-    from flows.factories import FlowStepDefinitionFactory
-    from flows.models import FlowDefinition, TriggerDefinition
-    from world.conditions.factories import ConditionTemplateFactory
+    from flows.models import FlowDefinition, FlowStepDefinition, TriggerDefinition
+    from world.conditions.models import ConditionCategory, ConditionTemplate
+    from world.seeds.sample_content import authored_or_sample
     from world.worship.constants import MiracleTrigger
     from world.worship.models import Miracle
     from world.worship.services import get_divine_intervention_config
 
     # 1. Flow + TriggerDefinition
-    flow, _ = FlowDefinition.objects.get_or_create(name="divine_intervention_flow")
-    if not flow.steps.exists():
-        FlowStepDefinitionFactory(
-            flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
-            variable_name="world.worship.services.maybe_fire_divine_intervention",
-            parameters={"payload": "{{payload}}"},
+    flow = authored_or_sample(FlowDefinition, {}, name="divine_intervention_flow")
+    if flow is not None:
+        if not flow.steps.exists():
+            authored_or_sample(
+                FlowStepDefinition,
+                {
+                    "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                    "parameters": {"payload": "{{payload}}"},
+                },
+                flow=flow,
+                variable_name="world.worship.services.maybe_fire_divine_intervention",
+                parent=None,
+            )
+        authored_or_sample(
+            TriggerDefinition,
+            {
+                "event_name": "character_incapacitated",
+                "flow_definition": flow,
+                "priority": 60,
+            },
+            name="divine_intervention_on_incapacitated",
         )
-    TriggerDefinition.objects.get_or_create(
-        name="divine_intervention_on_incapacitated",
-        defaults={
-            "event_name": "character_incapacitated",
-            "flow_definition": flow,
-            "priority": 60,
-        },
-    )
 
     # 2. Config singleton
     get_divine_intervention_config()
 
     # 3. Cooldown ConditionTemplate
-    ConditionTemplateFactory(name="Divine Intervention Cooldown")
+    cooldown_category = authored_or_sample(
+        ConditionCategory,
+        {"description": "Cooldown markers on repeatable divine/mechanical effects."},
+        name="Cooldown",
+    )
+    authored_or_sample(
+        ConditionTemplate,
+        {"category": cooldown_category},
+        name="Divine Intervention Cooldown",
+    )
 
     # 4. Example miracles for seeded beings (PLACEHOLDER)
     for being in WorshippedBeing.objects.filter(is_active=True):

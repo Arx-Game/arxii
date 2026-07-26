@@ -1,6 +1,6 @@
 """Tests for derived-on-read NPC allegiance (#1590, ADR-0058, ADR-0014)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -19,6 +19,7 @@ from world.conditions.types import BulkConditionApplication
 from world.npc_services.allegiance import derive_allegiance
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_charm_content gates on #2698
 class DeriveAllegianceTest(TestCase):
     def setUp(self):
         ensure_charm_content()

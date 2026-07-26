@@ -20,12 +20,20 @@ TEMPLATE_NAME = "Arx Barony Charter PLACEHOLDER"
 
 
 def seed_houses_demo() -> None:
-    """Seed the PLACEHOLDER landed house (idempotent)."""
+    """Seed the PLACEHOLDER landed house (idempotent).
+
+    ``realms.Realm`` is content-repo-owned (#2698) — looked up rather than
+    invented unless ``SEED_SAMPLE_CONTENT`` is on. When the "Arx" realm isn't
+    authored/sampled, this skips everything past ``seed_kinship_demo()`` —
+    Society/Organization/Title/SuccessionLaw all hang off ``realm`` via a
+    required FK.
+    """
     from world.areas.constants import AreaLevel  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
     from world.realms.models import Realm  # noqa: PLC0415
     from world.roster.models import Family  # noqa: PLC0415
     from world.seeds.kinship import DUCAL_HOUSE_NAME, seed_kinship_demo  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.societies.houses.constants import (  # noqa: PLC0415
         RecognitionRuleKind,
         SuccessionDerivation,
@@ -49,10 +57,13 @@ def seed_houses_demo() -> None:
     seed_kinship_demo()
     family = Family.objects.get(name=DUCAL_HOUSE_NAME)
 
-    realm, _ = Realm.objects.get_or_create(
+    realm = authored_or_sample(
+        Realm,
+        {"description": "The default realm.", "crest_asset": "", "theme": ""},
         name="Arx",
-        defaults={"description": "The default realm.", "crest_asset": "", "theme": ""},
     )
+    if realm is None:
+        return
     society, _ = Society.objects.get_or_create(
         name="PLACEHOLDER Peerage of Arx",
         defaults={"description": "PLACEHOLDER: the landed nobility.", "realm": realm},

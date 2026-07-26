@@ -280,6 +280,12 @@ def ensure_preparation_contribution_method() -> None:
     polish, and hang the garlands. Depends on the governance content;
     calls its idempotent seed to guarantee the composed CheckType exists.
     AP cost / progress magnitudes are PLACEHOLDER (tuning ledger §6).
+
+    ``checks.CheckType`` is content-repo-owned (#2698) — ``check_type`` is a
+    required FK on ``ContributionMethod``, so the whole method is skipped
+    when "Household Command" still isn't seeded after
+    ``seed_governance_check_content()`` runs, rather than raising
+    ``CheckType.DoesNotExist``.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.projects.constants import ProjectKind  # noqa: PLC0415
@@ -289,7 +295,9 @@ def ensure_preparation_contribution_method() -> None:
     check_type = CheckType.objects.filter(name="Household Command").first()
     if check_type is None:
         seed_governance_check_content()
-        check_type = CheckType.objects.get(name="Household Command")
+        check_type = CheckType.objects.filter(name="Household Command").first()
+    if check_type is None:
+        return
 
     ContributionMethod.objects.update_or_create(
         kind=ProjectKind.BUILDING_PREPARATION,

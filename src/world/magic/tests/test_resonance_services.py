@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import AccountFactory
@@ -869,8 +869,15 @@ class ImbueApChargeTests(TestCase):
         cr = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.resonance)
         self.assertEqual(cr.balance, 9999)
 
+    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_unbound_surcharge_applies(self) -> None:
-        """Unbound characters pay ceil(base × 1.5) AP."""
+        """Unbound characters pay ceil(base × 1.5) AP.
+
+        mechanics.ModifierCategory/ModifierTarget are content-repo-owned
+        (#2698); the surcharge's target only invents under
+        SEED_SAMPLE_CONTENT — this test asserts on the real surcharge, so it
+        opts in.
+        """
         import math
 
         from world.distinctions.services import grant_distinction

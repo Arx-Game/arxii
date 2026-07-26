@@ -11,11 +11,16 @@ specializations for the accusation counter-play (#1825);
 every FK (specializations, check compositions, character trait values)
 survives the rename.
 
-Authoritative + idempotent: each CheckType's composition is rewritten on
-each run (delete + recreate CheckTypeTrait / CheckTypeSpecialization) so a
-re-seed converges, while Skill / Specialization / Trait rows use
-get_or_create (preserving staff edits). Mirrors social_checks.py /
-combat_checks.py. Weights are PLACEHOLDER (1.0) per convention.
+``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``, and
+``traits.trait`` are content-repo-owned (#2698) — looked up via
+``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+on. ``skills.specialization``/``checks.checktypespecialization`` stay outside
+``CONTENT_MODELS`` and keep seeding unconditionally via ``get_or_create``, but
+no longer wipe and rewrite a composition on each run (#2698 Part 1 — that
+reverted authored/staff-tuned weights on every Big Button press);
+``get_or_create``/``authored_or_sample`` converge instead. Mirrors
+social_checks.py / combat_checks.py. Weights are PLACEHOLDER (1.0) per
+convention.
 """
 
 from __future__ import annotations
@@ -68,39 +73,53 @@ _CATEGORIES: dict[str, tuple[str, str, int]] = {
 }
 
 
-def _ensure_category(name: str) -> object:
+def _ensure_category(name: str) -> object | None:
+    """Look up (or sample) a security/criminal CheckCategory — content-repo-owned (#2698)."""
     from world.checks.models import CheckCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     description, display_order = _CATEGORIES[name][1], _CATEGORIES[name][2]
-    category, _ = CheckCategory.objects.get_or_create(
+    return authored_or_sample(
+        CheckCategory,
+        {"description": description, "display_order": display_order},
         name=name,
-        defaults={"description": description, "display_order": display_order},
     )
-    return category
 
 
-def _ensure_skill(name: str, tooltip: str) -> object:
+def _ensure_skill(name: str, tooltip: str) -> object | None:
+    """Look up (or sample) a PHYSICAL-category Skill + backing Trait (#2698)."""
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    trait, _ = Trait.objects.get_or_create(
-        name=name,
-        defaults={
+    trait = authored_or_sample(
+        Trait,
+        {
             "trait_type": TraitType.SKILL,
             "category": TraitCategory.PHYSICAL,
             "is_public": True,
         },
+        name=name,
     )
-    skill, _ = Skill.objects.get_or_create(
+    if trait is None:
+        return None
+    return authored_or_sample(
+        Skill,
+        {"tooltip": tooltip, "display_order": 35, "is_active": True},
         trait=trait,
-        defaults={"tooltip": tooltip, "display_order": 35, "is_active": True},
     )
-    return skill
 
 
-def _ensure_specialization(name: str, parent_skill) -> object:
+def _ensure_specialization(name: str, parent_skill) -> object | None:
+    """Seed a Specialization under a parent skill.
+
+    ``skills.Specialization`` is not content-repo-owned — stays unconditional.
+    Skipped when ``parent_skill`` is missing (its FK is required).
+    """
     from world.skills.models import Specialization  # noqa: PLC0415
 
+    if parent_skill is None:
+        return None
     spec, _ = Specialization.objects.get_or_create(
         parent_skill=parent_skill,
         name=name,
@@ -109,18 +128,20 @@ def _ensure_specialization(name: str, parent_skill) -> object:
     return spec
 
 
-def _ensure_stat_trait(name: str) -> object:
+def _ensure_stat_trait(name: str) -> object | None:
+    """Look up (or sample) a stat Trait — content-repo-owned (#2698)."""
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
-    trait, _ = Trait.objects.get_or_create(
-        name=name,
-        defaults={
+    return authored_or_sample(
+        Trait,
+        {
             "trait_type": TraitType.STAT,
             "category": _STAT_CATEGORIES[name],
             "is_public": True,
         },
+        name=name,
     )
-    return trait
 
 
 def rename_larceny_to_skulduggery() -> None:
@@ -175,12 +196,20 @@ def ensure_security_specializations(skills: dict[str, object]) -> dict[str, obje
 def ensure_security_check_compositions(
     skills: dict[str, object], specs: dict[str, object]
 ) -> dict[str, object]:
-    """Set each security CheckType's stat + skill (+ spec) composition (authoritative)."""
+    """Set each security CheckType's stat + skill (+ spec) composition.
+
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    No longer wipes and rewrites the composition on each run (#2698 Part 1 — that
+    reverted authored/staff-tuned weights on every Big Button press);
+    ``get_or_create``/``authored_or_sample`` converge instead.
+    """
     from world.checks.models import (  # noqa: PLC0415
         CheckType,
         CheckTypeSpecialization,
         CheckTypeTrait,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     weight = Decimal("1.0")  # PLACEHOLDER magnitudes
     check_types: dict[str, object] = {}
@@ -192,26 +221,28 @@ def ensure_security_check_compositions(
         category_name,
     ) in _SECURITY_CHECK_COMPOSITION.items():
         category = _ensure_category(category_name)
-        check_type, _ = CheckType.objects.get_or_create(
-            name=ct_name, category=category, defaults={"is_active": True}
+        if category is None:
+            continue
+        check_type = authored_or_sample(
+            CheckType, {"is_active": True}, name=ct_name, category=category
         )
-        # Authoritative: wipe the prior composition, then rewrite it.
-        CheckTypeTrait.objects.filter(check_type=check_type).delete()
-        CheckTypeSpecialization.objects.filter(check_type=check_type).delete()
+        if check_type is None:
+            continue
 
-        CheckTypeTrait.objects.create(
-            check_type=check_type,
-            trait=_ensure_stat_trait(stat_name),
-            weight=weight,
-        )
-        CheckTypeTrait.objects.create(
-            check_type=check_type,
-            trait=skills[skill_name].trait,  # type: ignore[attr-defined]
-            weight=weight,
-        )
-        if spec_name is not None:
-            CheckTypeSpecialization.objects.create(
-                check_type=check_type, specialization=specs[spec_name], weight=weight
+        stat_trait = _ensure_stat_trait(stat_name)
+        if stat_trait is not None:
+            authored_or_sample(
+                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=stat_trait
+            )
+        skill = skills.get(skill_name)
+        if skill is not None:
+            authored_or_sample(
+                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill.trait
+            )
+        spec = specs.get(spec_name) if spec_name is not None else None
+        if spec is not None:
+            CheckTypeSpecialization.objects.get_or_create(
+                check_type=check_type, specialization=spec, defaults={"weight": weight}
             )
         check_types[ct_name] = check_type
     return check_types

@@ -32,7 +32,7 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
 from commands.social.soul_tether import CmdSineater, CmdTether
@@ -127,6 +127,7 @@ def _mock_check_result(success_level: int = 2) -> MagicMock:
 
 
 @tag("postgres")
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SoulTetherJourneyTests(TestCase):
     """Full bond lifecycle via telnet commands: burden→entreat→consume→mire→rescue→dissolve."""
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.conditions.models import (
     ConditionDamageInteraction,
@@ -12,8 +12,12 @@ from world.conditions.models import (
 from world.seeds.game_content.elemental_interactions import seed_elemental_interactions
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ElementalInteractionsSeedTests(TestCase):
-    """Tests that the elemental interaction seed is idempotent and complete."""
+    """Tests that the elemental interaction seed is idempotent and complete.
+
+    Gates on SEED_SAMPLE_CONTENT (#2698) — drives the sample invention path.
+    """
 
     def test_seeds_damage_types(self) -> None:
         """Six canonical damage types are seeded."""

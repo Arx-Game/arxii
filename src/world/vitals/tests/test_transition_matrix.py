@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
@@ -108,6 +108,7 @@ def _build_death_pool(*, failure_outcome):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
 class PoisonTickKnockoutTests(TestCase):
     """Poison DoT tick crossing the knockout threshold (0–20%) applies Unconscious.
 
@@ -152,6 +153,7 @@ class PoisonTickKnockoutTests(TestCase):
 
 
 @tag("postgres")
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
 class PoisonTickBleedOutTests(TestCase):
     """Poison DoT tick crossing the death threshold (health ≤ 0) applies Bleeding-Out.
 
@@ -198,6 +200,7 @@ class PoisonTickBleedOutTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
 class TrapHitKnockoutTests(TestCase):
     """Trap hit crossing the knockout threshold (0–20%) applies Unconscious.
 
@@ -266,6 +269,7 @@ class TrapHitKnockoutTests(TestCase):
 
 
 @tag("postgres")
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
 class TrapHitBleedOutTests(TestCase):
     """Trap hit crossing the death threshold (health ≤ 0) applies Bleeding-Out.
 
@@ -340,6 +344,7 @@ class TrapHitBleedOutTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Endurance/Mortal Resolve CheckType gates on #2698
 class ExhaustionStrainKnockoutTests(TestCase):
     """Exhaustion strain crossing the knockout threshold (0–20%) applies Unconscious.
 
@@ -373,6 +378,7 @@ class ExhaustionStrainKnockoutTests(TestCase):
 
 
 @tag("postgres")
+@override_settings(SEED_SAMPLE_CONTENT=True)  # Mortal Resolve CheckType gates on #2698
 class ExhaustionStrainBleedOutTests(TestCase):
     """Exhaustion strain crossing the death threshold (health ≤ 0) applies Bleeding-Out.
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIRequestFactory, force_authenticate
@@ -49,8 +50,13 @@ def _make_check_mock(success_level: int) -> MagicMock:
     )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EntranceTechniqueRestDispatchTests(CastScenarioMixin):
-    """POST /api/action-requests/ with action_key=entrance + technique_id."""
+    """POST /api/action-requests/ with action_key=entrance + technique_id.
+
+    The DramaticMomentType is content-repo-owned (#2698); ``SEED_SAMPLE_CONTENT``
+    opts this suite into the sample-seeding path.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:

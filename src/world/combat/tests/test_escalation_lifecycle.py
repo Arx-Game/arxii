@@ -1,6 +1,6 @@
 """Tests for combat-owned CharacterEngagement lifecycle wiring (#872, Task 6)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
@@ -148,6 +148,7 @@ class EngagementLifecycleWiringTests(TestCase):
         self.assertTrue(CharacterEngagement.objects.filter(character=sheet).exists())
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class EscalationRoundWiringTests(TestCase):
     """begin_declaration_phase ticks escalation + installs room spike triggers (#872)."""
 

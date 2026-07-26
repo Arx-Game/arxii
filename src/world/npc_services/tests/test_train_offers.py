@@ -3,7 +3,7 @@
 from unittest import mock
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.classes.factories import PathFactory
 from world.currency.models import FavorTokenDetails
@@ -433,12 +433,18 @@ class TrainOfferApCostGuardTests(TestCase):
         self.assertIn("isn't yours to learn", result.message)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TrainOfferUnboundSurchargeTests(TestCase):
     """The Unbound magic-learning AP surcharge (#2442) on the Academy TRAIN
     door — the other of ``charge_and_learn``'s two front doors (#2440), proving
     the surcharge applies identically here as it does on the PC-teaching-accept
     door (see world.magic.tests.test_gift_acquisition_service
-    .UnboundMagicLearningApSurchargeTest)."""
+    .UnboundMagicLearningApSurchargeTest).
+
+    mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    the surcharge's target only invents under SEED_SAMPLE_CONTENT — this test
+    asserts on the real surcharge amount, so it opts in.
+    """
 
     def setUp(self) -> None:
         from world.action_points.models import ActionPointPool

@@ -5,8 +5,10 @@ Idempotently seeds the content the four social/mental combat verbs need:
 * Four ``CheckType`` rows (Rally/Demoralize/Taunt/Parley) with stat + skill
   (+ specialization) compositions, reusing the social skills/specializations
   seeded by ``world.seeds.social_checks`` (``ensure_social_skills`` /
-  ``ensure_social_specializations``). Mirrors the authoritative wipe-and-rewrite
-  pattern in ``social_checks.ensure_social_check_compositions``.
+  ``ensure_social_specializations``). ``checks.CheckCategory``/``CheckType``/
+  ``CheckTypeTrait`` are content-repo-owned (#2698) — looked up via
+  ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT``
+  is on; a reseed no longer wipes and rewrites the composition (#2698 Part 1).
 * An ``Inspired`` ``ConditionTemplate`` (``alters_behavior=False``) — the
   short-lived benefit ``RALLY`` applies to an ally, consumed by the ally's
   next resolved action this round. Mirrors ``conditions/charm_content.py``.
@@ -17,8 +19,8 @@ Idempotently seeds the content the four social/mental combat verbs need:
   seed pattern in ``combat/defend_content.py``.
 
 ``ensure_social_combat_content`` is idempotent (all writes via ``get_or_create``
-or the authoritative wipe-and-rewrite) and doubles as integration-test setup
-and staff seed data. Safe to call repeatedly.
+or ``authored_or_sample``) and doubles as integration-test setup and staff
+seed data. Safe to call repeatedly.
 """
 
 from __future__ import annotations
@@ -60,31 +62,35 @@ _SOCIAL_COMBAT_COMPOSITION: tuple[tuple[str, str, str, str | None], ...] = (
 )
 
 
-def _ensure_social_category() -> CheckCategory:
+def _ensure_social_category() -> CheckCategory | None:
+    """Look up (or sample) the Social CheckCategory — content-repo-owned (#2698)."""
     from world.checks.models import CheckCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = CheckCategory.objects.get_or_create(
-        name="Social",
-        defaults={
+    return authored_or_sample(
+        CheckCategory,
+        {
             "description": "Checks involving social interaction, persuasion, and presence.",
             "display_order": 10,
         },
+        name="Social",
     )
-    return category
 
 
-def _ensure_stat_trait(name: str) -> Trait:
+def _ensure_stat_trait(name: str) -> Trait | None:
+    """Look up (or sample) a SOCIAL stat Trait — content-repo-owned (#2698)."""
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    trait, _ = Trait.objects.get_or_create(
-        name=name,
-        defaults={
+    return authored_or_sample(
+        Trait,
+        {
             "trait_type": TraitType.STAT,
             "category": TraitCategory.SOCIAL,
             "is_public": True,
         },
+        name=name,
     )
-    return trait
 
 
 def _ensure_social_skills_and_specs() -> tuple[dict[str, object], dict[str, object]]:
@@ -108,60 +114,77 @@ def _ensure_social_combat_check_types(
 ) -> dict[str, object]:
     """Seed the 4 social-combat CheckTypes with stat + skill (+ spec) composition.
 
-    Authoritative wipe-and-rewrite (mirrors
-    ``social_checks.ensure_social_check_compositions``): clears the type's
-    existing ``CheckTypeTrait`` / ``CheckTypeSpecialization`` rows and rewrites
-    them, so re-running converges. Weights are PLACEHOLDER (1.0).
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    No longer wipes and rewrites the composition on each run (#2698 Part 1 — that
+    reverted any authored/staff-tuned weight on every Big Button press);
+    ``get_or_create``/``authored_or_sample`` converge instead, preserving edits.
+    ``CheckTypeSpecialization`` stays outside ``CONTENT_MODELS`` and keeps
+    seeding unconditionally. A CheckType whose category or row isn't authored is
+    skipped entirely for that entry.
     """
     from world.checks.models import (  # noqa: PLC0415
         CheckType,
         CheckTypeSpecialization,
         CheckTypeTrait,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     category = _ensure_social_category()
     weight = Decimal("1.0")  # PLACEHOLDER magnitudes
     check_types: dict[str, object] = {}
+    if category is None:
+        return check_types
 
     for ct_name, stat_name, skill_name, spec_name in _SOCIAL_COMBAT_COMPOSITION:
-        check_type, _ = CheckType.objects.get_or_create(
-            name=ct_name, category=category, defaults={"is_active": True}
+        check_type = authored_or_sample(
+            CheckType, {"is_active": True}, name=ct_name, category=category
         )
-        CheckTypeTrait.objects.filter(check_type=check_type).delete()
-        CheckTypeSpecialization.objects.filter(check_type=check_type).delete()
+        if check_type is None:
+            continue
 
-        CheckTypeTrait.objects.create(
-            check_type=check_type, trait=_ensure_stat_trait(stat_name), weight=weight
-        )
-        CheckTypeTrait.objects.create(
-            check_type=check_type, trait=skills[skill_name].trait, weight=weight
-        )
-        if spec_name is not None:
-            CheckTypeSpecialization.objects.create(
-                check_type=check_type, specialization=specs[spec_name], weight=weight
+        stat_trait = _ensure_stat_trait(stat_name)
+        if stat_trait is not None:
+            authored_or_sample(
+                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=stat_trait
+            )
+        skill = skills.get(skill_name)
+        if skill is not None:
+            authored_or_sample(
+                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill.trait
+            )
+        if spec_name is not None and specs.get(spec_name) is not None:
+            CheckTypeSpecialization.objects.get_or_create(
+                check_type=check_type, specialization=specs[spec_name], defaults={"weight": weight}
             )
         check_types[ct_name] = check_type
     return check_types
 
 
-def _ensure_inspired_condition() -> ConditionTemplate:
+def _ensure_inspired_condition() -> ConditionTemplate | None:
     """Seed the ``Inspired`` condition category + template (#2015).
 
     A short-lived benefit RALLY applies to an ally. ``alters_behavior=False`` —
     it is a buff, not a compulsion (ADR-0024: consent gates behavior-alteration,
     not benefit). Duration: 1 round (consumed by the ally's next resolved action).
+
+    ``conditions.ConditionCategory``/``ConditionTemplate`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
     """
-    category, _ = ConditionCategory.objects.get_or_create(
-        name="Inspiration",
-        defaults={
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    category = authored_or_sample(
+        ConditionCategory,
+        {
             "description": "Rallying and inspirational effects that bolster allies.",
             "is_negative": False,
             "alters_behavior": False,
         },
+        name="Inspiration",
     )
-    template, _ = ConditionTemplate.objects.get_or_create(
-        name=INSPIRED_CONDITION_NAME,
-        defaults={
+    return authored_or_sample(
+        ConditionTemplate,
+        {
             "category": category,
             "description": "Inspired by an ally's rallying words; the next action lands harder.",
             "default_duration_type": DurationType.ROUNDS,
@@ -169,39 +192,52 @@ def _ensure_inspired_condition() -> ConditionTemplate:
             "is_stackable": False,
             "can_be_dispelled": True,
         },
+        name=INSPIRED_CONDITION_NAME,
     )
-    return template
 
 
-def _ensure_charm_technique() -> Technique:
+def _ensure_charm_technique() -> Technique | None:
     """Seed the ``Charming Word`` technique that applies Charmed to an ENEMY (#2015).
 
     Makes the Charm → allegiance flip (``derive_allegiance`` → ``ALLY_OF_CASTER``)
     player-reachable without the parley verb. Mirrors the technique seed in
-    ``combat/defend_content.py``: direct ORM (``Technique.get_or_create`` +
-    ``TechniqueAppliedCondition.get_or_create``), not the budget builder.
+    ``combat/defend_content.py``: direct ORM lookups, not the budget builder.
+
+    ``Gift``/``EffectType``/``Technique``/
+    ``TechniqueAppliedCondition`` are all content-repo-owned (#2698) — looked
+    up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns
+    ``None`` (skipping the TechniqueAppliedCondition row) when any
+    prerequisite is missing. The ``Charmed`` ConditionTemplate this technique
+    applies (``conditions.conditiontemplate``) is ALSO content-repo-owned
+    (#2698) — ``ensure_charm_content()`` now gates its own creation, so this
+    looks it up defensively rather than assuming it exists.
     """
     # Ensure the Charmed template exists first (self-contained seed).
     from world.conditions.charm_content import ensure_charm_content  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     ensure_charm_content()
-    charm_gift, _ = Gift.objects.get_or_create(
+    charm_gift = authored_or_sample(
+        Gift,
+        {"description": "Charm, compulsion, and social influence magic."},
         name="Charm",
-        defaults={"description": "Charm, compulsion, and social influence magic."},
     )
-    effect_type, _ = EffectType.objects.get_or_create(
-        name="Compulsion",
-        defaults={
+    effect_type = authored_or_sample(
+        EffectType,
+        {
             "description": "Alters a target's behavior or allegiance.",
             "base_power": None,
             "base_anima_cost": 0,
             "has_power_scaling": False,
         },
+        name="Compulsion",
     )
-    technique, _created = Technique.objects.get_or_create(
-        name=CHARM_TECHNIQUE_NAME,
-        gift=charm_gift,
-        defaults={
+    if charm_gift is None or effect_type is None:
+        return None
+
+    technique = authored_or_sample(
+        Technique,
+        {
             "description": (
                 "A word of power that turns an enemy's loyalty, charming them to fight for you."
             ),
@@ -213,16 +249,24 @@ def _ensure_charm_technique() -> Technique:
             "anima_cost": 2,
             "combo_opening_probing": None,
         },
+        name=CHARM_TECHNIQUE_NAME,
+        gift=charm_gift,
     )
-    charmed_template = ConditionTemplate.objects.get(name=CHARM_CONDITION_NAME)
-    TechniqueAppliedCondition.objects.get_or_create(
-        technique=technique,
-        condition=charmed_template,
-        target_kind=ConditionTargetKind.ENEMY,
-        defaults={
+    if technique is None:
+        return None
+
+    charmed_template = ConditionTemplate.objects.filter(name=CHARM_CONDITION_NAME).first()
+    if charmed_template is None:
+        return technique
+    authored_or_sample(
+        TechniqueAppliedCondition,
+        {
             "base_severity": 1,
             "minimum_success_level": 1,
         },
+        technique=technique,
+        condition=charmed_template,
+        target_kind=ConditionTargetKind.ENEMY,
     )
     return technique
 
@@ -233,7 +277,7 @@ def ensure_social_combat_content() -> None:
     Seeds the 4 CheckTypes (Rally/Demoralize/Taunt/Parley) with stat + skill
     (+ spec) compositions, the ``Inspired`` condition, and the ``Charming Word``
     charm technique. Safe to call repeatedly — every write goes through
-    ``get_or_create`` or the authoritative wipe-and-rewrite.
+    ``get_or_create`` or ``authored_or_sample``.
     """
     skills, specs = _ensure_social_skills_and_specs()
     _ensure_social_combat_check_types(skills, specs)

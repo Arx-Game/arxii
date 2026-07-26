@@ -23,6 +23,8 @@ from decimal import Decimal
 import logging
 from typing import TYPE_CHECKING
 
+from django.conf import settings
+
 from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
     FALLBACK_STARTING_ROOM_FIXTURE_KEY,
@@ -309,26 +311,32 @@ def ensure_canonical_fallback_room() -> ObjectDB:
 
 
 def wire_starting_technique_picks_target():
-    """Seed the 'starting_technique_picks' ModifierTarget (#2426).
+    """Look up the 'starting_technique_picks' ModifierTarget (#2426).
 
     A character-creation-scoped flat bonus: distinctions granting extra CG
     magic-stage technique picks (e.g. Tradition Training) target this row.
     ``CharacterDraft.starting_technique_picks`` sums it via
     ``_get_distinction_bonus(STARTING_TECHNIQUE_PICKS_TARGET, CG_MODIFIER_CATEGORY)``.
-    Idempotent via get_or_create on (category, name) — mirrors
-    ``wire_elevation_advantage_modifier_target`` (world/combat/factories.py).
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on (mirrors ``wire_elevation_advantage_modifier_target``,
+    world/combat/factories.py). Returns ``None`` when the ModifierCategory
+    isn't authored; ``ensure_tradition_training_distinction`` skips wiring its
+    DistinctionEffect to a missing target.
     """
     from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = ModifierCategory.objects.get_or_create(name=CG_MODIFIER_CATEGORY)
-    target, _ = ModifierTarget.objects.get_or_create(
+    category = authored_or_sample(ModifierCategory, {}, name=CG_MODIFIER_CATEGORY)
+    if category is None:
+        return None
+    return authored_or_sample(
+        ModifierTarget,
+        {"description": "Extra CG magic-stage technique picks, beyond the base of 1."},
         name=STARTING_TECHNIQUE_PICKS_TARGET,
         category=category,
-        defaults={
-            "description": "Extra CG magic-stage technique picks, beyond the base of 1.",
-        },
     )
-    return target
 
 
 def ensure_tradition_training_distinction() -> None:
@@ -340,25 +348,32 @@ def ensure_tradition_training_distinction() -> None:
     distinction, ``world/seeds/social_relationships.py``); "Arcane" is the
     magic-flavored category named in ``DistinctionCategory``'s own docstring
     ("the initial set: Physical, Mental, Personality, Social, Background, Arcane").
+
+    ``distinctions.distinctioncategory``/``distinction``/``distinctioneffect`` are
+    content-repo-owned (#2698) — each is looked up via ``authored_or_sample`` and
+    invented only under ``SEED_SAMPLE_CONTENT``. Skips wiring the category,
+    distinction, or effect once any of its own dependencies (category, then
+    distinction, then the ``ModifierTarget``) isn't authored.
     """
     from world.distinctions.models import (  # noqa: PLC0415
         Distinction,
         DistinctionCategory,
         DistinctionEffect,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     target = wire_starting_technique_picks_target()
 
-    category, _ = DistinctionCategory.objects.get_or_create(
+    category = authored_or_sample(
+        DistinctionCategory,
+        {"name": "Arcane", "description": _MAGIC_DISTINCTION_DESCRIPTION},
         slug="arcane",
-        defaults={
-            "name": "Arcane",
-            "description": (_MAGIC_DISTINCTION_DESCRIPTION),
-        },
     )
-    distinction, _ = Distinction.objects.get_or_create(
-        slug="tradition-training",
-        defaults={
+    if category is None:
+        return
+    distinction = authored_or_sample(
+        Distinction,
+        {
             "name": "Tradition Training",
             "category": category,
             "description": (
@@ -368,15 +383,20 @@ def ensure_tradition_training_distinction() -> None:
             "cost_per_rank": 1,
             "max_rank": 2,
         },
+        slug="tradition-training",
     )
-    DistinctionEffect.objects.update_or_create(
-        distinction=distinction,
-        target=target,
-        defaults={
-            "value_per_rank": 1,
-            "description": "+1 CG magic-stage technique pick per rank.",
-        },
-    )
+    # distinction/target (distinctions.Distinction / mechanics.ModifierTarget) are
+    # content-repo-owned (#2698) — skip wiring the effect when either is missing.
+    if distinction is not None and target is not None:
+        authored_or_sample(
+            DistinctionEffect,
+            {
+                "value_per_rank": 1,
+                "description": "+1 CG magic-stage technique pick per rank.",
+            },
+            distinction=distinction,
+            target=target,
+        )
 
 
 #: Canonical name: ``world.character_creation.constants.UNBOUND_TRADITION_NAME``
@@ -408,7 +428,7 @@ _METALLIC_ORDER_TRADITION_NAME = "Metallic Order"
 
 
 def wire_magic_learning_ap_cost_target():
-    """Seed the 'magic_learning_ap_cost' ModifierTarget (#2442).
+    """Look up the 'magic_learning_ap_cost' ModifierTarget (#2442).
 
     A live-play percent AP surcharge on magic-learning activities: the "Unbound"
     drawback distinction (``ensure_unbound_drawback_distinction`` below) authors a
@@ -418,27 +438,36 @@ def wire_magic_learning_ap_cost_target():
     ``CharacterModifier`` resolution path every other distinction-authored modifier
     uses, NOT the CG-draft ``CharacterDraft._get_distinction_bonus`` helper (that
     reads a draft's in-progress ``draft_data``, never a committed
-    ``CharacterDistinction``). Idempotent via get_or_create on (category, name) —
-    mirrors ``wire_starting_technique_picks_target`` above.
+    ``CharacterDistinction``).
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on (mirrors ``wire_starting_technique_picks_target`` above). Returns
+    ``None`` when the ModifierCategory isn't authored;
+    ``ensure_unbound_drawback_distinction`` skips wiring its DistinctionEffect
+    to a missing target.
     """
     from world.magic.constants import (  # noqa: PLC0415
         MAGIC_LEARNING_AP_COST_TARGET_NAME,
         MAGIC_MODIFIER_CATEGORY_NAME,
     )
     from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = ModifierCategory.objects.get_or_create(name=MAGIC_MODIFIER_CATEGORY_NAME)
-    target, _ = ModifierTarget.objects.get_or_create(
-        name=MAGIC_LEARNING_AP_COST_TARGET_NAME,
-        category=category,
-        defaults={
+    category = authored_or_sample(ModifierCategory, {}, name=MAGIC_MODIFIER_CATEGORY_NAME)
+    if category is None:
+        return None
+    return authored_or_sample(
+        ModifierTarget,
+        {
             "description": (
                 "Percent AP surcharge on magic-learning activities (technique "
                 "acquisition — teaching-offer accepts and #2440 TRAIN offers)."
             ),
         },
+        name=MAGIC_LEARNING_AP_COST_TARGET_NAME,
+        category=category,
     )
-    return target
 
 
 def ensure_unbound_drawback_distinction():
@@ -464,30 +493,34 @@ def ensure_unbound_drawback_distinction():
     lives there.
 
     "Arcane" reuses the magic-flavored ``DistinctionCategory`` first seeded by
-    ``ensure_tradition_training_distinction`` (get_or_create is a no-op on a
-    second creation regardless of call order). Idempotent via get_or_create /
-    update_or_create; never overwrites a staff-adjusted ``Distinction`` row (the
-    ``DistinctionEffect`` value is re-synced on every run, same as
-    ``ensure_tradition_training_distinction``'s).
+    ``ensure_tradition_training_distinction`` (the lookup is a no-op on a second
+    creation regardless of call order).
+
+    ``distinctions.distinctioncategory``/``distinction``/``distinctioneffect`` are
+    content-repo-owned (#2698) — each is looked up via ``authored_or_sample`` and
+    invented only under ``SEED_SAMPLE_CONTENT``; this can return ``None`` when the
+    row isn't authored and sampling is off, so callers (``seed_beginning_
+    traditions``, and any test asserting on the real row) must handle that.
     """
     from world.distinctions.models import (  # noqa: PLC0415
         Distinction,
         DistinctionCategory,
         DistinctionEffect,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     target = wire_magic_learning_ap_cost_target()
 
-    category, _ = DistinctionCategory.objects.get_or_create(
+    category = authored_or_sample(
+        DistinctionCategory,
+        {"name": "Arcane", "description": _MAGIC_DISTINCTION_DESCRIPTION},
         slug="arcane",
-        defaults={
-            "name": "Arcane",
-            "description": (_MAGIC_DISTINCTION_DESCRIPTION),
-        },
     )
-    distinction, _ = Distinction.objects.get_or_create(
-        slug=_UNBOUND_DRAWBACK_DISTINCTION_SLUG,
-        defaults={
+    if category is None:
+        return None
+    distinction = authored_or_sample(
+        Distinction,
+        {
             "name": "Unbound",
             "category": category,
             "description": (
@@ -500,15 +533,20 @@ def ensure_unbound_drawback_distinction():
             "cost_per_rank": -2,
             "max_rank": 1,
         },
+        slug=_UNBOUND_DRAWBACK_DISTINCTION_SLUG,
     )
-    DistinctionEffect.objects.update_or_create(
-        distinction=distinction,
-        target=target,
-        defaults={
-            "value_per_rank": 50,
-            "description": "+50% AP cost on magic-learning activities.",
-        },
-    )
+    # distinction/target (distinctions.Distinction / mechanics.ModifierTarget) are
+    # content-repo-owned (#2698) — skip wiring the effect when either is missing.
+    if distinction is not None and target is not None:
+        authored_or_sample(
+            DistinctionEffect,
+            {
+                "value_per_rank": 50,
+                "description": "+50% AP cost on magic-learning activities.",
+            },
+            distinction=distinction,
+            target=target,
+        )
     return distinction
 
 
@@ -704,22 +742,28 @@ def ensure_orphaned_tradition_distinction():
     (contrast ``ensure_tradition_training_distinction``, which does attach one).
 
     "Arcane" reuses the magic-flavored ``DistinctionCategory`` first seeded by
-    ``ensure_tradition_training_distinction`` (get_or_create is a no-op on a
-    second creation regardless of call order). Idempotent via get_or_create;
-    never overwrites a staff-adjusted row.
+    ``ensure_tradition_training_distinction`` (the lookup is a no-op on a second
+    creation regardless of call order).
+
+    ``distinctions.distinctioncategory``/``distinction`` are content-repo-owned
+    (#2698) — each is looked up via ``authored_or_sample`` and invented only
+    under ``SEED_SAMPLE_CONTENT``; this can return ``None`` when the row isn't
+    authored and sampling is off — callers (``seed_metallic_order_tradition``)
+    must handle that.
     """
     from world.distinctions.models import Distinction, DistinctionCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = DistinctionCategory.objects.get_or_create(
+    category = authored_or_sample(
+        DistinctionCategory,
+        {"name": "Arcane", "description": _MAGIC_DISTINCTION_DESCRIPTION},
         slug="arcane",
-        defaults={
-            "name": "Arcane",
-            "description": (_MAGIC_DISTINCTION_DESCRIPTION),
-        },
     )
-    distinction, _ = Distinction.objects.get_or_create(
-        slug=_ORPHANED_TRADITION_DISTINCTION_SLUG,
-        defaults={
+    if category is None:
+        return None
+    return authored_or_sample(
+        Distinction,
+        {
             "name": "Orphaned Tradition",
             "category": category,
             "description": (
@@ -731,8 +775,8 @@ def ensure_orphaned_tradition_distinction():
             "cost_per_rank": -2,
             "max_rank": 1,
         },
+        slug=_ORPHANED_TRADITION_DISTINCTION_SLUG,
     )
-    return distinction
 
 
 def seed_metallic_order_tradition():
@@ -813,11 +857,18 @@ def seed_metallic_order_tradition():
     return tradition
 
 
-def seed_character_creation_dev() -> None:
-    """Seed the CG-world content a fresh DB needs to run character creation.
+def _seed_sample_cg_world(species: Species, species_khati: Species) -> None:
+    """Sample realms/areas/beginnings for a clone with no content repo (#2698).
 
-    Idempotent: every write is ``get_or_create`` (or idempotent M2M ``add``);
-    safe to re-run; never overwrites an edited row.
+    Gated behind ``settings.SEED_SAMPLE_CONTENT`` (default OFF). These are
+    open-ended world content, not config: maintainers author realms, starting
+    areas and beginnings in the content repo, and seeding invented ones here is
+    what put "Commoner", "Noble", "Arx City" and "Luxen Port" into that repo via
+    ``export_to_content_repo``.
+
+    Kept rather than deleted because a fresh clone without a content repo still
+    needs *a* playable starting point, and because the Khati/Human split below
+    is what exercises the CG species-filtering UI.
     """
     realm, _ = Realm.objects.get_or_create(
         name="Arx",
@@ -861,17 +912,6 @@ def seed_character_creation_dev() -> None:
     if area_luxen.default_starting_room_id is None:
         area_luxen.default_starting_room = ensure_canonical_fallback_room().room_profile
         area_luxen.save(update_fields=["default_starting_room"])
-    species, _ = Species.objects.get_or_create(
-        name="Human",
-        defaults={"description": "The default species.", "sort_order": 0},
-    )
-    species_khati, _ = Species.objects.get_or_create(
-        name="Khati",
-        defaults={
-            "description": "A feline species known for agility and perception.",
-            "sort_order": 1,
-        },
-    )
     beginnings, _ = Beginnings.objects.get_or_create(
         name="Commoner",
         defaults={
@@ -912,22 +952,92 @@ def seed_character_creation_dev() -> None:
     beginnings_noble.allowed_species.add(species)
     beginnings_luxen.allowed_species.add(species)
     beginnings_luxen.allowed_species.add(species_khati)
-    Gender.objects.get_or_create(
-        key="male",
-        defaults={"display_name": "Male", "is_default": False},
+    _seed_commoner_families(realm)
+
+
+def seed_character_creation_dev() -> None:
+    """Seed the CG config a fresh DB needs to run character creation.
+
+    Idempotent: every write is ``get_or_create`` (or idempotent M2M ``add``);
+    safe to re-run; never overwrites an edited row.
+
+    Config only. Open-ended world content — realms, starting areas, beginnings,
+    the onboarding codex, the Academy, the orientation mission — lives behind
+    ``settings.SEED_SAMPLE_CONTENT`` (default OFF), because maintainers author
+    those in the content repo and seeded copies leak into it on export (#2698).
+    """
+    # species.Species, character_sheets.Gender, and forms.HeightBand/Build are
+    # all content-repo-owned (#2698) — looked up via authored_or_sample rather
+    # than invented unless SEED_SAMPLE_CONTENT is on. Realms/areas/beginnings
+    # are also open-ended world content and stay behind the sample-content flag.
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    species = authored_or_sample(
+        Species, {"description": "The default species.", "sort_order": 0}, name="Human"
     )
-    Gender.objects.get_or_create(
-        key="female",
-        defaults={"display_name": "Female", "is_default": False},
+    species_khati = authored_or_sample(
+        Species,
+        {
+            "description": "A feline species known for agility and perception.",
+            "sort_order": 1,
+        },
+        name="Khati",
     )
-    Gender.objects.get_or_create(
-        key="non_binary",
-        defaults={"display_name": "Non-Binary", "is_default": False},
+    if settings.SEED_SAMPLE_CONTENT:
+        _seed_sample_cg_world(species, species_khati)
+    authored_or_sample(Gender, {"display_name": "Male", "is_default": False}, key="male")
+    authored_or_sample(Gender, {"display_name": "Female", "is_default": False}, key="female")
+    authored_or_sample(
+        Gender, {"display_name": "Non-Binary", "is_default": False}, key="non_binary"
     )
-    Gender.objects.get_or_create(
-        key="unspecified",
-        defaults={"display_name": "Unspecified", "is_default": True},
+    authored_or_sample(
+        Gender, {"display_name": "Unspecified", "is_default": True}, key="unspecified"
     )
+    authored_or_sample(
+        HeightBand,
+        {
+            "display_name": "Average",
+            "min_inches": 60,
+            "max_inches": 74,
+            "weight_min": 120,
+            "weight_max": 220,
+            "is_cg_selectable": True,
+        },
+        name="average_band",
+    )
+    authored_or_sample(
+        Build,
+        {
+            "display_name": "Average",
+            "weight_factor": Decimal("1.0"),
+            "is_cg_selectable": True,
+        },
+        name="average_build",
+    )
+    _seed_form_traits(species)
+    _seed_form_traits(species_khati)
+    _seed_heritages()
+    _seed_pronouns()
+    # traits.trait is content-repo-owned (#2698) — looked up rather than
+    # invented unless SEED_SAMPLE_CONTENT is on. These are the base stat
+    # Traits every other check-composing seeder in this repo looks up by
+    # name; a real content repo authors them (the ADR-0168 audit found
+    # checks.checktype alone at 42 seeded vs. 72 authored rows).
+    for stat_name in DEFAULT_STAT_NAMES:
+        authored_or_sample(
+            Trait,
+            {"trait_type": TraitType.STAT, "description": stat_name},
+            name=stat_name,
+        )
+    Roster.objects.get_or_create(name="Available Characters")
+    Roster.objects.get_or_create(name="Active Characters")
+    _seed_cg_explanations()
+    ensure_tradition_training_distinction()
+    ensure_somehow_always_broke_distinction()
+    if not settings.SEED_SAMPLE_CONTENT:
+        return
+    # Named world content — authored in the content repo by maintainers, so
+    # only invented here for a clone that has none (#2698).
     TarotCard.objects.get_or_create(
         name="The Fool",
         defaults={
@@ -936,37 +1046,6 @@ def seed_character_creation_dev() -> None:
             "latin_name": "Fatui",
         },
     )
-    HeightBand.objects.get_or_create(
-        name="average_band",
-        defaults={
-            "display_name": "Average",
-            "min_inches": 60,
-            "max_inches": 74,
-            "weight_min": 120,
-            "weight_max": 220,
-            "is_cg_selectable": True,
-        },
-    )
-    Build.objects.get_or_create(
-        name="average_build",
-        defaults={
-            "display_name": "Average",
-            "weight_factor": Decimal("1.0"),
-            "is_cg_selectable": True,
-        },
-    )
-    _seed_form_traits(species)
-    _seed_form_traits(species_khati)
-    _seed_heritages()
-    _seed_pronouns()
-    _seed_commoner_families(realm)
-    for stat_name in DEFAULT_STAT_NAMES:
-        Trait.objects.get_or_create(
-            name=stat_name,
-            defaults={"trait_type": TraitType.STAT, "description": stat_name},
-        )
-    Roster.objects.get_or_create(name="Available Characters")
-    Roster.objects.get_or_create(name="Active Characters")
     Path.objects.get_or_create(
         name="The Wanderer",
         defaults={
@@ -976,15 +1055,12 @@ def seed_character_creation_dev() -> None:
             "is_active": True,
         },
     )
-    _seed_cg_explanations()
     seed_onboarding_codex()
-    ensure_tradition_training_distinction()
     seed_beginning_traditions()
     ensure_shroudwatch_academy()
     ensure_durance_registration_ritual()
     ensure_orientation_mission()
     seed_metallic_order_tradition()
-    ensure_somehow_always_broke_distinction()
 
 
 def ensure_somehow_always_broke_distinction():
@@ -998,25 +1074,35 @@ def ensure_somehow_always_broke_distinction():
 
     The mechanic lives in the ``DistinctionPurseDrain`` sidecar
     (``100% / floor 0``): the two weekly cron tasks empty every holder's purse
-    down to just that week's income. Both rows are idempotent ``get_or_create``;
-    the drain row's ``distinction`` O2O keys off the seeded distinction. Never
-    overwrites a staff-adjusted row.
+    down to just that week's income.
+
+    ``distinctions.distinctioncategory``/``distinction`` are content-repo-owned
+    (#2698) — each is looked up via ``authored_or_sample`` and invented only
+    under ``SEED_SAMPLE_CONTENT``; this can return ``None`` when the row isn't
+    authored and sampling is off, in which case the drain sidecar (config, not
+    content — ``currency.DistinctionPurseDrain`` isn't in ``CONTENT_MODELS``) is
+    skipped too, since it has nothing to key off. The drain row's own
+    ``get_or_create`` never overwrites a staff-adjusted ``drain_percent``.
     """
     from world.currency.models import DistinctionPurseDrain  # noqa: PLC0415
     from world.distinctions.models import Distinction, DistinctionCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = DistinctionCategory.objects.get_or_create(
-        slug="personality",
-        defaults={
+    category = authored_or_sample(
+        DistinctionCategory,
+        {
             "name": "Personality",
             "description": (
                 "Distinctions rooted in a character's temperament, habits, and compulsions."
             ),
         },
+        slug="personality",
     )
-    distinction, _ = Distinction.objects.get_or_create(
-        slug="somehow-always-broke",
-        defaults={
+    if category is None:
+        return None
+    distinction = authored_or_sample(
+        Distinction,
+        {
             "name": "Somehow Always Broke",
             "category": category,
             "description": (
@@ -1028,7 +1114,10 @@ def ensure_somehow_always_broke_distinction():
             "cost_per_rank": -50,
             "max_rank": 1,
         },
+        slug="somehow-always-broke",
     )
+    if distinction is None:
+        return None
     DistinctionPurseDrain.objects.get_or_create(
         distinction=distinction,
         defaults={"drain_percent": 100, "floor_coppers": 0},
@@ -1037,17 +1126,23 @@ def ensure_somehow_always_broke_distinction():
 
 
 def _seed_cg_explanations() -> None:
-    """Upsert every ``CGExplanation`` row from ``CG_EXPLANATION_COPY`` (#2162).
+    """Look up every ``CGExplanation`` row named in ``CG_EXPLANATION_COPY`` (#2162, #2698).
 
-    Unlike the rest of this seeder's create-if-missing rows, explanation copy is
-    re-synced on every run via ``update_or_create`` so prose fixes made here in
-    the repo keep reaching already-seeded deploys instead of being stuck behind
-    whatever text happened to land first.
+    ``character_creation.cgexplanation`` is content-repo-owned (#2698) — each
+    key is looked up via ``authored_or_sample`` and invented only under
+    ``SEED_SAMPLE_CONTENT``. Most keys here already have an authored
+    counterpart in the content repo; the five ``*_lore_intro``/
+    ``path_lore_durance`` keys currently do not, and are skipped (logged) —
+    same as any other missing content row — until the content repo authors
+    them. Unlike the retired ``update_or_create`` shape, a staff edit to an
+    already-seeded row now survives a re-run (the #2698 second guard forbids
+    resyncing a content-model row on every press).
     """
     from world.character_creation.models import CGExplanation  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     for key, text in CG_EXPLANATION_COPY.items():
-        CGExplanation.objects.update_or_create(key=key, defaults={"text": text})
+        authored_or_sample(CGExplanation, {"text": text}, key=key)
 
 
 def seed_onboarding_codex() -> None:
@@ -1217,40 +1312,53 @@ _APPEARANCE_TRAITS: tuple[tuple[str, str, str, bool, tuple[tuple[str, str], ...]
 )
 
 
-def _seed_form_traits(species: Species) -> None:
+def _seed_form_traits(species: Species | None) -> None:
     """Seed FormTrait, FormTraitOption, and SpeciesFormTrait for the given species.
 
     Creates the minimum viable appearance options for character creation.
     Each trait is linked to the species via SpeciesFormTrait with
     ``is_available_in_cg=True`` and no ``allowed_options`` restriction
     (all options are available).
+
+    ``forms.formtrait``/``formtraitoption``/``speciesformtrait`` are
+    content-repo-owned (#2698) — each row is looked up via
+    ``authored_or_sample`` and invented only under ``SEED_SAMPLE_CONTENT``.
+    When a trait isn't authored, its options and species link are skipped
+    entirely — nothing to hang them off. When ``species`` is ``None``
+    (``species.Species`` itself isn't authored and sampling is off), the
+    species link is skipped but trait/option content still seeds normally.
     """
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
     for sort_idx, (name, display_name, trait_type, is_cosmetic, options) in enumerate(
         _APPEARANCE_TRAITS
     ):
-        trait, _ = FormTrait.objects.get_or_create(
-            name=name,
-            defaults={
+        trait = authored_or_sample(
+            FormTrait,
+            {
                 "display_name": display_name,
                 "trait_type": trait_type,
                 "is_cosmetic": is_cosmetic,
                 "sort_order": sort_idx,
             },
+            name=name,
         )
+        if trait is None:
+            continue
         for opt_sort_idx, (opt_name, opt_display) in enumerate(options):
-            FormTraitOption.objects.get_or_create(
+            authored_or_sample(
+                FormTraitOption,
+                {"display_name": opt_display, "sort_order": opt_sort_idx},
                 trait=trait,
                 name=opt_name,
-                defaults={
-                    "display_name": opt_display,
-                    "sort_order": opt_sort_idx,
-                },
             )
-        SpeciesFormTrait.objects.get_or_create(
-            species=species,
-            trait=trait,
-            defaults={"is_available_in_cg": True},
-        )
+        if species is not None:
+            authored_or_sample(
+                SpeciesFormTrait,
+                {"is_available_in_cg": True},
+                species=species,
+                trait=trait,
+            )
     _wire_composite_options()
 
 

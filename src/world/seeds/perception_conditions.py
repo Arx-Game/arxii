@@ -8,6 +8,9 @@ the deferred automated producers; both apply/clear this same condition once buil
 
 Mirrors the get-or-create pattern in world/magic/effect_palette_content.py's
 _seed_intangibility_condition.
+
+``conditions.ConditionCategory``/``ConditionTemplate`` are content-repo-owned
+(#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
 """
 
 from __future__ import annotations
@@ -18,10 +21,11 @@ from world.conditions.constants import DurationType
 def seed_perception_condition_content() -> None:
     """Cluster entry — seed the Concealed condition category + template."""
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    category, _ = ConditionCategory.objects.get_or_create(
-        name="Concealed",
-        defaults={
+    category = authored_or_sample(
+        ConditionCategory,
+        {
             "description": (
                 "Conditions that make the bearer imperceptible to others "
                 "(invisibility, magical concealment, stealth) — pierced per-observer "
@@ -32,10 +36,11 @@ def seed_perception_condition_content() -> None:
             "alters_behavior": False,
             "conceals_from_perception": True,
         },
-    )
-    ConditionTemplate.objects.get_or_create(
         name="Concealed",
-        defaults={
+    )
+    authored_or_sample(
+        ConditionTemplate,
+        {
             "description": "The bearer cannot be perceived by anyone who hasn't detected them.",
             "category": category,
             "default_duration_type": DurationType.PERMANENT,
@@ -45,4 +50,5 @@ def seed_perception_condition_content() -> None:
             "has_progression": False,
             "can_be_dispelled": True,
         },
+        name="Concealed",
     )

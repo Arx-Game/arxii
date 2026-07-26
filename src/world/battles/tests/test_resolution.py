@@ -9,7 +9,7 @@ from __future__ import annotations
 import types
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from actions.factories import ActionTemplateFactory
 from world.battles.constants import (
@@ -1803,6 +1803,7 @@ class IsolationAndMobilityTests(TestCase):
         assert _is_isolated(p1) is False
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_surrounded_content gates on #2698
 class SelectSurroundedTerminalPoolTests(TestCase):
     def test_routes_to_enemy_pool_when_no_pc_opposes_at_place(self) -> None:
         from world.battles.resolution import select_surrounded_terminal_pool
@@ -1849,6 +1850,7 @@ class SelectSurroundedTerminalPoolTests(TestCase):
         assert pool == content["pools"]["surrounded_terminal_pvp"]
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_surrounded_content gates on #2698
 class EntryRollTests(TestCase):
     def setUp(self) -> None:
         self.content = ensure_surrounded_content()
@@ -1933,6 +1935,7 @@ class EntryRollTests(TestCase):
         assert instance.current_stage.stage_order == 1
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_surrounded_content gates on #2698
 class EscalationTickTests(TestCase):
     def setUp(self) -> None:
         self.content = ensure_surrounded_content()
@@ -2031,6 +2034,7 @@ class EscalationTickTests(TestCase):
         assert instance.current_stage.stage_order == 2
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_surrounded_content gates on #2698
 class RescueResolutionTests(TestCase):
     def setUp(self) -> None:
         self.content = ensure_surrounded_content()

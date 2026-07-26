@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import CovenantType
@@ -51,6 +51,7 @@ _EXPECTED_RITUALS: dict[str, str] = {
 }
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class CovenantLifecycleRitualsSeedTests(TestCase):
     """A fresh-DB seed_magic_dev() run (the Big Button path) yields every
     covenant-lifecycle Ritual row, findable by exact name and dispatch-ready."""
@@ -97,6 +98,7 @@ class CovenantLifecycleRitualsSeedTests(TestCase):
         self.assertIsInstance(content.covenant_rite, CovenantRite)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class WireCovenantLifecycleRitualsIdempotencyTests(TestCase):
     """Re-running wire_covenant_lifecycle_rituals() on a populated DB is a no-op
     for the Ritual/CovenantRite rows and preserves staff edits (user story 7)."""
@@ -149,6 +151,7 @@ class WireCovenantLifecycleRitualsIdempotencyTests(TestCase):
         self.assertNotEqual(config.band_width, 999)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeededFormationRitualDispatchTests(TestCase):
     """Prove the seed_magic_dev()-seeded "Covenant Formation" Ritual row (not a
     freshly-built factory row) resolves and dispatches to create_covenant_via_session."""
@@ -208,6 +211,7 @@ class SeededFormationRitualDispatchTests(TestCase):
         self.assertEqual(covenant.covenant_type, CovenantType.DURANCE)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeededOrganizationInductionRitualDispatchTests(TestCase):
     """Prove the seed_magic_dev()-seeded "Organization Induction" Ritual row
     resolves and dispatches to induct_organization_member_via_session."""

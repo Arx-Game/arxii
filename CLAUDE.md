@@ -27,14 +27,29 @@ Explore/research agents). Two concrete failure modes motivate this:
 - **Batched mutating tool calls cascade-cancel**: when one call in a parallel
   batch errors or hits an approval prompt, the harness cancels every sibling
   in that batch, and most of the intended work silently doesn't run.
-- **Subagents must run every command in the foreground.** Background completion
-  notifications re-invoke the main loop only — a subagent that backgrounds a
-  command and ends its turn "waiting for the notification" dies silently holding
-  uncommitted work (two stalls during #1909). Put a foreground-only instruction
-  in every implementer/fix dispatch prompt. The instruction alone does not fully
-  prevent it (6+ recurrences on 2026-07-06/07) — when a subagent stalls this
-  way, the recovery is cheap and reliable: **resume it with a message** ordering
-  it to re-run the checks in the foreground and commit before ending its turn.
+- **Order every implementer dispatch "commit, THEN test" — do not rely on the
+  foreground instruction holding.** Background completion notifications re-invoke
+  the main loop only, so a subagent that backgrounds a command and ends its turn
+  "waiting for the notification" dies silently. Telling it not to has failed
+  across three sessions (2 stalls in #1909, 6+ on 2026-07-06/07, 6 of 7 agents in
+  #2698 *despite* a capitalised block naming `run_in_background`, `&`, `Monitor`
+  and poll-a-file by name); agents route around the instruction creatively, so
+  keep it but do not treat it as the control. **The control is ordering.** Put
+  this in every implementer/fix dispatch:
+
+  > Commit as soon as the code change is complete and the fast oracle passes,
+  > BEFORE running the long app suites. Commit any test fixes as follow-ups.
+
+  In #2698 the agents dispatched before that line stranded 21, 68 and 72
+  uncommitted files when they stalled; the ones dispatched after it stalled just
+  the same but had already committed, so recovery was reading `git log` and
+  moving on. The stall was never the cost — the unrecoverable work was.
+  Recovery when it still matters: **resume it with a message** ordering it to
+  re-run the checks in the foreground and commit before ending its turn.
+
+  Corollary: a subagent usually should not run a whole-app suite at all. CI is
+  the regression gate, so have it prove the change with the narrowest fast
+  oracle, commit, and let CI do the sweep.
 - **Subagent dispatch prompts must anchor the worktree.** A subagent's FIRST
   action must be `cd <worktree>` then `pwd` + `git status --short`, verifying
   branch and tree before any edit; every path it edits and every test it runs

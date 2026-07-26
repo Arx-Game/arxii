@@ -8,7 +8,7 @@ accumulator, not stage multipliers). The fall DamageType leaves its wound/death
 pools null so the config-default survivability pools apply, exactly like poison.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.areas.positioning.constants import (
     FALL_DAMAGE_TYPE_NAME,
@@ -26,6 +26,7 @@ from world.conditions.models import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_fall_content gates on #2698
 class EnsureFallContentTests(TestCase):
     def test_seeds_fall_damage_type(self):
         ensure_fall_content()

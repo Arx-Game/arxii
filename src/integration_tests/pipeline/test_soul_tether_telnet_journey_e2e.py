@@ -12,7 +12,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from commands.ritual import CmdRitual
 from evennia_extensions.factories import CharacterFactory
@@ -79,6 +79,7 @@ def _make_active_relationship(source: object, target: object) -> object:
     return CharacterRelationshipFactory(source=target, target=source, is_pending=False)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SoulTetherTelnetJourneyTests(TestCase):
     """draft → join → fire through CmdRitual forms a real Soul Tether."""
 

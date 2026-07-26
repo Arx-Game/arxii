@@ -33,44 +33,52 @@ def ensure_resonance_tiers() -> list[ResonanceTier]:
     return tiers
 
 
-def ensure_touchstone_content() -> tuple[ItemTemplate, list[ItemTemplate]]:
+def ensure_touchstone_content() -> tuple[ItemTemplate | None, list[ItemTemplate]]:
     """Get-or-create one example touchstone template + generic reagent templates.
 
-    Self-contained: no canonical Resonance/Affinity catalog exists yet in
-    production seed code (Resonances today are authored ad hoc, e.g. by
-    story-specific dev-content seeds via ``ResonanceFactory``) — so this
-    get-or-creates its own "Praedari" Resonance (+ "Primal" Affinity) by
-    name rather than assuming some other seed ran first. This module is
-    called unconditionally from ``seeds_sanctum.ensure_sanctum_rituals()``,
+    The "Primal" Affinity and "Praedari" Resonance are content-repo-owned
+    (#2698) — looked up rather than assumed, and invented only under
+    ``SEED_SAMPLE_CONTENT``. When either is absent, the touchstone
+    ``ItemTemplate`` (which needs a real ``tied_resonance``) is skipped and
+    ``None`` is returned in its place; the generic reagent templates below
+    don't reference a resonance, so they still seed unconditionally. This
+    module is called unconditionally from ``seeds_sanctum.ensure_sanctum_rituals()``,
     which itself is called broadly (dev seed + many unrelated tests), so it
     must never hard-fail on a missing prerequisite.
     """
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     tiers = {t.tier_level: t for t in ensure_resonance_tiers()}
-    primal_affinity, _ = Affinity.objects.get_or_create(
+    primal_affinity = authored_or_sample(
+        Affinity,
+        {"description": "The affinity of nature, beasts, and raw survival."},
         name="Primal",
-        defaults={"description": "The affinity of nature, beasts, and raw survival."},
     )
-    praedari, _ = Resonance.objects.get_or_create(
-        name="Praedari",
-        defaults={
-            "description": "The resonance of the predator, the hunt, and the kill.",
-            "affinity": primal_affinity,
-        },
-    )
+    praedari = None
+    if primal_affinity is not None:
+        praedari = authored_or_sample(
+            Resonance,
+            {
+                "description": "The resonance of the predator, the hunt, and the kill.",
+                "affinity": primal_affinity,
+            },
+            name="Praedari",
+        )
 
-    touchstone, _ = ItemTemplate.objects.get_or_create(
-        name=PRAEDARI_PAW_TEMPLATE_NAME,
-        defaults={
-            "description": "A dried predatory animal's paw, warm to the touch.",
-            "weight": 0.2,
-            "size": 1,
-            "value": 0,
-            "tied_resonance": praedari,
-            "resonance_tier": tiers[1],
-        },
-    )
+    touchstone = None
+    if praedari is not None:
+        touchstone, _ = ItemTemplate.objects.get_or_create(
+            name=PRAEDARI_PAW_TEMPLATE_NAME,
+            defaults={
+                "description": "A dried predatory animal's paw, warm to the touch.",
+                "weight": 0.2,
+                "size": 1,
+                "value": 0,
+                "tied_resonance": praedari,
+                "resonance_tier": tiers[1],
+            },
+        )
 
     reagent_names = (
         (CANDLE_TEMPLATE_NAME, "A plain tallow candle."),

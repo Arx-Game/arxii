@@ -1,6 +1,6 @@
 """Tests for the offensive-only elevation bonus (#2011)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from evennia import create_object
 
 from world.areas.positioning.constants import PositionKind
@@ -8,8 +8,15 @@ from world.areas.positioning.services import connect_positions, create_position
 from world.combat.services import elevation_bonus
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ElevationBonusTest(TestCase):
-    """elevation_bonus returns a flat bonus when attacker is elevated and target is not."""
+    """elevation_bonus returns a flat bonus when attacker is elevated and target is not.
+
+    mechanics.ModifierCategory/ModifierTarget are content-repo-owned (#2698);
+    wire_elevation_advantage_modifier_target() only invents them under
+    SEED_SAMPLE_CONTENT — this test needs the real row to attach a
+    CharacterModifier to, so it opts in.
+    """
 
     def setUp(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory

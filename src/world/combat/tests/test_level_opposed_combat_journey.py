@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from actions.factories import ActionTemplateFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -173,6 +173,7 @@ class LevelOpposedOffenseJourneyTests(TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # wire_penetration_check_type gates on #2698
 class LevelOpposedPenetrationJourneyTests(TestCase):
     """The ward contest's difficulty is additive: ward + level_opposition (#2707 Task 6,
     decision 6)."""

@@ -7,13 +7,14 @@ factory-built character's check resolving. The full character-creation
 pipeline and a live multi-round encounter are Phase 2, out of scope here.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.seeds.database import seed_dev_database
 from world.seeds.tests.content_stub import stub_content_root
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # combat check-content seeds gate on #2698
 class TestPlayableSlice(TestCase):
     @stub_content_root()
     def test_resolution_tables_seeded(self) -> None:
@@ -75,6 +76,7 @@ class TestPlayableSlice(TestCase):
         self.assertIsInstance(result.outcome, CheckOutcome)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeededCharacterCreation(TestCase):
     """The #1333 proof: a clean DB seeded via the Big Button can run CG.
 

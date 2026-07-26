@@ -7,7 +7,7 @@ attrition invariant (ADR-0156): the never-to-full fraction cap.
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
@@ -23,8 +23,13 @@ from world.vitals.seeds import seed_survivability_content
 from world.vitals.services import mend_wound, process_damage_consequences
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class WoundPoolAppliesConditionTests(TestCase):
-    """The audit's central gap: the wound pool now applies real conditions."""
+    """The audit's central gap: the wound pool now applies real conditions.
+
+    Gates on SEED_SAMPLE_CONTENT (#2698) — ``seed_survivability_content``
+    drives the real Crippling Wound condition through the wound pool.
+    """
 
     def test_failure_tier_applies_crippling_wound_with_wound_details(self) -> None:
         seed_survivability_content()

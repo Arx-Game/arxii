@@ -72,12 +72,18 @@ def ensure_melee_offense_pool() -> ConsequencePool:
     )
 
 
-def get_melee_offense_pool() -> ConsequencePool:
+def get_melee_offense_pool() -> ConsequencePool | None:
     """Return the shared 'Combat: Melee Offense' base ConsequencePool, seeding the
-    'Melee Attack' ActionTemplate (and its pool) if absent."""
+    'Melee Attack' ActionTemplate (and its pool) if absent.
+
+    ``checks.CheckType`` is content-repo-owned (#2698) — returns ``None``
+    when ``wire_melee_attack_action_template()`` returns ``None`` (the
+    'Melee Attack' CheckType isn't authored).
+    """
     from world.combat.factories import wire_melee_attack_action_template  # noqa: PLC0415
 
-    return wire_melee_attack_action_template().consequence_pool
+    template = wire_melee_attack_action_template()
+    return template.consequence_pool if template is not None else None
 
 
 def ensure_combat_offense_catalog_content() -> list[ActionTemplate]:
@@ -87,14 +93,22 @@ def ensure_combat_offense_catalog_content() -> list[ActionTemplate]:
     the base 'Melee Attack' template — only consequence_pool differs). Machinery
     lives in ``actions.catalog_seeding`` (shared with the magic catalog, #1320).
 
+    ``checks.CheckType`` is content-repo-owned (#2698) — the base 'Melee
+    Attack' ActionTemplate is skipped entirely (``wire_melee_attack_action_
+    template()`` returns ``None``) when its CheckType isn't authored; the
+    catalog has nothing to hang off then, so it returns ``[]``.
+
     Returns the list of catalog ActionTemplate rows (created or pre-existing),
     in `_COMBAT_CATALOG_POOLS` order.
     """
     from actions.catalog_seeding import ensure_catalog_content  # noqa: PLC0415
     from world.combat.factories import wire_melee_attack_action_template  # noqa: PLC0415
 
+    base_template = wire_melee_attack_action_template()
+    if base_template is None:
+        return []
     return ensure_catalog_content(
-        base_template=wire_melee_attack_action_template(),
+        base_template=base_template,
         base_consequences=_OFFENSE_CONSEQUENCES,
         catalog=_COMBAT_CATALOG_POOLS,
         category="combat",

@@ -12,15 +12,20 @@ seeds willpower/composure/stability the same way the trait tests do
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.covenants.factories import wire_covenant_rite_content
 from world.mechanics.models import ModifierTarget
 from world.traits.models import Trait, TraitCategory, TraitType
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class RiteStatTargetTraitLinkageTest(TestCase):
-    """Seeded stat ModifierTargets link to their canonical Trait."""
+    """Seeded stat ModifierTargets link to their canonical Trait.
+
+    The backing "Renew the Oath" Ritual is content-repo-owned (#2698);
+    ``SEED_SAMPLE_CONTENT`` opts this suite into the sample-seeding path.
+    """
 
     def setUp(self) -> None:
         # Canonical stat Traits are not auto-present in a fresh test DB; seed

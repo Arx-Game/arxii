@@ -11,7 +11,7 @@ Coverage targets per brief:
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from actions.definitions import sanctum as sanctum_actions
 from world.magic.seeds_sanctum import ensure_sanctification_personal_ritual
@@ -73,6 +73,7 @@ class SanctumWeaveActionTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SanctumInstallActionTests(TestCase):
     def setUp(self):
         # execute() now resolves the Sanctification Ritual row (#707, Task 8)

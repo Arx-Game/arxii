@@ -6,7 +6,7 @@ ChallengeApproach per _SUCCOR_CAPABILITIES entry, and idempotency of
 ensure_succor_content().
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.combat.succor_content import (
     _SUCCOR_CAPABILITIES,
@@ -20,6 +20,7 @@ from world.mechanics.models import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_succor_content gates on #2698
 class EnsureSuccorContentIdempotencyTests(TestCase):
     """ensure_succor_content() is safe to call repeatedly (#1744)."""
 

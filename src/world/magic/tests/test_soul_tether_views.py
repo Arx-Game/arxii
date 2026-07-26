@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.test import override_settings
 from rest_framework.test import APITestCase
 
 # ---------------------------------------------------------------------------
@@ -106,6 +107,7 @@ def _make_eligible_pair_with_accounts(track=None):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SoulTetherAcceptViewTests(APITestCase):
     """Tests for POST /api/magic/soul-tether/accept/."""
 
@@ -219,6 +221,7 @@ class SoulTetherAcceptViewTests(APITestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SoulTetherDetailViewTests(APITestCase):
     """Tests for GET /api/magic/soul-tether/{relationship_id}/."""
 
@@ -303,6 +306,7 @@ class SoulTetherDetailViewTests(APITestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SoulTetherDissolveViewTests(APITestCase):
     """Tests for POST /api/magic/soul-tether/dissolve/.
 
@@ -393,6 +397,7 @@ class SoulTetherDissolveViewTests(APITestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SineatingRequestViewTests(APITestCase):
     """Tests for POST /api/magic/soul-tether/sineating/request/."""
 
@@ -483,6 +488,7 @@ class SineatingRequestViewTests(APITestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SineatingRespondViewTests(APITestCase):
     """Tests for POST /api/magic/soul-tether/sineating/respond/.
 
@@ -597,6 +603,7 @@ class SineatingRespondViewTests(APITestCase):
 # ---------------------------------------------------------------------------
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SoulTetherRescueViewTests(APITestCase):
     """Tests for POST /api/magic/soul-tether/rescue/.
 
