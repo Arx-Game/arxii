@@ -84,12 +84,12 @@ class TechniqueProgressE2ETest(TestCase):
         )
 
         # Train — partial
-        result = contribute_to_technique_progress(self.learner, progress, amount=30)
+        result = contribute_to_technique_progress(self.learner, progress, dev_points=30)
         self.assertIsNone(result)
 
         # Train — complete
         progress.refresh_from_db()
-        result = contribute_to_technique_progress(self.learner, progress, amount=20)
+        result = contribute_to_technique_progress(self.learner, progress, dev_points=20)
         self.assertIsNotNone(result)
         self.assertIsInstance(result, CharacterTechnique)
 
