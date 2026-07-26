@@ -1213,6 +1213,16 @@ def _get_technique_sources(
     from world.magic.services.resonance import resolve_gift_ids_by_technique  # noqa: PLC0415
     from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
+    power_config = get_capability_power_config()
+    if power_config is None:
+        # Inert invariant (#2708 C1): no config row means the curve is disabled
+        # EVERYWHERE. Skip the thread/power derivation entirely — see the sibling
+        # note in world.conditions.services._technique_capability_values, the
+        # agency oracle this availability oracle must agree with in the inert
+        # state. See ``_inert_technique_capability_sources`` for why bare
+        # ``calculate_value()`` reproduces the pre-#2708 output exactly.
+        return _inert_technique_capability_sources(grants)
+
     try:
         handler = character.threads
     except AttributeError:
@@ -1220,10 +1230,13 @@ def _get_technique_sources(
 
         handler = CharacterThreadHandler(character)
 
-    gift_id_by_technique = resolve_gift_ids_by_technique(
-        tuple({grant.technique_id for grant in grants})
-    )
-    power_config = get_capability_power_config()
+    # The technique->gift mapping only matters to GIFT-thread ambient bumps; a
+    # character owning no threads at all can never have one, so skip the query.
+    gift_id_by_technique: dict[int, int] = {}
+    if handler.all():
+        gift_id_by_technique = resolve_gift_ids_by_technique(
+            tuple({grant.technique_id for grant in grants})
+        )
 
     power_by_technique: dict[int, int] = {}
     sources: list[CapabilitySource] = []
@@ -1258,6 +1271,40 @@ def _get_technique_sources(
             )
         )
 
+    return sources
+
+
+def _inert_technique_capability_sources(
+    grants: list[TechniqueCapabilityGrant],
+) -> list[CapabilitySource]:
+    """Availability-oracle sources with ``calculate_value()`` called bare.
+
+    The inert branch of the #2708 C1 fix: with no ``CapabilityPowerConfig`` row,
+    the curve is disabled everywhere, so ``calculate_value()`` (no ``effective_power``
+    passed) falls back to ``self.technique.intensity`` and returns the RETIRED
+    additive formula unchanged — byte-identical to the pre-#2708 value. Mirrors
+    ``world.conditions.services._inert_technique_capability_totals``, the agency
+    oracle's sibling; extracted to a module-level helper purely to keep
+    ``_get_technique_sources``'s cyclomatic complexity under the lint ceiling.
+    """
+    sources: list[CapabilitySource] = []
+    for grant in grants:
+        value = grant.calculate_value(config=None)
+        if value <= 0:
+            continue
+        effect_property_ids = _get_technique_effect_property_ids(grant.technique)
+        sources.append(
+            CapabilitySource(
+                capability_name=grant.capability.name,
+                capability_id=grant.capability_id,
+                value=value,
+                source_type=CapabilitySourceType.TECHNIQUE,
+                source_name=grant.technique.name,
+                source_id=grant.technique_id,
+                effect_property_ids=effect_property_ids,
+                prerequisite=grant.prerequisite,
+            )
+        )
     return sources
 
 

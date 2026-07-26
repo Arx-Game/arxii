@@ -29,6 +29,7 @@ from world.covenants.factories import (
 from world.magic.constants import EffectKind, TargetKind
 from world.magic.factories import (
     CharacterTechniqueFactory,
+    GiftFactory,
     ResonanceFactory,
     TechniqueCapabilityGrantFactory,
     TechniqueFactory,
@@ -602,15 +603,27 @@ class ActionContextThreadingTests(TestCase):
         self.assertEqual(result, 1)
 
     def test_supplied_context_activates_trait_thread(self) -> None:
-        """The climbing case: an action that involves the trait lights its thread up."""
+        """The climbing case: an action that involves the trait lights its thread up.
+
+        This test exercises the curve itself (#2708's core feature), so it must
+        create a ``CapabilityPowerConfig`` row — without one, the curve is disabled
+        and this shape asserts nothing about it (#2708 C1 review: this test used to
+        assert the additive value 51 with NO config row present, which was only
+        possible because the oracle was wrongly feeding a real power figure through
+        the retired additive formula. See
+        ``InertOracleAtNonzeroSensitivityTests`` below for the inert-through-the-
+        oracle guard that shape was missing.)
+        """
+        CapabilityPowerConfig.objects.create(pk=1)
         cap, thread = self._trait_thread_technique_setup()
         action_ctx = PullActionContext(involved_traits=(thread.target_trait_id,))
 
         result = get_effective_capability_value(self.sheet, cap, action_ctx=action_ctx)
 
-        # power = 0 + 0 + 50 (tier-0 bump at thread level 10, multiplier 1.0) ->
-        # base_value(1) + intensity_multiplier(1) * 50 = 51.
-        self.assertEqual(result, 51)
+        # power = 0 + 0 + 50 (tier-0 bump at thread level 10, multiplier 1.0).
+        # Curved (default power_per_doubling=10): base_value(1) * 2 ** (sensitivity(1)
+        # * power(50) / 10) = 1 * 2**5 = 32.
+        self.assertEqual(result, 32)
         dark_value = get_effective_capability_value(self.sheet, cap)
         self.assertGreater(result, dark_value)
 
@@ -678,6 +691,60 @@ class ActionContextThreadingTests(TestCase):
         # (ctx.involved_techniques=(T2, T1)), giving T2 a value of 51 and a
         # result of 51 — this assertion is what catches that regression.
         self.assertEqual(result, 1)
+
+
+class InertOracleAtNonzeroSensitivityTests(TestCase):
+    """#2708 C1 review: the shape nothing covered before this fix.
+
+    Every other inert-invariant test either used ``intensity_multiplier=0`` (so a
+    real power figure couldn't move the result even if fed through) or called
+    ``calculate_value()`` bare directly (which never exercised the oracle's own
+    power-derivation wiring at all). This is the one shape that combines a
+    NONZERO sensitivity grant with an AMBIENTLY-active bumped thread and goes
+    through the real oracle (``get_effective_capability_value``) with no
+    ``CapabilityPowerConfig`` row present — exactly the state #2708 ships in. Before
+    the fix, the oracle unconditionally computed
+    ``technique.intensity + context_free_power + contextual_thread_power(...)`` and
+    fed it to the RETIRED additive formula as ``effective_power``, so the ambient
+    thread's bump leaked into a value that should have been untouched.
+    """
+
+    def test_ambient_gift_thread_bump_does_not_move_the_inert_value(self) -> None:
+        sheet = CharacterSheetFactory()
+        cap = CapabilityTypeFactory(innate_baseline=0)
+        gift = GiftFactory()
+        technique = TechniqueFactory(gift=gift, intensity=3)
+        TechniqueCapabilityGrantFactory(
+            technique=technique, capability=cap, base_value=1, intensity_multiplier=1
+        )
+        CharacterTechniqueFactory(character=sheet, technique=technique)
+
+        # A GIFT thread is always in-action (_ALWAYS_IN_ACTION_KINDS), so this bump
+        # is visible even under the ambient default (no action_ctx) — the shape most
+        # likely to fire on every ordinary capability read post-merge.
+        thread = ThreadFactory(
+            owner=sheet,
+            target_kind=TargetKind.GIFT,
+            target_gift=gift,
+            target_trait=None,
+            level=20,
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.GIFT,
+            resonance=thread.resonance,
+            target_gift=gift,
+            tier=0,
+            as_intensity_bump=True,
+            intensity_bump_amount=100,
+        )
+
+        result = get_effective_capability_value(sheet, cap)
+
+        # No CapabilityPowerConfig row: the curve is disabled, and the ambient
+        # thread's bump must be invisible to the RETIRED additive formula — the
+        # exact pre-#2708 number, computed from technique.intensity alone:
+        # base_value(1) + intensity_multiplier(1) * technique.intensity(3) = 4.
+        self.assertEqual(result, 4)
 
 
 class CapabilityOracleQueryCountTests(TestCase):

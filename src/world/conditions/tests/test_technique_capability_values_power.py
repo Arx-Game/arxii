@@ -82,12 +82,14 @@ class TechniqueCapabilityValuesQueryCountTests(TestCase):
         return sheet
 
     def test_ten_technique_sweep_costs_a_fixed_query_count_no_config_row(self) -> None:
-        """No ``CapabilityPowerConfig`` row: 1 grants query + 1 gift-id-mapping query +
-        1 config-existence check (fetched ONCE for the whole sweep via
-        ``get_capability_power_config()``, never once per grant — Task 5 review finding
-        1) = 3, regardless of sweep size."""
+        """No ``CapabilityPowerConfig`` row: 1 grants query + 1 config-existence check
+        = 2, regardless of sweep size. This IS the state #2708 ships in (#2708 C1
+        review): the curve is disabled everywhere, so the thread/power derivation
+        (and its own gift-id-mapping query) is skipped entirely rather than merely
+        having its result discarded — restoring this sweep to its exact pre-#2708
+        query cost, not just its pre-#2708 output."""
         sheet = self._sheet_with_technique_sweep(10)
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(2):
             result = _technique_capability_values(sheet)
         assert result
 
@@ -106,7 +108,12 @@ class TechniqueCapabilityValuesQueryCountTests(TestCase):
     def test_gift_id_mapping_and_config_do_not_scale_with_technique_count(self) -> None:
         """Growing the sweep from 3 to 10 techniques must add ZERO queries: both the
         technique->gift mapping (Task 4 review) and the ``CapabilityPowerConfig`` fetch
-        (Task 5 review) are resolved ONCE for the whole sweep, never once per grant."""
+        (Task 5 review) are resolved ONCE for the whole sweep, never once per grant.
+
+        Requires a config row: with none, the gift-id mapping is skipped entirely
+        (#2708 C1) rather than resolved-once, so this test would prove nothing about
+        the property it names."""
+        CapabilityPowerConfig.objects.create(pk=1, power_per_doubling=10)
         small_sheet = self._sheet_with_technique_sweep(3)
         large_sheet = self._sheet_with_technique_sweep(10)
 

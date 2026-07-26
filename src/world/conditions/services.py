@@ -96,6 +96,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.covenants.models import CovenantRole
     from world.magic.models import PendingAlteration, Technique, Thread
+    from world.magic.models.techniques import TechniqueCapabilityGrant
     from world.magic.types.pull import PullActionContext
     from world.mechanics.models import ModifierTarget
     from world.scenes.models import Scene
@@ -1609,6 +1610,28 @@ def _passive_capability_grants(character_sheet: "CharacterSheet") -> dict[int, i
     return handler.passive_capability_grants()
 
 
+def _inert_technique_capability_totals(
+    grants: list["TechniqueCapabilityGrant"],
+) -> dict[int, int]:
+    """Best (max) value per CapabilityType with ``calculate_value()`` called bare.
+
+    The inert branch of the #2708 C1 fix: with no ``CapabilityPowerConfig`` row,
+    the curve is disabled everywhere, so ``calculate_value()`` (no ``effective_power``
+    passed) falls back to ``self.technique.intensity`` and returns the RETIRED
+    additive formula unchanged — byte-identical to the pre-#2708 value. Extracted
+    to a module-level helper (rather than inlined in ``_technique_capability_values``)
+    purely to keep that function's cyclomatic complexity under the lint ceiling.
+    """
+    totals: dict[int, int] = {}
+    for grant in grants:
+        value = grant.calculate_value(config=None)
+        if value <= 0:
+            continue
+        cap_id = grant.capability_id
+        totals[cap_id] = max(totals.get(cap_id, 0), value)
+    return totals
+
+
 def _technique_capability_values(
     character_sheet: "CharacterSheet",
     *,
@@ -1696,6 +1719,18 @@ def _technique_capability_values(
     if not grants:
         return {}
 
+    power_config = get_capability_power_config()
+    if power_config is None:
+        # Inert invariant (#2708 C1): no config row means the curve is disabled
+        # EVERYWHERE. Skip the thread/power derivation entirely — deriving a real
+        # power figure here and passing it as `effective_power` would feed the
+        # RETIRED additive formula (base + intensity_multiplier * power) a power
+        # figure many times larger than the `technique.intensity` it was designed
+        # for, silently changing every grant's value even with no config row. See
+        # ``_inert_technique_capability_totals`` for why bare ``calculate_value()``
+        # reproduces the pre-#2708 output exactly.
+        return _inert_technique_capability_totals(grants)
+
     character = character_sheet.character
     try:
         handler = character.threads
@@ -1704,10 +1739,13 @@ def _technique_capability_values(
 
         handler = CharacterThreadHandler(character)
 
-    gift_id_by_technique = resolve_gift_ids_by_technique(
-        tuple({grant.technique_id for grant in grants})
-    )
-    power_config = get_capability_power_config()
+    # The technique->gift mapping only matters to GIFT-thread ambient bumps; a
+    # character owning no threads at all can never have one, so skip the query.
+    gift_id_by_technique: dict[int, int] = {}
+    if handler.all():
+        gift_id_by_technique = resolve_gift_ids_by_technique(
+            tuple({grant.technique_id for grant in grants})
+        )
 
     power_by_technique: dict[int, int] = {}
     totals: dict[int, int] = {}
