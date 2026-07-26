@@ -428,13 +428,21 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
 ) -> bool:
     """Check if a persona can view an interaction.
 
+    This gate governs an IC ACTION (a scene reaction — "did you actually witness
+    this event?"), which is why it exists as a third cascade alongside
+    ``InteractionQuerySet.visible_to`` (read-visibility for the scene log) and
+    ``CanViewInteraction`` (REST object permission) rather than being redundant
+    with either: a reactor whose account can technically read the log is still
+    blocked here if their PERSONA never perceived the event (#2710).
+
     Visibility cascade:
     1. very_private -> writer + InteractionReceiver check (not staff)
-    2. Whisper or place-scoped -> writer + InteractionReceiver check (+ staff),
+    2. perceived_only -> writer + InteractionReceiver check (+ staff) (#2710)
+    3. Whisper or place-scoped -> writer + InteractionReceiver check (+ staff),
        regardless of scene privacy — mirrors the real-time push rule so the
        persisted log never shows more than the room heard
-    3. Private scene -> all scene participants (Account-based via SceneParticipation)
-    4. Public -> everyone
+    4. Private scene -> all scene participants (Account-based via SceneParticipation)
+    5. Public -> everyone
     """
     is_writer = interaction.persona_id == persona.pk
     is_receiver = InteractionReceiver.objects.filter(
@@ -449,6 +457,12 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
     # Staff can see everything except very_private
     if is_staff:
         return True
+
+    # Perceived only (#2710): only the characters who actually perceived the
+    # event, plus staff (already returned True above). Unlike VERY_PRIVATE this
+    # tier still admits staff — checked here, after the staff early-return.
+    if interaction.visibility == InteractionVisibility.PERCEIVED_ONLY:
+        return is_receiver or is_writer
 
     # Whisper, receiver-scoped mutter, or place-scoped (table talk): only
     # writer + receivers, even inside a public or private scene. A mutter
