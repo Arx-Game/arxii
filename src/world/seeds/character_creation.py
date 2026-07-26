@@ -61,8 +61,8 @@ from world.missions.models import (
     MissionTemplate,
 )
 from world.realms.models import Realm
-from world.roster.models import Roster
 from world.roster.models.families import Family
+from world.roster.seeds import ensure_rosters
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
@@ -965,8 +965,7 @@ def seed_character_creation_dev() -> None:
             name=stat_name,
             defaults={"trait_type": TraitType.STAT, "description": stat_name},
         )
-    Roster.objects.get_or_create(name="Available Characters")
-    Roster.objects.get_or_create(name="Active Characters")
+    ensure_rosters()
     Path.objects.get_or_create(
         name="The Wanderer",
         defaults={
