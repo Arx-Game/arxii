@@ -11,6 +11,7 @@ ConditionTemplate with formula-based severity/duration scaling.
 """
 
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -25,10 +26,19 @@ from world.covenants.constants import RoleArchetype
 from world.magic.constants import TechniqueCategory, TechniqueFunction, TechniqueReach
 from world.magic.models.gifts import Gift
 
+if TYPE_CHECKING:
+    from world.magic.models.power_config import CapabilityPowerConfig
+
 # App-qualified model paths repeated across FK references; centralized for dedup.
 _TECHNIQUE_MODEL = "magic.Technique"
 _CONDITION_TEMPLATE_MODEL = "conditions.ConditionTemplate"
 _CAPABILITY_TYPE_MODEL = "conditions.CapabilityType"
+
+# Sentinel distinguishing "no config argument passed" (self-fetch) from an explicit
+# ``config=None`` (caller already established no row exists — skip the fetch). Lets a
+# sweep over many grants fetch CapabilityPowerConfig once and hand it to every
+# ``calculate_value()`` call without re-triggering a per-grant query (#2708 Task 5 review).
+_CONFIG_UNSET = object()
 
 
 class ConditionTargetKind(models.TextChoices):
@@ -883,6 +893,7 @@ class TechniqueCapabilityGrant(NaturalKeyMixin, AbstractCapabilityGrant):
         self,
         *,
         effective_power: int | None = None,
+        config: "CapabilityPowerConfig | None" = _CONFIG_UNSET,  # type: ignore[assignment]
     ) -> int:
         """Calculate effective Capability value on the ADR-0164 ladder.
 
@@ -900,6 +911,15 @@ class TechniqueCapabilityGrant(NaturalKeyMixin, AbstractCapabilityGrant):
 
         ``effective_power``: when provided, used as the aggregate. When None, falls back
         to ``self.technique.intensity`` — the oracles supply the real figure.
+
+        ``config``: pass an already-fetched ``CapabilityPowerConfig`` (or ``None`` when
+        the caller has already established no row exists) so a sweep over many grants
+        issues one config query total, not one per grant (#2708 Task 5 review — this
+        helper was placed inside both oracles' per-grant loops, and its own single-fetch
+        default previously meant a real row was fetched TWICE per grant: once here for the
+        inert check, once more inside ``apply_capability_curve``). Omit the argument
+        entirely to self-fetch — the single-call convenience path callers used before this
+        param existed.
         """
         from world.magic.services.capability_curve import (  # noqa: PLC0415
             apply_capability_curve,
@@ -907,10 +927,15 @@ class TechniqueCapabilityGrant(NaturalKeyMixin, AbstractCapabilityGrant):
         )
 
         power = effective_power if effective_power is not None else self.technique.intensity
-        if get_capability_power_config() is None:
+        if config is _CONFIG_UNSET:
+            config = get_capability_power_config()
+        if config is None:
             return int(self.base_value + (self.intensity_multiplier * Decimal(power)))
         return apply_capability_curve(
-            self.base_value, power=power, sensitivity=self.intensity_multiplier
+            self.base_value,
+            power=power,
+            sensitivity=self.intensity_multiplier,
+            config=config,
         )
 
 

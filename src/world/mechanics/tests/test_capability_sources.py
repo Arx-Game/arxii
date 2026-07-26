@@ -191,14 +191,14 @@ class TechniqueSourceQueryCountTests(TestCase):
     for the sibling oracle — both must resolve the technique->gift mapping ONCE for
     the whole sweep, never per technique (the N+1 Task 4's review caught twice)."""
 
-    def _character_with_technique_sweep(self, technique_count: int):
+    def _character_with_technique_sweep(self, technique_count: int, *, label: str | None = None):
         from world.magic.constants import TargetKind
         from world.magic.factories import ThreadFactory, ThreadPullEffectFactory
         from world.magic.types.pull import PullActionContext
 
         sheet = CharacterSheetFactory()
         gift = GiftFactory()
-        capability = CapabilityTypeFactory(name=f"avail_sweep_cap_{technique_count}")
+        capability = CapabilityTypeFactory(name=f"avail_sweep_cap_{label or technique_count}")
         thread = ThreadFactory(
             owner=sheet,
             target_kind=TargetKind.GIFT,
@@ -228,11 +228,12 @@ class TechniqueSourceQueryCountTests(TestCase):
         handler.contextual_thread_power(PullActionContext())
         return sheet.character
 
-    def test_gift_id_mapping_does_not_scale_with_technique_count(self) -> None:
-        """Growing the sweep from 3 to 10 techniques must add exactly 7 queries — one
-        per added grant's own ``CapabilityPowerConfig`` check (Task 1, orthogonal to
-        this fix) — never an extra query per technique from a re-resolved
-        ``Technique`` gift lookup."""
+    def test_gift_id_mapping_and_config_do_not_scale_with_technique_count(self) -> None:
+        """Growing the sweep from 3 to 10 techniques must add ZERO queries: both the
+        technique->gift mapping (Task 4 review) and the ``CapabilityPowerConfig`` fetch
+        (Task 5 review finding 1/2 — was landing inside this per-grant loop via
+        ``calculate_value``'s own single-call default) are resolved ONCE for the whole
+        sweep, never once per grant."""
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
@@ -250,8 +251,40 @@ class TechniqueSourceQueryCountTests(TestCase):
         small_queries = len(small_ctx.captured_queries)
         large_queries = len(large_ctx.captured_queries)
         self.assertEqual(
-            large_queries - small_queries,
-            7,
-            f"expected exactly +7 queries (10-3 grants' own config checks) growing "
-            f"from 3 to 10 techniques; got {small_queries} -> {large_queries}.",
+            large_queries,
+            small_queries,
+            f"expected the SAME query count (O(1), not O(N)) growing from 3 to 10 "
+            f"techniques; got {small_queries} -> {large_queries}. An extra query per "
+            f"technique here means the gift mapping or the config lookup is being "
+            f"re-resolved per grant instead of once for the whole sweep.",
+        )
+
+    def test_ten_technique_sweep_costs_a_fixed_query_count_no_config_row(self) -> None:
+        """No ``CapabilityPowerConfig`` row: the config-existence check is fetched ONCE
+        for the whole sweep (Task 5 review), so the query count is independent of sweep
+        size and of whether a config row exists."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        character = self._character_with_technique_sweep(10, label="nocfg")
+        with CaptureQueriesContext(connection) as ctx:
+            sources = get_capability_sources_for_character(character)
+        assert sources
+        no_config_count = len(ctx.captured_queries)
+
+        from world.magic.models import CapabilityPowerConfig
+
+        CapabilityPowerConfig.objects.create(pk=1, power_per_doubling=10)
+        character = self._character_with_technique_sweep(10, label="withcfg")
+        with CaptureQueriesContext(connection) as ctx:
+            sources = get_capability_sources_for_character(character)
+        assert sources
+        with_config_count = len(ctx.captured_queries)
+
+        self.assertEqual(
+            no_config_count,
+            with_config_count,
+            "expected the same query count whether or not a CapabilityPowerConfig row "
+            "exists — the config lookup happens once for the whole sweep either way "
+            f"(Task 5 review finding 1/2); got {no_config_count} vs {with_config_count}.",
         )

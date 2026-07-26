@@ -1619,6 +1619,13 @@ def _technique_capability_values(character_sheet: "CharacterSheet") -> dict[int,
     every technique in this sweep — never per grant — to keep the sweep constant-query
     (Task 4's review caught this N+1 twice; see ``resolve_gift_ids_by_technique``).
 
+    ``CapabilityPowerConfig`` is likewise fetched ONCE for the whole sweep and threaded
+    through every ``calculate_value(config=...)`` call — the same
+    memoize-per-sweep-not-per-grant pattern as ``power_by_technique`` below. Left to its
+    own single-fetch default, ``calculate_value`` would issue one query per grant (Task 5
+    review finding 1/2 — a helper that had never been called in a loop before this task
+    landed in one here).
+
     Args:
         character_sheet: The character's CharacterSheet.
 
@@ -1626,6 +1633,7 @@ def _technique_capability_values(character_sheet: "CharacterSheet") -> dict[int,
         Dict mapping CapabilityType PK to the best positive technique-granted value.
     """
     from world.magic.models.techniques import TechniqueCapabilityGrant  # noqa: PLC0415
+    from world.magic.services.capability_curve import get_capability_power_config  # noqa: PLC0415
     from world.magic.services.resonance import resolve_gift_ids_by_technique  # noqa: PLC0415
     from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
@@ -1649,6 +1657,7 @@ def _technique_capability_values(character_sheet: "CharacterSheet") -> dict[int,
     gift_id_by_technique = resolve_gift_ids_by_technique(
         tuple({grant.technique_id for grant in grants})
     )
+    power_config = get_capability_power_config()
 
     power_by_technique: dict[int, int] = {}
     totals: dict[int, int] = {}
@@ -1663,7 +1672,7 @@ def _technique_capability_values(character_sheet: "CharacterSheet") -> dict[int,
                 + handler.contextual_thread_power(ctx, gift_id_by_technique=gift_id_by_technique)
             )
             power_by_technique[technique_id] = power
-        value = grant.calculate_value(effective_power=power)
+        value = grant.calculate_value(effective_power=power, config=power_config)
         if value <= 0:
             continue
         cap_id = grant.capability_id

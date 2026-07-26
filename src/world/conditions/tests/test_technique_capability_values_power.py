@@ -8,11 +8,21 @@ TWICE — once because it wasn't memoized at all, once because a batch caller re
 per-call instead of once for the whole sweep. This module proves the oracle's own
 wiring uses the batched shape: growing the technique sweep must not add a
 ``Technique`` gift-lookup query per technique.
+
+Task 5's review caught a second N+1: ``TechniqueCapabilityGrant.calculate_value()``'s
+own ``CapabilityPowerConfig`` lookup (a real SELECT — ``SharedMemoryModel``'s idmapper
+caches object identity, not querysets) was placed inside this sweep's per-grant loop
+without being memoized the same way ``power_by_technique`` is. These tests now assert
+a fixed, sweep-size-independent query count (config fetched ONCE), with AND without a
+config row present — the state where the fix actually matters, since the pre-fix
+double-fetch (finding 2) only bites once a row exists.
 """
 
 from decimal import Decimal
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
@@ -27,6 +37,7 @@ from world.magic.factories import (
     ThreadFactory,
     ThreadPullEffectFactory,
 )
+from world.magic.models import CapabilityPowerConfig
 from world.magic.types.pull import PullActionContext
 
 
@@ -70,24 +81,32 @@ class TechniqueCapabilityValuesQueryCountTests(TestCase):
         handler.contextual_thread_power(PullActionContext())
         return sheet
 
-    def test_ten_technique_sweep_costs_a_fixed_query_count(self) -> None:
-        """1 grants query + 1 gift-id-mapping query + 10 per-grant
-        ``CapabilityPowerConfig`` checks (Task 1, orthogonal to this fix) = 12. If the
-        technique->gift mapping were re-resolved per technique instead of once for the
-        whole sweep (the N+1 Task 4's review caught twice), this would be 22, not 12."""
+    def test_ten_technique_sweep_costs_a_fixed_query_count_no_config_row(self) -> None:
+        """No ``CapabilityPowerConfig`` row: 1 grants query + 1 gift-id-mapping query +
+        1 config-existence check (fetched ONCE for the whole sweep via
+        ``get_capability_power_config()``, never once per grant — Task 5 review finding
+        1) = 3, regardless of sweep size."""
         sheet = self._sheet_with_technique_sweep(10)
-        with self.assertNumQueries(12):
+        with self.assertNumQueries(3):
             result = _technique_capability_values(sheet)
         assert result
 
-    def test_gift_id_mapping_does_not_scale_with_technique_count(self) -> None:
-        """Growing the sweep from 3 to 10 techniques must add exactly 7 queries — one
-        per added grant's own ``CapabilityPowerConfig`` check (pre-existing, Task 1,
-        orthogonal to this fix) — and NOT an eighth-or-more query per technique from a
-        re-resolved ``Technique`` gift lookup (the N+1 Task 4's review caught twice)."""
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
+    def test_ten_technique_sweep_costs_a_fixed_query_count_with_config_row(self) -> None:
+        """Same fixed-cost shape with a ``CapabilityPowerConfig`` row present — the
+        state where the pre-fix double-fetch (Task 5 review finding 2: ``calculate_value``
+        fetched once for its own inert check, ``apply_capability_curve`` fetched again
+        internally) actually bit. Still exactly one config query for the whole sweep,
+        threaded through every ``calculate_value(config=...)`` call."""
+        CapabilityPowerConfig.objects.create(pk=1, power_per_doubling=10)
+        sheet = self._sheet_with_technique_sweep(10)
+        with self.assertNumQueries(3):
+            result = _technique_capability_values(sheet)
+        assert result
 
+    def test_gift_id_mapping_and_config_do_not_scale_with_technique_count(self) -> None:
+        """Growing the sweep from 3 to 10 techniques must add ZERO queries: both the
+        technique->gift mapping (Task 4 review) and the ``CapabilityPowerConfig`` fetch
+        (Task 5 review) are resolved ONCE for the whole sweep, never once per grant."""
         small_sheet = self._sheet_with_technique_sweep(3)
         large_sheet = self._sheet_with_technique_sweep(10)
 
@@ -102,10 +121,10 @@ class TechniqueCapabilityValuesQueryCountTests(TestCase):
         small_queries = len(small_ctx.captured_queries)
         large_queries = len(large_ctx.captured_queries)
         self.assertEqual(
-            large_queries - small_queries,
-            7,
-            f"expected exactly +7 queries (10-3 grants' own config checks) growing "
-            f"from 3 to 10 techniques; got {small_queries} -> {large_queries}. An "
-            f"extra query per technique here means the technique->gift mapping is "
-            f"being re-resolved per call instead of once for the whole sweep.",
+            large_queries,
+            small_queries,
+            f"expected the SAME query count (O(1), not O(N)) growing from 3 to 10 "
+            f"techniques; got {small_queries} -> {large_queries}. An extra query per "
+            f"technique here means the gift mapping or the config lookup is being "
+            f"re-resolved per grant instead of once for the whole sweep.",
         )

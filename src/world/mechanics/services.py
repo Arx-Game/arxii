@@ -1175,6 +1175,11 @@ def _get_technique_sources(
     so availability doesn't flicker based on whether combat is running). The
     technique->gift mapping ``contextual_thread_power`` needs is resolved ONCE for
     every technique in this sweep, never per grant, to keep the sweep constant-query.
+
+    ``CapabilityPowerConfig`` is likewise fetched ONCE for the whole sweep and threaded
+    through every ``calculate_value(config=...)`` call, mirroring ``power_by_technique``
+    below (Task 5 review finding 1/2 — left to its own single-fetch default,
+    ``calculate_value`` issues one query per grant).
     """
     grants = list(
         TechniqueCapabilityGrant.objects.filter(
@@ -1204,6 +1209,7 @@ def _get_technique_sources(
     if not grants:
         return []
 
+    from world.magic.services.capability_curve import get_capability_power_config  # noqa: PLC0415
     from world.magic.services.resonance import resolve_gift_ids_by_technique  # noqa: PLC0415
     from world.magic.types.pull import PullActionContext  # noqa: PLC0415
 
@@ -1217,6 +1223,7 @@ def _get_technique_sources(
     gift_id_by_technique = resolve_gift_ids_by_technique(
         tuple({grant.technique_id for grant in grants})
     )
+    power_config = get_capability_power_config()
 
     power_by_technique: dict[int, int] = {}
     sources: list[CapabilitySource] = []
@@ -1231,7 +1238,7 @@ def _get_technique_sources(
                 + handler.contextual_thread_power(ctx, gift_id_by_technique=gift_id_by_technique)
             )
             power_by_technique[technique_id] = power
-        value = grant.calculate_value(effective_power=power)
+        value = grant.calculate_value(effective_power=power, config=power_config)
         if value <= 0:
             continue
 

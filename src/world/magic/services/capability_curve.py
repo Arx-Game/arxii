@@ -18,6 +18,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from world.magic.models import CapabilityPowerConfig
 
+# Sentinel distinguishing "no config argument passed" (self-fetch) from an explicit
+# ``config=None`` (caller already established no row exists — skip the fetch).
+# Same pattern as world.skills.services._UNSET.
+_UNSET = object()
+
 
 def get_capability_power_config() -> CapabilityPowerConfig | None:
     """Return the CapabilityPowerConfig singleton, or None if no row exists yet."""
@@ -26,7 +31,13 @@ def get_capability_power_config() -> CapabilityPowerConfig | None:
     return CapabilityPowerConfig.objects.filter(pk=1).first()
 
 
-def apply_capability_curve(base: int, *, power: int, sensitivity: Decimal) -> int:
+def apply_capability_curve(
+    base: int,
+    *,
+    power: int,
+    sensitivity: Decimal,
+    config: CapabilityPowerConfig | None = _UNSET,  # type: ignore[assignment]
+) -> int:
     """Return ``base`` curved geometrically by ``power``.
 
         value = round(base * 2 ** (sensitivity * power / power_per_doubling))
@@ -40,8 +51,16 @@ def apply_capability_curve(base: int, *, power: int, sensitivity: Decimal) -> in
     returns less than ``base``: power is an empowerment axis, and impairment is
     the conditions layer's job (a negative ``ConditionCapabilityEffect``), not
     this curve's.
+
+    ``config``: pass an already-fetched ``CapabilityPowerConfig`` (or ``None`` when
+    the caller already knows no row exists) to avoid a redundant query — a sweep over
+    many grants/specs must fetch the singleton once, not once per call (#2708 Task 5
+    review — this and ``calculate_value``'s own ``config`` param were the site of an
+    N+1 that landed inside a per-grant loop). Omit the argument entirely to self-fetch,
+    the single-call convenience path every direct caller used before this param existed.
     """
-    config = get_capability_power_config()
+    if config is _UNSET:
+        config = get_capability_power_config()
     if config is None or sensitivity <= 0 or power <= 0 or config.power_per_doubling <= 0:
         return base
     exponent = (sensitivity * Decimal(power)) / Decimal(config.power_per_doubling)
