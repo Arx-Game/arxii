@@ -1424,8 +1424,6 @@ class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase
         )
 
     def test_finalize_via_real_select_tradition_pays_ap_surcharge_on_acquisition(self):
-        import math
-
         from rest_framework import status as drf_status
         from rest_framework.test import APIClient
 
@@ -1530,10 +1528,15 @@ class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase
 
         accept_technique_offer(sheet, offer)
 
+        # With the progress meter (#2711), AP is no longer spent at offer
+        # acceptance — it's spent per-session via contribute_to_technique_progress.
+        # The meter total is the base cost (5), not surcharged.
+        from world.magic.models import TechniqueProgress
+
+        progress = TechniqueProgress.objects.get(character_sheet=sheet, technique=second_technique)
+        assert progress.total_required == base_ap_cost
         learner_pool.refresh_from_db()
-        expected_cost = math.ceil(base_ap_cost * 1.5)
-        assert expected_cost == 8  # sanity: ceil(5 * 1.5) == 8
-        assert learner_pool.current == 200 - expected_cost
+        assert learner_pool.current == 200  # AP not spent at meter creation
 
 
 class FinalizeCharacterTarotTests(FinalizationTestMixin, TestCase):

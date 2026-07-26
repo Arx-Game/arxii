@@ -278,6 +278,11 @@ class SettleObligationLoopEndToEndTests(TestCase):
         )
         accepted = resolve_offer(train_session, trainer_offer)
         self.assertIsNotNone(accepted.object_pk, accepted.message)
+        # Meter created, not CharacterTechnique (#2711)
+        from world.magic.models import TechniqueProgress
+
         self.assertTrue(
-            CharacterTechnique.objects.filter(character=sheet, technique=train_technique).exists()
+            TechniqueProgress.objects.filter(
+                character_sheet=sheet, technique=train_technique
+            ).exists()
         )

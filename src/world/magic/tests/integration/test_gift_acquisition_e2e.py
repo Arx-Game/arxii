@@ -17,8 +17,8 @@ from world.magic.exceptions import TechniqueCapExceeded
 from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory
 from world.magic.models import (
     CharacterGift,
-    CharacterTechnique,
     GiftUnlock,
+    TechniqueProgress,
     TechniqueTeachingOffer,
     Thread,
 )
@@ -83,8 +83,8 @@ class GiftAcquisitionE2ETest(TestCase):
         )
 
         # 3. Learner accepts — first technique, gift implicitly acquired
-        ct1 = accept_technique_offer(self.sheet, offer1)
-        self.assertEqual(ct1.technique, self.technique1)
+        progress1 = accept_technique_offer(self.sheet, offer1)
+        self.assertEqual(progress1.technique, self.technique1)
 
         # Gift was acquired
         self.assertTrue(CharacterGift.objects.filter(character=self.sheet, gift=self.gift).exists())
@@ -96,9 +96,11 @@ class GiftAcquisitionE2ETest(TestCase):
         )
         self.assertEqual(thread.level, 0)
 
-        # AP cost was 5 * 3 (first_technique_ap_multiplier) = 15
+        # Meter total = 5 * 3 (first_technique_ap_multiplier) = 15. AP not spent
+        # at meter creation — spent per-session via contribute_to_technique_progress (#2711).
+        self.assertEqual(progress1.total_required, 15)
         self.learner_ap.refresh_from_db()
-        self.assertEqual(self.learner_ap.current, 200 - 15)
+        self.assertEqual(self.learner_ap.current, 200)
 
         # 4. Teacher creates offer for second technique
         offer2 = TechniqueTeachingOffer.objects.create(
@@ -110,12 +112,9 @@ class GiftAcquisitionE2ETest(TestCase):
         )
 
         # 5. Learner accepts — second technique, gift already owned, base AP
-        self.learner_ap.current = 200
-        self.learner_ap.save()
-        ct2 = accept_technique_offer(self.sheet, offer2)
-        self.assertEqual(ct2.technique, self.technique2)
-        self.learner_ap.refresh_from_db()
-        self.assertEqual(self.learner_ap.current, 200 - 5)  # 5 AP, no multiplier
+        progress2 = accept_technique_offer(self.sheet, offer2)
+        self.assertEqual(progress2.technique, self.technique2)
+        self.assertEqual(progress2.total_required, 5)  # 5 AP, no multiplier
 
         # 6. Learn a third technique (cap = 3 at depth 1 for level-0 thread)
         offer3 = TechniqueTeachingOffer.objects.create(
@@ -125,10 +124,8 @@ class GiftAcquisitionE2ETest(TestCase):
             learn_ap_cost=5,
             banked_ap=1,
         )
-        self.learner_ap.current = 200
-        self.learner_ap.save()
-        ct3 = accept_technique_offer(self.sheet, offer3)
-        self.assertEqual(ct3.technique, self.technique3)
+        progress3 = accept_technique_offer(self.sheet, offer3)
+        self.assertEqual(progress3.technique, self.technique3)
 
         # 7. Fourth technique should hit the cap
         offer4 = TechniqueTeachingOffer.objects.create(
@@ -138,15 +135,14 @@ class GiftAcquisitionE2ETest(TestCase):
             learn_ap_cost=5,
             banked_ap=1,
         )
-        self.learner_ap.current = 200
-        self.learner_ap.save()
         with self.assertRaises(TechniqueCapExceeded):
             accept_technique_offer(self.sheet, offer4)
 
-        # 8. Verify total techniques learned
+        # 8. Verify meters created (not CharacterTechnique — that requires
+        # filling the meter via contribute_to_technique_progress, #2711)
         self.assertEqual(
-            CharacterTechnique.objects.filter(
-                character=self.sheet, technique__gift=self.gift
+            TechniqueProgress.objects.filter(
+                character_sheet=self.sheet, technique__gift=self.gift
             ).count(),
             3,
         )

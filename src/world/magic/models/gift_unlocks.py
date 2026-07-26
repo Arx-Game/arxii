@@ -198,6 +198,29 @@ class GiftAcquisitionConfig(SharedMemoryModel):
             "surcharge is applied on top via the magic_learning_ap_cost modifier."
         ),
     )
+    cross_path_cost_multiplier = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("2.00"),
+        help_text=(
+            "Multiplier on the technique-progress meter total when the teacher's "
+            "Path.style differs from the learner's. 1.00 = no cross-path friction."
+        ),
+    )
+    weekly_training_cap = models.PositiveIntegerField(
+        default=50,
+        help_text=(
+            "Max meter-progress points a learner can contribute per game week "
+            "toward a single technique."
+        ),
+    )
+    cross_path_cap_divisor = models.PositiveIntegerField(
+        default=1,
+        help_text=(
+            "Divides the weekly training cap for cross-path learning. "
+            "1 = no effect (same cap). Higher = slower per-week progress."
+        ),
+    )
 
     class Meta:
         verbose_name = "Gift Acquisition Config"

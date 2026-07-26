@@ -101,14 +101,25 @@ class LearnTechniqueTest(TestCase):
             )
 
     def test_ap_cost_deducted(self):
-        learn_technique(
+        """With ap_cost > 0, a TechniqueProgress meter is created (#2711).
+
+        AP is not spent at meter creation — it's spent per-session via
+        ``contribute_to_technique_progress``. The meter total reflects the
+        ap_cost (after training-room discount, if any).
+        """
+        from world.magic.models import TechniqueProgress
+
+        result = learn_technique(
             self.sheet,
             self.technique,
             source=AccessChangeSource.TECHNIQUE_GRANT,
             ap_cost=10,
         )
+        self.assertIsInstance(result, TechniqueProgress)
+        self.assertEqual(result.total_required, 10)
+        # AP not spent at meter creation
         self.ap_pool.refresh_from_db()
-        self.assertEqual(self.ap_pool.current, 200 - 10)
+        self.assertEqual(self.ap_pool.current, 200)
 
     def test_duplicate_raises_value_error(self):
         learn_technique(
@@ -146,37 +157,35 @@ class TrainingRoomDiscountTests(TestCase):
         self.ap_pool.save()
 
     def test_training_room_discounts_ap_cost(self):
-        """A Training Room at level 2 reduces the AP spent by 2 (1 per level)."""
+        """A Training Room at level 2 reduces the meter total by 2 (#675, #2711)."""
         from world.room_features.factories import RoomFeatureInstanceFactory
         from world.room_features.seeds import ensure_training_room_kind
 
         kind = ensure_training_room_kind()
         instance = RoomFeatureInstanceFactory(feature_kind=kind, level=2)
 
-        learn_technique(
+        result = learn_technique(
             self.sheet,
             self.technique,
             source=AccessChangeSource.TECHNIQUE_GRANT,
             ap_cost=10,
             location=instance.room_profile.objectdb,
         )
-        self.ap_pool.refresh_from_db()
-        # 10 - 2 (level 2 * 1 per level) = 8 spent; 200 - 8 = 192
-        self.assertEqual(self.ap_pool.current, 192)
+        # 10 - 2 (level 2 * 1 per level) = 8 meter total
+        self.assertEqual(result.total_required, 8)
 
     def test_no_training_room_means_full_cost(self):
-        """Without a Training Room, the full AP cost is spent (regression)."""
-        learn_technique(
+        """Without a Training Room, the full AP cost is the meter total (#2711)."""
+        result = learn_technique(
             self.sheet,
             self.technique,
             source=AccessChangeSource.TECHNIQUE_GRANT,
             ap_cost=10,
         )
-        self.ap_pool.refresh_from_db()
-        self.assertEqual(self.ap_pool.current, 200 - 10)
+        self.assertEqual(result.total_required, 10)
 
     def test_discount_floors_at_zero(self):
-        """The discounted cost never drops below 0 AP."""
+        """The discounted meter total never drops below 0 (#2711)."""
         from world.room_features.factories import RoomFeatureInstanceFactory
         from world.room_features.seeds import ensure_training_room_kind
 
@@ -184,13 +193,12 @@ class TrainingRoomDiscountTests(TestCase):
         # A level-3 Training Room (max) discounts 3, flooring at 0 for a 2-AP cost.
         instance = RoomFeatureInstanceFactory(feature_kind=kind, level=3)
 
-        learn_technique(
+        result = learn_technique(
             self.sheet,
             self.technique,
             source=AccessChangeSource.TECHNIQUE_GRANT,
             ap_cost=2,
             location=instance.room_profile.objectdb,
         )
-        self.ap_pool.refresh_from_db()
-        # 2 - 3 = -1, floored to 0; 200 - 0 = 200
-        self.assertEqual(self.ap_pool.current, 200)
+        # 2 - 3 = -1, floored to 0
+        self.assertEqual(result.total_required, 0)
