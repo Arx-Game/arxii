@@ -239,6 +239,7 @@ from world.magic.models.threads import (
     ThreadXPLockedLevel,
 )
 from world.magic.models.touchstone_config import TouchstoneCastConfig
+from world.magic.models.training_outcome import TrainingOutcomeAward
 from world.magic.models.weaving import (
     CharacterThreadWeavingUnlock,
     ThreadWeavingTeachingOffer,
@@ -471,4 +472,6 @@ __all__ = [
     "TraditionGiftGrant",
     "TraditionManager",
     "TraditionRitualGrant",
+    # training outcome awards (#2727)
+    "TrainingOutcomeAward",
 ]
