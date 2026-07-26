@@ -582,7 +582,7 @@ def _anchor_ambiently_active(  # noqa: PLR0911 — one arm per TargetKind, flat 
     ORGANIZATION deliberately returns False. Its rule ("tied to organization missions or
     activities", ratified 2026-07-25) needs a marker ``PullActionContext`` does not carry;
     shipping an arm that can never fire would be worse than omitting it. Tracked as a
-    needs-design question off #2708.
+    needs-design question #2731.
 
     ``gift_id_by_technique`` lets a batch caller (``build_applicable_threads``, which
     invokes this once per thread in a loop, or a caller sweeping many technique-contexts

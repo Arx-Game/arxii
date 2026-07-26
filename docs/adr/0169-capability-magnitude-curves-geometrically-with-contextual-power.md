@@ -118,7 +118,7 @@ not an assumption that one mirrors the other. The `ORGANIZATION` ambient arm is
 deliberately deferred (`_anchor_ambiently_active` returns `False` for it) — its
 ratified rule ("tied to organization missions or activities") needs a marker
 `PullActionContext` does not carry yet; shipping an arm that can never fire would be
-worse than omitting it, so it's tracked as a needs-design question off #2708 rather than
+worse than omitting it, so it's tracked as needs-design question #2731 rather than
 guessed at here.
 
 > Status: accepted · Source: issue #2708 (should technique/capability grants scale with
