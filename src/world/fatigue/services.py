@@ -24,6 +24,7 @@ from world.fatigue.constants import (
     EFFORT_COST_MULTIPLIER,
     EXHAUSTION_DAMAGE_TYPE_NAME,
     FATIGUE_ENDURANCE_STAT,
+    FATIGUE_TRAIT_DEFAULTS,
     MIN_FATIGUE_COST,
     REST_AP_COST,
     WELL_RESTED_MULTIPLIER,
@@ -35,7 +36,7 @@ from world.fatigue.constants import (
 from world.fatigue.models import FatiguePool
 from world.fatigue.types import FatigueCollapseResult, RestResult
 from world.traits.constants import PrimaryStat
-from world.traits.models import Trait, TraitType
+from world.traits.models import Trait
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -340,9 +341,10 @@ def should_check_collapse(
 def _ensure_endurance_check_type(category: str) -> CheckType:
     """Ensure the endurance CheckType exists for a fatigue category, creating if needed.
 
-    Requires Trait fixture data (stamina/composure/stability) to be loaded.
-    Without populated CheckRank/ResultChart data, checks default to
-    success_level=0 (treated as failure).
+    Also ensures the underlying stat Trait (stamina/composure/stability) via
+    FATIGUE_TRAIT_DEFAULTS — a config prerequisite (#2724) may call this before the
+    content load populates Trait fixtures. Without populated CheckRank/ResultChart
+    data, checks default to success_level=0 (treated as failure).
     """
     endurance_stat_name = FATIGUE_ENDURANCE_STAT[category]
     check_name = f"fatigue_endurance_{category}"
@@ -358,23 +360,33 @@ def _ensure_endurance_check_type(category: str) -> CheckType:
     )
     # Unconditional (not gated on `created`) so a pre-existing (e.g. fixture-supplied)
     # bare CheckType still gets its trait attached (#2724); get_or_create's defaults let
-    # an authored weight survive a re-run. Tolerant of a not-yet-loaded Trait — as a
-    # config prerequisite this can run before the content load populates the stat Trait
-    # fixtures; the gameplay call site (unchanged) self-heals the composition once the
-    # Trait exists.
-    trait = Trait.objects.filter(name=endurance_stat_name, trait_type=TraitType.STAT).first()
-    if trait is not None:
-        CheckTypeTrait.objects.get_or_create(
-            check_type=check_type, trait=trait, defaults={"weight": 1.0}
-        )
+    # an authored weight survive a re-run. As a config prerequisite this can run before
+    # the content load populates the stat Trait fixtures, so the Trait itself is also
+    # get_or_create'd — never left to lazily self-heal at first gameplay use, which
+    # would reinstate the undeclared-dependency bug #2724 exists to close. The code
+    # default (FATIGUE_TRAIT_DEFAULTS) matches the authored fixture row, so a later
+    # content-fixture upsert is a no-op.
+    trait_default = FATIGUE_TRAIT_DEFAULTS[endurance_stat_name]
+    trait, _ = Trait.objects.get_or_create(
+        name=endurance_stat_name,
+        defaults={
+            "trait_type": trait_default.trait_type,
+            "category": trait_default.category,
+            "description": trait_default.description,
+        },
+    )
+    CheckTypeTrait.objects.get_or_create(
+        check_type=check_type, trait=trait, defaults={"weight": 1.0}
+    )
     return check_type
 
 
 def _ensure_willpower_check_type() -> CheckType:
     """Ensure the willpower power-through CheckType exists, creating if needed.
 
-    Requires willpower Trait fixture data to be loaded.
-    Without populated CheckRank/ResultChart data, checks default to
+    Also ensures the underlying willpower Trait via FATIGUE_TRAIT_DEFAULTS — a config
+    prerequisite (#2724) may call this before the content load populates Trait
+    fixtures. Without populated CheckRank/ResultChart data, checks default to
     success_level=0 (treated as failure).
     """
     fatigue_category, _ = CheckCategory.objects.get_or_create(
@@ -388,17 +400,24 @@ def _ensure_willpower_check_type() -> CheckType:
     )
     # Unconditional (not gated on `created`) so a pre-existing (e.g. fixture-supplied)
     # bare CheckType still gets its trait attached (#2724); get_or_create's defaults let
-    # an authored weight survive a re-run. Tolerant of a not-yet-loaded Trait — as a
-    # config prerequisite this can run before the content load populates the willpower
-    # Trait fixture; the gameplay call site (unchanged) self-heals the composition once
-    # the Trait exists.
-    trait = Trait.objects.filter(
-        name=PrimaryStat.WILLPOWER.value, trait_type=TraitType.STAT
-    ).first()
-    if trait is not None:
-        CheckTypeTrait.objects.get_or_create(
-            check_type=check_type, trait=trait, defaults={"weight": 1.0}
-        )
+    # an authored weight survive a re-run. As a config prerequisite this can run before
+    # the content load populates the willpower Trait fixture, so the Trait itself is
+    # also get_or_create'd — never left to lazily self-heal at first gameplay use, which
+    # would reinstate the undeclared-dependency bug #2724 exists to close. The code
+    # default (FATIGUE_TRAIT_DEFAULTS) matches the authored fixture row, so a later
+    # content-fixture upsert is a no-op.
+    trait_default = FATIGUE_TRAIT_DEFAULTS[PrimaryStat.WILLPOWER.value]
+    trait, _ = Trait.objects.get_or_create(
+        name=PrimaryStat.WILLPOWER.value,
+        defaults={
+            "trait_type": trait_default.trait_type,
+            "category": trait_default.category,
+            "description": trait_default.description,
+        },
+    )
+    CheckTypeTrait.objects.get_or_create(
+        check_type=check_type, trait=trait, defaults={"weight": 1.0}
+    )
     return check_type
 
 

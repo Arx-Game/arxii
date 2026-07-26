@@ -1,6 +1,9 @@
+from typing import NamedTuple
+
 from django.db import models
 
 from actions.constants import ActionCategory
+from world.traits.models import TraitCategory, TraitType
 
 # Name of the authored DamageType applied when fatigue collapse strain reaches health.
 # Resolved/created on demand via _ensure_exhaustion_damage_type (no fixture/migration).
@@ -75,6 +78,39 @@ FATIGUE_ENDURANCE_STAT = {
     ActionCategory.PHYSICAL: "stamina",
     ActionCategory.SOCIAL: "composure",
     ActionCategory.MENTAL: "stability",
+}
+
+
+class TraitDefault(NamedTuple):
+    """Code default for a STAT Trait `_ensure_*_check_type` may need to create (#2724)."""
+
+    trait_type: str
+    category: str
+    description: str
+
+
+# Code defaults for the willpower/endurance STAT Traits the fatigue check types roll on.
+# `Trait.category` has no model default and is a required column (world/traits/models.py)
+# — a get_or_create that omits it silently stores "". These values match the authored
+# rows in arx2/fixtures/traits/trait.json exactly, so the later content-fixture upsert
+# (`load_entries`) is a no-op when the lore repo already carries the row.
+FATIGUE_TRAIT_DEFAULTS: dict[str, TraitDefault] = {
+    "willpower": TraitDefault(
+        TraitType.STAT, TraitCategory.META, "Mental fortitude and determination."
+    ),
+    "stamina": TraitDefault(
+        TraitType.STAT, TraitCategory.PHYSICAL, "Endurance and resistance to harm."
+    ),
+    "composure": TraitDefault(
+        TraitType.STAT,
+        TraitCategory.SOCIAL,
+        "Social endurance. Poise under social pressure and resistance to embarrassment.",
+    ),
+    "stability": TraitDefault(
+        TraitType.STAT,
+        TraitCategory.MENTAL,
+        "Mental endurance. Sustained focus and resistance to mental strain.",
+    ),
 }
 
 # Collapse risk zones per effort level. Maps effort → minimum zone where collapse triggers.
