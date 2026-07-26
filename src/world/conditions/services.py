@@ -1694,6 +1694,14 @@ def get_capability_status(
     Collects additive values from all active ConditionCapabilityEffect rows
     that target this capability. Floor at 0.
 
+    An effect with ``scales_with_severity`` set has its value multiplied by the
+    condition instance's ``effective_severity`` (#2708); otherwise a staged
+    condition's value is multiplied by the current stage's ``severity_multiplier``.
+    This precedence (severity branch wins; stage multiplier is the elif, never
+    both) mirrors ``get_condition_modifier_total`` exactly — ``effective_severity``
+    already folds the stage multiplier in, so applying both would double-count.
+    Do not "fix" the elif into an if.
+
     Args:
         target: The ObjectDB instance
         capability: CapabilityType instance
@@ -1714,7 +1722,9 @@ def get_capability_status(
 
         for effect in effects:
             modifier = effect.value
-            if instance.current_stage:
+            if effect.scales_with_severity:
+                modifier = int(modifier * instance.effective_severity)
+            elif instance.current_stage:
                 modifier = int(modifier * instance.current_stage.severity_multiplier)
             result.value += modifier
             result.condition_contributions.append((instance, modifier))

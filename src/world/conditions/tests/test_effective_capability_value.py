@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -7,12 +9,15 @@ from world.classes.factories import CharacterClassLevelFactory
 from world.conditions.factories import (
     CapabilityTypeFactory,
     ConditionCapabilityEffectFactory,
+    ConditionInstanceFactory,
+    ConditionStageFactory,
     ConditionTemplateFactory,
 )
 from world.conditions.models import CapabilityType
 from world.conditions.services import (
     apply_condition,
     get_all_capability_values,
+    get_capability_status,
     get_effective_capability_value,
 )
 from world.covenants.factories import (
@@ -423,3 +428,68 @@ class ThreadCapabilityGrantQueryCountTests(TestCase):
             handler.passive_capability_grants()
 
         self.assertEqual(baseline_count, len(scaled_ctx.captured_queries))
+
+
+class CapabilityEffectSeverityScalingTests(TestCase):
+    """#2708 Task 7: ConditionCapabilityEffect.scales_with_severity is honoured
+    by get_capability_status, mirroring get_condition_modifier_total's
+    precedence (severity branch wins; stage multiplier is the elif — never
+    both, since ConditionInstance.effective_severity already folds the stage
+    multiplier in).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
+
+    def test_flag_false_ignores_severity(self) -> None:
+        """Default False: an existing row's behaviour is bit-for-bit unchanged."""
+        cap = CapabilityTypeFactory(name="sev_scale_off")
+        condition = ConditionTemplateFactory(name="sev_scale_off_condition")
+        ConditionCapabilityEffectFactory(
+            condition=condition, capability=cap, value=5, scales_with_severity=False
+        )
+        apply_condition(target=self.character, condition=condition, severity=3)
+
+        status = get_capability_status(self.sheet, cap)
+        self.assertEqual(status.value, 5)
+
+    def test_flag_true_scales_by_effective_severity(self) -> None:
+        """A severity-3 instance of a +5 effect contributes +15."""
+        cap = CapabilityTypeFactory(name="sev_scale_on")
+        condition = ConditionTemplateFactory(name="sev_scale_on_condition")
+        ConditionCapabilityEffectFactory(
+            condition=condition, capability=cap, value=5, scales_with_severity=True
+        )
+        apply_condition(target=self.character, condition=condition, severity=3)
+
+        status = get_capability_status(self.sheet, cap)
+        self.assertEqual(status.value, 15)
+
+    def test_stage_multiplier_precedence_matches_sibling(self) -> None:
+        """Same precedence as get_condition_modifier_total:1758-1761 — the
+        scales_with_severity branch wins, the stage branch is the elif, so a
+        staged instance with the flag set does NOT also apply the stage
+        multiplier on top of effective_severity (which already folds it in).
+        """
+        cap = CapabilityTypeFactory(name="sev_scale_precedence")
+        progressive = ConditionTemplateFactory(
+            name="sev_scale_precedence_cond", has_progression=True
+        )
+        stage = ConditionStageFactory(
+            condition=progressive, stage_order=2, severity_multiplier=Decimal("2.0")
+        )
+        ConditionCapabilityEffectFactory(
+            condition=progressive, capability=cap, value=10, scales_with_severity=True
+        )
+        instance = ConditionInstanceFactory(
+            target=self.character, condition=progressive, current_stage=stage, severity=3
+        )
+        # effective_severity already folds the stage multiplier: 3 * 2.0 = 6.
+        self.assertEqual(instance.effective_severity, 6)
+
+        status = get_capability_status(self.sheet, cap)
+        # Correct precedence: 10 * 6 = 60. A double-count bug (also applying
+        # the stage multiplier on top) would instead produce 10 * 6 * 2 = 120.
+        self.assertEqual(status.value, 60)
