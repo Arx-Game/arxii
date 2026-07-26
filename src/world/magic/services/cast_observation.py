@@ -46,9 +46,6 @@ class CastAudience:
     vague: list[Persona]
 
 
-_UNCONCEALED = CastAudience(concealed=False, full=[], vague=[])
-
-
 def _concealment_for(caster: ObjectDB, *, cast_openly: bool) -> int:  # noqa: OBJECTDB_PARAM
     """The caster's style concealment rating; 0 when overt, pathless, or cast openly."""
     if cast_openly:
@@ -98,7 +95,7 @@ def resolve_cast_audience(
 ) -> CastAudience:
     """Who perceived this cast, and in how much detail.
 
-    Returns ``_UNCONCEALED`` — and runs no queries and no checks — whenever the
+    Returns an unconcealed audience — and runs no queries and no checks — whenever the
     caster's style imposes no concealment. That is the overwhelmingly common path and
     keeps every existing style byte-identical to its pre-#2710 behaviour.
 
@@ -109,7 +106,9 @@ def resolve_cast_audience(
     """
     concealment = _concealment_for(caster, cast_openly=cast_openly)
     if concealment <= 0:
-        return _UNCONCEALED
+        # A fresh instance per call — never a shared module-level singleton, whose
+        # mutable full/vague lists a future caller could accidentally mutate in place.
+        return CastAudience(concealed=False, full=[], vague=[])
 
     full: list[Persona] = []
     vague: list[Persona] = []
