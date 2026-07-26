@@ -500,6 +500,13 @@ def _resolve_and_pose_cast(  # noqa: PLR0913, PLR0915 - one cohesive cast resolu
         action_interaction.visibility = InteractionVisibility.PERCEIVED_ONLY
         action_interaction.save(update_fields=["visibility"])
         receiver_accounts = accounts_for_personas(audience.full)
+        # audience.full always includes the caster (resolve_cast_audience appends them),
+        # and unlike create_interaction's place-scoped auto-populate path (which excludes
+        # the writer via .exclude(pk=persona.pk)), we deliberately do NOT exclude them
+        # here. create_action_interaction_core builds this row via Interaction.objects.
+        # create(...) directly rather than through create_interaction, so it never pins
+        # writer_account_id — receiver membership is the caster's only route back to
+        # their own concealed ACTION row.
         InteractionReceiver.objects.bulk_create(
             [
                 InteractionReceiver(

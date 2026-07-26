@@ -316,10 +316,19 @@ class ConcealedCastJourneyTests(CastScenarioMixin):
         self.assertEqual(self._log_for(self.bystander), [])
 
     def test_the_action_interaction_is_concealed_too(self) -> None:
-        """The caster's ACTION row carries the technique name on its own."""
-        request = self._cast(self._concealed_audience(full=[self.caster], vague=[]))
+        """The caster's ACTION row carries the technique name on its own.
+
+        Asserts both directions: the negative (a bystander never sees it) AND the
+        positive (the caster and a full-detail detector CAN read it back). The positive
+        leg matters because create_action_interaction_core never pins writer_account_id
+        (unlike create_interaction) -- the caster's own read access rests entirely on
+        being included in the receiver rows the concealment block bulk-creates.
+        """
+        request = self._cast(self._concealed_audience(full=[self.caster, self.detector], vague=[]))
         action_interaction = request.action_interaction
         self.assertEqual(action_interaction.visibility, InteractionVisibility.PERCEIVED_ONLY)
+        self.assertIn(action_interaction, self._log_for(self.caster))
+        self.assertIn(action_interaction, self._log_for(self.detector))
         self.assertNotIn(action_interaction, self._log_for(self.bystander))
 
     def test_vague_line_names_neither_caster_nor_technique(self) -> None:
