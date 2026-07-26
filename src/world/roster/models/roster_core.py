@@ -18,7 +18,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.roster.managers import RosterEntryManager
-from world.roster.models.choices import ActivityRequirement, CreationProvenance
+from world.roster.models.choices import ActivityRequirement, CreationProvenance, RosterType
 
 
 class Roster(NaturalKeyMixin, SharedMemoryModel):
@@ -30,6 +30,18 @@ class Roster(NaturalKeyMixin, SharedMemoryModel):
         max_length=50,
         unique=True,
         help_text="e.g., Active, Inactive, Available",
+    )
+    roster_type = models.CharField(
+        max_length=16,
+        choices=RosterType.choices,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text=(
+            "The shelf this roster IS — the key code matches on (#2728). `name` is"
+            " a display label only. Nullable purely so the schema change lands"
+            " without a data migration (ADR-0013); the seed sets it on every row."
+        ),
     )
     description = models.TextField(
         blank=True,
