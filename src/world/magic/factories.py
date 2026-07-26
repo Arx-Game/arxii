@@ -158,6 +158,7 @@ class TechniqueStyleFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Technique Style {n}")
     description = factory.LazyAttribute(lambda o: f"Description for {o.name}.")
+    cast_concealment = 0
 
 
 class StyleCapabilityRequirementFactory(factory.django.DjangoModelFactory):

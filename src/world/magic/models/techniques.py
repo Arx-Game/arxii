@@ -134,6 +134,17 @@ class TechniqueStyle(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="Description of this technique style.",
     )
+    cast_concealment = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "How hard it is to notice a cast worked in this style (#2710). 0 = overt: "
+            "the cast is posed to the whole room exactly as an unconcealed cast is, and "
+            "no detection check runs at all. Above 0 this is the difficulty floor an "
+            "observer must beat, on top of the caster's own level opposition — so a "
+            "Subtle style sits high and Manifestation stays 0. A magnitude, not a flag: "
+            "styles differ in how subtle they are, not merely whether they are."
+        ),
+    )
     objects = TechniqueStyleManager()
 
     class Meta:
