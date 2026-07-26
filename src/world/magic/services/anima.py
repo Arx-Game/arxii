@@ -247,6 +247,35 @@ def apply_anima_ritual_outcome(
     )
 
 
+def _uniquify_ritual_name(base: str) -> str:
+    """Return ``base``, or ``base (2)``/``base (3)``/… when the name is taken.
+
+    ``Ritual.name`` is ``unique=True``, and a player's anima ritual name defaults to
+    ``"<first name>'s Anima Ritual"`` — so two characters sharing a first name used to
+    collide, and because provisioning runs inside character creation's atomic block the
+    ``IntegrityError`` rolled back the entire finalization (#2724). Collisions are
+    routine rather than exotic, so they are resolved silently instead of surfaced: the
+    player never learns that another character took the name.
+
+    Terminates because each candidate is distinct and only finitely many rows exist.
+    Truncates the base so a suffixed result still fits ``max_length``.
+    """
+    from world.magic.models.rituals import Ritual  # noqa: PLC0415
+
+    # Django's public-if-underscored model-introspection API.
+    max_length = Ritual._meta.get_field("name").max_length  # noqa: SLF001
+    candidate = base[:max_length]
+    if not Ritual.objects.filter(name=candidate).exists():
+        return candidate
+    attempt = 2
+    while True:
+        suffix = f" ({attempt})"
+        candidate = f"{base[: max_length - len(suffix)]}{suffix}"
+        if not Ritual.objects.filter(name=candidate).exists():
+            return candidate
+        attempt += 1
+
+
 @transaction.atomic
 def provision_player_anima_ritual(  # noqa: PLR0913
     account: AccountDB,
@@ -325,7 +354,7 @@ def provision_player_anima_ritual(  # noqa: PLR0913
     # 3. Create the Ritual row (no service_function_path, no flow — SCENE_ACTION).
     # Description and narrative prose are placeholder text editable post-CG.
     ritual = Ritual.objects.create(
-        name=ritual_name,
+        name=_uniquify_ritual_name(ritual_name),
         description=(
             "A personal ritual for restoring anima. "
             "Edit this description to match your character's practice."
