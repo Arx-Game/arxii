@@ -358,27 +358,30 @@ def ensure_character_magic_check_type(character_sheet, *, stat, skill):
     The character's signature check: rolled by their Anima Ritual AND their
     technique casts. Idempotent; weights are tuning placeholders (staff-tunable).
 
-    Not part of the #2698 gating itself (see module docstring) — but its own
-    dependencies, the Magic ``CheckCategory`` (``ensure_magic_check_category``)
-    and the Arcana ``Aspect`` (``_ensure_arcana_aspect``), are content-repo-owned
-    and can return ``None`` when neither is authored and ``SEED_SAMPLE_CONTENT``
-    is off. ``checks.CheckType.category`` is NOT NULL, so this returns ``None``
-    rather than attempting the insert when the category is missing; callers
-    (``world.magic.services.anima.provision_player_anima_ritual``) already treat
-    a ``None`` check_type as "skip wiring" (``RitualCheckConfig.check_type`` is
-    nullable). The Arcana aspect wiring is skipped independently when missing.
+    Not part of the #2698 gating itself (see module docstring): unlike
+    ``ensure_magic_check_category``/``ensure_magic_check_types`` (which author
+    curated, named CheckTypes and stay gated), this function's own Magic
+    ``CheckCategory`` dependency is resolved via a plain ``get_or_create`` — a
+    per-character CheckType can never be pre-authored (it's parametrized by the
+    character's own pk), so blocking it behind unauthored content would silently
+    break every character's magic casting in a real deploy with no content repo
+    yet seeded. ``get_or_create`` still finds an authored "Magic" category if
+    the content repo provides one — no duplicate row, no divergent values. The
+    Arcana aspect wiring stays optional and is skipped gracefully when missing.
     """
     from decimal import Decimal  # noqa: PLC0415
 
     from world.checks.models import (  # noqa: PLC0415
+        CheckCategory,
         CheckType,
         CheckTypeAspect,
         CheckTypeTrait,
     )
 
-    category = ensure_magic_check_category()
-    if category is None:
-        return None
+    category, _ = CheckCategory.objects.get_or_create(
+        name=MAGIC_CHECK_CATEGORY_NAME,
+        defaults={"description": "Checks of magical practice, lore, and endurance."},
+    )
     arcana = _ensure_arcana_aspect()
     name = character_magic_check_type_name(character_sheet)
     check_type, _ = CheckType.objects.get_or_create(
