@@ -103,6 +103,9 @@ if TYPE_CHECKING:
 
 # Timing constants
 SECONDS_PER_ROUND = 6
+# Out-of-combat cooldown for shake-off attempts (break-free + wake).
+# 60s paces freeform RP; combat rounds gate at one-per-round via in_combat_tick.
+FREEFORM_RESIST_COOLDOWN_SECONDS = 60
 
 
 def _invalidate_condition_handler(target: "ObjectDB") -> None:  # noqa: OBJECTDB_PARAM
