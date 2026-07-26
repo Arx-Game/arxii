@@ -2038,6 +2038,23 @@ def _make_magical_endurance_check_type():
     return CheckTypeFactory(name=MAGICAL_ENDURANCE_CHECK_TYPE_NAME, category=category)
 
 
+def _make_resist_corruption_check_type():
+    """Return a 'Resist Corruption' CheckType — factory-owned, not the gated #709 seed (#2698).
+
+    Mirrors ``_make_magical_endurance_check_type``: the seed is content-repo-gated
+    and may omit this key when SEED_SAMPLE_CONTENT is off, but a test factory must
+    always produce a valid object. Uses ``get_or_create`` so repeated calls share one row.
+    """
+    from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+    from world.magic.seeds_checks import (
+        MAGIC_CHECK_CATEGORY_NAME,
+        RESIST_CORRUPTION_CHECK_TYPE_NAME,
+    )
+
+    category = CheckCategoryFactory(name=MAGIC_CHECK_CATEGORY_NAME)
+    return CheckTypeFactory(name=RESIST_CORRUPTION_CHECK_TYPE_NAME, category=category)
+
+
 class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
     """Factory for a per-resonance Corruption ConditionTemplate with 5 stages.
 
@@ -2098,7 +2115,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
         thresholds = [50, 200, 500, 1000, 1500]
         is_abyssal = self.corruption_resonance.affinity.name.lower() == _ABYSSAL_AFFINITY_NAME
         difficulties = [12, 18, 25, 30, 35] if is_abyssal else [8, 12, 18, 22, 28]
-        check_type = _make_magical_endurance_check_type()
+        check_type = _make_resist_corruption_check_type()
 
         for i, (threshold, dc) in enumerate(zip(thresholds, difficulties, strict=True), start=1):
             ConditionStageFactory(

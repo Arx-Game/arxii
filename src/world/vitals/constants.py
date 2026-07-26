@@ -98,6 +98,7 @@ AUTO_RETIRE_DAYS: int = 14
 
 ENDURANCE_CHECK_NAME: str = "Endurance"  # shared: knockout + permanent wound
 DEATH_CHECK_NAME: str = "Mortal Resolve"  # distinct, high-stakes (death)
+MEDICINE_CHECK_NAME: str = "Medicine"  # wound treatment (#2748)
 SURVIVABILITY_CHECK_CATEGORY: str = "Survival"
 
 # ---------------------------------------------------------------------------

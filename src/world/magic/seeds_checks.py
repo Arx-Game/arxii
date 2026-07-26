@@ -49,6 +49,7 @@ ANIMA_RESTORATION_CHECK_TYPE_NAME = "Anima Restoration"
 SANCTUM_CONSECRATION_CHECK_TYPE_NAME = "Sanctum Consecration"
 SANCTUM_DISSOLUTION_CHECK_TYPE_NAME = "Sanctum Dissolution"
 MAGICAL_ENDURANCE_CHECK_TYPE_NAME = "Magical Endurance"
+RESIST_CORRUPTION_CHECK_TYPE_NAME = "Resist Corruption"
 ARCANA_ASPECT_NAME = "Arcana"
 
 # (name, description, display_order)
@@ -85,6 +86,11 @@ _MAGIC_CHECK_TYPES = [
         "Endurance check against the spiritual pressure of hallowed ground.",
         4,
     ),
+    (
+        RESIST_CORRUPTION_CHECK_TYPE_NAME,
+        "Resisting the pull of corruption when it crosses a stage threshold.",
+        5,
+    ),
 ]
 
 # (check_type_name, trait_name, weight)
@@ -103,6 +109,8 @@ _MAGIC_TRAIT_WEIGHTS = [
     (MAGICAL_ENDURANCE_CHECK_TYPE_NAME, "occult", "0.50"),
     (ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME, "willpower", "1.00"),
     (ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME, "theology", "0.50"),
+    (RESIST_CORRUPTION_CHECK_TYPE_NAME, "willpower", "1.00"),
+    (RESIST_CORRUPTION_CHECK_TYPE_NAME, "occult", "1.00"),
 ]
 
 # Stat trait defaults used only when the stat row doesn't exist yet.
