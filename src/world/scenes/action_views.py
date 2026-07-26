@@ -6,7 +6,7 @@ from http import HTTPMethod
 from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import QuerySet
+from django.db.models import Exists, OuterRef, QuerySet
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -43,8 +43,10 @@ from world.scenes.action_services import (
     respond_to_action_target,
 )
 from world.scenes.cast_services import request_technique_cast
+from world.scenes.constants import InteractionVisibility
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import Persona, Scene
+from world.scenes.place_models import InteractionReceiver
 from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
@@ -114,9 +116,39 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         persona_ids = get_account_personas(self.request)
         if not persona_ids:
             return SceneActionRequest.objects.none()
+        # #2710: a concealed cast must not be readable through its request row. The
+        # target is scoped in above (they may need to consent), but under the
+        # target-rolls-like-anyone-else rule they may also have failed to notice
+        # the cast at all — and technique_name + initiator_persona are serialized.
+        # Perception is recorded as InteractionReceiver rows on the result pose.
+        #
+        # This is deliberately an Exists() subquery, NOT a joined
+        # `result_interaction__receivers__persona_id__in=` condition folded into
+        # the exclude() Q below. `receivers` is a to-many relation off
+        # `result_interaction`; ANDing a negated condition on it together with the
+        # other conditions in one Q binds PER JOINED ROW rather than as an
+        # aggregate "no receiver matches" check. With two-or-more receivers on the
+        # same interaction (e.g. caster + a detecting target), the join produces
+        # one row per receiver — and the row pairing the OTHER receiver (who isn't
+        # in persona_ids) with the visibility/initiator conditions would satisfy
+        # the exclude() query even though the viewer's OWN receiver row exists,
+        # wrongly hiding the request from someone who actually perceived it.
+        # Exists() collapses "did any receiver row match persona_ids" to a single
+        # per-request boolean, sidestepping the multi-valued-relation trap and the
+        # duplicate-row risk that would otherwise require a trailing .distinct().
+        viewer_perceived_result = InteractionReceiver.objects.filter(
+            interaction_id=OuterRef("result_interaction_id"),
+            persona_id__in=persona_ids,
+        )
         return (
             SceneActionRequest.objects.filter(
                 Q(initiator_persona_id__in=persona_ids) | Q(target_persona_id__in=persona_ids)
+            )
+            .annotate(viewer_perceived_result=Exists(viewer_perceived_result))
+            .exclude(
+                Q(result_interaction__visibility=InteractionVisibility.PERCEIVED_ONLY)
+                & Q(viewer_perceived_result=False)
+                & ~Q(initiator_persona_id__in=persona_ids)
             )
             # perf: technique, technique__effect_type, and
             # target_persona__character_sheet must stay in select_related —

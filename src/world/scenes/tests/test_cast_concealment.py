@@ -10,8 +10,14 @@ from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
+from world.conditions.factories import ConditionTemplateFactory
+from world.magic.factories import TechniqueAppliedConditionFactory
+from world.magic.models.techniques import ConditionTargetKind
 from world.magic.narration import render_vague_cast_narration
 from world.magic.services.cast_observation import CastAudience
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
@@ -43,6 +49,26 @@ from world.scenes.tests.test_reaction_windows import make_participant
 # Per-persona account cache for _account_playing (module-level so repeated calls
 # within a test — or across tests sharing a persona via setUpTestData — return the
 # same account instead of minting a fresh one each time).
+#
+# Keyed on persona.pk deliberately, NOT id(persona): Django's TestCase deep-copies
+# every setUpTestData()-assigned class attribute the first time each test method
+# accesses it (`self.bystander` is NOT the same object as `cls.bystander` — see
+# Django's TestData wrapper), so id(persona) differs between the setUpTestData loop
+# and every later self.<persona> access even within the SAME class. pk survives that
+# copy unchanged, which is what makes the cache hit across test methods at all.
+#
+# The tradeoff (#2710 task 5): this cache is now shared by two sibling TestCase
+# classes in this module (ConcealedCastJourneyTests and
+# ConcealedCastRequestLeakTests), each with its own class-scoped setUpTestData
+# transaction rolled back at teardown. SQLite reassigns rowids from the freed range
+# after a rollback, so a later class's fresh PersonaFactory() row can land on the
+# exact pk an earlier, already-torn-down sibling class used — a pk hit would then
+# hand back a stale AccountFactory wired to that earlier persona's roster tenure,
+# leaving the current persona with no roster wiring at all and silently emptying
+# every listing endpoint for it. Every class whose setUpTestData mints its own
+# fresh personas via this helper must clear the cache first (see
+# ConcealedCastRequestLeakTests.setUpTestData) so it starts from an empty cache
+# rather than one instance a torn-down sibling class populated a moment ago.
 _PERSONA_ACCOUNTS: dict[int, AccountFactory] = {}
 
 
@@ -52,7 +78,9 @@ def _account_playing(persona):
     Mints an ``AccountFactory`` + ``PlayerDataFactory`` + a current (``end_date=None``)
     ``RosterTenureFactory`` bound to *persona*'s existing ``RosterEntry`` — or creates
     that ``RosterEntry`` too, since ``PersonaFactory`` does not provision one. Cached
-    per persona pk so repeated calls return the same account.
+    per persona pk so repeated calls return the same account (see the cache's
+    module-level docstring for the pk-vs-identity tradeoff and the per-class
+    clear-on-setup contract this relies on).
     """
     if persona.pk in _PERSONA_ACCOUNTS:
         return _PERSONA_ACCOUNTS[persona.pk]
@@ -350,3 +378,86 @@ class ConcealedCastJourneyTests(CastScenarioMixin):
         self.assertEqual(pose.visibility, InteractionVisibility.DEFAULT)
         self.assertFalse(pose.receivers.exists())
         self.assertIn(pose, self._log_for(self.bystander))
+
+
+class ConcealedCastRequestLeakTests(APITestCase, ConcealedCastJourneyTests):
+    """The target of a concealed cast who failed detection must not read it back.
+
+    The viewset scopes to initiator OR target persona, and the serializer exposes
+    technique_name and initiator_persona — so without this filter the victim of a
+    subtle working could simply list the row and see exactly what was done to them.
+
+    ``ConcealedCastJourneyTests.setUpTestData`` (Task 4) places the caster/detector/
+    marginal/bystander personas in the room and pins their accounts, but never does
+    so for ``cls.target`` (the mixin's own ``CastScenarioMixin.target`` — it is
+    never placed, accounted, or cast at anywhere in Task 4's suite). This class's
+    own ``setUpTestData`` override does both, plus attaches a benign (non-behavior-
+    altering) ALLY condition to ``cls.technique``: the technique as built by
+    ``make_benign_castable_technique`` carries no condition_applications at all, so
+    ``derive_target_relationship`` falls through to its SELF default — and casting
+    a SELF-relationship technique at a persona other than the caster is rejected by
+    ``validate_cast_target`` before a request row is ever created. Mirrors the
+    exact pattern proven in ``TestBenignNonConsentBuffAtOtherPC``
+    (test_cast_targeting.py): an ALLY-kind condition on a category with
+    ``alters_behavior=False`` (the factory default) makes the cast legal without
+    also routing it into the consent (PENDING) path.
+
+    Clears ``_PERSONA_ACCOUNTS`` before minting its own personas — see that cache's
+    module-level docstring: without this, a pk this class's fresh ``PersonaFactory()``
+    rows land on can collide with one ``ConcealedCastJourneyTests`` already used and
+    rolled back, silently handing back an account wired to nothing this class created.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        _PERSONA_ACCOUNTS.clear()
+        super().setUpTestData()
+        character = cls.target.character_sheet.character
+        character.location = cls.scene.location
+        character.save()
+        _account_playing(cls.target)
+        TechniqueAppliedConditionFactory(
+            technique=cls.technique,
+            condition=ConditionTemplateFactory(),
+            target_kind=ConditionTargetKind.ALLY,
+            minimum_success_level=0,
+        )
+
+    def _request_ids_visible_to(self, persona) -> set[int]:
+        self.client.force_authenticate(user=_account_playing(persona))
+        response = self.client.get(reverse("sceneactionrequest-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return {row["id"] for row in response.data["results"]}
+
+    def _cast_at_target(self, audience: CastAudience):
+        """A concealed cast aimed at self.target, with a stubbed audience."""
+        with patch(
+            "world.magic.services.cast_observation.resolve_cast_audience",
+            return_value=audience,
+        ):
+            return request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.caster,
+                target_persona=self.target,
+                technique=self.technique,
+            ).request
+
+    def test_undetecting_target_cannot_list_the_request(self) -> None:
+        """The crux: influenced without ever knowing it."""
+        request = self._cast_at_target(self._concealed_audience(full=[self.caster], vague=[]))
+        self.assertNotIn(request.pk, self._request_ids_visible_to(self.target))
+
+    def test_detecting_target_can_list_the_request(self) -> None:
+        request = self._cast_at_target(
+            self._concealed_audience(full=[self.caster, self.target], vague=[])
+        )
+        self.assertIn(request.pk, self._request_ids_visible_to(self.target))
+
+    def test_initiator_always_lists_their_own_request(self) -> None:
+        request = self._cast_at_target(self._concealed_audience(full=[self.caster], vague=[]))
+        self.assertIn(request.pk, self._request_ids_visible_to(self.caster))
+
+    def test_unconcealed_request_still_lists_for_the_target(self) -> None:
+        """No regression for the ordinary case."""
+        request = self._cast_at_target(CastAudience(concealed=False, full=[], vague=[]))
+        self.assertIn(request.pk, self._request_ids_visible_to(self.target))
