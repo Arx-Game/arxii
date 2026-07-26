@@ -3130,6 +3130,9 @@ def decay_all_conditions_tick() -> DecayTickSummary:
         decay_condition_severity(instance, cond.passive_decay_per_day)
         ticked += 1
 
+    # Process NPC break-free attempts alongside decay (#2706).
+    process_break_free_tick()
+
     return DecayTickSummary(
         examined=examined,
         ticked=ticked,
@@ -3274,6 +3277,39 @@ def attempt_break_free(
         level_override=level_override,
     )
     return _resolve_break_free_outcome(instance, result.success_level)
+
+
+def process_break_free_tick() -> list[BreakFreeResult]:
+    """Process periodic break-free attempts for NPC targets (#2706).
+
+    Called from the decay tick (non-combat). Finds all active behavior-altering
+    conditions that are break-free-able and calls attempt_break_free for NPCs.
+    PCs with SELF_INITIATED mode are skipped (they self-initiate via command).
+    NPCs (no CharacterSheet) always get periodic auto-rolls.
+    """
+    results: list[BreakFreeResult] = []
+
+    instances = (
+        ConditionInstance.objects.select_related("condition", "condition__category", "target")
+        .filter(
+            resolved_at__isnull=True,
+            condition__category__alters_behavior=True,
+        )
+        .exclude(condition__break_free_mode=BreakFreeMode.NONE)
+    )
+
+    for instance in instances:
+        # PCs with SELF_INITIATED are handled by the player command, not the tick.
+        if instance.condition.break_free_mode == BreakFreeMode.SELF_INITIATED:
+            sheet = _resolve_character_sheet_for_target(instance.target)
+            if sheet is not None:
+                continue
+
+        result = attempt_break_free(instance, in_combat_tick=False)
+        if result.attempted:
+            results.append(result)
+
+    return results
 
 
 def _compute_chronic_damage(
