@@ -41,13 +41,6 @@ class TechniqueFunction(models.TextChoices):
     HOLD = "hold", "Hold / Lock"
 
 
-class CastDetail(models.TextChoices):
-    """How much of a concealed cast an observer perceived (#2710)."""
-
-    FULL = "full", "Full"
-    VAGUE = "vague", "Vague"
-
-
 DETECT_CAST_CHECK_NAME = "Perception"
 """The CheckType an observer rolls to notice a cast worked in a concealed style (#2710).
 
