@@ -36,8 +36,11 @@ class InteractionVisibility(models.TextChoices):
     ``PERCEIVED_ONLY`` (#2710) restricts an interaction to its writer and the
     personas recorded as ``InteractionReceiver`` rows — the characters who actually
     perceived the event — while STILL admitting staff and the scene's GM, so a scene
-    stays runnable. ``VERY_PRIVATE`` is the stricter tier and admits no exception,
-    staff included; the two are not interchangeable.
+    stays runnable. The GM exception is a scene-log read guarantee only
+    (``InteractionQuerySet.visible_to``'s ``gm_visible`` branch); a non-staff GM is
+    denied on REST object access (``CanViewInteraction``) and the reaction-witness gate
+    (``can_view_interaction``), both staff-only. ``VERY_PRIVATE`` is the stricter tier
+    and admits no exception, staff included; the two are not interchangeable.
     """
 
     DEFAULT = "default", "Default"
