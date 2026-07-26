@@ -244,6 +244,12 @@ class CastScenarioMixin(TestCase):
         # seeded in the fast tier. Patch it for all cast tests.
         self.accrue_patcher = patch("world.scenes.action_services.accrue")
         self.mock_accrue = self.accrue_patcher.start()
+        # Invalidate the caster's threads handler between tests. The Character
+        # instance is shared across test methods via setUpTestData + the idmapper
+        # identity map; without this, a prior test's cast re-populates the
+        # handler's _all cached_property with Thread rows that are rolled back
+        # by the savepoint, leaving stale instances visible to the next test (#2718).
+        self.caster.character_sheet.character.threads.invalidate()
 
     def tearDown(self) -> None:
         self.accrue_patcher.stop()
