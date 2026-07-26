@@ -139,3 +139,121 @@ class HealthBandTest(TestCase):
 
     def test_zero_max_health(self) -> None:
         self.assertEqual(health_band(0, 0), "on the verge of collapse")
+
+
+class EnhancementDetectionTest(TestCase):
+    """_has_engaged_assessment_role follows the reveals_weakness pattern."""
+
+    def test_no_role_returns_false(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.consider import _has_engaged_assessment_role
+
+        sheet = CharacterSheetFactory()
+        self.assertFalse(_has_engaged_assessment_role(sheet))
+
+    def test_engaged_role_with_flag_returns_true(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.consider import _has_engaged_assessment_role
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantRoleFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(enhances_assessment=True)
+        CharacterCovenantRoleFactory(
+            character_sheet=sheet,
+            covenant_role=role,
+            engaged=True,
+        )
+        self.assertTrue(_has_engaged_assessment_role(sheet))
+
+    def test_disengaged_role_returns_false(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.consider import _has_engaged_assessment_role
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantRoleFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(enhances_assessment=True)
+        CharacterCovenantRoleFactory(
+            character_sheet=sheet,
+            covenant_role=role,
+            engaged=False,
+        )
+        self.assertFalse(_has_engaged_assessment_role(sheet))
+
+
+class ConsiderOpponentServiceTest(TestCase):
+    """consider_opponent runs the check, caches the reading, returns prose."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.classes.factories import CharacterClassLevelFactory
+        from world.combat.constants import (
+            OpponentTier,
+            ParticipantStatus,
+        )
+        from world.combat.factories import (
+            CombatEncounterFactory,
+            CombatOpponentFactory,
+            CombatParticipantFactory,
+            seed_scaling_defaults,
+        )
+
+        seed_scaling_defaults()
+        cls.encounter = CombatEncounterFactory()
+        cls.participant = CombatParticipantFactory(
+            encounter=cls.encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        CharacterClassLevelFactory(
+            character=cls.participant.character_sheet,
+            level=10,
+            is_primary=True,
+        )
+        cls.opponent = CombatOpponentFactory(
+            encounter=cls.encounter,
+            tier=OpponentTier.MOOK,
+            level=10,
+        )
+
+    def test_returns_a_reading_with_prose(self) -> None:
+        from world.combat.consider import consider_opponent
+        from world.combat.models import ConsiderReading
+
+        reading = consider_opponent(self.participant, self.opponent)
+        self.assertIsInstance(reading, ConsiderReading)
+        self.assertTrue(reading.prose)
+        self.assertFalse(reading.is_enhanced)
+
+    def test_caches_reading_no_reroll(self) -> None:
+        from world.combat.consider import consider_opponent
+
+        first = consider_opponent(self.participant, self.opponent)
+        second = consider_opponent(self.participant, self.opponent)
+        self.assertEqual(first.pk, second.pk)
+
+    def test_reading_stores_success_level(self) -> None:
+        from world.combat.consider import consider_opponent
+
+        reading = consider_opponent(self.participant, self.opponent)
+        self.assertIsNotNone(reading.success_level)
+
+    def test_enhanced_reading_is_flagged(self) -> None:
+        from world.combat.consider import consider_opponent
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantRoleFactory,
+        )
+
+        role = CovenantRoleFactory(enhances_assessment=True)
+        CharacterCovenantRoleFactory(
+            character_sheet=self.participant.character_sheet,
+            covenant_role=role,
+            engaged=True,
+        )
+        reading = consider_opponent(self.participant, self.opponent)
+        self.assertTrue(reading.is_enhanced)

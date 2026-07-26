@@ -10,8 +10,15 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
+from world.traits.constants import PrimaryStat
+
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
+
+    from world.character_sheets.models import CharacterSheet
+    from world.checks.models import CheckType
+    from world.combat.models import CombatOpponent, CombatParticipant, ConsiderReading
+    from world.covenants.models import CovenantRole
 
 # --- Band definitions ---------------------------------------------------------
 # Each band is (min_gap, max_gap, prose). Gaps are opponent_level - player_level.
@@ -166,3 +173,166 @@ def health_band(health: int, max_health: int) -> str:
     if pct >= _HEALTH_BLOODIED:
         return "bloodied and flagging"
     return "on the verge of collapse"
+
+
+# --- Enhancement detection ----------------------------------------------------
+
+
+def _role_enhances_assessment(role: CovenantRole) -> bool:
+    """True if the role itself enhances assessment, or it rides its parent's flag."""
+    if role.enhances_assessment:
+        return True
+    return role.parent_role_id is not None and role.parent_role.enhances_assessment
+
+
+def _has_engaged_assessment_role(sheet: CharacterSheet) -> bool:
+    """True if the sheet holds an active engaged membership riding enhances_assessment."""
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    memberships = CharacterCovenantRole.objects.filter(
+        character_sheet=sheet,
+        engaged=True,
+        left_at__isnull=True,
+    ).select_related("covenant_role", "covenant_role__parent_role")
+    return any(_role_enhances_assessment(membership.covenant_role) for membership in memberships)
+
+
+# --- CheckType get-or-create ---------------------------------------------------
+
+CONSIDER_CHECK_TYPE_NAME = "Consider"
+
+
+def ensure_consider_check_type() -> CheckType:
+    """Get-or-create the 'Consider' CheckType with PERCEPTION as its driving trait.
+
+    No data migration — follows the existing ensure_* pattern (e.g.
+    ``src/world/areas/positioning/plummet_content.py:206``).
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.checks.models import (  # noqa: PLC0415
+        CheckCategory,
+        CheckType,
+        CheckTypeTrait,
+    )
+    from world.traits.factories import StatTraitFactory  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
+
+    category, _ = CheckCategory.objects.get_or_create(name="Exploration")
+    check_type, _ = CheckType.objects.get_or_create(
+        name=CONSIDER_CHECK_TYPE_NAME,
+        category=category,
+        defaults={
+            "description": "Assess a foe's threat level relative to your own.",
+        },
+    )
+    CheckTypeTrait.objects.get_or_create(
+        check_type=check_type,
+        trait=StatTraitFactory(
+            name=PrimaryStat.PERCEPTION.value,
+            category=TraitCategory.META,
+        ),
+        defaults={"weight": Decimal("1.00")},
+    )
+    return check_type
+
+
+# --- Tier prose ---------------------------------------------------------------
+
+
+def _tier_prose(opponent: CombatOpponent) -> str:
+    """Return the authored assess_prose for the opponent's tier, or empty string."""
+    from world.combat.models import OpponentTierTemplate  # noqa: PLC0415
+
+    try:
+        template = OpponentTierTemplate.objects.get(tier=opponent.tier)
+    except OpponentTierTemplate.DoesNotExist:
+        return ""
+    return template.assess_prose or ""
+
+
+# --- Main service function ----------------------------------------------------
+
+
+def consider_opponent(participant: CombatParticipant, opponent: CombatOpponent) -> ConsiderReading:
+    """Assess an opponent's threat level and cache the reading.
+
+    Runs a PERCEPTION check opposed by the opponent's level. The success_level
+    determines accuracy — failures produce confidently wrong bands. One
+    reading per (participant, opponent) is cached; re-calls return the cache.
+
+    Args:
+        participant: The assessing CombatParticipant.
+        opponent: The CombatOpponent to assess.
+
+    Returns:
+        A ConsiderReading with the (possibly inaccurate) prose reading.
+    """
+    from world.checks.services import (  # noqa: PLC0415
+        level_opposition,
+        perform_check,
+    )
+    from world.combat.models import ConsiderReading  # noqa: PLC0415
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        get_character_path_level,
+    )
+
+    # Return cached reading if it exists — no re-rolls.
+    cached = ConsiderReading.objects.filter(participant=participant, opponent=opponent).first()
+    if cached is not None:
+        return cached
+
+    sheet = participant.character_sheet
+    character = sheet.character
+    is_enhanced = _has_engaged_assessment_role(sheet)
+
+    check_type = ensure_consider_check_type()
+    difficulty = level_opposition(check_type, level=opponent.level, character=opponent.objectdb)
+    result = perform_check(
+        character,
+        check_type,
+        target_difficulty=difficulty,
+    )
+    success_level = result.success_level
+
+    # Compute the player's level for the gap.
+    player_level = get_character_path_level(character)
+    gap = opponent.level - player_level
+
+    # Determine band set and true index.
+    fine = is_enhanced
+    bands = FINE_BANDS if fine else COARSE_BANDS
+    max_index = len(bands) - 1
+    true_index = gap_to_band_index(gap, fine=fine)
+
+    # Apply skew on failure.
+    skew = skew_for_success_level(success_level)
+    reported_index = apply_skew(true_index, skew, character, max_index=max_index)
+
+    # Assemble prose.
+    band_text = band_prose(reported_index, fine=fine)
+    tier_text = _tier_prose(opponent)
+
+    # Enhanced extras: only on a precise reading (success_level >= 5).
+    extras = ""
+    if is_enhanced and success_level >= _SKEW_PRECISE_FLOOR + 4:
+        health_text = health_band(opponent.health, opponent.max_health)
+        extras = f", {health_text}"
+
+    parts = [f"The {opponent.name} is {band_text}"]
+    if tier_text:
+        parts.append(f" — {tier_text}")
+    if extras:
+        parts.append(extras)
+    parts.append(".")
+    prose = "".join(parts)
+
+    return ConsiderReading.objects.create(
+        participant=participant,
+        opponent=opponent,
+        success_level=success_level,
+        true_band_index=true_index,
+        reported_band_index=reported_index,
+        prose=prose,
+        is_enhanced=is_enhanced,
+    )
