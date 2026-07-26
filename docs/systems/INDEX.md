@@ -558,7 +558,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `"magic"`) — single seam; telnet `CmdTechnique` and web `POST /api/magic/techniques/author/`
   both converge here. Telnet: `technique draft|show|set|restrict|grant|damage|condition|price|author|discard`
   (`cmd:perm(Builder)` — staff/GM only).
-- **Cast observation (#2710, ADR-0167):** `resolve_cast_audience(*, caster,
+- **Cast observation (#2710, ADR-0170):** `resolve_cast_audience(*, caster,
   cast_openly=False) -> CastAudience` (`world/magic/services/cast_observation.py`) — who
   perceived a cast worked in a concealed `TechniqueStyle.cast_concealment` style, and in
   how much detail (full/vague/nothing), resolved per co-located observer at cast time.

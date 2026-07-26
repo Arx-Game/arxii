@@ -1,12 +1,12 @@
 # Cast observation is a per-observer resolution at the pose seam
 
-> Note: `main` currently carries two ADR-0164 files
-> (`0164-capability-value-ladder-and-emergent-blocking.md` and
-> `0164-technique-style-is-a-property-of-the-casters-path.md`); 0167 is the next free
-> number, not one past the highest number that looks free.
+> Note: this ADR was drafted as 0167 and renumbered to 0170 when the branch rebased.
+> `main` had carried two ADR-0164 files and resolved that by renumbering the #2700
+> technique-style decision to 0167, then added 0168 and 0169 — so 0170 is the next
+> free number. Check `ls docs/adr/` rather than assuming one past the highest.
 
 #2710 asked how "how absolute is subtle casting" should work now that style is a
-property of the caster's Path (ADR-0164): if a caster's style is Subtle, does *nobody*
+property of the caster's Path (ADR-0167): if a caster's style is Subtle, does *nobody*
 ever notice, or is it a contest? The answer is a contest, resolved once per observer at
 the moment the cast poses, not a global on/off switch on the Technique or the Interaction.
 

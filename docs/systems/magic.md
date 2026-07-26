@@ -1968,11 +1968,11 @@ prerequisites run first in that sequence.
 
 ---
 
-### Cast observation — who noticed that cast (#2710, ADR-0167)
+### Cast observation — who noticed that cast (#2710, ADR-0170)
 
 **[BUILT & WIRED].** How obvious a cast is to bystanders is a property of the caster's
 Path-derived `TechniqueStyle`, resolved per observer at the moment the cast poses — not
-a room-wide visible/hidden flag on the Technique or the Interaction. See ADR-0167 for
+a room-wide visible/hidden flag on the Technique or the Interaction. See ADR-0170 for
 the full decision record; this section is the reference for the mechanism.
 
 **Entry point:** `resolve_cast_audience(*, caster, cast_openly=False) ->
@@ -2008,7 +2008,7 @@ read guarantee only (`InteractionQuerySet.visible_to`'s `gm_visible` branch); a 
 GM is denied on the REST object-access permission (`CanViewInteraction`) and the
 reaction-witness gate (`can_view_interaction`), both staff-only. `VERY_PRIVATE` is
 stricter and admits no exception, staff included; the two tiers are deliberately not
-interchangeable (ADR-0167). `world.scenes.cast_services.create_cast_outcome_pose` writes up to two
+interchangeable (ADR-0170). `world.scenes.cast_services.create_cast_outcome_pose` writes up to two
 Narrator OUTCOME poses when concealed — a `full`-tier pose (receivers = `audience.full`)
 and, only if `audience.vague` is non-empty, a second attribution-free `vague`-tier pose
 (no `target_personas`, so the vague line cannot leak who was targeted either).
@@ -2071,7 +2071,7 @@ content lives in the lore repo, never as arxii seed data:**
   detection `CheckType` row itself. Absent → fails closed (nobody ever detects).
 - A `CheckTypeCapabilityModifier` row bridging a magic-detection capability into that
   `CheckType`, so a character with such a capability rolls better at detection. Without
-  it, detection is a flat stat/skill roll with no capability leg (ADR-0167 — this bonus
+  it, detection is a flat stat/skill roll with no capability leg (ADR-0170 — this bonus
   is deliberately never an auto-detect threshold).
 - Non-zero `TechniqueStyle.cast_concealment` values per style. Every style defaults to 0
   (overt) until authored otherwise, so no existing style behavior changes until content

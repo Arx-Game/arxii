@@ -168,7 +168,7 @@ by `world.magic.services.portal_travel.perform_portal_travel`, not a damage/cond
 capability-grant row.
 _Avoid_: portal technique, teleport spell.
 
-**Cast Concealment** (#2710, ADR-0167):
+**Cast Concealment** (#2710, ADR-0170):
 `TechniqueStyle.cast_concealment` — the style's difficulty floor for being noticed while
 casting. A magnitude, not a flag: 0 (default, overt) means the cast is posed to the whole
 room exactly as always and no detection check runs at all; above 0 it's the difficulty an
@@ -177,7 +177,7 @@ a property of the caster's Path (ADR-0164), so concealment is too — the same c
 `Technique` is loud cast by one Path and concealed cast by another.
 _Avoid_: spell visibility, stealth casting.
 
-**Cast Audience** (#2710, ADR-0167):
+**Cast Audience** (#2710, ADR-0170):
 Who perceived a concealed cast, and in how much detail — resolved per co-located
 observer at cast time by `resolve_cast_audience`, never a single room-wide flag. Three
 tiers: the caster is always `full`; an observer who beats the detection check by enough

@@ -119,7 +119,7 @@ scene-reaction witness gate, "did this persona actually perceive the event").
 | Tier | Admits | Enforcement notes |
 |------|--------|--------------------|
 | `DEFAULT` | Room-heard: everyone who could plausibly witness the pose (subject to the usual scene/room read rules) | Baseline — no receiver-row restriction. |
-| `PERCEIVED_ONLY` (#2710, ADR-0167) | Writer + `InteractionReceiver` rows (the personas who actually perceived the event), plus staff, plus — **on the scene-log read only** — a non-staff GM of that scene | `visible_to`'s `gm_visible` branch is the *only* surface that admits a non-staff GM. `CanViewInteraction` and `can_view_interaction` both admit **staff only** for this tier — a non-staff GM is denied on REST object access and on the reaction-witness gate, same as `VERY_PRIVATE`. |
+| `PERCEIVED_ONLY` (#2710, ADR-0170) | Writer + `InteractionReceiver` rows (the personas who actually perceived the event), plus staff, plus — **on the scene-log read only** — a non-staff GM of that scene | `visible_to`'s `gm_visible` branch is the *only* surface that admits a non-staff GM. `CanViewInteraction` and `can_view_interaction` both admit **staff only** for this tier — a non-staff GM is denied on REST object access and on the reaction-witness gate, same as `VERY_PRIVATE`. |
 | `VERY_PRIVATE` | Writer + `InteractionReceiver` rows only | No exception on any of the three surfaces — not even staff. The strictest tier; deliberately not interchangeable with `PERCEIVED_ONLY`. |
 
 `PERCEIVED_ONLY` was introduced for concealed spellcasting (`world.magic.services
