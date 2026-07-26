@@ -3777,6 +3777,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/consider/{opponent_pk}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Assess an opponent's threat level (#2716).
+     *
+     *     GET /api/combat/encounters/<pk>/consider/<opponent_pk>/
+     *     Returns narrative prose — never the check mechanics.
+     */
+    get: operations['combat_consider_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/cover/': {
     parameters: {
       query?: never;
@@ -43029,6 +43051,29 @@ export interface operations {
       };
     };
   };
+  combat_consider_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+        opponent_pk: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
   combat_cover_create: {
     parameters: {
       query?: never;
@@ -52148,9 +52193,7 @@ export interface operations {
   };
   magic_consequence_pool_catalog_list: {
     parameters: {
-      query?: {
-        action_category?: string;
-      };
+      query?: never;
       header?: never;
       path?: never;
       cookie?: never;
@@ -52172,8 +52215,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Consequence Pool. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
