@@ -71,13 +71,19 @@ class Roster(NaturalKeyMixin, SharedMemoryModel):
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
-        fields = ["name"]
+        fields = ["roster_type"]
 
     def __str__(self) -> str:
         return self.name
 
     class Meta:
         ordering: ClassVar[list[str]] = ["sort_order", "name"]
+        constraints: ClassVar[list[models.BaseConstraint]] = [
+            models.CheckConstraint(
+                condition=models.Q(roster_type__in=RosterType.values),
+                name="roster_roster_type_in_vocabulary",
+            ),
+        ]
 
 
 class RosterEntry(SharedMemoryModel):

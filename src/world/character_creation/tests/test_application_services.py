@@ -41,6 +41,7 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
+from world.roster.seeds import ensure_rosters
 from world.skills.factories import SkillFactory
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
@@ -309,6 +310,9 @@ class ApproveApplicationTests(TestCase):
     def setUpTestData(cls):
         cls.staff = AccountFactory(is_staff=True)
         cls.account = AccountFactory()
+        # finalize_character is mocked below, but approve_application's own
+        # Roster.objects.get(roster_type=ACTIVE) lookup (#2728) is not — seed it.
+        ensure_rosters()
 
     @patch("world.character_creation.services.RosterTenure")
     @patch("world.character_creation.services.finalize_character")
@@ -622,6 +626,10 @@ class ApproveApplicationIntegrationTests(TestCase):
         from world.traits.models import Trait, TraitType
 
         cls.staff = AccountFactory(is_staff=True)
+
+        # finalize_character()/approve_application() look up seeded rosters by
+        # roster_type (Roster.objects.get — #2728) rather than lazily creating them.
+        ensure_rosters()
 
         cls.realm = Realm.objects.create(
             name="Approve Integration Realm",

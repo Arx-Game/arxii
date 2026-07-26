@@ -45,6 +45,7 @@ from world.magic.seeds_cast import TECHNIQUE_CAST_CHECK_TYPE_NAME, get_standalon
 from world.magic.seeds_checks import character_magic_check_type_name
 from world.magic.services.anima import get_character_cast_check
 from world.realms.models import Realm
+from world.roster.seeds import ensure_rosters
 from world.scenes import cast_services
 from world.scenes.cast_services import request_technique_cast
 from world.scenes.factories import PersonaFactory, SceneFactory
@@ -76,6 +77,8 @@ class CastUsesPerCharacterCheckTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        # finalize_character() looks up a seeded roster by roster_type (#2728).
+        ensure_rosters()
         # Full check system (outcomes/charts/ranks + stat traits) so perform_check
         # can resolve and so the cast pipeline runs end-to-end.
         CheckSystemSetupFactory.create()

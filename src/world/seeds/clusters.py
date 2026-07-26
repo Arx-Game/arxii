@@ -347,8 +347,12 @@ def _seed_project_resonance() -> None:
 
 
 def _seed_roster() -> None:
-    from world.roster.seeds import seed_invite_trust_category  # noqa: PLC0415
+    from world.roster.seeds import ensure_rosters, seed_invite_trust_category  # noqa: PLC0415
 
+    # ensure_rosters() is idempotent (#2728) — seed it here too so the roster cluster
+    # creates the seven shelves on its own instead of depending on character_creation's
+    # cluster having run first.
+    ensure_rosters()
     seed_invite_trust_category()
 
 

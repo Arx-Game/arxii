@@ -6,67 +6,82 @@ ephemeral pre-production and must contain no data seeding (ADR-0013).
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 from world.roster.models import Roster
 from world.roster.models.choices import ActivityRequirement, RosterType
 
-# roster_type -> (display name, description, is_active, is_public,
-#                 allow_applications, activity_requirement)
-_ROSTER_SEED: dict[str, tuple[str, str, bool, bool, bool, str]] = {
-    RosterType.ACTIVE: (
-        "Active Characters",
-        "Currently played characters.",
-        True,
-        True,
-        False,
-        ActivityRequirement.HIGH,
+
+class RosterSeedSpec(NamedTuple):
+    """One shelf's seed defaults. Named fields — the three consecutive booleans
+    (``is_active``/``is_public``/``allow_applications``) silently transposed when this
+    was a bare positional tuple; a NamedTuple makes each spec self-documenting and
+    keyword-constructible."""
+
+    name: str
+    description: str
+    is_active: bool
+    is_public: bool
+    allow_applications: bool
+    activity_requirement: str
+
+
+_ROSTER_SEED: dict[str, RosterSeedSpec] = {
+    RosterType.ACTIVE: RosterSeedSpec(
+        name="Active Characters",
+        description="Currently played characters.",
+        is_active=True,
+        is_public=True,
+        allow_applications=False,
+        activity_requirement=ActivityRequirement.HIGH,
     ),
-    RosterType.AVAILABLE: (
-        "Available Characters",
-        "Characters players may apply for.",
-        True,
-        True,
-        True,
-        ActivityRequirement.NONE,
+    RosterType.AVAILABLE: RosterSeedSpec(
+        name="Available Characters",
+        description="Characters players may apply for.",
+        is_active=True,
+        is_public=True,
+        allow_applications=True,
+        activity_requirement=ActivityRequirement.NONE,
     ),
-    RosterType.INACTIVE: (
-        "Inactive Characters",
-        "Characters whose player has lapsed.",
-        True,
-        True,
-        True,
-        ActivityRequirement.NONE,
+    RosterType.INACTIVE: RosterSeedSpec(
+        name="Inactive Characters",
+        description="Characters whose player has lapsed.",
+        is_active=True,
+        is_public=True,
+        allow_applications=True,
+        activity_requirement=ActivityRequirement.NONE,
     ),
-    RosterType.PENDING: (
-        "Pending Characters",
-        "Characters awaiting staff approval.",
-        False,
-        False,
-        False,
-        ActivityRequirement.NONE,
+    RosterType.PENDING: RosterSeedSpec(
+        name="Pending Characters",
+        description="Characters awaiting staff approval.",
+        is_active=False,
+        is_public=False,
+        allow_applications=False,
+        activity_requirement=ActivityRequirement.NONE,
     ),
-    RosterType.RESTRICTED: (
-        "Restricted Characters",
-        "Characters requiring special approval to play.",
-        True,
-        True,
-        True,
-        ActivityRequirement.HIGH,
+    RosterType.RESTRICTED: RosterSeedSpec(
+        name="Restricted Characters",
+        description="Characters requiring special approval to play.",
+        is_active=True,
+        is_public=True,
+        allow_applications=True,
+        activity_requirement=ActivityRequirement.HIGH,
     ),
-    RosterType.FROZEN: (
-        "Frozen Characters",
-        "Characters set aside by their player during an OC swap.",
-        True,
-        False,
-        False,
-        ActivityRequirement.NONE,
+    RosterType.FROZEN: RosterSeedSpec(
+        name="Frozen Characters",
+        description="Characters set aside by their player during an OC swap.",
+        is_active=True,
+        is_public=False,
+        allow_applications=False,
+        activity_requirement=ActivityRequirement.NONE,
     ),
-    RosterType.NPC: (
-        "NPCs",
-        "Story and standing NPCs. Never claimable, never swept.",
-        True,
-        False,
-        False,
-        ActivityRequirement.NONE,
+    RosterType.NPC: RosterSeedSpec(
+        name="NPCs",
+        description="Story and standing NPCs. Never claimable, never swept.",
+        is_active=True,
+        is_public=False,
+        allow_applications=False,
+        activity_requirement=ActivityRequirement.NONE,
     ),
 }
 
@@ -83,16 +98,15 @@ def ensure_rosters() -> dict[str, Roster]:
     """
     rosters: dict[str, Roster] = {}
     for roster_type, spec in _ROSTER_SEED.items():
-        name, description, is_active, is_public, allow_applications, requirement = spec
         roster, _created = Roster.objects.get_or_create(
             roster_type=roster_type,
             defaults={
-                "name": name,
-                "description": description,
-                "is_active": is_active,
-                "is_public": is_public,
-                "allow_applications": allow_applications,
-                "activity_requirement": requirement,
+                "name": spec.name,
+                "description": spec.description,
+                "is_active": spec.is_active,
+                "is_public": spec.is_public,
+                "allow_applications": spec.allow_applications,
+                "activity_requirement": spec.activity_requirement,
             },
         )
         rosters[roster_type] = roster

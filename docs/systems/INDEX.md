@@ -1592,6 +1592,15 @@ provenance ("Crafted by X, Designed by Y").
 Character lifecycle management with web-first applications and player anonymity.
 
 - **Models:** `Roster`, `RosterEntry`, `RosterTenure`, `RosterApplication`, `PlayerMail`
+- **`Roster.roster_type` is the key (#2728):** a `RosterType` TextChoices
+  (`ACTIVE`/`INACTIVE`/`AVAILABLE`/`RESTRICTED`/`FROZEN`/`PENDING`/`NPC` — PENDING and
+  NPC were previously real shelves living outside the enum, matched on `name` text)
+  is the unique, DB-`CheckConstraint`-enforced identity for a shelf; `name` is a
+  free-text display label only, editable by staff without creating a second shelf.
+  `world.roster.seeds.ensure_rosters()` is the single seeding path (idempotent,
+  `get_or_create` on `roster_type`) — service functions look up a shelf via
+  `Roster.objects.get(roster_type=...)`, never by calling `ensure_rosters()` at
+  runtime (that function is seeding-only).
 - **`RosterApplication` uniqueness (#2162):** a PENDING-only `UniqueConstraint` on
   `(player_data, character)` (was a status-blind `unique_together`, which blocked
   re-applying for a character after denial/withdrawal, not duplicate submissions —

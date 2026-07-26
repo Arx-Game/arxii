@@ -14,11 +14,14 @@ from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.magic.factories import TraditionFactory
 from world.roster.models import RosterEntry
 from world.roster.models.choices import CreationProvenance, RosterType
+from world.roster.seeds import ensure_rosters
 
 
 class GMFinalizeViewTests(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        # finalize_gm_character() looks up a seeded roster by roster_type (#2728).
+        ensure_rosters()
         cls.gm = GMProfileFactory()
         cls.table = GMTableFactory(gm=cls.gm)
 

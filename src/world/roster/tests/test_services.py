@@ -22,7 +22,7 @@ class PlayerDataServiceTestCase(TestCase):
         """Set up test data for each test"""
         self.player_data = PlayerDataFactory()
         self.character = CharacterSheetFactory().character
-        self.roster = RosterFactory(is_active=True)
+        self.roster = RosterFactory(roster_type=RosterType.ACTIVE, is_active=True)
         self.roster_entry = RosterEntryFactory(
             character_sheet__character=self.character,
             roster=self.roster,
@@ -71,7 +71,7 @@ class PlayerDataServiceTestCase(TestCase):
 
         # Create character with roster entry in inactive roster
         non_roster_char = CharacterFactory()
-        inactive_roster = RosterFactory(is_active=False)
+        inactive_roster = RosterFactory(roster_type=RosterType.INACTIVE, is_active=False)
         non_roster_entry = RosterEntryFactory(
             character_sheet__character=non_roster_char,
             roster=inactive_roster,

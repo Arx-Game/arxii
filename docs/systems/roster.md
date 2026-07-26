@@ -13,7 +13,7 @@ Character lifecycle management with web-first applications, player anonymity, an
 from world.roster.models import (
     ApplicationStatus,      # PENDING, APPROVED, DENIED, WITHDRAWN
     PlotInvolvement,        # HIGH, MEDIUM, LOW, NONE
-    RosterType,             # ACTIVE, INACTIVE, AVAILABLE, RESTRICTED, FROZEN
+    RosterType,             # ACTIVE, INACTIVE, AVAILABLE, RESTRICTED, FROZEN, PENDING, NPC
     CreationProvenance,     # STAFF, GM_TABLE, PLAYER (viewable quality/trust signal, #1506)
     ApprovalScope,          # ALL, HOUSE, STORY, NONE
     ValidationErrorCodes,   # Error code constants for DRF serializers
@@ -23,13 +23,30 @@ from world.roster.models import (
 
 ---
 
+## Applying these migrations
+
+`Roster.roster_type` (#2728) is `null=False` with no default — migration 0011
+(`alter_roster_roster_type`) fails with `column "roster_type" contains null values`
+on any database that already has `Roster` rows (ADR-0013 forbids a data-migration
+backfill). There is no production data pre-launch, so the fix is simply:
+
+```sql
+DELETE FROM roster_roster;
+```
+
+then re-run `world.roster.seeds.ensure_rosters()` (e.g. via the roster or
+character_creation seed cluster) — it creates all seven canonical shelves keyed by
+`roster_type`.
+
+---
+
 ## Models
 
 ### Core Roster
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Roster` | Character category groups (Active, Inactive, etc.) | `name` (unique), `description`, `is_active`, `is_public`, `allow_applications`, `sort_order` |
+| `Roster` | Character category groups (Active, Inactive, etc.) — keyed by `roster_type` (#2728); `name` is a display label only | `roster_type` (unique, `RosterType`, the key), `name` (unique, display label), `description`, `is_active`, `is_public`, `allow_applications`, `sort_order` |
 | `RosterEntry` | Bridge linking characters to rosters (1:1 with ObjectDB) | `character` (OneToOne ObjectDB), `roster` (FK), `profile_picture` (FK TenureMedia), `joined_roster`, `previous_roster`, `last_puppeted`, `frozen`, `gm_notes`, `creation_provenance` (`CreationProvenance`, #1506), `created_by_account` (FK AccountDB), `created_for_table` (FK gm.GMTable — set for GM_TABLE) |
 
 ### Tenures & Anonymity

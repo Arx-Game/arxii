@@ -84,14 +84,15 @@ class KinSlotPoolAdmin(admin.ModelAdmin):
 class RosterAdmin(admin.ModelAdmin):
     list_display = [
         "name",
+        "roster_type",
         "description",
         "is_active",
         "allow_applications",
         "activity_requirement",
         "sort_order",
     ]
-    list_filter = ["is_active", "allow_applications", "activity_requirement"]
-    search_fields = ["name", "description"]
+    list_filter = ["roster_type", "is_active", "allow_applications", "activity_requirement"]
+    search_fields = ["name", "roster_type", "description"]
     ordering = ["sort_order", "name"]
 
 

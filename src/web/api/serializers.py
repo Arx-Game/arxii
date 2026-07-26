@@ -44,7 +44,7 @@ class AvailableCharacterSerializer(serializers.Serializer):
     name = serializers.SerializerMethodField()
     portrait_url = serializers.SerializerMethodField()
     character_type = serializers.SerializerMethodField()
-    roster_status = serializers.CharField(source="roster.name", read_only=True)
+    roster_status = serializers.CharField(source="roster.roster_type", read_only=True)
     personas = serializers.SerializerMethodField()
     last_location = serializers.SerializerMethodField()
     currently_puppeted_in_session = serializers.SerializerMethodField()
@@ -81,8 +81,10 @@ class AvailableCharacterSerializer(serializers.Serializer):
 class PendingApplicationSerializer(serializers.ModelSerializer):
     """Pending RosterApplication entry for the account payload."""
 
-    character_id = serializers.IntegerField(source="character.id", read_only=True)
-    character_name = serializers.CharField(source="character.key", read_only=True)
+    # RosterApplication.character is a CharacterSheet (#2608, ObjectDB FK audit) —
+    # walk to the ObjectDB via .character for the id/key ObjectDB itself carries.
+    character_id = serializers.IntegerField(source="character.character.id", read_only=True)
+    character_name = serializers.CharField(source="character.character.key", read_only=True)
 
     class Meta:
         model = RosterApplication

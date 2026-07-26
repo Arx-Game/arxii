@@ -25,7 +25,9 @@ class AccountPlayerSerializerFullPayloadTests(TestCase):
         self.account = AccountFactory()
         # roster_type (#2728) is what the payload filter matches on now, not name.
         self.active_roster = RosterFactory(name=RosterType.ACTIVE, roster_type=RosterType.ACTIVE)
-        self.inactive_roster = RosterFactory(name=RosterType.INACTIVE)
+        self.inactive_roster = RosterFactory(
+            name=RosterType.INACTIVE, roster_type=RosterType.INACTIVE
+        )
 
     def _add_character(self, *, key: str, roster) -> None:
         character = CharacterFactory(db_key=key)
@@ -55,17 +57,19 @@ class AccountPlayerSerializerFullPayloadTests(TestCase):
 
     def test_payload_pending_applications(self) -> None:
         target = CharacterFactory(db_key="Lyra")
+        target_sheet = CharacterSheetFactory(character=target)
         pending_application = RosterApplication.objects.create(
             player_data=self.account.player_data,
-            character=target.sheet_data,
+            character=target_sheet,
             application_text="please",
             status=ApplicationStatus.PENDING,
         )
         # Approved application should NOT appear
         approved_target = CharacterFactory(db_key="Maeve")
+        approved_sheet = CharacterSheetFactory(character=approved_target)
         RosterApplication.objects.create(
             player_data=self.account.player_data,
-            character=approved_target.sheet_data,
+            character=approved_sheet,
             application_text="please",
             status=ApplicationStatus.APPROVED,
         )
@@ -76,7 +80,7 @@ class AccountPlayerSerializerFullPayloadTests(TestCase):
         app_names = [a["character_name"] for a in data["pending_applications"]]
         assert app_names == ["Lyra"]
         app_character_ids = [a["character_id"] for a in data["pending_applications"]]
-        assert app_character_ids == [pending_application.character.id]
+        assert app_character_ids == [pending_application.character.character.id]
 
     def test_payload_no_characters(self) -> None:
         data = AccountPlayerSerializer(

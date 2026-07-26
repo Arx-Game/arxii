@@ -26,7 +26,7 @@ class AvailableCharacterSerializerTests(TestCase):
 
     def setUp(self) -> None:
         self.account = AccountFactory()
-        self.active_roster = RosterFactory(name=RosterType.ACTIVE)
+        self.active_roster = RosterFactory(name=RosterType.ACTIVE, roster_type=RosterType.ACTIVE)
 
     def _make_entry(self, character_factory=CharacterFactory):
         """Build an account -> tenure -> entry -> sheet -> character chain."""

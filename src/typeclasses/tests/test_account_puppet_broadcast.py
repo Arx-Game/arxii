@@ -46,7 +46,7 @@ class PuppetCharacterBroadcastTests(TestCase):
         sheet = CharacterSheetFactory(character=self.character)
         entry = RosterEntryFactory(
             character_sheet=sheet,
-            roster=RosterFactory(name=RosterType.ACTIVE),
+            roster=RosterFactory(name=RosterType.ACTIVE, roster_type=RosterType.ACTIVE),
         )
         RosterTenureFactory(
             player_data=self.account.player_data,
@@ -109,7 +109,7 @@ class PuppetObjectDirectCallBroadcastTests(TestCase):
         sheet = CharacterSheetFactory(character=self.character)
         entry = RosterEntryFactory(
             character_sheet=sheet,
-            roster=RosterFactory(name=RosterType.ACTIVE),
+            roster=RosterFactory(name=RosterType.ACTIVE, roster_type=RosterType.ACTIVE),
         )
         RosterTenureFactory(
             player_data=self.account.player_data,
@@ -174,7 +174,7 @@ class UnpuppetBroadcastTests(TestCase):
         sheet = CharacterSheetFactory(character=self.character)
         entry = RosterEntryFactory(
             character_sheet=sheet,
-            roster=RosterFactory(name=RosterType.ACTIVE),
+            roster=RosterFactory(name=RosterType.ACTIVE, roster_type=RosterType.ACTIVE),
         )
         RosterTenureFactory(
             player_data=self.account.player_data,

@@ -5,6 +5,7 @@ from django.test import SimpleTestCase, TestCase
 
 from world.roster.models import Roster
 from world.roster.models.choices import RosterType
+from world.roster.seeds import ensure_rosters
 
 
 class RosterTypeVocabularyTests(SimpleTestCase):
@@ -27,10 +28,18 @@ class RosterTypeKeyTests(TestCase):
         with self.assertRaises(IntegrityError):
             Roster.objects.create(name="Active", roster_type=RosterType.ACTIVE)
 
-    def test_name_is_free_text_and_not_the_key(self):
-        """Display label may differ from the key without creating a second shelf."""
-        roster = Roster.objects.create(
-            name="Currently Played Characters", roster_type=RosterType.ACTIVE
-        )
-        self.assertEqual(roster.roster_type, RosterType.ACTIVE)
-        self.assertNotEqual(roster.name, roster.roster_type)
+    def test_ensure_rosters_reuses_a_staff_renamed_row_instead_of_duplicating_it(self):
+        """A staff-edited ``name`` must not cause ensure_rosters() to mint a second
+        shelf for that roster_type — get_or_create's ``defaults`` must never clobber
+        an already-existing row's hand-edited display label."""
+        seeded = ensure_rosters()
+        active = seeded[RosterType.ACTIVE]
+        active.name = "Currently Played Characters"
+        active.save(update_fields=["name"])
+
+        reseeded = ensure_rosters()
+
+        self.assertEqual(Roster.objects.count(), 7)
+        reused = reseeded[RosterType.ACTIVE]
+        self.assertEqual(reused.pk, active.pk)
+        self.assertEqual(reused.name, "Currently Played Characters")

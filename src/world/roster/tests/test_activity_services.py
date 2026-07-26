@@ -20,7 +20,7 @@ from world.character_sheets.types import (
     LifecycleState,
 )
 from world.roster.factories import RosterEntryFactory, RosterFactory, RosterTenureFactory
-from world.roster.models.choices import ActivityRequirement
+from world.roster.models.choices import ActivityRequirement, RosterType
 from world.roster.services.activity import (
     FREEZE_COOLDOWN_DAYS,
     MAX_HIATUS_DAYS,
@@ -47,7 +47,10 @@ def _build_sheet_with_tenure(
 
     Returns ``(sheet, account, roster, entry)``.
     """
-    roster = RosterFactory(activity_requirement=requirement)
+    # roster_type pinned explicitly (#2728) — RosterFactory's django_get_or_create on
+    # roster_type would otherwise risk silently discarding activity_requirement if a
+    # bare/kwarg-only call reuses an existing row from earlier in the same test.
+    roster = RosterFactory(roster_type=RosterType.ACTIVE, activity_requirement=requirement)
     sheet = CharacterSheetFactory()
     entry = RosterEntryFactory(character_sheet=sheet, roster=roster)
     tenure = RosterTenureFactory(roster_entry=entry)

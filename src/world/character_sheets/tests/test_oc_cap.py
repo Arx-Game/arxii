@@ -14,11 +14,20 @@ from world.character_sheets.services import (
 )
 from world.character_sheets.types import ActivityState, LifecycleState
 from world.roster.factories import RosterEntryFactory, RosterFactory
+from world.roster.models import RosterType
 
 
 def _make_oc(account, *, allow_applications: bool = False, **sheet_kwargs):
-    """Build an OC owned by ``account`` on a Roster matching ``allow_applications``."""
-    roster = RosterFactory(allow_applications=allow_applications)
+    """Build an OC owned by ``account`` on a Roster matching ``allow_applications``.
+
+    roster_type is pinned explicitly (#2728): RosterFactory's django_get_or_create
+    on roster_type means a bare/kwarg-only call can silently reuse an existing row
+    from earlier in the same test and drop allow_applications. Deriving roster_type
+    from allow_applications keeps repeated calls with the same value idempotent
+    (same roster reused on purpose) instead of accidentally colliding.
+    """
+    roster_type = RosterType.AVAILABLE if allow_applications else RosterType.ACTIVE
+    roster = RosterFactory(roster_type=roster_type, allow_applications=allow_applications)
     sheet = CharacterSheetFactory(is_oc=True, created_by=account, **sheet_kwargs)
     RosterEntryFactory(character_sheet=sheet, roster=roster)
     return sheet

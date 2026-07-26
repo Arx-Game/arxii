@@ -28,6 +28,7 @@ from world.magic.factories import (
     TraditionGiftGrantFactory,
 )
 from world.realms.models import Realm
+from world.roster.seeds import ensure_rosters
 from world.skills.factories import SkillFactory
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
@@ -70,6 +71,12 @@ class FinalizationTestMixin:
         height_band, build, path, effect_type, resonance, tradition.
         """
         slug = prefix.lower().replace(" ", "_")
+
+        # finalize_character()/approve_application() now look up seeded rosters by
+        # roster_type (Roster.objects.get — #2728) instead of lazily creating them
+        # via ensure_rosters(). Seed all seven shelves here so any finalization test
+        # can add_to_roster=True/False or approve without a Roster.DoesNotExist.
+        ensure_rosters()
 
         target.realm = Realm.objects.create(name=f"{prefix} Realm", description="Test")
         target.area = StartingArea.objects.create(
@@ -117,10 +124,6 @@ class FinalizationTestMixin:
                 name=stat_name,
                 defaults={"trait_type": TraitType.STAT, "description": stat_name},
             )
-        # No manual Roster pre-seed here: finalize_character() -> ensure_rosters()
-        # (#2728) creates every shelf on demand, keyed by roster_type. A
-        # name-only pre-seed used to collide with that seeder's canonical
-        # "Available Characters" row (unique on name, roster_type left NULL).
         target.path = PathFactory(name=f"{prefix} Path", stage=PathStage.PROSPECT, minimum_level=1)
         target.effect_type = EffectTypeFactory()
         target.resonance = ResonanceFactory()
@@ -1756,6 +1759,8 @@ class FinalizeGMCharacterTests(TestCase):
     def setUpTestData(cls) -> None:
         from world.gm.factories import GMProfileFactory, GMTableFactory
 
+        # finalize_gm_character() looks up a seeded roster by roster_type (#2728).
+        ensure_rosters()
         cls.gm = GMProfileFactory()
         cls.table = GMTableFactory(gm=cls.gm)
 
