@@ -112,9 +112,17 @@ class ResolveCastAudienceTests(TestCase):
     """Who perceived the cast, and at what detail."""
 
     def test_zero_concealment_returns_unconcealed_without_rolling(self) -> None:
-        """The hot path: an overt style runs no detection check at all."""
+        """The hot path: an overt style runs no detection check at all.
+
+        Patches the service's OWN bound name (not world.checks.services — that patch
+        target can never intercept the call, since the service imports the name into
+        its own module namespace) and puts an observer in the room, so the assertion
+        actually discriminates: with the early return deleted, there would be somebody
+        for perform_check to be called on.
+        """
         caster = _caster_on_path_with_style(cast_concealment=0)
-        with patch("world.checks.services.perform_check") as rolled:
+        _observer_in_room_with(caster)
+        with patch("world.magic.services.cast_observation.perform_check") as rolled:
             audience = resolve_cast_audience(caster=caster)
         self.assertFalse(audience.concealed)
         rolled.assert_not_called()
