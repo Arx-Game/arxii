@@ -233,10 +233,17 @@ class TechniqueSourceQueryCountTests(TestCase):
         technique->gift mapping (Task 4 review) and the ``CapabilityPowerConfig`` fetch
         (Task 5 review finding 1/2 — was landing inside this per-grant loop via
         ``calculate_value``'s own single-call default) are resolved ONCE for the whole
-        sweep, never once per grant."""
+        sweep, never once per grant.
+
+        Requires a config row: with none, the gift-id mapping is skipped entirely
+        (#2708 C1) rather than resolved-once, so this test would prove nothing about
+        the property it names."""
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
+        from world.magic.models import CapabilityPowerConfig
+
+        CapabilityPowerConfig.objects.create(pk=1, power_per_doubling=10)
         small_character = self._character_with_technique_sweep(3)
         large_character = self._character_with_technique_sweep(10)
 
@@ -259,10 +266,13 @@ class TechniqueSourceQueryCountTests(TestCase):
             f"re-resolved per grant instead of once for the whole sweep.",
         )
 
-    def test_ten_technique_sweep_costs_a_fixed_query_count_no_config_row(self) -> None:
-        """No ``CapabilityPowerConfig`` row: the config-existence check is fetched ONCE
-        for the whole sweep (Task 5 review), so the query count is independent of sweep
-        size and of whether a config row exists."""
+    def test_no_config_row_costs_fewer_queries_than_a_config_row(self) -> None:
+        """No ``CapabilityPowerConfig`` row: the curve is disabled everywhere, so
+        ``_get_technique_sources`` skips the thread/power derivation (and its own
+        gift-id-mapping query) entirely rather than deriving it and discarding the
+        result (#2708 C1) — the config-existence check is still fetched ONCE for the
+        whole sweep either way (Task 5 review), but the inert sweep costs exactly ONE
+        FEWER query than the curved sweep: the skipped gift-id-mapping query."""
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
@@ -282,9 +292,10 @@ class TechniqueSourceQueryCountTests(TestCase):
         with_config_count = len(ctx.captured_queries)
 
         self.assertEqual(
-            no_config_count,
             with_config_count,
-            "expected the same query count whether or not a CapabilityPowerConfig row "
-            "exists — the config lookup happens once for the whole sweep either way "
-            f"(Task 5 review finding 1/2); got {no_config_count} vs {with_config_count}.",
+            no_config_count + 1,
+            "expected the curved sweep to cost exactly one more query than the inert "
+            "sweep (the gift-id-mapping query, skipped entirely when no config row "
+            f"exists — #2708 C1); got no_config={no_config_count}, "
+            f"with_config={with_config_count}.",
         )
