@@ -60,11 +60,12 @@ def is_cross_path_learning(
 def contribute_to_technique_progress(
     sheet: CharacterSheet,
     progress: TechniqueProgress,
-    amount: int,
+    dev_points: int,
     *,
+    ap_to_spend: int | None = None,
     game_week: GameWeek | None = None,
 ):
-    """Invest AP toward an in-progress technique meter (#2711).
+    """Invest AP toward an in-progress technique meter (#2711, #2727).
 
     Spends AP (with the Unbound surcharge applied), adds meter-progress
     points, enforces the weekly cap, and mints the CharacterTechnique when
@@ -73,9 +74,12 @@ def contribute_to_technique_progress(
     Args:
         sheet: The learner's CharacterSheet.
         progress: The TechniqueProgress meter to contribute toward.
-        amount: Meter-progress points (dev points) to contribute. 1 AP = 1
-            dev point before the surcharge; the surcharge increases AP cost
-            but not meter progress.
+        dev_points: Meter-progress points (dev points) to contribute.
+        ap_to_spend: AP to charge (with surcharge). When None (default),
+            derived from dev_points (original #2711 behavior). When set,
+            decouples AP cost from dev-point yield — the check-based training
+            wrapper (#2727) uses this so a botch spends full AP but credits
+            0 dev points.
         game_week: Optional GameWeek; resolved from the current game week
             if not provided.
 
@@ -114,19 +118,23 @@ def contribute_to_technique_progress(
         msg = f"You've trained as much as you can this week ({effective_cap} points)."
         raise WeeklyTrainingCapExceeded(msg)
 
-    # 4. Clamp the contribution to remaining weekly allowance.
-    clamped = min(amount, effective_cap - weekly.points_contributed)
+    # 4. Clamp the dev-point contribution to remaining weekly allowance.
+    clamped = min(dev_points, effective_cap - weekly.points_contributed)
 
     # 5. Compute AP to spend (with Unbound surcharge).
+    if ap_to_spend is None:
+        ap_base = clamped
+    else:
+        ap_base = ap_to_spend
     surcharge_percent = magic_learning_ap_cost_surcharge_percent(sheet)
-    ap_to_spend = math.ceil(clamped * (100 + surcharge_percent) / 100)
+    ap_to_spend_actual = math.ceil(ap_base * (100 + surcharge_percent) / 100)
 
     # 6. Spend AP.
     pool = ActionPointPool.get_or_create_for_character(sheet.character)
-    if not pool.can_afford(ap_to_spend):
-        msg = f"Insufficient action points (need {ap_to_spend}, have {pool.current})."
+    if not pool.can_afford(ap_to_spend_actual):
+        msg = f"Insufficient action points (need {ap_to_spend_actual}, have {pool.current})."
         raise MagicError(msg)
-    pool.spend(ap_to_spend)
+    pool.spend(ap_to_spend_actual)
 
     # 7. Add to meter (atomic).
     progress = TechniqueProgress.objects.select_for_update().get(pk=progress.pk)

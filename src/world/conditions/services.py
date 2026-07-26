@@ -43,6 +43,7 @@ from world.conditions.constants import (
     SLOW_POISON_CONDITION_NAME,
     TARGET_EFFECT_ALTERATION,
     TARGET_EFFECT_CONDITION,
+    BreakFreeMode,
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
     DamageTickTiming,
@@ -73,6 +74,8 @@ from world.conditions.types import (
     AdvancementOutcome,
     AdvancementResistFailureKind,
     ApplyConditionResult,
+    BreakFreeOutcome,
+    BreakFreeResult,
     BulkConditionApplication,
     CapabilityStatus,
     CheckModifierResult,
@@ -103,6 +106,9 @@ if TYPE_CHECKING:
 
 # Timing constants
 SECONDS_PER_ROUND = 6
+# Out-of-combat cooldown for shake-off attempts (break-free + wake).
+# 60s paces freeform RP; combat rounds gate at one-per-round via in_combat_tick.
+FREEFORM_RESIST_COOLDOWN_SECONDS = 60
 
 
 def _invalidate_condition_handler(target: "ObjectDB") -> None:  # noqa: OBJECTDB_PARAM
@@ -3124,12 +3130,186 @@ def decay_all_conditions_tick() -> DecayTickSummary:
         decay_condition_severity(instance, cond.passive_decay_per_day)
         ticked += 1
 
+    # Process NPC break-free attempts alongside decay (#2706).
+    process_break_free_tick()
+
     return DecayTickSummary(
         examined=examined,
         ticked=ticked,
         engagement_blocked=engagement_blocked,
         severity_gated=severity_gated,
     )
+
+
+def _resolve_break_free_outcome(
+    instance: ConditionInstance,
+    success_level: int,
+) -> BreakFreeResult:
+    """Map a break-free check's success_level to a tiered outcome.
+
+    Crit (SL>=2): remove entirely. Partial (SL==1): decay severity. Failure
+    (SL>=-1): hold. Botch (SL<=-2): advance severity.
+    """
+    # Break-free outcome thresholds (CheckOutcome.success_level values).
+    crit_threshold = 2
+    partial_threshold = 1
+    botch_threshold = -2
+
+    if success_level >= crit_threshold:
+        remove_condition(instance.target, instance.condition)
+        return BreakFreeResult(
+            attempted=True,
+            broke_free=True,
+            outcome=BreakFreeOutcome.SHATTERED,
+            message="You shatter the effect gripping your mind!",
+            severity_delta=-instance.severity,
+        )
+    if success_level == partial_threshold:
+        decay_amount = max(1, success_level)
+        decay_condition_severity(instance, decay_amount)
+        return BreakFreeResult(
+            attempted=True,
+            broke_free=False,
+            outcome=BreakFreeOutcome.WEAKENED,
+            message="You push back against the effect, weakening its hold.",
+            severity_delta=-decay_amount,
+        )
+    if success_level > botch_threshold:
+        return BreakFreeResult(
+            attempted=True,
+            broke_free=False,
+            outcome=BreakFreeOutcome.HELD,
+            message="The effect's grip holds firm.",
+        )
+    advance_condition_severity(instance, 1)
+    return BreakFreeResult(
+        attempted=True,
+        broke_free=False,
+        outcome=BreakFreeOutcome.STRENGTHENED,
+        message="Your struggle only tightens the effect's grip!",
+        severity_delta=1,
+    )
+
+
+def attempt_break_free(
+    instance: ConditionInstance,
+    *,
+    extra_modifiers: int = 0,
+    helper_bonus: int = 0,
+    in_combat_tick: bool = False,
+    level_override: int | None = None,
+) -> BreakFreeResult:
+    """Resolve a single break-free attempt against an applied condition.
+
+    Mirrors attempt_wake's shape: rate-limit via last_resist_attempt_at, roll
+    perform_check, apply tiered outcome. Called by both BreakFreeAction (PC) and
+    the periodic tick (NPC).
+
+    Args:
+        extra_modifiers: Caller-provided modifiers (goals, magic, etc.).
+        helper_bonus: Bonus from a RallyAction (added to extra_modifiers).
+        in_combat_tick: When True (combat round tick), no rate-limit stamp.
+            When False (player command or non-combat tick), stamps the field.
+        level_override: When set, substitutes for the target's resolved level
+            in perform_check (for ephemeral CombatOpponent NPCs).
+
+    Returns:
+        BreakFreeResult with outcome label and severity delta.
+    """
+    from world.checks.services import level_opposition, perform_check  # noqa: PLC0415
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        get_character_path_level,
+    )
+
+    template = instance.condition
+
+    if template.break_free_mode == BreakFreeMode.NONE:
+        return BreakFreeResult(
+            attempted=False,
+            broke_free=False,
+            message="This effect cannot be shaken off.",
+        )
+
+    if not instance.is_aware and not in_combat_tick:
+        return BreakFreeResult(
+            attempted=False,
+            broke_free=False,
+            message="You don't notice anything wrong.",
+        )
+
+    if not in_combat_tick:
+        now = timezone.now()
+        last = instance.last_resist_attempt_at
+        if last is not None and (now - last).total_seconds() < FREEFORM_RESIST_COOLDOWN_SECONDS:
+            return BreakFreeResult(
+                attempted=False,
+                broke_free=False,
+                message="You are still fighting the grip of the effect.",
+            )
+        instance.last_resist_attempt_at = now
+        instance.save(update_fields=["last_resist_attempt_at"])
+
+    check_type = template.break_free_check_type or template.resist_check_type
+    if check_type is None:
+        return BreakFreeResult(
+            attempted=False,
+            broke_free=False,
+            message="This effect has no break-free check defined.",
+        )
+
+    difficulty = template.break_free_difficulty
+    caster = instance.source_character
+    if caster is not None:
+        caster_level = get_character_path_level(caster)
+        difficulty += level_opposition(check_type, level=caster_level, character=caster)
+
+    rally_bonus = instance.pending_rally_bonus
+    if rally_bonus > 0:
+        instance.pending_rally_bonus = 0
+        instance.save(update_fields=["pending_rally_bonus"])
+
+    total_modifiers = extra_modifiers + helper_bonus + rally_bonus
+    result = perform_check(
+        instance.target,
+        check_type,
+        target_difficulty=difficulty,
+        extra_modifiers=total_modifiers,
+        level_override=level_override,
+    )
+    return _resolve_break_free_outcome(instance, result.success_level)
+
+
+def process_break_free_tick() -> list[BreakFreeResult]:
+    """Process periodic break-free attempts for NPC targets (#2706).
+
+    Called from the decay tick (non-combat). Finds all active behavior-altering
+    conditions that are break-free-able and calls attempt_break_free for NPCs.
+    PCs with SELF_INITIATED mode are skipped (they self-initiate via command).
+    NPCs (no CharacterSheet) always get periodic auto-rolls.
+    """
+    results: list[BreakFreeResult] = []
+
+    instances = (
+        ConditionInstance.objects.select_related("condition", "condition__category", "target")
+        .filter(
+            resolved_at__isnull=True,
+            condition__category__alters_behavior=True,
+        )
+        .exclude(condition__break_free_mode=BreakFreeMode.NONE)
+    )
+
+    for instance in instances:
+        # PCs with SELF_INITIATED are handled by the player command, not the tick.
+        if instance.condition.break_free_mode == BreakFreeMode.SELF_INITIATED:
+            sheet = _resolve_character_sheet_for_target(instance.target)
+            if sheet is not None:
+                continue
+
+        result = attempt_break_free(instance, in_combat_tick=False)
+        if result.attempted:
+            results.append(result)
+
+    return results
 
 
 def _compute_chronic_damage(

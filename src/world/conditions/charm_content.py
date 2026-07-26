@@ -13,6 +13,7 @@ from __future__ import annotations
 from world.conditions.constants import (
     CALM_CONDITION_NAME,
     CHARM_CONDITION_NAME,
+    BreakFreeMode,
     DurationType,
 )
 from world.conditions.models import ConditionCategory, ConditionTemplate
@@ -39,6 +40,7 @@ def ensure_charm_content() -> None:
             "default_duration_value": 3,
             "is_stackable": False,
             "can_be_dispelled": True,
+            "break_free_mode": BreakFreeMode.SELF_INITIATED,
         },
         name=CHARM_CONDITION_NAME,
     )
@@ -51,6 +53,7 @@ def ensure_charm_content() -> None:
             "default_duration_value": 3,
             "is_stackable": False,
             "can_be_dispelled": True,
+            "break_free_mode": BreakFreeMode.SELF_INITIATED,
         },
         name=CALM_CONDITION_NAME,
     )

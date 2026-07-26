@@ -5,10 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        (
-            "magic",
-            "0130_alter_auderemajorafaithvariantcapabilitygrant_intensity_multiplier_and_more",
-        ),
+        ("magic", "0132_giftacquisitionconfig_training_knobs"),
     ]
 
     operations = [

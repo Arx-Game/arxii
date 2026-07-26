@@ -50,6 +50,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     specialization: "Specialization | None" = None,
     *,
     situation_ctx: "SituationContext | None" = None,
+    level_override: int | None = None,
 ) -> CheckResult:
     """
     Main check resolution function.
@@ -109,6 +110,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             fatigue_penalty=fatigue_penalty,
             specialization=specialization,
             situation_ctx=situation_ctx,
+            level_override=level_override,
         )
 
     breakdown = _compute_check_breakdown(
@@ -120,6 +122,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
         fatigue_penalty=fatigue_penalty,
         specialization=specialization,
         situation_ctx=situation_ctx,
+        level_override=level_override,
     )
 
     roll = random.randint(1, 100)  # noqa: S311
@@ -141,6 +144,7 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
     fatigue_penalty: int,
     specialization: "Specialization | None" = None,
     situation_ctx: "SituationContext | None" = None,
+    level_override: int | None = None,
 ) -> CheckResult:
     """Build a synthetic CheckResult for the test-rig forced-outcome path.
 
@@ -162,6 +166,7 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
         fatigue_penalty=fatigue_penalty,
         specialization=specialization,
         situation_ctx=situation_ctx,
+        level_override=level_override,
     )
     outcome = _apply_outcome_guarantees(character, forced_outcome, breakdown.chart, situation_ctx)
     return _check_result(check_type, outcome, breakdown)

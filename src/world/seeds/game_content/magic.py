@@ -2546,6 +2546,112 @@ class RelationshipTrackThreadUnlockResult:
     unlock: ThreadWeavingUnlock
 
 
+def ensure_technique_training_content():
+    """Seed config + sample content for check-based technique training (#2727).
+
+    The ``TrainingOutcomeAward`` rows are config (staff-tunable tuning
+    data, not lore-repo content), so they're always seeded. The
+    "Arcane Theory" Skill/Trait, "Technique Training" CheckType, and
+    their CheckTypeTrait composition rows ARE content models
+    (``CONTENT_MODELS`` per #2698) — they're looked up first and only
+    invented under ``SEED_SAMPLE_CONTENT`` (off by default) via
+    ``authored_or_sample``. In a real deploy they come from the lore
+    repo; in a test/dev DB with sampling on, a stand-in is created.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
+    from world.magic.models import TrainingOutcomeAward  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import (  # noqa: PLC0415
+        CheckOutcome,
+        Trait,
+        TraitCategory,
+        TraitType,
+    )
+
+    # 1. Arcane Theory skill + backing trait (content models — sample only).
+    arcane_trait = authored_or_sample(
+        Trait,
+        defaults={
+            "trait_type": TraitType.SKILL,
+            "category": TraitCategory.MAGIC,
+            "is_public": True,
+        },
+        name="Arcane Theory",
+    )
+    if arcane_trait is not None:
+        Skill.objects.get_or_create(
+            trait=arcane_trait,
+            defaults={
+                "tooltip": "Understanding the theoretical underpinnings of magical techniques.",
+                "display_order": 0,
+                "is_active": True,
+            },
+        )
+
+    # 2. intellect stat trait (content model — sample only, may already exist
+    # from CG seed).
+    intellect_trait = authored_or_sample(
+        Trait,
+        defaults={
+            "trait_type": TraitType.STAT,
+            "category": TraitCategory.MENTAL,
+            "is_public": True,
+        },
+        name="intellect",
+    )
+
+    # 3. Magic check category (content model — sample only).
+    category = authored_or_sample(
+        CheckCategory,
+        defaults={
+            "description": "Checks involving magical theory and practice.",
+            "display_order": 40,
+        },
+        name="Magic",
+    )
+
+    # 4. Technique Training CheckType (content model — sample only).
+    check_type = None
+    if category is not None:
+        check_type = authored_or_sample(
+            CheckType,
+            defaults={"is_active": True, "display_order": 10},
+            name="Technique Training",
+            category=category,
+        )
+    if check_type is not None and intellect_trait is not None and arcane_trait is not None:
+        weight = Decimal("1.0")
+        CheckTypeTrait.objects.update_or_create(
+            check_type=check_type,
+            trait=intellect_trait,
+            defaults={"weight": weight},
+        )
+        CheckTypeTrait.objects.update_or_create(
+            check_type=check_type,
+            trait=arcane_trait,
+            defaults={"weight": weight},
+        )
+
+    # 5. TrainingOutcomeAward rows (config, NOT content models — always seeded).
+    award_defaults = {
+        "Critical Failure": Decimal("0.00"),
+        "Failure": Decimal("0.00"),
+        "Partial Success": Decimal("0.50"),
+        "Success": Decimal("1.00"),
+        "Critical Success": Decimal("1.50"),
+    }
+    for name, mult in award_defaults.items():
+        outcome = CheckOutcome.objects.filter(name=name).first()
+        if outcome is not None:
+            TrainingOutcomeAward.objects.update_or_create(
+                outcome_tier=outcome,
+                defaults={"dev_point_multiplier": mult},
+            )
+
+
 @dataclass
 class MagicDevSeedResult:
     """Returned by seed_magic_dev().
@@ -2839,6 +2945,8 @@ def seed_magic_dev() -> MagicDevSeedResult:
     # #2643 — mechanics config (not authored content, see the factory docstring),
     # so it's seeded directly here rather than deferred to lore-repo content.
     ensure_team_damage_percent_target()
+
+    ensure_technique_training_content()
 
     return MagicDevSeedResult(
         config=config,

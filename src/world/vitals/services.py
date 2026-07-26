@@ -1328,14 +1328,17 @@ def _wake_roll_blocked(
     "one check per round" means per *elapsed* round. Out of combat: at most
     one roll per wall-clock round-equivalent (stamps the attempt time).
     """
-    from world.conditions.services import SECONDS_PER_ROUND  # noqa: PLC0415
+    from world.conditions.services import (  # noqa: PLC0415
+        FREEFORM_RESIST_COOLDOWN_SECONDS,
+        SECONDS_PER_ROUND,
+    )
 
     if in_combat_tick:
         if (now - instance.applied_at).total_seconds() < SECONDS_PER_ROUND:
             return ""
         return None
     last = instance.last_resist_attempt_at
-    if last is not None and (now - last).total_seconds() < SECONDS_PER_ROUND:
+    if last is not None and (now - last).total_seconds() < FREEFORM_RESIST_COOLDOWN_SECONDS:
         return "You are still sunk too deep to try again."
     instance.last_resist_attempt_at = now
     instance.save(update_fields=["last_resist_attempt_at"])

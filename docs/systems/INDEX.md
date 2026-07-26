@@ -2529,6 +2529,21 @@ register as additional kinds.
   Path-discovery system (#2603); it does not model the full research/discovery
   progression that gates Path selection. Seeded by `wire_ghost_tutor_content()`
   (`world.magic.factories`), called by `seed_magic_dev()`.
+- **Check-based technique training (#2727):** `resolve_training_check()`
+  (`world.magic.services.technique_training`) wraps
+  `contribute_to_technique_progress` with a learning check. The learner
+  rolls intellect + the new "Arcane Theory" skill ("Technique Training"
+  `CheckType`, seeded by `ensure_technique_training_content()`). The
+  check outcome maps to a dev-point multiplier via
+  `TrainingOutcomeAward(OutcomeTierAward)` (botch/failure=0×, partial=0.5×,
+  success=1.0×, critical=1.5×). AP is always spent; only dev-point yield
+  varies. `contribute_to_technique_progress` was changed to accept
+  `dev_points` + `ap_to_spend` as co-equal params (decoupling AP from
+  dev points). Difficulty: `target_difficulty = (technique.tier × step)
+  − (learner_level // divisor) − teacher_skill_bonus
+  + (self_study_penalty if teacher is None)`. Four tuning knobs on
+  `GiftAcquisitionConfig`. No production caller yet — the player-facing
+  training trigger is a deferred follow-up.
 - **SETTLE_OBLIGATION — the Academy Registrar (#2428 whole-branch fix):** closes the gap
   where `societies.obligation_services.settle_obligation` (Task 1) shipped with no live
   caller — an Unbound Prospect had no in-game way to ever pay off their Academy entrance

@@ -170,8 +170,11 @@ class DecayAllConditionsTickTests(TestCase):
         The engagement gate used to add a fifth (one ``CharacterEngagement``
         ``.exists()`` per instance); it is now hoisted into a single batched
         lookup, mirroring ``_apply_ap_regen``'s locked_character_ids set.
+
+        The break-free NPC tick (#2706) adds one constant query (it filters
+        for behavior-altering conditions and finds none here).
         """
-        self.assertEqual(self._tick_queries(add=10, expect_ticked=10), 42)
+        self.assertEqual(self._tick_queries(add=10, expect_ticked=10), 43)
 
     def test_engagement_gate_does_not_scale_with_instance_count(self):
         """The slope is what matters — a reintroduced N+1 would push it to 5.

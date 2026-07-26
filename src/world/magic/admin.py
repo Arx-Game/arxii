@@ -1206,6 +1206,7 @@ from world.magic.models import (  # noqa: E402
     FallRedemptionRecord,
     GhostTutelage,
     ResonanceConversion,
+    TrainingOutcomeAward,
 )
 
 
@@ -1324,3 +1325,11 @@ class TechniqueProgressAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):  # noqa: ARG002
         return False
+
+
+@admin.register(TrainingOutcomeAward)
+class TrainingOutcomeAwardAdmin(admin.ModelAdmin):
+    """Staff-tunable dev-point multiplier per outcome tier (#2727)."""
+
+    list_display = ["outcome_tier", "dev_point_multiplier"]
+    ordering = ["outcome_tier__success_level"]
