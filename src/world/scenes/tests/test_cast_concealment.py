@@ -12,14 +12,17 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
+from world.magic.narration import render_vague_cast_narration
+from world.magic.services.cast_observation import CastAudience
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
+from world.scenes.cast_services import request_technique_cast
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
     ReactionWindowKind,
     ScenePrivacyMode,
 )
-from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.scenes.factories import PersonaFactory, SceneFactory, SceneParticipationFactory
 from world.scenes.interaction_permissions import CanViewInteraction
 from world.scenes.interaction_services import can_view_interaction, create_interaction
 from world.scenes.models import Interaction
@@ -30,7 +33,35 @@ from world.scenes.reaction_services import (
     react_to_window,
     register_reaction_kind,
 )
+from world.scenes.tests.cast_test_helpers import (
+    CastScenarioMixin,
+    grant_technique,
+    make_benign_castable_technique,
+)
 from world.scenes.tests.test_reaction_windows import make_participant
+
+# Per-persona account cache for _account_playing (module-level so repeated calls
+# within a test — or across tests sharing a persona via setUpTestData — return the
+# same account instead of minting a fresh one each time).
+_PERSONA_ACCOUNTS: dict[int, AccountFactory] = {}
+
+
+def _account_playing(persona):
+    """The account currently playing *persona*, creating the roster wiring on first ask.
+
+    Mints an ``AccountFactory`` + ``PlayerDataFactory`` + a current (``end_date=None``)
+    ``RosterTenureFactory`` bound to *persona*'s existing ``RosterEntry`` — or creates
+    that ``RosterEntry`` too, since ``PersonaFactory`` does not provision one. Cached
+    per persona pk so repeated calls return the same account.
+    """
+    if persona.pk in _PERSONA_ACCOUNTS:
+        return _PERSONA_ACCOUNTS[persona.pk]
+    account = AccountFactory()
+    player_data = PlayerDataFactory(account=account)
+    roster_entry = RosterEntryFactory(character_sheet=persona.character_sheet)
+    RosterTenureFactory(player_data=player_data, roster_entry=roster_entry, end_date=None)
+    _PERSONA_ACCOUNTS[persona.pk] = account
+    return account
 
 
 def _played_persona():
@@ -208,3 +239,105 @@ class CanViewInteractionPublicSceneOrderingTests(TestCase):
     def test_whisper_in_public_scene_denied_to_outsider(self) -> None:
         """Regression: the pre-existing bug this review found -- same leak class."""
         self.assertFalse(_can_view_object(self.whisper, self.outsider))
+
+
+class ConcealedCastJourneyTests(CastScenarioMixin):
+    """Concealment at the real seam: request_technique_cast end to end.
+
+    The audience is stubbed, not rolled — Task 3's suite owns the dice. What is under
+    test here is that a resolved cast writes BOTH of its interactions to exactly the
+    audience it was given, and nothing to anyone else.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        room = cls.scene.location
+        cls.detector = PersonaFactory()
+        cls.marginal = PersonaFactory()
+        cls.bystander = PersonaFactory()
+        # The mixin does not place characters; resolve_cast_audience reads
+        # location.contents, so put every participant in the room explicitly.
+        for persona in (cls.caster, cls.detector, cls.marginal, cls.bystander):
+            character = persona.character_sheet.character
+            character.location = room
+            character.save()
+            # Pin each persona's account BEFORE any cast happens: create_interaction
+            # resolves receiver accounts (accounts_for_personas) via RosterTenure at
+            # write time, off whatever tenure exists then — an account minted only
+            # later, inside _log_for, would leave the receiver row's account_id NULL
+            # and the reader-side party filter (receivers__account_id=) would never
+            # match it.
+            _account_playing(persona)
+        cls.technique = make_benign_castable_technique()
+        grant_technique(cls.caster, cls.technique)
+
+    def _cast(self, audience: CastAudience):
+        """Resolve a self-targeted cast with a stubbed audience; return the request."""
+        with patch(
+            "world.magic.services.cast_observation.resolve_cast_audience",
+            return_value=audience,
+        ):
+            return request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.caster,
+                technique=self.technique,
+            ).request
+
+    def _log_for(self, persona) -> list[Interaction]:
+        """What this persona's scene log actually returns — the reader's side."""
+        account = _account_playing(persona)
+        return list(
+            Interaction.objects.visible_to(account, persona_ids=[persona.pk]).filter(
+                scene=self.scene
+            )
+        )
+
+    def _concealed_audience(self, *, full, vague):
+        return CastAudience(concealed=True, full=list(full), vague=list(vague))
+
+    def test_detector_sees_the_full_outcome_pose(self) -> None:
+        """A strong detector reads exactly what an overt cast would have shown."""
+        self._cast(self._concealed_audience(full=[self.caster, self.detector], vague=[]))
+        contents = [i.content for i in self._log_for(self.detector)]
+        self.assertTrue(any(self.technique.name in c for c in contents))
+
+    def test_marginal_detector_gets_only_the_vague_line(self) -> None:
+        """They know something was worked — not by whom, not what."""
+        self._cast(self._concealed_audience(full=[self.caster], vague=[self.marginal]))
+        contents = [i.content for i in self._log_for(self.marginal)]
+        self.assertEqual(contents, [render_vague_cast_narration()])
+
+    def test_bystander_sees_neither_interaction(self) -> None:
+        """The whole point. Nothing in their scene log, ever."""
+        self._cast(
+            self._concealed_audience(full=[self.caster, self.detector], vague=[self.marginal])
+        )
+        self.assertEqual(self._log_for(self.bystander), [])
+
+    def test_the_action_interaction_is_concealed_too(self) -> None:
+        """The caster's ACTION row carries the technique name on its own."""
+        request = self._cast(self._concealed_audience(full=[self.caster], vague=[]))
+        action_interaction = request.action_interaction
+        self.assertEqual(action_interaction.visibility, InteractionVisibility.PERCEIVED_ONLY)
+        self.assertNotIn(action_interaction, self._log_for(self.bystander))
+
+    def test_vague_line_names_neither_caster_nor_technique(self) -> None:
+        """The attribution boundary, asserted on content rather than on tier."""
+        line = render_vague_cast_narration()
+        self.assertNotIn(self.caster.name, line)
+        self.assertNotIn(self.technique.name, line)
+
+    def test_no_vague_interaction_when_nobody_marginally_detected(self) -> None:
+        """One interaction, not two, when the vague tier is empty."""
+        self._cast(self._concealed_audience(full=[self.caster], vague=[]))
+        outcomes = Interaction.objects.filter(scene=self.scene, mode=InteractionMode.OUTCOME)
+        self.assertEqual(outcomes.count(), 1)
+
+    def test_unconcealed_cast_is_unchanged(self) -> None:
+        """Zero concealment: DEFAULT visibility, no receiver rows, room-heard."""
+        self._cast(CastAudience(concealed=False, full=[], vague=[]))
+        pose = Interaction.objects.get(scene=self.scene, mode=InteractionMode.OUTCOME)
+        self.assertEqual(pose.visibility, InteractionVisibility.DEFAULT)
+        self.assertFalse(pose.receivers.exists())
+        self.assertIn(pose, self._log_for(self.bystander))

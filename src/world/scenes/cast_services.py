@@ -54,7 +54,7 @@ from world.scenes.action_constants import (
     ActionRequestStatus,
 )
 from world.scenes.action_models import SceneActionPullDeclaration, SceneActionRequest
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.interaction_services import create_interaction
 from world.scenes.narrator import get_or_create_narrator_persona
 from world.scenes.types import CastResult, EnhancedSceneActionResult
@@ -65,6 +65,7 @@ if TYPE_CHECKING:
     from actions.types import PendingActionResolution
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import FuryTier, Resonance, Technique
+    from world.magic.services.cast_observation import CastAudience
     from world.magic.services.fury import FuryResolution
     from world.magic.types.power_ledger import PowerLedger
     from world.magic.types.pull import CastPullDeclaration
@@ -217,13 +218,27 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     target_persona: Persona | None,
     technique: Technique,
     result: EnhancedSceneActionResult,
+    audience: CastAudience,
     power_ledger: PowerLedger | None = None,
     fizzle_note: str | None = None,
     technique_name: str | None = None,
-) -> Interaction:
-    """Author the Narrator OUTCOME pose describing a resolved standalone cast.
+) -> tuple[Interaction, Interaction | None]:
+    """Author the Narrator OUTCOME pose(s) describing a resolved standalone cast (#2710).
+
+    Returns ``(pose, vague_pose)``. ``vague_pose`` is ``None`` unless the cast was
+    concealed AND at least one observer only marginally detected it.
+
+    Both poses are scene-linked but deliberately NOT wired to
+    ``SceneActionRequest.result_interaction`` — that FK is a ``OneToOne``, so it can
+    only ever point at one Interaction, and the caller already wires ``pose`` there.
+    Combat's broadcast poses are likewise unlinked from any per-request FK. The vague
+    pose also carries **no** ``target_personas`` — naming the target would leak the
+    attribution this detection tier is meant to withhold.
 
     Args:
+        audience: Who perceived this cast, from ``resolve_cast_audience``. When
+            ``audience.concealed`` is False, behavior is byte-identical to before
+            #2710 — a single DEFAULT-visibility, room-heard pose.
         fizzle_note: Optional explanatory note appended to the narration when a
             declared pull could not be charged (e.g. resonance drained mid-consent).
         technique_name: Optional display name override. When provided (e.g. a
@@ -254,16 +269,40 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         signature_snippet=signature_snippet,
     )
 
-    return create_interaction(
+    if not audience.concealed:
+        return create_interaction(
+            persona=get_or_create_narrator_persona(),
+            content=narration,
+            mode=InteractionMode.OUTCOME,
+            scene=scene,
+            target_personas=[target_persona] if target_persona is not None else None,
+        ), None
+
+    from world.magic.narration import render_vague_cast_narration  # noqa: PLC0415
+
+    pose = create_interaction(
         persona=get_or_create_narrator_persona(),
         content=narration,
         mode=InteractionMode.OUTCOME,
         scene=scene,
+        receivers=audience.full,
         target_personas=[target_persona] if target_persona is not None else None,
+        visibility=InteractionVisibility.PERCEIVED_ONLY,
     )
+    vague_pose = None
+    if audience.vague:
+        vague_pose = create_interaction(
+            persona=get_or_create_narrator_persona(),
+            content=render_vague_cast_narration(),
+            mode=InteractionMode.OUTCOME,
+            scene=scene,
+            receivers=audience.vague,
+            visibility=InteractionVisibility.PERCEIVED_ONLY,
+        )
+    return pose, vague_pose
 
 
-def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast resolution; cohesive
+def _resolve_and_pose_cast(  # noqa: PLR0913, PLR0915 - one cohesive cast resolution
     *,
     request: SceneActionRequest,
     scene: Scene,
@@ -420,12 +459,19 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     request.resolved_difficulty = difficulty
     request.save(update_fields=["status", "resolved_at", "resolved_difficulty"])
 
-    pose = create_cast_outcome_pose(
+    from world.magic.services.cast_observation import resolve_cast_audience  # noqa: PLC0415
+
+    # Task 6 threads the real flag; until then every standalone cast rolls as if
+    # never declared open.
+    audience = resolve_cast_audience(caster=character, cast_openly=False)
+
+    pose, _vague_pose = create_cast_outcome_pose(
         scene=scene,
         caster_persona=caster_persona,
         target_persona=target_persona,
         technique=technique,
         result=result,
+        audience=audience,
         power_ledger=power_ledger,
         fizzle_note=fizzle_note,
         technique_name=resolved_name,
@@ -433,7 +479,10 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     request.result_interaction = pose
     request.save(update_fields=["result_interaction"])
 
-    from world.scenes.interaction_services import create_action_interaction_core  # noqa: PLC0415
+    from world.scenes.interaction_services import (  # noqa: PLC0415
+        accounts_for_personas,
+        create_action_interaction_core,
+    )
     from world.scenes.power_ledger_services import persist_power_ledger  # noqa: PLC0415
 
     action_interaction = create_action_interaction_core(
@@ -443,6 +492,25 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         strain_committed=strain_commitment,
         fury_committed=fury_res.realized_tier if fury_res else None,
     )
+    if audience.concealed:
+        # #2710: this row's content is the technique name. Concealing only the OUTCOME
+        # pose would still show every bystander "Ilyra — Whisper of Binding" in the log.
+        from world.scenes.place_models import InteractionReceiver  # noqa: PLC0415
+
+        action_interaction.visibility = InteractionVisibility.PERCEIVED_ONLY
+        action_interaction.save(update_fields=["visibility"])
+        receiver_accounts = accounts_for_personas(audience.full)
+        InteractionReceiver.objects.bulk_create(
+            [
+                InteractionReceiver(
+                    interaction=action_interaction,
+                    timestamp=action_interaction.timestamp,
+                    persona=p,
+                    account_id=receiver_accounts.get(p.pk),
+                )
+                for p in audience.full
+            ]
+        )
     persist_power_ledger(interaction=action_interaction, ledger=power_ledger)
     request.action_interaction = action_interaction
     request.save(update_fields=["action_interaction"])

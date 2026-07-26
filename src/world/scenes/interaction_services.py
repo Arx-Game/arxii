@@ -179,7 +179,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
 
     if effective_receivers:
         # Pin each receiver's account too (#1219), batched to one query for the whole room.
-        receiver_accounts = _accounts_for_personas(effective_receivers)
+        receiver_accounts = accounts_for_personas(effective_receivers)
         InteractionReceiver.objects.bulk_create(
             [
                 InteractionReceiver(
@@ -505,12 +505,15 @@ def _get_account_for_persona(persona: Persona) -> int | None:
     return _get_account_for_character(persona.character_sheet_id)
 
 
-def _accounts_for_personas(personas: list[Persona]) -> dict[int, int]:
+def accounts_for_personas(personas: list[Persona]) -> dict[int, int]:
     """Map persona pk -> current account id for a batch of personas, in one query (#1219).
 
     The batched form of ``_get_account_for_persona`` — used when pinning receiver accounts at
     interaction creation so a place-scoped (whole-room) interaction stays O(1) queries.
-    Personas whose character has no current tenure are simply absent from the map.
+    Personas whose character has no current tenure are simply absent from the map. Public
+    (#2710) so callers outside this module — e.g. concealing a cast's ACTION interaction in
+    ``world.scenes.cast_services`` — can pin receiver accounts without reaching for an
+    underscore-prefixed name.
     """
     from world.roster.models import RosterTenure  # noqa: PLC0415
 
