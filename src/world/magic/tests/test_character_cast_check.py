@@ -30,7 +30,6 @@ from world.magic.seeds_checks import (
     ensure_character_magic_check_type,
 )
 from world.realms.models import Realm
-from world.roster.models import Roster
 from world.skills.factories import SkillFactory
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
@@ -88,7 +87,6 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
                 name=stat_name,
                 defaults={"trait_type": TraitType.STAT, "description": stat_name},
             )
-        Roster.objects.get_or_create(name="Available Characters")
 
         realm = Realm.objects.create(name="ProvisionCheck Realm", description="Test")
         area = StartingArea.objects.create(
@@ -231,7 +229,6 @@ class GetCharacterCastCheckTests(TestCase):
                 name=stat_name,
                 defaults={"trait_type": TraitType.STAT, "description": stat_name},
             )
-        Roster.objects.get_or_create(name="Available Characters")
 
         realm = Realm.objects.create(name="CastCheck Realm", description="Test")
         area = StartingArea.objects.create(

@@ -45,7 +45,6 @@ from world.magic.seeds_cast import TECHNIQUE_CAST_CHECK_TYPE_NAME, get_standalon
 from world.magic.seeds_checks import character_magic_check_type_name
 from world.magic.services.anima import get_character_cast_check
 from world.realms.models import Realm
-from world.roster.models import Roster
 from world.scenes import cast_services
 from world.scenes.cast_services import request_technique_cast
 from world.scenes.factories import PersonaFactory, SceneFactory
@@ -86,7 +85,6 @@ class CastUsesPerCharacterCheckTests(TestCase):
                 defaults={"trait_type": TraitType.STAT, "description": stat_name},
             )
         cls.anima_stat = Trait.objects.get(name="willpower")
-        Roster.objects.get_or_create(name="Available Characters")
 
         realm = Realm.objects.create(name="CastPC Realm", description="Test")
         cls.area = StartingArea.objects.create(

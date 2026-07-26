@@ -35,12 +35,9 @@ class Roster(NaturalKeyMixin, SharedMemoryModel):
         max_length=16,
         choices=RosterType.choices,
         unique=True,
-        null=True,
-        blank=True,
         help_text=(
             "The shelf this roster IS — the key code matches on (#2728). `name` is"
-            " a display label only. Nullable purely so the schema change lands"
-            " without a data migration (ADR-0013); the seed sets it on every row."
+            " a display label only."
         ),
     )
     description = models.TextField(

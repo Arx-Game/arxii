@@ -145,9 +145,15 @@ class RosterPolicyServiceTestCase(TestCase):
         self.player_data = PlayerDataFactory()
 
         # Create different roster types for testing. roster_type (#2728) is what the
-        # policy gate matches on now, not name — set it explicitly for the restricted
-        # roster so this test actually exercises the gate.
-        self.active_roster = RosterFactory(name="Active", is_active=True, sort_order=1)
+        # policy gate matches on now, not name — set it explicitly on every row here
+        # (not just the restricted one) so this test's outcome never depends on
+        # RosterFactory's cycling default landing on RosterType.RESTRICTED by chance.
+        self.active_roster = RosterFactory(
+            name="Active",
+            roster_type=RosterType.ACTIVE,
+            is_active=True,
+            sort_order=1,
+        )
         self.restricted_roster = RosterFactory(
             name="Restricted",
             roster_type=RosterType.RESTRICTED,
@@ -156,6 +162,7 @@ class RosterPolicyServiceTestCase(TestCase):
         )
         self.inactive_roster = RosterFactory(
             name="Inactive",
+            roster_type=RosterType.INACTIVE,
             is_active=False,
             sort_order=3,
         )
