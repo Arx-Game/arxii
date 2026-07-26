@@ -262,7 +262,8 @@
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK] (nullable)
   - stage -> conditions.ConditionStage [FK] (nullable)
-  - check_type -> checks.CheckType [FK]
+  - check_type -> checks.CheckType [FK] (nullable)
+  - check_category -> checks.CheckCategory [FK] (nullable)
 
 ### ConditionResistanceModifier
 **Foreign Keys:**
@@ -1606,6 +1607,8 @@
   - rescues_as_sinner <- magic.SoulTetherRescue
   - rescues_as_sineater <- magic.SoulTetherRescue
   - technique_draft <- magic.TechniqueDraft
+  - technique_progress <- magic.TechniqueProgress
+  - technique_progress_weekly <- magic.TechniqueProgressWeekly
   - threads <- magic.Thread
   - thread_weaving_unlocks <- magic.CharacterThreadWeavingUnlock
   - unseen_observations <- scenes.SceneUnseenObserver
@@ -1651,6 +1654,7 @@
   - challenge_records <- mechanics.CharacterChallengeRecord
   - engagement <- mechanics.CharacterEngagement
   - consequence_outcomes <- checks.ConsequenceOutcome
+  - owned_check_types <- checks.CheckType
   - relationships_as_source <- relationships.CharacterRelationship
   - relationships_as_target <- relationships.CharacterRelationship
   - relationshipupdate_set <- relationships.RelationshipUpdate
@@ -1754,11 +1758,13 @@
 
 ### CheckCategory
 **Pointed to by:**
+  - condition_check_modifiers <- conditions.ConditionCheckModifier
   - check_types <- checks.CheckType
 
 ### CheckType
 **Foreign Keys:**
   - category -> checks.CheckCategory [FK]
+  - owner_sheet -> character_sheets.CharacterSheet [FK] (nullable)
 **Pointed to by:**
   - action_templates <- actions.ActionTemplate
   - action_template_gates <- actions.ActionTemplateGate
@@ -2723,7 +2729,8 @@
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK] (nullable)
   - stage -> conditions.ConditionStage [FK] (nullable)
-  - check_type -> checks.CheckType [FK]
+  - check_type -> checks.CheckType [FK] (nullable)
+  - check_category -> checks.CheckCategory [FK] (nullable)
 
 ### ConditionResistanceModifier
 **Foreign Keys:**
@@ -3719,6 +3726,7 @@
   - skill_usages <- progression.WeeklySkillUsage
   - vote_budgets <- progression.WeeklyVoteBudget
   - votes <- progression.WeeklyVote
+  - technique_progress_weekly <- magic.TechniqueProgressWeekly
   - purse_drain_weeks <- currency.PurseDrainWeek
   - relationships <- relationships.CharacterRelationship
   - journal_xp_trackers <- journals.WeeklyJournalXP
@@ -4770,6 +4778,8 @@
   - granted_by_tradition_gifts <- magic.TraditionGiftGrant
   - variants <- magic.TechniqueVariant
   - grants <- magic.TechniqueGrant
+  - progress_records <- magic.TechniqueProgress
+  - progress_weekly <- magic.TechniqueProgressWeekly
   - anchored_threads <- magic.Thread
   - scene_action_requests <- scenes.SceneActionRequest
   - alternate_self_grants <- forms.AlternateSelf
@@ -5522,6 +5532,18 @@
   - technique -> magic.Technique [FK]
   - item_template -> items.ItemTemplate [FK] (nullable)
   - ritual -> magic.Ritual [FK] (nullable)
+
+### TechniqueProgress
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - technique -> magic.Technique [FK]
+  - teacher_tenure -> roster.RosterTenure [FK] (nullable)
+
+### TechniqueProgressWeekly
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - technique -> magic.Technique [FK]
+  - game_week -> game_clock.GameWeek [FK]
 
 ### ThreadPullCost
 
@@ -7284,6 +7306,7 @@
   - gift_unlocks_taught <- magic.CharacterGiftUnlock
   - technique_teaching_offers <- magic.TechniqueTeachingOffer
   - taught_rituals <- magic.CharacterRitualKnowledge
+  - technique_progress_taught <- magic.TechniqueProgress
   - thread_weaving_unlocks_taught <- magic.CharacterThreadWeavingUnlock
   - thread_weaving_offers <- magic.ThreadWeavingTeachingOffer
   - friendships_made <- scenes.Friendship

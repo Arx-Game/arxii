@@ -18,7 +18,7 @@ callable. Members are the modules' own existing ``_ensure_*`` helpers, wrapped w
 take arguments. Registering a helper here does NOT stop its gameplay call site working —
 those calls stay, stay idempotent, and remain the self-healing path if a row is deleted.
 
-See ADR-0169, and ADR-0168 for the model-level rule this carves out of.
+See ADR-0171, and ADR-0168 for the model-level rule this carves out of.
 """
 
 from __future__ import annotations
