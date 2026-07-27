@@ -81,20 +81,85 @@ def get_heritage_errors(draft: CharacterDraft) -> list[str]:
     return errors
 
 
+def get_draft_parent_lines(draft: CharacterDraft) -> list:
+    """Heredity ParentLines for a draft's parents (#2815).
+
+    Claimed kin slot: derive from the slot node's authored true edges.
+    Invented parents: the dominant line is implicit (the child's species, per
+    back-inference) and only a declared cross-species other parent
+    contributes; player-invented parents are always band-null.
+    """
+    from world.roster.services.heredity import ParentLine, derive_lines_for_child  # noqa: PLC0415
+
+    if draft.claimed_kin_slot is not None:
+        return derive_lines_for_child(draft.claimed_kin_slot)
+    if draft.second_parent_species is not None:
+        return [
+            ParentLine(
+                kinsperson=None,
+                species=draft.selected_species,
+                band=None,
+                is_dominant_role=True,
+            ),
+            ParentLine(
+                kinsperson=None,
+                species=draft.second_parent_species,
+                band=None,
+                is_dominant_role=False,
+            ),
+        ]
+    return []
+
+
+def _get_heredity_species_errors(draft: CharacterDraft) -> list[str]:
+    """Parent Dominance legality for the chosen species (#2815).
+
+    One-directional and creation-time only: a claimed slot's authored parents
+    must support the chosen species *now*. When chimeric is possible (both
+    parents Grand+), any species is accepted — chimeric offspring are unique
+    authored species that no enumeration can predict, and a staff-authored
+    slot at that power implies staff intent.
+    """
+    from world.roster.services.heredity import derivable_species  # noqa: PLC0415
+
+    if draft.selected_species is None or draft.claimed_kin_slot is None:
+        return []
+    lines = get_draft_parent_lines(draft)
+    if not lines:
+        return []
+    derivation = derivable_species(lines, fallback_maternal=draft.selected_species)
+    if draft.selected_species in derivation.allowed or derivation.chimeric_possible:
+        return []
+    allowed_names = ", ".join(species.name for species in derivation.allowed)
+    return [
+        f"{draft.selected_species.name} is not derivable from this slot's parents "
+        f"(allowed: {allowed_names})"
+    ]
+
+
 def get_lineage_errors(draft: CharacterDraft) -> list[str]:
     """Return validation errors for the Lineage stage."""
+    errors: list[str] = []
+    # A declared cross-species parent must actually be named (#2815).
+    if (
+        draft.second_parent_species is not None
+        and not str(draft.draft_data.get("other_parent_name", "")).strip()
+    ):
+        errors.append("Name the parent whose species you selected")
+    errors.extend(_get_heredity_species_errors(draft))
     # Family chosen completes lineage (family provides surname)
     if draft.family is not None:
-        return []
+        return errors
     # Familyless characters (orphan or unknown origins) need a tarot card
     is_familyless = (
         draft.selected_beginnings and not draft.selected_beginnings.family_known
     ) or draft.draft_data.get("lineage_is_orphan", False)
     if is_familyless:
         if not draft.draft_data.get("tarot_card_name"):
-            return ["Select a tarot card for your surname"]
-        return []
-    return ["Select a family"]
+            errors.append("Select a tarot card for your surname")
+        return errors
+    errors.append("Select a family")
+    return errors
 
 
 def get_distinctions_errors(draft: CharacterDraft) -> list[str]:
@@ -169,6 +234,49 @@ def get_attributes_errors(draft: CharacterDraft) -> list[str]:
     return errors
 
 
+def _get_form_trait_errors(draft: CharacterDraft) -> list[str]:
+    """Required traits + palette legality for form-trait picks (#2815).
+
+    Every ``is_required`` trait for the species needs a selection, and every
+    selected option must sit in the species' own palette or among the
+    inherited options a cross-species parent makes legal (pinned-aware).
+    """
+    from world.forms.models import SpeciesFormTrait  # noqa: PLC0415
+    from world.forms.services import get_cg_form_options  # noqa: PLC0415
+    from world.roster.services.heredity import inherited_options  # noqa: PLC0415
+
+    species = draft.selected_species
+    if species is None:
+        return []
+    errors: list[str] = []
+    selections = draft.draft_data.get("form_traits") or {}
+
+    required_links = SpeciesFormTrait.objects.filter(
+        species=species, is_available_in_cg=True, is_required=True
+    ).select_related("trait")
+    errors.extend(
+        f"Select a {link.trait.display_name}"
+        for link in required_links
+        if not selections.get(link.trait.name)
+    )
+
+    if not selections:
+        return errors
+
+    own_palette = get_cg_form_options(species)
+    legal_pks = {opt.pk for options in own_palette.values() for opt in options}
+    lines = get_draft_parent_lines(draft)
+    if lines:
+        for entry in inherited_options(species, lines):
+            legal_pks.update(opt.pk for opt in entry.options)
+    trait_names = {trait.name: trait.display_name for trait in own_palette}
+    for trait_name, option_id in selections.items():
+        if isinstance(option_id, int) and option_id not in legal_pks:
+            display = trait_names.get(trait_name, trait_name)
+            errors.append(f"{display} selection is not available to your species or lineage")
+    return errors
+
+
 def get_appearance_errors(draft: CharacterDraft) -> list[str]:
     """Return validation errors for the Appearance stage."""
     errors: list[str] = []
@@ -182,6 +290,7 @@ def get_appearance_errors(draft: CharacterDraft) -> list[str]:
         errors.append("Set exact height")
     if draft.build is None:
         errors.append("Select a build")
+    errors.extend(_get_form_trait_errors(draft))
     return errors
 
 
