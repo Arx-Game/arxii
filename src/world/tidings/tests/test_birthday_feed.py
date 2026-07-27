@@ -19,7 +19,7 @@ class BirthdayFeedTests(TestCase):
     def setUpTestData(cls) -> None:
         GameClockFactory()
         cls.room_profile = RoomProfileFactory()
-        cls.room = cls.room_profile.room
+        cls.room = cls.room_profile.objectdb
         cls.active_roster = RosterFactory(name="Active", roster_type=RosterType.ACTIVE)
         cls.npc_roster = RosterFactory(name="NPC Shelf", roster_type=RosterType.NPC)
 

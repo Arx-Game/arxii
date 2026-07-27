@@ -175,6 +175,8 @@ class CastUsesPerCharacterCheckTests(TestCase):
             selected_path=self.path,
             selected_tradition=self.tradition,
             age=25,
+            birthday_month=6,
+            birthday_day=12,
             height_band=self.height_band,
             height_inches=6050,
             build=self.build,
