@@ -795,6 +795,19 @@ class CharacterDraft(SharedMemoryModel):
             "filled later through review."
         ),
     )
+    # Invented parents (#2815): names/genders ride draft_data (line_parent_name,
+    # other_parent_name, line_parent_gender_id, other_parent_gender_id); only the
+    # cross-species declaration needs a queryable column. Player-invented parents
+    # are always band-null, so maternal dominance holds and this only unlocks the
+    # other parent's palette in the appearance stage.
+    second_parent_species = models.ForeignKey(
+        "species.Species",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Species of the invented non-dominant parent when cross-species (#2815).",
+    )
     # Note: orphan intent can be represented in draft_data to avoid extra boolean field.
 
     # Stage 5: Path

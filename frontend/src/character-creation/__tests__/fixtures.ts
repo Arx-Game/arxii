@@ -226,6 +226,7 @@ export const mockEmptyDraft: CharacterDraft = {
   selected_gender: null,
   public_worship: null,
   secret_worship: null,
+  second_parent_species: null,
   age: null,
   birthday_month: null,
   birthday_day: null,

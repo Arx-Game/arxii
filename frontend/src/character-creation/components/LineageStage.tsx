@@ -26,8 +26,10 @@ import {
   useCGExplanations,
   useClaimableTitles,
   useFamilies,
+  useGenders,
   useHouseClaim,
   useNamingRitualConfig,
+  useSpecies,
   useTarotCards,
   useUpdateDraft,
   useFamilySlots,
@@ -254,10 +256,153 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
 
           {draft.family && <KinSlotPicker draft={draft} familyId={draft.family.id} />}
 
+          {!draft.claimed_kin_slot && !draft.claimed_kin_pool && !draft.defer_parents && (
+            <InventedParentsCard draft={draft} />
+          )}
+
           {!draft.family && <HouseFoundingPanel draft={draft} />}
         </section>
       )}
     </motion.div>
+  );
+}
+
+// =============================================================================
+// InventedParentsCard — name your parents; a cross-species parent unlocks
+// their line's colors in the Appearance stage (#2815)
+// =============================================================================
+
+function InventedParentsCard({ draft }: { draft: CharacterDraft }) {
+  const updateDraft = useUpdateDraft();
+  const { data: genders } = useGenders();
+  const { data: species } = useSpecies();
+
+  const draftData = draft.draft_data;
+  const [lineName, setLineName] = useState<string>(draftData.line_parent_name ?? '');
+  const [otherName, setOtherName] = useState<string>(draftData.other_parent_name ?? '');
+
+  useEffect(() => {
+    setLineName(draftData.line_parent_name ?? '');
+    setOtherName(draftData.other_parent_name ?? '');
+  }, [draftData.line_parent_name, draftData.other_parent_name]);
+
+  const lineGenderId = draftData.line_parent_gender_id ?? null;
+  const otherGenderId = draftData.other_parent_gender_id ?? null;
+  const sameGender = lineGenderId !== null && lineGenderId === otherGenderId;
+
+  const commitDraftData = (patch: Record<string, unknown>) => {
+    updateDraft.mutate({ draftId: draft.id, data: { draft_data: patch } });
+  };
+
+  const commitName = (key: 'line_parent_name' | 'other_parent_name', value: string) => {
+    if ((draftData[key] ?? '') === value.trim()) return;
+    commitDraftData({ [key]: value.trim() });
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium text-muted-foreground">Your Parents</Label>
+      <p className="text-xs text-muted-foreground">
+        Optional — name them and they become part of your family record. A parent of another species
+        opens that line&apos;s features for your appearance.
+        {sameGender && (
+          <span>
+            {' '}
+            Two parents of the same gender bore you through the Tree of Souls — the first parent
+            invoked the ritual and carries your line.
+          </span>
+        )}
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="line-parent-name" className="text-xs">
+            Line parent (your species)
+          </Label>
+          <Input
+            id="line-parent-name"
+            placeholder="Name (optional)"
+            value={lineName}
+            onChange={(e) => setLineName(e.target.value)}
+            onBlur={(e) => commitName('line_parent_name', e.target.value)}
+          />
+          <Select
+            value={lineGenderId !== null ? String(lineGenderId) : ''}
+            onValueChange={(value) =>
+              commitDraftData({ line_parent_gender_id: parseInt(value, 10) })
+            }
+          >
+            <SelectTrigger aria-label="Line parent gender">
+              <SelectValue placeholder="Gender" />
+            </SelectTrigger>
+            <SelectContent>
+              {(genders ?? []).map((gender) => (
+                <SelectItem key={gender.id} value={String(gender.id)}>
+                  {gender.display_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="other-parent-name" className="text-xs">
+            Other parent
+          </Label>
+          <Input
+            id="other-parent-name"
+            placeholder="Name (optional)"
+            value={otherName}
+            onChange={(e) => setOtherName(e.target.value)}
+            onBlur={(e) => commitName('other_parent_name', e.target.value)}
+          />
+          <Select
+            value={otherGenderId !== null ? String(otherGenderId) : ''}
+            onValueChange={(value) =>
+              commitDraftData({ other_parent_gender_id: parseInt(value, 10) })
+            }
+          >
+            <SelectTrigger aria-label="Other parent gender">
+              <SelectValue placeholder="Gender" />
+            </SelectTrigger>
+            <SelectContent>
+              {(genders ?? []).map((gender) => (
+                <SelectItem key={gender.id} value={String(gender.id)}>
+                  {gender.display_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={
+              draft.second_parent_species !== null && draft.second_parent_species !== undefined
+                ? String(draft.second_parent_species)
+                : ''
+            }
+            onValueChange={(value) =>
+              updateDraft.mutate({
+                draftId: draft.id,
+                data: {
+                  second_parent_species_id: value === 'same' ? null : parseInt(value, 10),
+                },
+              })
+            }
+          >
+            <SelectTrigger aria-label="Other parent species">
+              <SelectValue placeholder="Species (same as yours)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="same">Same as yours</SelectItem>
+              {(species ?? [])
+                .filter((entry) => entry.id !== draft.selected_species?.id)
+                .map((entry) => (
+                  <SelectItem key={entry.id} value={String(entry.id)}>
+                    {entry.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
   );
 }
 

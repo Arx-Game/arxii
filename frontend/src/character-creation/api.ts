@@ -26,7 +26,7 @@ import type {
   Family,
   FamilySlots,
   FamilyTree,
-  FormTraitWithOptions,
+  FormOptionsResponse,
   GenderOption,
   GiftDetail,
   GiftListItem,
@@ -305,8 +305,12 @@ export async function getBuilds(): Promise<Build[]> {
   return res.json();
 }
 
-export async function getFormOptions(speciesId: number): Promise<FormTraitWithOptions[]> {
-  const res = await apiFetch(`${BASE_URL}/form-options/${speciesId}/`);
+export async function getFormOptions(
+  speciesId: number,
+  draftId?: number
+): Promise<FormOptionsResponse> {
+  const suffix = draftId ? `?draft=${draftId}` : '';
+  const res = await apiFetch(`${BASE_URL}/form-options/${speciesId}/${suffix}`);
   if (!res.ok) {
     throw new Error('Failed to load form options');
   }

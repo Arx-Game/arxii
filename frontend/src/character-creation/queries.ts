@@ -86,8 +86,8 @@ export const characterCreationKeys = {
   canCreate: () => [...characterCreationKeys.all, 'can-create'] as const,
   heightBands: () => [...characterCreationKeys.all, 'height-bands'] as const,
   builds: () => [...characterCreationKeys.all, 'builds'] as const,
-  formOptions: (speciesId: number) =>
-    [...characterCreationKeys.all, 'form-options', speciesId] as const,
+  formOptions: (speciesId: number, draftId?: number) =>
+    [...characterCreationKeys.all, 'form-options', speciesId, draftId ?? null] as const,
   statDefinitions: () => [...characterCreationKeys.all, 'stat-definitions'] as const,
   // Magic system keys
   affinities: () => [...characterCreationKeys.all, 'affinities'] as const,
@@ -358,10 +358,10 @@ export function useBuilds() {
   });
 }
 
-export function useFormOptions(speciesId: number | undefined) {
+export function useFormOptions(speciesId: number | undefined, draftId?: number) {
   return useQuery({
-    queryKey: characterCreationKeys.formOptions(speciesId!),
-    queryFn: () => getFormOptions(speciesId!),
+    queryKey: characterCreationKeys.formOptions(speciesId!, draftId),
+    queryFn: () => getFormOptions(speciesId!, draftId),
     enabled: !!speciesId,
   });
 }

@@ -32,6 +32,7 @@ from world.character_creation.models import (
 )
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
+from world.roster.constants import ParentageKind
 from world.roster.models import Roster, RosterEntry, RosterTenure
 from world.roster.models.choices import CreationProvenance, RosterType
 
@@ -44,7 +45,8 @@ if TYPE_CHECKING:
         DraftApplication,
         DraftApplicationComment,
     )
-    from world.character_sheets.models import CharacterSheet, Profile
+    from world.character_sheets.models import CharacterSheet, Gender, Profile
+    from world.roster.models import Kinsperson
     from world.scenes.models import Persona
     from world.stories.models import Story
 
@@ -290,18 +292,133 @@ def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
 
     try:
         if draft.claimed_kin_slot is not None:
-            claim_appable_node(node=draft.claimed_kin_slot, sheet=sheet)
+            node = claim_appable_node(node=draft.claimed_kin_slot, sheet=sheet)
+            _pin_heredity_back_inference(draft, node)
             return
         if draft.claimed_kin_pool is not None:
             node = mint_from_pool(draft.claimed_kin_pool, created_by=draft.account)
             claim_appable_node(node=node, sheet=sheet)
+            _pin_heredity_back_inference(draft, node)
             return
     except KinshipServiceError:
         logger.exception(
             "Kinship slot claim failed for draft %s; falling back to self-serve node.",
             draft.pk,
         )
-    ensure_node_for_sheet(sheet, family=draft.family)
+    node = ensure_node_for_sheet(sheet, family=draft.family)
+    _bind_invented_parents(draft, node)
+    _pin_heredity_back_inference(draft, node)
+
+
+def _resolve_draft_gender(gender_id: object) -> Gender | None:
+    """Resolve a draft_data gender id defensively (stale ids are not fatal)."""
+    from world.character_sheets.models import Gender  # noqa: PLC0415
+
+    if not gender_id:
+        return None
+    return Gender.objects.filter(pk=gender_id).first()
+
+
+def _bind_invented_parents(draft: CharacterDraft, child_node: Kinsperson) -> None:
+    """Create NAME_ONLY parent nodes + edges for player-invented parents (#2815).
+
+    Different-gender couples get BIOLOGICAL edges; same-gender couples route
+    through TREE_OF_SOULS with the line parent as ritual invoker (the Tree
+    exists in part so same-sex couples can have children). Player-invented
+    parents are always band-null, so maternal dominance holds by construction.
+    """
+    from world.roster.services.kinship import create_person, record_parentage  # noqa: PLC0415
+
+    line_name = str(draft.draft_data.get("line_parent_name", "")).strip()
+    other_name = str(draft.draft_data.get("other_parent_name", "")).strip()
+    if not line_name and not other_name:
+        return
+
+    line_gender = _resolve_draft_gender(draft.draft_data.get("line_parent_gender_id"))
+    other_gender = _resolve_draft_gender(draft.draft_data.get("other_parent_gender_id"))
+    same_gender = line_gender is not None and line_gender == other_gender
+    kind = ParentageKind.TREE_OF_SOULS if same_gender else ParentageKind.BIOLOGICAL
+
+    line_parent = None
+    if line_name:
+        line_parent = create_person(
+            name=line_name,
+            family=draft.family,
+            gender=line_gender,
+            created_by=draft.account,
+        )
+        line_edge = record_parentage(child=child_node, parent=line_parent, kind=kind)
+        if same_gender:
+            line_edge.is_ritual_invoker = True
+            line_edge.save(update_fields=["is_ritual_invoker"])
+    if other_name:
+        other_parent = create_person(
+            name=other_name,
+            gender=other_gender,
+            created_by=draft.account,
+        )
+        if draft.second_parent_species is not None:
+            other_parent.species = draft.second_parent_species
+            other_parent.save(update_fields=["species"])
+        record_parentage(child=child_node, parent=other_parent, kind=kind)
+
+
+def _pin_heredity_back_inference(draft: CharacterDraft, child_node: Kinsperson) -> None:
+    """Approval-time back-inference pinning (#2815).
+
+    The undefined dominant-line parent acquires the child's species; each
+    off-palette color the child took is attributed to the cross-species parent
+    who acquires it as a pinned trait value. get_or_create never clobbers an
+    existing pin — earlier siblings' definitions win.
+    """
+    from world.forms.models import FormTraitOption  # noqa: PLC0415
+    from world.forms.services import get_cg_form_options  # noqa: PLC0415
+    from world.roster.models import KinspersonTraitValue  # noqa: PLC0415
+    from world.roster.services.heredity import derive_lines_for_child  # noqa: PLC0415
+
+    species = draft.selected_species
+    if species is None:
+        return
+    lines = derive_lines_for_child(child_node)
+    if not lines:
+        return
+
+    dominant = next((line for line in lines if line.is_dominant_role), None)
+    if (
+        dominant is not None
+        and dominant.kinsperson is not None
+        and dominant.kinsperson.species is None
+    ):
+        dominant.kinsperson.species = species
+        dominant.kinsperson.save(update_fields=["species"])
+
+    cross_parents = [
+        line.kinsperson
+        for line in lines
+        if not line.is_dominant_role
+        and line.kinsperson is not None
+        and line.kinsperson.species is not None
+        and line.kinsperson.species != species
+    ]
+    if not cross_parents:
+        return
+
+    own_palette = get_cg_form_options(species)
+    own_option_pks = {opt.pk for options in own_palette.values() for opt in options}
+    selected_ids = [
+        option_id
+        for option_id in (draft.draft_data.get("form_traits") or {}).values()
+        if isinstance(option_id, int) and option_id not in own_option_pks
+    ]
+    if not selected_ids:
+        return
+    target = cross_parents[0]
+    for option in FormTraitOption.objects.filter(pk__in=selected_ids).select_related("trait"):
+        KinspersonTraitValue.objects.get_or_create(
+            kinsperson=target,
+            trait=option.trait,
+            defaults={"option": option},
+        )
 
 
 def _build_character_full_name(draft: CharacterDraft) -> str:

@@ -3959,7 +3959,11 @@ paths:
   /api/character-creation/form-options/{species_id}/:
     get:
       operationId: character_creation_form_options_retrieve
-      description: Return form traits and options available for the given species.
+      description: |-
+        Return form traits and options available for the given species.
+
+        ``?draft=<id>`` (the requester's own draft) appends the cross-line
+        options that draft's parents unlock, tagged with their source line.
       parameters:
       - in: path
         name: species_id
@@ -36886,6 +36890,9 @@ components:
           readOnly: true
         defer_parents:
           type: boolean
+        second_parent_species:
+          type: integer
+          readOnly: true
         height_band:
           allOf:
           - $ref: '#/components/schemas/HeightBand'
@@ -36978,6 +36985,7 @@ components:
       - height_band
       - id
       - public_worship
+      - second_parent_species
       - secret_worship
       - selected_area
       - selected_beginnings
@@ -37071,6 +37079,10 @@ components:
           nullable: true
         defer_parents:
           type: boolean
+        second_parent_species_id:
+          type: integer
+          writeOnly: true
+          nullable: true
         height_band_id:
           type: integer
           writeOnly: true
@@ -42841,10 +42853,12 @@ components:
       enum:
       - color
       - style
+      - feature
       type: string
       description: |-
         * `color` - Color
         * `style` - Style
+        * `feature` - Feature
     FormTypeEnum:
       enum:
       - 'true'
@@ -54993,6 +55007,10 @@ components:
           nullable: true
         defer_parents:
           type: boolean
+        second_parent_species_id:
+          type: integer
+          writeOnly: true
+          nullable: true
         height_band_id:
           type: integer
           writeOnly: true

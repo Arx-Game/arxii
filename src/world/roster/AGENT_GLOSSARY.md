@@ -17,6 +17,29 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   changes who raised you, not whose line you are** (no inheritance claim by
   default); **acknowledged** is legitimation of an existing blood tie.
   _Avoid:_ mother/father slots (retired binary model).
+- **Parent Dominance** (#2815) — the species-inheritance rule set in
+  `services/heredity.py`: a child is the mother's species unless the
+  father's power band strictly exceeds hers; chimeric (a unique authored
+  species) is possible only when both parents are Grand+. Roles are derived
+  at computation time (gender for BIOLOGICAL, ritual invoker for
+  TREE_OF_SOULS), never stored. Validation is one-directional and
+  creation-time only (ADR-0173). _Avoid:_ "crossing" for species mixing —
+  that word is the magic-progression threshold (levels 3/6/11/16/21).
+- **Power band** — `Kinsperson.power_band` (`PowerBand` choices mirroring
+  PathStage names + QUIESCENT). Null = unspecified, assumed sub-Puissant;
+  staff/GM-authored only — players can never set it. Everything below
+  Puissant is one dominance tier; the finer bands are story color.
+- **Ritual invoker** — `ParentageEdge.is_ritual_invoker` on a TREE_OF_SOULS
+  edge: the parent who invoked the ritual, and therefore the dominant line
+  regardless of gender (the Tree exists partly so same-sex couples can have
+  children). At most one per child. _Avoid:_ treating it as a gender slot.
+- **Pinned trait value** — a `KinspersonTraitValue` row: a parent stub's
+  known appearance color. Written by CG approval back-inference (a child's
+  off-palette pick is attributed to the cross-species parent) or staff
+  authoring; the first child to draw on an unpinned trait defines it, and
+  pins constrain later siblings. _Avoid:_ heredity service named "lineage"
+  (that word already means the CG stage, display-lineage, and roadmap
+  lineage powers).
 - **Step-parent / in-law** — DERIVED relations (a parent's union partner
   with no parentage edge to you; a spouse's blood kin), never stored — the
   fix for Arx 1's unmarked-in-law ambiguity.

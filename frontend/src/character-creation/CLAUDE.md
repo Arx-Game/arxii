@@ -62,6 +62,7 @@ character-creation/
 - `GET /api/character-creation/gifts/?draft_id=X` - List gifts pickable for the draft's tradition + path
 - `GET /api/character-creation/technique-options/?draft_id=X&gift_id=Y` - List technique options (pool ∪ signature) for the chosen gift
 - `GET /api/character-creation/glimpse-tags/` - List the active glimpse tag catalog (guided Glimpse flow, #2427)
+- `GET /api/character-creation/form-options/{species_id}/?draft=X` - Trait palettes (`{traits, inherited}`; traits carry `is_required`, `?draft=` appends cross-line option groups from the draft's parents, #2815)
 - `POST /api/character-creation/drafts/{id}/submit/` - Submit for review
 - `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff direct add
 

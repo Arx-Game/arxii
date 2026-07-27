@@ -15,7 +15,14 @@ facts from #1884.
   ladder (`NAME_ONLY → FUNCTIONARY → STANDING → SHEETED → PC`); anchors:
   `sheet` (OneToOne CharacterSheet), `functionary`. Appable-slot fields
   (`is_appable`, `name_locked`, age band, `allowed_genders`) + CG deferral
-  (`deferred_definer`).
+  (`deferred_definer`). Heredity stub fields (#2815): nullable `species` FK
+  and nullable `power_band` (`PowerBand` choices; null = unspecified,
+  assumed sub-Puissant; staff/GM-authored only).
+- **`KinspersonTraitValue`** — a pinned appearance value (kinsperson →
+  `forms.FormTrait` → `forms.FormTraitOption`, unique per trait, #2815).
+  Written by CG approval back-inference (a child's off-palette color is
+  attributed to the cross-species parent, who acquires it) or authored by
+  staff; once pinned it constrains later siblings' inherited options.
 - **`FamilyMembership`** — claim rows (basis: born/married-in/adopted/
   legitimized/granted/founding; end reasons incl. disowned) — the history +
   law input.
@@ -24,7 +31,9 @@ facts from #1884.
   these; births stamp `born_within_union` for legitimacy law.
 - **`ParentageEdge`** — typed child→parent facts (`BIOLOGICAL /
   TREE_OF_SOULS / VAMPIRIC_EMBRACE / ADOPTIVE / FOSTER / ACKNOWLEDGED`),
-  N per child. Step-parents are DERIVED, never stored.
+  N per child. Step-parents are DERIVED, never stored. `is_ritual_invoker`
+  (#2815) marks the Tree of Souls invoker — the dominant-line partner
+  regardless of gender, at most one per child (partial unique constraint).
 - **`Soul` + `SoulIncarnation`** — reincarnation chains with per-life
   knowledge (the Monique/Covet contract, tested literally).
 - **`KinSlotPool`** — fuzzy appable capacity minting nodes on claim.
@@ -33,6 +42,22 @@ Truth trio on edges/unions/incarnations: `is_public_record`, `is_true`,
 `secret` FK (→`secrets.Secret`; ADR-0010 direction). Hidden + no secret =
 staff-only. `Secret.subject_aware=False` (new field) keeps subject-unaware
 truths off the owner's own shelf (`secrets_owned_by` filters).
+
+## Heredity service (`world.roster.services.heredity`, #2815)
+
+Parent Dominance: species inheritance is magical and maternal by default.
+`DOMINANCE_TIER` collapses `PowerBand` values (everything sub-Puissant,
+including null, is tier 0; then Puissant < True < Grand < Transcendent).
+`derive_lines_for_child(child)` builds `ParentLine`s kind-aware (gender for
+BIOLOGICAL, `is_ritual_invoker` for TREE_OF_SOULS); `derivable_species`
+returns the legal child species (maternal always; paternal appended when his
+tier strictly exceeds hers; `chimeric_possible` when both are Grand+ and
+differ); `inherited_options` returns cross-line `FormTraitOption`s per trait
+(pins constrain, unpinned parents expose their species palette, own-palette
+overlap excluded so hidden ancestry stays hideable). Validation built on it
+is **one-directional and creation-time only** (ADR-0173): outcomes require
+supporting bands when created; parents may be retro-defined upward freely.
+Named "heredity" — NOT "lineage" (that word is taken three other ways).
 
 ## Services (`world.roster.services.kinship`)
 

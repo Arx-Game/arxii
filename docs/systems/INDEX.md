@@ -762,7 +762,9 @@ Species/race definitions with stat bonuses, language assignments, and species-gi
   `CharacterDraft.calculate_cg_points_breakdown()` (character_creation).
 - **Key Methods:** `Species.get_stat_bonuses_dict()`, `Species.is_subspecies`
 - **Integrates with:** character_creation (Beginnings.allowed_species, CG points
-  breakdown), forms (physical traits), magic (GIFT thread via
+  breakdown), forms (physical traits — per-species palettes + `is_required`
+  identity markers on `SpeciesFormTrait`), roster heredity (Parent Dominance
+  species inheritance, #2815 / ADR-0173), magic (GIFT thread via
   `provision_latent_gift_thread`), conditions (drawback/benefit condition application),
   distinctions (forced drawback distinction grant)
 - **Source:** `src/world/species/`
@@ -779,7 +781,8 @@ shapeshift lifecycle.
   `CharacterKnownStyle` (#2632 — learned by having it done: NPC stylist or a knowing PC
   stylist teaches on application), `FormCombatProfile`, `FormCombatProfileEffect`,
   `AlternateSelf`, `ActiveAlternateSelf`
-- **Enums:** `TraitType` (color/style), `FormType` (TRUE/ALTERNATE/DISGUISE), `DurationType`
+- **Enums:** `TraitType` (color/style/feature — FEATURE = structural species markers:
+  horns, wings, fangs, #2815), `FormType` (TRUE/ALTERNATE/DISGUISE), `DurationType`
 - **Key Services:** `assume_alternate_self(sheet, alt)`, `revert_alternate_self(sheet)`,
   `switch_form(character, target_form)`, `revert_to_true_form(character)`,
   `get_presented_appearance(character)` (normalized = joined blend components when present),
@@ -1729,19 +1732,30 @@ Character lifecycle management with web-first applications and player anonymity.
 Person-node genealogy: typed parentage/union edges, truth-vs-public-record via
 Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
 
-- **Models:** `Family`, `Kinsperson` (5 definition tiers), `FamilyMembership`,
-  `UnionKind`/`Union`, `ParentageEdge` (6 kinds; step/in-law DERIVED),
-  `Soul`/`SoulIncarnation`, `KinSlotPool`; `Secret.subject_aware` delta
+- **Models:** `Family`, `Kinsperson` (5 definition tiers; heredity stubs
+  `species`/`power_band`, #2815), `FamilyMembership`, `UnionKind`/`Union`,
+  `ParentageEdge` (6 kinds; step/in-law DERIVED; `is_ritual_invoker` marks the
+  Tree of Souls dominant line), `KinspersonTraitValue` (lazily-pinned parent
+  colors), `Soul`/`SoulIncarnation`, `KinSlotPool`; `Secret.subject_aware` delta
+- **Enums:** `PowerBand` (Quiescent→Transcendent; null = assumed sub-Puissant)
 - **Services:** `world.roster.services.kinship` — viewer-aware walks
   (`derive_relationship`, `family_tree_for`, `parents_of`...), writers
   (`record_parentage`/`record_union`/`record_incarnation`, memberships,
-  `mint_from_pool`/`claim_appable_node`/`define_deferred`); `OMNISCIENT` sentinel
+  `mint_from_pool`/`claim_appable_node`/`define_deferred`); `OMNISCIENT` sentinel.
+  `world.roster.services.heredity` (#2815) — Parent Dominance:
+  `derive_lines_for_child`/`derivable_species`/`inherited_options`
 - **Surfaces:** `families/:id/tree/` + `families/:id/slots/` REST; CG slot claim
   (draft `claimed_kin_slot/_pool`, `_bind_kinship_node` at finalize; FE
-  `KinSlotPicker`); telnet `sheet/family`; staff admin. Seeds: cluster `kinship`
-- **Consumed by:** #1884 recognition/succession law; #1985 estates (future)
-- **Source:** `src/world/roster/models/families.py`, `services/kinship.py`
-- **Details:** [kinship.md](kinship.md) · ADR-0097
+  `KinSlotPicker`); CG invented parents (`second_parent_species` + draft_data
+  names/genders → `_bind_invented_parents` + `_pin_heredity_back_inference` at
+  finalize; FE `InventedParentsCard`); parent-aware
+  `form-options/:species_id/?draft=` (inherited option groups + `is_required`);
+  telnet `sheet/family`; staff admin. Seeds: cluster `kinship`
+- **Consumed by:** #1884 recognition/succession law; #1985 estates (future);
+  future child-generation spec (deferred, #2815)
+- **Source:** `src/world/roster/models/families.py`, `services/kinship.py`,
+  `services/heredity.py`
+- **Details:** [kinship.md](kinship.md) · ADR-0097 · ADR-0173
 
 ### GM
 Player-GM identity, tables, roster recruitment, and the trust ladder that caps what a

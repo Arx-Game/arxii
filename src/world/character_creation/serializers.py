@@ -487,6 +487,15 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     defer_parents = serializers.BooleanField(required=False)
     claimed_kin_slot = serializers.PrimaryKeyRelatedField(read_only=True)
     claimed_kin_pool = serializers.PrimaryKeyRelatedField(read_only=True)
+    # Invented cross-species parent (#2815)
+    second_parent_species = serializers.PrimaryKeyRelatedField(read_only=True)
+    second_parent_species_id = serializers.PrimaryKeyRelatedField(
+        queryset=Species.objects.all(),
+        source="second_parent_species",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
     # Appearance fields
     height_band = HeightBandSerializer(read_only=True)
     height_band_id = serializers.PrimaryKeyRelatedField(
@@ -565,6 +574,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "claimed_kin_pool",
             "claimed_kin_pool_id",
             "defer_parents",
+            "second_parent_species",
+            "second_parent_species_id",
             "height_band",
             "height_band_id",
             "height_inches",

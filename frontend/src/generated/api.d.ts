@@ -2560,7 +2560,12 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Return form traits and options available for the given species. */
+    /**
+     * @description Return form traits and options available for the given species.
+     *
+     *     ``?draft=<id>`` (the requester's own draft) appends the cross-line
+     *     options that draft's parents unlock, tagged with their source line.
+     */
     get: operations['character_creation_form_options_retrieve'];
     put?: never;
     post?: never;
@@ -21923,6 +21928,7 @@ export interface components {
       readonly claimed_kin_slot: number;
       readonly claimed_kin_pool: number;
       defer_parents?: boolean;
+      readonly second_parent_species: number;
       readonly height_band: components['schemas']['HeightBand'];
       height_inches?: number | null;
       readonly build: components['schemas']['Build'];
@@ -22002,6 +22008,7 @@ export interface components {
       claimed_kin_slot_id?: number | null;
       claimed_kin_pool_id?: number | null;
       defer_parents?: boolean;
+      second_parent_species_id?: number | null;
       height_band_id?: number | null;
       height_inches?: number | null;
       build_id?: number | null;
@@ -24688,9 +24695,10 @@ export interface components {
     /**
      * @description * `color` - Color
      *     * `style` - Style
+     *     * `feature` - Feature
      * @enum {string}
      */
-    FormTraitTraitTypeEnum: 'color' | 'style';
+    FormTraitTraitTypeEnum: 'color' | 'style' | 'feature';
     /**
      * @description * `true` - True Form
      *     * `alternate` - Alternate Form
@@ -31342,6 +31350,7 @@ export interface components {
       claimed_kin_slot_id?: number | null;
       claimed_kin_pool_id?: number | null;
       defer_parents?: boolean;
+      second_parent_species_id?: number | null;
       height_band_id?: number | null;
       height_inches?: number | null;
       build_id?: number | null;
