@@ -1018,6 +1018,9 @@ def seed_character_creation_dev() -> None:
     )
     _seed_form_traits(species)
     _seed_form_traits(species_khati)
+    _seed_feature_traits()
+    if settings.SEED_SAMPLE_CONTENT:
+        _seed_sample_infernal()
     _seed_heritages()
     _seed_pronouns()
     # traits.trait is content-repo-owned (#2698) — looked up rather than
@@ -1314,6 +1317,123 @@ _APPEARANCE_TRAITS: tuple[tuple[str, str, str, bool, tuple[tuple[str, str], ...]
         ),
     ),
 )
+
+
+# Structural species-identity traits (#2815). Seeded as traits + options only —
+# NO default species links, because required markers (horns, wings, fangs) are
+# per-species facts: content authors them via SpeciesFormTrait(is_required=True)
+# with the species' allowed variants. Option variants are PLACEHOLDER lists —
+# staff/content extend freely.
+_FEATURE_TRAITS: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
+    (
+        "horns",
+        "Horns",
+        (("curved", "Curved"), ("straight", "Straight"), ("spiraled", "Spiraled")),
+    ),
+    (
+        "tail",
+        "Tail",
+        (("sleek", "Sleek"), ("tufted", "Tufted"), ("barbed", "Barbed")),
+    ),
+    (
+        "wings",
+        "Wings",
+        (("feathered", "Feathered"), ("leathern", "Leathern"), ("gossamer", "Gossamer")),
+    ),
+    (
+        "ear_shape",
+        "Ear Shape",
+        (
+            ("pointed", "Pointed"),
+            ("swept", "Swept"),
+            ("feline", "Feline"),
+            ("vulpine", "Vulpine"),
+        ),
+    ),
+    (
+        "fangs",
+        "Fangs",
+        (("subtle", "Subtle"), ("pronounced", "Pronounced")),
+    ),
+    (
+        "patches",
+        "Scale/Fur Patches",
+        (("scaled", "Scaled"), ("furred", "Furred"), ("mottled", "Mottled")),
+    ),
+)
+
+
+def _seed_feature_traits() -> None:
+    """Seed structural FEATURE traits + options, unlinked to any species (#2815).
+
+    Content-repo-owned like the color traits — ``authored_or_sample`` rows,
+    invented only under ``SEED_SAMPLE_CONTENT``. Species links (with
+    ``is_required``/palette gating) are authored per species; the sample tier
+    demonstrates the pattern via ``_seed_sample_infernal``.
+    """
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    base_sort = len(_APPEARANCE_TRAITS)
+    for sort_idx, (name, display_name, options) in enumerate(_FEATURE_TRAITS):
+        trait = authored_or_sample(
+            FormTrait,
+            {
+                "display_name": display_name,
+                "trait_type": FormTraitType.FEATURE,
+                "is_cosmetic": False,
+                "sort_order": base_sort + sort_idx,
+            },
+            name=name,
+        )
+        if trait is None:
+            continue
+        for opt_sort_idx, (opt_name, opt_display) in enumerate(options):
+            authored_or_sample(
+                FormTraitOption,
+                {"display_name": opt_display, "sort_order": opt_sort_idx},
+                trait=trait,
+                name=opt_name,
+            )
+
+
+def _seed_sample_infernal() -> None:
+    """Sample Infernal demonstrating heredity gating (#2815). SAMPLE tier only.
+
+    Required horns + tail (species identity markers) and a restricted color
+    palette, so human-exclusive colors are legible on a fresh clone: an
+    Infernal-listed child of a human parent taking "blonde" hair or "hazel"
+    eyes is visibly carrying human blood. Real rosters/palettes are
+    content-repo authored.
+    """
+    infernal, _ = Species.objects.get_or_create(
+        name="Infernal",
+        defaults={
+            "description": "PLACEHOLDER — a species marked by horns and tail.",
+            "sort_order": 2,
+        },
+    )
+
+    def _link(
+        trait_name: str, *, required: bool = False, allowed: tuple[str, ...] | None = None
+    ) -> None:
+        trait = FormTrait.objects.filter(name=trait_name).first()
+        if trait is None:
+            return
+        link, _ = SpeciesFormTrait.objects.get_or_create(
+            species=infernal,
+            trait=trait,
+            defaults={"is_available_in_cg": True, "is_required": required},
+        )
+        if allowed and not link.allowed_options.exists():
+            options = FormTraitOption.objects.filter(trait=trait, name__in=allowed)
+            link.allowed_options.set(options)
+
+    _link("horns", required=True)
+    _link("tail", required=True)
+    _link("hair_color", allowed=("black", "red", "white", "violet"))
+    _link("eye_color", allowed=("green", "gray", "mismatched"))
+    _link("skin_tone", allowed=("medium", "tan", "dark"))
+    _link("hair_style")
 
 
 def _seed_form_traits(species: Species | None) -> None:
