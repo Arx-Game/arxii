@@ -101,7 +101,7 @@ class BattlePerilRescueE2EJourneyTest(TestCase):
             # exclusion). Assert this mock is never called — proves the exclusion holds,
             # not just that the stage happens to still read 1.
             patch(
-                "world.vitals.services.perform_check", return_value=_stub_check(-999)
+                "world.vitals.services.perform_check_with_modifiers", return_value=_stub_check(-999)
             ) as escalation_check_mock,
         ):
             _run(self.gm_char, "resolve")
@@ -115,7 +115,9 @@ class BattlePerilRescueE2EJourneyTest(TestCase):
         _run(self.gm_char, "round")
         # Only the rescuer declares (a SUPPORT no-op target isn't needed for this
         # assertion) -- the PC's own peril still ticks because afk_peril_override=True.
-        with patch("world.vitals.services.perform_check", return_value=_stub_check(-1)):
+        with patch(
+            "world.vitals.services.perform_check_with_modifiers", return_value=_stub_check(-1)
+        ):
             _run(self.gm_char, "resolve")
 
         instance.refresh_from_db()
