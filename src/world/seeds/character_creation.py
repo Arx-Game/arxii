@@ -1322,43 +1322,62 @@ _APPEARANCE_TRAITS: tuple[tuple[str, str, str, bool, tuple[tuple[str, str], ...]
 # Structural species-identity traits (#2815). Seeded as traits + options only —
 # NO default species links, because required markers (horns, wings, fangs) are
 # per-species facts: content authors them via SpeciesFormTrait(is_required=True)
-# with the species' allowed variants. Option variants are PLACEHOLDER lists —
-# staff/content extend freely.
+# with the species' allowed variants. Trait/option NAMES mirror the canonical
+# content-repo vocabulary (ear_type/horn_type/tail_type/wing_type/fangs/claws/
+# facial_markings) — the sample tier is a strict subset, never a rename.
 _FEATURE_TRAITS: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     (
-        "horns",
-        "Horns",
-        (("curved", "Curved"), ("straight", "Straight"), ("spiraled", "Spiraled")),
-    ),
-    (
-        "tail",
-        "Tail",
-        (("sleek", "Sleek"), ("tufted", "Tufted"), ("barbed", "Barbed")),
-    ),
-    (
-        "wings",
-        "Wings",
-        (("feathered", "Feathered"), ("leathern", "Leathern"), ("gossamer", "Gossamer")),
-    ),
-    (
-        "ear_shape",
-        "Ear Shape",
+        "ear_type",
+        "Ear Type",
         (
+            ("normal", "Normal"),
             ("pointed", "Pointed"),
-            ("swept", "Swept"),
             ("feline", "Feline"),
-            ("vulpine", "Vulpine"),
+            ("fox", "Fox"),
         ),
     ),
     (
         "fangs",
         "Fangs",
-        (("subtle", "Subtle"), ("pronounced", "Pronounced")),
+        (("no", "No"), ("yes", "Yes")),
     ),
     (
-        "patches",
-        "Scale/Fur Patches",
-        (("scaled", "Scaled"), ("furred", "Furred"), ("mottled", "Mottled")),
+        "claws",
+        "Claws",
+        (("no", "No"), ("yes", "Yes")),
+    ),
+    (
+        "tail_type",
+        "Tail Type",
+        (
+            ("none", "None"),
+            ("short", "Short"),
+            ("long", "Long"),
+            ("feline", "Feline"),
+        ),
+    ),
+    (
+        "wing_type",
+        "Wing Type",
+        (
+            ("none", "None"),
+            ("bat_large", "Large Bat-like"),
+            ("feather_white", "White Feathered"),
+        ),
+    ),
+    (
+        "horn_type",
+        "Horn Type",
+        (
+            ("none", "None"),
+            ("small_curved", "Small Curved"),
+            ("spiral", "Spiral"),
+        ),
+    ),
+    (
+        "facial_markings",
+        "Facial Markings",
+        (("none", "None"), ("runic_pattern", "Runic Pattern")),
     ),
 )
 
@@ -1400,7 +1419,7 @@ def _seed_sample_infernal() -> None:
     """Sample Infernal demonstrating heredity gating (#2815). SAMPLE tier only.
 
     Required horns + tail (species identity markers) and a restricted color
-    palette, so human-exclusive colors are legible on a fresh clone: an
+    palette, so excluded colors are legible on a fresh clone: an
     Infernal-listed child of a human parent taking "blonde" hair or "hazel"
     eyes is visibly carrying human blood. Real rosters/palettes are
     content-repo authored.
@@ -1428,8 +1447,8 @@ def _seed_sample_infernal() -> None:
             options = FormTraitOption.objects.filter(trait=trait, name__in=allowed)
             link.allowed_options.set(options)
 
-    _link("horns", required=True)
-    _link("tail", required=True)
+    _link("horn_type", required=True, allowed=("small_curved", "spiral"))
+    _link("tail_type", required=True, allowed=("short", "long"))
     _link("hair_color", allowed=("black", "red", "white", "violet"))
     _link("eye_color", allowed=("green", "gray", "mismatched"))
     _link("skin_tone", allowed=("medium", "tan", "dark"))

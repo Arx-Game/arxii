@@ -9,8 +9,11 @@ Domain-local vocabulary for `world.species`. Root terms live in
   ancestry is the roster kinship graph. _Avoid:_ race (legacy term).
 - **Species palette** — the `forms.SpeciesFormTrait.allowed_options` set for
   a (species, trait) pair: which colors/variants that species can normally
-  take in CG. Empty = all options. Colors outside every supernatural palette
-  but inside Human's are how human blood shows on a supernatural child.
+  take in CG. Empty = all options. Palettes are broad with pointed
+  per-species *exclusions* (an Infernal cannot natively have fair skin or
+  light-blue eyes); wearing an excluded color is the visible tell of
+  cross-line blood. _Avoid:_ "human-exclusive colors" (retired first-pass
+  framing).
 - **Required trait** — `SpeciesFormTrait.is_required=True`: a species
   identity marker (horns + tail for True Infernals, wings for Daeva, fangs
   for vampires) that CG must fill. Species identity is protected by required
