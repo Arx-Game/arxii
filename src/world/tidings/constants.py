@@ -8,3 +8,9 @@ class FeedItemKind(models.TextChoices):
 
     DEED = "deed", "Deed"
     SCANDAL = "scandal", "Scandal"
+    # Fix-on-sight (#2756): pardon/crisis rows were emitted as raw strings that
+    # bypassed this enum while PublicFeedItemSerializer.kind validates against
+    # its choices — enum membership makes the serializer honest.
+    PARDON = "pardon", "Pardon"
+    CRISIS = "crisis", "Crisis"
+    BIRTHDAY = "birthday", "Birthday"

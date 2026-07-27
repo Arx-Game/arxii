@@ -110,6 +110,18 @@ SURVIVABILITY_CHECK_CATEGORY: str = "Survival"
 # world.mechanics.factories.max_health_modifier_target().
 MAX_HEALTH_MODIFIER_TARGET: str = "max_health"
 
+# --- Old-age decline (#2756) — all PLACEHOLDER tuning, admin-editable on
+# VitalsConsequenceConfig. Frailty severity counts accumulated decline; its
+# ConditionModifierEffect (-1 x severity vs MAX_HEALTH) is that target's first
+# writer, folded in by recompute_max_health.
+FRAILTY_CONDITION_NAME: str = "Frailty"
+AGING_CHECK_TYPE_NAME: str = "Aging Resistance"
+AGING_DIFFICULTY_PER_YEAR: int = 7
+FRAILTY_FAIL_SEVERITY: int = 2
+FRAILTY_PARTIAL_SEVERITY: int = 1
+AGING_FLOOR_FRACTION: str = "0.20"
+AGING_DEATH_WINDOW_IC_DAYS: int = 30
+
 # ---------------------------------------------------------------------------
 # Peril consequence pool natural-key names
 # ---------------------------------------------------------------------------

@@ -18,7 +18,8 @@ class RosterEntryViewSetTestCase(TestCase):
         self.gender = GenderFactory(key="male", display_name="Male")
         # Factory already created a sheet; update it with test-specific fields.
         self.sheet = self.roster_entry.character_sheet
-        self.sheet.age = 30
+        self.sheet.matured_years = 30
+        self.sheet.withered_years = 0
         self.sheet.gender = self.gender
         self.sheet.concept = "Brave knight"
         self.sheet.vocation = "Warrior"
@@ -77,7 +78,7 @@ class RosterEntryViewSetTestCase(TestCase):
         assert "tenures" in response.data
         character = response.data["character"]
         assert character["name"] == self.roster_entry.character_sheet.character.name
-        assert character["age"] == self.sheet.age
+        assert character["age"] == self.sheet.apparent_age
         # Gender returns display_name string via item_data handler
         assert character["gender"] == self.gender.display_name
         assert character["concept"] == self.sheet.concept

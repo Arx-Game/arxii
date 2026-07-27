@@ -174,6 +174,8 @@ def get_appearance_errors(draft: CharacterDraft) -> list[str]:
     errors: list[str] = []
     if draft.age is None:
         errors.append("Set your character's age")
+    if draft.birthday_month is None or draft.birthday_day is None:
+        errors.append("Pick your character's birthday")
     if draft.height_band is None:
         errors.append("Select a height band")
     if draft.height_inches is None:

@@ -191,7 +191,8 @@ class CharacterSerializerTestCase(TestCase):
         # Create sheet with all item_data fields populated
         CharacterSheetFactory(
             character=character,
-            age=28,
+            matured_years=28,
+            withered_years=0,
             gender=gender,
             species=self.species,
             concept="A skilled warrior-diplomat",

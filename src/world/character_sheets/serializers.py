@@ -9,6 +9,7 @@ in the future when the frontend needs it.
 
 from __future__ import annotations
 
+import calendar
 from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -95,6 +96,31 @@ class OriginSlotClearSerializer(serializers.Serializer):
     slot_id = serializers.IntegerField()
 
 
+class MaturationSpendInputSerializer(serializers.Serializer):
+    """Input for CharacterSheetViewSet.spend-maturation-point (#2756)."""
+
+    trait_id = serializers.IntegerField()
+
+
+class MaturationStatEntrySerializer(serializers.Serializer):
+    """One spendable stat row in the maturation panel (#2756)."""
+
+    trait_id = serializers.IntegerField()
+    name = serializers.CharField()
+    value = serializers.IntegerField()
+    at_cap = serializers.BooleanField()
+
+
+class MaturationStateSerializer(serializers.Serializer):
+    """Response for CharacterSheetViewSet.maturation (#2756): the spend panel state."""
+
+    available_points = serializers.IntegerField()
+    stat_cap = serializers.IntegerField(allow_null=True)
+    matured_years = serializers.IntegerField()
+    next_milestone_year = serializers.IntegerField()
+    stats = MaturationStatEntrySerializer(many=True)
+
+
 # --- Tiny helpers for nested {id, name} representations ---
 
 
@@ -155,6 +181,7 @@ def _build_identity(
     display_name: str | None = None,
     reveal_identity: bool = True,
     bio_profile: Profile | None = None,
+    privileged: bool = False,
 ) -> IdentitySection:
     """Build the identity section (#1109/#1270-aware).
 
@@ -204,12 +231,24 @@ def _build_identity(
     except ObjectDoesNotExist:
         worship = None
 
+    # Celebrated birthday is public sheet data (#2756); the true age axes are
+    # owner/staff-only per the leak table (chronological stays None for a
+    # Sleeper even when privileged — unknowable, rendered "Unknown").
+    if sheet.birthday_month is not None and sheet.birthday_day is not None:
+        birthday = f"{calendar.month_name[sheet.birthday_month]} {sheet.birthday_day}"
+    else:
+        birthday = None
+
     return IdentitySection(
         name=name,
         fullname=fullname,
         concept=concept,
         quote=quote,
-        age=sheet.age,
+        age=sheet.apparent_age,
+        birthday=birthday,
+        chronological_age=sheet.chronological_age if privileged else None,
+        biological_age=sheet.biological_age if privileged else None,
+        withered_years=sheet.withered_years if privileged else None,
         gender=_id_name_or_null(sheet.gender, name_field="display_name"),
         pronouns=pronouns,
         species=_id_name_or_null(sheet.species),
@@ -1172,6 +1211,7 @@ class CharacterSheetSerializer(serializers.Serializer):
                 display_name=display_name,
                 reveal_identity=reveal_identity,
                 bio_profile=bio_profile,
+                privileged=privileged,
             ),
             "appearance": _build_appearance(
                 sheet, reveal_identity=reveal_identity, privileged=privileged

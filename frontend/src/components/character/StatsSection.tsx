@@ -2,6 +2,7 @@ import type { CharacterData } from '@/roster/types';
 
 interface StatsSectionProps {
   age?: CharacterData['age'];
+  birthday?: CharacterData['birthday'];
   gender?: CharacterData['gender'];
   race?: CharacterData['race'];
   charClass?: CharacterData['char_class'];
@@ -14,6 +15,7 @@ interface StatsSectionProps {
 
 export function StatsSection({
   age,
+  birthday,
   gender,
   race,
   charClass,
@@ -29,6 +31,12 @@ export function StatsSection({
       <dl className="grid grid-cols-2 gap-x-2">
         <dt>Age</dt>
         <dd>{age ?? 'TBD'}</dd>
+        {birthday && (
+          <>
+            <dt>Birthday</dt>
+            <dd>{birthday}</dd>
+          </>
+        )}
         <dt>Gender</dt>
         <dd>{gender ?? 'TBD'}</dd>
         <dt>Race</dt>

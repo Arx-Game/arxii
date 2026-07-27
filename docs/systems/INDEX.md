@@ -1391,6 +1391,11 @@ scoped to what a viewer's persona would have heard. **Modelless and greenfield-l
 feed table; the service aggregates two awareness M2Ms other apps already own.
 
 - **No models.** `world.tidings` is a service + API app (no migrations).
+- **Birthday digest (#2756):** `_birthday_items()` is a crier-scope-only source folded into
+  `hub_feed_for_room` — upcoming celebrated birthdays (next 3 IC weeks) of Active-roster,
+  alive, non-dormant characters, as `FeedItemKind.BIRTHDAY` rows. Merge-on-read like every
+  other source. The enum also gained `PARDON`/`CRISIS` (fix-on-sight: those emitters
+  previously bypassed the serializer's choices).
 - **Key functions (`world/tidings/services.py`):** `public_feed_for_societies(society_ids, *,
   limit)` is the core read; `public_feed_for(persona, *, limit)` (viewer scope: union of
   `SocietyReputation` societies + `OrganizationMembership` orgs' societies) and
@@ -1494,7 +1499,8 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 
 - **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
   **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`, `witnesses` M2M → `scenes.Persona`),
-  **Training Site (#1700):** `DuranceTrainingSite` (room + trainer-of-record pair; enables site-convened sessions — `room_profile` FK → `RoomProfile`, `officiant` FK → `CharacterSheet`, `training_path` FK → `Path` (nullable), `is_active`; unique `(room_profile, officiant)`)
+  **Training Site (#1700):** `DuranceTrainingSite` (room + trainer-of-record pair; enables site-convened sessions — `room_profile` FK → `RoomProfile`, `officiant` FK → `CharacterSheet`, `training_path` FK → `Path` (nullable), `is_active`; unique `(room_profile, officiant)`),
+  **Maturation Points (#2756, ADR-0172):** `MaturationStatCap` (authored per-`PathStage` stat cap, seeded 5/6/11/16/21/26 PLACEHOLDER) + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 raw stat value, stage-capped) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it)
 - **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
   - `TraitRequirement` — checks CharacterTraitValue
   - `LevelRequirement` — checks character_class_levels
@@ -1589,8 +1595,23 @@ Character identity, appearance, demographics, and guise system.
   `DecayTier.SHORT_INACTIVE` (30d) is named so it stops colliding with
   `ActivityState.INACTIVE` — a day-count tier and a swept flag are not the same
   thing.
+- **Age axes (#2756, ADR-0172):** `matured_years` + `withered_years` +
+  `aging_paused` + nullable `ic_birth_year` + `birthday_month`/`birthday_day`
+  (celebrated date; Sleeper waking day — `Heritage.chronological_age_unknown`
+  leaves the birth year null). Derived properties `biological_age` (= matured +
+  withered), `apparent_age` (= biological; cosmetic overrides are free and live
+  in the appearance layer), `chronological_age` (vs `get_ic_now()`, None =
+  "Unknown"). Old `age`/`real_age`/`birthday` columns retired. Maturation
+  Points live in progression; decline/Frailty/dying window live in vitals;
+  the birthday digest lives in tidings. Sheet API: identity carries public
+  `age` (apparent) + `birthday`, owner/staff-only `chronological_age`/
+  `biological_age`/`withered_years`; owner actions `GET …/maturation/` +
+  `POST …/spend-maturation-point/`.
 - **Integrates with:** roster (character management), character_creation (sheet setup),
-  gm (table update requests apply prose rewrites), stories (`Era` stamps)
+  gm (table update requests apply prose rewrites), stories (`Era` stamps),
+  game_clock (chronological derivation + aging crons), progression (Maturation
+  Points), vitals (Frailty decline), species (`eternal_youth`,
+  `decline_start_age`), tidings (birthday digest)
 - **Source:** `src/world/character_sheets/`
 - **Details:** [character_sheets.md](character_sheets.md)
 ### Character Creation
@@ -5625,6 +5646,17 @@ combat, poison, spells, exhaustion, and any damage source.
   the mend-cap basis; `health_mended_total` PositiveInt, default 0 — running sum every
   `mend_wound()` call has ever mended on this wound, across every healer; stamped by
   `_record_wound_details` the moment the wound tier applies a wound condition)
+- **Old-age decline (#2756, ADR-0172):** the Frailty condition (severity counts accumulated
+  decline; its `ConditionModifierEffect` −1 × severity vs the `max_health` ModifierTarget is
+  that target's first writer, folded in by `recompute_max_health`). `world/vitals/aging.py`
+  carries the three IC-cadence cron services — `run_birthday_tick` (AFK-safe window query
+  advancing `matured_years`), `run_decline_checks` (Aging Resistance stamina check,
+  difficulty = `aging_difficulty_per_year` × years past `Species.decline_start_age`;
+  Failure/Partial deepen Frailty by `frailty_fail_severity`/`frailty_partial_severity`),
+  `run_death_sweep` (resolves `CharacterVitals.aging_death_ic_deadline` via `_mark_dead` →
+  estates settlement). Config knobs live on `VitalsConsequenceConfig` (all PLACEHOLDER);
+  registered as `aging.birthday_tick`/`aging.decline_check`/`aging.death_sweep`
+  (`FrequencyType.IC`) in `game_clock/tasks.py`.
 - **Key Services (`world/vitals/services.py`):**
   - `is_dead(sheet)`, `is_alive(sheet)`, `can_act(sheet)` — mortality/agency gates.
   - `derive_character_status(sheet) -> str` — compute dead/dying/incapacitated/alive at read time.

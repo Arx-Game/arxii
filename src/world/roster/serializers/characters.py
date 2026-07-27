@@ -26,6 +26,12 @@ class CharacterSerializer(serializers.ModelSerializer):
         read_only=True,
         allow_null=True,
     )
+    # Celebrated birthday, rendered "March 15" by the item_data handler (#2756).
+    birthday = serializers.CharField(
+        source="item_data.birthday",
+        read_only=True,
+        default="",
+    )
     gender = serializers.CharField(
         source="item_data.gender",
         read_only=True,
@@ -70,6 +76,7 @@ class CharacterSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "age",
+            "birthday",
             "gender",
             "race",
             "char_class",

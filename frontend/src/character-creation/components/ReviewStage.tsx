@@ -268,6 +268,29 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
               <InfoRow label="Species" value={draft.selected_species?.name} />
               <InfoRow label="Gender" value={draft.selected_gender?.display_name} />
               <InfoRow label="Age" value={draft.age?.toString()} />
+              <InfoRow
+                label="Birthday"
+                value={
+                  draft.birthday_month && draft.birthday_day
+                    ? `${
+                        [
+                          'January',
+                          'February',
+                          'March',
+                          'April',
+                          'May',
+                          'June',
+                          'July',
+                          'August',
+                          'September',
+                          'October',
+                          'November',
+                          'December',
+                        ][draft.birthday_month - 1]
+                      } ${draft.birthday_day}`
+                    : undefined
+                }
+              />
             </div>
 
             <div>

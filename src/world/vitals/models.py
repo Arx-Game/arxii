@@ -1,13 +1,20 @@
 """Models for the vitals system."""
 
+from decimal import Decimal
+
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from world.vitals.constants import (
+    AGING_DEATH_WINDOW_IC_DAYS,
+    AGING_DIFFICULTY_PER_YEAR,
+    AGING_FLOOR_FRACTION,
     AUTO_RETIRE_DAYS,
     DEATH_BASE_DIFFICULTY,
     DEATH_SCALING_PER_PERCENT,
+    FRAILTY_FAIL_SEVERITY,
+    FRAILTY_PARTIAL_SEVERITY,
     KNOCKOUT_BASE_DIFFICULTY,
     KNOCKOUT_SCALING_PER_PERCENT,
     WAKE_BASE_DIFFICULTY,
@@ -85,6 +92,16 @@ class CharacterVitals(SharedMemoryModel):
         choices=CharacterLifeState.choices,
         default=CharacterLifeState.ALIVE,
         help_text="Mortality axis. Consciousness/dying are conditions, not vitals.",
+    )
+    aging_death_ic_deadline = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "IC datetime at which old-age death resolves (#2756). Stamped when "
+            "Frailty drives max health through the aging floor; the death sweep "
+            "resolves it via _mark_dead once get_ic_now() passes it. Null = not "
+            "in the dying window."
+        ),
     )
     death_deferred_pending = models.BooleanField(
         default=False,
@@ -185,6 +202,42 @@ class VitalsConsequenceConfig(SharedMemoryModel):
     stamina_to_health_weight = models.PositiveSmallIntegerField(
         default=3,
         help_text="Health per point of Stamina contributed to base_max_health.",
+    )
+
+    # ------------------------------------------------------------------
+    # Old-age decline tuning (#2756) — all PLACEHOLDER values
+    # ------------------------------------------------------------------
+
+    aging_difficulty_per_year = models.PositiveSmallIntegerField(
+        default=AGING_DIFFICULTY_PER_YEAR,
+        help_text=(
+            "Aging-check difficulty points per year of biological age past the "
+            "species decline_start_age."
+        ),
+    )
+    frailty_fail_severity = models.PositiveSmallIntegerField(
+        default=FRAILTY_FAIL_SEVERITY,
+        help_text="Frailty severity gained on a failed aging check.",
+    )
+    frailty_partial_severity = models.PositiveSmallIntegerField(
+        default=FRAILTY_PARTIAL_SEVERITY,
+        help_text="Frailty severity gained on a partial-success aging check.",
+    )
+    aging_floor_fraction = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        default=Decimal(AGING_FLOOR_FRACTION),
+        help_text=(
+            "Fraction of base max health at which age-bled max health tips the "
+            "character into the dying window."
+        ),
+    )
+    aging_death_window_ic_days = models.PositiveIntegerField(
+        default=AGING_DEATH_WINDOW_IC_DAYS,
+        help_text=(
+            "IC days between the dying-window notification and death resolving "
+            "— the deathbed-scene grace period."
+        ),
     )
 
     # ------------------------------------------------------------------

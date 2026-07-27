@@ -65,6 +65,25 @@ class Species(NaturalKeyMixin, SharedMemoryModel):
         related_name="species",
         help_text="Lore entry this species is bound to, if any.",
     )
+    # Age axes (#2756)
+    eternal_youth = models.BooleanField(
+        default=False,
+        help_text=(
+            "Elves, vampires, and similar: apparent age locks in the early 20s "
+            "(CG caps the age input at 29), no Maturation Points are ever "
+            "earned, and old-age decline never begins."
+        ),
+    )
+    decline_start_age = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        default=60,
+        help_text=(
+            "Biological age at which old-age decline checks begin (PLACEHOLDER "
+            "60 for humans). Null = this species never declines; forced null "
+            "in effect when eternal_youth is set."
+        ),
+    )
 
     objects = NaturalKeyManager()
 

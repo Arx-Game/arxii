@@ -37,7 +37,7 @@ class CharacterSheetModelTests(TestCase):
     def test_character_sheet_creation(self):
         """Test creating a character sheet."""
         assert self.sheet.character == self.character
-        assert self.sheet.age >= 18  # From factory validator
+        assert self.sheet.matured_years >= 18  # From factory range
         # Gender is a nullable FK - factory creates without gender
         assert self.sheet.gender is None
         assert self.sheet.marital_status == MaritalStatus.SINGLE
@@ -55,11 +55,10 @@ class CharacterSheetModelTests(TestCase):
         assert str(self.sheet) == expected
 
     def test_age_validation_constraints(self):
-        """Test age validation works correctly."""
-        # Test minimum age validation through model clean
+        """matured_years must be at least 1 (#2756)."""
         # Use a different character to avoid identity mapper returning the cached sheet
         new_char = CharacterFactory()
-        sheet = CharacterSheet(character=new_char, age=15)
+        sheet = CharacterSheet(character=new_char, matured_years=0)
         with pytest.raises(ValidationError):
             sheet.full_clean()
 

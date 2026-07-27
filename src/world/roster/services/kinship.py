@@ -355,11 +355,12 @@ def mint_from_pool(
 
 def _check_slot_constraints(node: Kinsperson, sheet: CharacterSheet) -> None:
     """Refuse a claim whose sheet violates the slot's authored constraints."""
-    if node.age_min is not None and sheet.age is not None and sheet.age < node.age_min:
-        msg = f"sheet age {sheet.age} below slot minimum {node.age_min}"
+    sheet_age = sheet.apparent_age
+    if node.age_min is not None and sheet_age < node.age_min:
+        msg = f"sheet age {sheet_age} below slot minimum {node.age_min}"
         raise KinshipServiceError(msg, user_message="Your age is below this position's range.")
-    if node.age_max is not None and sheet.age is not None and sheet.age > node.age_max:
-        msg = f"sheet age {sheet.age} above slot maximum {node.age_max}"
+    if node.age_max is not None and sheet_age > node.age_max:
+        msg = f"sheet age {sheet_age} above slot maximum {node.age_max}"
         raise KinshipServiceError(msg, user_message="Your age is above this position's range.")
     allowed = list(node.allowed_genders.all())
     if allowed and sheet.gender not in allowed:

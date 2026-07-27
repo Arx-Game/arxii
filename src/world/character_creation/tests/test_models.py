@@ -140,6 +140,8 @@ class AppearanceStageCompletionTest(TestCase):
         draft = CharacterDraftFactory(
             account=self.account,
             age=25,
+            birthday_month=6,
+            birthday_day=12,
             height_band=None,
             height_inches=70,
             build=self.build,
@@ -152,6 +154,8 @@ class AppearanceStageCompletionTest(TestCase):
         draft = CharacterDraftFactory(
             account=self.account,
             age=25,
+            birthday_month=6,
+            birthday_day=12,
             height_band=self.height_band,
             height_inches=None,
             build=self.build,
@@ -164,6 +168,8 @@ class AppearanceStageCompletionTest(TestCase):
         draft = CharacterDraftFactory(
             account=self.account,
             age=25,
+            birthday_month=6,
+            birthday_day=12,
             height_band=self.height_band,
             height_inches=70,
             build=None,
@@ -176,6 +182,8 @@ class AppearanceStageCompletionTest(TestCase):
         draft = CharacterDraftFactory(
             account=self.account,
             age=25,
+            birthday_month=6,
+            birthday_day=12,
             height_band=self.height_band,
             height_inches=70,
             build=self.build,

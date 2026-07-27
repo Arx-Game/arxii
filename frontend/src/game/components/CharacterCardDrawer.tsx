@@ -195,6 +195,7 @@ export function CharacterCardDrawer({
                 <BackgroundSection background={entry.character.background} />
                 <StatsSection
                   age={entry.character.age}
+                  birthday={entry.character.birthday}
                   gender={entry.character.gender}
                   race={entry.character.race}
                   charClass={entry.character.char_class}

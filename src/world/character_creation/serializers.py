@@ -6,6 +6,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.character_creation.constants import (
+    AGE_MAX_ETERNAL_YOUTH,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
 )
@@ -24,7 +25,7 @@ from world.character_creation.models import (
     StartingArea,
 )
 from world.character_creation.types import StageValidationErrors
-from world.character_sheets.models import Gender, Pronouns
+from world.character_sheets.models import DAYS_IN_MONTH, Gender, Pronouns
 from world.classes.models import Path, PathStage
 from world.distinctions.models import Distinction
 from world.forms.models import Build, HeightBand
@@ -143,6 +144,7 @@ class SpeciesSerializer(serializers.ModelSerializer):
             "parent_name",
             "stat_bonuses",
             "codex_entry_id",
+            "eternal_youth",
         ]
 
     def get_stat_bonuses(self, obj: Species) -> dict[str, int]:
@@ -554,6 +556,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "selected_gender",
             "selected_gender_id",
             "age",
+            "birthday_month",
+            "birthday_day",
             "family",
             "family_id",
             "claimed_kin_slot",
@@ -711,12 +715,25 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         return value
 
     def validate_age(self, value):
-        """Validate age is within allowed range for character creation."""
+        """Validate age against the CG range, tightened for eternal-youth species."""
         if value is None:
             return value
 
         if value < AGE_MIN or value > AGE_MAX:
             msg = f"Age must be between {AGE_MIN} and {AGE_MAX} years."
+            raise serializers.ValidationError(msg)
+
+        species = None
+        species_id = self.initial_data.get("selected_species_id")
+        if species_id:
+            species = Species.objects.filter(id=species_id).first()
+        elif self.instance:
+            species = self.instance.selected_species
+        if species is not None and species.eternal_youth and value > AGE_MAX_ETERNAL_YOUTH:
+            msg = (
+                f"{species.name} characters keep their eternal youth: age must be "
+                f"at most {AGE_MAX_ETERNAL_YOUTH}."
+            )
             raise serializers.ValidationError(msg)
         return value
 
@@ -878,6 +895,15 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                         )
                     }
                 )
+
+        # Birthday pair must name a real Gregorian date (#2756).
+        month = attrs.get("birthday_month", self.instance.birthday_month if self.instance else None)
+        day = attrs.get("birthday_day", self.instance.birthday_day if self.instance else None)
+        if month is not None and day is not None:
+            max_day = DAYS_IN_MONTH[month - 1]
+            if day > max_day:
+                msg = f"Month {month} has at most {max_day} days."
+                raise serializers.ValidationError({"birthday_day": msg})
 
         return attrs
 
