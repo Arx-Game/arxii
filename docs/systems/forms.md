@@ -11,7 +11,8 @@ Physical appearance options (height, build, hair/eye colors) with true form, alt
 
 ```python
 from world.forms.models import (
-    TraitType,        # COLOR, STYLE - categorizes form traits
+    TraitType,        # COLOR, STYLE, FEATURE - categorizes form traits
+                      # (FEATURE = structural species markers: horns, wings, fangs — #2815)
     FormType,         # TRUE, ALTERNATE, DISGUISE - type of saved character form
     DisguiseKind,     # MUNDANE, MAGICAL - how a fake overlay is pierced (#1110)
     ConcealmentLevel, # NONE, DESCRIPTOR, FULL - what a disguise hides from an unpierced viewer (#1272)
@@ -32,7 +33,7 @@ from world.forms.models import (
 | `Build` | Body type with weight calculation factor | `name`, `display_name`, `weight_factor` (Decimal), `is_cg_selectable`, `sort_order` |
 | `FormTrait` | Physical characteristic type (e.g., hair_color) | `name`, `display_name`, `trait_type` (TraitType), `sort_order` |
 | `FormTraitOption` | Valid value for a trait (e.g., "black" for hair_color) | `trait` (FK), `name`, `display_name`, `height_modifier_inches` (nullable), `sort_order` |
-| `SpeciesFormTrait` | Links species to available traits/options in CG | `species` (FK), `trait` (FK), `is_available_in_cg`, `allowed_options` (M2M, empty = all) |
+| `SpeciesFormTrait` | Links species to available traits/options in CG | `species` (FK), `trait` (FK), `is_available_in_cg`, `is_required` (species identity marker, #2815), `allowed_options` (M2M, empty = all) |
 
 ### Character Data (models.Model - per-character instances)
 

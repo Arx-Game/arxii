@@ -27,7 +27,7 @@ Character stats and dice rolling mechanics based on Arx I's successful system.
 ### `character_sheets/` - Character Demographics (Source of Truth)
 Character identity, appearance, and biographical data. **CharacterSheet is the single source-of-truth anchor** for all character-related data — `Persona`, `RosterEntry`, `CharacterVitals`, and mechanical systems all FK to CharacterSheet. The `primary_persona` is identified by `Persona.persona_type=PRIMARY` (unique constraint).
 
-**Key Models**: `CharacterSheet`, `Heritage`, `Gender`, `Pronouns`, `Characteristic`, `CharacteristicValue`
+**Key Models**: `CharacterSheet`, `Profile`, `Heritage`, `Gender`, `Pronouns` (appearance traits live in the `forms` app — the legacy `Characteristic`/`CharacteristicValue` models are retired, #1119)
 
 ### `classes/` - Character Classes System
 Class-based character progression and abilities.

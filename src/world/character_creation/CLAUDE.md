@@ -8,7 +8,10 @@ Character creation is a multi-stage process that guides players through creating
 
 1. **Origin** - Select starting area (city), which gates heritage options
 2. **Heritage** - Special heritage (Sleeper/Misbegotten) or normal → Species → Gender/Pronouns → Age
-3. **Lineage** - Family selection (or "Unknown" for special heritage)
+3. **Lineage** - Family selection (or "Unknown" for special heritage); kin-slot
+   claim/mint/defer, plus invented parents (#2815: names/genders in draft_data,
+   `second_parent_species` for a cross-species parent — unlocks that line's
+   colors in Appearance; finalize creates the nodes and pins back-inference)
 4. **Distinctions** - Advantages and disadvantages
 5. **Path** - Class/path selection
 6. **Gift** - Tradition, Gift + Technique catalog picks, gift resonance, and Anima Check

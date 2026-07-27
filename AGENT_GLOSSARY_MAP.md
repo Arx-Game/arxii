@@ -34,6 +34,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [companions](src/world/companions/AGENT_GLOSSARY.md)
 - [gm](src/world/gm/AGENT_GLOSSARY.md)
 - [roster / kinship](src/world/roster/AGENT_GLOSSARY.md)
+- [species](src/world/species/AGENT_GLOSSARY.md)
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
 - [journals](src/world/journals/AGENT_GLOSSARY.md)
 - [npc_services](src/world/npc_services/AGENT_GLOSSARY.md)

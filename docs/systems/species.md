@@ -116,9 +116,10 @@ str(bonus)  # "Infernal: -1 Charm"
 
 ## Integration Points
 
-- **Forms System** (`world.forms`): `SpeciesFormTrait` links species to available physical appearance traits and options for CG.
+- **Forms System** (`world.forms`): `SpeciesFormTrait` links species to available physical appearance traits and options for CG — the per-species **palette**; `is_required=True` marks species identity markers (horns for True Infernals) that CG must fill.
 - **Character Creation** (`world.character_creation`): `Beginnings.allowed_species` controls which species are selectable during character creation.
 - **Traits System** (`world.traits`): `SpeciesStatBonus.stat` uses `PrimaryStat` choices from `world.traits.constants`.
+- **Heredity / Parent Dominance** (#2815): a child's species derives from its parents via `world.roster.services.heredity` — maternal by default, flipping to the father's line only when his power band strictly exceeds hers, with chimeric (unique authored `Species` rows) possible only when both parents are Grand+ (level 16+). Cross-species parents unlock *their actual colors* for the child in CG. See `docs/systems/kinship.md` and ADR-0173. NB: "crossing" remains the magic-progression term — this system's vocabulary is "Parent Dominance" / "power band".
 
 ---
 

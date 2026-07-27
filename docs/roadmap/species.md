@@ -20,6 +20,20 @@ Code wins over this doc.
   that nets against the drawback vulnerability at the combat-damage seam (`apply_damage_to_participant`).
   ADR-0071. E2E: `world/magic/tests/integration/test_species_gift_e2e.py`.
 
+- **Parent Dominance / species inheritance (#2815, 2026-07-27)** [BUILT & WIRED]:
+  the heredity rules engine (`world/roster/services/heredity.py` — maternal default,
+  paternal flip on strictly-greater power band, chimeric gate at Grand+ both sides),
+  `Kinsperson.species`/`power_band` + lazily-pinned `KinspersonTraitValue` stubs,
+  `ParentageEdge.is_ritual_invoker` (Tree of Souls dominant line), CG invented
+  parents + approval-time back-inference pinning, one-directional creation-time
+  validation (ADR-0173), parent-aware form options endpoint + CG UI (inherited
+  "from your father's line" option groups, required structural traits), and
+  structural FEATURE traits (horns/tail/wings/ear_shape/fangs/patches) with
+  `SpeciesFormTrait.is_required`. Pending content: real per-species palettes and
+  the full roster (Infernals, Daeva, Vampires, Dhampir, Lycan, elf lines) are
+  content-repo authoring, coordinated with TehomCD's species content pass (#2692
+  follow-up). Child generation is deliberately deferred to its own spec.
+
 ## The design (ADR-0050): species abilities are Minor Gifts
 
 khati (special blood → lineage / animal-feature abilities), vampires, lycans, and other species powers
