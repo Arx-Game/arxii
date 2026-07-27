@@ -45,9 +45,9 @@ class EnsureMagicSkillsTests(TestCase):
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_magic_check_types gates on #2698
 class EnsureMagicCheckTypesTests(TestCase):
-    def test_creates_five_composed_check_types(self):
+    def test_creates_six_composed_check_types(self):
         check_types = ensure_magic_check_types()
-        self.assertEqual(len(check_types), 5)
+        self.assertEqual(len(check_types), 6)
         category = CheckCategory.objects.get(name=MAGIC_CHECK_CATEGORY_NAME)
         arcana = Aspect.objects.get(name="Arcana")
         for ct in check_types.values():
@@ -91,7 +91,7 @@ class EnsureMagicCheckTypesTests(TestCase):
         ensure_magic_check_types()
         self.assertEqual(
             CheckType.objects.filter(category__name=MAGIC_CHECK_CATEGORY_NAME).count(),
-            5,
+            6,
         )
 
 
