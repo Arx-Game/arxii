@@ -1419,7 +1419,7 @@ def _seed_sample_infernal() -> None:
     """Sample Infernal demonstrating heredity gating (#2815). SAMPLE tier only.
 
     Required horns + tail (species identity markers) and a restricted color
-    palette, so human-exclusive colors are legible on a fresh clone: an
+    palette, so excluded colors are legible on a fresh clone: an
     Infernal-listed child of a human parent taking "blonde" hair or "hazel"
     eyes is visibly carrying human blood. Real rosters/palettes are
     content-repo authored.
