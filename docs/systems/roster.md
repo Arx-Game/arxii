@@ -40,6 +40,70 @@ character_creation seed cluster) — it creates all seven canonical shelves keye
 
 ---
 
+## Activity, inactivity, and auto-release (#671, #2728)
+
+Two orthogonal axes, both on `CharacterSheet`: `activity_state` is **OOC** (is the
+player showing up), `lifecycle_state` is **IC** (what is true in the fiction). A
+captured character and a lapsed player are different facts and neither implies the
+other.
+
+**`activity_requirement` is authored per character, on `RosterEntry`.** It follows
+from the nature of the character and the stories it is tied to, so staff set and
+change it by hand in the admin. It is deliberately *not* on `Roster`: approval moves
+a character from Available onto the Active shelf, which would flatten every
+character's requirement to whatever that one shelf carried.
+
+It governs two things — **which signals count** (HIGH = any-persona IC action *plus*
+account login; LOW = account login only) and **whether inactivity also releases the
+character**. It does *not* decide whether a character is swept: every character is
+flagged INACTIVE at 30 days so nothing accrues income or takes decay for someone
+who isn't there.
+
+### The sweep is demotion-only
+
+`world.roster.services.activity.sweep_activity_states` (weekly cron) walks
+characters on the **Active shelf** and demotes those past the 30-day bar. Story NPCs
+sit on the NPC shelf and are excluded by construction rather than by a special case.
+
+Promotion is **event-driven**: `mark_character_active` fires from `at_post_puppet`,
+so a returning player is ACTIVE immediately instead of waiting up to a week. The
+sweep therefore never examines a non-ACTIVE sheet to catch a return.
+
+Hiatus expiry runs *after* demotion, deliberately. A player's decay clock keeps
+running through a declared absence, so expiring and demoting in one tick would flag —
+and for a roster character, release — someone the instant their vacation ended,
+before they could log back in. Expiring last leaves them ACTIVE until the next run.
+
+### Release is narrower than the flag
+
+| | Flagged INACTIVE at 30d | Auto-released |
+|---|---|---|
+| `activity_requirement` HIGH | yes | **yes** |
+| `activity_requirement` LOW | yes | **yes** |
+| `activity_requirement` NONE | yes | no |
+| OCs (`is_oc=True`) | yes | **never** |
+| NPCs (NPC shelf) | not swept | n/a |
+
+The flag is broad because its job is to stop accrual for an absent player. The
+release is narrow because taking a character away is only justified when someone
+else is waiting for it. On release the tenure is **ended, never deleted** and the
+entry moves back to Available.
+
+**A returning player is re-seated, not renumbered.** Applications are staff-approved,
+so approval — not application order — is the decision point, and losing applications
+result in nothing. If the original player is the one approved,
+`RosterApplication.approve` reopens their existing tenure rather than minting a
+second one, which would otherwise announce them as "2nd player of X" when they are
+the same person.
+
+Consumers should ask the shared vocabulary on `CharacterSheet.objects`
+(`.active()` / `.claimable()` / `.dormant()` / `.inactive_at_least(tier)`) rather
+than deriving absence from timestamps. Mothballing (90d) reads
+`inactive_at_least(LONG_INACTIVE)` — a *consequence* of inactivity, not a rival
+definition of it.
+
+---
+
 ## Models
 
 ### Core Roster
@@ -47,7 +111,7 @@ character_creation seed cluster) — it creates all seven canonical shelves keye
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `Roster` | Character category groups (Active, Inactive, etc.) — keyed by `roster_type` (#2728); `name` is a display label only | `roster_type` (unique, `RosterType`, the key), `name` (unique, display label), `description`, `is_active`, `is_public`, `allow_applications`, `sort_order` |
-| `RosterEntry` | Bridge linking characters to rosters (1:1 with CharacterSheet) | `character_sheet` (OneToOne CharacterSheet — retargeted from ObjectDB in #2608), `roster` (FK), `profile_picture` (FK TenureMedia), `joined_roster`, `previous_roster`, `last_puppeted`, `gm_notes`, `creation_provenance` (`CreationProvenance`, #1506), `created_by_account` (FK AccountDB), `created_for_table` (FK gm.GMTable — set for GM_TABLE) |
+| `RosterEntry` | Bridge linking characters to rosters (1:1 with CharacterSheet) | `character_sheet` (OneToOne CharacterSheet — retargeted from ObjectDB in #2608), `roster` (FK), `profile_picture` (FK TenureMedia), `joined_roster`, `previous_roster`, `last_puppeted`, `activity_requirement` (`ActivityRequirement`, #2728 — **authored per character**, not derived from the shelf), `gm_notes`, `creation_provenance` (`CreationProvenance`, #1506), `created_by_account` (FK AccountDB), `created_for_table` (FK gm.GMTable — set for GM_TABLE) |
 
 ### Tenures & Anonymity
 

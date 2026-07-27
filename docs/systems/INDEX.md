@@ -1678,6 +1678,18 @@ Character lifecycle management with web-first applications and player anonymity.
   `get_or_create` on `roster_type`) — service functions look up a shelf via
   `Roster.objects.get(roster_type=...)`, never by calling `ensure_rosters()` at
   runtime (that function is seeding-only).
+- **Activity + auto-release (#2728 §4/§6/§7):** `RosterEntry.activity_requirement` is
+  **authored per character** (staff-editable), deliberately not on `Roster` — approval
+  moves a character Available → Active, which would flatten a shelf-level value. It
+  governs which signals count (HIGH = IC action + login; LOW = login only) and whether
+  inactivity also *releases*; it no longer decides whether a character is swept at all.
+  `sweep_activity_states` is **demotion-only**, scoped to the Active shelf (NPCs are
+  excluded by shelf, not by a special case); promotion is event-driven via
+  `mark_character_active` from `at_post_puppet`. Hiatus expiry runs after demotion so a
+  lapsed vacation doesn't cost the character in the same tick. Release is narrower than
+  the flag — HIGH/LOW released, NONE and OCs never — and ends the tenure rather than
+  deleting it, so `RosterApplication.approve` can re-seat a returning player onto their
+  own row instead of renumbering them as a second player.
 - **`RosterApplication` uniqueness (#2162):** a PENDING-only `UniqueConstraint` on
   `(player_data, character)` (was a status-blind `unique_together`, which blocked
   re-applying for a character after denial/withdrawal, not duplicate submissions —

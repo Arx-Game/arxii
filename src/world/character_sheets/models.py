@@ -763,7 +763,8 @@ class CharacterSheet(SharedMemoryModel):
     def decay_tier(self) -> str | None:
         """Inactivity tier from days-since-last-signal, or None when fresh.
 
-        Walks the FK chain ``roster_entry -> roster.activity_requirement`` and
+        Reads the per-character ``roster_entry.activity_requirement`` (#2728 —
+        authored, not derived from the shelf) and walks
         ``roster_entry -> current_tenure -> player_data.account.last_login``
         plus ``roster_entry.last_puppeted`` for HIGH-tier rosters. Returns the
         biggest matching tier (DORMANT > LONG_INACTIVE > INACTIVE >
@@ -781,6 +782,20 @@ class CharacterSheet(SharedMemoryModel):
             if days >= threshold:
                 return tier
         return None
+
+    def inactive_at_least(self, tier: str) -> bool:
+        """Whether this character's newest activity signal is at least ``tier`` old.
+
+        The single-instance counterpart of
+        ``CharacterSheet.objects.inactive_at_least(tier)``, for consumers holding one
+        sheet (mothballing asks per building). Both derive from the same thresholds;
+        this one reuses ``decay_tier`` directly rather than issuing a query, since the
+        FK walk is already amortised by the identity map.
+        """
+        current = self.decay_tier
+        if current is None:
+            return False
+        return DECAY_TIER_THRESHOLDS_DAYS[current] >= DECAY_TIER_THRESHOLDS_DAYS[tier]
 
     def _last_activity_signal_at(self) -> datetime | None:
         """Return the most recent activity signal for this sheet, or None.
@@ -800,7 +815,7 @@ class CharacterSheet(SharedMemoryModel):
 
         from world.roster.models.choices import ActivityRequirement  # noqa: PLC0415
 
-        requirement = entry.roster.activity_requirement
+        requirement = entry.activity_requirement
         if requirement == ActivityRequirement.LOW:
             return last_login
 
