@@ -20,6 +20,7 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 
 ### `services.py`
 - **`perform_check(character, check_type, target_difficulty, extra_modifiers)`**: Main resolution function. Returns CheckResult.
+- **`perform_check_with_modifiers(character, check_type, ..., *, scene=None)`** (#2750): Thin wrapper around `perform_check` that resolves `character.character_sheet`, guards `None` for sheet-less actors (GM puppets, companions), calls `collect_check_modifiers`, and forwards `breakdown.total` additively to `perform_check`. Use this for any check that should honor conditions, equipment, fashion, capability, and distinction modifiers. Mirrors `perform_check`'s exact signature plus a keyword-only `scene` param.
 - **`get_rollmod(character)`**: Public function that sums character and account rollmod values. Used by both checks and attempts apps.
 
 ### `consequence_resolution.py`
