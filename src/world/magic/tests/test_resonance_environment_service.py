@@ -367,7 +367,7 @@ class ResonanceCastOpposedBackfireTest(ResonanceCacheIsolationMixin, TestCase):
         # Force perform_check to return the failure outcome
         check_result = _make_check_result(self.outcome_failure)
         with patch(
-            "world.magic.services.resonance_environment.perform_check",
+            "world.magic.services.resonance_environment.perform_check_with_modifiers",
             return_value=check_result,
         ):
             result = resonance_environment_for_cast(
@@ -391,7 +391,7 @@ class ResonanceCastOpposedBackfireTest(ResonanceCacheIsolationMixin, TestCase):
         """OPPOSED + success outcome → success consequence's condition applied to caster."""
         check_result = _make_check_result(self.outcome_success)
         with patch(
-            "world.magic.services.resonance_environment.perform_check",
+            "world.magic.services.resonance_environment.perform_check_with_modifiers",
             return_value=check_result,
         ):
             result = resonance_environment_for_cast(
@@ -451,7 +451,7 @@ class ResonanceCastOpposedBackfireTest(ResonanceCacheIsolationMixin, TestCase):
 
         check_result = _make_check_result(self.outcome_failure)
         with patch(
-            "world.magic.services.resonance_environment.perform_check",
+            "world.magic.services.resonance_environment.perform_check_with_modifiers",
             return_value=check_result,
         ):
             result = resonance_environment_for_cast(
@@ -581,7 +581,7 @@ class AppliedNameParenthesisRegressionTest(ResonanceCacheIsolationMixin, TestCas
         """result.applied must contain the EXACT full name 'Singed (light)', not truncated."""
         check_result = _make_check_result(self.outcome_failure)
         with patch(
-            "world.magic.services.resonance_environment.perform_check",
+            "world.magic.services.resonance_environment.perform_check_with_modifiers",
             return_value=check_result,
         ):
             result = resonance_environment_for_cast(
@@ -889,7 +889,7 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
         """
         check_result = _make_check_result(self.outcome_failure)
         with patch(
-            "world.magic.services.resonance_environment.perform_check",
+            "world.magic.services.resonance_environment.perform_check_with_modifiers",
             return_value=check_result,
         ):
             result = use_technique(
@@ -957,7 +957,7 @@ class UseTechniqueResonanceEnvironmentIntegrationTest(ResonanceCacheIsolationMix
         check_result = _make_check_result(self.outcome_failure)
         with (
             patch(
-                "world.magic.services.resonance_environment.perform_check",
+                "world.magic.services.resonance_environment.perform_check_with_modifiers",
                 return_value=check_result,
             ),
             patch(
