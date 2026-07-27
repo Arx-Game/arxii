@@ -1699,7 +1699,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
     # Test 5: Resilience check drives Soulfray consequence
     # ------------------------------------------------------------------
 
-    @patch("world.checks.services.perform_check")
+    @patch("world.checks.services.perform_check_with_modifiers")
     def test_resilience_check_drives_soulfray_consequence(
         self,
         mock_check: object,
@@ -1778,7 +1778,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
     # Test 7: TechniqueOutcomeModifier affects resilience check
     # ------------------------------------------------------------------
 
-    @patch("world.checks.services.perform_check")
+    @patch("world.checks.services.perform_check_with_modifiers")
     def test_technique_outcome_modifies_resilience_check(
         self,
         mock_check: object,
@@ -1831,9 +1831,10 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
         assert result.soulfray_result is not None
         assert result.soulfray_result.resilience_check is not None
         # Verify the modifier was applied: stage2 penalty (-5) +
-        # botch modifier (-5) = -10 total
+        # botch modifier (-5) = -10 total, now passed via extra_contributions
         call_kwargs = mock_check.call_args[1]
-        assert call_kwargs["extra_modifiers"] == -10
+        contributions = call_kwargs.get("extra_contributions") or []
+        assert sum(c.value for c in contributions) == -10
 
     # ------------------------------------------------------------------
     # Test 8: Control mishap fires independently of Soulfray

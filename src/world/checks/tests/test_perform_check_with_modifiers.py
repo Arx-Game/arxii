@@ -41,7 +41,13 @@ class PerformCheckWithModifiersTest(TestCase):
                 extra_modifiers=3,
             )
             # Aggregator was called with the sheet and check_type.
-            mock_collect.assert_called_once_with(self.sheet, self.check_type, scene=None)
+            mock_collect.assert_called_once_with(
+                self.sheet,
+                self.check_type,
+                scene=None,
+                extra_contributions=None,
+                skip_fashion=False,
+            )
             # perform_check received extra_modifiers=3+5=8.
             call_kwargs = mock_perform.call_args
             assert call_kwargs.kwargs["extra_modifiers"] == 8
@@ -81,7 +87,13 @@ class PerformCheckWithModifiersTest(TestCase):
         ):
             mock_collect.return_value.total = 0
             perform_check_with_modifiers(self.target, self.check_type, scene=scene)
-            mock_collect.assert_called_once_with(self.sheet, self.check_type, scene=scene)
+            mock_collect.assert_called_once_with(
+                self.sheet,
+                self.check_type,
+                scene=scene,
+                extra_contributions=None,
+                skip_fashion=False,
+            )
 
     def test_all_params_forwarded(self):
         """specialization, situation_ctx, effort_level, fatigue_penalty,

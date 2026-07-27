@@ -38698,6 +38698,7 @@ components:
       - pull
       - relationship
       - capability
+      - soulfray
       type: string
       description: |-
         * `condition` - Condition
@@ -38713,6 +38714,7 @@ components:
         * `pull` - Combat Pull
         * `relationship` - Relationship
         * `capability` - Capability
+        * `soulfray` - Soulfray
     ConsequencePoolCatalog:
       type: object
       description: Read-only serializer for the curated technique-cast consequence-pool

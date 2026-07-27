@@ -20,7 +20,7 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 
 ### `services.py`
 - **`perform_check(character, check_type, target_difficulty, extra_modifiers)`**: Main resolution function. Returns CheckResult.
-- **`perform_check_with_modifiers(character, check_type, ..., *, scene=None)`** (#2750): Thin wrapper around `perform_check` that resolves `character.character_sheet`, guards `None` for sheet-less actors (GM puppets, companions), calls `collect_check_modifiers`, and forwards `breakdown.total` additively to `perform_check`. Use this for any check that should honor conditions, equipment, fashion, capability, and distinction modifiers. Mirrors `perform_check`'s exact signature plus a keyword-only `scene` param.
+- **`perform_check_with_modifiers(character, check_type, ..., *, scene=None, extra_contributions=None, skip_fashion=False)`** (#2750, #2758): Thin wrapper around `perform_check` that resolves `character.character_sheet`, guards `None` for sheet-less actors (GM puppets, companions — sums `extra_contributions` `.value` into `extra_modifiers` on this path so caller modifiers aren't lost), calls `collect_check_modifiers`, and forwards `breakdown.total` additively to `perform_check`. Use this for any check that should honor conditions, equipment, fashion, capability, and distinction modifiers. Mirrors `perform_check`'s exact signature plus keyword-only `scene`, `extra_contributions` (caller-supplied labeled contributions forwarded to the aggregator), and `skip_fashion` (suppress the aggregator's location-derived FASHION block when the caller supplies fashion via `extra_contributions`).
 - **`get_rollmod(character)`**: Public function that sums character and account rollmod values. Used by both checks and attempts apps.
 
 ### `consequence_resolution.py`
@@ -108,11 +108,13 @@ opposes a `CombatOpponent`, whose authored `level` field isn't reachable through
 regardless of the opponent's real level) — it passes
 `compute_resist_increment(target.objectdb, effort_level, level_override=target.level)`.
 
-## The modifier seam — `collect_check_modifiers(sheet, check_type, *, scene=None, ...)`
+## The modifier seam — `collect_check_modifiers(sheet, check_type, *, scene=None, extra_contributions=None, skip_fashion=False)`
 
 Central aggregator (`services.py`) that gathers condition / rollmod / scene /
 equipment / CHARACTER / equipment-walk / **fashion** / **CAPABILITY** contributions
-into one `ModifierBreakdown`. The CAPABILITY block (#2505) emits one contribution
+into one `ModifierBreakdown`. `skip_fashion=True` suppresses the FASHION block
+(caller supplies fashion via `extra_contributions`); default `False` is byte-identical.
+The CAPABILITY block (#2505) emits one contribution
 per authored `CheckTypeCapabilityModifier` row. Both the roll path
 (`_calculate_capability_points`) and this provenance path (`_capability_contributions`)
 share one arithmetic helper, `_capability_point_allocation` — it computes the raw

@@ -273,8 +273,9 @@ def _fire_stage_consequence_pool(
         apply_resolution,
         select_consequence_from_result,
     )
-    from world.checks.services import perform_check  # noqa: PLC0415
-    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.checks.types import ModifierContribution, ResolutionContext  # noqa: PLC0415
     from world.conditions.models import ConditionCheckModifier  # noqa: PLC0415
     from world.magic.models import TechniqueOutcomeModifier  # noqa: PLC0415
 
@@ -308,12 +309,32 @@ def _fire_stage_consequence_pool(
         if outcome_mod:
             outcome_modifier = outcome_mod.modifier_value
 
-    # Perform resilience check
-    resilience_check = perform_check(
+    # Perform resilience check — route through the aggregator so condition,
+    # rollmod, equipment, character, and capability modifiers reach this check
+    # (#2758). The stage/outcome modifiers are domain-specific to soulfray and
+    # pass as labeled SOULFRAY-kind contributions.
+    soulfray_contributions = []
+    if stage_modifier != 0:
+        soulfray_contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.SOULFRAY,
+                source_label="Soulfray stage penalty",
+                value=stage_modifier,
+            )
+        )
+    if outcome_modifier != 0:
+        soulfray_contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.SOULFRAY,
+                source_label="Technique outcome modifier",
+                value=outcome_modifier,
+            )
+        )
+    resilience_check = perform_check_with_modifiers(
         character=character,
         check_type=soulfray_config.resilience_check_type,
         target_difficulty=soulfray_config.base_check_difficulty,
-        extra_modifiers=stage_modifier + outcome_modifier,
+        extra_contributions=soulfray_contributions or None,
     )
 
     # Select and apply consequence

@@ -22706,6 +22706,7 @@ export interface components {
      *     * `pull` - Combat Pull
      *     * `relationship` - Relationship
      *     * `capability` - Capability
+     *     * `soulfray` - Soulfray
      * @enum {string}
      */
     ConsequenceOutcomeModifierSourceKindEnum:
@@ -22721,7 +22722,8 @@ export interface components {
       | 'affinity'
       | 'pull'
       | 'relationship'
-      | 'capability';
+      | 'capability'
+      | 'soulfray';
     /** @description Read-only serializer for the curated technique-cast consequence-pool catalog. */
     ConsequencePoolCatalog: {
       readonly id: number;

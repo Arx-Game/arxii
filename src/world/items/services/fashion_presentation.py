@@ -21,8 +21,10 @@ from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
 
+from world.checks.constants import ModifierSourceKind
 from world.checks.models import CheckType
-from world.checks.services import perform_check
+from world.checks.services import perform_check_with_modifiers
+from world.checks.types import ModifierContribution
 from world.items.constants import (
     FASHION_PRESENTATION_BASE_DIFFICULTY,
     FASHION_PRESENTATION_CHECK_TYPE_NAME,
@@ -34,7 +36,8 @@ from world.items.models import FashionPresentation
 from world.items.services.trendsetter import bump_vogue_momentum
 from world.magic.models.endorsement import PresentationEndorsement
 from world.magic.services.gain import account_for_sheet
-from world.mechanics.services import get_modifier_total
+from world.mechanics.services import fashion_outfit_bonus
+from world.scenes.models import Scene
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -99,15 +102,32 @@ def present_outfit(
         raise FashionPresentationError(msg)
 
     target = get_fashion_modifier_target()
-    bonus = get_modifier_total(presenter, target, perceiving_society=society)
     difficulty = _difficulty_from_taste(society)
     check_type = CheckType.objects.get(name=FASHION_PRESENTATION_CHECK_TYPE_NAME)
+    scene = Scene.objects.filter(event=event, is_active=True).first()
 
-    result = perform_check(
+    # Host-society fashion bonus — preserves the event's declared judging society
+    # (semantically distinct from the aggregator's location-derived societies_for_scene).
+    # Passed via extra_contributions; skip_fashion=True suppresses the aggregator's
+    # own FASHION path to avoid double-counting (#2758).
+    fashion_bonus = fashion_outfit_bonus(presenter, target, society) if society else 0
+    extra_contributions = []
+    if fashion_bonus != 0:
+        extra_contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.FASHION,
+                source_label="Fashion (host society)",
+                value=fashion_bonus,
+            )
+        )
+
+    result = perform_check_with_modifiers(
         presenter.character,
         check_type,
         target_difficulty=difficulty,
-        extra_modifiers=bonus,
+        scene=scene,
+        skip_fashion=True,
+        extra_contributions=extra_contributions or None,
     )
     base = _score_from_outcome(result)
 

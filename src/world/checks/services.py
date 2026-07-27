@@ -146,6 +146,8 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
     situation_ctx: "SituationContext | None" = None,
     level_override: int | None = None,
     scene: "Scene | None" = None,
+    extra_contributions: "list[ModifierContribution] | None" = None,
+    skip_fashion: bool = False,
 ) -> CheckResult:
     """Run a check with all character modifiers gathered automatically.
 
@@ -172,24 +174,37 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
         scene: Optional Scene — when provided, scene modifiers and the
             perception-relative fashion bonus apply. Omit when the check is
             performed outside an active scene.
+        extra_contributions: Caller-supplied, already-labeled contributions
+            forwarded to ``collect_check_modifiers``. On the sheet-less path,
+            their ``.value`` is summed into ``extra_modifiers``.
+        skip_fashion: When True, suppress the aggregator's location-derived
+            FASHION block (caller supplies fashion via extra_contributions).
+            Default False = byte-identical to prior behavior.
 
     Returns:
         CheckResult from perform_check.
     """
     sheet = character.character_sheet
     if sheet is None:
+        contribution_sum = sum(c.value for c in (extra_contributions or []))
         return perform_check(
             character,
             check_type,
             target_difficulty=target_difficulty,
-            extra_modifiers=extra_modifiers,
+            extra_modifiers=extra_modifiers + contribution_sum,
             effort_level=effort_level,
             fatigue_penalty=fatigue_penalty,
             specialization=specialization,
             situation_ctx=situation_ctx,
             level_override=level_override,
         )
-    breakdown = collect_check_modifiers(sheet, check_type, scene=scene)
+    breakdown = collect_check_modifiers(
+        sheet,
+        check_type,
+        scene=scene,
+        extra_contributions=extra_contributions,
+        skip_fashion=skip_fashion,
+    )
     return perform_check(
         character,
         check_type,
@@ -1163,6 +1178,7 @@ def collect_check_modifiers(
     *,
     scene: "Scene | None" = None,
     extra_contributions: list[ModifierContribution] | None = None,
+    skip_fashion: bool = False,
 ) -> ModifierBreakdown:
     """Aggregate all modifier contributions for a check into a ModifierBreakdown.
 
@@ -1272,7 +1288,7 @@ def collect_check_modifiers(
     # MagicMock would raise anyway.
     if isinstance(check_type, _DjangoModel):
         contributions.extend(
-            _character_and_equipment_contributions(character_sheet, check_type, scene)
+            _character_and_equipment_contributions(character_sheet, check_type, scene, skip_fashion)
         )
 
     # --- CAPABILITY contributions (#2505) ---
@@ -1296,6 +1312,7 @@ def _character_and_equipment_contributions(
     character_sheet: "CharacterSheet",
     check_type: "CheckType",
     scene: "Scene | None",
+    skip_fashion: bool = False,
 ) -> list[ModifierContribution]:
     """Contributions keyed off the check's scoped ModifierTarget (#767, #512).
 
@@ -1374,7 +1391,7 @@ def _character_and_equipment_contributions(
         )
 
     # FASHION — perception-relative outfit bonus (best across scene societies).
-    if scene is not None:
+    if scene is not None and not skip_fashion:
         from world.areas.services import societies_for_scene  # noqa: PLC0415
 
         societies = societies_for_scene(scene)
