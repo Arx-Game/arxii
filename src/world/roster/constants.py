@@ -45,6 +45,24 @@ class DefinitionTier(models.TextChoices):
     PC = "pc", "Player Character"
 
 
+class PowerBand(models.TextChoices):
+    """Kinsperson power for Parent Dominance (#2815).
+
+    A null ``Kinsperson.power_band`` means unspecified — assumed sub-Puissant,
+    GM-pinnable later. Bands mirror the PathStage names with QUIESCENT (level 0,
+    ungifted) below them. For dominance math every band below PUISSANT counts as
+    one tier; the finer sub-Puissant bands exist for story, not species.
+    """
+
+    QUIESCENT = "quiescent", "Quiescent"
+    PROSPECT = "prospect", "Prospect"
+    POTENTIAL = "potential", "Potential"
+    PUISSANT = "puissant", "Puissant"
+    TRUE = "true", "True"
+    GRAND = "grand", "Grand"
+    TRANSCENDENT = "transcendent", "Transcendent"
+
+
 class ParentageKind(models.TextChoices):
     """Typed parent-child link kinds (#2062).
 

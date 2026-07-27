@@ -28,6 +28,7 @@ from world.roster.constants import (
     MembershipBasis,
     MembershipEndReason,
     ParentageKind,
+    PowerBand,
 )
 
 _SHEET_FK = "character_sheets.CharacterSheet"
@@ -174,6 +175,30 @@ class Kinsperson(SharedMemoryModel):
     )
     is_deceased = models.BooleanField(default=False)
 
+    # --- Heredity stub fields (#2815 Parent Dominance) -----------------------
+    species = models.ForeignKey(
+        "species.Species",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="kinspeople",
+        help_text=(
+            "Null = undeclared. CG approval back-inference pins the dominant-line "
+            "parent to the child's species; staff author it directly."
+        ),
+    )
+    power_band = models.CharField(
+        max_length=20,
+        choices=PowerBand.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "Staff/GM-authored only; null = unspecified (assumed sub-Puissant). "
+            "Drives Parent Dominance: species flips and chimeric children require "
+            "bands that support them at creation time."
+        ),
+    )
+
     # --- Appable-slot fields (#2062 slot mountain) ---------------------------
     is_appable = models.BooleanField(
         default=False,
@@ -237,6 +262,44 @@ class Kinsperson(SharedMemoryModel):
         if self.sheet is not None:
             return str(self.sheet)
         return self.name or "Unnamed"
+
+
+class KinspersonTraitValue(SharedMemoryModel):
+    """A pinned appearance value on a kinsperson stub (#2815).
+
+    Written by CG approval back-inference (a child taking an off-palette color
+    attributes it to the cross-species parent, who acquires it) or authored by
+    staff. Once pinned, the value constrains later siblings' inherited options.
+    Unpinned traits stay free — the first child to draw on them defines them.
+    """
+
+    kinsperson = models.ForeignKey(
+        Kinsperson,
+        on_delete=models.CASCADE,
+        related_name="trait_values",
+    )
+    trait = models.ForeignKey(
+        "forms.FormTrait",
+        on_delete=models.CASCADE,
+        related_name="kinsperson_values",
+    )
+    option = models.ForeignKey(
+        "forms.FormTraitOption",
+        on_delete=models.CASCADE,
+        related_name="kinsperson_values",
+    )
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["kinsperson", "trait"],
+                name="roster_kinsperson_trait_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.kinsperson_id}: {self.trait_id}={self.option_id}"
 
 
 class FamilyMembership(SharedMemoryModel):
@@ -409,6 +472,13 @@ class ParentageEdge(SharedMemoryModel):
         related_name="+",
         help_text="Secret gating a hidden edge. Hidden with no secret = staff-only.",
     )
+    is_ritual_invoker = models.BooleanField(
+        default=False,
+        help_text=(
+            "TREE_OF_SOULS only: this parent invoked the ritual and is the "
+            "dominant line regardless of gender (#2815)."
+        ),
+    )
 
     class Meta:
         ordering = ["pk"]
@@ -416,6 +486,11 @@ class ParentageEdge(SharedMemoryModel):
             models.UniqueConstraint(
                 fields=["child", "parent", "kind"],
                 name="roster_parentage_unique_per_kind",
+            ),
+            models.UniqueConstraint(
+                fields=["child"],
+                condition=models.Q(is_ritual_invoker=True),
+                name="roster_parentage_one_invoker_per_child",
             ),
             models.CheckConstraint(
                 check=~models.Q(child=models.F("parent")),

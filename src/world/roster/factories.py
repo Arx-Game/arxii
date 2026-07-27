@@ -61,6 +61,15 @@ class ParentageEdgeFactory(factory_django.DjangoModelFactory):
     parent = factory.SubFactory(KinspersonFactory)
 
 
+class KinspersonTraitValueFactory(factory_django.DjangoModelFactory):
+    """Factory for pinned kinsperson appearance values (#2815)."""
+
+    class Meta:
+        model = "roster.KinspersonTraitValue"
+
+    kinsperson = factory.SubFactory(KinspersonFactory)
+
+
 class UnionKindFactory(factory_django.DjangoModelFactory):
     """Factory for authorable union vocabulary rows (#2062)."""
 
