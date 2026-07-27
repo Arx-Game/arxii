@@ -132,9 +132,9 @@ def _roster_entry(character: ObjectDB):
 
 def _check_tier(character: ObjectDB) -> int:
     """Run the Gossip check; return its ``success_level`` (>=1 success, >=2 special)."""
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
-    return perform_check(character, _gossip_check_type()).success_level
+    return perform_check_with_modifiers(character, _gossip_check_type()).success_level
 
 
 def _delta_for(tier: int, regular: int, special: int) -> int:
@@ -274,7 +274,7 @@ def refute_accusation(character: ObjectDB, secret: Secret, *, room: ObjectDB) ->
     Tom/Bob/Fred rule: defending the accused is open; only naming-and-attacking the
     author (denounce) needs the author's hostile-consent opt-in.
     """
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.secrets.constants import (  # noqa: PLC0415
         REFUTE_BASE_DIFFICULTY,
         REFUTE_DIFFICULTY_PER_LEVEL,
@@ -295,7 +295,9 @@ def refute_accusation(character: ObjectDB, secret: Secret, *, room: ObjectDB) ->
         raise GossipError(_ALREADY_REFUTED)
 
     difficulty = REFUTE_BASE_DIFFICULTY + secret.level * REFUTE_DIFFICULTY_PER_LEVEL
-    result = perform_check(character, _gossip_check_type(), target_difficulty=difficulty)
+    result = perform_check_with_modifiers(
+        character, _gossip_check_type(), target_difficulty=difficulty
+    )
     succeeded = result.success_level >= 1
     AccusationRebuttal.objects.create(
         secret=secret, refuter_sheet=refuter_sheet, succeeded=succeeded

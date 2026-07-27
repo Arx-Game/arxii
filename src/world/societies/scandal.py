@@ -214,7 +214,7 @@ def reduce_witnesses_by_stealth(
     worlds (no Stealth CheckType) change nothing.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     if not characters:
         return witnesses, False
@@ -225,7 +225,7 @@ def reduce_witnesses_by_stealth(
     outsider_count = sum(1 for w in witnesses if w.pk not in actor_pks)
     worst: int | None = None
     for character in characters:
-        result = perform_check(
+        result = perform_check_with_modifiers(
             character,
             check_type,
             target_difficulty=_containment_difficulty(outsider_count),
@@ -261,7 +261,7 @@ def _run_containment_check(
     (nothing to roll → the scandal leaks).
     """
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     check_type = None
     declared = _approach_for_key(approach_key)
@@ -282,7 +282,7 @@ def _run_containment_check(
         )
     if check_type is None:
         return False
-    result = perform_check(
+    result = perform_check_with_modifiers(
         character,
         check_type,
         target_difficulty=_containment_difficulty(witness_count),

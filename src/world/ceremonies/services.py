@@ -203,7 +203,7 @@ def record_speech(
     """Recognize a speaker; their Performance/Oratory roll shapes the tally."""
     _require_open(ceremony)
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
 
     check_type = CheckType.objects.filter(name=SPEECH_CHECK_TYPE_NAME).first()
@@ -213,7 +213,7 @@ def record_speech(
             name=SPEECH_SPECIALIZATION_NAME,
             parent_skill__trait__name=SPEECH_CHECK_TYPE_NAME,
         ).first()
-        result = perform_check(
+        result = perform_check_with_modifiers(
             speaker_persona.character_sheet.character,
             check_type,
             specialization=oratory,
@@ -232,7 +232,7 @@ def finish_ceremony(*, ceremony: Ceremony) -> Ceremony:
     """Close the rite: quality roll, renown tallies, worship, funeral effects."""
     _require_open(ceremony)
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.worship.services import bump_devotion  # noqa: PLC0415
 
     config = get_ceremony_config()
@@ -243,7 +243,7 @@ def finish_ceremony(*, ceremony: Ceremony) -> Ceremony:
     if check_type is not None:
         # The rite follows the TRUE being's forms (Decision 10) — its tradition
         # specialization applies even when the presentation claims another god.
-        result = perform_check(
+        result = perform_check_with_modifiers(
             officiant_sheet.character,
             check_type,
             specialization=ceremony.being.tradition.rites_specialization,

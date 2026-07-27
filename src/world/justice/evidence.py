@@ -79,7 +79,7 @@ def gather_evidence(character: ObjectDB, evidence: CrimeEvidence) -> EvidenceRes
     On success the evidence becomes a physical inventory item (holdable, givable,
     stealable); on failure it stays where it lies.
     """
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.items.services.materialize import materialize_item_game_object  # noqa: PLC0415
 
     if evidence.state != EvidenceState.AT_SCENE:
@@ -87,7 +87,9 @@ def gather_evidence(character: ObjectDB, evidence: CrimeEvidence) -> EvidenceRes
     if character.location != evidence.room_profile.objectdb:
         raise EvidenceError(_NOT_AT_SCENE)
 
-    result = perform_check(character, _gather_check_type(), target_difficulty=evidence.quality)
+    result = perform_check_with_modifiers(
+        character, _gather_check_type(), target_difficulty=evidence.quality
+    )
     if result.success_level < 0:
         return EvidenceResult(success=False, evidence_id=evidence.pk)
 
@@ -112,14 +114,16 @@ def dispose_evidence(character: ObjectDB, evidence: CrimeEvidence) -> EvidenceRe
     Disposal is why the dampener in ``accrue_for_deed_knowledge`` exists: a deed
     whose every evidence row is DISPOSED spreads far less pursuit heat.
     """
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     if evidence.state != EvidenceState.GATHERED:
         raise EvidenceError(_NOT_DISPOSABLE)
     if not _holds_evidence(character, evidence):
         raise EvidenceError(_NOT_HOLDER)
 
-    result = perform_check(character, _gather_check_type(), target_difficulty=evidence.quality)
+    result = perform_check_with_modifiers(
+        character, _gather_check_type(), target_difficulty=evidence.quality
+    )
     if result.success_level < 0:
         return EvidenceResult(success=False, evidence_id=evidence.pk)
 

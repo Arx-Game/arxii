@@ -161,13 +161,13 @@ def run_fury_for_action(
     if fury_commitment is None:
         return None
 
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     cfg = _config()
     check_type = _ensure_fury_check_type(cfg.check_trait)
     ease = provocation_ease(character, fury_anchor)
     target_diff = max(fury_commitment.base_check_difficulty - ease, 0)
-    check = perform_check(character, check_type, target_difficulty=target_diff)
+    check = perform_check_with_modifiers(character, check_type, target_difficulty=target_diff)
     fury_res = resolve_fury(
         character=character, tier=fury_commitment, anchor=fury_anchor, check_result=check
     )

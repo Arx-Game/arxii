@@ -1397,11 +1397,11 @@ def _perform_rescue_check(sineater_sheet: CharacterSheet) -> Any:
         CheckResult dataclass from perform_check.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.magic.seeds_checks import MAGICAL_ENDURANCE_CHECK_TYPE_NAME  # noqa: PLC0415
 
     check_type = CheckType.objects.get(name=MAGICAL_ENDURANCE_CHECK_TYPE_NAME)
-    return perform_check(
+    return perform_check_with_modifiers(
         sineater_sheet.character,
         check_type=check_type,
         target_difficulty=0,

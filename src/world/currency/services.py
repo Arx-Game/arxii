@@ -534,7 +534,7 @@ def collect_org_income(*, organization: Organization, character) -> CollectionRe
     here).
     """
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.currency.constants import TAX_COLLECTION_CHECK_NAME  # noqa: PLC0415
     from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice  # noqa: PLC0415
 
@@ -574,7 +574,7 @@ def collect_org_income(*, organization: Organization, character) -> CollectionRe
     check_type = CheckType.objects.filter(name__iexact=TAX_COLLECTION_CHECK_NAME).first()
     success_level = 0  # unseeded world: every collection is an unremarkable partial
     if check_type is not None:
-        result = perform_check(
+        result = perform_check_with_modifiers(
             character,
             check_type,
             target_difficulty=DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
@@ -777,7 +777,7 @@ def collect_asset_income(*, asset, character_sheet) -> CollectionResult:
         ValidationError: If the pool is empty (nothing to collect).
     """
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.currency.constants import TAX_COLLECTION_CHECK_NAME  # noqa: PLC0415
     from world.scenes.action_constants import (  # noqa: PLC0415
         DIFFICULTY_VALUES,
@@ -794,7 +794,7 @@ def collect_asset_income(*, asset, character_sheet) -> CollectionResult:
     check_type = CheckType.objects.filter(name__iexact=TAX_COLLECTION_CHECK_NAME).first()
     success_level = 0  # unseeded world: every collection is an unremarkable partial
     if check_type is not None:
-        result = perform_check(
+        result = perform_check_with_modifiers(
             character_sheet.character,
             check_type,
             target_difficulty=DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
@@ -830,7 +830,7 @@ def improve_org_domain(*, organization: Organization, character) -> ImprovementR
     All magnitudes PLACEHOLDER.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.currency.constants import (  # noqa: PLC0415
         DOMAIN_INVESTMENT_CHECK_NAME,
         IMPROVEMENT_GRAFT_STEP,
@@ -841,7 +841,7 @@ def improve_org_domain(*, organization: Organization, character) -> ImprovementR
     check_type = CheckType.objects.filter(name__iexact=DOMAIN_INVESTMENT_CHECK_NAME).first()
     success_level = -1  # unseeded world: investment simply fails, nothing moves
     if check_type is not None:
-        result = perform_check(
+        result = perform_check_with_modifiers(
             character,
             check_type,
             target_difficulty=DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
@@ -1323,7 +1323,7 @@ def work_chore(employment: CharacterEmployment, *, ap_spent: int) -> int:
     (fail 1×, success 1.5×, strong success 2×). Returns coppers paid.
     """
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     if not employment.active:
         msg = "You do not hold that job."
@@ -1339,7 +1339,7 @@ def work_chore(employment: CharacterEmployment, *, ap_spent: int) -> int:
 
     multiplier = CHORE_MULTIPLIER_FAIL
     if employment.profession.chore_check_type is not None:
-        result = perform_check(
+        result = perform_check_with_modifiers(
             employment.character_sheet.character,
             employment.profession.chore_check_type,
         )

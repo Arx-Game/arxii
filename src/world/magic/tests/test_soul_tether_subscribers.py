@@ -633,7 +633,7 @@ class StageAdvancePromptFiresWhenSineaterInSceneTests(TestCase):
     def tearDown(self) -> None:
         _pending_stage_advance_offers.clear()
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_prompt_offer_recorded_when_sineater_in_scene(self, mock_check: object) -> None:
         """Advancing severity over stage2 threshold records a StageAdvanceBonusOffer."""
         mock_check.return_value = _make_check_result(success_level=-1)  # Fail = advances
@@ -645,7 +645,7 @@ class StageAdvancePromptFiresWhenSineaterInSceneTests(TestCase):
         # The handler should have recorded one offer.
         self.assertEqual(len(_pending_stage_advance_offers), 1)
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_offer_has_correct_sinner_and_sineater(self, mock_check: object) -> None:
         """The recorded offer references the correct Sinner and Sineater sheets."""
         mock_check.return_value = _make_check_result(success_level=-1)
@@ -656,7 +656,7 @@ class StageAdvancePromptFiresWhenSineaterInSceneTests(TestCase):
         self.assertEqual(offer.sinner_sheet, self.sinner)
         self.assertEqual(offer.sineater_sheet, self.sineater)
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_offer_max_hollow_reflects_thread_capacity(self, mock_check: object) -> None:
         """max_hollow_to_spend equals the Sinner's Thread's current hollow_current."""
         mock_check.return_value = _make_check_result(success_level=-1)
@@ -666,7 +666,7 @@ class StageAdvancePromptFiresWhenSineaterInSceneTests(TestCase):
         offer = next(iter(_pending_stage_advance_offers.values()))
         self.assertEqual(offer.max_hollow_to_spend, 5)  # Thread.hollow_current=5
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_sineater_receives_notification(self, mock_check: object) -> None:
         """The Sineater's ObjectDB.msg() is called with the offer details."""
         mock_check.return_value = _make_check_result(success_level=-1)
@@ -715,7 +715,7 @@ class StageAdvancePromptNoSineaterInSceneTests(TestCase):
     def tearDown(self) -> None:
         _pending_stage_advance_offers.clear()
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_no_offer_when_sineater_in_different_room(self, mock_check: object) -> None:
         """Sineater in a different room → no offer recorded."""
         mock_check.return_value = _make_check_result(success_level=-1)
@@ -724,7 +724,7 @@ class StageAdvancePromptNoSineaterInSceneTests(TestCase):
 
         self.assertEqual(len(_pending_stage_advance_offers), 0)
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_resist_check_proceeds_without_offer(self, mock_check: object) -> None:
         """Check still fires (mock called) even with no Sineater in scene."""
         mock_check.return_value = _make_check_result(success_level=1)  # Pass = HELD
@@ -792,7 +792,7 @@ class StageAdvancePromptNonCorruptionConditionTests(TestCase):
     def tearDown(self) -> None:
         _pending_stage_advance_offers.clear()
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_non_corruption_condition_skipped(self, mock_check: object) -> None:
         """Handler returns immediately for non-Corruption conditions — no offer recorded."""
         mock_check.return_value = _make_check_result(success_level=-1)
@@ -841,7 +841,7 @@ class StageAdvanceBonusAcceptTests(TestCase):
 
     def _fire_prompt_and_get_offer_id(self) -> str:
         """Trigger the stage-advance check (mocked to fail) and return the offer_id."""
-        with patch("world.conditions.services.perform_check") as mock_check:
+        with patch("world.conditions.services.perform_check_with_modifiers") as mock_check:
             mock_check.return_value = _make_check_result(success_level=-1)
             advance_condition_severity(self.condition_instance, 5)
 
@@ -937,7 +937,7 @@ class StageAdvanceBonusDeclineTests(TestCase):
         _pending_stage_advance_offers.clear()
 
     def _fire_and_get_offer_id(self) -> str:
-        with patch("world.conditions.services.perform_check") as mock_check:
+        with patch("world.conditions.services.perform_check_with_modifiers") as mock_check:
             mock_check.return_value = _make_check_result(success_level=-1)
             advance_condition_severity(self.condition_instance, 5)
         return next(iter(_pending_stage_advance_offers.keys()))

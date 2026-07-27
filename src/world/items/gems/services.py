@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.checks.services import perform_check
+from world.checks.services import perform_check_with_modifiers
 from world.items.exceptions import (
     AdornmentCapacityExceeded,
     CraftingCostUnaffordable,
@@ -145,7 +145,7 @@ def pry_adornment(  # noqa: PLR0913 — keyword-only adornment + crafter + check
         host.lore_value = max(0, (host.lore_value or 0) - worth)
         host.save(update_fields=["lore_value"])
 
-        check_result = perform_check(crafter_character, check_type, base_difficulty)
+        check_result = perform_check_with_modifiers(crafter_character, check_type, base_difficulty)
         if check_result.success_level < min_success_level:
             gem_instance.delete()  # CASCADE removes the Adornment + GemInstanceDetails
             return PryResult(shattered=True, freed_gem=None, worth_removed=worth)
@@ -215,7 +215,9 @@ def cut_gem(
             msg = f"You need {ap_cost} action points but only have {pool.current}."
             raise CraftingCostUnaffordable(msg)
 
-    check_result = perform_check(crafter_character, recipe.check_type, recipe.base_difficulty)
+    check_result = perform_check_with_modifiers(
+        crafter_character, recipe.check_type, recipe.base_difficulty
+    )
 
     if check_result.success_level < recipe.min_success_level:
         worth_lost = compute_gem_worth(gem)

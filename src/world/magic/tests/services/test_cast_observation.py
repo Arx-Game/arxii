@@ -103,7 +103,7 @@ def _forced_success_level(level: int) -> Iterator[MagicMock]:
     Must patch world.magic.services.cast_observation.perform_check — the name as
     imported into the service's own module namespace — not world.checks.services.
     """
-    with patch("world.magic.services.cast_observation.perform_check") as rolled:
+    with patch("world.magic.services.cast_observation.perform_check_with_modifiers") as rolled:
         rolled.return_value = _check_result_with_success_level(level)
         yield rolled
 
@@ -122,7 +122,7 @@ class ResolveCastAudienceTests(TestCase):
         """
         caster = _caster_on_path_with_style(cast_concealment=0)
         _observer_in_room_with(caster)
-        with patch("world.magic.services.cast_observation.perform_check") as rolled:
+        with patch("world.magic.services.cast_observation.perform_check_with_modifiers") as rolled:
             audience = resolve_cast_audience(caster=caster)
         self.assertFalse(audience.concealed)
         rolled.assert_not_called()
@@ -174,7 +174,7 @@ class ResolveCastAudienceTests(TestCase):
         caster = _caster_on_path_with_style(cast_concealment=25, level=4)
         _observer_in_room_with(caster)
         with (
-            patch("world.magic.services.cast_observation.perform_check") as rolled,
+            patch("world.magic.services.cast_observation.perform_check_with_modifiers") as rolled,
             patch("world.magic.services.cast_observation.level_opposition", return_value=20),
         ):
             rolled.return_value = _check_result_with_success_level(0)

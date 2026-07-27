@@ -124,7 +124,7 @@ def attempt_bribe(persona: Persona, area: Area) -> dict:
     ``bribery`` crime with its own heat.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.currency.services import get_or_create_purse  # noqa: PLC0415
     from world.justice.services import accrue_heat  # noqa: PLC0415
 
@@ -150,7 +150,7 @@ def attempt_bribe(persona: Persona, area: Area) -> dict:
         msg = f"purse {purse.pk} below bribe cost {cost}"
         raise HeatLifecycleError(msg, user_message="You cannot afford that bribe.")
 
-    result = perform_check(character, check_type)
+    result = perform_check_with_modifiers(character, check_type)
     level = result.outcome.success_level if result.outcome else 0
 
     if level > 0:

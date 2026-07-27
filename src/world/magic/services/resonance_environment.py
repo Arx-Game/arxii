@@ -14,7 +14,7 @@ from world.areas.models import AreaClosure
 from world.checks.consequence_resolution import apply_resolution, select_consequence_from_result
 from world.checks.constants import EffectType
 from world.checks.models import CheckType
-from world.checks.services import perform_check
+from world.checks.services import perform_check_with_modifiers
 from world.checks.types import ResolutionContext
 from world.conditions.services import apply_condition, remove_condition
 from world.locations.constants import KeyType
@@ -682,7 +682,7 @@ def resonance_environment_for_cast(
 
     # Perform the endurance check at the config-derived difficulty.
     check_type = _get_endure_hallowed_ground_check_type()
-    check_result = perform_check(caster, check_type, effect.backfire_difficulty)
+    check_result = perform_check_with_modifiers(caster, check_type, effect.backfire_difficulty)
 
     # Select from the pool using the existing check result (pool holds WeightedConsequence).
     weighted_consequences = pool.cached_consequences

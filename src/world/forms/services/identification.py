@@ -367,7 +367,7 @@ def attempt_identification(
     logic isn't duplicated.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.forms.constants import IDENTIFICATION_CHECK_TYPE_NAME  # noqa: PLC0415
     from world.scenes.services import persona_discovery_between  # noqa: PLC0415
 
@@ -412,6 +412,8 @@ def attempt_identification(
 
     target_difficulty = _target_difficulty(odds, guess_name, true_persona)
     check_type = CheckType.objects.get(name=IDENTIFICATION_CHECK_TYPE_NAME)
-    result = perform_check(viewer_character, check_type, target_difficulty=target_difficulty)
+    result = perform_check_with_modifiers(
+        viewer_character, check_type, target_difficulty=target_difficulty
+    )
 
     return _roll_outcome_result(result, presented_persona, true_persona, viewer_sheet)

@@ -98,7 +98,7 @@ def examine_evidence(character: ObjectDB, evidence: CrimeEvidence) -> EvidenceRe
     and success simply confirms nothing is off.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     if evidence.state != EvidenceState.PRODUCED:
         raise EvidenceError(_NOT_EXAMINABLE)
@@ -109,7 +109,7 @@ def examine_evidence(character: ObjectDB, evidence: CrimeEvidence) -> EvidenceRe
         evidence.tamper_quality if evidence.tamper_quality is not None else evidence.quality
     )
     check_type = CheckType.objects.get(name=SCRUTINIZE_EVIDENCE_CHECK_NAME)
-    result = perform_check(character, check_type, target_difficulty=difficulty)
+    result = perform_check_with_modifiers(character, check_type, target_difficulty=difficulty)
     if result.success_level < 0:
         return EvidenceResult(success=False, evidence_id=evidence.pk)
     if evidence.tamper_quality is not None:

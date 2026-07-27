@@ -34,7 +34,7 @@ from flows.models.triggers import Trigger
 from world.achievements.constants import ConditionEventType
 from world.checks.constants import ModifierSourceKind
 from world.checks.models import CheckType
-from world.checks.services import perform_check
+from world.checks.services import perform_check_with_modifiers
 from world.checks.types import ModifierContribution
 from world.conditions.constants import (
     POISON_CATEGORY_NAME,
@@ -611,7 +611,7 @@ def _check_application_resist(
     """
     if template.resist_check_type is None:
         return False
-    result = perform_check(
+    result = perform_check_with_modifiers(
         character=target,
         check_type=template.resist_check_type,
         target_difficulty=template.resist_difficulty,
@@ -2913,7 +2913,7 @@ def _perform_advancement_resist_check(
             location=location,
         )
 
-    result = perform_check(
+    result = perform_check_with_modifiers(
         character=instance.target,
         check_type=next_stage.resist_check_type,
         target_difficulty=payload.base_difficulty,
@@ -3668,7 +3668,6 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     from django.db import IntegrityError  # noqa: PLC0415
     from django.utils import timezone as tz  # noqa: PLC0415
 
-    from world.checks.services import perform_check  # noqa: PLC0415
     from world.conditions.exceptions import (  # noqa: PLC0415
         HelperEngagedForTreatment,
         NoSupportingBondThread,
@@ -3802,7 +3801,7 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     # ------------------------------------------------------------------
     # Execute: perform check
     # ------------------------------------------------------------------
-    check_result = perform_check(
+    check_result = perform_check_with_modifiers(
         helper,
         check_type=treatment.check_type,
         target_difficulty=treatment.target_difficulty,

@@ -103,13 +103,13 @@ def _observer_senses_twist(  # noqa: PLR0913
     *, observer, observer_sheet, officiant_sheet, check_type, difficulty, worship_secret
 ) -> bool:
     """One witness: consent gate → hidden Search roll → clue mint on success."""
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.clues.services import acquire_clue  # noqa: PLC0415
     from world.roster.models import RosterEntry  # noqa: PLC0415
 
     if not _may_investigate(observer_sheet, officiant_sheet):
         return False
-    result = perform_check(observer, check_type, target_difficulty=difficulty)
+    result = perform_check_with_modifiers(observer, check_type, target_difficulty=difficulty)
     if result.outcome is None or result.outcome.success_level <= 0:
         return False
     entry = RosterEntry.objects.filter(character_sheet=observer_sheet).first()

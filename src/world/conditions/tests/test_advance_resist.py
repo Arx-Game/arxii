@@ -69,7 +69,7 @@ class TestAdvanceConditionSeverityResistCheck(TestCase):
         self.assertEqual(result.outcome, AdvancementOutcome.ADVANCED)
         self.assertTrue(result.stage_changed)
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_hold_overflow_with_resist_check_holds_on_pass(self, mock_perform_check):
         """HOLD_OVERFLOW + resist check passes → outcome=HELD, stage unchanged."""
         self.stage2.advancement_resist_failure_kind = AdvancementResistFailureKind.HOLD_OVERFLOW
@@ -89,7 +89,7 @@ class TestAdvanceConditionSeverityResistCheck(TestCase):
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.current_stage, self.stage1)
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_hold_overflow_with_resist_check_advances_on_fail(self, mock_perform_check):
         """HOLD_OVERFLOW + resist check fails → outcome=ADVANCED."""
         self.stage2.advancement_resist_failure_kind = AdvancementResistFailureKind.HOLD_OVERFLOW
