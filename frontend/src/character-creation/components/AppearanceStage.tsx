@@ -10,7 +10,9 @@ import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -18,7 +20,7 @@ import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   useBuilds,
@@ -27,7 +29,22 @@ import {
   useHeightBands,
   useUpdateDraft,
 } from '../queries';
-import type { Build, CharacterDraft, FormTraitWithOptions, HeightBand } from '../types';
+import type {
+  Build,
+  CharacterDraft,
+  FormTraitOption,
+  FormTrait,
+  HeightBand,
+  InheritedTraitGroup,
+} from '../types';
+
+/** A trait row for rendering: own palette + inherited groups (#2815). */
+interface MergedTraitOptions {
+  trait: FormTrait;
+  is_required: boolean;
+  options: FormTraitOption[];
+  inherited: InheritedTraitGroup[];
+}
 
 interface AppearanceStageProps {
   draft: CharacterDraft;
@@ -73,9 +90,40 @@ export function AppearanceStage({
   const { data: heightBands, isLoading: heightBandsLoading } = useHeightBands();
   const { data: builds, isLoading: buildsLoading } = useBuilds();
   const { data: formOptions, isLoading: formOptionsLoading } = useFormOptions(
-    draft.selected_species?.id
+    draft.selected_species?.id,
+    draft.id
   );
   const draftData = draft.draft_data;
+
+  // Merge own-palette traits with inherited cross-line groups (#2815). An
+  // inherited group for a trait outside the own palette (e.g. a pinned value
+  // on a trait the species doesn't normally offer) gets its own row.
+  const mergedFormOptions = useMemo<MergedTraitOptions[]>(() => {
+    if (!formOptions) return [];
+    const rows: MergedTraitOptions[] = formOptions.traits.map((entry) => ({
+      trait: entry.trait,
+      is_required: entry.is_required,
+      options: entry.options,
+      inherited: [],
+    }));
+    const byTraitId = new Map(rows.map((row) => [row.trait.id, row]));
+    for (const group of formOptions.inherited) {
+      const row = byTraitId.get(group.trait.id);
+      if (row) {
+        row.inherited.push(group);
+      } else {
+        const newRow: MergedTraitOptions = {
+          trait: group.trait,
+          is_required: false,
+          options: [],
+          inherited: [group],
+        };
+        byTraitId.set(group.trait.id, newRow);
+        rows.push(newRow);
+      }
+    }
+    return rows;
+  }, [formOptions]);
 
   const { register, getValues, reset, formState } = useForm<AppearanceFormValues>({
     defaultValues: {
@@ -414,12 +462,21 @@ export function AppearanceStage({
                 <div key={i} className="h-16 animate-pulse rounded bg-muted" />
               ))}
             </div>
-          ) : formOptions && formOptions.length > 0 ? (
+          ) : mergedFormOptions.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {formOptions.map((formOption: FormTraitWithOptions) => (
+              {mergedFormOptions.map((formOption) => (
                 <div key={formOption.trait.id} className="space-y-2">
                   <Label htmlFor={`trait-${formOption.trait.name}`}>
                     {formOption.trait.display_name}
+                    {formOption.is_required && (
+                      <span
+                        className="ml-1 text-destructive"
+                        title="Required for your species"
+                        aria-label="required"
+                      >
+                        *
+                      </span>
+                    )}
                   </Label>
                   <Select
                     value={getSelectedOptionId(formOption.trait.name)}
@@ -435,6 +492,18 @@ export function AppearanceStage({
                         <SelectItem key={option.id} value={String(option.id)}>
                           {option.display_name}
                         </SelectItem>
+                      ))}
+                      {formOption.inherited.map((group) => (
+                        <SelectGroup key={`${formOption.trait.id}-${group.source}`}>
+                          <SelectLabel className="text-accent-foreground">
+                            From your {group.source}
+                          </SelectLabel>
+                          {group.options.map((option) => (
+                            <SelectItem key={option.id} value={String(option.id)}>
+                              {option.display_name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
                       ))}
                     </SelectContent>
                   </Select>

@@ -9,6 +9,7 @@ from world.roster.models import (
     FamilyMembership,
     KinSlotPool,
     Kinsperson,
+    KinspersonTraitValue,
     ParentageEdge,
     PlayerMail,
     Roster,
@@ -44,6 +45,14 @@ class FamilyMembershipInline(admin.TabularInline):
     extra = 0
 
 
+class KinspersonTraitValueInline(admin.TabularInline):
+    """Pinned appearance values (#2815) — authored or back-inferred."""
+
+    model = KinspersonTraitValue
+    extra = 0
+    raw_id_fields = ["trait", "option"]
+
+
 @admin.register(Kinsperson)
 class KinspersonAdmin(admin.ModelAdmin):
     """Staff authoring surface for the kinship graph (#2062)."""
@@ -53,21 +62,30 @@ class KinspersonAdmin(admin.ModelAdmin):
     list_display = [
         "display_name",
         "definition_tier",
+        "species",
+        "power_band",
         "family",
         "is_deceased",
         "is_appable",
         "deferred_definer",
     ]
-    list_filter = ["definition_tier", "is_deceased", "is_appable", "family__family_type"]
+    list_filter = [
+        "definition_tier",
+        "power_band",
+        "species",
+        "is_deceased",
+        "is_appable",
+        "family__family_type",
+    ]
     search_fields = ["name", "description", "family__name"]
     raw_id_fields = ["sheet", "functionary", "deferred_definer"]
-    inlines = [ParentageUpInline, FamilyMembershipInline]
+    inlines = [ParentageUpInline, FamilyMembershipInline, KinspersonTraitValueInline]
 
 
 @admin.register(ParentageEdge)
 class ParentageEdgeAdmin(admin.ModelAdmin):
-    list_display = ["child", "kind", "parent", "is_public_record", "is_true"]
-    list_filter = ["kind", "is_public_record", "is_true"]
+    list_display = ["child", "kind", "parent", "is_ritual_invoker", "is_public_record", "is_true"]
+    list_filter = ["kind", "is_ritual_invoker", "is_public_record", "is_true"]
     search_fields = ["child__name", "parent__name"]
     raw_id_fields = ["child", "parent", "born_within_union", "secret"]
 

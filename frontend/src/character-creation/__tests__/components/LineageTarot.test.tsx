@@ -40,6 +40,9 @@ vi.mock('../../api', () => ({
   getTarotCards: vi.fn(),
   getNamingRitualConfig: vi.fn(),
   getCGExplanations: vi.fn(),
+  // Invented-parents card (#2815)
+  getGenders: vi.fn().mockResolvedValue([]),
+  getSpecies: vi.fn().mockResolvedValue([]),
 }));
 
 // =============================================================================

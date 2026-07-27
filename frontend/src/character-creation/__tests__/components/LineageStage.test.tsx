@@ -36,6 +36,9 @@ vi.mock('../../api', () => ({
   getTarotCards: vi.fn(),
   getNamingRitualConfig: vi.fn(),
   getCGExplanations: vi.fn(),
+  // Invented-parents card (#2815)
+  getGenders: vi.fn().mockResolvedValue([]),
+  getSpecies: vi.fn().mockResolvedValue([]),
 }));
 
 describe('LineageStage', () => {
@@ -160,7 +163,9 @@ describe('LineageStage', () => {
         expect(screen.getByText('Commoner Families')).toBeInTheDocument();
       });
 
-      expect(screen.getByRole('combobox')).toBeInTheDocument();
+      // Multiple comboboxes exist now (invented-parents card, #2815) — assert
+      // the family dropdown specifically via its placeholder text.
+      expect(screen.getByText('Select a family')).toBeInTheDocument();
     });
 
     it('highlights selected family', async () => {

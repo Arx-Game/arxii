@@ -288,12 +288,25 @@ export interface FormTrait {
   id: number;
   name: string;
   display_name: string;
-  trait_type: 'color' | 'style';
+  trait_type: 'color' | 'style' | 'feature';
 }
 
 export interface FormTraitWithOptions {
   trait: FormTrait;
+  is_required: boolean;
   options: FormTraitOption[];
+}
+
+/** Cross-line options unlocked by a cross-species parent (#2815). */
+export interface InheritedTraitGroup {
+  trait: FormTrait;
+  options: FormTraitOption[];
+  source: string;
+}
+
+export interface FormOptionsResponse {
+  traits: FormTraitWithOptions[];
+  inherited: InheritedTraitGroup[];
 }
 
 export enum Stage {
@@ -345,6 +358,8 @@ export interface CharacterDraft {
   claimed_kin_slot: number | null;
   claimed_kin_pool: number | null;
   defer_parents: boolean;
+  /** Species id of the invented non-dominant parent when cross-species (#2815). */
+  second_parent_species: number | null;
   height_band: HeightBand | null;
   height_inches: number | null;
   build: Build | null;
@@ -720,6 +735,12 @@ export interface DraftData {
   tarot_reversed?: boolean;
   // Orphan / no family flag for lineage stage
   lineage_is_orphan?: boolean;
+  // Invented parents (#2815) — names + genders; species rides
+  // CharacterDraft.second_parent_species
+  line_parent_name?: string;
+  other_parent_name?: string;
+  line_parent_gender_id?: number | null;
+  other_parent_gender_id?: number | null;
   // Goals for Final Touches stage
   goals?: DraftGoal[];
   [key: string]: unknown;
@@ -745,6 +766,7 @@ export interface CharacterDraftUpdate {
   selected_tradition_id?: number | null;
   public_worship_id?: number | null;
   secret_worship_id?: number | null;
+  second_parent_species_id?: number | null;
   draft_data?: Partial<DraftData>;
 }
 
