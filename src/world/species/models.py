@@ -201,6 +201,11 @@ class SpeciesGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         help_text="CG points charged for this grant (0 = free). Summed across a "
         "species' grants into the character-creation points breakdown.",
     )
+    inheritable = models.BooleanField(
+        default=True,
+        help_text="Whether child species inherit this grant via the ancestor walk. "
+        "False = this grant is species-specific and does not propagate to children.",
+    )
 
     objects = NaturalKeyManager()
 

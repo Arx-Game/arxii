@@ -179,6 +179,55 @@ class GetCGFormOptionsTest(TestCase):
         self.assertIn(self.hair_trait, options)
         self.assertNotIn(eye_trait, options)
 
+    def test_child_species_inherits_parent_form_traits(self):
+        """A child species sees form traits authored on its parent."""
+        parent = SpeciesFactory(name="TestParentSpecies")
+        child = SpeciesFactory(name="TestChildSpecies", parent=parent)
+
+        parent_trait = FormTraitFactory(name="parent_only_trait", display_name="Parent Trait")
+        FormTraitOptionFactory(trait=parent_trait, name="a", display_name="A")
+        SpeciesFormTraitFactory(species=parent, trait=parent_trait)
+
+        options = get_cg_form_options(child)
+        self.assertIn(
+            parent_trait,
+            options,
+            "Child species should see form traits from its parent species",
+        )
+
+    def test_child_species_still_sees_own_form_traits(self):
+        """A child species also sees traits authored directly on itself."""
+        parent = SpeciesFactory(name="TestParentOwn")
+        child = SpeciesFactory(name="TestChildOwn", parent=parent)
+
+        parent_trait = FormTraitFactory(name="parent_trait_2", display_name="Parent Trait 2")
+        FormTraitOptionFactory(trait=parent_trait, name="x", display_name="X")
+        SpeciesFormTraitFactory(species=parent, trait=parent_trait)
+
+        child_trait = FormTraitFactory(name="child_trait", display_name="Child Trait")
+        FormTraitOptionFactory(trait=child_trait, name="y", display_name="Y")
+        SpeciesFormTraitFactory(species=child, trait=child_trait)
+
+        options = get_cg_form_options(child)
+        self.assertIn(parent_trait, options)
+        self.assertIn(child_trait, options)
+
+    def test_parent_cg_unavailable_trait_not_inherited(self):
+        """A parent trait with is_available_in_cg=False is not shown to a child."""
+        parent = SpeciesFactory(name="TestParentUnavail")
+        child = SpeciesFactory(name="TestChildUnavail", parent=parent)
+
+        hidden_trait = FormTraitFactory(name="hidden_trait", display_name="Hidden")
+        FormTraitOptionFactory(trait=hidden_trait, name="z", display_name="Z")
+        SpeciesFormTraitFactory(species=parent, trait=hidden_trait, is_available_in_cg=False)
+
+        options = get_cg_form_options(child)
+        self.assertNotIn(
+            hidden_trait,
+            options,
+            "Child should not see a parent trait marked is_available_in_cg=False",
+        )
+
 
 class CreateTrueFormTest(TestCase):
     @classmethod

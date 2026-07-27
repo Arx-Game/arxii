@@ -169,6 +169,105 @@ class ProvisionSpeciesGiftsTests(TestCase):
         self.assertEqual(rows.first().rank, 1)
 
 
+class InheritableFlagTests(TestCase):
+    """Tests for the SpeciesGiftGrant.inheritable flag (#2692)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.resonance = ResonanceFactory()
+        cls.parent_species = SpeciesFactory(name="TestInheritableParent")
+        cls.child_species = SpeciesFactory(name="TestInheritableChild", parent=cls.parent_species)
+        # Inheritable grant (default) on parent — child inherits it
+        cls.inheritable_gift = GiftFactory(name="Test Shared Gift", kind=GiftKind.MINOR)
+        cls.inheritable_gift.resonances.add(cls.resonance)
+        cls.inheritable_grant = SpeciesGiftGrantFactory(
+            species=cls.parent_species,
+            gift=cls.inheritable_gift,
+        )
+        # Non-inheritable grant on parent — child does NOT inherit it
+        cls.non_inheritable_gift = GiftFactory(name="Test Parent-Only Gift", kind=GiftKind.MINOR)
+        cls.non_inheritable_gift.resonances.add(cls.resonance)
+        cls.non_inheritable_grant = SpeciesGiftGrantFactory(
+            species=cls.parent_species,
+            gift=cls.non_inheritable_gift,
+            inheritable=False,
+        )
+
+    def test_child_inherits_inheritable_grant(self):
+        """A child species inherits grants marked inheritable=True (default)."""
+        sheet = CharacterSheetFactory(species=self.child_species)
+        provision_species_gifts(sheet, resonance=self.resonance)
+        self.assertTrue(
+            CharacterGift.objects.filter(character=sheet, gift=self.inheritable_gift).exists(),
+            "Child should inherit the inheritable grant from parent",
+        )
+
+    def test_child_does_not_inherit_non_inheritable_grant(self):
+        """A child species does NOT inherit grants marked inheritable=False."""
+        sheet = CharacterSheetFactory(species=self.child_species)
+        provision_species_gifts(sheet, resonance=self.resonance)
+        self.assertFalse(
+            CharacterGift.objects.filter(character=sheet, gift=self.non_inheritable_gift).exists(),
+            "Child should NOT inherit the non-inheritable grant from parent",
+        )
+
+    def test_parent_gets_both_grants(self):
+        """The parent species itself gets all its own grants (inheritable or not)."""
+        sheet = CharacterSheetFactory(species=self.parent_species)
+        provision_species_gifts(sheet, resonance=self.resonance)
+        self.assertTrue(
+            CharacterGift.objects.filter(character=sheet, gift=self.inheritable_gift).exists(),
+            "Parent should get its own inheritable grant",
+        )
+        self.assertTrue(
+            CharacterGift.objects.filter(character=sheet, gift=self.non_inheritable_gift).exists(),
+            "Parent should get its own non-inheritable grant",
+        )
+
+    def test_non_inheritable_grant_cost_not_charged_to_child(self):
+        """total_species_gift_cost does not charge a child for a non-inheritable parent grant."""
+        SpeciesGiftGrantFactory(
+            species=self.parent_species,
+            gift=GiftFactory(name="Test Costed Non-Inheritable", kind=GiftKind.MINOR),
+            cg_point_cost=10,
+            inheritable=False,
+        )
+        self.assertEqual(
+            total_species_gift_cost(self.child_species),
+            0,
+            "Child should not be charged for parent's non-inheritable costed grant",
+        )
+        self.assertEqual(
+            total_species_gift_cost(self.parent_species),
+            10,
+            "Parent should be charged for its own non-inheritable costed grant",
+        )
+
+    def test_non_inheritable_sunlight_drawback_not_inherited_by_child(self):
+        """_has_sunlight_drawback returns False for a child whose parent has a
+        non-inheritable sunlight-carrying grant, and True for the parent."""
+        from world.species.factories import ensure_sunlight_exposure_content
+        from world.species.services import _has_sunlight_drawback
+
+        sunlight_template = ensure_sunlight_exposure_content()
+        SpeciesGiftGrantFactory(
+            species=self.parent_species,
+            gift=GiftFactory(name="Test Sunlight Gift", kind=GiftKind.MINOR),
+            drawback_condition=sunlight_template,
+            inheritable=False,
+        )
+        parent_sheet = CharacterSheetFactory(species=self.parent_species)
+        child_sheet = CharacterSheetFactory(species=self.child_species)
+        self.assertTrue(
+            _has_sunlight_drawback(parent_sheet),
+            "Parent should have the sunlight drawback from its own non-inheritable grant",
+        )
+        self.assertFalse(
+            _has_sunlight_drawback(child_sheet),
+            "Child should NOT inherit the non-inheritable sunlight drawback",
+        )
+
+
 class ProvisionSpeciesGiftsFinalizeIntegrationTest(TestCase):
     """Integration: finalize_magic_data wires provision_species_gifts (SQLite-safe)."""
 
