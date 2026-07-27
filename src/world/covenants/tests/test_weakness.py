@@ -240,3 +240,15 @@ class ResolveWeaknessSelectionTests(TestCase):
         resolved = resolve_weakness_selection(self.selection, self.entry.name)
 
         assert resolved is False
+
+
+class EnhancesAssessmentFlagTest(TestCase):
+    """CovenantRole.enhances_assessment parallels reveals_weakness."""
+
+    def test_field_defaults_to_false(self) -> None:
+        role = CovenantRoleFactory()
+        self.assertFalse(role.enhances_assessment)
+
+    def test_field_can_be_set_true(self) -> None:
+        role = CovenantRoleFactory(enhances_assessment=True)
+        self.assertTrue(role.enhances_assessment)

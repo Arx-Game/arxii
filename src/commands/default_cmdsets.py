@@ -51,6 +51,7 @@ from commands.consent import (
     CmdSeduce,
 )
 from commands.consent_preferences import CmdConsent
+from commands.consider import CmdConsider
 from commands.covenant import CmdCovenant
 from commands.crafting import CmdCraft
 from commands.crafting_station import CmdLabStation
@@ -391,6 +392,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdSetSituation,
             # #1514 — in-room comfort/weather readout (the mechanical surface).
             CmdComfort,
+            # #2716 — narrative /consider threat readout.
+            CmdConsider,
             # #1522 — IC time + local weather readout (`time`/`weather`).
             CmdTime,
             # #1111 — form shift/revert telnet namespace for alternate selves.

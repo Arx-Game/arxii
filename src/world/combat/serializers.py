@@ -31,6 +31,7 @@ from world.combat.models import (
     CombatOpponent,
     CombatParticipant,
     CombatRoundAction,
+    ConsiderReading,
     DramaticSurgeRecord,
     DuelChallenge,
     EscalationCurve,
@@ -1485,3 +1486,19 @@ class DeclareClashContributionSerializer(serializers.Serializer):
             "technique": technique,
             "strain_commitment": strain_commitment,
         }
+
+
+class ConsiderReadingSerializer(serializers.Serializer):
+    """Read serializer for a cached consider reading (#2716).
+
+    Exposes only ``prose``, ``assessed_at``, and ``is_cached`` — never the
+    check mechanics (success_level, true_band_index, reported_band_index).
+    """
+
+    prose = serializers.CharField(read_only=True)
+    assessed_at = serializers.DateTimeField(read_only=True, source="created_at")
+    is_cached = serializers.SerializerMethodField()
+
+    def get_is_cached(self, obj: ConsiderReading) -> bool:  # noqa: ARG002
+        """True when this is a re-fetch of an existing reading."""
+        return self.context.get("is_cached", False)
