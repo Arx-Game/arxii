@@ -39,7 +39,9 @@ def aging_birthday_tick_task() -> None:
     )
     aged = run_birthday_tick(ic_start=ic_start, ic_end=ic_now)
     if aged:
-        logger.info("Birthday tick: %d characters aged.", aged)
+        # Static message only: CodeQL's clear-text-logging heuristic treats any
+        # value flowing out of a *birthday*-named function as private data.
+        logger.info("Birthday tick: characters aged this window.")
 
 
 def aging_decline_check_task() -> None:
