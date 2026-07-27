@@ -87,7 +87,7 @@
 - `advance_resolution(pending: 'PendingActionResolution', context: 'ResolutionContext', player_decision: 'str | None' = None) -> 'PendingActionResolution' — Resume a paused pipeline after player decision.`
 - `apply_resolution(pending: 'PendingResolution', context: 'ResolutionContext') -> 'list[AppliedEffect]' — Apply all effects from the selected consequence.`
 - `get_effective_consequences(pool: 'ConsequencePool') -> 'list[WeightedConsequence]' — Resolve pool inheritance into a flat list of weighted consequences.`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_scene_action(*, character: 'ObjectDB', action_template: 'ActionTemplate | None', action_key: 'str', difficulty: 'int') -> 'SceneActionResult' — Resolve a scene-based action check using an ActionTemplate.`
 - `select_consequence_from_result(character: 'ObjectDB', check_result: 'CheckResult', consequences: 'list[WeightedConsequence]') -> 'PendingResolution' — Select a consequence using an existing check result.`
 - `start_action_resolution(character: 'ObjectDB', template: 'ActionTemplate', target_difficulty: 'int', context: 'ResolutionContext', extra_modifiers: 'int' = 0, *, check_type: 'CheckType | None' = None) -> 'PendingActionResolution' — Start an action resolution pipeline and run it to completion or pause.`
@@ -174,6 +174,7 @@
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
   - resist_check_type -> checks.CheckType [FK] (nullable)
+  - break_free_check_type -> checks.CheckType [FK] (nullable)
   - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
@@ -1560,6 +1561,7 @@
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
   - weekly_skill_usage <- progression.WeeklySkillUsage
+  - maturation_spends <- progression.MaturationSpend
   - unlocks <- progression.CharacterUnlock
   - audere_offers <- magic.PendingAudereOffer
   - created_gifts <- magic.Gift
@@ -1773,6 +1775,7 @@
   - professions <- currency.Profession
   - cures_conditions <- conditions.ConditionTemplate
   - resists_condition_applications <- conditions.ConditionTemplate
+  - breaks_free_conditions <- conditions.ConditionTemplate
   - conditionstage_set <- conditions.ConditionStage
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - treatmenttemplate_set <- conditions.TreatmentTemplate
@@ -1854,7 +1857,7 @@
 - `get_character_path_level(character: 'ObjectDB') -> 'int' — Return the character's primary class level (or highest, or 1).`
 - `get_rollmod(character: 'ObjectDB') -> int — Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
 - `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int — Difficulty an opposing entity of *level* adds to *check_type* (#2707).`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
 - `record_consequence_outcome(character_sheet: 'CharacterSheet', check_type: 'CheckType', pool, selected_consequence: 'Consequence | None', breakdown: world.checks.types.ModifierBreakdown, *, combat_interaction: 'Interaction | None' = None, challenge_record: 'CharacterChallengeRecord | None' = None, summary: str = '') -> world.checks.outcome_models.ConsequenceOutcome — Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.`
 
@@ -2146,6 +2149,7 @@
   - engagement_locks <- combat.EngagementLock
   - pending_selections <- combat.PendingSelection
   - marks <- combat.CombatMark
+  - consider_readings <- combat.ConsiderReading
 
 ### BossPhase
 **Foreign Keys:**
@@ -2198,6 +2202,7 @@
   - engagement_locks <- combat.EngagementLock
   - pending_selections <- combat.PendingSelection
   - marks <- combat.CombatMark
+  - consider_readings <- combat.ConsiderReading
 
 ### CombatRoundAction
 **Foreign Keys:**
@@ -2422,6 +2427,11 @@
   - opponent -> combat.CombatOpponent [FK]
   - source_technique -> magic.Technique [FK] (nullable)
 
+### ConsiderReading
+**Foreign Keys:**
+  - participant -> combat.CombatParticipant [FK]
+  - opponent -> combat.CombatOpponent [FK]
+
 ### Service Functions
 - `accumulate_threat(encounter: 'CombatEncounter', opponent: 'CombatOpponent', participant: 'CombatParticipant', amount: 'int') -> 'None' — Increment the threat value for an (opponent, participant) pairing (#2020).`
 - `acknowledge_encounter_risk(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet') -> 'EncounterRiskAcknowledgement' — Idempotently record that a character acknowledged the encounter's risk (#777).`
@@ -2483,7 +2493,7 @@
 - `maybe_pause_encounter_for_disconnect(character_sheet: 'CharacterSheet') -> 'None' — Pause the character's live CombatEncounter, if any, on disconnect (#1899).`
 - `maybe_resolve_on_ready(encounter: 'CombatEncounter') -> 'RoundResolutionResult | None' — Resolve the round early when every ACTIVE participant is ready (#2120).`
 - `minimum_break_bar_threshold() -> 'int' — Pacing floor for a boss's break-bar threshold (#2642, batch-3 F-7a).`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `remove_participant(participant: 'CombatParticipant') -> 'None' — Remove a participant: status write + combat engagement teardown (#872).`
 - `resolve_cast_position_params(participant: 'CombatParticipant', technique: 'Technique', position_params: 'dict[str, int]') -> 'dict[str, Position | None]' — Validate declared cast positions against the encounter's room + technique reach.`
 - `resolve_combat_technique(*, participant: 'CombatParticipant', action: 'CombatRoundAction', fatigue_category: 'str', offense_check_type: 'CheckType', offense_check_fn: 'PerformCheckFn | None') -> 'CombatTechniqueResult' — Route a damage-path combat technique through use_technique.`
@@ -2641,6 +2651,7 @@
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
   - resist_check_type -> checks.CheckType [FK] (nullable)
+  - break_free_check_type -> checks.CheckType [FK] (nullable)
   - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
@@ -2808,6 +2819,7 @@
 - `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult — Apply a condition to a target, handling stacking and interactions.`
 - `apply_condition_by_name(*, payload: object, condition_name: str) -> None — Apply a named condition to the character carried by the event payload.`
 - `apply_stage_entry_aftermath(payload: flows.events.payloads.ConditionStageChangedPayload) -> None — On ascending stage changes, apply the stage's on_entry_conditions.`
+- `attempt_break_free(instance: world.conditions.models.ConditionInstance, *, extra_modifiers: int = 0, helper_bonus: int = 0, in_combat_tick: bool = False, level_override: int | None = None) -> world.conditions.types.BreakFreeResult — Resolve a single break-free attempt against an applied condition.`
 - `batch_chronic_effect_tick() -> world.conditions.types.ChronicTickSummary — Scheduler entry point. Advance long-term (chronic) DoT by one tick.`
 - `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> list[world.conditions.types.ApplyConditionResult] — Apply multiple conditions in a single transaction with batched queries.`
 - `can_perceive(actor: 'ObjectDB', target: 'ObjectDB') -> bool — Whether *actor* can perceive *target*.`
@@ -2844,10 +2856,11 @@
 - `has_death_deferred(character: 'ObjectDB') -> bool — Return True if the character has any active condition granting death_deferred.`
 - `is_concealed(target: 'ObjectDB') -> bool — True if *target* holds any active perception-concealing condition.`
 - `is_untargetable(target: 'ObjectDB') -> bool — True if *target* holds any active intangibility condition.`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None, skip_engagement_gate: bool = False) -> world.conditions.types.TreatmentOutcome — Resolve a TreatmentTemplate against an effect instance.`
 - `priced_percent_severity(*, eff_intensity: int, target: 'ObjectDB') -> int — Apply-time percent severity for the bounded team-damage-percent lane (#2643).`
 - `process_action_tick(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process on-action damage for conditions (when target takes an action).`
+- `process_break_free_tick() -> list[world.conditions.types.BreakFreeResult] — Process periodic break-free attempts for NPC targets (#2706).`
 - `process_damage_interactions(target: 'ObjectDB', damage_type: world.conditions.models.DamageType) -> world.conditions.types.DamageInteractionResult — Process condition interactions when target takes damage.`
 - `process_round_end(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process end-of-round effects for all conditions on a target.`
 - `process_round_start(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process start-of-round effects for all conditions on a target.`
@@ -3530,13 +3543,14 @@
 - `apply_technique_fatigue(character_sheet: 'CharacterSheet', category: 'str', effective_anima_cost: 'int', strain_commitment: 'int', *, immune_to_fatigue_collapse: 'bool' = False) -> 'int' — Accrue fatigue from a technique cast and conditionally check collapse.`
 - `attempt_endurance_check(character_sheet: 'CharacterSheet', category: 'str') -> 'bool' — Endurance check against fatigue via the unified check system.`
 - `attempt_power_through(character_sheet: 'CharacterSheet', category: 'str') -> 'tuple[bool, int]' — Willpower check to power through collapse via the unified check system.`
+- `ensure_stat_trait(name: 'str') -> 'Trait' — Ensure the named STAT Trait exists, creating it from STAT_TRAIT_DEFAULTS if not.`
 - `get_fatigue_capacity(character_sheet: 'CharacterSheet', category: 'str', *, well_rested: 'bool | None' = None) -> 'int' — Calculate max fatigue capacity for a category.`
 - `get_fatigue_penalty(character_sheet: 'CharacterSheet', category: 'str') -> 'int' — Return the check penalty for the current fatigue zone.`
 - `get_fatigue_percentage(character_sheet: 'CharacterSheet', category: 'str') -> 'float' — Return current fatigue as a percentage of capacity.`
 - `get_fatigue_zone(character_sheet: 'CharacterSheet', category: 'str') -> 'str' — Return the FatigueZone based on current fatigue percentage.`
 - `get_full_status(character_sheet: 'CharacterSheet', *, pool: 'FatiguePool | None') -> 'dict' — Get fatigue status for all three categories in one pass.`
 - `get_or_create_fatigue_pool(character_sheet: 'CharacterSheet') -> 'FatiguePool' — Get or create a FatiguePool for a character sheet.`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `reset_fatigue(character_sheet: 'CharacterSheet') -> 'None' — Reset all fatigue pools to 0.`
 - `resolve_fatigue_collapse(character_sheet: 'CharacterSheet', category: 'str') -> 'FatigueCollapseResult' — Run the fatigue collapse sequence for one category and apply strain damage.`
 - `rest(character_sheet: 'CharacterSheet') -> 'RestResult' — Spend AP to rest, gaining well_rested for the next dawn reset.`
@@ -5591,6 +5605,10 @@
 
 ### TouchstoneCastConfig
 
+### TrainingOutcomeAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
 ### ThreadWeavingUnlock
 **Foreign Keys:**
   - unlock_trait -> traits.Trait [FK] (nullable)
@@ -6416,7 +6434,7 @@
 - `incur_npc_debt(standing: 'NPCStanding', amount: 'int', *, current_affection: 'int', current_missions_completed: 'int') -> 'NPCStanding' — Add ``amount`` to ``standing.debt`` and re-stamp the repayment baseline.`
 - `mission_pool_count(*, role: 'NPCRole', persona: 'Persona', npc_persona: 'Persona | None') -> 'int' — POOL offer count to surface for ``persona`` at this NPC (#726, #1020).`
 - `outstanding_debt(standing: 'NPCStanding', *, current_affection: 'int', current_missions_completed: 'int', affection_divisor: 'int', mission_divisor: 'int') -> 'int' — Derive-on-read: net ``standing.debt`` against progress since the baseline.`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `record_petition_outcome(standing: 'NPCStanding', *, succeeded: 'bool', escalation_threshold: 'int') -> 'bool' — Increment/reset ``consecutive_failed_petitions``; report threshold crossing.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
 - `serialize_npc_session_state(session: 'InteractionSession', *, last_result_message: 'str' = '') -> 'dict' — Compose the response payload from a (live or freshly-closed) session.`
@@ -6598,6 +6616,13 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - trait -> traits.Trait [FK]
   - game_week -> game_clock.GameWeek [FK]
+
+### MaturationStatCap
+
+### MaturationSpend
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - trait -> traits.Trait [FK]
 
 ### XPCostChart
 **Pointed to by:**
@@ -8829,6 +8854,7 @@
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
   - weekly_skill_usage <- progression.WeeklySkillUsage
+  - maturation_spends <- progression.MaturationSpend
   - xp_costs <- progression.TraitXPCost
   - rating_unlocks <- progression.TraitRatingUnlock
   - trait_requirements <- progression.TraitRequirement
@@ -8860,6 +8886,7 @@
   - magic_sanctumpurgingretentionaward <- magic.SanctumPurgingRetentionAward
   - magic_sanctumdissolutionrecoveryaward <- magic.SanctumDissolutionRecoveryAward
   - magic_animaritualbudgetaward <- magic.AnimaRitualBudgetAward
+  - magic_trainingoutcomeaward <- magic.TrainingOutcomeAward
   - beat_completions <- stories.BeatCompletion
   - gang_turf_thresholds <- societies.GangTurfTierThreshold
   - societies_gangturfreputationaward <- societies.GangTurfReputationAward
@@ -8886,6 +8913,9 @@
 **Foreign Keys:**
   - chart -> traits.ResultChart [FK]
   - outcome -> traits.CheckOutcome [FK]
+
+### Service Functions
+- `ensure_stat_trait(name: 'str') -> 'Trait' — Ensure the named STAT Trait exists, creating it from STAT_TRAIT_DEFAULTS if not.`
 
 
 ## world.travel
@@ -8978,6 +9008,7 @@
 - `covenant_role_health(character: 'object', level: 'int') -> 'int' — Level-scaled covenant-role 'armor': sum of level * bonus_per_level over engaged`
 - `derive_base_max_health(character_sheet: 'CharacterSheet') -> 'int' — Derive base_max_health = class stage-rate sum + stamina term + covenant-role armor.`
 - `derive_character_status(character_sheet: 'CharacterSheet | None') -> 'str' — Derive a coarse, read-only life-status string for the wire/API.`
+- `frailty_floor_reached(character_sheet: 'CharacterSheet') -> 'bool' — True when age-bled max health has crossed the dying floor (#2756).`
 - `get_dream_room() -> 'ObjectDB | None' — Return the liminal dream room (seeded by the survivability cluster).`
 - `get_vitals_consequence_config() -> 'VitalsConsequenceConfig' — Return the VitalsConsequenceConfig singleton (pk=1), creating it lazily on first call.`
 - `is_alive(character_sheet: 'CharacterSheet | None') -> 'bool' — Return True if the character is not dead.`
@@ -8985,7 +9016,7 @@
 - `is_retired(character_sheet: 'CharacterSheet | None') -> 'bool' — True when the dead character has been released (retire fired, #2287).`
 - `mend_wound(healer_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', wound_instance: 'ConditionInstance', amount: 'int') -> 'int' — Raise a wounded target's health, double-bounded (#2644 — the attrition invariant).`
 - `perceives_dreamside(character_sheet: 'CharacterSheet | None') -> 'bool' — True when the character's perception is relocated to the dream side (#2287).`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `process_damage_consequences(character_sheet: 'CharacterSheet | None', damage_dealt: 'int', damage_type: 'DamageType | None', *, extra_modifiers: 'int' = 0, combat_interaction_factory: 'Callable[[], Interaction] | None' = None, source_character: 'ObjectDB | None' = None) -> 'DamageConsequenceResult' — Process survivability consequences after damage is applied.`
 - `recompute_max_health(character_sheet: 'CharacterSheet', *, thread_addend: 'int' = 0) -> 'int' — Derive max_health from base_max_health plus a thread-derived addend.`
 - `resolve_abandonment(character_sheet: 'CharacterSheet | None') -> 'bool' — Resolve an abandoned downed victim's fate through the abandonment pool (#1479 T8).`

@@ -37,16 +37,19 @@ logger = logging.getLogger(__name__)
 def _owner_is_long_inactive(building: Building) -> bool:
     """Whether the owner's activity signal warrants mothballing.
 
-    Uses the existing 14/30/90/365d ``decay_tier`` ladder; the mothball
-    threshold is LONG_INACTIVE (90d+). Ownerless buildings never mothball
-    (staff-authored scenery stays put).
+    Asks the shared absence vocabulary (#2728 §5/§8) rather than reading
+    ``decay_tier`` and restating the ladder here. Mothballing keeps its own
+    90-day bar — it is a *consequence* of inactivity with reversible per-room
+    state, not a rival definition of it. With auto-release the two are
+    sequential: at 30 days the character is released, at 90 the building is
+    hidden if still unclaimed, so the grid doesn't fill with ghost houses.
+    Ownerless buildings never mothball (staff-authored scenery stays put).
     """
     from world.character_sheets.types import DecayTier  # noqa: PLC0415
 
     if building.owner_persona is None:
         return False
-    tier = building.owner_persona.character_sheet.decay_tier
-    return tier in {DecayTier.LONG_INACTIVE, DecayTier.DORMANT}
+    return building.owner_persona.character_sheet.inactive_at_least(DecayTier.LONG_INACTIVE)
 
 
 @transaction.atomic

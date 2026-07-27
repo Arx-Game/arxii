@@ -105,6 +105,7 @@ export const mockSpeciesHuman: Species = {
   description: 'The most common species in the realm.',
   stat_bonuses: { strength: 1 },
   codex_entry_id: null,
+  eternal_youth: false,
 };
 
 export const mockSpeciesElf: Species = {
@@ -113,6 +114,7 @@ export const mockSpeciesElf: Species = {
   description: 'Long-lived and graceful beings.',
   stat_bonuses: { agility: 1, intellect: 1 },
   codex_entry_id: null,
+  eternal_youth: true,
 };
 
 export const mockSpeciesDwarf: Species = {
@@ -121,6 +123,7 @@ export const mockSpeciesDwarf: Species = {
   description: 'Stout and hardy folk.',
   stat_bonuses: { stamina: 1, willpower: 1 },
   codex_entry_id: null,
+  eternal_youth: false,
 };
 
 export const mockSpeciesList: Species[] = [mockSpeciesHuman, mockSpeciesElf, mockSpeciesDwarf];
@@ -224,6 +227,8 @@ export const mockEmptyDraft: CharacterDraft = {
   public_worship: null,
   secret_worship: null,
   age: null,
+  birthday_month: null,
+  birthday_day: null,
   family: null,
   claimed_kin_slot: null,
   claimed_kin_pool: null,

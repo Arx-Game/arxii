@@ -10,6 +10,7 @@ This package organizes admin interfaces into logical modules:
 
 # Import all admin classes to register them with Django
 from world.progression.admin.kudos_admin import *  # noqa: F403
+from world.progression.admin.maturation_admin import *  # noqa: F403
 from world.progression.admin.paths_admin import *  # noqa: F403
 from world.progression.admin.rewards_admin import *  # noqa: F403
 from world.progression.admin.unlocks_admin import *  # noqa: F403

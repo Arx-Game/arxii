@@ -98,7 +98,7 @@ class CharacterSheetAdmin(admin.ModelAdmin):
     large_table_widget_exempt = ["roster_entry"]
     list_display = [
         "character",
-        "age",
+        "matured_years",
         "gender",
         "concept",
         "social_rank",
@@ -124,7 +124,25 @@ class CharacterSheetAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Basic Information",
-            {"fields": ("character", "age", "real_age", "gender", "pronouns", "birthday")},
+            {"fields": ("character", "gender", "pronouns")},
+        ),
+        (
+            "Age Axes (#2756)",
+            {
+                "fields": (
+                    "matured_years",
+                    "withered_years",
+                    "aging_paused",
+                    "ic_birth_year",
+                    "birthday_month",
+                    "birthday_day",
+                ),
+                "description": (
+                    "Biological age = matured + withered; chronological derives from "
+                    "ic_birth_year vs the game clock (null = Unknown); apparent age is "
+                    "biological — cosmetic overrides live in the appearance layer."
+                ),
+            },
         ),
         (
             "Pronouns (Direct)",

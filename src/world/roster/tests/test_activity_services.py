@@ -21,6 +21,7 @@ from world.character_sheets.types import (
 )
 from world.roster.factories import RosterEntryFactory, RosterFactory, RosterTenureFactory
 from world.roster.models.choices import ActivityRequirement, RosterType
+from world.roster.seeds import ensure_rosters
 from world.roster.services.activity import (
     FREEZE_COOLDOWN_DAYS,
     MAX_HIATUS_DAYS,
@@ -29,6 +30,7 @@ from world.roster.services.activity import (
     declare_hiatus,
     end_hiatus,
     freeze_character,
+    mark_character_active,
     set_lifecycle_state,
     sweep_activity_states,
     unfreeze_character,
@@ -47,12 +49,16 @@ def _build_sheet_with_tenure(
 
     Returns ``(sheet, account, roster, entry)``.
     """
-    # roster_type pinned explicitly (#2728) — RosterFactory's django_get_or_create on
-    # roster_type would otherwise risk silently discarding activity_requirement if a
-    # bare/kwarg-only call reuses an existing row from earlier in the same test.
-    roster = RosterFactory(roster_type=RosterType.ACTIVE, activity_requirement=requirement)
+    # activity_requirement is authored per character on the ENTRY (#2728), not on
+    # the shelf — a shelf-level value would be flattened the moment approval moved
+    # everyone onto the Active roster.
+    roster = RosterFactory(roster_type=RosterType.ACTIVE)
     sheet = CharacterSheetFactory()
-    entry = RosterEntryFactory(character_sheet=sheet, roster=roster)
+    entry = RosterEntryFactory(
+        character_sheet=sheet,
+        roster=roster,
+        activity_requirement=requirement,
+    )
     tenure = RosterTenureFactory(roster_entry=entry)
     account = tenure.player_data.account
     account.last_login = timezone.now() - timedelta(days=days_inactive)
@@ -117,19 +123,57 @@ class IsDormantTests(TestCase):
 class SweepActivityStatesTests(TestCase):
     """sweep_activity_states cron behavior."""
 
+    def setUp(self):
+        # The sweep releases onto the Available shelf, so the canonical shelves must
+        # exist. Production seeds them; an unseeded DB is a deployment error the
+        # sweep is meant to surface loudly rather than paper over (#2728).
+        ensure_rosters()
+
     def test_flips_active_to_inactive_at_30_days(self):
         sheet, *_ = _build_sheet_with_tenure(requirement=ActivityRequirement.LOW, days_inactive=30)
         sweep_activity_states()
         sheet.refresh_from_db()
         self.assertEqual(sheet.activity_state, ActivityState.INACTIVE)
 
-    def test_flips_inactive_back_to_active_on_recent_signal(self):
+    def test_the_sweep_no_longer_promotes_a_returning_player(self):
+        """Promotion moved to the login/puppet path (#2728 §6).
+
+        The sweep is demotion-only now, so it must NOT quietly reactivate an
+        INACTIVE sheet — otherwise the event-driven path is untested dead weight
+        and a returning player's promotion silently depends on cron timing again.
+        """
         sheet, *_ = _build_sheet_with_tenure(requirement=ActivityRequirement.LOW, days_inactive=5)
         sheet.activity_state = ActivityState.INACTIVE
         sheet.save(update_fields=["activity_state"])
+
         sweep_activity_states()
+
+        sheet.refresh_from_db()
+        self.assertEqual(sheet.activity_state, ActivityState.INACTIVE)
+
+    def test_mark_character_active_promotes_on_return(self):
+        """The replacement path: puppeting IS the signal, so it flips immediately."""
+        sheet, *_ = _build_sheet_with_tenure(requirement=ActivityRequirement.LOW, days_inactive=5)
+        sheet.activity_state = ActivityState.INACTIVE
+        sheet.save(update_fields=["activity_state"])
+
+        self.assertTrue(mark_character_active(sheet))
+
         sheet.refresh_from_db()
         self.assertEqual(sheet.activity_state, ActivityState.ACTIVE)
+
+    def test_mark_character_active_leaves_hiatus_and_frozen_alone(self):
+        """Only INACTIVE is cron-inferred; the other two are deliberate states."""
+        for state in (ActivityState.HIATUS, ActivityState.FROZEN):
+            with self.subTest(state=state):
+                sheet, *_ = _build_sheet_with_tenure(requirement=ActivityRequirement.LOW)
+                sheet.activity_state = state
+                sheet.save(update_fields=["activity_state"])
+
+                self.assertFalse(mark_character_active(sheet))
+
+                sheet.refresh_from_db()
+                self.assertEqual(sheet.activity_state, state)
 
     def test_hiatus_expires_to_active(self):
         sheet, *_ = _build_sheet_with_tenure(requirement=ActivityRequirement.LOW, days_inactive=60)
@@ -140,6 +184,26 @@ class SweepActivityStatesTests(TestCase):
         sheet.refresh_from_db()
         self.assertEqual(sheet.activity_state, ActivityState.ACTIVE)
         self.assertIsNone(sheet.activity_state_until)
+
+    def test_expiring_hiatus_does_not_also_demote_in_the_same_tick(self):
+        """A vacation must not cost you the character the moment it ends (#2728).
+
+        The decay clock keeps running through a declared absence, so a sheet whose
+        hiatus lapses is already well past the 30-day bar. If expiry and demotion
+        ran in one tick, the player would be flagged INACTIVE — and a roster
+        character auto-released — before they had any chance to log back in, which
+        is exactly what declaring a hiatus is supposed to prevent. They get the
+        cycle until the next sweep.
+        """
+        sheet, *_ = _build_sheet_with_tenure(requirement=ActivityRequirement.LOW, days_inactive=60)
+        sheet.activity_state = ActivityState.HIATUS
+        sheet.activity_state_until = timezone.now() - timedelta(days=1)
+        sheet.save(update_fields=["activity_state", "activity_state_until"])
+
+        sweep_activity_states()
+
+        sheet.refresh_from_db()
+        self.assertEqual(sheet.activity_state, ActivityState.ACTIVE)
 
     def test_hiatus_in_window_stays_hiatus(self):
         sheet, *_ = _build_sheet_with_tenure(requirement=ActivityRequirement.LOW, days_inactive=60)
@@ -159,13 +223,21 @@ class SweepActivityStatesTests(TestCase):
         sheet.refresh_from_db()
         self.assertEqual(sheet.activity_state, ActivityState.FROZEN)
 
-    def test_none_tier_rosters_skipped(self):
+    def test_none_requirement_is_still_flagged_inactive(self):
+        """§4: the flag is universal — NONE no longer means "never swept".
+
+        Every character goes INACTIVE at 30 days so nothing accrues income or takes
+        decay for someone who isn't there. What NONE buys is exemption from
+        *release*, not from the flag.
+        """
         sheet, *_ = _build_sheet_with_tenure(
             requirement=ActivityRequirement.NONE, days_inactive=400
         )
+
         sweep_activity_states()
+
         sheet.refresh_from_db()
-        self.assertEqual(sheet.activity_state, ActivityState.ACTIVE)
+        self.assertEqual(sheet.activity_state, ActivityState.INACTIVE)
 
 
 class HiatusServiceTests(TestCase):

@@ -179,8 +179,6 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         output = ["|wBasic Information|n", "-" * 20]
 
         output.append(f"Age: {sheet_data.age}")
-        if sheet_data.real_age and self.caller.is_staff:
-            output.append(f"Real Age: {sheet_data.real_age} |r(staff only)|n")
 
         output.append(f"Gender: {sheet_data.gender.title()}")
         output.append(f"Concept: {sheet_data.concept or 'None'}")

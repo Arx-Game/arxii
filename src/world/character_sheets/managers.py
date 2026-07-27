@@ -98,7 +98,7 @@ class CharacterSheetQuerySet(models.QuerySet):
         annotated = self.annotate(_current_tenure_login=current_login)
 
         has_entry = Q(roster_entry__isnull=False)
-        is_low = Q(roster_entry__roster__activity_requirement=ActivityRequirement.LOW)
+        is_low = Q(roster_entry__activity_requirement=ActivityRequirement.LOW)
 
         # LOW: login is the only signal, so a missing login means no signal at all.
         low_stale = has_entry & is_low & Q(_current_tenure_login__lte=cutoff)

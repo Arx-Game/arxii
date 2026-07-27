@@ -57,3 +57,9 @@ EFFORT_DEV_BASE: types.MappingProxyType[str, int] = types.MappingProxyType(
         EffortLevel.EXTREME: 30,
     }
 )
+
+
+# Maturation Points (#2756) — deterministic milestones for actually aging.
+# PLACEHOLDER tuning: first milestone at matured-year 21, then every 3 years.
+MATURATION_START_YEAR = 21
+MATURATION_INTERVAL_YEARS = 3

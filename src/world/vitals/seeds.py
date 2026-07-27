@@ -753,12 +753,58 @@ def _wire_consequence_config() -> None:
         config.save(update_fields=update_fields)
 
 
+def ensure_frailty_condition() -> ConditionTemplate | None:
+    """Ensure the Frailty old-age condition + its MAX_HEALTH effect (#2756).
+
+    Severity counts accumulated decline; the -1 x severity
+    ``ConditionModifierEffect`` against the ``max_health`` ModifierTarget is
+    that target's first writer, folded in by ``recompute_max_health``.
+    Content-repo-owned rows — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on; the decline cron skips with a log when
+    this returns None (mirrors the Bleeding Out seeding-gap behavior).
+    """
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+    from world.conditions.models import ConditionModifierEffect, ConditionTemplate  # noqa: PLC0415
+    from world.mechanics.factories import max_health_modifier_target  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.vitals.constants import FRAILTY_CONDITION_NAME  # noqa: PLC0415
+
+    category = _ensure_peril_category()
+    template = authored_or_sample(
+        ConditionTemplate,
+        {
+            "category": category,
+            "description": "PLACEHOLDER The accumulating toll of old age.",
+            "player_description": (
+                "PLACEHOLDER Your body carries its years heavily now; strength "
+                "that once returned no longer does."
+            ),
+            "observer_description": "moves with the careful economy of age.",
+            "default_duration_type": DurationType.UNTIL_CURED,
+            "default_duration_value": 0,
+            "is_visible_to_others": True,
+        },
+        name=FRAILTY_CONDITION_NAME,
+    )
+    if template is None:
+        return None
+    authored_or_sample(
+        ConditionModifierEffect,
+        {"value": -1, "scales_with_severity": True},
+        condition=template,
+        stage=None,
+        modifier_target=max_health_modifier_target(),
+    )
+    return template
+
+
 def seed_survivability_content() -> None:
     """Seed everything the survivability pipeline needs to fire in production."""
     ensure_foundational_capabilities()
     ensure_unconscious_condition()
     ensure_sleeping_condition()
     ensure_bleeding_out_condition()
+    ensure_frailty_condition()
     ensure_wound_conditions()
     create_bleed_out_terminal_pool()
     create_abandonment_pools()

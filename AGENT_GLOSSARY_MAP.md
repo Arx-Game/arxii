@@ -8,6 +8,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 
 ## Per-app glossaries
 
+- [character_sheets](src/world/character_sheets/AGENT_GLOSSARY.md)
 - [magic](src/world/magic/AGENT_GLOSSARY.md)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md)

@@ -232,6 +232,8 @@ class SettleObligationLoopEndToEndTests(TestCase):
             selected_path=path,
             selected_tradition=tradition,
             age=25,
+            birthday_month=6,
+            birthday_day=12,
             height_band=height_band,
             height_inches=(height_band.min_inches + height_band.max_inches) // 2,
             build=build,

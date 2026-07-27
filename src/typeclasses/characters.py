@@ -436,6 +436,12 @@ class Character(ObjectParent, DefaultCharacter):
         if entry:
             entry.last_puppeted = timezone.now()
             entry.save(update_fields=["last_puppeted"])
+            # Event-driven promotion (#2728 §6). Puppeting IS the activity signal,
+            # so clear INACTIVE here rather than leaving a returning player waiting
+            # up to a week for the weekly sweep to notice.
+            from world.roster.services.activity import mark_character_active
+
+            mark_character_active(self.sheet_data)
         payload = serialize_cmdset(self)
         for session in self.sessions.all():
             session.msg(commands=(payload, {}))

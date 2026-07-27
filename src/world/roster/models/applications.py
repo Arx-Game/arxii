@@ -12,7 +12,7 @@ from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.roster.managers import RosterApplicationManager
-from world.roster.models.choices import ApplicationStatus
+from world.roster.models.choices import ApplicationStatus, RosterType
 
 if TYPE_CHECKING:
     from evennia_extensions.models import PlayerData
@@ -70,18 +70,43 @@ class RosterApplication(SharedMemoryModel):
         from django.apps import apps
 
         RosterTenure = apps.get_model("roster", "RosterTenure")
+        Roster = apps.get_model("roster", "Roster")
 
-        # Create the tenure
-        player_number = self.character.roster_entry.tenures.count() + 1
-        tenure = RosterTenure.objects.create(
-            player_data=self.player_data,
-            roster_entry=self.character.roster_entry,
-            player_number=player_number,
-            start_date=timezone.now(),
-            applied_date=self.applied_date,
-            approved_date=timezone.now(),
-            approved_by=staff_player_data,
-        )
+        entry = self.character.roster_entry
+
+        # A returning player is re-seated onto their own past tenure rather than
+        # given a new one (#2728 §7) — minting a second row would announce them as
+        # "2nd player of X" when they are the same person, which is exactly what
+        # the anonymity numbering is not for. Approval is the decision point, so
+        # rival applications simply never reach here.
+        tenure = entry.tenures.filter(player_data=self.player_data).order_by("-start_date").first()
+        if tenure is not None:
+            tenure.end_date = None
+            tenure.applied_date = self.applied_date
+            tenure.approved_date = timezone.now()
+            tenure.approved_by = staff_player_data
+            tenure.save(
+                update_fields=["end_date", "applied_date", "approved_date", "approved_by"],
+            )
+        else:
+            # max()+1, not count()+1: an ended tenure still occupies its number, and
+            # counting would reissue it after any row is ever removed.
+            highest = entry.tenures.aggregate(models.Max("player_number"))["player_number__max"]
+            tenure = RosterTenure.objects.create(
+                player_data=self.player_data,
+                roster_entry=entry,
+                player_number=(highest or 0) + 1,
+                start_date=timezone.now(),
+                applied_date=self.applied_date,
+                approved_date=timezone.now(),
+                approved_by=staff_player_data,
+            )
+
+        # Someone is playing this character now, so it leaves the shelf it was
+        # offered from. The authored activity_requirement lives on the entry and is
+        # untouched by the move (#2728) — that is why it isn't on the Roster.
+        entry.move_to_roster(Roster.objects.get(roster_type=RosterType.ACTIVE))
+        entry.__dict__.pop("cached_tenures", None)
 
         # Update application
         self.status = ApplicationStatus.APPROVED

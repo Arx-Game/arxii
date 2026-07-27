@@ -22,6 +22,8 @@ from world.character_creation.services import (
 from world.character_sheets.models import CharacterSheet
 from world.character_sheets.serializers import (
     CharacterSheetSerializer,
+    MaturationSpendInputSerializer,
+    MaturationStateSerializer,
     OriginSlotClearSerializer,
     OriginSlotInputSerializer,
     ProfileTextVersionSerializer,
@@ -103,6 +105,78 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
             return Response({"detail": "Slot not found."}, status=status.HTTP_404_NOT_FOUND)
         clear_origin_slot(sheet, slot)
         return Response(status=status.HTTP_200_OK)
+
+    @extend_schema(responses={200: MaturationStateSerializer})
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="maturation")
+    def maturation(self, request: Request, pk: int | None = None) -> Response:
+        """The owner's Maturation Point panel state (#2756)."""
+        from world.progression.constants import (  # noqa: PLC0415
+            MATURATION_INTERVAL_YEARS,
+            MATURATION_START_YEAR,
+        )
+        from world.progression.services.maturation import (  # noqa: PLC0415
+            available_points,
+            milestone_count,
+            stat_cap_for,
+        )
+        from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
+
+        sheet = self.get_object()
+        self._check_ownership(sheet)
+        earned = milestone_count(sheet.matured_years)
+        next_milestone = MATURATION_START_YEAR + earned * MATURATION_INTERVAL_YEARS
+        cap = stat_cap_for(sheet)
+        values = {
+            tv.trait_id: tv.value
+            for tv in CharacterTraitValue.objects.filter(
+                character=sheet, trait__trait_type=TraitType.STAT
+            )
+        }
+        stats = [
+            {
+                "trait_id": trait.pk,
+                "name": trait.name,
+                "value": values.get(trait.pk, 0),
+                "at_cap": cap is not None and values.get(trait.pk, 0) >= cap,
+            }
+            for trait in Trait.objects.filter(trait_type=TraitType.STAT, is_public=True).order_by(
+                "name"
+            )
+        ]
+        payload = MaturationStateSerializer(
+            {
+                "available_points": available_points(sheet),
+                "stat_cap": cap,
+                "matured_years": sheet.matured_years,
+                "next_milestone_year": next_milestone,
+                "stats": stats,
+            }
+        )
+        return Response(payload.data)
+
+    @extend_schema(
+        request=MaturationSpendInputSerializer, responses={200: MaturationStateSerializer}
+    )
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="spend-maturation-point")
+    def spend_maturation_point_action(self, request: Request, pk: int | None = None) -> Response:
+        """Spend one Maturation Point on +1 to a stat (#2756)."""
+        from world.progression.exceptions import MaturationError  # noqa: PLC0415
+        from world.progression.services.maturation import spend_maturation_point  # noqa: PLC0415
+        from world.traits.models import Trait  # noqa: PLC0415
+
+        sheet = self.get_object()
+        self._check_ownership(sheet)
+        serializer = MaturationSpendInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            trait = Trait.objects.get(pk=serializer.validated_data["trait_id"])
+        except Trait.DoesNotExist:
+            return Response({"detail": "Trait not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            spend_maturation_point(sheet, trait)
+        except MaturationError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return self.maturation(request, pk=pk)
 
     @extend_schema(responses={200: ProfileTextVersionSerializer(many=True)})
     @action(detail=True, methods=[HTTPMethod.GET], url_path="profile-text-versions")

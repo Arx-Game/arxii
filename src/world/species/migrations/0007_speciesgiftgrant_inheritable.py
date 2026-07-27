@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("species", "0005_species_codex_entry"),
+        ("species", "0006_species_decline_start_age_species_eternal_youth"),
     ]
 
     operations = [

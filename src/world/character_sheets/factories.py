@@ -68,12 +68,13 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
         django_get_or_create = ("character",)
 
     character = factory.SubFactory(CharacterFactory)
-    age = factory.Faker("random_int", min=18, max=50)
+    matured_years = factory.Faker("random_int", min=18, max=50)
     # gender and pronouns are now FKs - leave null for basic factory
     marital_status = MaritalStatus.SINGLE
     vocation = factory.Faker("job")
     social_rank = factory.Faker("random_int", min=1, max=20)
-    birthday = factory.Faker("date")
+    birthday_month = factory.Faker("random_int", min=1, max=12)
+    birthday_day = factory.Faker("random_int", min=1, max=28)
     # Bio (concept/quote/…) and lineage (family/heritage/tarot/origin) live on Profile now
     # (#1270); they are accepted as factory kwargs and routed to true_profile in _create below.
 

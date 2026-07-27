@@ -3127,6 +3127,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/maturation/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The owner's Maturation Point panel state (#2756). */
+    get: operations['character_sheets_maturation_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-sheets/{id}/profile-text-versions/': {
     parameters: {
       query?: never;
@@ -3164,6 +3181,23 @@ export interface paths {
     put?: never;
     /** @description Set a character's origin-story slot answer (#2478). */
     post: operations['character_sheets_set_origin_slot_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/spend-maturation-point/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Spend one Maturation Point on +1 to a stat (#2756). */
+    post: operations['character_sheets_spend_maturation_point_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -21662,6 +21696,8 @@ export interface components {
       readonly id: number;
       name: string;
       readonly age: number | null;
+      /** @default  */
+      readonly birthday: string;
       readonly gender: string | null;
       readonly race: string;
       readonly char_class: string;
@@ -21879,6 +21915,10 @@ export interface components {
       readonly selected_gender: components['schemas']['Gender'];
       /** @description Character age in years (18-65) */
       age?: number | null;
+      /** @description Month (1-12) of the celebrated birthday / waking day. */
+      birthday_month?: number | null;
+      /** @description Day of month of the celebrated birthday / waking day. */
+      birthday_day?: number | null;
       readonly family: components['schemas']['Family'];
       readonly claimed_kin_slot: number;
       readonly claimed_kin_pool: number;
@@ -21954,6 +21994,10 @@ export interface components {
       selected_gender_id?: number | null;
       /** @description Character age in years (18-65) */
       age?: number | null;
+      /** @description Month (1-12) of the celebrated birthday / waking day. */
+      birthday_month?: number | null;
+      /** @description Day of month of the celebrated birthday / waking day. */
+      birthday_day?: number | null;
       family_id?: number | null;
       claimed_kin_slot_id?: number | null;
       claimed_kin_pool_id?: number | null;
@@ -26398,6 +26442,25 @@ export interface components {
       readonly ware_listings: {
         [key: string]: unknown;
       }[];
+    };
+    /** @description Input for CharacterSheetViewSet.spend-maturation-point (#2756). */
+    MaturationSpendInputRequest: {
+      trait_id: number;
+    };
+    /** @description One spendable stat row in the maturation panel (#2756). */
+    MaturationStatEntry: {
+      trait_id: number;
+      name: string;
+      value: number;
+      at_cap: boolean;
+    };
+    /** @description Response for CharacterSheetViewSet.maturation (#2756): the spend panel state. */
+    MaturationState: {
+      available_points: number;
+      stat_cap: number | null;
+      matured_years: number;
+      next_milestone_year: number;
+      stats: components['schemas']['MaturationStatEntry'][];
     };
     /**
      * @description * `pitch` - Pitch
@@ -31271,6 +31334,10 @@ export interface components {
       selected_gender_id?: number | null;
       /** @description Character age in years (18-65) */
       age?: number | null;
+      /** @description Month (1-12) of the celebrated birthday / waking day. */
+      birthday_month?: number | null;
+      /** @description Day of month of the celebrated birthday / waking day. */
+      birthday_day?: number | null;
       family_id?: number | null;
       claimed_kin_slot_id?: number | null;
       claimed_kin_pool_id?: number | null;
@@ -33602,9 +33669,12 @@ export interface components {
     /**
      * @description * `deed` - Deed
      *     * `scandal` - Scandal
+     *     * `pardon` - Pardon
+     *     * `crisis` - Crisis
+     *     * `birthday` - Birthday
      * @enum {string}
      */
-    PublicFeedItemKindEnum: 'deed' | 'scandal';
+    PublicFeedItemKindEnum: 'deed' | 'scandal' | 'pardon' | 'crisis' | 'birthday';
     /**
      * @description Wire shape for the optional ``action_context`` block in a pull preview.
      *
@@ -35577,6 +35647,8 @@ export interface components {
         [key: string]: number;
       };
       readonly codex_entry_id: number | null;
+      /** @description Elves, vampires, and similar: apparent age locks in the early 20s (CG caps the age input at 29), no Maturation Points are ever earned, and old-age decline never begins. */
+      eternal_youth?: boolean;
     };
     /** @description ModelSerializer for Species model. */
     SpeciesRequest: {
@@ -35586,6 +35658,8 @@ export interface components {
       description?: string;
       /** @description Parent species for subspecies (e.g., Rex'alfar.parent = Elven) */
       parent?: number | null;
+      /** @description Elves, vampires, and similar: apparent age locks in the early 20s (CG caps the age input at 29), no Maturation Points are ever earned, and old-age decline never begins. */
+      eternal_youth?: boolean;
     };
     /** @description POST body to spread a tale: which deed, in which scene, how told. */
     SpreadInputRequest: {
@@ -42244,6 +42318,27 @@ export interface operations {
       };
     };
   };
+  character_sheets_maturation_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MaturationState'];
+        };
+      };
+    };
+  };
   character_sheets_profile_text_versions_list: {
     parameters: {
       query?: never;
@@ -42282,6 +42377,31 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  character_sheets_spend_maturation_point_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MaturationSpendInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MaturationState'];
+        };
       };
     };
   };

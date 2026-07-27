@@ -61,9 +61,16 @@ The central time engine that drives the living world. An anchor-based game clock
 - Weather system (own design + PR, consumes clock for season/time-of-day)
 - Celestial atmosphere — moon phases, astrological conjunctions (part of atmosphere PR)
 - IC calendar lore names (brainstorm separately, populate via config table)
-- Aging mechanics — multiple age types (chronological, physical, unknown origin) need own design
-- Birthday notifications and friend alerts (notification system consumes clock queries)
-- `ic_birthdate` field on CharacterSheet
+- ~~Aging mechanics~~ — **built (#2756)**: three age axes on CharacterSheet
+  (chronological derives from `ic_birth_year` vs `get_ic_now()`; biological =
+  matured + withered years), deterministic Maturation Points, IC-cadence aging
+  crons (`aging.birthday_tick` / `aging.decline_check` / `aging.death_sweep`),
+  Frailty decline, dying window into the estates flow. See ADR-0172.
+- ~~Birthday notifications~~ — **built (#2756)** as the Town Crier tidings
+  digest (`FeedItemKind.BIRTHDAY`, merge-on-read), deliberately not push
+  notifications; friends/watched filters remain a scale valve for later.
+- ~~`ic_birthdate` field~~ — **built (#2756)** as `birthday_month`/`birthday_day`
+  (celebrated date; Sleeper waking day) + nullable `ic_birth_year`.
 - Scene time integration (scene system responsibility)
 - Event scheduling logic (event system consumes clock conversion API)
 - Frontend clock widget and day/night atmospheric styling

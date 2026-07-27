@@ -22,6 +22,7 @@ Items carry a ``category`` when the row's archetypes name a scandal category (th
 
 from __future__ import annotations
 
+import calendar
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -144,7 +145,7 @@ def _pardon_items(society_ids: set[int], *, limit: int) -> list[PublicFeedItem]:
     )
     return [
         PublicFeedItem(
-            kind="pardon",
+            kind=FeedItemKind.PARDON,
             headline=(
                 f"{grant.granter_persona.name} pardons {grant.target_persona.name} "
                 f"in {grant.area.name}"
@@ -178,7 +179,66 @@ def hub_feed_for_room(
 
     profile = get_room_profile(room)
     societies = societies_for_area(profile.area)
-    return public_feed_for_societies([society.pk for society in societies], limit=limit)
+    items = public_feed_for_societies([society.pk for society in societies], limit=limit)
+    birthdays = _birthday_items(limit=limit)
+    if not birthdays:
+        return items
+    merged = items + birthdays
+    merged.sort(key=lambda item: item.occurred_at, reverse=True)
+    return merged[:limit]
+
+
+# Upcoming-birthday window for the Town Crier digest (#2756): 3 IC weeks = 1 RL
+# week at the 3:1 clock ratio. PLACEHOLDER tuning.
+_BIRTHDAY_WINDOW_IC_DAYS = 21
+
+
+def _birthday_items(*, limit: int) -> list[PublicFeedItem]:
+    """Upcoming birthdays of active, living characters (#2756).
+
+    A crier-scope-only source (birthdays are civic notables, not
+    society-gossip rows): Active-roster shelf + ALIVE + non-dormant sheets
+    whose celebrated (month, day) falls within the next 3 IC weeks. Merge-on-
+    read like every other tidings source — no model, no cron.
+    """
+    from datetime import timedelta  # noqa: PLC0415
+
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.character_sheets.types import ActivityState, LifecycleState  # noqa: PLC0415
+    from world.game_clock.services import get_ic_now  # noqa: PLC0415
+    from world.roster.models.choices import RosterType  # noqa: PLC0415
+
+    ic_now = get_ic_now()
+    if ic_now is None:
+        return []
+
+    day_filter = Q()
+    for offset in range(_BIRTHDAY_WINDOW_IC_DAYS):
+        day = ic_now + timedelta(days=offset)
+        day_filter |= Q(birthday_month=day.month, birthday_day=day.day)
+
+    sheets = CharacterSheet.objects.filter(
+        day_filter,
+        lifecycle_state=LifecycleState.ALIVE,
+        activity_state=ActivityState.ACTIVE,
+        roster_entry__roster__roster_type=RosterType.ACTIVE,
+    ).select_related("character")[:limit]
+
+    return [
+        PublicFeedItem(
+            kind=FeedItemKind.BIRTHDAY,
+            headline=(
+                f"Upcoming: {sheet.character.db_key}'s birthday, "
+                f"{calendar.month_name[sheet.birthday_month]} {sheet.birthday_day}"
+            ),
+            subject=sheet.character.db_key,
+            occurred_at=ic_now,
+            category=None,
+        )
+        for sheet in sheets
+    ]
 
 
 def house_feed_for(organization, *, limit: int = _DEFAULT_LIMIT) -> list[PublicFeedItem]:
@@ -233,7 +293,7 @@ def _open_crisis_items(organization, *, limit: int) -> list[PublicFeedItem]:
     )
     return [
         PublicFeedItem(
-            kind="crisis",
+            kind=FeedItemKind.CRISIS,
             headline=(
                 f"{crisis.crisis_type.name if crisis.crisis_type else 'Crisis'} "
                 f"in {crisis.domain.name}"

@@ -25,15 +25,6 @@ from world.character_sheets.types import (
 from world.roster.factories import RosterEntryFactory, RosterFactory, RosterTenureFactory
 from world.roster.models.choices import ActivityRequirement, RosterType
 
-# One shelf per requirement. RosterFactory get_or_creates on roster_type, so two
-# calls sharing a roster_type would silently reuse the first row's
-# activity_requirement — these tests need HIGH and LOW side by side.
-_SHELF_FOR_REQUIREMENT = {
-    ActivityRequirement.HIGH: RosterType.ACTIVE,
-    ActivityRequirement.LOW: RosterType.RESTRICTED,
-    ActivityRequirement.NONE: RosterType.INACTIVE,
-}
-
 
 def _sheet_with_tenure(
     *,
@@ -46,12 +37,13 @@ def _sheet_with_tenure(
     ``None`` for either day-count leaves that signal unset, so the no-signal and
     single-signal cases are expressible.
     """
-    roster = RosterFactory(
-        roster_type=_SHELF_FOR_REQUIREMENT[requirement],
+    roster = RosterFactory(roster_type=RosterType.ACTIVE)
+    sheet = CharacterSheetFactory()
+    entry = RosterEntryFactory(
+        character_sheet=sheet,
+        roster=roster,
         activity_requirement=requirement,
     )
-    sheet = CharacterSheetFactory()
-    entry = RosterEntryFactory(character_sheet=sheet, roster=roster)
     tenure = RosterTenureFactory(roster_entry=entry)
 
     account = tenure.player_data.account

@@ -1535,7 +1535,7 @@ def recompute_max_health(
     base = vitals.base_max_health
     if base is None:
         base = derive_base_max_health(character_sheet)
-    new_max = max(base + thread_addend, 0)
+    new_max = max(base + thread_addend + _condition_max_health_delta(character_sheet), 0)
     update_fields: list[str] = []
     if vitals.max_health != new_max:
         vitals.max_health = new_max
@@ -1546,6 +1546,44 @@ def recompute_max_health(
     if update_fields:
         vitals.save(update_fields=update_fields)
     return new_max
+
+
+def _condition_max_health_delta(character_sheet: CharacterSheet) -> int:
+    """Active-condition contributions to the MAX_HEALTH target (#2756).
+
+    Today the only writer is the Frailty old-age condition (-1 x severity),
+    making this the first consumer of MAX_HEALTH ConditionModifierEffect rows.
+    Returns 0 when the target row doesn't exist (unseeded test worlds).
+    """
+    from world.conditions.services import get_condition_modifier_total  # noqa: PLC0415
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+    from world.vitals.constants import MAX_HEALTH_MODIFIER_TARGET  # noqa: PLC0415
+
+    target = ModifierTarget.objects.filter(name=MAX_HEALTH_MODIFIER_TARGET).first()
+    if target is None:
+        return 0
+    return get_condition_modifier_total(character_sheet, target)
+
+
+def frailty_floor_reached(character_sheet: CharacterSheet) -> bool:
+    """True when age-bled max health has crossed the dying floor (#2756).
+
+    The floor is ``aging_floor_fraction`` of the character's *base* max health
+    (authored or derived, before condition deltas), so the trigger point is
+    stable as Frailty deepens. False without a vitals row.
+    """
+    try:
+        vitals = character_sheet.vitals
+    except ObjectDoesNotExist:
+        return False
+    base = vitals.base_max_health
+    if base is None:
+        base = derive_base_max_health(character_sheet)
+    if base <= 0:
+        return False
+    config = get_vitals_consequence_config()
+    floor = int(base * config.aging_floor_fraction)
+    return vitals.max_health <= floor
 
 
 def covenant_role_health(character: object, level: int) -> int:  # noqa: OBJECTDB_PARAM

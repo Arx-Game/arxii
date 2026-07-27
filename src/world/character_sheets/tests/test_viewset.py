@@ -219,7 +219,8 @@ class TestIdentitySection(TestCase):
 
         cls.sheet = CharacterSheetFactory(
             character=cls.character,
-            age=25,
+            matured_years=25,
+            withered_years=0,
             concept="Noble warrior",
             quote="Steel before surrender.",
             gender=cls.gender,
@@ -270,6 +271,10 @@ class TestIdentitySection(TestCase):
             "concept",
             "quote",
             "age",
+            "birthday",
+            "chronological_age",
+            "biological_age",
+            "withered_years",
             "gender",
             "pronouns",
             "species",
@@ -1943,7 +1948,8 @@ class TestCharacterSheetQueryCount(TestCase):
 
         cls.sheet = CharacterSheetFactory(
             character=cls.character,
-            age=30,
+            matured_years=30,
+            withered_years=0,
             concept="Complete character",
             quote="Everything at once.",
             gender=cls.gender,
@@ -2158,7 +2164,8 @@ class TestPrefetchCompleteness(TestCase):
 
         cls.sheet = CharacterSheetFactory(
             character=cls.character,
-            age=28,
+            matured_years=28,
+            withered_years=0,
             concept="Prefetch test",
             quote="No queries.",
             gender=cls.gender,

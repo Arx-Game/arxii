@@ -83,7 +83,7 @@ from world.character_sheets.types import Gender as GenderChoices
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Heritage` | Origin story types (Sleeper, Misbegotten, Normal) | `name`, `description`, `is_special`, `family_known`, `family_display` |
+| `Heritage` | Origin story types (Sleeper, Misbegotten, Normal) | `name`, `description`, `is_special`, `family_known`, `family_display`, `chronological_age_unknown` (#2756 — Sleepers: CG leaves `ic_birth_year` null; everyone, the player included, sees "Unknown") |
 | `Gender` | Canonical gender identities | `key`, `display_name`, `is_default` |
 | `Pronouns` | Canonical pronoun sets (decoupled from gender) | `key`, `display_name`, `subject`, `object`, `possessive`, `is_default` |
 | `Characteristic` | Physical trait types (eye_color, hair_color, etc.) | `name`, `display_name`, `description`, `is_active`, `required_for_races` |
@@ -93,7 +93,7 @@ from world.character_sheets.types import Gender as GenderChoices
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterSheet` | Primary character demographics, identity, and source-of-truth anchor | `character` (OneToOne to ObjectDB, primary_key), `age`, `real_age`, `gender`, `pronouns`, pronoun fields, `species`, `social_rank`, `marital_status`, `additional_desc`, `true_profile` (OneToOne → Profile). Narrative bio (`concept`/`quote`/`background`/…) **and lineage** (`family`/`heritage`/`tarot_card`/`tarot_reversed`/`origin_realm`) are read/written through forwarding properties → `true_profile` (#1270). |
+| `CharacterSheet` | Primary character demographics, identity, and source-of-truth anchor | `character` (OneToOne to ObjectDB, primary_key), **age axes (#2756, ADR-0172)**: `matured_years` (the maturation meter), `withered_years` (curse overlay), `aging_paused`, `ic_birth_year` (nullable; chronological derives vs `get_ic_now()`), `birthday_month`/`birthday_day` (celebrated date; Sleeper waking day) + derived `biological_age`/`apparent_age`/`chronological_age` properties (the old `age`/`real_age`/`birthday` columns are retired), `gender`, `pronouns`, pronoun fields, `species`, `social_rank`, `marital_status`, `additional_desc`, `true_profile` (OneToOne → Profile). Narrative bio (`concept`/`quote`/`background`/…) **and lineage** (`family`/`heritage`/`tarot_card`/`tarot_reversed`/`origin_realm`) are read/written through forwarding properties → `true_profile` (#1270). |
 | `Profile` | The narrative bio + lineage a persona presents (#1270) | `concept`, `real_concept`, `quote`, `personality`, `background`, `obituary`, `family` (FK roster.Family), `heritage` (FK), `tarot_card` (FK), `tarot_reversed`, `origin_realm` (FK realms.Realm). Referenced by `CharacterSheet.true_profile` and `Persona.profile`. |
 | `CharacterSheetValue` | Links characters to characteristic values | `character_sheet` (FK), `characteristic_value` (FK) |
 

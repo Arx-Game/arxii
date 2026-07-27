@@ -111,3 +111,27 @@ class AlreadyRegisteredForDuranceError(ClassLevelAdvancementError):
     """Raised when a character attempts the intake registration rite twice."""
 
     user_message = "You have already been registered into the Durance arc."
+
+
+class MaturationError(Exception):
+    """Base for Maturation Point failures (#2756)."""
+
+    user_message = "This maturation point could not be spent."
+
+
+class MaturationNoPointsError(MaturationError):
+    """No unspent milestone is available at the character's matured years."""
+
+    user_message = "You have no maturation points available to spend."
+
+
+class MaturationCapReachedError(MaturationError):
+    """The target stat already sits at the character's stage cap."""
+
+    user_message = "That stat is already at the maximum your stage allows."
+
+
+class MaturationNotAStatError(MaturationError):
+    """Maturation points buy primary stats only."""
+
+    user_message = "Maturation points can only be spent on stats."
