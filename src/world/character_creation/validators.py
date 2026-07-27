@@ -263,15 +263,25 @@ def _get_form_trait_errors(draft: CharacterDraft) -> list[str]:
     if not selections:
         return errors
 
+    # Legality is scoped per offered trait: a trait the species has no
+    # SpeciesFormTrait link for was never offered — finalize silently skips
+    # it (pre-#2815 behavior), so validation ignores it too.
     own_palette = get_cg_form_options(species)
-    legal_pks = {opt.pk for options in own_palette.values() for opt in options}
+    legal_by_trait: dict[str, set[int]] = {
+        trait.name: {opt.pk for opt in options} for trait, options in own_palette.items()
+    }
     lines = get_draft_parent_lines(draft)
     if lines:
         for entry in inherited_options(species, lines):
-            legal_pks.update(opt.pk for opt in entry.options)
+            legal_by_trait.setdefault(entry.trait.name, set()).update(
+                opt.pk for opt in entry.options
+            )
     trait_names = {trait.name: trait.display_name for trait in own_palette}
     for trait_name, option_id in selections.items():
-        if isinstance(option_id, int) and option_id not in legal_pks:
+        legal = legal_by_trait.get(trait_name)
+        if legal is None:
+            continue
+        if isinstance(option_id, int) and option_id not in legal:
             display = trait_names.get(trait_name, trait_name)
             errors.append(f"{display} selection is not available to your species or lineage")
     return errors
