@@ -12,6 +12,7 @@ SCENES_PERSONA_FK = "scenes.Persona"
 class TraitType(models.TextChoices):
     COLOR = "color", "Color"
     STYLE = "style", "Style"
+    FEATURE = "feature", "Feature"
 
 
 class HeightBand(NaturalKeyMixin, SharedMemoryModel):
@@ -179,6 +180,13 @@ class SpeciesFormTrait(NaturalKeyMixin, SharedMemoryModel):
     trait = models.ForeignKey(FormTrait, on_delete=models.CASCADE, related_name="species_links")
     is_available_in_cg = models.BooleanField(
         default=True, help_text="Show this trait in character creation"
+    )
+    is_required = models.BooleanField(
+        default=False,
+        help_text=(
+            "This species must have a value for this trait (species identity marker, "
+            "e.g. horns for True Infernals). CG blocks submit without a selection."
+        ),
     )
     allowed_options = models.ManyToManyField(
         FormTraitOption,

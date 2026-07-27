@@ -73,6 +73,15 @@ class SpeciesFormTraitModelTest(TestCase):
     def test_str_format(self):
         self.assertEqual(str(self.species_trait), "Human - Hair Color")
 
+    def test_is_required_defaults_false(self):
+        self.assertFalse(self.species_trait.is_required)
+
+    def test_feature_trait_type(self):
+        trait = FormTraitFactory(name="horns", trait_type=TraitType.FEATURE)
+        required = SpeciesFormTraitFactory(species=self.species, trait=trait, is_required=True)
+        self.assertEqual(trait.trait_type, TraitType.FEATURE)
+        self.assertTrue(required.is_required)
+
 
 class CharacterFormModelTest(TestCase):
     @classmethod
