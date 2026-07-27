@@ -77,9 +77,8 @@ def _has_sunlight_drawback(sheet) -> bool:
 
     if sheet.species_id is None:
         return False
-    species_pks = [s.pk for s in _species_and_ancestors(sheet.species)]
     return SpeciesGiftGrant.objects.filter(
-        species_id__in=species_pks,
+        _inheritable_grant_filter(sheet.species),
         drawback_condition__name=SUNLIGHT_EXPOSURE_NAME,
     ).exists()
 
@@ -108,6 +107,30 @@ def _species_and_ancestors(species):
         chain.append(node)
         node = node.parent
     return chain
+
+
+def _own_and_inheritable_ancestor_pks(species):
+    """Return (own_pk, ancestor_pks) for the species parent chain.
+
+    own_pk is the species' own PK (all grants fetched, inheritable or not).
+    ancestor_pks is the list of ancestor PKs (only inheritable=True grants fetched).
+    """
+    chain = _species_and_ancestors(species)
+    own_pk = chain[0].pk
+    ancestor_pks = [s.pk for s in chain[1:]]
+    return own_pk, ancestor_pks
+
+
+def _inheritable_grant_filter(species):
+    """Build a Q filter for SpeciesGiftGrant that respects the inheritable flag.
+
+    Own species: all grants (including non-inheritable).
+    Ancestor species: only inheritable=True grants.
+    """
+    own_pk, ancestor_pks = _own_and_inheritable_ancestor_pks(species)
+    from django.db.models import Q  # noqa: PLC0415
+
+    return Q(species_id=own_pk) | Q(species_id__in=ancestor_pks, inheritable=True)
 
 
 def _apply_permanent_condition_once(character, condition) -> None:
@@ -144,9 +167,8 @@ def total_species_gift_cost(species) -> int:
     """
     from django.db.models import Sum  # noqa: PLC0415
 
-    species_pks = [s.pk for s in _species_and_ancestors(species)]
     return (
-        SpeciesGiftGrant.objects.filter(species_id__in=species_pks)
+        SpeciesGiftGrant.objects.filter(_inheritable_grant_filter(species))
         .aggregate(total=Sum("cg_point_cost"))
         .get("total")
         or 0
@@ -167,10 +189,9 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
     if sheet.species_id is None:
         return []
 
-    species_pks = [s.pk for s in _species_and_ancestors(sheet.species)]
-    grants = SpeciesGiftGrant.objects.filter(species_id__in=species_pks).select_related(
-        "gift", "drawback_condition", "benefit_condition", "drawback_distinction"
-    )
+    grants = SpeciesGiftGrant.objects.filter(
+        _inheritable_grant_filter(sheet.species)
+    ).select_related("gift", "drawback_condition", "benefit_condition", "drawback_distinction")
     minted: list[CharacterGift] = []
     for grant in grants:
         res = resonance or grant.gift.resonances.first()

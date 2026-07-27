@@ -456,6 +456,19 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
     active.save(update_fields=["alternate_self", "return_form", "return_persona"])
 
 
+def _walk_species_chain(species: Species) -> list[Species]:
+    """Return [species, parent, grandparent, ...] walking the parent chain.
+
+    Mirrors ``world.species.services._species_and_ancestors``; duplicated
+    locally to avoid a cross-app services import.
+    """
+    chain, node = [], species
+    while node is not None:
+        chain.append(node)
+        node = node.parent
+    return chain
+
+
 def get_cg_form_options(species: Species) -> dict[FormTrait, list[FormTraitOption]]:
     """
     Get available form trait options for character creation.
@@ -463,12 +476,16 @@ def get_cg_form_options(species: Species) -> dict[FormTrait, list[FormTraitOptio
     Returns traits this species has in CG with their available options.
     Options are filtered by the SpeciesFormTrait.allowed_options field -
     if empty, all options are available; if set, only those options show.
+
+    Walks the species + ancestor chain so a form trait authored on a parent
+    species (e.g. Khati) is visible to its subspecies (e.g. Vulpi).
     """
     result: dict[FormTrait, list[FormTraitOption]] = {}
 
-    # Get traits available for this species in CG
+    # Get traits available for this species (and ancestors) in CG
+    species_pks = [s.pk for s in _walk_species_chain(species)]
     species_traits = (
-        SpeciesFormTrait.objects.filter(species=species, is_available_in_cg=True)
+        SpeciesFormTrait.objects.filter(species_id__in=species_pks, is_available_in_cg=True)
         .select_related("trait")
         .prefetch_related(
             Prefetch(
