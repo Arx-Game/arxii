@@ -1085,7 +1085,25 @@ class FormOptionsView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        form_options = get_cg_form_options(species)
+        draft = None
+        raw_draft_id = request.query_params.get("draft")  # noqa: USE_FILTERSET
+        if raw_draft_id:
+            try:
+                draft_id = int(raw_draft_id)
+            except (TypeError, ValueError):
+                draft_id = None
+            if draft_id is not None:
+                draft = get_object_or_404(CharacterDraft, pk=draft_id, account=request.user)
+
+        if draft is not None:
+            # Children of fully-defined parents work from the family look
+            # (#2815): base options narrow to the parents' pinned values.
+            from world.character_creation.validators import get_draft_parent_lines  # noqa: PLC0415
+            from world.roster.services.heredity import base_trait_options  # noqa: PLC0415
+
+            form_options = base_trait_options(species, get_draft_parent_lines(draft))
+        else:
+            form_options = get_cg_form_options(species)
         required_trait_ids = set(
             SpeciesFormTrait.objects.filter(
                 species=species, is_available_in_cg=True, is_required=True
@@ -1103,15 +1121,8 @@ class FormOptionsView(APIView):
             )
 
         payload: dict[str, object] = {"traits": result, "inherited": []}
-        raw_draft_id = request.query_params.get("draft")  # noqa: USE_FILTERSET
-        if raw_draft_id:
-            try:
-                draft_id = int(raw_draft_id)
-            except (TypeError, ValueError):
-                draft_id = None
-            if draft_id is not None:
-                draft = get_object_or_404(CharacterDraft, pk=draft_id, account=request.user)
-                payload["inherited"] = self._inherited_payload(draft, species)
+        if draft is not None:
+            payload["inherited"] = self._inherited_payload(draft, species)
         return Response(payload)
 
 
