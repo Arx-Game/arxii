@@ -25,6 +25,7 @@ from world.vitals.constants import (
     DERIVED_STATUS_INCAPACITATED,
     ENDURANCE_CHECK_NAME,
     KNOCKOUT_HEALTH_THRESHOLD,
+    MEDICINE_CHECK_NAME,
     NEVER_TO_FULL_FRACTION,
     PERMANENT_WOUND_THRESHOLD,
     SURVIVABILITY_CHECK_CATEGORY,
@@ -275,6 +276,57 @@ def _ensure_endurance_check_type() -> CheckType | None:
     if stamina is not None:
         authored_or_sample(
             CheckTypeTrait, {"weight": Decimal("1.00")}, check_type=check, trait=stamina
+        )
+    return check
+
+
+def _ensure_medicine_check_type() -> CheckType | None:
+    """Look up (or sample) the Medicine CheckType + composition (#2748).
+
+    Composed as ``intellect`` stat + ``Medicine`` skill (stat + skill tenet).
+
+    Used for wound treatment checks (``TreatmentTemplate.check_type``).
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait``, ``traits.Trait``,
+    and ``skills.Skill`` are content-repo-owned (#2698) — looked up rather than
+    invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` when the
+    category or the check type itself isn't authored.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.checks.models import CheckTypeTrait  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+
+    category = _ensure_survival_category()
+    if category is None:
+        return None
+    check = authored_or_sample(
+        CheckType,
+        {
+            "category": category,
+            "description": "Diagnosing and treating wounds, ailments, and poisons.",
+        },
+        name=MEDICINE_CHECK_NAME,
+    )
+    if check is None:
+        return None
+    intellect = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.MENTAL, "is_public": True},
+        name="intellect",
+    )
+    if intellect is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": Decimal("1.00")}, check_type=check, trait=intellect
+        )
+    medicine = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.SKILL, "category": TraitCategory.GENERAL, "is_public": True},
+        name="Medicine",
+    )
+    if medicine is not None:
+        authored_or_sample(
+            CheckTypeTrait, {"weight": Decimal("1.00")}, check_type=check, trait=medicine
         )
     return check
 

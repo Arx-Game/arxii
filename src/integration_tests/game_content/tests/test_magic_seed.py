@@ -183,10 +183,10 @@ class TestSeedMagicConfigIdempotency(TestCase):
         self.assertEqual(counts["mishap_pool_tiers"], 1)
         # Guard against orphan CheckType/CheckCategory rows leaking on re-run.
         # seed_magic_config() now delegates to ensure_magic_check_types() which
-        # seeds the five Magic CheckTypes (#709); count updated from 1 → 5.
+        # seeds the six Magic CheckTypes (#709, #2747); count updated from 1 → 6.
         self.assertEqual(
             counts["check_types"],
-            5,
+            6,
             "seed_magic_config() must not create extra CheckType rows on second call",
         )
         self.assertEqual(
@@ -1799,7 +1799,7 @@ class SeedMagicDevMagicChecksTests(TestCase):
 
     def test_seed_magic_dev_includes_magic_check_content(self):
         result = seed_magic_dev()
-        self.assertEqual(len(result.magic_checks.check_types), 5)
+        self.assertEqual(len(result.magic_checks.check_types), 6)
         self.assertEqual(len(result.magic_checks.skills), 3)
         self.assertEqual(len(result.magic_checks.configs), 5)
 

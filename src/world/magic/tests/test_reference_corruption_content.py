@@ -93,7 +93,7 @@ class TestCorruptionConditionTemplateFactory(TestCase):
         # All stages should have a resist_check_type
         for stage in template.stages.select_related("resist_check_type").order_by("stage_order"):
             self.assertIsNotNone(stage.resist_check_type, f"Stage {stage.stage_order} missing")
-            self.assertEqual(stage.resist_check_type.name, "Magical Endurance")
+            self.assertEqual(stage.resist_check_type.name, "Resist Corruption")
 
     def test_passive_decay_max_severity_is_none_for_primal(self) -> None:
         """Primal Corruption decays all the way to zero per Spec B §11 (tuning placeholder)."""

@@ -619,15 +619,11 @@ def ensure_default_wound_pool() -> ConsequencePool:
 def ensure_wound_treatment_content() -> None:
     """Seed one TreatmentTemplate per wound condition (#2644 — bounded HP mend).
 
-    **Check type — documented judgment call.** No Medicine/first-aid CheckType
-    exists anywhere in the codebase's seeded content (checked every production
-    seed file); authoring a new stat+skill composition (a Medicine Skill/Trait
-    plus its CheckType) is a bigger content-authoring lift than this mechanics-
-    vocabulary pass calls for. Reuses the vitals-owned ``Endurance`` CheckType
-    (Stamina resist check, already seeded by ``_ensure_endurance_check_type``)
-    per the spec's fallback clause ("reuse an existing broadly-applicable [check
-    type] and document") — a proper Medicine composition is a future authoring
-    pass; ``TreatmentTemplate.check_type`` just gets repointed, no schema change.
+    Uses the ``Medicine`` CheckType (intellect + Medicine skill, #2748) for the
+    treatment check. Previously fell back to the ``Endurance`` CheckType (stamina
+    resist) as a placeholder — now that Medicine is a composed check, treatment
+    rolls against it instead. ``TreatmentTemplate.check_type`` is a plain FK, so
+    repointing requires no schema change.
 
     Modest ``anima_cost`` (no bond thread requirement — unlike the Soulfray/
     Mage-Scar aftermath treatments, tending a physical wound doesn't require an
@@ -638,14 +634,14 @@ def ensure_wound_treatment_content() -> None:
     """
     from world.conditions.constants import TreatmentTargetKind  # noqa: PLC0415
     from world.conditions.models import TreatmentTemplate  # noqa: PLC0415
-    from world.vitals.services import _ensure_endurance_check_type  # noqa: PLC0415
+    from world.vitals.services import _ensure_medicine_check_type  # noqa: PLC0415
 
     lingering_ache, crippling_wound, bleeding_wound = ensure_wound_conditions()
-    check_type = _ensure_endurance_check_type()
+    check_type = _ensure_medicine_check_type()
     if check_type is None:
         # checks.CheckType is content-repo-owned (#2698); check_type is a
         # required FK on TreatmentTemplate, so every treatment template is
-        # skipped entirely when the Endurance CheckType isn't authored.
+        # skipped entirely when the Medicine CheckType isn't authored.
         return
 
     specs = [
