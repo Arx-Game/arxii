@@ -3216,7 +3216,12 @@ def attempt_break_free(
     Returns:
         BreakFreeResult with outcome label and severity delta.
     """
-    from world.checks.services import level_opposition, perform_check  # noqa: PLC0415
+    from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
+    from world.checks.services import (  # noqa: PLC0415
+        level_opposition,
+        perform_check_with_modifiers,
+    )
+    from world.checks.types import ModifierContribution  # noqa: PLC0415
     from world.progression.services.skill_development import (  # noqa: PLC0415
         get_character_path_level,
     )
@@ -3268,13 +3273,34 @@ def attempt_break_free(
         instance.pending_rally_bonus = 0
         instance.save(update_fields=["pending_rally_bonus"])
 
-    total_modifiers = extra_modifiers + helper_bonus + rally_bonus
-    result = perform_check(
+    # Route through the aggregator so condition/rollmod/equipment/character/
+    # capability modifiers reach this check (#2758). The caller-supplied
+    # modifiers and rally bonus pass as labeled contributions — separate so
+    # rally (a RallyAction-crit concept) has its own provenance line.
+    contributions = []
+    caller_total = extra_modifiers + helper_bonus
+    if caller_total != 0:
+        contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.EFFORT,
+                source_label="Caller modifiers",
+                value=caller_total,
+            )
+        )
+    if rally_bonus > 0:
+        contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.EFFORT,
+                source_label="Rally bonus",
+                value=rally_bonus,
+            )
+        )
+    result = perform_check_with_modifiers(
         instance.target,
         check_type,
         target_difficulty=difficulty,
-        extra_modifiers=total_modifiers,
         level_override=level_override,
+        extra_contributions=contributions or None,
     )
     return _resolve_break_free_outcome(instance, result.success_level)
 
