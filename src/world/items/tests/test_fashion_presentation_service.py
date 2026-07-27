@@ -45,6 +45,10 @@ class FashionPresentationServiceTests(TestCase):
             name=FASHION_PRESENTATION_MODIFIER_TARGET_NAME,
         )
         cls.check_type = CheckTypeFactory(name=FASHION_PRESENTATION_CHECK_TYPE_NAME)
+        # Link the CheckType to its ModifierTarget (mirrors migration 0050) so the
+        # aggregator's CHARACTER/EQUIPMENT/crafted blocks fire for this check.
+        cls.modifier_target.target_check_type = cls.check_type
+        cls.modifier_target.save(update_fields=["target_check_type"])
 
         # Deterministic graded outcomes.
         cls.outcome_success = CheckOutcomeFactory(
