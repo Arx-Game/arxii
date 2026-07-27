@@ -203,3 +203,55 @@ class HeredityValidationTest(FinalizationTestMixin, TestCase):
         draft.save(update_fields=["second_parent_species"])
         errors = get_lineage_errors(draft)
         self.assertTrue(any("Name the parent" in error for error in errors))
+
+
+class FormOptionsEndpointTest(FinalizationTestMixin, TestCase):
+    """Parent-aware form options endpoint (#2815)."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username="optionsuser")
+        self._setup_finalization_base(self, prefix="Options Test", height_min=700, height_max=800)
+        self.human = SpeciesFactory(name="Human")
+        self.hair = FormTraitFactory(name="hair_color")
+        self.black = FormTraitOptionFactory(trait=self.hair, name="black")
+        self.red = FormTraitOptionFactory(trait=self.hair, name="red")
+        own_link = SpeciesFormTraitFactory(species=self.species, trait=self.hair, is_required=True)
+        own_link.allowed_options.set([self.black])
+        human_link = SpeciesFormTraitFactory(species=self.human, trait=self.hair)
+        human_link.allowed_options.set([self.black, self.red])
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def _get(self, species_id, **params):
+        url = f"/api/character-creation/form-options/{species_id}/"
+        return self.client.get(url, params)
+
+    def test_traits_carry_required_flag(self):
+        response = self._get(self.species.id)
+        self.assertEqual(response.status_code, 200)
+        traits = response.data["traits"]
+        self.assertEqual(len(traits), 1)
+        self.assertTrue(traits[0]["is_required"])
+        self.assertEqual(response.data["inherited"], [])
+
+    def test_draft_param_appends_inherited_group(self):
+        draft = self._create_base_draft(other_parent_name="Bob")
+        draft.second_parent_species = self.human
+        draft.save(update_fields=["second_parent_species"])
+        response = self._get(self.species.id, draft=draft.pk)
+        self.assertEqual(response.status_code, 200)
+        inherited = response.data["inherited"]
+        self.assertEqual(len(inherited), 1)
+        self.assertEqual(inherited[0]["source"], "Human parent")
+        self.assertEqual([opt["name"] for opt in inherited[0]["options"]], ["red"])
+
+    def test_foreign_draft_is_404(self):
+        stranger = AccountDB.objects.create(username="stranger")
+        draft = self._create_base_draft()
+        draft.account = stranger
+        draft.save(update_fields=["account"])
+        response = self._get(self.species.id, draft=draft.pk)
+        self.assertEqual(response.status_code, 404)

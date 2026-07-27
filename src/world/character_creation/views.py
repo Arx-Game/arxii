@@ -87,6 +87,7 @@ from world.character_creation.services import (
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathAspect, PathStage
 from world.codex.models import BeginningsCodexGrant, PathCodexGrant
+from world.forms.models import FormTrait, FormTraitOption, SpeciesFormTrait
 from world.forms.services import get_cg_form_options
 from world.magic.models import (
     Gift,
@@ -1035,8 +1036,47 @@ class FormOptionsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @staticmethod
+    def _trait_payload(trait: FormTrait) -> dict[str, object]:
+        return {
+            "id": trait.id,
+            "name": trait.name,
+            "display_name": trait.display_name,
+            "trait_type": trait.trait_type,
+        }
+
+    @staticmethod
+    def _option_payload(opt: FormTraitOption) -> dict[str, object]:
+        return {
+            "id": opt.id,
+            "name": opt.name,
+            "display_name": opt.display_name,
+            "sort_order": opt.sort_order,
+        }
+
+    def _inherited_payload(self, draft: CharacterDraft, species: Species) -> list[dict]:
+        """Cross-line options unlocked by the draft's parents (#2815)."""
+        from world.character_creation.validators import get_draft_parent_lines  # noqa: PLC0415
+        from world.roster.services.heredity import inherited_options  # noqa: PLC0415
+
+        lines = get_draft_parent_lines(draft)
+        if not lines:
+            return []
+        return [
+            {
+                "trait": self._trait_payload(entry.trait),
+                "options": [self._option_payload(opt) for opt in entry.options],
+                "source": entry.source,
+            }
+            for entry in inherited_options(species, lines)
+        ]
+
     def get(self, request: Request, species_id: int) -> Response:
-        """Return form traits and options available for the given species."""
+        """Return form traits and options available for the given species.
+
+        ``?draft=<id>`` (the requester's own draft) appends the cross-line
+        options that draft's parents unlock, tagged with their source line.
+        """
         try:
             species = Species.objects.get(id=species_id)
         except Species.DoesNotExist:
@@ -1046,31 +1086,33 @@ class FormOptionsView(APIView):
             )
 
         form_options = get_cg_form_options(species)
+        required_trait_ids = set(
+            SpeciesFormTrait.objects.filter(
+                species=species, is_available_in_cg=True, is_required=True
+            ).values_list("trait_id", flat=True)
+        )
 
-        # Convert dict to list format for serialization
         result = []
         for trait, options in form_options.items():
             result.append(
                 {
-                    "trait": {
-                        "id": trait.id,
-                        "name": trait.name,
-                        "display_name": trait.display_name,
-                        "trait_type": trait.trait_type,
-                    },
-                    "options": [
-                        {
-                            "id": opt.id,
-                            "name": opt.name,
-                            "display_name": opt.display_name,
-                            "sort_order": opt.sort_order,
-                        }
-                        for opt in options
-                    ],
+                    "trait": self._trait_payload(trait),
+                    "is_required": trait.id in required_trait_ids,
+                    "options": [self._option_payload(opt) for opt in options],
                 }
             )
 
-        return Response(result)
+        payload: dict[str, object] = {"traits": result, "inherited": []}
+        raw_draft_id = request.query_params.get("draft")  # noqa: USE_FILTERSET
+        if raw_draft_id:
+            try:
+                draft_id = int(raw_draft_id)
+            except (TypeError, ValueError):
+                draft_id = None
+            if draft_id is not None:
+                draft = get_object_or_404(CharacterDraft, pk=draft_id, account=request.user)
+                payload["inherited"] = self._inherited_payload(draft, species)
+        return Response(payload)
 
 
 class IsStaffPermission(permissions.BasePermission):
