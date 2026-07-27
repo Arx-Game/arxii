@@ -16362,11 +16362,6 @@ paths:
         resolve_cast_action_template enforces the same split at submit/finalize
         time. The technique builder's category-agnostic picker keeps the flat
         union by passing no param.
-      parameters:
-      - in: query
-        name: action_category
-        schema:
-          type: string
       tags:
       - magic
       security:
@@ -16398,8 +16393,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Consequence Pool.
+          type: string
         required: true
       tags:
       - magic
@@ -38686,6 +38680,7 @@ components:
       - pull
       - relationship
       - capability
+      - soulfray
       type: string
       description: |-
         * `condition` - Condition
@@ -38701,6 +38696,7 @@ components:
         * `pull` - Combat Pull
         * `relationship` - Relationship
         * `capability` - Capability
+        * `soulfray` - Soulfray
     ConsequencePoolCatalog:
       type: object
       description: Read-only serializer for the curated technique-cast consequence-pool

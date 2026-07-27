@@ -22699,6 +22699,7 @@ export interface components {
      *     * `pull` - Combat Pull
      *     * `relationship` - Relationship
      *     * `capability` - Capability
+     *     * `soulfray` - Soulfray
      * @enum {string}
      */
     ConsequenceOutcomeModifierSourceKindEnum:
@@ -22714,7 +22715,8 @@ export interface components {
       | 'affinity'
       | 'pull'
       | 'relationship'
-      | 'capability';
+      | 'capability'
+      | 'soulfray';
     /** @description Read-only serializer for the curated technique-cast consequence-pool catalog. */
     ConsequencePoolCatalog: {
       readonly id: number;
@@ -52321,9 +52323,7 @@ export interface operations {
   };
   magic_consequence_pool_catalog_list: {
     parameters: {
-      query?: {
-        action_category?: string;
-      };
+      query?: never;
       header?: never;
       path?: never;
       cookie?: never;
@@ -52345,8 +52345,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Consequence Pool. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
