@@ -56,13 +56,13 @@ class CharacterDataHandlerTests(TestCase):
     def test_handler_caches_sheet_data(self):
         """Test that sheet data is cached after first access."""
         # Create sheet manually
-        CharacterSheetFactory(character=self.character, age=25)
+        CharacterSheetFactory(character=self.character, matured_years=25, withered_years=0)
 
         # First access
         age1 = self.handler.age
 
         # Modify sheet directly in database, bypassing identity mapper
-        CharacterSheet.objects.filter(character=self.character).update(age=30)
+        CharacterSheet.objects.filter(character=self.character).update(matured_years=30)
 
         # Second access should return cached value (handler holds reference to
         # the identity-mapped instance, which was not updated by .update())
@@ -74,13 +74,13 @@ class CharacterDataHandlerTests(TestCase):
     def test_clear_cache_refreshes_data(self):
         """Test that clearing cache refreshes data."""
         # Create sheet
-        CharacterSheetFactory(character=self.character, age=25)
+        CharacterSheetFactory(character=self.character, matured_years=25, withered_years=0)
 
         # First access (caches data)
         age1 = self.handler.age
 
         # Modify sheet directly in DB, bypassing identity mapper
-        CharacterSheet.objects.filter(character=self.character).update(age=30)
+        CharacterSheet.objects.filter(character=self.character).update(matured_years=30)
         # Flush identity mapper so the handler re-fetches fresh data
         CharacterSheet.flush_instance_cache()
 
@@ -98,7 +98,8 @@ class CharacterDataHandlerTests(TestCase):
         gender = GenderFactory(key="female", display_name="Female")
         CharacterSheetFactory(
             character=self.character,
-            age=25,
+            matured_years=25,
+            withered_years=0,
             gender=gender,
             concept="A brave warrior",
             social_rank=5,
@@ -152,14 +153,6 @@ class CharacterDataHandlerTests(TestCase):
         handler = CharacterDataHandler(character)
 
         assert handler.skin_tone == "Porcelain"
-
-    def test_set_age_method(self):
-        """Test setting age updates database."""
-        self.handler.set_age(30)
-
-        # Should be reflected in fresh handler
-        new_handler = CharacterDataHandler(self.character)
-        assert new_handler.age == 30
 
     def test_display_name_methods(self):
         """Test display name helper methods."""

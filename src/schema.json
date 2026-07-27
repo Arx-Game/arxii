@@ -4631,6 +4631,27 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-sheets/{id}/maturation/:
+    get:
+      operationId: character_sheets_maturation_retrieve
+      description: The owner's Maturation Point panel state (#2756).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaturationState'
+          description: ''
   /api/character-sheets/{id}/profile-text-versions/:
     get:
       operationId: character_sheets_profile_text_versions_list
@@ -4679,6 +4700,33 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-sheets/{id}/spend-maturation-point/:
+    post:
+      operationId: character_sheets_spend_maturation_point_create
+      description: Spend one Maturation Point on +1 to a stat (#2756).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaturationSpendInputRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaturationState'
+          description: ''
   /api/characters/online/:
     get:
       operationId: characters_online_retrieve
@@ -36359,6 +36407,10 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        birthday:
+          type: string
+          readOnly: true
+          default: ''
         gender:
           type: string
           readOnly: true
@@ -36412,6 +36464,7 @@ components:
       required:
       - age
       - background
+      - birthday
       - char_class
       - concept
       - covenant
@@ -36809,6 +36862,18 @@ components:
           minimum: 18
           nullable: true
           description: Character age in years (18-65)
+        birthday_month:
+          type: integer
+          maximum: 12
+          minimum: 1
+          nullable: true
+          description: Month (1-12) of the celebrated birthday / waking day.
+        birthday_day:
+          type: integer
+          maximum: 31
+          minimum: 1
+          nullable: true
+          description: Day of month of the celebrated birthday / waking day.
         family:
           allOf:
           - $ref: '#/components/schemas/Family'
@@ -36980,6 +37045,18 @@ components:
           minimum: 18
           nullable: true
           description: Character age in years (18-65)
+        birthday_month:
+          type: integer
+          maximum: 12
+          minimum: 1
+          nullable: true
+          description: Month (1-12) of the celebrated birthday / waking day.
+        birthday_day:
+          type: integer
+          maximum: 31
+          minimum: 1
+          nullable: true
+          description: Day of month of the celebrated birthday / waking day.
         family_id:
           type: integer
           writeOnly: true
@@ -46547,6 +46624,55 @@ components:
       - owner_name
       - stock_listings
       - ware_listings
+    MaturationSpendInputRequest:
+      type: object
+      description: Input for CharacterSheetViewSet.spend-maturation-point (#2756).
+      properties:
+        trait_id:
+          type: integer
+      required:
+      - trait_id
+    MaturationStatEntry:
+      type: object
+      description: One spendable stat row in the maturation panel (#2756).
+      properties:
+        trait_id:
+          type: integer
+        name:
+          type: string
+        value:
+          type: integer
+        at_cap:
+          type: boolean
+      required:
+      - at_cap
+      - name
+      - trait_id
+      - value
+    MaturationState:
+      type: object
+      description: 'Response for CharacterSheetViewSet.maturation (#2756): the spend
+        panel state.'
+      properties:
+        available_points:
+          type: integer
+        stat_cap:
+          type: integer
+          nullable: true
+        matured_years:
+          type: integer
+        next_milestone_year:
+          type: integer
+        stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaturationStatEntry'
+      required:
+      - available_points
+      - matured_years
+      - next_milestone_year
+      - stat_cap
+      - stats
     MaturityEnum:
       enum:
       - pitch
@@ -54841,6 +54967,18 @@ components:
           minimum: 18
           nullable: true
           description: Character age in years (18-65)
+        birthday_month:
+          type: integer
+          maximum: 12
+          minimum: 1
+          nullable: true
+          description: Month (1-12) of the celebrated birthday / waking day.
+        birthday_day:
+          type: integer
+          maximum: 31
+          minimum: 1
+          nullable: true
+          description: Day of month of the celebrated birthday / waking day.
         family_id:
           type: integer
           writeOnly: true
@@ -59156,10 +59294,16 @@ components:
       enum:
       - deed
       - scandal
+      - pardon
+      - crisis
+      - birthday
       type: string
       description: |-
         * `deed` - Deed
         * `scandal` - Scandal
+        * `pardon` - Pardon
+        * `crisis` - Crisis
+        * `birthday` - Birthday
     PullActionContextRequest:
       type: object
       description: |-
@@ -63322,6 +63466,11 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        eternal_youth:
+          type: boolean
+          description: 'Elves, vampires, and similar: apparent age locks in the early
+            20s (CG caps the age input at 29), no Maturation Points are ever earned,
+            and old-age decline never begins.'
       required:
       - codex_entry_id
       - id
@@ -63344,6 +63493,11 @@ components:
           type: integer
           nullable: true
           description: Parent species for subspecies (e.g., Rex'alfar.parent = Elven)
+        eternal_youth:
+          type: boolean
+          description: 'Elves, vampires, and similar: apparent age locks in the early
+            20s (CG caps the age input at 29), no Maturation Points are ever earned,
+            and old-age decline never begins.'
       required:
       - name
     SpreadInputRequest:

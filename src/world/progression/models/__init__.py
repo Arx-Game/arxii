@@ -38,6 +38,10 @@ from world.progression.models.kudos import (
     KudosSourceCategory,
     KudosTransaction,
 )
+from world.progression.models.maturation import (
+    MaturationSpend,
+    MaturationStatCap,
+)
 from world.progression.models.path_intent import PathIntent
 from world.progression.models.paths import CharacterPathHistory
 from world.progression.models.random_scene import (
@@ -110,6 +114,8 @@ __all__ = [
     "LegendRequirement",
     "LevelRequirement",
     "MajorGiftTechniqueRequirement",
+    "MaturationSpend",
+    "MaturationStatCap",
     "MultiClassLevel",
     "MultiClassRequirement",
     "PathIntent",

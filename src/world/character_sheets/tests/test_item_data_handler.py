@@ -26,12 +26,13 @@ class CharacterItemDataHandlerTests(TestCase):
         gender = GenderFactory(key="female", display_name="Female")
         CharacterSheetFactory(
             character=self.character,
-            age=30,
+            matured_years=30,
+            withered_years=0,
             gender=gender,
             concept="A test character",
         )
 
-        # Should be accessible through flat interface
+        # Should be accessible through flat interface (age = apparent age, #2756)
         assert self.handler.age == 30
         assert self.handler.gender == "Female"  # Returns display_name
         assert self.handler.concept == "A test character"
@@ -47,13 +48,11 @@ class CharacterItemDataHandlerTests(TestCase):
         # Now handler should be loaded
         assert self.handler._sheet_handler is not None
 
-    def test_fallback_to_getattr_for_unmapped_attributes(self):
-        """Test fallback to __getattr__ for attributes not explicitly mapped."""
-        CharacterSheetFactory(character=self.character, birthday="Spring 15th")
+    def test_birthday_renders_month_name_and_day(self):
+        """The birthday property renders the celebrated month/day pair (#2756)."""
+        CharacterSheetFactory(character=self.character, birthday_month=3, birthday_day=15)
 
-        # birthday is not explicitly mapped as a property
-        # but should be accessible through __getattr__
-        assert self.handler.birthday == "Spring 15th"
+        assert self.handler.birthday == "March 15"
 
     def test_attribute_error_when_no_source_found(self):
         """Test AttributeError when no data source has the attribute."""
@@ -64,7 +63,8 @@ class CharacterItemDataHandlerTests(TestCase):
         """Test integration through character.item_data property."""
         CharacterSheetFactory(
             character=self.character,
-            age=25,
+            matured_years=25,
+            withered_years=0,
             concept="Integration test",
         )
 

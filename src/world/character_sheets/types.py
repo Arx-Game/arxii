@@ -35,6 +35,13 @@ class IdentitySection(TypedDict):
     concept: str
     quote: str
     age: int | None
+    birthday: str | None
+    # Age axes (#2756): populated only for the owner/staff; always None for
+    # other viewers (leak table). chronological_age is None for a Sleeper even
+    # on their own sheet — unknowable, rendered "Unknown".
+    chronological_age: int | None
+    biological_age: int | None
+    withered_years: int | None
     gender: IdNameRef | None
     pronouns: PronounsData
     species: IdNameRef | None

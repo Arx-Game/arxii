@@ -22,6 +22,7 @@ import { SecretsTab } from '@/secrets/components/SecretsTab';
 import { CluesTab } from '@/clues/components/CluesTab';
 import { CrimeTab } from '@/justice/components/CrimeTab';
 import { TitlesPanel } from '@/achievements/components/TitlesPanel';
+import { MaturationPanel } from '@/character_sheets/components/MaturationPanel';
 import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
@@ -147,8 +148,10 @@ export function CharacterSheetPage() {
           {isMyCharacter && sheetPayload && (
             <OriginStoryEditorDialog characterId={entry.character.id} sheet={sheetPayload} />
           )}
+          {isMyCharacter && <MaturationPanel sheetId={entry.character.id} />}
           <StatsSection
             age={entry.character.age}
+            birthday={entry.character.birthday}
             gender={entry.character.gender}
             race={entry.character.race}
             charClass={entry.character.char_class}

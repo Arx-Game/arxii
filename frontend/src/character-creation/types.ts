@@ -36,6 +36,7 @@ export interface Species {
   parent_name?: string | null;
   stat_bonuses: Record<string, number>;
   codex_entry_id: number | null;
+  eternal_youth: boolean;
 }
 
 export interface CGPointBudget {
@@ -338,6 +339,8 @@ export interface CharacterDraft {
   selected_species: Species | null;
   selected_gender: { id: number; key: string; display_name: string } | null;
   age: number | null;
+  birthday_month: number | null;
+  birthday_day: number | null;
   family: Family | null;
   claimed_kin_slot: number | null;
   claimed_kin_pool: number | null;
@@ -732,6 +735,8 @@ export interface CharacterDraftUpdate {
   selected_species_id?: number | null;
   selected_gender_id?: number | null;
   age?: number | null;
+  birthday_month?: number | null;
+  birthday_day?: number | null;
   family_id?: number | null;
   height_band_id?: number | null;
   height_inches?: number | null;

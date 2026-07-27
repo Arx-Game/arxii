@@ -431,17 +431,40 @@ def _finalize_origin_slots(sheet: CharacterSheet, origin_slots: dict[str, str]) 
 
 
 def _set_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
-    """Apply gender, pronouns, age, species, and family from the draft."""
+    """Apply gender, pronouns, age axes, birthday, species, and family from the draft."""
     if draft.selected_gender:
         sheet.gender = draft.selected_gender
         # Auto-derive pronouns from gender
         _set_pronouns_from_gender(sheet, draft.selected_gender)
     if draft.age:
-        sheet.age = draft.age
+        sheet.matured_years = draft.age
+        sheet.ic_birth_year = _derive_ic_birth_year(draft)
+    if draft.birthday_month and draft.birthday_day:
+        sheet.birthday_month = draft.birthday_month
+        sheet.birthday_day = draft.birthday_day
     if draft.selected_species:
         sheet.species = draft.selected_species
     if draft.family:
         sheet.family = draft.family
+
+
+def _derive_ic_birth_year(draft: CharacterDraft) -> int | None:
+    """IC birth year from the draft age, or None when unknowable (#2756).
+
+    A heritage flagged ``chronological_age_unknown`` (Sleepers) leaves the
+    birth year null — nobody, the player included, knows how many years have
+    truly passed. Also null when no game clock exists.
+    """
+    beginnings = draft.selected_beginnings
+    heritage = beginnings.heritage if beginnings else None
+    if heritage is not None and heritage.chronological_age_unknown:
+        return None
+    from world.game_clock.services import get_ic_now  # noqa: PLC0415
+
+    ic_now = get_ic_now()
+    if ic_now is None:
+        return None
+    return ic_now.year - draft.age
 
 
 def _set_tarot_card(sheet: CharacterSheet, draft: CharacterDraft) -> None:

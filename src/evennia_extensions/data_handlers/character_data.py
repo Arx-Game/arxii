@@ -109,15 +109,9 @@ class CharacterItemDataHandler(BaseItemDataHandler):
     # Override base properties to return actual character data
     @property
     def age(self) -> int:
-        """Character's age from sheet data."""
+        """Character's apparent age (#2756) — the age the world reads."""
         sheet = self._get_sheet()
-        return sheet.age
-
-    @property
-    def real_age(self) -> int:
-        """Character's true age from sheet data (staff field)."""
-        sheet = self._get_sheet()
-        return sheet.real_age or sheet.age
+        return sheet.apparent_age
 
     @property
     def gender(self) -> str:
@@ -167,9 +161,13 @@ class CharacterItemDataHandler(BaseItemDataHandler):
 
     @property
     def birthday(self) -> str:
-        """Character's birthday from sheet data."""
+        """Celebrated birthday (waking day for Sleepers) as 'Month day' (#2756)."""
+        import calendar
+
         sheet = self._get_sheet()
-        return sheet.birthday or ""
+        if sheet.birthday_month is None or sheet.birthday_day is None:
+            return ""
+        return f"{calendar.month_name[sheet.birthday_month]} {sheet.birthday_day}"
 
     @property
     def background(self) -> str:
@@ -216,14 +214,6 @@ class CharacterItemDataHandler(BaseItemDataHandler):
     def personas(self):
         """Character's available personas."""
         return self._get_personas()
-
-    def set_age(self, age):
-        """Set the character's age."""
-        sheet = self._get_sheet()
-        sheet.age = age
-        sheet.save()
-        # Clear the sheet cache
-        self._sheet_cache = None
 
     def clear_cache(self):
         """Clear all cached data, forcing fresh lookups."""

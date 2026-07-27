@@ -19,6 +19,9 @@ STAT_DISPLAY_DIVISOR = 10
 # Age constraints for character creation
 AGE_MIN = 18
 AGE_MAX = 65
+# Eternal-youth species (elves, vampires) lock their apparent age in the
+# early 20s — CG caps their age input here (#2756, PLACEHOLDER).
+AGE_MAX_ETERNAL_YOUTH = 29
 
 # Required primary stat names
 REQUIRED_STATS = PrimaryStat.get_all_stat_names()

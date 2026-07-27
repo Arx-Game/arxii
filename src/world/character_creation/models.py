@@ -725,6 +725,19 @@ class CharacterDraft(SharedMemoryModel):
         validators=[MinValueValidator(AGE_MIN), MaxValueValidator(AGE_MAX)],
         help_text=f"Character age in years ({AGE_MIN}-{AGE_MAX})",
     )
+    # Celebrated birthday (#2756) — waking day for Sleeper heritages.
+    birthday_month = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        help_text="Month (1-12) of the celebrated birthday / waking day.",
+    )
+    birthday_day = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(31)],
+        help_text="Day of month of the celebrated birthday / waking day.",
+    )
 
     # Stage 9: Identity — worship declarations (#2355)
     public_worship = models.ForeignKey(

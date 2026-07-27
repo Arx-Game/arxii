@@ -41,7 +41,27 @@ interface AppearanceFormValues {
 
 const AGE_MIN = 18;
 const AGE_MAX = 65;
+// Eternal-youth species (elves, vampires) lock their apparent age in the
+// early 20s (#2756) — mirrors the server-side cap.
+const AGE_MAX_ETERNAL_YOUTH = 29;
 const AGE_DEFAULT = 22;
+
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+// 29 for February: leap-day birthdays are legal (#2756).
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 export function AppearanceStage({
   draft,
@@ -89,6 +109,8 @@ export function AppearanceStage({
   }, [onRegisterBeforeLeave, saveDescription]);
 
   const [localAge, setLocalAge] = useState(String(draft.age ?? AGE_DEFAULT));
+  // Eternal-youth species cap their age input (#2756); server enforces too.
+  const ageMax = draft.selected_species?.eternal_youth ? AGE_MAX_ETERNAL_YOUTH : AGE_MAX;
 
   // Auto-save default age on first visit when unset, so backend sees age != None
   useEffect(() => {
@@ -102,7 +124,7 @@ export function AppearanceStage({
     const parsed = parseInt(localAge, 10);
     const clamped = Number.isNaN(parsed)
       ? AGE_DEFAULT
-      : Math.max(AGE_MIN, Math.min(AGE_MAX, parsed));
+      : Math.max(AGE_MIN, Math.min(ageMax, parsed));
     setLocalAge(String(clamped));
     if (clamped !== draft.age) {
       updateDraft.mutate({
@@ -110,6 +132,20 @@ export function AppearanceStage({
         data: { age: clamped },
       });
     }
+  };
+
+  // Celebrated birthday (#2756) — waking day for Sleeper beginnings.
+  const birthdayMonth = draft.birthday_month;
+  const birthdayDay = draft.birthday_day;
+  const maxDay = birthdayMonth ? DAYS_IN_MONTH[birthdayMonth - 1] : 31;
+
+  const commitBirthday = (month: number | null, day: number | null) => {
+    const clampedDay =
+      month !== null && day !== null ? Math.max(1, Math.min(DAYS_IN_MONTH[month - 1], day)) : day;
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: { birthday_month: month, birthday_day: clampedDay },
+    });
   };
 
   const handleHeightBandSelect = (band: HeightBand) => {
@@ -213,15 +249,63 @@ export function AppearanceStage({
           <Input
             type="number"
             min={AGE_MIN}
-            max={AGE_MAX}
+            max={ageMax}
             value={localAge}
             onChange={(e) => setLocalAge(e.target.value)}
             onBlur={commitAge}
-            placeholder={`Enter age (${AGE_MIN}-${AGE_MAX})`}
+            placeholder={`Enter age (${AGE_MIN}-${ageMax})`}
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            Age must be between {AGE_MIN} and {AGE_MAX} years.
+            Age must be between {AGE_MIN} and {ageMax} years.
+            {draft.selected_species?.eternal_youth &&
+              ' Your species keeps its eternal youth — apparent age locks in the early twenties.'}
           </p>
+        </div>
+      </section>
+
+      {/* Birthday */}
+      <section className="space-y-4">
+        <h3 className="theme-heading text-lg font-semibold">Birthday</h3>
+        <p className="text-sm text-muted-foreground">
+          The day your character celebrates each year. Friends will see it coming up in the Town
+          Crier&apos;s tidings.
+        </p>
+        <div className="flex max-w-md gap-3">
+          <div className="flex-1">
+            <Label className="text-xs">Month</Label>
+            <Select
+              value={birthdayMonth ? String(birthdayMonth) : ''}
+              onValueChange={(value) => commitBirthday(parseInt(value, 10), birthdayDay ?? 1)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent>
+                {MONTH_NAMES.map((name, index) => (
+                  <SelectItem key={name} value={String(index + 1)}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-28">
+            <Label className="text-xs">Day</Label>
+            <Input
+              type="number"
+              min={1}
+              max={maxDay}
+              value={birthdayDay ?? ''}
+              onChange={(e) => {
+                const parsed = parseInt(e.target.value, 10);
+                if (!Number.isNaN(parsed) && birthdayMonth) {
+                  commitBirthday(birthdayMonth, parsed);
+                }
+              }}
+              placeholder="Day"
+              disabled={!birthdayMonth}
+            />
+          </div>
         </div>
       </section>
 

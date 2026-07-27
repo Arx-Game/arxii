@@ -973,7 +973,9 @@ def seed_character_creation_dev() -> None:
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     species = authored_or_sample(
-        Species, {"description": "The default species.", "sort_order": 0}, name="Human"
+        Species,
+        {"description": "The default species.", "sort_order": 0, "decline_start_age": 60},
+        name="Human",
     )
     species_khati = authored_or_sample(
         Species,

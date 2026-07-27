@@ -38,13 +38,15 @@ class SheetCommandTests(TestCase):
         # Update sheet with more test data
         self.gender = GenderFactory(key="female", display_name="Female")
         self.family = FamilyFactory(name="Stormwind")
-        self.sheet.age = 25
+        self.sheet.matured_years = 25
+        self.sheet.withered_years = 0
         self.sheet.gender = self.gender
         self.sheet.concept = "A brave knight"
         self.sheet.family = self.family
         self.sheet.vocation = "Knight"
         self.sheet.social_rank = 3
-        self.sheet.birthday = "Spring 15th"
+        self.sheet.birthday_month = 3
+        self.sheet.birthday_day = 15
         self.sheet.quote = "Honor above all!"
         self.sheet.personality = "Brave and noble, always stands up for the weak."
         self.sheet.background = "Born into nobility, trained as a knight from childhood."
@@ -104,7 +106,7 @@ class SheetCommandTests(TestCase):
         assert "Family: Stormwind" in output
         assert "Vocation: Knight" in output
         assert "Social Rank: 3" in output
-        assert "Birthday: Spring 15th" in output
+        assert "Birthday: March 15" in output
 
     def test_sheet_command_physical_characteristics(self):
         """Test that physical characteristics are displayed."""
@@ -173,8 +175,8 @@ class SheetCommandTests(TestCase):
 
     def test_sheet_command_staff_only_fields_hidden(self):
         """Test that staff-only fields are hidden from normal users."""
-        # Add staff-only data
-        self.sheet.real_age = 100
+        # Add staff-only data (real_age retired by #2756 — apparent age is the
+        # only telnet-visible age; chronological/biological live on the web API)
         self.sheet.real_concept = "Secret vampire"
         self.sheet.obituary = "Died heroically"
         self.sheet.additional_desc = "Staff notes here"
@@ -187,7 +189,6 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Staff-only fields should not appear
-        assert "Real Age" not in output
         assert "Real Concept" not in output
         assert "Obituary" not in output
         assert "Additional Description" not in output
@@ -196,8 +197,7 @@ class SheetCommandTests(TestCase):
 
     def test_sheet_command_staff_only_fields_shown_to_staff(self):
         """Test that staff-only fields are shown to staff users."""
-        # Add staff-only data
-        self.sheet.real_age = 100
+        # Add staff-only data (real_age retired by #2756)
         self.sheet.real_concept = "Secret vampire"
         self.sheet.obituary = "Died heroically"
         self.sheet.additional_desc = "Staff notes here"
@@ -211,7 +211,6 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Staff-only fields should appear
-        assert "Real Age: 100" in output
         assert "Real Concept: Secret vampire" in output
         assert "Obituary (Staff Only)" in output
         assert "Additional Description (Staff Only)" in output

@@ -10,10 +10,64 @@ from django.db import models
 from world.game_clock.task_registry import (
     CronDefinition,
     CronPhase,
+    FrequencyType,
     register_task,
 )
 
 logger = logging.getLogger("world.game_clock.tasks")
+
+
+def aging_birthday_tick_task() -> None:
+    """IC-daily: advance matured_years for birthdays in the elapsed IC window (#2756).
+
+    The window starts at this task's own last IC run (AFK-safe range query —
+    a downtime gap or a staff time skip simply processes the whole elapsed
+    range), falling back to one IC day on the very first run.
+    """
+    from world.game_clock.models import ScheduledTaskRecord
+    from world.game_clock.services import get_ic_now
+    from world.vitals.aging import run_birthday_tick
+
+    ic_now = get_ic_now()
+    if ic_now is None:
+        return
+    record = ScheduledTaskRecord.objects.filter(task_key="aging.birthday_tick").first()
+    ic_start = (
+        record.last_ic_run_at
+        if record is not None and record.last_ic_run_at is not None
+        else ic_now - timedelta(days=1)
+    )
+    aged = run_birthday_tick(ic_start=ic_start, ic_end=ic_now)
+    if aged:
+        # Static message only: CodeQL's clear-text-logging heuristic treats any
+        # value flowing out of a *birthday*-named function as private data.
+        logger.info("Birthday tick: characters aged this window.")
+
+
+def aging_decline_check_task() -> None:
+    """IC-monthly: old-age stamina checks deepen Frailty past decline age (#2756)."""
+    from world.game_clock.services import get_ic_now
+    from world.vitals.aging import run_decline_checks
+
+    ic_now = get_ic_now()
+    if ic_now is None:
+        return
+    checked = run_decline_checks(ic_now=ic_now)
+    if checked:
+        logger.info("Aging decline: %d characters checked.", checked)
+
+
+def aging_death_sweep_task() -> None:
+    """IC-daily: resolve dying windows whose IC deadline has passed (#2756)."""
+    from world.game_clock.services import get_ic_now
+    from world.vitals.aging import run_death_sweep
+
+    ic_now = get_ic_now()
+    if ic_now is None:
+        return
+    deaths = run_death_sweep(ic_now=ic_now)
+    if deaths:
+        logger.info("Old-age death sweep: %d deaths resolved.", deaths)
 
 
 def weekly_rollover_task() -> None:
@@ -837,6 +891,33 @@ def _register_late_tasks(roll_and_echo_weather: object) -> None:
             callable=auto_retire_dead_characters,
             interval=timedelta(hours=6),
             description="Auto-retire dead characters past the grace window (#2287).",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="aging.birthday_tick",
+            callable=aging_birthday_tick_task,
+            interval=timedelta(days=1),
+            frequency_type=FrequencyType.IC,
+            description="Advance matured_years for IC birthdays in the elapsed window (#2756).",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="aging.decline_check",
+            callable=aging_decline_check_task,
+            interval=timedelta(days=30),
+            frequency_type=FrequencyType.IC,
+            description="IC-monthly old-age stamina checks deepen Frailty (#2756).",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="aging.death_sweep",
+            callable=aging_death_sweep_task,
+            interval=timedelta(days=1),
+            frequency_type=FrequencyType.IC,
+            description="Resolve old-age dying windows past their IC deadline (#2756).",
         )
     )
     register_task(

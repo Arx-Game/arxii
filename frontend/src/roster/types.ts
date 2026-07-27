@@ -42,6 +42,8 @@ export interface CharacterData {
   id: number;
   name: string;
   age?: number | null;
+  /** Celebrated birthday, rendered "March 15" (#2756); waking day for Sleepers. */
+  birthday?: string;
   gender?: Gender | null;
   race?: CharacterRaceInfo | null;
   char_class?: string | null;

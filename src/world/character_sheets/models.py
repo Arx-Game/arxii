@@ -44,6 +44,11 @@ from world.character_sheets.types import (
     SheetVisibility,
 )
 
+# Max day per month for the celebrated birthday pair (#2756); 29 for February so
+# leap-day birthdays are legal (the birthday tick is a range query, so non-leap
+# years simply celebrate on the window edge).
+DAYS_IN_MONTH = (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
 
 class Heritage(NaturalKeyMixin, SharedMemoryModel):
     """
@@ -74,6 +79,14 @@ class Heritage(NaturalKeyMixin, SharedMemoryModel):
         max_length=100,
         blank=True,
         help_text="What to display for family (e.g., 'Unknown', 'Discoverable in play')",
+    )
+    chronological_age_unknown = models.BooleanField(
+        default=False,
+        help_text=(
+            "Characters of this heritage cannot know how many years have truly "
+            "passed since their birth (e.g. Sleepers); CG leaves ic_birth_year "
+            "null and every viewer, including the player, sees 'Unknown' (#2756)."
+        ),
     )
 
     objects = NaturalKeyManager()
@@ -292,17 +305,44 @@ class CharacterSheet(SharedMemoryModel):
         ),
     )
 
-    # Basic Identity & Demographics
-    age = models.PositiveSmallIntegerField(
-        default=18,
-        validators=[MinValueValidator(16), MaxValueValidator(200)],
-        help_text="Character's apparent age",
-    )
-    real_age = models.PositiveSmallIntegerField(
+    # Basic Identity & Demographics — three age axes (#2756).
+    # Chronological derives from ic_birth_year vs the game clock; biological =
+    # matured + withered; apparent = biological (cosmetic overrides are an
+    # appearance-layer concern and deliberately never touch these fields).
+    ic_birth_year = models.IntegerField(
         null=True,
         blank=True,
+        help_text=(
+            "IC year of birth on Arx's timeline; chronological age derives from "
+            "this against the game clock. Null = unknowable (Sleeper heritages); "
+            "staff hand-set shroud-exception elders."
+        ),
+    )
+    matured_years = models.PositiveSmallIntegerField(
+        default=18,
         validators=[MinValueValidator(1), MaxValueValidator(10000)],
-        help_text="Character's true age (staff/hidden field)",
+        help_text=(
+            "Years of aging actually lived forward — the maturation meter. "
+            "Advanced by the birthday tick; paused by aging_paused; only true "
+            "age-reversal magic reduces it."
+        ),
+    )
+    withered_years = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MaxValueValidator(10000)],
+        help_text=(
+            "Years stacked on by curses/vitality drains. Pure detriment: counts "
+            "toward biological age (decline, death, looks) but never earns "
+            "maturation milestones; restoration magic may strip it."
+        ),
+    )
+    aging_paused = models.BooleanField(
+        default=False,
+        help_text=(
+            "True while magic holds this character's aging in stasis: the "
+            "birthday tick skips them (no matured_years advance, no milestones). "
+            "Set by future time-magic; admin-editable until then."
+        ),
     )
 
     # Physical Characteristics (Build/Height system)
@@ -468,11 +508,19 @@ class CharacterSheet(SharedMemoryModel):
         ),
     )
 
-    # Temporal & Cultural
-    birthday = models.CharField(
-        max_length=255,
+    # Temporal & Cultural — the celebrated date (#2756). For Sleeper heritages
+    # this is the waking day; whether it is the true birth date is unknowable.
+    birthday_month = models.PositiveSmallIntegerField(
+        null=True,
         blank=True,
-        help_text="Character birthday - consider DateField later",
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        help_text="Month (1-12) of the celebrated birthday / waking day.",
+    )
+    birthday_day = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(31)],
+        help_text="Day of month of the celebrated birthday / waking day.",
     )
 
     # Descriptive Text Fields
@@ -681,6 +729,36 @@ class CharacterSheet(SharedMemoryModel):
             or self.lifecycle_state != LifecycleState.ALIVE
         )
 
+    # --- Age axes (#2756) ------------------------------------------------
+
+    @property
+    def biological_age(self) -> int:
+        """How far the body has traveled toward death: matured + withered years."""
+        return self.matured_years + self.withered_years
+
+    @property
+    def apparent_age(self) -> int:
+        """The age the world reads. Equals biological age; cosmetic overrides
+        (glamours, guises) are an appearance-layer concern and deliberately
+        free — they never touch the stored axes."""
+        return self.biological_age
+
+    @property
+    def chronological_age(self) -> int | None:
+        """Years since birth on Arx's timeline, or None when unknowable.
+
+        None both for null ``ic_birth_year`` (Sleepers) and for a world with
+        no ``GameClock`` row — without a clock there is no IC "now".
+        """
+        if self.ic_birth_year is None:
+            return None
+        from world.game_clock.services import get_ic_now  # noqa: PLC0415
+
+        ic_now = get_ic_now()
+        if ic_now is None:
+            return None
+        return ic_now.year - self.ic_birth_year
+
     @property
     def decay_tier(self) -> str | None:
         """Inactivity tier from days-since-last-signal, or None when fresh.
@@ -772,6 +850,19 @@ class CharacterSheet(SharedMemoryModel):
         if self.active_persona_id is not None and self.active_persona.character_sheet_id != self.pk:
             msg = "Active persona must be one of this character's own personas."
             raise ValidationError({"active_persona": msg})
+        self._clean_birthday_pair()
+
+    def _clean_birthday_pair(self) -> None:
+        """Both-or-neither, and the pair must name a real Gregorian date (#2756)."""
+        if (self.birthday_month is None) != (self.birthday_day is None):
+            msg = "Birthday month and day must be set together."
+            raise ValidationError({"birthday_day": msg})
+        if self.birthday_month is None or self.birthday_day is None:
+            return
+        max_day = DAYS_IN_MONTH[self.birthday_month - 1]
+        if self.birthday_day > max_day:
+            msg = f"Month {self.birthday_month} has at most {max_day} days."
+            raise ValidationError({"birthday_day": msg})
 
     @cached_property
     def cached_payload_personas(self) -> list[Persona]:
