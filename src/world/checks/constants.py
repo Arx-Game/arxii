@@ -83,6 +83,7 @@ class ModifierSourceKind(models.TextChoices):
     PULL = "pull", "Combat Pull"
     RELATIONSHIP = "relationship", "Relationship"
     CAPABILITY = "capability", "Capability"
+    SOULFRAY = "soulfray", "Soulfray"
 
 
 class SecurityCheckKind(models.TextChoices):
