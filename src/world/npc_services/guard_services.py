@@ -78,10 +78,10 @@ def check_guard_detection(character: ObjectDB, room: ObjectDB) -> None:
 
     # Roll the intruder's Stealth against the guard's detection difficulty.
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     stealth_check = CheckType.objects.get(name="Stealth")
-    result = perform_check(
+    result = perform_check_with_modifiers(
         character=character,
         check_type=stealth_check,
         target_difficulty=GUARD_DETECTION_DIFFICULTY,

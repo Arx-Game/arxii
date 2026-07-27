@@ -98,7 +98,7 @@ def perform_anima_ritual(
     first at ritual_severity_cost_per_point per point, then refill anima
     with leftover budget. Crit always tops anima to max regardless.
     """
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.magic.exceptions import (  # noqa: PLC0415
         CharacterEngagedForRitual,
         NoRitualConfigured,
@@ -126,10 +126,11 @@ def perform_anima_ritual(
     if AnimaRitualPerformance.objects.filter(ritual=ritual, scene=scene).exists():
         raise RitualAlreadyPerformedThisScene
 
-    check_result = perform_check(
+    check_result = perform_check_with_modifiers(
         character,
         check_type=config.check_type,
         target_difficulty=config.target_difficulty,
+        scene=scene,
     )
     outcome = check_result.outcome
 

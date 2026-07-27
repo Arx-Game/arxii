@@ -152,7 +152,7 @@ def _run_embellish_check(
 ) -> bool:
     """Roll the manipulation check against the giver. Raises if the reporter can't embellish."""
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     if not reporter_can_embellish(reporter):
         msg = "You lack the Persuasion to embellish your account."
@@ -161,7 +161,7 @@ def _run_embellish_check(
     if check_type is None:
         msg = "There is no one here who will hear an embellished account."
         raise MissionReportError(msg)
-    result = perform_check(
+    result = perform_check_with_modifiers(
         reporter,
         check_type,
         target_difficulty=_embellish_difficulty(functionary),
@@ -183,7 +183,7 @@ def _run_consequence_dodge_check(
     fail closed (falls back to the bare Persuasion check when Con is absent).
     """
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     check_type = (
         CheckType.objects.filter(name__iexact="Con").first()
@@ -191,7 +191,7 @@ def _run_consequence_dodge_check(
     )
     if check_type is None:
         return False  # unseeded world: the dodge simply fails, consequences apply.
-    result = perform_check(
+    result = perform_check_with_modifiers(
         reporter,
         check_type,
         target_difficulty=_embellish_difficulty(functionary),
@@ -215,7 +215,7 @@ def _apply_masked_deed_association(
     harsh (association happens without a roll) — consistent with the dodge failing closed.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.justice.services import associate_heat  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
@@ -231,7 +231,7 @@ def _apply_masked_deed_association(
         or CheckType.objects.filter(name__iexact="Persuasion").first()
     )
     if check_type is not None:
-        result = perform_check(
+        result = perform_check_with_modifiers(
             reporter,
             check_type,
             target_difficulty=_embellish_difficulty(functionary),

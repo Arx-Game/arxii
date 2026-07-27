@@ -1985,7 +1985,10 @@ class EscalationTickTests(TestCase):
                 "world.battles.resolution.resolve_battle_technique",
                 return_value=_success_result(3),
             ),
-            patch("world.vitals.services.perform_check", return_value=_failure_result(-1)),
+            patch(
+                "world.vitals.services.perform_check_with_modifiers",
+                return_value=_failure_result(-1),
+            ),
         ):
             resolve_battle_round(battle_round=battle_round)
 
@@ -2005,7 +2008,9 @@ class EscalationTickTests(TestCase):
         battle_round = begin_battle_round(battle=battle)
         # No declaration this round; battle.afk_peril_override defaults False.
 
-        with patch("world.vitals.services.perform_check", return_value=_failure_result(-1)):
+        with patch(
+            "world.vitals.services.perform_check_with_modifiers", return_value=_failure_result(-1)
+        ):
             resolve_battle_round(battle_round=battle_round)
 
         instance = get_active_conditions(
@@ -2025,7 +2030,9 @@ class EscalationTickTests(TestCase):
         participant = self._surrounded_participant(battle, side)
         battle_round = begin_battle_round(battle=battle)
 
-        with patch("world.vitals.services.perform_check", return_value=_failure_result(-1)):
+        with patch(
+            "world.vitals.services.perform_check_with_modifiers", return_value=_failure_result(-1)
+        ):
             resolve_battle_round(battle_round=battle_round)
 
         instance = get_active_conditions(

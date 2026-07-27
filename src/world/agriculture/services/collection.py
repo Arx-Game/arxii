@@ -209,7 +209,7 @@ def _roll_collection_check(character, pool_bonus: int, difficulty_modifier: int)
     """
     from world.agriculture.constants import FOOD_COLLECTION_CHECK_NAME  # noqa: PLC0415
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.scenes.action_constants import (  # noqa: PLC0415
         DIFFICULTY_VALUES,
         DifficultyChoice,
@@ -224,7 +224,7 @@ def _roll_collection_check(character, pool_bonus: int, difficulty_modifier: int)
     )
     effective_difficulty = min(effective_difficulty, DIFFICULTY_VALUES[DifficultyChoice.HARROWING])
     effective_difficulty = max(effective_difficulty, DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL])
-    result = perform_check(
+    result = perform_check_with_modifiers(
         character,
         check_type,
         target_difficulty=effective_difficulty,

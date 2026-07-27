@@ -270,7 +270,7 @@ def search_room(
     caller (the Search action) charges AP + fatigue and resolves which check type to use.
     Returns the clues found this search (empty if the searcher has no roster entry).
     """
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     roster_entry = _roster_entry_for(character)
     if roster_entry is None:
@@ -289,7 +289,7 @@ def search_room(
             continue
         if not _placement_passes_eligibility(placement, character, context_holder):
             continue
-        result = perform_check(
+        result = perform_check_with_modifiers(
             character, search_check_type, target_difficulty=placement.detect_difficulty
         )
         if result.outcome is None or result.outcome.success_level < 0:

@@ -380,7 +380,7 @@ class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
     def tearDown(self) -> None:
         _pending_stage_advance_offers.clear()
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_subscriber_writes_pending_row(self, mock_check: object) -> None:
         """Advancing severity over the stage threshold writes one PendingStageAdvanceOffer row."""
         from world.conditions.services import advance_condition_severity
@@ -403,7 +403,7 @@ class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
             ).exists()
         )
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_pending_row_expires_at_within_ttl(self, mock_check: object) -> None:
         """The expires_at is approximately now + STAGE_ADVANCE_OFFER_TTL."""
         from world.conditions.services import advance_condition_severity
@@ -422,7 +422,7 @@ class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
         self.assertGreaterEqual(row.expires_at, expected_min)
         self.assertLessEqual(row.expires_at, expected_max)
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_pending_row_has_correct_commit_units_max(self, mock_check: object) -> None:
         """commit_units_max equals the Sinner's hollow_current at prompt time."""
         from world.conditions.services import advance_condition_severity
@@ -436,7 +436,7 @@ class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
         )
         self.assertEqual(row.commit_units_max, 5)  # Thread.hollow_current was 5
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_pending_row_resonance_matches(self, mock_check: object) -> None:
         """PendingStageAdvanceOffer.resonance matches the Corruption condition's resonance."""
         from world.conditions.services import advance_condition_severity
@@ -527,7 +527,7 @@ class SoulTetherStageAdvancePromptNoSharedSceneTests(TestCase):
     def tearDown(self) -> None:
         _pending_stage_advance_offers.clear()
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_no_pending_row_when_no_shared_scene(self, mock_check: object) -> None:
         """When no shared SceneParticipation exists, no PendingStageAdvanceOffer is written."""
         from world.conditions.services import advance_condition_severity
@@ -544,7 +544,7 @@ class SoulTetherStageAdvancePromptNoSharedSceneTests(TestCase):
             "A PendingStageAdvanceOffer row must NOT be written when there is no shared scene.",
         )
 
-    @patch("world.conditions.services.perform_check")
+    @patch("world.conditions.services.perform_check_with_modifiers")
     def test_in_memory_offer_still_recorded_when_no_shared_scene(self, mock_check: object) -> None:
         """Even without a shared scene, the in-memory offer is recorded."""
         from world.conditions.services import advance_condition_severity

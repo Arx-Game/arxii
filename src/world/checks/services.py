@@ -134,6 +134,75 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     return _check_result(check_type, outcome, breakdown)
 
 
+def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signature
+    character: "ObjectDB",
+    check_type: "CheckType",
+    target_difficulty: int = 0,
+    extra_modifiers: int = 0,
+    effort_level: str | None = None,
+    fatigue_penalty: int = 0,
+    specialization: "Specialization | None" = None,
+    *,
+    situation_ctx: "SituationContext | None" = None,
+    level_override: int | None = None,
+    scene: "Scene | None" = None,
+) -> CheckResult:
+    """Run a check with all character modifiers gathered automatically.
+
+    Thin wrapper around :func:`perform_check` that resolves the character's
+    ``CharacterSheet`` and calls :func:`collect_check_modifiers` to gather
+    condition, rollmod, scene, equipment, character, fashion, and capability
+    contributions. The aggregator's ``.total`` is added to any caller-supplied
+    ``extra_modifiers`` (additive, not replacing).
+
+    For sheet-less actors (GM puppets, companions with no ``CharacterSheet``),
+    forwards to ``perform_check`` unchanged — no crash, no modifiers applied.
+
+    Args:
+        character: The character performing the check.
+        check_type: The type of check being resolved.
+        target_difficulty: Target difficulty in points.
+        extra_modifiers: Additional modifiers from the caller. Added to the
+            aggregator's total when a sheet exists.
+        effort_level: Optional EffortLevel value.
+        fatigue_penalty: Penalty from fatigue zone (typically negative).
+        specialization: Optional skill specialization.
+        situation_ctx: Optional SituationContext for situational perks.
+        level_override: Optional level override (substitutes for resolved level).
+        scene: Optional Scene — when provided, scene modifiers and the
+            perception-relative fashion bonus apply. Omit when the check is
+            performed outside an active scene.
+
+    Returns:
+        CheckResult from perform_check.
+    """
+    sheet = character.character_sheet
+    if sheet is None:
+        return perform_check(
+            character,
+            check_type,
+            target_difficulty=target_difficulty,
+            extra_modifiers=extra_modifiers,
+            effort_level=effort_level,
+            fatigue_penalty=fatigue_penalty,
+            specialization=specialization,
+            situation_ctx=situation_ctx,
+            level_override=level_override,
+        )
+    breakdown = collect_check_modifiers(sheet, check_type, scene=scene)
+    return perform_check(
+        character,
+        check_type,
+        target_difficulty=target_difficulty,
+        extra_modifiers=extra_modifiers + breakdown.total,
+        effort_level=effort_level,
+        fatigue_penalty=fatigue_penalty,
+        specialization=specialization,
+        situation_ctx=situation_ctx,
+        level_override=level_override,
+    )
+
+
 def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signature for test seam
     character: "ObjectDB",
     check_type: "CheckType",

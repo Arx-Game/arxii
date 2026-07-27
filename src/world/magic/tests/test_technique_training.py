@@ -207,7 +207,7 @@ class ResolveTrainingCheckTest(TestCase):
             )
 
         with patch(
-            "world.magic.services.technique_training.perform_check",
+            "world.magic.services.technique_training.perform_check_with_modifiers",
             side_effect=capture_check,
         ):
             resolve_training_check(self.sheet, high_progress, ap_to_invest=20)
@@ -239,7 +239,7 @@ class ResolveTrainingCheckTest(TestCase):
         mock_teacher = type("MockTeacher", (), {"character": self.sheet.character})()
 
         with patch(
-            "world.magic.services.technique_training.perform_check",
+            "world.magic.services.technique_training.perform_check_with_modifiers",
             side_effect=capture_check,
         ):
             with patch(

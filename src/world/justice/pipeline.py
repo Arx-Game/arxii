@@ -133,14 +133,14 @@ def _resolve_evasion_level(encounter: GuardEncounter, check_level: int | None) -
     if check_level is not None:
         return check_level
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     sheet = encounter.persona.character_sheet
     character = sheet.character if sheet is not None else None
     check_type = CheckType.objects.filter(name=EVASION_CHECK_TYPE_NAME).first()
     if character is None or check_type is None:
         return 1  # unseeded world / bodiless persona: escape clean
-    result = perform_check(character, check_type)
+    result = perform_check_with_modifiers(character, check_type)
     return result.outcome.success_level if result.outcome else 0
 
 
@@ -371,7 +371,7 @@ def initiate_trial(
 
 def _argument_levels(participants: list[Persona]) -> list[int]:
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     check_type = CheckType.objects.filter(name=ADVOCACY_CHECK_TYPE_NAME).first()
     levels: list[int] = []
@@ -381,7 +381,7 @@ def _argument_levels(participants: list[Persona]) -> list[int]:
         if check_type is None or character is None:
             levels.append(0)
             continue
-        result = perform_check(character, check_type)
+        result = perform_check_with_modifiers(character, check_type)
         levels.append(result.outcome.success_level if result.outcome else 0)
     return levels
 

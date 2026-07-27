@@ -16,7 +16,7 @@ from world.action_points.models import ActionPointPool
 from world.character_creation.constants import STAT_MAX_VALUE
 from world.character_sheets.models import CharacterSheet
 from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
-from world.checks.services import perform_check
+from world.checks.services import perform_check_with_modifiers
 from world.fatigue.constants import (
     CAPACITY_STAT_MULTIPLIER,
     CAPACITY_WILLPOWER_MULTIPLIER,
@@ -419,7 +419,7 @@ def attempt_endurance_check(character_sheet: CharacterSheet, category: str) -> b
     # Scale difficulty: at 81% it's moderate, at 150%+ it's very hard
     target_difficulty = int((percentage - 60) * 3)
 
-    result = perform_check(
+    result = perform_check_with_modifiers(
         character=character_sheet.character,
         check_type=check_type,
         target_difficulty=target_difficulty,
@@ -456,7 +456,7 @@ def attempt_power_through(
 
     target_difficulty = 50 + (strain_damage * 3)
 
-    result = perform_check(
+    result = perform_check_with_modifiers(
         character=character_sheet.character,
         check_type=check_type,
         target_difficulty=target_difficulty,

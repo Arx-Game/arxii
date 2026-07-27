@@ -32,7 +32,7 @@ class ApplyConditionResistCheckTest(TestCase):
         )
         fake_result = SimpleNamespace(success_level=1)
         with patch(
-            "world.conditions.services.perform_check", return_value=fake_result
+            "world.conditions.services.perform_check_with_modifiers", return_value=fake_result
         ) as mock_check:
             result = apply_condition(self.target, template)
 
@@ -54,7 +54,9 @@ class ApplyConditionResistCheckTest(TestCase):
             resist_difficulty=15,
         )
         fake_result = SimpleNamespace(success_level=0)
-        with patch("world.conditions.services.perform_check", return_value=fake_result):
+        with patch(
+            "world.conditions.services.perform_check_with_modifiers", return_value=fake_result
+        ):
             result = apply_condition(self.target, template)
 
         self.assertTrue(result.success)
@@ -63,7 +65,7 @@ class ApplyConditionResistCheckTest(TestCase):
     def test_null_resist_check_type_applies_unconditionally(self) -> None:
         """When resist_check_type is None (default), no check is rolled at all."""
         template = ConditionTemplateFactory(name="UnresistibleCondition")
-        with patch("world.conditions.services.perform_check") as mock_check:
+        with patch("world.conditions.services.perform_check_with_modifiers") as mock_check:
             result = apply_condition(self.target, template)
 
         mock_check.assert_not_called()
@@ -91,7 +93,7 @@ class BulkApplyConditionsResistCheckTest(TestCase):
         # target_a resists (SL=1), target_b does not (SL=0) — SimpleNamespace side_effect
         # returns results in call order: target_a is processed first (insertion order).
         with patch(
-            "world.conditions.services.perform_check",
+            "world.conditions.services.perform_check_with_modifiers",
             side_effect=[SimpleNamespace(success_level=1), SimpleNamespace(success_level=0)],
         ):
             results = bulk_apply_conditions(
@@ -110,7 +112,7 @@ class BulkApplyConditionsResistCheckTest(TestCase):
     def test_null_resist_check_type_applies_unconditionally_in_bulk(self) -> None:
         """A template with no resist_check_type applies normally via bulk_apply_conditions."""
         template = ConditionTemplateFactory(name="BulkUnresistibleCondition")
-        with patch("world.conditions.services.perform_check") as mock_check:
+        with patch("world.conditions.services.perform_check_with_modifiers") as mock_check:
             results = bulk_apply_conditions(
                 [BulkConditionApplication(target=self.target_a, template=template)]
             )

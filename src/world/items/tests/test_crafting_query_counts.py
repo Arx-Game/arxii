@@ -256,7 +256,9 @@ class CraftAttachFacetQueryCountTests(TestCase):
             # per-instance .save(update_fields=["quantity"]) — the test setup
             # uses quantity=2 materials with quantity=1 requirements, so the
             # common case is now a partial-consume (save, not delete). The band
-            # dropped from 91-94 to 74-76.
+            # dropped from 91-94 to 74-76, then rose to 79-81 after #2750 routed
+            # the crafting check through collect_check_modifiers (adding ~5
+            # queries for condition/equipment/character/capability contributions).
             with CaptureQueriesContext(connection) as ctx:
                 result = craft_attach_facet(
                     crafter_account=self.account,
@@ -266,9 +268,9 @@ class CraftAttachFacetQueryCountTests(TestCase):
                 )
             executed = len(ctx.captured_queries)
             self.assertTrue(
-                74 <= executed <= 76,
-                f"{executed} queries executed, expected 75 ±1 identity-map "
-                f"wobble (band 74-76). A jump of >=3 means a per-row N+1.",
+                79 <= executed <= 81,
+                f"{executed} queries executed, expected 80 ±1 identity-map "
+                f"wobble (band 79-81). A jump of >=3 means a per-row N+1.",
             )
 
         self.assertTrue(result.attached)

@@ -49,7 +49,7 @@ def _promote_functionary(
     from world.areas.services import get_room_profile  # noqa: PLC0415
     from world.assets.models import NPCAsset  # noqa: PLC0415
     from world.character_sheets.services import create_character_with_sheet  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.npc_services.functionaries import remove_functionary  # noqa: PLC0415
     from world.npc_services.models import Functionary  # noqa: PLC0415
 
@@ -80,7 +80,7 @@ def _promote_functionary(
             message="This offer has no capability check configured. (Authoring error.)",
         )
 
-    check_result = perform_check(
+    check_result = perform_check_with_modifiers(
         character, offer.check_type, target_difficulty=offer.check_difficulty
     )
     if check_result.success_level <= 0:
@@ -179,7 +179,7 @@ def run_asset_intel_task(offer: NPCServiceOffer, persona: Persona) -> EffectResu
         AssetTaskIntelDetails,
         NPCAsset,
     )
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.clues.models import CharacterClue  # noqa: PLC0415
     from world.roster.models import RosterEntry  # noqa: PLC0415
 
@@ -207,7 +207,7 @@ def run_asset_intel_task(offer: NPCServiceOffer, persona: Persona) -> EffectResu
     # Roll the check — the PC rolls (they're directing the task).
     character = persona.character_sheet.character
     if offer.check_type_id is not None:
-        check_result = perform_check(
+        check_result = perform_check_with_modifiers(
             character, offer.check_type, target_difficulty=offer.check_difficulty
         )
         if check_result.success_level <= 0:

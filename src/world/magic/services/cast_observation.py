@@ -21,7 +21,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
-from world.checks.services import level_opposition, perform_check
+from world.checks.services import level_opposition, perform_check_with_modifiers
 from world.magic.constants import CAST_DETECTION_ATTRIBUTION_LEVEL, DETECT_CAST_CHECK_NAME
 
 if TYPE_CHECKING:
@@ -153,7 +153,7 @@ def resolve_cast_audience(
         persona = _persona_for(observer)
         if persona is None:
             continue
-        result = perform_check(observer, check_type, target_difficulty=difficulty)
+        result = perform_check_with_modifiers(observer, check_type, target_difficulty=difficulty)
         if result.success_level >= CAST_DETECTION_ATTRIBUTION_LEVEL:
             full.append(persona)
         elif result.success_level >= 1:

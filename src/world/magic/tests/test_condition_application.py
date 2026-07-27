@@ -327,7 +327,9 @@ class ApplyTechniqueConditionsResistCheckTest(TestCase):
             minimum_success_level=1,
         )
         fake_result = SimpleNamespace(success_level=1)
-        with patch("world.conditions.services.perform_check", return_value=fake_result):
+        with patch(
+            "world.conditions.services.perform_check_with_modifiers", return_value=fake_result
+        ):
             results = apply_technique_conditions(
                 technique=self.technique,
                 success_level=2,
@@ -358,7 +360,9 @@ class ApplyTechniqueConditionsResistCheckTest(TestCase):
             minimum_success_level=1,
         )
         fake_result = SimpleNamespace(success_level=0)
-        with patch("world.conditions.services.perform_check", return_value=fake_result):
+        with patch(
+            "world.conditions.services.perform_check_with_modifiers", return_value=fake_result
+        ):
             results = apply_technique_conditions(
                 technique=self.technique,
                 success_level=2,
@@ -413,7 +417,7 @@ class RemoveTechniqueConditionsTest(TestCase):
         )
         with (
             patch("world.magic.services.condition_application.remove_condition") as mock_remove,
-            patch("world.magic.services.condition_application.perform_check"),
+            patch("world.magic.services.condition_application.perform_check_with_modifiers"),
         ):
             result = remove_technique_conditions(
                 technique=self.technique,
@@ -502,7 +506,8 @@ class RemoveTechniqueConditionsTest(TestCase):
         fake_result = SimpleNamespace(success_level=0)
         with (
             patch(
-                "world.magic.services.condition_application.perform_check", return_value=fake_result
+                "world.magic.services.condition_application.perform_check_with_modifiers",
+                return_value=fake_result,
             ),
             patch("world.magic.services.condition_application.remove_condition") as mock_remove,
             patch("world.magic.services.condition_application.get_condition_instance") as mock_get,
@@ -542,7 +547,8 @@ class RemoveTechniqueConditionsTest(TestCase):
         fake_result = SimpleNamespace(success_level=2)
         with (
             patch(
-                "world.magic.services.condition_application.perform_check", return_value=fake_result
+                "world.magic.services.condition_application.perform_check_with_modifiers",
+                return_value=fake_result,
             ),
             patch("world.magic.services.condition_application.remove_condition") as mock_remove,
             patch("world.magic.services.condition_application.get_condition_instance") as mock_get,
@@ -572,7 +578,9 @@ class RemoveTechniqueConditionsTest(TestCase):
             target_kind=ConditionTargetKind.ALLY,
         )
         with (
-            patch("world.magic.services.condition_application.perform_check") as mock_check,
+            patch(
+                "world.magic.services.condition_application.perform_check_with_modifiers"
+            ) as mock_check,
             patch("world.magic.services.condition_application.remove_condition") as mock_remove,
             patch("world.magic.services.condition_application.get_condition_instance") as mock_get,
         ):

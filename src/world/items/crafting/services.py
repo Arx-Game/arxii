@@ -22,7 +22,7 @@ from world.checks.consequence_resolution import (
     apply_resolution,
     select_consequence_from_result,
 )
-from world.checks.services import perform_check
+from world.checks.services import perform_check_with_modifiers
 from world.checks.types import ResolutionContext
 from world.items.crafting.constants import CraftingRecipeKind
 from world.items.crafting.cost import consume_cost, stage_and_assert_affordable
@@ -537,7 +537,9 @@ def run_crafting_recipe(  # noqa: PLR0913
     )
 
     # --- 5. Roll ---
-    check_result = perform_check(crafter_character, recipe.check_type, recipe.base_difficulty)
+    check_result = perform_check_with_modifiers(
+        crafter_character, recipe.check_type, recipe.base_difficulty
+    )
 
     # --- 6. Station wear (#1234) — unconditional, regardless of roll outcome ---
     _apply_station_wear(station)

@@ -15,7 +15,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.checks.models import CheckCategory, CheckType
-from world.checks.services import collect_check_modifiers, perform_check
+from world.checks.services import collect_check_modifiers, perform_check_with_modifiers
 from world.vitals.constants import (
     DEATH_CHECK_NAME,
     DEATH_HEALTH_THRESHOLD,
@@ -1235,7 +1235,7 @@ def _advance_staged_peril_condition(
                 return True
             continue
 
-        result = perform_check(
+        result = perform_check_with_modifiers(
             character,
             stage.resist_check_type,
             target_difficulty=stage.resist_difficulty,
@@ -1467,7 +1467,7 @@ def attempt_wake(  # noqa: PLR0911 - one return per resolved wake-attempt outcom
         return WakeResult(
             attempted=False, woke=False, message="You strain, but nothing answers the effort."
         )
-    result = perform_check(character, check_type, target_difficulty=difficulty)
+    result = perform_check_with_modifiers(character, check_type, target_difficulty=difficulty)
     if int(result.success_level) >= 0:
         remove_condition(character, instance.condition)
         _maybe_move_to_destination(character, destination_room)

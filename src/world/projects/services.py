@@ -223,7 +223,7 @@ def contribute_check_to_project(
     spend rolls back with the contribution if anything downstream fails.
     """
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     if project.status != ProjectStatus.ACTIVE:
         msg = f"Project #{project.pk} is not accepting contributions."
@@ -239,7 +239,7 @@ def contribute_check_to_project(
                 msg = "You don't have enough action points for that."
                 raise ContributionMethodError(msg)
 
-        result = perform_check(actor, method.check_type)
+        result = perform_check_with_modifiers(actor, method.check_type)
         if result.outcome is None:
             msg = "The check could not be resolved."
             raise ContributionMethodError(msg)

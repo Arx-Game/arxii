@@ -568,7 +568,7 @@ class AttemptEnduranceCheckTests(TestCase):
         pool.set_current("physical", fatigue)
         pool.save()
 
-    @patch("world.fatigue.services.perform_check")
+    @patch("world.fatigue.services.perform_check_with_modifiers")
     def test_endurance_pass_when_check_succeeds(self, mock_perform_check):
         """Endurance check passes when perform_check returns positive success_level."""
         self._setup_character(stamina_internal=30, willpower_internal=20, fatigue=29)
@@ -577,7 +577,7 @@ class AttemptEnduranceCheckTests(TestCase):
         assert result is True
         mock_perform_check.assert_called_once()
 
-    @patch("world.fatigue.services.perform_check")
+    @patch("world.fatigue.services.perform_check_with_modifiers")
     def test_endurance_fail_when_check_fails(self, mock_perform_check):
         """Endurance check fails when perform_check returns zero success_level."""
         self._setup_character(stamina_internal=10, willpower_internal=10, fatigue=11)
@@ -585,7 +585,7 @@ class AttemptEnduranceCheckTests(TestCase):
         result = attempt_endurance_check(self.sheet, ActionCategory.PHYSICAL)
         assert result is False
 
-    @patch("world.fatigue.services.perform_check")
+    @patch("world.fatigue.services.perform_check_with_modifiers")
     def test_endurance_fail_when_negative_success(self, mock_perform_check):
         """Endurance check fails when perform_check returns negative success_level."""
         self._setup_character(stamina_internal=50, willpower_internal=50, fatigue=0)
@@ -593,7 +593,7 @@ class AttemptEnduranceCheckTests(TestCase):
         result = attempt_endurance_check(self.sheet, ActionCategory.PHYSICAL)
         assert result is False
 
-    @patch("world.fatigue.services.perform_check")
+    @patch("world.fatigue.services.perform_check_with_modifiers")
     def test_endurance_difficulty_scales_with_fatigue(self, mock_perform_check):
         """Target difficulty should scale with fatigue percentage."""
         # Capacity = 1*10 + 1*3 = 13. fatigue=26 -> 200%
@@ -624,7 +624,7 @@ class AttemptPowerThroughTests(TestCase):
         pool.set_current("physical", fatigue)
         pool.save()
 
-    @patch("world.fatigue.services.perform_check")
+    @patch("world.fatigue.services.perform_check_with_modifiers")
     def test_power_through_pass_when_check_succeeds(self, mock_perform_check):
         """Power through succeeds when perform_check returns positive success_level."""
         # Capacity = 3*10 + 5*3 = 45. fatigue=46 -> over_ratio = 1/45 = 0.022
@@ -635,7 +635,7 @@ class AttemptPowerThroughTests(TestCase):
         assert succeeded is True
         assert strain_damage == 1
 
-    @patch("world.fatigue.services.perform_check")
+    @patch("world.fatigue.services.perform_check_with_modifiers")
     def test_power_through_fail_when_check_fails(self, mock_perform_check):
         """Power through fails when perform_check returns zero success_level."""
         self._setup_character(stamina_internal=50, willpower_internal=50, fatigue=70)
@@ -643,7 +643,7 @@ class AttemptPowerThroughTests(TestCase):
         succeeded, _strain_damage = attempt_power_through(self.sheet, ActionCategory.PHYSICAL)
         assert succeeded is False
 
-    @patch("world.fatigue.services.perform_check")
+    @patch("world.fatigue.services.perform_check_with_modifiers")
     def test_power_through_pass_when_high_success(self, mock_perform_check):
         """Power through succeeds with high success_level."""
         self._setup_character(stamina_internal=10, willpower_internal=10, fatigue=50)
@@ -651,7 +651,7 @@ class AttemptPowerThroughTests(TestCase):
         succeeded, _strain_damage = attempt_power_through(self.sheet, ActionCategory.PHYSICAL)
         assert succeeded is True
 
-    @patch("world.fatigue.services.perform_check")
+    @patch("world.fatigue.services.perform_check_with_modifiers")
     def test_power_through_strain_scales_with_over_capacity(self, mock_perform_check):
         """Strain damage increases as fatigue exceeds capacity."""
         # Capacity = 1*10 + 1*3 = 13. fatigue=26 -> over_ratio = 13/13 = 1.0

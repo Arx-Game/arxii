@@ -148,7 +148,7 @@ class FoodPreCollectEventTests(TestCase):
 
         with (
             patch("flows.emit.emit_event", side_effect=emit_side_effect),
-            patch("world.checks.services.perform_check") as mock_check,
+            patch("world.checks.services.perform_check_with_modifiers") as mock_check,
         ):
             mock_check.return_value = MagicMock(success_level=0)
 
@@ -188,7 +188,7 @@ class FoodCollectedEventTests(TestCase):
 
         with (
             patch("flows.emit.emit_event", side_effect=_uncancelled_stack) as mock_emit,
-            patch("world.checks.services.perform_check") as mock_check,
+            patch("world.checks.services.perform_check_with_modifiers") as mock_check,
         ):
             # success_level=-2 → below the last band floor (-1) → catastrophe
             mock_check.return_value = MagicMock(success_level=-2)

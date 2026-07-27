@@ -12,7 +12,7 @@ from collections.abc import Iterable
 import logging
 from typing import TYPE_CHECKING
 
-from world.checks.services import perform_check
+from world.checks.services import perform_check_with_modifiers
 from world.conditions.services import (
     bulk_apply_conditions,
     get_condition_instance,
@@ -189,7 +189,8 @@ def remove_technique_conditions(
       2. ``can_be_dispelled`` hard gate: a condition whose template has
          ``can_be_dispelled=False`` is a no-op (skipped, never an error).
       3. Opposed cure check: when ``row.condition.cure_check_type`` is set, rolls
-         ``perform_check(source_character, cure_check_type, cure_difficulty)``. Removal
+         ``perform_check_with_modifiers(source_character, cure_check_type,
+         cure_difficulty)``. Removal
          succeeds iff ``check_result.success_level > 0``; otherwise it is resisted (no-op
          for that target, cast continues). When ``cure_check_type`` is null, removal
          proceeds unconditionally (uncontested dispel).
@@ -258,7 +259,7 @@ def _attempt_removal(
     # Gate 3: opposed cure check (only when the condition defines one).
     cure_check_type = condition.cure_check_type
     if cure_check_type is not None:
-        check_result = perform_check(
+        check_result = perform_check_with_modifiers(
             source_character,
             cure_check_type,
             condition.cure_difficulty,

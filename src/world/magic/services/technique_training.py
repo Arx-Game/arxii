@@ -11,7 +11,7 @@ from decimal import Decimal
 import math
 from typing import TYPE_CHECKING
 
-from world.checks.services import compute_check_rating, perform_check
+from world.checks.services import compute_check_rating, perform_check_with_modifiers
 from world.magic.models import TrainingOutcomeAward
 from world.magic.services.gift_acquisition import get_gift_acquisition_config
 from world.magic.services.technique_progress import contribute_to_technique_progress
@@ -81,7 +81,7 @@ def resolve_training_check(
     target_difficulty = max(0, target_difficulty - teacher_skill_bonus)
 
     # 3. Resolve the check.
-    check_result = perform_check(
+    check_result = perform_check_with_modifiers(
         learner.character,
         check_type,
         target_difficulty=target_difficulty,

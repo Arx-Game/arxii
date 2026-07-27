@@ -196,14 +196,14 @@ def advance_trace(claim: ReclamationClaim, *, check_level: int | None = None) ->
 
 def _roll_trace_check(claim: ReclamationClaim) -> int:
     from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
 
     sheet = claim.claimant_sheet
     character = sheet.character if sheet is not None else None
     check_type = CheckType.objects.filter(name=TRACE_CHECK_TYPE_NAME).first()
     if character is None or check_type is None:
         return 1  # unseeded world: the floor never hard-blocks
-    result = perform_check(character, check_type)
+    result = perform_check_with_modifiers(character, check_type)
     return result.outcome.success_level if result.outcome else 0
 
 
