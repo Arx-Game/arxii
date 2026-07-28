@@ -393,6 +393,25 @@ class OrgTaskViewSet(
         serializer = self.get_serializer(task)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @extend_schema(request=None, responses=OpenApiTypes.OBJECT)
+    @action(detail=True, methods=["post"])
+    def accept(self, request: Request, pk: str | None = None) -> Response:
+        """Pick this task up yourself as a mission (#2820 phase 5)."""
+        from world.tasking.services import accept_task  # noqa: PLC0415
+
+        task = self.get_object()
+        persona = active_persona_for_request(request)
+        if persona is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            fulfillment = accept_task(task, persona)
+        except TaskingError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        task.refresh_from_db()
+        data = self.get_serializer(task).data
+        data["mission_instance"] = fulfillment.mission_instance_id
+        return Response(data, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=["post"])
     def assign(self, request: Request, pk: str | None = None) -> Response:
         """Dispatch one of the requester's own agents on this task."""

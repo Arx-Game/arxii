@@ -239,7 +239,11 @@ def resolve_task(task: OrgTask) -> TaskFulfillment:
 
 
 def resolve_due_tasks() -> int:
-    """Game-clock sweep: resolve every ASSIGNED task whose deadline has passed."""
+    """Game-clock sweep: resolve every ASSIGNED task whose deadline has passed.
+
+    Also fails out tasks whose PC mission fulfillment was abandoned or
+    expired (#2820 phase 5) — the mission walked away, so the job did too.
+    """
     due = OrgTask.objects.filter(
         status=TaskStatus.ASSIGNED,
         deadline__lte=timezone.now(),
@@ -248,4 +252,111 @@ def resolve_due_tasks() -> int:
     for task in due:
         resolve_task(task)
         count += 1
+    count += _sweep_dead_pc_fulfillments()
     return count
+
+
+def _sweep_dead_pc_fulfillments() -> int:
+    from world.missions.constants import MissionStatus  # noqa: PLC0415
+
+    dead = TaskFulfillment.objects.filter(
+        is_active=True,
+        task__status=TaskStatus.ASSIGNED,
+        mission_instance__isnull=False,
+        mission_instance__status__in=[MissionStatus.ABANDONED, MissionStatus.EXPIRED],
+    ).select_related("task")
+    count = 0
+    now = timezone.now()
+    for fulfillment in dead:
+        task = fulfillment.task
+        fulfillment.report = "The job was left unfinished."
+        fulfillment.resolved_at = now
+        fulfillment.save(update_fields=["report", "resolved_at"])
+        task.status = TaskStatus.FAILED
+        task.resolved_at = now
+        task.save(update_fields=["status", "resolved_at"])
+        count += 1
+    return count
+
+
+@transaction.atomic
+def accept_task(task: OrgTask, handler: Persona) -> TaskFulfillment:
+    """A member picks up a PC-fulfillable task as a mission (#2820 phase 5).
+
+    Spawns a normal MissionInstance from the template's linked mission
+    (`staff_assign_mission`, the same giver-less primitive board takes use);
+    the run's terminal route grades into the task's own outcome-route table
+    via `resolve_task_for_mission`.
+    """
+    from world.missions.services.run import staff_assign_mission  # noqa: PLC0415
+
+    if task.status != TaskStatus.OPEN:
+        raise TaskNotOpenError
+    if task.template.mission_template_id is None:
+        raise TaskResolutionError
+    if not _is_active_member(handler, task.org):
+        raise HandlerNotMemberError
+
+    character = handler.character_sheet.character
+    instance = staff_assign_mission(
+        task.template.mission_template,
+        character,
+        persona=handler,
+    )
+    fulfillment = TaskFulfillment(
+        task=task,
+        mission_instance=instance,
+        handler=handler,
+    )
+    fulfillment.full_clean()
+    fulfillment.save()
+    task.status = TaskStatus.ASSIGNED
+    task.save(update_fields=["status"])
+    return fulfillment
+
+
+def resolve_task_for_mission(instance, route=None) -> None:
+    """Terminal-completion seam (#2820 phase 5) — mirrors the crisis seam.
+
+    Called from missions' ``_finish_terminal``; a cheap no-op for every run
+    that isn't fulfilling an OrgTask. The mission's terminal route tier
+    lands on the SAME TaskOutcomeRoute table the NPC path uses — one
+    authored payout surface, two execution engines. No risk pool here: the
+    PC ran the job themselves; asset exposure is the NPC path's stake.
+    """
+    fulfillment = (
+        TaskFulfillment.objects.filter(mission_instance=instance, is_active=True)
+        .select_related("task")
+        .first()
+    )
+    if fulfillment is None:
+        return
+    task = fulfillment.task
+    if task.status != TaskStatus.ASSIGNED:
+        return
+
+    outcome_tier = route.outcome_tier if route is not None else None
+    task_route = None
+    if outcome_tier is not None:
+        task_route = task.template.outcome_routes.filter(outcome_tier=outcome_tier).first()
+    if task_route is not None:
+        _apply_route_payouts(task_route, fulfillment)
+
+    # A BRANCH terminal (route=None) or a success-tier route completes the
+    # task; a failure-tier terminal fails it.
+    succeeded = outcome_tier is None or outcome_tier.success_level > 0
+    now = timezone.now()
+    fulfillment.resolved_outcome = outcome_tier
+    if task_route is not None and task_route.report_template:
+        fulfillment.report = task_route.report_template.format(
+            task=task.template.name,
+            target=target_label(task),
+            agent=str(fulfillment.handler),
+        )
+    else:
+        fulfillment.report = f"{fulfillment.handler} saw to {task.template.name} personally."
+    fulfillment.resolved_at = now
+    fulfillment.save(update_fields=["resolved_outcome", "report", "resolved_at"])
+    task.status = TaskStatus.COMPLETED if succeeded else TaskStatus.FAILED
+    task.resolved_at = now
+    task.save(update_fields=["status", "resolved_at"])
