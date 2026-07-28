@@ -7,6 +7,7 @@ check or room placement required.
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -36,9 +37,26 @@ class NPCAsset(SharedMemoryModel):
 
     promoter_persona = models.ForeignKey(
         "scenes.Persona",
+        null=True,
+        blank=True,
         on_delete=models.PROTECT,
         related_name="promoted_assets",
-        help_text="The PC's persona who cultivated or was granted this asset.",
+        help_text=(
+            "The PC's persona who cultivated or was granted this asset. NULL for "
+            "org-held rows (#2820 — exactly one of promoter_persona/promoter_org)."
+        ),
+    )
+    promoter_org = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="held_assets",
+        help_text=(
+            "The organization holding this asset relationship (#2820 network "
+            "agents). Control follows org leadership — succession needs no "
+            "transfer. NULL for personal rows."
+        ),
     )
     asset_persona = models.ForeignKey(
         "scenes.Persona",
@@ -123,10 +141,30 @@ class NPCAsset(SharedMemoryModel):
                 condition=models.Q(status="active"),
                 name="unique_active_npcasset_promoter_asset_persona",
             ),
+            # #2820 — org rows mirror the co-ownership rule: one active row per
+            # (org, asset persona). NULL promoter_org (personal rows) exempt.
+            models.UniqueConstraint(
+                fields=["promoter_org", "asset_persona"],
+                condition=models.Q(status="active", promoter_org__isnull=False),
+                name="unique_active_npcasset_org_asset_persona",
+            ),
         ]
 
+    def clean(self) -> None:
+        """Exactly one holder: promoter_persona XOR promoter_org (#2820)."""
+        super().clean()
+        has_persona = self.promoter_persona_id is not None
+        has_org = self.promoter_org_id is not None
+        if has_persona == has_org:
+            msg = "Exactly one of promoter_persona or promoter_org must be set."
+            raise ValidationError({"promoter_persona": msg})
+
+    @property
+    def holder_label(self) -> str:
+        return str(self.promoter_org) if self.promoter_org_id else str(self.promoter_persona)
+
     def __str__(self) -> str:
-        return f"{self.asset_persona} ({self.role_context}, owned by {self.promoter_persona})"
+        return f"{self.asset_persona} ({self.role_context}, owned by {self.holder_label})"
 
 
 class DistinctionAssetGrant(SharedMemoryModel):

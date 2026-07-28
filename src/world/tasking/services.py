@@ -91,7 +91,13 @@ def assign_agent(task: OrgTask, npc_asset: NPCAsset, handler: Persona) -> TaskFu
         raise TaskNotOpenError
     if npc_asset.status != AssetStatus.ACTIVE:
         raise AgentUnavailableError
-    if npc_asset.promoter_persona_id != handler.pk:
+    # Dispatchable agents: the handler's own, or the issuing org's roster
+    # (#2820 phase 2 — org-held rows; membership is checked below either way).
+    owns_personally = npc_asset.promoter_persona_id == handler.pk
+    org_held_by_issuer = (
+        npc_asset.promoter_org_id is not None and npc_asset.promoter_org_id == task.org_id
+    )
+    if not (owns_personally or org_held_by_issuer):
         raise ForeignAgentError
     if not _is_active_member(handler, task.org):
         raise HandlerNotMemberError

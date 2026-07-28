@@ -7,6 +7,17 @@ field definitions for historical reasons.
 
 from django.db import models
 
+# Office slug for the parent-org oversight seat over covert children (#2820).
+# Mirrors DOMAIN_STEWARD_OFFICE (houses) / MAGISTRATE_OFFICE (justice): the
+# holder gets READ access to associated covert child orgs' boards; command
+# always stays with the child org's own leadership.
+SPYMASTER_OFFICE = "spymaster"
+
+# Covert-membership secret level by rank tier (#2820): the spymaster's identity
+# is a DANGEROUS secret; a street courier is merely uncommon knowledge.
+COVERT_SECRET_LEVEL_BY_TIER = {1: 4, 2: 3, 3: 2}
+COVERT_SECRET_DEFAULT_LEVEL = 1
+
 # ---------------------------------------------------------------------------
 # Fame tier ladder (Renown system, #676)
 #

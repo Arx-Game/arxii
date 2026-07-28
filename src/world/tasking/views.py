@@ -19,6 +19,7 @@ from rest_framework.response import Response
 
 from world.tasking.exceptions import TaskingError
 from world.tasking.filters import (
+    OrgRosterFilterSet,
     OrgTaskFilterSet,
     TaskOutcomeRouteFilterSet,
     TaskTemplateFilterSet,
@@ -62,6 +63,42 @@ class TaskOutcomeRouteViewSet(viewsets.ModelViewSet):
     filterset_class = TaskOutcomeRouteFilterSet
 
 
+class OrgRosterViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """The org's held agents (#2820 phase 2) — the board's Roster panel.
+
+    Visibility mirrors the task board: active members plus parent-org
+    oversight. Non-members simply see an empty list; the ``org`` filter
+    narrows within the allowed set.
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = TaskingPagination
+    filterset_class = OrgRosterFilterSet
+
+    def get_serializer_class(self):
+        from world.assets.serializers import NPCAssetSerializer  # noqa: PLC0415
+
+        return NPCAssetSerializer
+
+    def get_queryset(self):
+        from world.assets.models import NPCAsset  # noqa: PLC0415
+        from world.societies.models import OrganizationMembership  # noqa: PLC0415
+        from world.societies.office_services import overseen_org_ids  # noqa: PLC0415
+
+        persona = active_persona_for_request(self.request)
+        if persona is None:
+            return NPCAsset.objects.none()
+        member_org_ids = list(
+            OrganizationMembership.objects.filter(
+                persona=persona,
+                left_at__isnull=True,
+                exiled_at__isnull=True,
+            ).values_list("organization_id", flat=True)
+        )
+        allowed = set(member_org_ids) | set(overseen_org_ids(persona))
+        return NPCAsset.objects.filter(promoter_org_id__in=allowed).select_related("asset_persona")
+
+
 class OrgTaskViewSet(
     mixins.CreateModelMixin,
     mixins.ListModelMixin,
@@ -79,19 +116,23 @@ class OrgTaskViewSet(
         persona = active_persona_for_request(self.request)
         if persona is None:
             return OrgTask.objects.none()
+        from django.db.models import Q  # noqa: PLC0415
+
         from world.societies.models import OrganizationMembership  # noqa: PLC0415
+        from world.societies.office_services import overseen_org_ids  # noqa: PLC0415
 
         member_org_ids = OrganizationMembership.objects.filter(
             persona=persona,
             left_at__isnull=True,
             exiled_at__isnull=True,
         ).values_list("organization_id", flat=True)
+        # Membership grants the board; parent-org oversight (#2820 phase 2 —
+        # parent leadership + spymaster office) grants read on child boards.
+        visible = Q(org_id__in=member_org_ids) | Q(org_id__in=overseen_org_ids(persona))
         # No Prefetch onto SharedMemoryModel parents (identity-map instances are
         # shared across requests); the list path hands the serializer a
         # fulfillment map via context instead.
-        return OrgTask.objects.filter(org_id__in=member_org_ids).select_related(
-            "template", "issued_by"
-        )
+        return OrgTask.objects.filter(visible).select_related("template", "issued_by")
 
     def list(self, request: Request, *args, **kwargs) -> Response:
         from world.tasking.models import TaskFulfillment  # noqa: PLC0415
