@@ -30,6 +30,7 @@ class TestClusterRegistry(TestCase):
                 "tutorial",
                 "progression",
                 "npc_services",
+                "spy_tasks",
                 "justice",
                 "governance",
                 "scandal",

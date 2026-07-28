@@ -628,6 +628,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.societies.houses.models import Title  # noqa: PLC0415
     from world.societies.models import PropagandaCampaignTier  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
+    from world.tasking.models import TaskTemplate  # noqa: PLC0415
     from world.traits.models import ResultChart, Trait  # noqa: PLC0415
     from world.worship.models import WorshippedBeing, WorshipTradition  # noqa: PLC0415
 
@@ -702,6 +703,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # live caller for settle_obligation and the fresh-DB-completable training
         # loop), represented by NPCRole (mirrors "tutorial" above).
         "npc_services": [NPCRole],
+        # Spy Job Kit (#2833): the sample spy TaskTemplates + Spywork Exposure pool.
+        "spy_tasks": [TaskTemplate],
         # Justice: the starter CrimeKind vocabulary (#1765); AreaLaw rows are world data.
         "justice": [CrimeKind],
         # Governance seeds skills/specs + CheckTypes (shared spine rows counted under
