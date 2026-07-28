@@ -99,6 +99,107 @@ class OrgRosterViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         return NPCAsset.objects.filter(promoter_org_id__in=allowed).select_related("asset_persona")
 
 
+class ListenerPostViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Standing listener posts (#2820 phase 3) — the board's Postings panel.
+
+    Visibility: your own posts (handler), plus posts whose agent is held by
+    an org you belong to or oversee. ``collect`` requires the handler's body
+    in the posted room — the visit is the exposure surface.
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = TaskingPagination
+
+    def get_serializer_class(self):
+        from world.tasking.serializers import ListenerPostSerializer  # noqa: PLC0415
+
+        return ListenerPostSerializer
+
+    def get_queryset(self):
+        from django.db.models import Q  # noqa: PLC0415
+
+        from world.societies.models import OrganizationMembership  # noqa: PLC0415
+        from world.societies.office_services import overseen_org_ids  # noqa: PLC0415
+        from world.tasking.models import ListenerPost  # noqa: PLC0415
+
+        persona = active_persona_for_request(self.request)
+        if persona is None:
+            return ListenerPost.objects.none()
+        member_org_ids = list(
+            OrganizationMembership.objects.filter(
+                persona=persona,
+                left_at__isnull=True,
+                exiled_at__isnull=True,
+            ).values_list("organization_id", flat=True)
+        )
+        allowed = set(member_org_ids) | set(overseen_org_ids(persona))
+        visible = Q(handler=persona) | Q(assignment__npc_asset__promoter_org_id__in=allowed)
+        return (
+            ListenerPost.objects.filter(visible, assignment__is_active=True)
+            .select_related("assignment", "assignment__npc_asset", "handler")
+            .distinct()
+        )
+
+    def create(self, request: Request, *args, **kwargs) -> Response:
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from world.assets.models import NPCAsset  # noqa: PLC0415
+        from world.checks.models import CheckType  # noqa: PLC0415
+        from world.tasking.listener_services import create_listener_post  # noqa: PLC0415
+        from world.tasking.serializers import ListenerPostCreateSerializer  # noqa: PLC0415
+
+        persona = active_persona_for_request(request)
+        if persona is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+        payload = ListenerPostCreateSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+        npc_asset = NPCAsset.objects.filter(pk=data["npc_asset"]).first()
+        room = RoomProfile.objects.filter(pk=data["room"]).first()
+        if npc_asset is None or room is None:
+            return Response(
+                {"detail": "Unknown agent or room."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        check_type = None
+        if data.get("check_type"):
+            check_type = CheckType.objects.filter(pk=data["check_type"]).first()
+        try:
+            post = create_listener_post(
+                npc_asset,
+                room,
+                persona,
+                check_type=check_type,
+                check_difficulty=data.get("check_difficulty", 0),
+            )
+        except TaskingError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = self.get_serializer(post)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
+    def collect(self, request: Request, pk: str | None = None) -> Response:
+        """Collect the oldest pending harvest, in person."""
+        from world.tasking.listener_services import collect_harvest  # noqa: PLC0415
+
+        post = self.get_object()
+        persona = active_persona_for_request(request)
+        if persona is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            clue = collect_harvest(post, persona)
+        except TaskingError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        if clue is None:
+            detail = "Your agent has little of substance — talk, but nothing solid."
+        else:
+            detail = f"Your agent leans close: {clue.name}."
+        return Response({"detail": detail, "clue": clue.pk if clue else None})
+
+
 class OrgTaskViewSet(
     mixins.CreateModelMixin,
     mixins.ListModelMixin,

@@ -1205,11 +1205,17 @@ class AssignmentRole(models.TextChoices):
     GUARD is the first implemented behavior (post-arrival detection).
     DOORMAN is reserved for pre-traversal announcement (needs-design).
     SERVANT is reserved for the follow-up servant-fetch issue.
+    LISTENER (#2820 phase 3) is a standing informant post — the buzz/harvest
+    loop lives in ``world.tasking`` (ListenerPost sidecar); this app only
+    knows the role. One active assignment per (room, role) means prime
+    listening posts are contested — rival networks flip the sitting
+    listener rather than stacking their own beside it.
     """
 
     GUARD = "guard", "Guard"
     DOORMAN = "doorman", "Doorman"
     SERVANT = "servant", "Servant"
+    LISTENER = "listener", "Listener"
 
 
 class NPCSourceType(models.TextChoices):

@@ -5,7 +5,13 @@ from __future__ import annotations
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from world.tasking.models import OrgTask, TaskFulfillment, TaskOutcomeRoute, TaskTemplate
+from world.tasking.models import (
+    ListenerPost,
+    OrgTask,
+    TaskFulfillment,
+    TaskOutcomeRoute,
+    TaskTemplate,
+)
 
 
 class TaskTemplateSerializer(serializers.ModelSerializer):
@@ -127,6 +133,50 @@ class OrgTaskSerializer(serializers.ModelSerializer):
         if active is None:
             return None
         return TaskFulfillmentSerializer(active, context=self.context).data
+
+
+class ListenerPostSerializer(serializers.ModelSerializer):
+    """Board row for a standing listener post.
+
+    The buzz meter is shown as-is: a suppressed post (phase 4) and an
+    unlucky one render identically — the ambiguity is the design.
+    """
+
+    agent_name = serializers.SerializerMethodField()
+    room_id = serializers.IntegerField(source="assignment.room_id", read_only=True)
+    handler_name = serializers.CharField(source="handler.name", read_only=True)
+    pending_harvests = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ListenerPost
+        fields = [
+            "id",
+            "agent_name",
+            "room_id",
+            "handler",
+            "handler_name",
+            "buzz",
+            "threshold",
+            "last_sweep_at",
+            "pending_harvests",
+            "created_at",
+        ]
+
+    def get_agent_name(self, obj) -> str:
+        asset = obj.assignment.npc_asset
+        return str(asset.asset_persona) if asset else ""
+
+    def get_pending_harvests(self, obj) -> int:
+        return obj.harvests.filter(collected_at__isnull=True).count()
+
+
+class ListenerPostCreateSerializer(serializers.Serializer):
+    """Create payload: agent + room; optional tradecraft check."""
+
+    npc_asset = serializers.IntegerField(min_value=1)
+    room = serializers.IntegerField(min_value=1)
+    check_type = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    check_difficulty = serializers.IntegerField(default=0)
 
 
 class OrgTaskCreateSerializer(serializers.ModelSerializer):

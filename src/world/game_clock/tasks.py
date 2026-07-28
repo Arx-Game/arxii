@@ -483,7 +483,8 @@ def auto_retire_dead_characters() -> None:
 
 
 def _register_tasking_tasks() -> None:
-    """Register the #2820 org-task resolution sweep."""
+    """Register the #2820 org-task resolution + listener sweeps."""
+    from world.tasking.listener_services import listener_sweep
     from world.tasking.services import resolve_due_tasks
 
     register_task(
@@ -495,6 +496,18 @@ def _register_tasking_tasks() -> None:
                 "#2820: resolve ASSIGNED org tasks whose deadline passed — the "
                 "agent's offscreen check, outcome-route payouts, and the "
                 "template's ADR-0092 risk pool."
+            ),
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="tasking.listener_sweep",
+            callable=listener_sweep,
+            interval=timedelta(days=7),
+            description=(
+                "#2820 phase 3: weekly listener accrual — buzz from the posted "
+                "room's mechanical residue (scenes, minted secrets; never "
+                "prose), harvests banked at threshold."
             ),
         )
     )

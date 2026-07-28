@@ -47,3 +47,12 @@ class TaskTargetKind(models.TextChoices):
 # success level of the handler's dispatch check. The handler's briefing
 # quality shifts the agent's odds without ever replacing the agent's roll.
 DISPATCH_MARGIN_STEP = 5
+
+# Listener-loop tuning (#2820 phase 3). PLACEHOLDER calibration: buzz accrues
+# from the room's MECHANICAL residue only (scenes held, secrets minted there)
+# — prose is structurally invisible to the pipeline. A dead room takes many
+# weeks to fill the meter; a room where a secret was minted fills fast.
+LISTENER_BUZZ_BASE = 5
+LISTENER_BUZZ_PER_SCENE = 10
+LISTENER_BUZZ_PER_SECRET = 25
+LISTENER_BUZZ_THRESHOLD = 100
