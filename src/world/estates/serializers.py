@@ -100,7 +100,7 @@ class BequestSerializer(serializers.ModelSerializer):
         persona = self._value(attrs, "recipient_persona")
         org = self._value(attrs, "recipient_organization")
         if (persona is None) == (org is None):
-            raise serializers.ValidationError("Exactly one recipient (character or organization).")
+            raise serializers.ValidationError("Exactly one recipient (character or organization).")  # noqa: EM101, TRY003
         if kind in self._PERSONA_ONLY_KINDS and org is not None:
             raise serializers.ValidationError(
                 {"recipient_organization": f"A {kind} bequest needs a character recipient."}

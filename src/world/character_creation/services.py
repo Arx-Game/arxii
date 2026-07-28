@@ -721,9 +721,9 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
 def _create_stat_values(
     character: ObjectDB,
     draft: CharacterDraft,
-    Trait: Any,
-    TraitType: Any,
-    CharacterTraitValue: Any,
+    _trait_cls: Any,
+    _trait_type_cls: Any,
+    _character_trait_value_cls: Any,
 ) -> None:
     """Create stat trait values from the draft's stat allocations.
 
@@ -732,9 +732,9 @@ def _create_stat_values(
     Args:
         character: The newly created ``ObjectDB`` character.
         draft: The completed ``CharacterDraft``.
-        Trait: ``Trait`` model class.
-        TraitType: ``TraitType`` enum.
-        CharacterTraitValue: ``CharacterTraitValue`` model class.
+        _trait_cls: ``Trait`` model class.
+        _trait_type_cls: ``TraitType`` enum.
+        _character_trait_value_cls: ``CharacterTraitValue`` model class.
     """
     stats = draft.draft_data.get("stats", {})
     if not stats:
@@ -742,14 +742,16 @@ def _create_stat_values(
     stat_names = list(stats.keys())
     traits_by_name = {
         trait.name: trait
-        for trait in Trait.objects.filter(name__in=stat_names, trait_type=TraitType.STAT)
+        for trait in _trait_cls.objects.filter(name__in=stat_names, trait_type=_trait_type_cls.STAT)
     }
     trait_values = [
-        CharacterTraitValue(character=character.sheet_data, trait=traits_by_name[name], value=value)
+        _character_trait_value_cls(
+            character=character.sheet_data, trait=traits_by_name[name], value=value
+        )
         for name, value in stats.items()
         if name in traits_by_name
     ]
-    CharacterTraitValue.objects.bulk_create(trait_values)
+    _character_trait_value_cls.objects.bulk_create(trait_values)
 
 
 def _create_path_history(character: ObjectDB, draft: CharacterDraft) -> None:
@@ -795,7 +797,7 @@ def _establish_chosen_patronage(character: ObjectDB, draft: CharacterDraft) -> N
 def _apply_post_cg_bonuses(
     character: ObjectDB,
     draft: CharacterDraft,
-    CharacterTraitValue: Any,
+    _character_trait_value_cls: Any,
 ) -> None:
     """Apply post-CG stat bonuses from the draft (reserved for future use).
 
@@ -805,13 +807,13 @@ def _apply_post_cg_bonuses(
     Args:
         character: The newly created ``ObjectDB`` character.
         draft: The completed ``CharacterDraft``.
-        CharacterTraitValue: ``CharacterTraitValue`` model class.
+        _character_trait_value_cls: ``CharacterTraitValue`` model class.
     """
     post_cg_bonuses = draft.draft_data.get("stats_post_cg_bonuses", {})
     if not post_cg_bonuses:
         return
     for stat_name, bonus in post_cg_bonuses.items():
-        trait_value = CharacterTraitValue.objects.filter(
+        trait_value = _character_trait_value_cls.objects.filter(
             character_id=character.pk, trait__name=stat_name
         ).first()
         if trait_value:
@@ -1086,25 +1088,25 @@ def _create_true_form(character: ObjectDB, draft_data: dict) -> None:
 
 def _resolve_form_trait_selections(
     form_traits: dict,
-    FormTrait: Any,
-    FormTraitOption: Any,
+    _form_trait_cls: Any,
+    _form_trait_option_cls: Any,
 ) -> dict:
     """Resolve trait names and option IDs to FormTrait/FormTraitOption pairs.
 
     Args:
         form_traits: Mapping of trait name to option ID from the draft.
-        FormTrait: ``FormTrait`` model class.
-        FormTraitOption: ``FormTraitOption`` model class.
+        _form_trait_cls: ``FormTrait`` model class.
+        _form_trait_option_cls: ``FormTraitOption`` model class.
 
     Returns:
         Mapping of ``FormTrait`` instance to ``FormTraitOption`` instance,
         skipping invalid entries.
     """
     trait_names = list(form_traits.keys())
-    traits_by_name = {t.name: t for t in FormTrait.objects.filter(name__in=trait_names)}
+    traits_by_name = {t.name: t for t in _form_trait_cls.objects.filter(name__in=trait_names)}
 
     option_ids = [v for v in form_traits.values() if isinstance(v, int)]
-    options_by_id = {o.id: o for o in FormTraitOption.objects.filter(id__in=option_ids)}
+    options_by_id = {o.id: o for o in _form_trait_option_cls.objects.filter(id__in=option_ids)}
 
     selections = {}
     for trait_name, option_id in form_traits.items():

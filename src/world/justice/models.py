@@ -18,7 +18,7 @@ _LEGEND_ENTRY_MODEL = "societies.LegendEntry"
 _SOCIETY_MODEL = "societies.Society"
 _AREA_MODEL = "areas.Area"
 _PERSONA_MODEL = "scenes.Persona"
-SECRET_MODEL = "secrets.Secret"
+SECRET_MODEL = "secrets.Secret"  # noqa: S105
 
 
 class CrimeKind(SharedMemoryModel):

@@ -489,7 +489,7 @@ def _resolve_treatment_bond_thread(
     return bond_thread
 
 
-def _perform_treatment_for_target(
+def _perform_treatment_for_target(  # noqa: PLR0913
     *,
     treatment: Any,
     target: Any,

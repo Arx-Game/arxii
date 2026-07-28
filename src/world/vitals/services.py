@@ -706,7 +706,7 @@ def _apply_knockout_tier(  # noqa: PLR0913 - one keyword arg per resolved tier i
         )
 
 
-def _process_wound_tier(
+def _process_wound_tier(  # noqa: PLR0913
     *,
     character_sheet: CharacterSheet,
     result: DamageConsequenceResult,
@@ -744,15 +744,15 @@ def _process_wound_tier(
     )
 
 
-def _process_death_tier(
+def _process_death_tier(  # noqa: PLR0913
     *,
     character_sheet: CharacterSheet,
     result: DamageConsequenceResult,
     damage_type: DamageType | None,
     extra_modifiers: int,
     combat_interaction_factory: Callable[[], Interaction] | None,
-    source_character: ObjectDB | None,
-    vitals: CharacterVitals,
+    source_character: ObjectDB | None,  # noqa: OBJECTDB_PARAM
+    vitals: CharacterVitals,  # noqa: ARG001
     raw_health_pct: float,
     saves: ThreadSurvivabilitySaves,
 ) -> bool:
@@ -781,7 +781,7 @@ def _process_death_tier(
     )
 
 
-def _process_knockout_tier(
+def _process_knockout_tier(  # noqa: PLR0913
     *,
     character_sheet: CharacterSheet,
     result: DamageConsequenceResult,

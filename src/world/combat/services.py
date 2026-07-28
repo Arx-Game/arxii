@@ -10,7 +10,7 @@ from decimal import Decimal
 import logging
 import math
 import random
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from django.db import transaction
 from django.db.models import F, Prefetch, Q, Sum
@@ -3728,10 +3728,8 @@ def _batch_fetch_cooldown_data(
         e.pk: e.cooldown_rounds for e in all_entries if e.cooldown_rounds is not None
     }
 
-    result = _collect_cooldown_actions(cooldown_filters, entry_cooldown_map, round_number, result)
-    result = _collect_cooldown_pending(
-        pending_cooldown_filters, entry_cooldown_map, round_number, result
-    )
+    _collect_cooldown_actions(cooldown_filters, entry_cooldown_map, round_number, result)
+    _collect_cooldown_pending(pending_cooldown_filters, entry_cooldown_map, round_number, result)
 
     return result
 
@@ -4029,10 +4027,10 @@ def _build_opponent_round_actions(  # noqa: PLR0913
 
     # --- Companion order integration (#1921) ---
     # An ALLY summon with a CompanionOrder may override its target or skip.
-    companion_result: Any = _apply_companion_order(opponent, encounter.round_number, target_pool)
+    companion_result = _apply_companion_order(opponent, encounter.round_number, target_pool)
     if companion_result is _COMPANION_HOLD:
         return []
-    if companion_result is not None:
+    if isinstance(companion_result, list):
         target_pool = companion_result
 
     if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
@@ -4108,7 +4106,7 @@ def _apply_companion_order(
     return None
 
 
-def _execute_npc_attack(
+def _execute_npc_attack(  # noqa: PLR0913
     *,
     opponent: CombatOpponent,
     eligible: list[ThreatPoolEntry],
