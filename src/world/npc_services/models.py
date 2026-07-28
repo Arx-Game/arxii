@@ -299,6 +299,78 @@ class Functionary(SharedMemoryModel):
         return f"{self.display_name} @ room {self.room_id}"
 
 
+class NamePart(models.TextChoices):
+    """Which slot of a generated name an entry fills (#2827 phase 2)."""
+
+    GIVEN = "given", "Given name"
+    SURNAME = "surname", "Surname"
+
+
+class NameCulture(NaturalKeyMixin, SharedMemoryModel):
+    """A pool of names reinforcing a region's (or society's) theme (#2827).
+
+    Resolution walks the room's area ancestor chain (nearest authored
+    culture wins), falling back to the global default (area and society
+    both NULL). Family surnames come from `roster.Family.name` directly —
+    generating one of the faceless nobility of a named house needs no
+    culture entry for the surname.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    area = models.ForeignKey(
+        "areas.Area",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="name_cultures",
+        help_text="Rooms under this area use this culture (nearest ancestor wins).",
+    )
+    society = models.ForeignKey(
+        "societies.Society",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="name_cultures",
+        help_text="Authoring hint for society-flavored pools. NULL+NULL area = global default.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class NameCultureEntry(SharedMemoryModel):
+    """One name in a culture's pool, weighted for random draw."""
+
+    culture = models.ForeignKey(
+        NameCulture,
+        on_delete=models.CASCADE,
+        related_name="entries",
+    )
+    part = models.CharField(max_length=10, choices=NamePart.choices)
+    value = models.CharField(max_length=100)
+    weight = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        ordering = ["culture", "part", "value"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["culture", "part", "value"],
+                name="unique_name_culture_entry",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.culture.name}/{self.part}: {self.value}"
+
+
 class StaffingProfile(SharedMemoryModel):
     """Default staffing for buildings of a kind (#2827 phase 1).
 
