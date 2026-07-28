@@ -2536,6 +2536,28 @@ consumers, not systems.
   **ADRs:** 0174, 0175
 - **Glossary:** `src/world/tasking/AGENT_GLOSSARY.md`
 
+### NPC Lifecycle (tier ladder)
+One identity climbs a ladder of tiers on the sheet-spine (ADR-0176: the sheet is
+the person; personas are faces — identically for PCs and NPCs). #2827, all 5
+phases.
+
+- **Models:** `StaffingProfile`/`StaffingProfileLine` (BuildingKind → baseline
+  crew, applied at building activation + weekly `staffing.weekly_refill` cron),
+  `Functionary.persona` (the materialization link), `NameCulture`/
+  `NameCultureEntry` (area-resolved name pools; `Family.name` surnames),
+  `PersonalityTrait`/`NpcPreference` (likes/dislikes with check-easing teeth),
+  `tasking.NpcTaskAptitude` (job-family bands)
+- **Services:** `staffing.py` (ensure/refill), `instantiation.py`
+  (`materialize_functionary` — sheet+persona minted at first engagement via the
+  `npc_start` hook; NPC-roster shelf entry), `personality.py`
+  (`preference_modifier` → cultivation + counterplay rolls),
+  `assets.extract_asset` (dual-mode recruitment: in-place default, extraction
+  as a choice), `lifecycle.py` (`promote_to_standing`/`demote_to_instantiated`/
+  `standing_candidates`/`graduate_to_roster`)
+- **API:** staff CRUD `staffing-profiles|staffing-lines`, staff ops
+  `/api/npc-services/lifecycle/…`, player `/api/assets/{id}/extract/`
+- **Source:** `src/world/npc_services/` · **Doc:** `docs/systems/npc-lifecycle.md`
+
 ### NPC Services
 Unified "ask NPC for thing" framework: per-NPC-role offer surface, persona-keyed standing,
 per-kind effect handler dispatch. Covers permits today; missions/loans/training/favors
