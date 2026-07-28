@@ -32061,12 +32061,7 @@ paths:
           description: ''
     post:
       operationId: tasking_posts_create
-      description: |-
-        Standing listener posts (#2820 phase 3) — the board's Postings panel.
-
-        Visibility: your own posts (handler), plus posts whose agent is held by
-        an org you belong to or oversee. ``collect`` requires the handler's body
-        in the posted room — the visit is the exposure surface.
+      description: Post a listener — through PostListenerAction (ADR-0001).
       tags:
       - tasking
       requestBody:
@@ -32114,7 +32109,7 @@ paths:
   /api/tasking/posts/{id}/collect/:
     post:
       operationId: tasking_posts_collect_create
-      description: Collect the oldest pending harvest, in person.
+      description: Collect in person — through CollectHarvestAction (ADR-0001).
       parameters:
       - in: path
         name: id
@@ -32324,7 +32319,7 @@ paths:
           description: ''
     post:
       operationId: tasking_tasks_create
-      description: 'The org task board: list/inspect/issue/assign.'
+      description: Issue a task — dispatched through IssueOrgTaskAction (ADR-0001).
       tags:
       - tasking
       requestBody:
@@ -32390,7 +32385,7 @@ paths:
   /api/tasking/tasks/{id}/assign/:
     post:
       operationId: tasking_tasks_assign_create
-      description: Dispatch one of the requester's own agents on this task.
+      description: Dispatch an agent — through AssignTaskAgentAction (ADR-0001).
       parameters:
       - in: path
         name: id

@@ -111,6 +111,7 @@ from commands.locations import CmdRoom
 from commands.market import CmdMarket
 from commands.missions import CmdMission
 from commands.motif import CmdMotif
+from commands.network import CmdNetwork  # #2820
 from commands.offer_response import CmdDecline
 from commands.organizations import CmdOrg
 from commands.outfit import CmdOutfit  # #1866
@@ -381,6 +382,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRoom,
             # #2178 — NPC guard assignment (assign/unassign/list).
             CmdGuard,
+            # #2820 — org tasking + spy networks (board/issue/assign/accept/
+            # post/collect/sweep/clear/suppress/flip/plant).
+            CmdNetwork,
             # #1498 — staff set-the-stage: apply a position blueprint to the room.
             CmdSetStage,
             # #2450 — GM story rooms: spin up/close a temp scene room; join/leave a
