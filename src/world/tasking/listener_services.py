@@ -145,6 +145,13 @@ def _sweep_post(post: ListenerPost, now) -> None:
     if asset is None or asset.status != AssetStatus.ACTIVE:
         return
 
+    # Suppressed (#2820 phase 4): the meter silently freezes. The handler
+    # can't tell suppression from a run of failed tradecraft rolls.
+    if post.suppressed_until is not None and post.suppressed_until > now:
+        post.last_sweep_at = now
+        post.save(update_fields=["last_sweep_at"])
+        return
+
     scene_count, new_secrets = _room_residue(post, post.last_sweep_at)
     accrual = (
         LISTENER_BUZZ_BASE
@@ -160,7 +167,16 @@ def _sweep_post(post: ListenerPost, now) -> None:
     post.buzz += accrual
     if post.buzz >= post.threshold:
         post.buzz -= post.threshold
-        ListenerHarvest.objects.create(post=post, secret=_uncaught_room_secret(post))
+        if post.flipped_controller_id is not None:
+            # Flipped (#2820 phase 4): the meter looks alive, but the true
+            # handler decides what gets delivered — a queued red herring, or
+            # nothing at all. Real catches stop.
+            ListenerHarvest.objects.create(post=post, planted_clue=post.pending_plant)
+            if post.pending_plant_id is not None:
+                post.pending_plant = None
+                post.save(update_fields=["pending_plant"])
+        else:
+            ListenerHarvest.objects.create(post=post, secret=_uncaught_room_secret(post))
     post.last_sweep_at = now
     post.save(update_fields=["buzz", "last_sweep_at"])
 
@@ -204,21 +220,27 @@ def collect_harvest(post: ListenerPost, collector: Persona) -> Clue | None:
 
     harvest.collected_at = timezone.now()
     harvest.save(update_fields=["collected_at"])
-    if harvest.secret_id is None:
+
+    # A flipped post's planted red herring collects exactly like a real
+    # catch — the handler cannot tell the difference (#2820 phase 4).
+    if harvest.planted_clue_id is not None:
+        clue = harvest.planted_clue
+    elif harvest.secret_id is not None:
+        clue, _ = Clue.objects.get_or_create(
+            target_kind=ClueTargetKind.SECRET,
+            target_secret=harvest.secret,
+            defaults={
+                "name": "An Agent's Whisper",
+                "description": (
+                    "PLACEHOLDER Your listener leans close: something happened here, "
+                    "and they caught the shape of it."
+                ),
+                "resolution_mode": ClueResolution.AUTOMATIC,
+            },
+        )
+    else:
         return None
 
-    clue, _ = Clue.objects.get_or_create(
-        target_kind=ClueTargetKind.SECRET,
-        target_secret=harvest.secret,
-        defaults={
-            "name": "An Agent's Whisper",
-            "description": (
-                "PLACEHOLDER Your listener leans close: something happened here, "
-                "and they caught the shape of it."
-            ),
-            "resolution_mode": ClueResolution.AUTOMATIC,
-        },
-    )
     roster_entry = RosterEntry.objects.filter(character_sheet=collector.character_sheet).first()
     if roster_entry is not None:
         acquire_clue(roster_entry, clue)

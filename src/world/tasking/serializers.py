@@ -179,6 +179,14 @@ class ListenerPostCreateSerializer(serializers.Serializer):
     check_difficulty = serializers.IntegerField(default=0)
 
 
+class PlantRedHerringSerializer(serializers.Serializer):
+    """Plant payload: the flipped post, the mark, and the lie."""
+
+    post = serializers.IntegerField(min_value=1)
+    subject_sheet = serializers.IntegerField(min_value=1)
+    content = serializers.CharField(max_length=2000)
+
+
 class OrgTaskCreateSerializer(serializers.ModelSerializer):
     """Create payload: template + org + the target leg matching the template."""
 

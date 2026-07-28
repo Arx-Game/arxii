@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -198,6 +200,125 @@ class ListenerPostViewSet(
         else:
             detail = f"Your agent leans close: {clue.name}."
         return Response({"detail": detail, "clue": clue.pk if clue else None})
+
+
+class CounterplayViewSet(viewsets.ViewSet):
+    """Spy-vs-spy verbs (#2820 phase 4), all requiring the actor's presence.
+
+    Offensive moves against a PC-run network route through the antagonism
+    consent register (``espionage`` category); NPC networks are always-on.
+    Suppress/flip find the room's sitting listener themselves — the actor
+    doesn't need to know which post id sits there.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _room_and_persona(self, request: Request):
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+        persona = active_persona_for_request(request)
+        if persona is None:
+            return None, None
+        character = persona.character_sheet.character
+        room = RoomProfile.objects.filter(pk=character.db_location_id).first()
+        return room, persona
+
+    def _sitting_post(self, room):
+        from world.tasking.models import ListenerPost  # noqa: PLC0415
+
+        return ListenerPost.objects.filter(
+            assignment__room_id=room.pk,
+            assignment__is_active=True,
+        ).first()
+
+    def _verb(self, request: Request, service) -> Response:
+        room, persona = self._room_and_persona(request)
+        if room is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+        post = self._sitting_post(room)
+        if post is None:
+            return Response(
+                {"detail": "No one here seems to be listening."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            success = service(persona, post)
+        except TaskingError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"success": success})
+
+    @extend_schema(request=None, responses=OpenApiTypes.OBJECT)
+    @action(detail=False, methods=["post"])
+    def suppress(self, request: Request) -> Response:
+        """Intimidate the room's sitting listener into silence."""
+        from world.tasking.counterplay_services import suppress_listener  # noqa: PLC0415
+
+        return self._verb(request, suppress_listener)
+
+    @extend_schema(request=None, responses=OpenApiTypes.OBJECT)
+    @action(detail=False, methods=["post"])
+    def flip(self, request: Request) -> Response:
+        """Seduce the room's sitting listener into a double allegiance."""
+        from world.tasking.counterplay_services import flip_listener  # noqa: PLC0415
+
+        return self._verb(request, flip_listener)
+
+    @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
+    @action(detail=False, methods=["post"])
+    def plant(self, request: Request) -> Response:
+        """Queue a red herring on a listener you've flipped."""
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.tasking.counterplay_services import plant_red_herring  # noqa: PLC0415
+        from world.tasking.models import ListenerPost  # noqa: PLC0415
+        from world.tasking.serializers import PlantRedHerringSerializer  # noqa: PLC0415
+
+        persona = active_persona_for_request(request)
+        if persona is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+        payload = PlantRedHerringSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+        post = ListenerPost.objects.filter(pk=data["post"]).first()
+        subject = CharacterSheet.objects.filter(pk=data["subject_sheet"]).first()
+        if post is None or subject is None:
+            return Response(
+                {"detail": "Unknown post or subject."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            plant_red_herring(persona, post, subject_sheet=subject, content=data["content"])
+        except TaskingError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"success": True})
+
+    @extend_schema(request=None, responses=OpenApiTypes.OBJECT)
+    @action(detail=False, methods=["post"])
+    def detect(self, request: Request) -> Response:
+        """Sweep the current room for informants. Consentless (defensive)."""
+        from world.tasking.counterplay_services import detect_listeners  # noqa: PLC0415
+
+        room, persona = self._room_and_persona(request)
+        if room is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            revealed = detect_listeners(persona, room)
+        except TaskingError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"revealed": revealed})
+
+    @extend_schema(request=None, responses=OpenApiTypes.OBJECT)
+    @action(detail=False, methods=["post"])
+    def clear(self, request: Request) -> Response:
+        """Expel listener assignments from a room you hold authority over."""
+        from world.tasking.counterplay_services import clear_room_listeners  # noqa: PLC0415
+
+        room, persona = self._room_and_persona(request)
+        if room is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            count = clear_room_listeners(persona, room)
+        except TaskingError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"cleared": count})
 
 
 class OrgTaskViewSet(

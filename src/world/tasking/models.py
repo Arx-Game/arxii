@@ -304,6 +304,35 @@ class ListenerPost(SharedMemoryModel):
         blank=True,
         help_text="When the weekly sweep last processed this post.",
     )
+    # --- Counterplay state (#2820 phase 4). NEVER serialized to the handler:
+    # a suppressed or flipped post must be indistinguishable from a quiet one.
+    suppressed_until = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Intimidated into silence until this moment. Hidden from the board.",
+    )
+    flipped_controller = models.ForeignKey(
+        _PERSONA_FK,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="flipped_listener_posts",
+        help_text=(
+            "The rival persona who truly controls this listener (double agent). "
+            "The original handler's board shows nothing. Hidden."
+        ),
+    )
+    pending_plant = models.ForeignKey(
+        "clues.Clue",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "A red-herring clue (accusation-provenance secret) queued by the "
+            "flip controller; the next harvest delivers it. Hidden."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -333,6 +362,17 @@ class ListenerHarvest(SharedMemoryModel):
         blank=True,
         related_name="+",
         help_text="The caught record. NULL = nothing real happened that cycle.",
+    )
+    planted_clue = models.ForeignKey(
+        "clues.Clue",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "A flip controller's red herring delivered instead of a real catch "
+            "(#2820 phase 4). Collection grants this clue as if it were real."
+        ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
     collected_at = models.DateTimeField(null=True, blank=True)

@@ -140,6 +140,19 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         ConsentMode.EVERYONE,
     ),
     (
+        "espionage",
+        "Espionage",
+        # PLACEHOLDER (agent-drafted player-facing copy — Apostate to rewrite, #2820):
+        "Whether your spy network's agents may be targeted — intimidated into "
+        "silence, seduced into double allegiance, fed false intelligence. "
+        "Defensive moves (sweeping your own rooms for informants) are never "
+        "gated; this covers offense against the network you run.",
+        32,
+        # Inherits All Antagonism (FRIENDS_WHITELIST); own value kept strict for
+        # the unseeded/orphaned-row fallback (mirrors theft).
+        ConsentMode.ALLOWLIST,
+    ),
+    (
         "general",
         "General",
         "Public-facing social performances and recovery actions with broad audience.",
@@ -161,6 +174,7 @@ _CATEGORY_PARENTS: dict[str, str] = {
     "theft": "antagonism",
     "secret-investigation": "antagonism",
     "receiving-stolen-goods": "antagonism",
+    "espionage": "antagonism",
 }
 
 # ActionTemplate.name → category key
