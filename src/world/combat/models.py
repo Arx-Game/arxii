@@ -1760,6 +1760,15 @@ class CombatPullResolvedEffect(SharedMemoryModel):
         blank=True,
         related_name="combat_pull_grants",
     )
+    capability_grant_value = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Frozen curved magnitude for CAPABILITY_GRANT rows (#2730). "
+            "Computed at pull-commit time via apply_capability_curve with "
+            "context_free_power. Null for every other effect_kind."
+        ),
+    )
     narrative_snippet = models.TextField(blank=True)
     resistance_damage_type = models.ForeignKey(
         "conditions.DamageType",
@@ -1782,6 +1791,7 @@ class CombatPullResolvedEffect(SharedMemoryModel):
                     | (
                         models.Q(scaled_value__isnull=False)
                         & models.Q(granted_capability__isnull=True)
+                        & models.Q(capability_grant_value__isnull=True)
                         & models.Q(narrative_snippet="")
                         & models.Q(vital_target__isnull=True)
                     )
@@ -1795,6 +1805,7 @@ class CombatPullResolvedEffect(SharedMemoryModel):
                     | (
                         models.Q(scaled_value__isnull=False)
                         & models.Q(granted_capability__isnull=True)
+                        & models.Q(capability_grant_value__isnull=True)
                         & models.Q(narrative_snippet="")
                         & models.Q(vital_target__isnull=True)
                     )
@@ -1810,18 +1821,20 @@ class CombatPullResolvedEffect(SharedMemoryModel):
                         models.Q(scaled_value__isnull=False)
                         & models.Q(vital_target__isnull=False)
                         & models.Q(granted_capability__isnull=True)
+                        & models.Q(capability_grant_value__isnull=True)
                         & models.Q(narrative_snippet="")
                     )
                 ),
                 name="combatpullresolvedeffect_vital_bonus_payload",
             ),
-            # CAPABILITY_GRANT: requires granted_capability, forbids scaled_value
-            # / narrative / vital_target.
+            # CAPABILITY_GRANT: requires granted_capability AND capability_grant_value,
+            # forbids scaled_value / narrative / vital_target.
             models.CheckConstraint(
                 check=(
                     ~models.Q(kind="CAPABILITY_GRANT")
                     | (
                         models.Q(granted_capability__isnull=False)
+                        & models.Q(capability_grant_value__isnull=False)
                         & models.Q(scaled_value__isnull=True)
                         & models.Q(narrative_snippet="")
                         & models.Q(vital_target__isnull=True)
@@ -1837,6 +1850,7 @@ class CombatPullResolvedEffect(SharedMemoryModel):
                         ~models.Q(narrative_snippet="")
                         & models.Q(scaled_value__isnull=True)
                         & models.Q(granted_capability__isnull=True)
+                        & models.Q(capability_grant_value__isnull=True)
                         & models.Q(vital_target__isnull=True)
                     )
                 ),
@@ -1851,6 +1865,7 @@ class CombatPullResolvedEffect(SharedMemoryModel):
                     | (
                         models.Q(scaled_value__isnull=False)
                         & models.Q(granted_capability__isnull=True)
+                        & models.Q(capability_grant_value__isnull=True)
                         & models.Q(narrative_snippet="")
                         & models.Q(vital_target__isnull=True)
                     )
@@ -1885,6 +1900,8 @@ class CombatPullResolvedEffect(SharedMemoryModel):
             raise ValidationError({"scaled_value": "Required for this kind."})
         if self.granted_capability is not None:
             raise ValidationError({"granted_capability": "Must be null for this kind."})
+        if self.capability_grant_value is not None:
+            raise ValidationError({"capability_grant_value": "Must be null for this kind."})
         if self.narrative_snippet:
             raise ValidationError({"narrative_snippet": "Must be empty for this kind."})
         if self.vital_target:
@@ -1903,6 +1920,8 @@ class CombatPullResolvedEffect(SharedMemoryModel):
             raise ValidationError({"vital_target": "VITAL_BONUS requires vital_target."})
         if self.granted_capability is not None:
             raise ValidationError({"granted_capability": "Must be null for VITAL_BONUS."})
+        if self.capability_grant_value is not None:
+            raise ValidationError({"capability_grant_value": "Must be null for VITAL_BONUS."})
         if self.narrative_snippet:
             raise ValidationError({"narrative_snippet": "Must be empty for VITAL_BONUS."})
 
@@ -1910,6 +1929,10 @@ class CombatPullResolvedEffect(SharedMemoryModel):
         if self.granted_capability is None:
             raise ValidationError(
                 {"granted_capability": "CAPABILITY_GRANT requires granted_capability."}
+            )
+        if self.capability_grant_value is None:
+            raise ValidationError(
+                {"capability_grant_value": "CAPABILITY_GRANT requires capability_grant_value."}
             )
         if self.scaled_value is not None:
             raise ValidationError({"scaled_value": "Must be null for CAPABILITY_GRANT."})
@@ -1927,6 +1950,8 @@ class CombatPullResolvedEffect(SharedMemoryModel):
             raise ValidationError({"scaled_value": "Must be null for NARRATIVE_ONLY."})
         if self.granted_capability is not None:
             raise ValidationError({"granted_capability": "Must be null for NARRATIVE_ONLY."})
+        if self.capability_grant_value is not None:
+            raise ValidationError({"capability_grant_value": "Must be null for NARRATIVE_ONLY."})
         if self.vital_target:
             raise ValidationError({"vital_target": "Must be null for NARRATIVE_ONLY."})
 

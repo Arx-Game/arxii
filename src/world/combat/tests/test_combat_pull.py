@@ -210,6 +210,7 @@ class CombatPullResolvedEffectCleanTests(TestCase):
             scaled_value=None,
             level_multiplier=2,
             granted_capability=self.capability,
+            capability_grant_value=1,
             narrative_snippet="",
             vital_target=None,
         )
@@ -360,6 +361,7 @@ class CombatPullResolvedEffectCheckConstraintTests(TestCase):
                 **self._base_kwargs(),
                 kind=EffectKind.CAPABILITY_GRANT,
                 granted_capability=None,
+                capability_grant_value=1,
             )
 
     def test_narrative_only_requires_snippet_db(self) -> None:
@@ -415,6 +417,7 @@ class CombatPullResolvedEffectCheckConstraintTests(TestCase):
                 **self._base_kwargs(),
                 kind=EffectKind.CAPABILITY_GRANT,
                 granted_capability=self.capability,
+                capability_grant_value=1,
                 scaled_value=4,
             )
 
