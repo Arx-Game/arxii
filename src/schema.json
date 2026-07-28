@@ -57654,6 +57654,24 @@ components:
           description: 'Residue (#2833): 1-4 mints a Secret about the HANDLER at this
             level (''they arranged it'') plus an investigable hub trail when the target
             room''s region is derivable. Authors put it on sloppy tiers.'
+        domain_report:
+          type: boolean
+          description: 'DOMAIN target: report population/prosperity/unrest, holdings,
+            and open crises — what a rival spymaster wants to know.'
+        domain_unrest_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'DOMAIN target: foment (positive) or soothe (negative) unrest,
+            feeding the existing weekly consumption/crisis machinery.'
+        organization_report:
+          type: boolean
+          description: 'ORG target: case the organization — member count, banded treasury,
+            held agents, parent/wings. Never exact coin.'
+        military_report:
+          type: boolean
+          description: 'ORG target: assay their strength — the org''s military units
+            and active armies. Movements come when positional troop state exists.'
     PatchedTaskTemplateRequest:
       type: object
       description: Staff authoring surface for job templates.
@@ -67068,6 +67086,24 @@ components:
           description: 'Residue (#2833): 1-4 mints a Secret about the HANDLER at this
             level (''they arranged it'') plus an investigable hub trail when the target
             room''s region is derivable. Authors put it on sloppy tiers.'
+        domain_report:
+          type: boolean
+          description: 'DOMAIN target: report population/prosperity/unrest, holdings,
+            and open crises — what a rival spymaster wants to know.'
+        domain_unrest_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'DOMAIN target: foment (positive) or soothe (negative) unrest,
+            feeding the existing weekly consumption/crisis machinery.'
+        organization_report:
+          type: boolean
+          description: 'ORG target: case the organization — member count, banded treasury,
+            held agents, parent/wings. Never exact coin.'
+        military_report:
+          type: boolean
+          description: 'ORG target: assay their strength — the org''s military units
+            and active armies. Movements come when positional troop state exists.'
       required:
       - id
       - outcome_tier
@@ -67126,6 +67162,24 @@ components:
           description: 'Residue (#2833): 1-4 mints a Secret about the HANDLER at this
             level (''they arranged it'') plus an investigable hub trail when the target
             room''s region is derivable. Authors put it on sloppy tiers.'
+        domain_report:
+          type: boolean
+          description: 'DOMAIN target: report population/prosperity/unrest, holdings,
+            and open crises — what a rival spymaster wants to know.'
+        domain_unrest_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'DOMAIN target: foment (positive) or soothe (negative) unrest,
+            feeding the existing weekly consumption/crisis machinery.'
+        organization_report:
+          type: boolean
+          description: 'ORG target: case the organization — member count, banded treasury,
+            held agents, parent/wings. Never exact coin.'
+        military_report:
+          type: boolean
+          description: 'ORG target: assay their strength — the org''s military units
+            and active armies. Movements come when positional troop state exists.'
       required:
       - outcome_tier
       - template

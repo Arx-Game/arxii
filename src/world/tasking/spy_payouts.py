@@ -27,25 +27,151 @@ MOVEMENTS_REPORT_DAYS = 14
 RESIDUE_TRAIL_DIFFICULTY = 25
 _CONDITION_TIER_MIN = 0
 _CONDITION_TIER_MAX = 5
+_COIN_BAND_THIN_MAX = 10_000
+_COIN_BAND_COMFORTABLE_MAX = 100_000
 
 
 def apply_spy_payouts(
     route: TaskOutcomeRoute, task: OrgTask, fulfillment: TaskFulfillment
 ) -> list[str]:
-    """Apply every spy payout the route carries; returns report lines."""
+    """Apply every spy payout the route carries; returns report lines.
+
+    Residue stays last: it mints the secret AFTER the job's own effects land.
+    """
+    payouts = [
+        (route.movements_report, lambda: _movements_report(task)),
+        (route.unmask_target, lambda: _unmask(task, fulfillment)),
+        (route.gossip_heat_delta, lambda: _gossip_heat(task, route.gossip_heat_delta)),
+        (
+            route.building_condition_delta,
+            lambda: _building_condition(task, route.building_condition_delta),
+        ),
+        (route.recruit_target, lambda: _recruit(task)),
+        (route.domain_report, lambda: _domain_report(task)),
+        (route.domain_unrest_delta, lambda: _domain_unrest(task, route.domain_unrest_delta)),
+        (route.organization_report, lambda: _organization_report(task)),
+        (route.military_report, lambda: _military_report(task)),
+        (
+            route.incriminate_level,
+            lambda: _incriminate(task, fulfillment, route.incriminate_level),
+        ),
+    ]
     lines: list[str] = []
-    if route.movements_report:
-        lines.extend(_movements_report(task))
-    if route.unmask_target:
-        lines.extend(_unmask(task, fulfillment))
-    if route.gossip_heat_delta:
-        lines.extend(_gossip_heat(task, route.gossip_heat_delta))
-    if route.building_condition_delta:
-        lines.extend(_building_condition(task, route.building_condition_delta))
-    if route.recruit_target:
-        lines.extend(_recruit(task))
-    if route.incriminate_level:
-        lines.extend(_incriminate(task, fulfillment, route.incriminate_level))
+    for enabled, payout in payouts:
+        if enabled:
+            lines.extend(payout())
+    return lines
+
+
+def _domain_report(task: OrgTask) -> list[str]:
+    """What a rival spymaster wants to know about a domain — all of it
+    mechanical state the domain machinery already tracks."""
+    from world.societies.houses.models import DomainCrisis, DomainHolding  # noqa: PLC0415
+
+    domain = task.target_domain
+    if domain is None:
+        return ["The survey found no domain to walk."]
+    holdings = ", ".join(
+        DomainHolding.objects.filter(domain=domain)
+        .select_related("kind")
+        .values_list("kind__name", flat=True)[:8]
+    )
+    crises = DomainCrisis.objects.filter(domain=domain, resolved_at__isnull=True).count()
+    lines = [
+        (
+            f"{domain.name}: some {domain.population} souls; prosperity "
+            f"{domain.prosperity}/100, unrest {domain.unrest}/100."
+        )
+    ]
+    if holdings:
+        lines.append(f"Holdings observed: {holdings}.")
+    if crises:
+        lines.append(f"The domain nurses {crises} open crisis(es).")
+    return lines
+
+
+def _domain_unrest(task: OrgTask, delta: int) -> list[str]:
+    """Foment or soothe unrest — plugs straight into the weekly domain tick
+    and crisis machinery (agitation today is a crisis next cycle)."""
+    domain = task.target_domain
+    if domain is None:
+        return ["No populace to stir."]
+    new_value = max(0, min(100, domain.unrest + delta))
+    if new_value == domain.unrest:
+        return ["The mood there resists any further push."]
+    domain.unrest = new_value
+    domain.save(update_fields=["unrest"])
+    if delta > 0:
+        return [f"Discontent takes root in {domain.name}."]
+    return [f"Tempers cool in {domain.name}."]
+
+
+def _organization_report(task: OrgTask) -> list[str]:
+    """Case a rival organization: counts and bands, never exact coin."""
+    from world.assets.constants import AssetStatus  # noqa: PLC0415
+    from world.assets.models import NPCAsset  # noqa: PLC0415
+    from world.currency.models import OrganizationTreasury  # noqa: PLC0415
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    org = task.target_org
+    if org is None:
+        return ["No organization to case."]
+    members = OrganizationMembership.objects.filter(
+        organization=org, left_at__isnull=True, exiled_at__isnull=True
+    ).count()
+    agents = NPCAsset.objects.filter(promoter_org=org, status=AssetStatus.ACTIVE).count()
+    treasury = OrganizationTreasury.objects.filter(organization=org).first()
+    band = _coin_band(treasury.balance if treasury else 0)
+    lines = [f"{org.name}: {members} sworn member(s); coffers run {band}."]
+    if agents:
+        lines.append(f"They keep perhaps {agents} agent(s) of their own.")
+    if org.parent_org_id is not None:
+        lines.append(f"They answer upward to {org.parent_org.name}.")
+    wings = org.child_orgs.count()
+    if wings:
+        lines.append(f"They operate {wings} wing(s) of their own.")
+    return lines
+
+
+_BAND_EMPTY = "empty"
+_BAND_THIN = "thin"
+_BAND_COMFORTABLE = "comfortable"
+_BAND_DEEP = "deep"
+
+
+def _coin_band(balance: int) -> str:
+    """PLACEHOLDER banding — a spy estimates, never audits."""
+    if balance <= 0:
+        return _BAND_EMPTY
+    if balance < _COIN_BAND_THIN_MAX:
+        return _BAND_THIN
+    if balance < _COIN_BAND_COMFORTABLE_MAX:
+        return _BAND_COMFORTABLE
+    return _BAND_DEEP
+
+
+def _military_report(task: OrgTask) -> list[str]:
+    """Assay a rival's strength — persistent units and active armies.
+
+    Troop MOVEMENTS wait on positional military state; strength counts are
+    what exists to spy on today (#2833 addendum).
+    """
+    from world.military.models import Army, MilitaryUnit  # noqa: PLC0415
+
+    org = task.target_org
+    if org is None:
+        return ["No banners to count."]
+    units = MilitaryUnit.objects.filter(owner_org=org)
+    unit_count = units.count()
+    if unit_count == 0:
+        return [f"{org.name} fields no soldiery worth the name."]
+    army_count = (
+        Army.objects.filter(units__owner_org=org, disbanded_at__isnull=True).distinct().count()
+    )
+    sample = ", ".join(units.values_list("name", flat=True)[:5])
+    lines = [f"{org.name} fields {unit_count} unit(s): {sample}."]
+    if army_count:
+        lines.append(f"{army_count} armied formation(s) stand active.")
     return lines
 
 
@@ -228,16 +354,26 @@ def _incriminate(task: OrgTask, fulfillment: TaskFulfillment, level: int) -> lis
 
 
 def template_is_offensive(template) -> bool:
-    """Whether any route works AGAINST a persona target (#2833 consent gate).
+    """Whether any route works AGAINST its target (#2833 consent gate).
 
-    Quashing gossip (negative heat only) is defensive; everything else
-    aimed at a persona is offense. Residue hits the handler, not the mark.
+    Quashing gossip and soothing unrest (negative deltas) are defensive;
+    reports, recruitment, agitation, and amplification are offense.
+    Residue hits the handler, not the mark.
     """
-    if template.target_kind != TaskTargetKind.PERSONA:
-        return False
     for route in template.outcome_routes.all():
-        if route.movements_report or route.unmask_target or route.recruit_target:
+        if template.target_kind == TaskTargetKind.PERSONA and (
+            route.movements_report
+            or route.unmask_target
+            or route.recruit_target
+            or route.gossip_heat_delta > 0
+        ):
             return True
-        if route.gossip_heat_delta > 0:
+        if template.target_kind == TaskTargetKind.DOMAIN and (
+            route.domain_report or route.domain_unrest_delta > 0
+        ):
+            return True
+        if template.target_kind == TaskTargetKind.ORG and (
+            route.organization_report or route.military_report
+        ):
             return True
     return False

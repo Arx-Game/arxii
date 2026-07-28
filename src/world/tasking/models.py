@@ -182,6 +182,35 @@ class TaskOutcomeRoute(SharedMemoryModel):
             "room's region is derivable. Authors put it on sloppy tiers."
         ),
     )
+    # --- Cross-system payouts (#2833 addendum): domain + org espionage.
+    domain_report = models.BooleanField(
+        default=False,
+        help_text=(
+            "DOMAIN target: report population/prosperity/unrest, holdings, and "
+            "open crises — what a rival spymaster wants to know."
+        ),
+    )
+    domain_unrest_delta = models.SmallIntegerField(
+        default=0,
+        help_text=(
+            "DOMAIN target: foment (positive) or soothe (negative) unrest, "
+            "feeding the existing weekly consumption/crisis machinery."
+        ),
+    )
+    organization_report = models.BooleanField(
+        default=False,
+        help_text=(
+            "ORG target: case the organization — member count, banded treasury, "
+            "held agents, parent/wings. Never exact coin."
+        ),
+    )
+    military_report = models.BooleanField(
+        default=False,
+        help_text=(
+            "ORG target: assay their strength — the org's military units and "
+            "active armies. Movements come when positional troop state exists."
+        ),
+    )
 
     class Meta:
         ordering = ["template", "outcome_tier"]

@@ -2530,11 +2530,13 @@ consumers, not systems.
 - **API:** `/api/tasking/` — staff `templates/`+`routes/`; member `tasks/`
   (create/assign/accept), `roster/`, `posts/` (+collect), `counterplay/`;
   React `OperationsSection` (Roster/Postings/Operations) on `OrgPage`
-- **Spy Job Kit (#2833):** six route payouts (`spy_payouts.py`) —
+- **Spy Job Kit (#2833):** ten route payouts (`spy_payouts.py`) —
   movements report, unmask (PERSONA_LINK), gossip heat ±, building
-  condition ±, suborn-NPC, and the incriminating-residue rule (handler
-  secret + hub trail); issue-time espionage consent gate; sample templates
-  in `world/seeds/spy_tasks.py`
+  condition ±, suborn-NPC, the incriminating-residue rule (handler
+  secret + hub trail), plus cross-system payouts: domain report, domain
+  unrest ± (foment/soothe), organization report (treasury banded),
+  military strength assay; issue-time espionage consent gate covers PCs
+  AND PC-led orgs/domains; sample templates in `world/seeds/spy_tasks.py`
 - **Boundary:** standing "stay until recalled" postings are `NPCAssignment`
   rows, never tasks — every task ends; prose is never a surveillance input
 - **Source:** `src/world/tasking/` · **Doc:** `docs/systems/tasking.md` ·

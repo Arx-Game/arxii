@@ -218,6 +218,104 @@ class ConsentGateTests(SpyPayoutTestBase):
         self.assertEqual(task.status, TaskStatus.OPEN)
 
 
+class DomainPayoutTests(SpyPayoutTestBase):
+    def _domain(self, name, **kwargs):
+        from world.areas.factories import AreaFactory
+        from world.societies.houses.models import Domain
+
+        return Domain.objects.create(
+            area=AreaFactory(), name=name, owner_org=OrganizationFactory(), **kwargs
+        )
+
+    def test_survey_reports_domain_state(self):
+        domain = self._domain("Surveyed March", population=4200, prosperity=61, unrest=33)
+        template = TaskTemplateFactory(
+            duration=timedelta(days=1), target_kind=TaskTargetKind.DOMAIN
+        )
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, domain_report=True)
+        _, fulfillment = self._resolve(template, target_domain=domain)
+        self.assertIn("4200 souls", fulfillment.report)
+        self.assertIn("prosperity 61/100", fulfillment.report)
+        self.assertIn("unrest 33/100", fulfillment.report)
+
+    def test_foment_unrest_raises_and_clamps(self):
+        domain = self._domain("Restless March", unrest=95)
+        template = TaskTemplateFactory(
+            duration=timedelta(days=1), target_kind=TaskTargetKind.DOMAIN
+        )
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, domain_unrest_delta=10)
+        self._resolve(template, target_domain=domain)
+        domain.refresh_from_db()
+        self.assertEqual(domain.unrest, 100)
+
+    def test_soothe_unrest_is_defensive(self):
+        from world.tasking.spy_payouts import template_is_offensive
+
+        domain = self._domain("Soothed March", unrest=40)
+        template = TaskTemplateFactory(
+            duration=timedelta(days=1), target_kind=TaskTargetKind.DOMAIN
+        )
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, domain_unrest_delta=-10)
+        self.assertFalse(template_is_offensive(template))
+        self._resolve(template, target_domain=domain)
+        domain.refresh_from_db()
+        self.assertEqual(domain.unrest, 30)
+
+
+class OrgPayoutTests(SpyPayoutTestBase):
+    def test_case_reports_membership_and_coffers(self):
+        rival = OrganizationFactory()
+        OrganizationMembershipFactory(organization=rival)
+        template = TaskTemplateFactory(duration=timedelta(days=1), target_kind=TaskTargetKind.ORG)
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, organization_report=True)
+        _, fulfillment = self._resolve(template, target_org=rival)
+        self.assertIn("1 sworn member", fulfillment.report)
+        self.assertIn("coffers run empty", fulfillment.report)
+
+    def test_assay_counts_units(self):
+        from world.military.factories import MilitaryUnitFactory
+
+        rival = OrganizationFactory()
+        MilitaryUnitFactory(owner_org=rival, name="The Grey Halberds")
+        template = TaskTemplateFactory(duration=timedelta(days=1), target_kind=TaskTargetKind.ORG)
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, military_report=True)
+        _, fulfillment = self._resolve(template, target_org=rival)
+        self.assertIn("fields 1 unit(s)", fulfillment.report)
+        self.assertIn("The Grey Halberds", fulfillment.report)
+
+    def test_assay_on_bannerless_org(self):
+        rival = OrganizationFactory()
+        template = TaskTemplateFactory(duration=timedelta(days=1), target_kind=TaskTargetKind.ORG)
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, military_report=True)
+        _, fulfillment = self._resolve(template, target_org=rival)
+        self.assertIn("no soldiery worth the name", fulfillment.report)
+
+    def test_offensive_job_against_pc_led_org_refuses(self):
+        from world.seeds.consent import seed_social_consent_categories
+
+        seed_social_consent_categories()
+        rival = OrganizationFactory()
+        leader_entry = RosterEntryFactory()
+        RosterTenureFactory(roster_entry=leader_entry, player_number=1)
+        OrganizationMembershipFactory(
+            organization=rival,
+            persona=leader_entry.character_sheet.primary_persona,
+            rank=1,
+        )
+        template = TaskTemplateFactory(duration=timedelta(days=1), target_kind=TaskTargetKind.ORG)
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, organization_report=True)
+        with self.assertRaises(TargetConsentError):
+            create_task(template, self.org, self.handler, target_org=rival)
+
+    def test_npc_led_org_is_ungated(self):
+        rival = OrganizationFactory()
+        OrganizationMembershipFactory(organization=rival, rank=1)  # NPC leader: no tenure
+        template = TaskTemplateFactory(duration=timedelta(days=1), target_kind=TaskTargetKind.ORG)
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, organization_report=True)
+        task = create_task(template, self.org, self.handler, target_org=rival)
+        self.assertEqual(task.status, TaskStatus.OPEN)
+
+
 class SeedTests(TestCase):
     def test_seed_creates_templates_when_outcomes_exist(self):
         from world.checks.factories import CheckTypeFactory
@@ -227,8 +325,10 @@ class SeedTests(TestCase):
         CheckTypeFactory(name="Stealth")
         CheckOutcomeFactory(name="seed best", success_level=3)
         CheckOutcomeFactory(name="seed worst", success_level=-2)
-        self.assertEqual(ensure_spy_task_templates(), 6)
+        self.assertEqual(ensure_spy_task_templates(), 10)
         self.assertEqual(ensure_spy_task_templates(), 0)
         sabotage = TaskTemplate.objects.get(name="Sabotage the Works")
         self.assertEqual(sabotage.target_kind, TaskTargetKind.ROOM)
         self.assertIsNotNone(sabotage.consequence_pool)
+        assay = TaskTemplate.objects.get(name="Assay Their Strength")
+        self.assertEqual(assay.target_kind, TaskTargetKind.ORG)

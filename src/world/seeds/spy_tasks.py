@@ -1,6 +1,6 @@
 """Spy Job Kit sample templates (#2833) — PLACEHOLDER content.
 
-Seeds the six spy job templates with routes keyed to the best success tier
+Seeds the spy job templates with routes keyed to the best success tier
 and worst failure tier present in the seeded check-resolution content, plus
 a "Spywork Exposure" risk pool (ASSET_STATUS COMPROMISED on any tier —
 tier-filtering happens at selection). Skips gracefully on shards without
@@ -67,6 +67,40 @@ _TEMPLATES = [
         {"recruit_target": True},
         {"incriminate_level": 2},
     ),
+    # Cross-system addendum (#2833): what a domain's spymaster wants done
+    # about rival domains and organizations.
+    (
+        "Survey the Domain",
+        TaskCategory.SPYCRAFT,
+        TaskTargetKind.DOMAIN,
+        "PLACEHOLDER Walk their roads and count what they'd rather we not count.",
+        {"domain_report": True},
+        {"incriminate_level": 1},
+    ),
+    (
+        "Foment Unrest",
+        TaskCategory.SPYCRAFT,
+        TaskTargetKind.DOMAIN,
+        "PLACEHOLDER A coin here, a rumor there, and their commons remember old grievances.",
+        {"domain_unrest_delta": 10},
+        {"incriminate_level": 3},
+    ),
+    (
+        "Case the Organization",
+        TaskCategory.SPYCRAFT,
+        TaskTargetKind.ORG,
+        "PLACEHOLDER Learn their numbers, their coffers, and who they answer to.",
+        {"organization_report": True},
+        {"incriminate_level": 2},
+    ),
+    (
+        "Assay Their Strength",
+        TaskCategory.SPYCRAFT,
+        TaskTargetKind.ORG,
+        "PLACEHOLDER Count their banners and how many stand ready beneath them.",
+        {"military_report": True},
+        {"incriminate_level": 2},
+    ),
 ]
 
 
@@ -126,7 +160,7 @@ def _check_type():
 
 
 def ensure_spy_task_templates() -> int:
-    """Seed the six spy job templates. Idempotent; returns templates ensured."""
+    """Seed the spy job templates. Idempotent; returns templates ensured."""
     best, worst = _outcome_tiers()
     check_type = _check_type()
     if best is None or check_type is None:
