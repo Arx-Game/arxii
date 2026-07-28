@@ -54,7 +54,11 @@ returns the legal child species (maternal always; paternal appended when his
 tier strictly exceeds hers; `chimeric_possible` when both are Grand+ and
 differ); `inherited_options` returns cross-line `FormTraitOption`s per trait
 (pins constrain, unpinned parents expose their species palette, own-palette
-overlap excluded so hidden ancestry stays hideable). Validation built on it
+overlap excluded so hidden ancestry stays hideable); `base_trait_options`
+narrows a child of fully-defined parents to the family look — when every
+parent line is pinned for a trait, options collapse to the same-species
+parents' pins, dominant line first (an unpinned side keeps the species
+palette open). Validation built on it
 is **one-directional and creation-time only** (ADR-0173): outcomes require
 supporting bands when created; parents may be retro-defined upward freely.
 Named "heredity" — NOT "lineage" (that word is taken three other ways).

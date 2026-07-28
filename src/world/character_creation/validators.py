@@ -242,8 +242,10 @@ def _get_form_trait_errors(draft: CharacterDraft) -> list[str]:
     inherited options a cross-species parent makes legal (pinned-aware).
     """
     from world.forms.models import SpeciesFormTrait  # noqa: PLC0415
-    from world.forms.services import get_cg_form_options  # noqa: PLC0415
-    from world.roster.services.heredity import inherited_options  # noqa: PLC0415
+    from world.roster.services.heredity import (  # noqa: PLC0415
+        base_trait_options,
+        inherited_options,
+    )
 
     species = draft.selected_species
     if species is None:
@@ -265,18 +267,20 @@ def _get_form_trait_errors(draft: CharacterDraft) -> list[str]:
 
     # Legality is scoped per offered trait: a trait the species has no
     # SpeciesFormTrait link for was never offered — finalize silently skips
-    # it (pre-#2815 behavior), so validation ignores it too.
-    own_palette = get_cg_form_options(species)
-    legal_by_trait: dict[str, set[int]] = {
-        trait.name: {opt.pk for opt in options} for trait, options in own_palette.items()
-    }
+    # it (pre-#2815 behavior), so validation ignores it too. Children of
+    # fully-defined parents work from the family look (base_trait_options
+    # narrows a trait to the parents' pins when every line carries one).
     lines = get_draft_parent_lines(draft)
+    base_palette = base_trait_options(species, lines)
+    legal_by_trait: dict[str, set[int]] = {
+        trait.name: {opt.pk for opt in options} for trait, options in base_palette.items()
+    }
     if lines:
         for entry in inherited_options(species, lines):
             legal_by_trait.setdefault(entry.trait.name, set()).update(
                 opt.pk for opt in entry.options
             )
-    trait_names = {trait.name: trait.display_name for trait in own_palette}
+    trait_names = {trait.name: trait.display_name for trait in base_palette}
     for trait_name, option_id in selections.items():
         legal = legal_by_trait.get(trait_name)
         if legal is None:

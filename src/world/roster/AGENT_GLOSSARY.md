@@ -37,7 +37,10 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   known appearance color. Written by CG approval back-inference (a child's
   off-palette pick is attributed to the cross-species parent) or staff
   authoring; the first child to draw on an unpinned trait defines it, and
-  pins constrain later siblings. _Avoid:_ heredity service named "lineage"
+  pins constrain later siblings. Children of *fully*-pinned parents work
+  from the family look (`base_trait_options`): a trait every parent line
+  has pinned collapses to the parents' values, mother's first; an unpinned
+  side keeps the palette open. _Avoid:_ heredity service named "lineage"
   (that word already means the CG stage, display-lineage, and roadmap
   lineage powers).
 - **Step-parent / in-law** — DERIVED relations (a parent's union partner

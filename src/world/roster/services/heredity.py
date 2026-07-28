@@ -43,6 +43,11 @@ CHIMERIC_MIN_TIER = DOMINANCE_TIER[PowerBand.GRAND]
 
 _HEREDITY_KINDS = (ParentageKind.BIOLOGICAL, ParentageKind.TREE_OF_SOULS)
 
+# Family-look narrowing needs both sides of the parentage recorded — a single
+# recorded parent means the other side is simply unknown, which keeps the
+# species palette open (lazy definition: unknown = free).
+_MIN_LINES_FOR_NARROWING = 2
+
 
 @dataclass(frozen=True)
 class ParentLine:
@@ -146,6 +151,58 @@ def derivable_species(lines: list[ParentLine], *, fallback_maternal: Species) ->
     return SpeciesDerivation(allowed=allowed, chimeric_possible=chimeric_possible)
 
 
+def _line_pins(line: ParentLine) -> dict[int, FormTraitOption]:
+    """A parent line's pinned values by trait pk (empty for undefined parents)."""
+    if line.kinsperson is None:
+        return {}
+    return {
+        pin.trait_id: pin.option
+        for pin in KinspersonTraitValue.objects.filter(kinsperson=line.kinsperson).select_related(
+            "option__trait"
+        )
+    }
+
+
+def base_trait_options(
+    child_species: Species, lines: list[ParentLine]
+) -> dict[FormTrait, list[FormTraitOption]]:
+    """The child's own-line options per trait, narrowed to the family look.
+
+    Children of *defined* parents work from their parents' actual colors,
+    defaulting to the mother's: when EVERY parent line carries a pin for a
+    trait, that trait's options collapse to the same-species parents' pinned
+    values (dominant line first — the UI's default ordering). An unpinned
+    side keeps the species palette open (lazy definition: unknown = free),
+    as does a family with fewer than two recorded parent lines.
+    Cross-species parents' pins are NOT folded in here — they surface via
+    ``inherited_options`` with their source label, so the UI grouping and
+    the no-duplicate invariant both hold.
+    """
+    palette = get_cg_form_options(child_species)
+    if len(lines) < _MIN_LINES_FOR_NARROWING:
+        return palette
+
+    ordered = sorted(lines, key=lambda line: not line.is_dominant_role)
+    pins_by_line = [(line, _line_pins(line)) for line in ordered]
+
+    result: dict[FormTrait, list[FormTraitOption]] = {}
+    for trait, options in palette.items():
+        pinned = [(line, pins.get(trait.pk)) for line, pins in pins_by_line]
+        if all(option is not None for _, option in pinned):
+            family_look: list[FormTraitOption] = []
+            for line, option in pinned:
+                if (
+                    option is not None
+                    and line.species == child_species
+                    and option not in family_look
+                ):
+                    family_look.append(option)
+            result[trait] = family_look or list(options)
+        else:
+            result[trait] = list(options)
+    return result
+
+
 def _parent_palette(
     line: ParentLine, trait_pins: dict[int, FormTraitOption]
 ) -> dict[FormTrait, list[FormTraitOption]]:
@@ -180,14 +237,7 @@ def inherited_options(
     for line in lines:
         if line.is_dominant_role or line.species is None or line.species == child_species:
             continue
-        trait_pins: dict[int, FormTraitOption] = {}
-        if line.kinsperson is not None:
-            trait_pins = {
-                pin.trait_id: pin.option
-                for pin in KinspersonTraitValue.objects.filter(
-                    kinsperson=line.kinsperson
-                ).select_related("option__trait")
-            }
+        trait_pins = _line_pins(line)
         has_real_name = line.kinsperson is not None and bool(
             line.kinsperson.name or line.kinsperson.sheet_id
         )

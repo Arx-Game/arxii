@@ -255,3 +255,74 @@ class FormOptionsEndpointTest(FinalizationTestMixin, TestCase):
         draft.save(update_fields=["account"])
         response = self._get(self.species.id, draft=draft.pk)
         self.assertEqual(response.status_code, 404)
+
+
+class DefinedParentsNarrowingTest(FinalizationTestMixin, TestCase):
+    """Children of fully-pinned parents work from the family look (#2815)."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username="narrowuser")
+        self._setup_finalization_base(self, prefix="Narrow Test", height_min=700, height_max=800)
+        self.female, _ = Gender.objects.get_or_create(
+            key="female", defaults={"display_name": "Female"}
+        )
+        self.male, _ = Gender.objects.get_or_create(key="male", defaults={"display_name": "Male"})
+        self.hair = FormTraitFactory(name="hair_color")
+        self.black = FormTraitOptionFactory(trait=self.hair, name="black")
+        self.brown = FormTraitOptionFactory(trait=self.hair, name="brown")
+        self.white = FormTraitOptionFactory(trait=self.hair, name="white")
+        own_link = SpeciesFormTraitFactory(species=self.species, trait=self.hair)
+        own_link.allowed_options.set([self.black, self.brown, self.white])
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def _slot_with_pinned_parents(self):
+        from world.roster.factories import KinspersonFactory, ParentageEdgeFactory
+        from world.roster.models import KinspersonTraitValue
+
+        mother = KinspersonFactory(gender=self.female, species=self.species)
+        father = KinspersonFactory(gender=self.male, species=self.species)
+        KinspersonTraitValue.objects.create(kinsperson=mother, trait=self.hair, option=self.brown)
+        KinspersonTraitValue.objects.create(kinsperson=father, trait=self.hair, option=self.black)
+        slot = KinspersonFactory(name="Heir", is_appable=True)
+        ParentageEdgeFactory(child=slot, parent=mother)
+        ParentageEdgeFactory(child=slot, parent=father)
+        return slot
+
+    def test_validation_rejects_outside_family_look(self):
+        from world.character_creation.validators import get_appearance_errors
+
+        slot = self._slot_with_pinned_parents()
+        draft = self._create_base_draft(form_traits={"hair_color": self.white.pk})
+        draft.claimed_kin_slot = slot
+        draft.save(update_fields=["claimed_kin_slot"])
+        errors = get_appearance_errors(draft)
+        self.assertTrue(any("not available" in error for error in errors))
+        draft.draft_data["form_traits"] = {"hair_color": self.brown.pk}
+        draft.save(update_fields=["draft_data"])
+        self.assertEqual(get_appearance_errors(draft), [])
+
+    def test_endpoint_narrows_mother_first(self):
+        slot = self._slot_with_pinned_parents()
+        draft = self._create_base_draft()
+        draft.claimed_kin_slot = slot
+        draft.save(update_fields=["claimed_kin_slot"])
+        response = self.client.get(
+            f"/api/character-creation/form-options/{self.species.id}/", {"draft": draft.pk}
+        )
+        self.assertEqual(response.status_code, 200)
+        hair_entry = next(
+            entry for entry in response.data["traits"] if entry["trait"]["name"] == "hair_color"
+        )
+        self.assertEqual([opt["name"] for opt in hair_entry["options"]], ["brown", "black"])
+
+    def test_endpoint_without_draft_keeps_full_palette(self):
+        self._slot_with_pinned_parents()
+        response = self.client.get(f"/api/character-creation/form-options/{self.species.id}/")
+        hair_entry = next(
+            entry for entry in response.data["traits"] if entry["trait"]["name"] == "hair_color"
+        )
+        self.assertEqual(len(hair_entry["options"]), 3)

@@ -18,6 +18,7 @@ from world.roster.factories import (
 from world.roster.models import KinspersonTraitValue
 from world.roster.services.heredity import (
     ParentLine,
+    base_trait_options,
     derivable_species,
     derive_lines_for_child,
     inherited_options,
@@ -272,3 +273,86 @@ class InheritedOptionsTest(TestCase):
         self.assertEqual(len(inherited), 1)
         self.assertEqual(set(inherited[0].options), {self.red, self.blonde})
         self.assertEqual(inherited[0].source, "Human parent")
+
+
+class BaseTraitOptionsTest(TestCase):
+    """Defined-parents narrowing: children work from the family look (#2815).
+
+    Narrowing triggers only when EVERY parent line is pinned for a trait; an
+    unpinned side (or a single recorded parent) keeps the palette open.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.khati = SpeciesFactory(name="Khati")
+        cls.human = SpeciesFactory(name="Human")
+        cls.hair = FormTraitFactory(name="hair_color")
+        cls.black = FormTraitOptionFactory(trait=cls.hair, name="black")
+        cls.brown = FormTraitOptionFactory(trait=cls.hair, name="brown")
+        cls.white = FormTraitOptionFactory(trait=cls.hair, name="white")
+        cls.red = FormTraitOptionFactory(trait=cls.hair, name="red")
+        khati_hair = SpeciesFormTraitFactory(species=cls.khati, trait=cls.hair)
+        khati_hair.allowed_options.set([cls.black, cls.brown, cls.white])
+        human_hair = SpeciesFormTraitFactory(species=cls.human, trait=cls.hair)
+        human_hair.allowed_options.set([cls.black, cls.brown, cls.red])
+
+    def _lines(self, mother, father):
+        return [
+            ParentLine(
+                kinsperson=mother,
+                species=mother.species if mother else None,
+                band=None,
+                is_dominant_role=True,
+            ),
+            ParentLine(
+                kinsperson=father,
+                species=father.species if father else None,
+                band=None,
+                is_dominant_role=False,
+            ),
+        ]
+
+    def test_both_parents_pinned_narrows_mother_first(self):
+        mother = KinspersonFactory(species=self.khati)
+        father = KinspersonFactory(species=self.khati)
+        KinspersonTraitValueFactory(kinsperson=mother, trait=self.hair, option=self.brown)
+        KinspersonTraitValueFactory(kinsperson=father, trait=self.hair, option=self.black)
+        base = base_trait_options(self.khati, self._lines(mother, father))
+        self.assertEqual(base[self.hair], [self.brown, self.black])
+
+    def test_unpinned_side_keeps_palette_open(self):
+        mother = KinspersonFactory(species=self.khati)
+        father = KinspersonFactory(species=self.khati)
+        KinspersonTraitValueFactory(kinsperson=mother, trait=self.hair, option=self.brown)
+        base = base_trait_options(self.khati, self._lines(mother, father))
+        self.assertEqual(set(base[self.hair]), {self.black, self.brown, self.white})
+
+    def test_single_line_keeps_palette(self):
+        mother = KinspersonFactory(species=self.khati)
+        KinspersonTraitValueFactory(kinsperson=mother, trait=self.hair, option=self.brown)
+        lines = self._lines(mother, None)[:1]
+        base = base_trait_options(self.khati, lines)
+        self.assertEqual(set(base[self.hair]), {self.black, self.brown, self.white})
+
+    def test_cross_species_pin_triggers_narrowing_but_rides_inherited(self):
+        # Mother khati pinned brown; father human pinned red (off khati palette).
+        # Base narrows to the mother's value only; red stays in the father's
+        # labeled inherited group — no duplicate between the two surfaces.
+        mother = KinspersonFactory(species=self.khati)
+        father = KinspersonFactory(species=self.human, name="Bob")
+        KinspersonTraitValueFactory(kinsperson=mother, trait=self.hair, option=self.brown)
+        KinspersonTraitValueFactory(kinsperson=father, trait=self.hair, option=self.red)
+        lines = self._lines(mother, father)
+        base = base_trait_options(self.khati, lines)
+        self.assertEqual(base[self.hair], [self.brown])
+        inherited = inherited_options(self.khati, lines)
+        self.assertEqual(len(inherited), 1)
+        self.assertEqual(inherited[0].options, [self.red])
+
+    def test_undefined_parents_keep_palette(self):
+        lines = [
+            ParentLine(kinsperson=None, species=self.khati, band=None, is_dominant_role=True),
+            ParentLine(kinsperson=None, species=self.human, band=None, is_dominant_role=False),
+        ]
+        base = base_trait_options(self.khati, lines)
+        self.assertEqual(set(base[self.hair]), {self.black, self.brown, self.white})
