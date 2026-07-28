@@ -293,11 +293,12 @@ class CharacterAuraAdmin(admin.ModelAdmin):
 class GlimpseTagAdmin(admin.ModelAdmin):
     """Guided glimpse tag catalog (#2427) — lore-repo content model."""
 
-    list_display = ["name", "axis", "sort_order", "is_active"]
-    list_filter = ["axis", "is_active"]
+    list_display = ["name", "axis", "affinity", "sort_order", "is_active"]
+    list_filter = ["axis", "is_active", "affinity"]
     search_fields = ["name", "slug"]
     prepopulated_fields = {"slug": ("name",)}
     filter_horizontal = ["paths"]
+    autocomplete_fields = ["affinity"]
 
 
 @admin.register(GlimpseTagDistinctionSuggestion)

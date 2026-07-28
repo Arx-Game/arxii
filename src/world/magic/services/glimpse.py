@@ -84,3 +84,86 @@ def unlink_distinction_from_glimpse(character_distinction: CharacterDistinction)
     """Clear a distinction's Glimpse provenance."""
     character_distinction.from_glimpse = None
     character_distinction.save()
+
+
+#: Per-tag affinity nudge in percentage points.  Each TONE or TRIGGER tag with
+#: an ``affinity`` FK shifts the matching affinity by this amount at CG
+#: finalize; the total is re-normalized so the three percentages still sum to
+#: 100.00.  The magnitude is intentionally small — the Glimpse is a *nudge*,
+#: not a rewrite of the aura the character's resonance history already
+#: produces.
+GLIMPSE_AFFINITY_NUDGE_PERCENT = 3
+
+
+def apply_glimpse_affinity_nudge(aura: CharacterAura) -> None:
+    """Apply a small aura affinity nudge from TONE/TRIGGER Glimpse tags.
+
+    Reads the character's chosen TONE and TRIGGER tags (single-select axes
+    where the emotional register / trigger story most directly maps to an
+    affinity). For each tag that carries an ``affinity`` FK, shifts that
+    affinity by ``GLIMPSE_AFFINITY_NUDGE_PERCENT`` percentage points, then
+    re-normalizes so the three values still sum to 100.00.
+
+    Called once at CG finalize, after tags are set but before the final
+    ``recompute_aura`` call. Tags without an ``affinity`` (including all
+    CONSEQUENCE, WITNESS, and SENSORY tags) are inert — the nudge only fires
+    on TONE and TRIGGER.
+
+    Idempotent: calling it twice doubles the nudge, but in practice it is
+    called exactly once from ``_finalize_glimpse_data``.
+    """
+    from world.magic.models.glimpse import GlimpseTag  # noqa: PLC0415
+
+    nudge_axes = {GlimpseTagAxis.TONE, GlimpseTagAxis.TRIGGER}
+    tag_ids = list(
+        CharacterGlimpseTag.objects.filter(aura=aura, tag__axis__in=nudge_axes)
+        .exclude(tag__affinity__isnull=True)
+        .values_list("tag_id", flat=True)
+    )
+    if not tag_ids:
+        return
+
+    # Count how many tags nudge each affinity.
+    affinity_counts: dict[str, int] = {}
+    for tag in GlimpseTag.objects.filter(pk__in=tag_ids).select_related("affinity"):
+        if tag.affinity is None:
+            continue
+        name = tag.affinity.name.lower()
+        affinity_counts[name] = affinity_counts.get(name, 0) + 1
+
+    if not affinity_counts:
+        return
+
+    from decimal import Decimal  # noqa: PLC0415
+
+    nudge = Decimal(GLIMPSE_AFFINITY_NUDGE_PERCENT)
+
+    # Apply nudges: add to the tagged affinity, subtract proportionally from
+    # the others to keep the sum at 100.00.
+    celestial = Decimal(aura.celestial)
+    primal = Decimal(aura.primal)
+    abyssal = Decimal(aura.abyssal)
+
+    values = {"celestial": celestial, "primal": primal, "abyssal": abyssal}
+
+    for affinity_name, count in affinity_counts.items():
+        shift = nudge * count
+        values[affinity_name] += shift
+        # Subtract evenly from the other two to keep sum == 100.
+        others = [k for k in values if k != affinity_name]
+        per_other = shift / Decimal(len(others))
+        for other in others:
+            values[other] -= per_other
+
+    # Clamp to [0, 100] and fix rounding so the three sum to exactly 100.00.
+    for k, v in values.items():
+        values[k] = max(Decimal(0), min(Decimal(100), v))
+
+    celestial = values["celestial"].quantize(Decimal("0.01"))
+    primal = values["primal"].quantize(Decimal("0.01"))
+    abyssal = (Decimal("100.00") - celestial - primal).quantize(Decimal("0.01"))
+
+    aura.celestial = celestial
+    aura.primal = primal
+    aura.abyssal = abyssal
+    aura.save()

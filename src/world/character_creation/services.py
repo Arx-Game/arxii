@@ -1523,6 +1523,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     # 4. Create CharacterAura, then persist the guided Glimpse picks (#2427)
     #    through the glimpse services so glimpse_state stays consistent.
     from world.magic.services.glimpse import (  # noqa: PLC0415
+        apply_glimpse_affinity_nudge,
         link_distinction_to_glimpse,
         set_glimpse_prose,
         set_glimpse_tags,
@@ -1561,6 +1562,15 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     from world.magic.services.aura import recompute_aura  # noqa: PLC0415
 
     recompute_aura(sheet)
+
+    # 4c. Apply the Glimpse affinity nudge (#2694). recompute_aura set the
+    #     aura from resonance history; the TONE/TRIGGER tag nudge shifts it
+    #     slightly to reflect the emotional register and trigger of the
+    #     awakening.  This is a one-time CG adjustment — it is not re-applied
+    #     by later recompute_aura calls (which overwrite from resonance
+    #     history).  The nudge is small (±3% per tag) and only fires on tags
+    #     that carry an ``affinity`` FK.
+    apply_glimpse_affinity_nudge(aura)
 
     # 5. Seed CharacterAnima + FatiguePool (idempotent — skip if already present).
     #    These must exist for Soul Tether sineating/rescue deductions to apply.
