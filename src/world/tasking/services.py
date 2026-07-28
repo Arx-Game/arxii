@@ -118,7 +118,7 @@ def assign_agent(task: OrgTask, npc_asset: NPCAsset, handler: Persona) -> TaskFu
     return fulfillment
 
 
-def _target_label(task: OrgTask) -> str:
+def target_label(task: OrgTask) -> str:
     if task.target_kind == TaskTargetKind.NONE:
         return "the job"
     field = OrgTask.DISCRIMINATOR_MAP[TaskTargetKind(task.target_kind)]
@@ -136,7 +136,7 @@ def _write_report(
         return _DEFAULT_REPORT.format(agent=agent_name, task=task.template.name)
     return route.report_template.format(
         task=task.template.name,
-        target=_target_label(task),
+        target=target_label(task),
         agent=agent_name,
     )
 
