@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 from world.npc_services.views import (
     InteractionViewSet,
     MissionOfferDetailsViewSet,
+    NpcLifecycleViewSet,
     NPCReactionLineViewSet,
     NPCRoleViewSet,
     NPCServiceOfferViewSet,
@@ -31,5 +32,7 @@ router.register(r"reaction-lines", NPCReactionLineViewSet, basename="npc-reactio
 
 router.register(r"staffing-profiles", StaffingProfileViewSet, basename="staffing-profile")
 router.register(r"staffing-lines", StaffingProfileLineViewSet, basename="staffing-profile-line")
+
+router.register(r"lifecycle", NpcLifecycleViewSet, basename="npc-lifecycle")
 
 urlpatterns = router.urls
