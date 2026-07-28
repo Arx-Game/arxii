@@ -21,6 +21,9 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.items.constants import OrgVaultEventKind, VaultTransitResolution
 
+# Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
+ITEM_INSTANCE_MODEL = "items.ItemInstance"
+
 
 class OrganizationVault(SharedMemoryModel):
     """One per org (get-or-create): the item-custody twin of ``OrganizationTreasury``."""
@@ -54,7 +57,7 @@ class VaultHolding(SharedMemoryModel):
         related_name="holdings",
     )
     item_instance = models.OneToOneField(
-        "items.ItemInstance",
+        ITEM_INSTANCE_MODEL,
         on_delete=models.CASCADE,
         related_name="vault_holding",
     )
@@ -95,7 +98,7 @@ class VaultTransit(SharedMemoryModel):
         related_name="transits",
     )
     item_instance = models.OneToOneField(
-        "items.ItemInstance",
+        ITEM_INSTANCE_MODEL,
         on_delete=models.CASCADE,
         related_name="vault_transit",
     )
@@ -133,7 +136,7 @@ class OrgVaultEvent(SharedMemoryModel):
         related_name="events",
     )
     item_instance = models.ForeignKey(
-        "items.ItemInstance",
+        ITEM_INSTANCE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

@@ -44,6 +44,10 @@ from world.magic.constants import TechniqueFunction
 
 CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
 
+# Extracted to satisfy S1192.
+CONDITION_TEMPLATE_FACTORY = "world.conditions.factories.ConditionTemplateFactory"
+PRIMARY_STAT_DESCRIPTION = "Primary character statistics."
+
 if TYPE_CHECKING:
     from world.checks.models import CheckType
     from world.conditions.models import CapabilityType, ConditionTemplate
@@ -199,7 +203,7 @@ class InsightTableEntryFactory(factory_django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Insight Entry {n}")
     prose = "{caster} reads the fight and shares it with {target}!"
-    condition = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
+    condition = factory.SubFactory(CONDITION_TEMPLATE_FACTORY)
     target_kind = InsightTargetKind.ALLY
     weight = 1
     is_active = True
@@ -215,7 +219,7 @@ class WeaknessPoolEntryFactory(factory_django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Weakness {n}")
     creature_template = factory.SubFactory("world.combat.factories.CreatureTemplateFactory")
     prose = "{caster} reveals {target}'s weakness — it is vulnerable!"
-    condition = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
+    condition = factory.SubFactory(CONDITION_TEMPLATE_FACTORY)
     is_active = True
 
 
@@ -353,7 +357,7 @@ class CovenantRiteRolePackageFactory(factory_django.DjangoModelFactory):
     rite = factory.SubFactory(CovenantRiteFactory)
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     min_covenant_level = 1
-    condition_template = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
+    condition_template = factory.SubFactory(CONDITION_TEMPLATE_FACTORY)
 
 
 class MentorBondFactory(factory_django.DjangoModelFactory):
@@ -658,7 +662,7 @@ def wire_covenant_rite_content() -> CovenantRite | None:
     # ------------------------------------------------------------------
     stat_cat = authored_or_sample(
         ModifierCategory,
-        {"description": "Primary character statistics.", "display_order": 10},
+        {"description": PRIMARY_STAT_DESCRIPTION, "display_order": 10},
         name="stat",
     )
 
@@ -851,7 +855,7 @@ def wire_covenant_level_bonus_catalog() -> CovenantLevelBonus:
 
     stat_cat, _ = ModifierCategory.objects.get_or_create(
         name="stat",
-        defaults={"description": "Primary character statistics.", "display_order": 10},
+        defaults={"description": PRIMARY_STAT_DESCRIPTION, "display_order": 10},
     )
     trait = Trait.get_by_name("willpower")
     target, _ = ModifierTarget.objects.get_or_create(
@@ -1081,7 +1085,7 @@ def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffe
     # ------------------------------------------------------------------
     stat_cat, _ = ModifierCategory.objects.get_or_create(
         name="stat",
-        defaults={"description": "Primary character statistics.", "display_order": 10},
+        defaults={"description": PRIMARY_STAT_DESCRIPTION, "display_order": 10},
     )
     bonus_target, _ = ModifierTarget.objects.get_or_create(
         category=stat_cat,

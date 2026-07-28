@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 _CONSEQUENCE_POOL_FK = "actions.ConsequencePool"
 _CONDITION_TEMPLATE_FK = "conditions.ConditionTemplate"
 _CONDITION_STAGE_FK = "conditions.ConditionStage"
+CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 
 # =============================================================================
 # Lookup Tables (SharedMemoryModel - cached, rarely change)
@@ -1374,7 +1375,7 @@ class ConditionInstance(SharedMemoryModel):
     )
 
     detected_by = models.ManyToManyField(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         related_name="detected_concealments",
         blank=True,
         help_text=(
@@ -1582,12 +1583,12 @@ class TreatmentAttempt(SharedMemoryModel):
     """
 
     helper = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.PROTECT,
         related_name="treatment_attempts_as_helper",
     )
     target = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.PROTECT,
         related_name="treatment_attempts_as_target",
     )

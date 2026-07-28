@@ -29,6 +29,7 @@ from world.room_features.constants import (
 
 ROOM_PROFILE_MODEL = "evennia_extensions.RoomProfile"
 _PERSONA_MODEL = "scenes.Persona"
+CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 
 
 class RoomFeatureKind(SharedMemoryModel):
@@ -370,7 +371,7 @@ class Trap(SharedMemoryModel):
         help_text="Whether the trap is concealed until a character resolves it.",
     )
     detected_by = models.ManyToManyField(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         related_name="detected_traps",
         blank=True,
         help_text=(
@@ -389,7 +390,7 @@ class Trap(SharedMemoryModel):
         ),
     )
     created_by_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -433,7 +434,7 @@ class PreparedGround(SharedMemoryModel):
         help_text="The room this ground was prepared in.",
     )
     prepared_by = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="prepared_ground",
         help_text=(

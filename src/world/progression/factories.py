@@ -35,6 +35,9 @@ from world.progression.types import DevelopmentSource, ProgressionReason
 # extracted to a single constant to satisfy S1192.
 _WEEK_SERVICES_MODULE = "world.game_clock.week_services"
 
+# Lazy factory reference (Django app_label.ModuleName.Factory), extracted to satisfy S1192.
+PATH_FACTORY = "world.classes.factories.PathFactory"
+
 
 class ExperiencePointsDataFactory(factory_django.DjangoModelFactory):
     """Factory for ExperiencePointsData."""
@@ -116,7 +119,7 @@ class CharacterPathHistoryFactory(factory_django.DjangoModelFactory):
         model = CharacterPathHistory
 
     character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    path = factory.SubFactory("world.classes.factories.PathFactory")
+    path = factory.SubFactory(PATH_FACTORY)
 
 
 class KudosSourceCategoryFactory(factory_django.DjangoModelFactory):
@@ -281,7 +284,7 @@ class PathIntentFactory(factory_django.DjangoModelFactory):
         model = PathIntent
 
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    intended_path = factory.SubFactory("world.classes.factories.PathFactory")
+    intended_path = factory.SubFactory(PATH_FACTORY)
 
 
 class DuranceTrainingSiteFactory(factory_django.DjangoModelFactory):
@@ -316,4 +319,4 @@ class CodexKnowledgeRequirementFactory(factory_django.DjangoModelFactory):
         model = CodexKnowledgeRequirement
 
     codex_entry = factory.SubFactory("world.codex.factories.CodexEntryFactory")
-    path = factory.SubFactory("world.classes.factories.PathFactory")
+    path = factory.SubFactory(PATH_FACTORY)

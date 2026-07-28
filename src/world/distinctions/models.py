@@ -28,6 +28,10 @@ from world.distinctions.types import (
 )
 from world.secrets.constants import SecretLevel
 
+# Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
+DISTINCTION_MODEL = "distinctions.Distinction"
+CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+
 
 class DistinctionCategoryManager(NaturalKeyManager):
     """Manager for DistinctionCategory with natural key support."""
@@ -358,7 +362,7 @@ class DistinctionPrerequisite(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["distinction", "key"]
-        dependencies = ["distinctions.Distinction"]
+        dependencies = [DISTINCTION_MODEL]
 
     class Meta:
         unique_together = [("distinction", "key")]
@@ -418,7 +422,7 @@ class DistinctionEffect(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["distinction", "target"]
-        dependencies = ["distinctions.Distinction", "mechanics.ModifierTarget"]
+        dependencies = [DISTINCTION_MODEL, "mechanics.ModifierTarget"]
 
     class Meta:
         unique_together = ["distinction", "target"]
@@ -454,7 +458,7 @@ class CharacterDistinction(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="distinctions",
         help_text="The character sheet this distinction belongs to.",
@@ -559,7 +563,7 @@ class CharacterDistinctionOther(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="distinction_other_entries",
         help_text="The character sheet that entered this 'Other' distinction.",
@@ -613,7 +617,7 @@ class SheetUpdateRequest(models.Model):  # noqa: SHARED_MEMORY
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="sheet_update_requests",
         help_text="The character requesting the change.",
@@ -629,7 +633,7 @@ class SheetUpdateRequest(models.Model):  # noqa: SHARED_MEMORY
         "for an existing holder sets this above the current rank). Ignored for REMOVE.",
     )
     target_distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        DISTINCTION_MODEL,
         on_delete=models.PROTECT,
         null=True,
         blank=True,

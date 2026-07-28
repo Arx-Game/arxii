@@ -149,7 +149,7 @@ export function BequestEditor({ will, frozen, mutations }: BequestEditorProps) {
           <Input
             placeholder={recipientIsOrg ? 'Search organizations…' : 'Search characters…'}
             value={recipient ? recipient.name : recipientQuery}
-            onChange={(e) => void search(e.target.value)}
+            onChange={(e) => search(e.target.value)}
           />
           {matches.length > 0 && !recipient && (
             <ul className="rounded border text-sm">

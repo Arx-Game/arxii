@@ -5,6 +5,8 @@ is the Sage's weakness reading; future consumers (tarot mage, etc.) plug
 into the same command.
 """
 
+from typing import Any
+
 from commands.command import ArxCommand
 
 
@@ -61,7 +63,6 @@ class CmdSelect(ArxCommand):
         self.caller.msg("\n".join(lines))
 
     def _resolve(self, sheet: object, arg: str) -> None:
-        from world.combat.constants import SelectionType  # noqa: PLC0415
         from world.combat.models import PendingSelection  # noqa: PLC0415
 
         selections = list(
@@ -75,34 +76,53 @@ class CmdSelect(ArxCommand):
             self.caller.msg("You have no pending selections.")
             return
 
-        # Try to match by ordinal number first
-        chosen_id = None
-        try:
-            ordinal = int(arg)
-            for sel in selections:
-                if 1 <= ordinal <= len(sel.options_json):
-                    chosen_id = sel.options_json[ordinal - 1]["id"]
-                    break
-        except ValueError:
-            chosen_id = arg
-
+        chosen_id = self._resolve_option_id(selections, arg)
         if chosen_id is None:
             self.caller.msg(f"No option matching '{arg}'. Use a number or option name.")
             return
 
-        # Try each selection until one resolves
         for sel in selections:
             option_ids = {opt["id"] for opt in sel.options_json}
             if chosen_id in option_ids:
-                if sel.selection_type == SelectionType.WEAKNESS:
-                    from world.covenants.weakness import resolve_weakness_selection  # noqa: PLC0415
-
-                    if resolve_weakness_selection(sel, chosen_id):
-                        self.caller.msg(f"You actualize: {chosen_id}")
-                        return
-                    self.caller.msg("That selection could not be resolved.")
-                    return
-                self.caller.msg(f"Unknown selection type: {sel.selection_type}")
+                self._dispatch_selection(sel, chosen_id)
                 return
 
         self.caller.msg(f"No pending option matching '{arg}'.")
+
+    def _resolve_option_id(self, selections: list, arg: str) -> str | int | None:
+        """Resolve ``arg`` to an option id by ordinal number or raw id.
+
+        Args:
+            selections: The caller's pending selections.
+            arg: The raw command argument (a number or option name).
+
+        Returns:
+            The matched option id, or ``None`` if no ordinal matched.
+        """
+        try:
+            ordinal = int(arg)
+            for sel in selections:
+                if 1 <= ordinal <= len(sel.options_json):
+                    return sel.options_json[ordinal - 1]["id"]
+        except ValueError:
+            return arg
+        return None
+
+    def _dispatch_selection(self, sel: Any, chosen_id: str | int) -> None:
+        """Dispatch a matched selection to its type-specific resolver.
+
+        Args:
+            sel: The ``PendingSelection`` whose option was chosen.
+            chosen_id: The matched option id.
+        """
+        from world.combat.constants import SelectionType  # noqa: PLC0415
+
+        if sel.selection_type == SelectionType.WEAKNESS:
+            from world.covenants.weakness import resolve_weakness_selection  # noqa: PLC0415
+
+            if resolve_weakness_selection(sel, str(chosen_id)):
+                self.caller.msg(f"You actualize: {chosen_id}")
+                return
+            self.caller.msg("That selection could not be resolved.")
+            return
+        self.caller.msg(f"Unknown selection type: {sel.selection_type}")

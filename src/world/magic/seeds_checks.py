@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from world.magic.constants import ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME
 from world.magic.seeds_sanctum import (
@@ -51,6 +51,9 @@ SANCTUM_DISSOLUTION_CHECK_TYPE_NAME = "Sanctum Dissolution"
 MAGICAL_ENDURANCE_CHECK_TYPE_NAME = "Magical Endurance"
 RESIST_CORRUPTION_CHECK_TYPE_NAME = "Resist Corruption"
 ARCANA_ASPECT_NAME = "Arcana"
+
+# Extracted to satisfy S1192.
+MAGIC_CHECK_CATEGORY_DESCRIPTION = "Checks of magical practice, lore, and endurance."
 
 # (name, description, display_order)
 _MAGIC_SKILLS = [
@@ -165,13 +168,11 @@ def ensure_magic_check_category() -> CheckCategory | None:
 
     category = authored_or_sample(
         CheckCategory,
-        {"description": "Checks of magical practice, lore, and endurance."},
+        {"description": MAGIC_CHECK_CATEGORY_DESCRIPTION},
         name=MAGIC_CHECK_CATEGORY_NAME,
     )
     if category is not None:
-        _upgrade_placeholder_description(
-            category, "Checks of magical practice, lore, and endurance."
-        )
+        _upgrade_placeholder_description(category, MAGIC_CHECK_CATEGORY_DESCRIPTION)
     return category
 
 
@@ -210,7 +211,7 @@ def ensure_magic_skills() -> dict[str, Skill]:
     return skills
 
 
-def _ensure_arcana_aspect():
+def _ensure_arcana_aspect() -> Any:
     """Look up (or sample) the Arcana Aspect — content-repo-owned (#2698)."""
     from world.classes.models import Aspect  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
@@ -222,46 +223,21 @@ def _ensure_arcana_aspect():
     )
 
 
-def ensure_magic_check_types() -> dict[str, CheckType]:
-    """Look up (or sample) the five Magic CheckTypes with trait + Arcana aspect composition.
+def _compose_trait_weights(check_types: dict, arcana: Any) -> None:
+    """Attach trait weights and the Arcana aspect to each seeded CheckType.
 
-    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` and
-    ``classes.Aspect`` are content-repo-owned (#2698) — looked up rather than
-    invented unless ``SEED_SAMPLE_CONTENT`` is on. A CheckType whose category
-    or row isn't authored is omitted from the returned dict; a trait-weight
-    row is skipped when its trait isn't authored either. ``checks.
-    CheckTypeAspect`` stays outside ``CONTENT_MODELS`` and keeps seeding
-    unconditionally.
+    Args:
+        check_types: Map of seeded CheckType name -> CheckType instance.
+        arcana: The Arcana Aspect instance (or ``None`` to skip aspect wiring).
+
+    Walks ``_MAGIC_TRAIT_WEIGHTS``, resolving each trait as a stat (authored
+    or sampled) or a skill (plain lookup), and creates the matching
+    ``CheckTypeTrait`` row. Skips traits whose CheckType or Trait row is
+    absent. When ``arcana`` is provided, attaches it to every CheckType.
     """
-    from world.checks.models import (  # noqa: PLC0415
-        CheckType,
-        CheckTypeAspect,
-        CheckTypeTrait,
-    )
+    from world.checks.models import CheckTypeTrait  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
-
-    category = ensure_magic_check_category()
-    ensure_magic_skills()
-    arcana = _ensure_arcana_aspect()
-
-    check_types: dict[str, CheckType] = {}
-    if category is not None:
-        for name, description, display_order in _MAGIC_CHECK_TYPES:
-            check_type = authored_or_sample(
-                CheckType,
-                {
-                    "description": description,
-                    "display_order": display_order,
-                    "is_active": True,
-                },
-                name=name,
-                category=category,
-            )
-            if check_type is None:
-                continue
-            _upgrade_placeholder_description(check_type, description)
-            check_types[name] = check_type
 
     for ct_name, trait_name, weight in _MAGIC_TRAIT_WEIGHTS:
         check_type = check_types.get(ct_name)
@@ -289,6 +265,8 @@ def ensure_magic_check_types() -> dict[str, CheckType]:
         )
 
     if arcana is not None:
+        from world.checks.models import CheckTypeAspect  # noqa: PLC0415
+
         for check_type in check_types.values():
             CheckTypeAspect.objects.get_or_create(
                 check_type=check_type,
@@ -296,6 +274,46 @@ def ensure_magic_check_types() -> dict[str, CheckType]:
                 defaults={"weight": Decimal("1.00")},
             )
 
+
+def ensure_magic_check_types() -> dict[str, CheckType]:
+    """Look up (or sample) the five Magic CheckTypes with trait + Arcana aspect composition.
+
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` and
+    ``classes.Aspect`` are content-repo-owned (#2698) — looked up rather than
+    invented unless ``SEED_SAMPLE_CONTENT`` is on. A CheckType whose category
+    or row isn't authored is omitted from the returned dict; a trait-weight
+    row is skipped when its trait isn't authored either. ``checks.
+    CheckTypeAspect`` stays outside ``CONTENT_MODELS`` and keeps seeding
+    unconditionally.
+    """
+    from world.checks.models import (  # noqa: PLC0415
+        CheckType,
+    )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    category = ensure_magic_check_category()
+    ensure_magic_skills()
+    arcana = _ensure_arcana_aspect()
+
+    check_types: dict[str, CheckType] = {}
+    if category is not None:
+        for name, description, display_order in _MAGIC_CHECK_TYPES:
+            check_type = authored_or_sample(
+                CheckType,
+                {
+                    "description": description,
+                    "display_order": display_order,
+                    "is_active": True,
+                },
+                name=name,
+                category=category,
+            )
+            if check_type is None:
+                continue
+            _upgrade_placeholder_description(check_type, description)
+            check_types[name] = check_type
+
+    _compose_trait_weights(check_types, arcana)
     return check_types
 
 
@@ -355,12 +373,12 @@ def ensure_ritual_check_configs(
     return configs
 
 
-def character_magic_check_type_name(character_sheet) -> str:
+def character_magic_check_type_name(character_sheet: Any) -> str:
     """Stable, per-character CheckType name (natural key with the Magic category)."""
     return f"Magic Check — sheet {character_sheet.pk}"
 
 
-def ensure_character_magic_check_type(character_sheet, *, stat, skill):
+def ensure_character_magic_check_type(character_sheet: Any, *, stat: Any, skill: Any):
     """Synthesize/return a per-character magic CheckType from stat + skill (+ Arcana).
 
     The character's signature check: rolled by their Anima Ritual AND their
@@ -388,7 +406,7 @@ def ensure_character_magic_check_type(character_sheet, *, stat, skill):
 
     category, _ = CheckCategory.objects.get_or_create(
         name=MAGIC_CHECK_CATEGORY_NAME,
-        defaults={"description": "Checks of magical practice, lore, and endurance."},
+        defaults={"description": MAGIC_CHECK_CATEGORY_DESCRIPTION},
     )
     arcana = _ensure_arcana_aspect()
     name = character_magic_check_type_name(character_sheet)

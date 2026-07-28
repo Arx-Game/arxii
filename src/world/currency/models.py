@@ -31,13 +31,14 @@ from world.currency.constants import (
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 PERSONA_MODEL = "scenes.Persona"
 ORGANIZATION_MODEL = "societies.Organization"
+CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 
 
 class CharacterPurse(SharedMemoryModel):
     """A character's personal money, in coppers."""
 
     character_sheet = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="purse",
         help_text="Body-anchored holder (persona presentation at serialization).",
@@ -697,7 +698,7 @@ class CharacterEmployment(SharedMemoryModel):
     """A character's current job (#929). One active employment at a time."""
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="employments",
     )
@@ -815,7 +816,7 @@ class PurseDrainWeek(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="purse_drain_weeks",
     )

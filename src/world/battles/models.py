@@ -1212,7 +1212,7 @@ class WarFundingDetails(SharedMemoryModel):
         related_name="war_funding_details",
     )
     covenant = models.ForeignKey(
-        "covenants.Covenant",
+        COVENANT_MODEL,
         on_delete=models.PROTECT,
         related_name="war_funding_projects",
         help_text="The covenant whose military readiness this drive funds.",
@@ -1317,7 +1317,7 @@ class CovenantMilitaryReadiness(SharedMemoryModel):
     """
 
     covenant = models.OneToOneField(
-        "covenants.Covenant",
+        COVENANT_MODEL,
         on_delete=models.CASCADE,
         related_name="military_readiness",
     )

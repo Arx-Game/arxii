@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -17,7 +20,7 @@ _DAMAGE_TYPE_MODEL = "conditions.DamageType"
 _POSITION_EDGE_CACHES = ("passable_edges_as_a", "passable_edges_as_b", "all_edges_as_a")
 
 
-def _pop_room_graph(room) -> None:
+def _pop_room_graph(room: Any) -> None:
     """Drop *room*'s cached ``positions_cached`` entry (targeted, never a blanket
     cached-property clear — the identity-mapped Room also caches live state such
     as ``scene_data``/``trigger_handler`` whose identity must survive mutations)."""
@@ -25,7 +28,7 @@ def _pop_room_graph(room) -> None:
         room.__dict__.pop("positions_cached", None)
 
 
-def invalidate_position_graph_caches(room) -> None:
+def invalidate_position_graph_caches(room: Any) -> None:
     """Invalidate the full cached positions graph for *room*.
 
     Pops the room's ``positions_cached`` plus every in-room Position's edge
@@ -146,15 +149,15 @@ class Position(PositionNodeBase):
     # Prefetch(to_attr=...); independent callers get the same shape lazily.
 
     @cached_property
-    def passable_edges_as_a(self) -> list["PositionEdge"]:
+    def passable_edges_as_a(self) -> list[PositionEdge]:
         return list(self.edges_as_a.filter(is_passable=True).only("position_a_id", "position_b_id"))
 
     @cached_property
-    def passable_edges_as_b(self) -> list["PositionEdge"]:
+    def passable_edges_as_b(self) -> list[PositionEdge]:
         return list(self.edges_as_b.filter(is_passable=True).only("position_a_id", "position_b_id"))
 
     @cached_property
-    def all_edges_as_a(self) -> list["PositionEdge"]:
+    def all_edges_as_a(self) -> list[PositionEdge]:
         return list(self.edges_as_a.select_related("gating_challenge__template"))
 
     rampart_or_none = ReverseOneToOneOrNone("rampart")
@@ -515,7 +518,7 @@ class RampartElementProfile(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["name"]
-        dependencies = ["conditions.DamageType", "conditions.ConditionTemplate"]
+        dependencies = [_DAMAGE_TYPE_MODEL, "conditions.ConditionTemplate"]
 
     objects = NaturalKeyManager()
 
@@ -567,7 +570,7 @@ class RampartElementResistance(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["profile", "damage_type"]
-        dependencies = ["areas.RampartElementProfile", "conditions.DamageType"]
+        dependencies = ["areas.RampartElementProfile", _DAMAGE_TYPE_MODEL]
 
     objects = NaturalKeyManager()
 

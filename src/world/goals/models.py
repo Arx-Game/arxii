@@ -27,6 +27,9 @@ from world.goals.constants import GoalStatus
 # Optional domains don't require point allocation
 OPTIONAL_GOAL_DOMAINS = {"Drives"}
 
+# Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
+CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+
 
 class CharacterGoal(SharedMemoryModel):
     """
@@ -40,7 +43,7 @@ class CharacterGoal(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="goals",
     )
@@ -86,7 +89,7 @@ class GoalJournal(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="goal_journals",
     )
@@ -124,7 +127,7 @@ class GoalRevision(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="goal_revision",
     )

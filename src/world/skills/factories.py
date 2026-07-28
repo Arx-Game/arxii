@@ -20,6 +20,9 @@ from world.skills.models import (
 from world.traits.factories import TraitFactory
 from world.traits.models import TraitCategory, TraitType
 
+# Lazy factory reference (Django app_label.ModuleName.Factory), extracted to satisfy S1192.
+CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
+
 
 class SkillTraitFactory(TraitFactory):
     """Factory for creating Trait records with type SKILL."""
@@ -60,7 +63,7 @@ class CharacterSkillValueFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterSkillValue
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     skill = factory.SubFactory(SkillFactory)
     value = 20
     development_points = 0
@@ -73,7 +76,7 @@ class CharacterSpecializationValueFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterSpecializationValue
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     specialization = factory.SubFactory(SpecializationFactory)
     value = 10
     development_points = 0
@@ -112,7 +115,7 @@ class TrainingAllocationFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = TrainingAllocation
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     skill = factory.SubFactory(SkillFactory)
     specialization = None
     mentor = None

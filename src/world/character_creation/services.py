@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -708,75 +708,117 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
     """
     from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
 
-    # Create stat values from draft (optimized with bulk operations)
-    stats = draft.draft_data.get("stats", {})
-    if stats:
-        # Fetch all stat traits in one query
-        stat_names = list(stats.keys())
-        traits_by_name = {
-            trait.name: trait
-            for trait in Trait.objects.filter(name__in=stat_names, trait_type=TraitType.STAT)
-        }
-
-        # Create trait values in bulk
-        trait_values = [
-            CharacterTraitValue(
-                character=character.sheet_data, trait=traits_by_name[name], value=value
-            )
-            for name, value in stats.items()
-            if name in traits_by_name
-        ]
-        CharacterTraitValue.objects.bulk_create(trait_values)
-
-    # Create skill values from draft
+    _create_stat_values(character, draft, Trait, TraitType, CharacterTraitValue)
     _create_skill_values(character, draft)
-
-    # Create goal records from draft
     _build_and_create_goals(character, draft)
-
-    # Create distinction records and their modifiers
     _create_distinctions(character, draft)
-
-    # Create the worship declaration (+ secret-worship Secret) (#2355)
     _create_worship_declaration(character, draft)
+    _create_path_history(character, draft)
+    _establish_chosen_patronage(character, draft)
+    _apply_post_cg_bonuses(character, draft, CharacterTraitValue)
 
-    # Create path history record
-    if draft.selected_path:
-        from world.progression.models import CharacterPathHistory  # noqa: PLC0415
 
-        CharacterPathHistory.objects.create(
-            character=character.sheet_data,
-            path=draft.selected_path,
+def _create_stat_values(
+    character: ObjectDB,
+    draft: CharacterDraft,
+    _trait_cls: Any,
+    _trait_type_cls: Any,
+    _character_trait_value_cls: Any,
+) -> None:
+    """Create stat trait values from the draft's stat allocations.
+
+    Fetches all stat traits in one query and bulk-creates the trait values.
+
+    Args:
+        character: The newly created ``ObjectDB`` character.
+        draft: The completed ``CharacterDraft``.
+        _trait_cls: ``Trait`` model class.
+        _trait_type_cls: ``TraitType`` enum.
+        _character_trait_value_cls: ``CharacterTraitValue`` model class.
+    """
+    stats = draft.draft_data.get("stats", {})
+    if not stats:
+        return
+    stat_names = list(stats.keys())
+    traits_by_name = {
+        trait.name: trait
+        for trait in _trait_cls.objects.filter(name__in=stat_names, trait_type=_trait_type_cls.STAT)
+    }
+    trait_values = [
+        _character_trait_value_cls(
+            character=character.sheet_data, trait=traits_by_name[name], value=value
         )
+        for name, value in stats.items()
+        if name in traits_by_name
+    ]
+    _character_trait_value_cls.objects.bulk_create(trait_values)
 
-    # Establish patronage for Path of the Chosen (#2550)
-    if draft.selected_path and draft.selected_path.name == PATH_OF_THE_CHOSEN_NAME:
-        from world.worship.models import PatronageValence, WorshipDeclaration  # noqa: PLC0415
-        from world.worship.services import establish_patronage  # noqa: PLC0415
 
-        declaration = WorshipDeclaration.objects.filter(
-            character_sheet=character.sheet_data
-        ).first()
-        if declaration:
-            being = declaration.secret_being or declaration.public_being
-            if being:
-                establish_patronage(
-                    character.sheet_data, being, valence=PatronageValence.DEVOTIONAL
-                )
+def _create_path_history(character: ObjectDB, draft: CharacterDraft) -> None:
+    """Create the path history record for the character's chosen path.
 
-    # Apply post-CG bonuses if any (from other stages exceeding 5)
-    # NOTE: This is reserved for future functionality where other CG stages might
-    # modify stats beyond the normal 1-5 range. Not currently used.
-    # TODO: Implement when heritage/path bonuses are added
+    Args:
+        character: The newly created ``ObjectDB`` character.
+        draft: The completed ``CharacterDraft``.
+    """
+    if not draft.selected_path:
+        return
+    from world.progression.models import CharacterPathHistory  # noqa: PLC0415
+
+    CharacterPathHistory.objects.create(
+        character=character.sheet_data,
+        path=draft.selected_path,
+    )
+
+
+def _establish_chosen_patronage(character: ObjectDB, draft: CharacterDraft) -> None:
+    """Establish patronage for a Path of the Chosen character (#2550).
+
+    If the character's selected path is "Path of the Chosen" and they have a
+    worship declaration with a being, establishes a devotional patronage link.
+
+    Args:
+        character: The newly created ``ObjectDB`` character.
+        draft: The completed ``CharacterDraft``.
+    """
+    if not draft.selected_path or draft.selected_path.name != PATH_OF_THE_CHOSEN_NAME:
+        return
+    from world.worship.models import PatronageValence, WorshipDeclaration  # noqa: PLC0415
+    from world.worship.services import establish_patronage  # noqa: PLC0415
+
+    declaration = WorshipDeclaration.objects.filter(character_sheet=character.sheet_data).first()
+    if not declaration:
+        return
+    being = declaration.secret_being or declaration.public_being
+    if being:
+        establish_patronage(character.sheet_data, being, valence=PatronageValence.DEVOTIONAL)
+
+
+def _apply_post_cg_bonuses(
+    character: ObjectDB,
+    draft: CharacterDraft,
+    _character_trait_value_cls: Any,
+) -> None:
+    """Apply post-CG stat bonuses from the draft (reserved for future use).
+
+    NOTE: This is reserved for future functionality where other CG stages might
+    modify stats beyond the normal 1-5 range. Not currently used.
+
+    Args:
+        character: The newly created ``ObjectDB`` character.
+        draft: The completed ``CharacterDraft``.
+        _character_trait_value_cls: ``CharacterTraitValue`` model class.
+    """
     post_cg_bonuses = draft.draft_data.get("stats_post_cg_bonuses", {})
-    if post_cg_bonuses:
-        for stat_name, bonus in post_cg_bonuses.items():
-            trait_value = CharacterTraitValue.objects.filter(
-                character_id=character.pk, trait__name=stat_name
-            ).first()
-            if trait_value:
-                trait_value.value += int(bonus)
-                trait_value.save()
+    if not post_cg_bonuses:
+        return
+    for stat_name, bonus in post_cg_bonuses.items():
+        trait_value = _character_trait_value_cls.objects.filter(
+            character_id=character.pk, trait__name=stat_name
+        ).first()
+        if trait_value:
+            trait_value.value += int(bonus)
+            trait_value.save()
 
 
 def _create_worship_declaration(character: ObjectDB, draft: CharacterDraft) -> None:
@@ -1036,45 +1078,79 @@ def _create_true_form(character: ObjectDB, draft_data: dict) -> None:
     if not form_traits:
         return
 
-    # Resolve trait names to FormTrait instances
+    selections = _resolve_form_trait_selections(form_traits, FormTrait, FormTraitOption)
+
+    if selections:
+        create_true_form(character, selections)
+
+    _apply_form_trait_descriptors(character, draft_data, selections)
+
+
+def _resolve_form_trait_selections(
+    form_traits: dict,
+    _form_trait_cls: Any,
+    _form_trait_option_cls: Any,
+) -> dict:
+    """Resolve trait names and option IDs to FormTrait/FormTraitOption pairs.
+
+    Args:
+        form_traits: Mapping of trait name to option ID from the draft.
+        _form_trait_cls: ``FormTrait`` model class.
+        _form_trait_option_cls: ``FormTraitOption`` model class.
+
+    Returns:
+        Mapping of ``FormTrait`` instance to ``FormTraitOption`` instance,
+        skipping invalid entries.
+    """
     trait_names = list(form_traits.keys())
-    traits_by_name = {t.name: t for t in FormTrait.objects.filter(name__in=trait_names)}
+    traits_by_name = {t.name: t for t in _form_trait_cls.objects.filter(name__in=trait_names)}
 
-    # Resolve option IDs to FormTraitOption instances
     option_ids = [v for v in form_traits.values() if isinstance(v, int)]
-    options_by_id = {o.id: o for o in FormTraitOption.objects.filter(id__in=option_ids)}
+    options_by_id = {o.id: o for o in _form_trait_option_cls.objects.filter(id__in=option_ids)}
 
-    # Build selections dict, skipping invalid entries
     selections = {}
     for trait_name, option_id in form_traits.items():
         trait = traits_by_name.get(trait_name)
         option = options_by_id.get(option_id)
         if trait and option and option.trait_id == trait.id:
             selections[trait] = option
+    return selections
 
-    if selections:
-        create_true_form(character, selections)
 
-    # #2632 — CG-authored per-trait descriptors ("red" + "flowing crimson"):
-    # free-text presentation flavor written onto the PRIMARY persona. Only
-    # traits actually selected get a descriptor; player-authored here, so the
-    # descriptor-never-auto-attach privacy invariant (#1109) is untouched —
-    # nothing is copied, the player typed it for this face.
+def _apply_form_trait_descriptors(
+    character: ObjectDB,
+    draft_data: dict,
+    selections: dict,
+) -> None:
+    """Write CG-authored per-trait descriptors onto the PRIMARY persona (#2632).
+
+    Free-text presentation flavor ("red" + "flowing crimson") written onto the
+    PRIMARY persona. Only traits actually selected get a descriptor;
+    player-authored here, so the descriptor-never-auto-attach privacy invariant
+    (#1109) is untouched — nothing is copied, the player typed it for this face.
+
+    Args:
+        character: The newly created Character object.
+        draft_data: The draft's JSON data blob.
+        selections: Resolved ``{FormTrait: FormTraitOption}`` mapping.
+    """
     descriptors = draft_data.get("form_trait_descriptors", {})
-    if selections and isinstance(descriptors, dict):
-        from world.forms.models import PersonaTraitDescriptor  # noqa: PLC0415
+    if not selections or not isinstance(descriptors, dict):
+        return
+    from world.forms.models import PersonaTraitDescriptor  # noqa: PLC0415
 
-        sheet = character.character_sheet
-        persona = sheet.primary_persona if sheet else None
-        if persona is not None:
-            for trait in selections:
-                text = descriptors.get(trait.name)
-                if isinstance(text, str) and text.strip():
-                    PersonaTraitDescriptor.objects.update_or_create(
-                        persona=persona,
-                        trait=trait,
-                        defaults={"text": text.strip()},
-                    )
+    sheet = character.character_sheet
+    persona = sheet.primary_persona if sheet else None
+    if persona is None:
+        return
+    for trait in selections:
+        text = descriptors.get(trait.name)
+        if isinstance(text, str) and text.strip():
+            PersonaTraitDescriptor.objects.update_or_create(
+                persona=persona,
+                trait=trait,
+                defaults={"text": text.strip()},
+            )
 
 
 def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:

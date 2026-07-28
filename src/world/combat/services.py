@@ -3716,6 +3716,43 @@ def _batch_fetch_cooldown_data(
     for cooldown purposes. Batched identically to the CombatOpponentAction
     read below (one extra fixed query, never a query per opponent).
     """
+    cooldown_filters, pending_cooldown_filters = _build_cooldown_q_filters(
+        opponents, entries_by_pool, round_number
+    )
+
+    result: dict[int, set[int]] = defaultdict(set)
+    if not cooldown_filters:
+        return result
+
+    entry_cooldown_map = {
+        e.pk: e.cooldown_rounds for e in all_entries if e.cooldown_rounds is not None
+    }
+
+    _collect_cooldown_actions(cooldown_filters, entry_cooldown_map, round_number, result)
+    _collect_cooldown_pending(pending_cooldown_filters, entry_cooldown_map, round_number, result)
+
+    return result
+
+
+def _build_cooldown_q_filters(
+    opponents: list[CombatOpponent],
+    entries_by_pool: dict[int, list[ThreatPoolEntry]],
+    round_number: int,
+) -> tuple[Q, Q]:
+    """Build OR-ed Q filters for committed and pending cooldown entries.
+
+    Iterates opponents, collecting per-pool cooldown entry IDs and computing
+    the earliest allowed round for each, then OR-combines into two Q objects.
+
+    Args:
+        opponents: The opponents to build filters for.
+        entries_by_pool: Mapping of threat_pool_id to entries.
+        round_number: The current round number.
+
+    Returns:
+        A tuple of ``(cooldown_filters, pending_cooldown_filters)`` — both empty
+        ``Q()`` when no opponent has cooldown entries.
+    """
     cooldown_filters = Q()
     pending_cooldown_filters = Q()
     for opponent in opponents:
@@ -3735,15 +3772,26 @@ def _batch_fetch_cooldown_data(
             threat_entry_id__in=cooldown_entry_ids,
             declared_round__gte=earliest_allowed,
         )
+    return cooldown_filters, pending_cooldown_filters
 
-    result: dict[int, set[int]] = defaultdict(set)
-    if not cooldown_filters:
-        return result
 
-    entry_cooldown_map = {
-        e.pk: e.cooldown_rounds for e in all_entries if e.cooldown_rounds is not None
-    }
+def _collect_cooldown_actions(
+    cooldown_filters: Q,
+    entry_cooldown_map: dict[int, int],
+    round_number: int,
+    result: dict[int, set[int]],
+) -> dict[int, set[int]]:
+    """Collect committed-action cooldown hits into *result*.
 
+    Args:
+        cooldown_filters: OR-ed Q filter for ``CombatOpponentAction``.
+        entry_cooldown_map: Mapping of entry_id to cooldown_rounds.
+        round_number: The current round number.
+        result: Accumulating result dict (mutated in place).
+
+    Returns:
+        The mutated *result* dict.
+    """
     recent_actions = CombatOpponentAction.objects.filter(cooldown_filters).values_list(
         "opponent_id", "threat_entry_id", "round_number"
     )
@@ -3753,7 +3801,26 @@ def _batch_fetch_cooldown_data(
             earliest = max(1, round_number - cooldown + 1)
             if round_num >= earliest:
                 result[opp_id].add(entry_id)
+    return result
 
+
+def _collect_cooldown_pending(
+    pending_cooldown_filters: Q,
+    entry_cooldown_map: dict[int, int],
+    round_number: int,
+    result: dict[int, set[int]],
+) -> dict[int, set[int]]:
+    """Collect pending-windup cooldown hits into *result*.
+
+    Args:
+        pending_cooldown_filters: OR-ed Q filter for ``PendingOpponentAttack``.
+        entry_cooldown_map: Mapping of entry_id to cooldown_rounds.
+        round_number: The current round number.
+        result: Accumulating result dict (mutated in place).
+
+    Returns:
+        The mutated *result* dict.
+    """
     recent_pending = PendingOpponentAttack.objects.filter(pending_cooldown_filters).values_list(
         "opponent_id", "threat_entry_id", "declared_round"
     )
@@ -3763,7 +3830,6 @@ def _batch_fetch_cooldown_data(
             earliest = max(1, round_number - cooldown + 1)
             if round_num >= earliest:
                 result[opp_id].add(entry_id)
-
     return result
 
 
@@ -3914,7 +3980,7 @@ def _get_companion_order(opponent: CombatOpponent, round_number: int) -> object 
     ).first()
 
 
-def _build_opponent_round_actions(  # noqa: C901, PLR0912, PLR0913
+def _build_opponent_round_actions(  # noqa: PLR0913
     opponent: CombatOpponent,
     pool_entries: list[ThreatPoolEntry],
     cooldown_used: set[int],
@@ -3961,22 +4027,11 @@ def _build_opponent_round_actions(  # noqa: C901, PLR0912, PLR0913
 
     # --- Companion order integration (#1921) ---
     # An ALLY summon with a CompanionOrder may override its target or skip.
-    companion_order = _get_companion_order(opponent, encounter.round_number)
-    if companion_order is not None:
-        from world.companions.constants import CompanionOrderKind  # noqa: PLC0415
-
-        if companion_order.order_kind == CompanionOrderKind.HOLD:
-            return []  # HOLD: skip this round
-
-        if (
-            companion_order.order_kind == CompanionOrderKind.ATTACK_TARGET
-            and companion_order.target_opponent_id is not None
-        ):
-            # Filter the pool to just the directed target (if still alive)
-            directed = [opp for opp in target_pool if opp.pk == companion_order.target_opponent_id]
-            if directed:
-                target_pool = directed
-            # else: target is dead/gone, fall back to auto-selection
+    companion_result = _apply_companion_order(opponent, encounter.round_number, target_pool)
+    if companion_result is _COMPANION_HOLD:
+        return []
+    if isinstance(companion_result, list):
+        target_pool = companion_result
 
     if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
         n_attacks = swarm_attack_count(
@@ -3989,42 +4044,131 @@ def _build_opponent_round_actions(  # noqa: C901, PLR0912, PLR0913
 
     actions: list[CombatOpponentAction] = []
     for attack_index in range(n_attacks):
-        weights = [e.weight for e in eligible]
-        chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
-
-        # Telegraphed wind-up (#2637 design 2-3): a windup_rounds entry commits
-        # to a PendingOpponentAttack instead of a same-round CombatOpponentAction.
-        # No CombatOpponentAction row exists for this attack until it matures.
-        if chosen.windup_rounds > 0:
-            _declare_windup_attack(
-                opponent,
-                chosen,
-                encounter,
-                target_pool,
-                targeting_participants=targeting_participants,
-                rotation=attack_index,
-                threat_map=threat_map,
-                shield_participant_ids=shield_participant_ids,
-            )
-            continue
-
-        action = CombatOpponentAction.objects.create(
+        _execute_npc_attack(
             opponent=opponent,
-            round_number=encounter.round_number,
-            threat_entry=chosen,
-        )
-        _set_npc_action_targets(
-            action,
-            chosen,
-            target_pool,
+            eligible=eligible,
+            encounter=encounter,
+            target_pool=target_pool,
             targeting_participants=targeting_participants,
             rotation=attack_index,
             threat_map=threat_map,
             shield_participant_ids=shield_participant_ids,
+            actions=actions,
         )
-        actions.append(action)
 
     return actions
+
+
+# Sentinel for the HOLD companion order — distinct from ``None`` (no order) and
+# from a directed target list (ATTACK_TARGET) so the caller can branch cleanly.
+_COMPANION_HOLD = object()
+
+
+def _apply_companion_order(
+    opponent: CombatOpponent,
+    round_number: int,
+    target_pool: list,
+) -> list | object | None:
+    """Apply a companion order to narrow or skip the opponent's target pool.
+
+    A HOLD order returns ``_COMPANION_HOLD`` (skip this round). An ATTACK_TARGET
+    order narrows *target_pool* to the directed opponent if still alive, and
+    returns that list. Returns ``None`` when no companion order is active, when
+    the order doesn't match, or when the directed target is dead/gone (fall back
+    to auto-selection).
+
+    Args:
+        opponent: The ``CombatOpponent`` to check for a companion order.
+        round_number: The current round number.
+        target_pool: The current target pool (used for ATTACK_TARGET narrowing).
+
+    Returns:
+        ``_COMPANION_HOLD`` when the order is HOLD (skip), a narrowed target list
+        when the order is ATTACK_TARGET and the target is alive, or ``None`` when
+        no companion order applies or the directed target is gone.
+    """
+    companion_order = _get_companion_order(opponent, round_number)
+    if companion_order is None:
+        return None
+
+    from world.companions.constants import CompanionOrderKind  # noqa: PLC0415
+
+    if companion_order.order_kind == CompanionOrderKind.HOLD:
+        return _COMPANION_HOLD
+
+    if (
+        companion_order.order_kind == CompanionOrderKind.ATTACK_TARGET
+        and companion_order.target_opponent_id is not None
+    ):
+        directed = [opp for opp in target_pool if opp.pk == companion_order.target_opponent_id]
+        if directed:
+            return directed
+    return None
+
+
+def _execute_npc_attack(  # noqa: PLR0913
+    *,
+    opponent: CombatOpponent,
+    eligible: list[ThreatPoolEntry],
+    encounter: CombatEncounter,
+    target_pool: list,
+    targeting_participants: bool,
+    rotation: int,
+    threat_map: dict[int, int] | None,
+    shield_participant_ids: set[int] | None,
+    actions: list[CombatOpponentAction],
+) -> None:
+    """Execute one NPC attack, appending to *actions* or declaring a windup.
+
+    Picks a weighted-random threat entry; if it has ``windup_rounds > 0``
+    declares a pending windup attack (no immediate row). Otherwise creates a
+    ``CombatOpponentAction`` row and sets its targets.
+
+    Args:
+        opponent: The attacking ``CombatOpponent``.
+        eligible: Eligible (off-cooldown) threat pool entries.
+        encounter: The active ``CombatEncounter``.
+        target_pool: The resolved target pool for this round.
+        targeting_participants: Whether targeting uses participants.
+        rotation: The attack index within the round (for rotation logic).
+        threat_map: Optional threat-map for target selection.
+        shield_participant_ids: Optional set of shield-bearing participant IDs.
+        actions: The accumulator list to append created actions to.
+    """
+    weights = [e.weight for e in eligible]
+    chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
+
+    # Telegraphed wind-up (#2637 design 2-3): a windup_rounds entry commits
+    # to a PendingOpponentAttack instead of a same-round CombatOpponentAction.
+    # No CombatOpponentAction row exists for this attack until it matures.
+    if chosen.windup_rounds > 0:
+        _declare_windup_attack(
+            opponent,
+            chosen,
+            encounter,
+            target_pool,
+            targeting_participants=targeting_participants,
+            rotation=rotation,
+            threat_map=threat_map,
+            shield_participant_ids=shield_participant_ids,
+        )
+        return
+
+    action = CombatOpponentAction.objects.create(
+        opponent=opponent,
+        round_number=encounter.round_number,
+        threat_entry=chosen,
+    )
+    _set_npc_action_targets(
+        action,
+        chosen,
+        target_pool,
+        targeting_participants=targeting_participants,
+        rotation=rotation,
+        threat_map=threat_map,
+        shield_participant_ids=shield_participant_ids,
+    )
+    actions.append(action)
 
 
 def _npc_action_target_pool(

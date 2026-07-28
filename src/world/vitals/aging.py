@@ -15,7 +15,7 @@ Three IC-cadence cron entry points (registered in world.game_clock.tasks):
 import calendar
 from datetime import datetime, timedelta
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from evennia.objects.models import ObjectDB
 
@@ -177,6 +177,51 @@ def _deepen_frailty(
     instance.save(update_fields=["severity"])
 
 
+def _process_decline_for_sheet(
+    sheet: Any,
+    *,
+    check_type: Any,
+    template: Any,
+    config: Any,
+    ic_now: datetime,
+) -> bool:
+    """Process the aging decline check for one sheet.
+
+    Args:
+        sheet: The CharacterSheet to check.
+        check_type: The aging CheckType to roll.
+        template: The Frailty ConditionTemplate to deepen on failure.
+        config: The VitalsConsequenceConfig singleton.
+        ic_now: Current in-character datetime, for the dying-window deadline.
+
+    Returns:
+        True if the sheet was checked (rolled), False if it was skipped.
+    """
+    species = sheet.species
+    start = species.decline_start_age if species else 60
+    if start is None or sheet.biological_age <= start:
+        return False
+    character = sheet.character
+    if character is None:
+        return False
+    difficulty = config.aging_difficulty_per_year * (sheet.biological_age - start)
+    result = perform_check(character, check_type, target_difficulty=difficulty)
+    outcome = result.outcome
+    if outcome is not None:
+        level = int(outcome.success_level)
+        if level <= -1:
+            delta = config.frailty_fail_severity
+        elif level == 0:
+            delta = config.frailty_partial_severity
+        else:
+            delta = None
+        if delta is not None:
+            _deepen_frailty(character, template, delta)
+            recompute_max_health(sheet)
+            _maybe_open_dying_window(sheet, ic_now=ic_now, config=config)
+    return True
+
+
 def run_decline_checks(*, ic_now: datetime) -> int:
     """Run the IC-monthly aging check for every declining character.
 
@@ -199,28 +244,14 @@ def run_decline_checks(*, ic_now: datetime) -> int:
     config = get_vitals_consequence_config()
     checked = 0
     for sheet in _aging_sheets():
-        species = sheet.species
-        start = species.decline_start_age if species else 60
-        if start is None or sheet.biological_age <= start:
-            continue
-        character = sheet.character
-        if character is None:
-            continue
-        difficulty = config.aging_difficulty_per_year * (sheet.biological_age - start)
-        result = perform_check(character, check_type, target_difficulty=difficulty)
-        checked += 1
-        if result.outcome is None:
-            continue
-        level = int(result.outcome.success_level)
-        if level <= -1:
-            delta = config.frailty_fail_severity
-        elif level == 0:
-            delta = config.frailty_partial_severity
-        else:
-            continue
-        _deepen_frailty(character, template, delta)
-        recompute_max_health(sheet)
-        _maybe_open_dying_window(sheet, ic_now=ic_now, config=config)
+        if _process_decline_for_sheet(
+            sheet,
+            check_type=check_type,
+            template=template,
+            config=config,
+            ic_now=ic_now,
+        ):
+            checked += 1
     return checked
 
 

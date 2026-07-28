@@ -29,6 +29,9 @@ if TYPE_CHECKING:
 _EVIDENCE_AP_COST = 1
 _EVIDENCE_FATIGUE_COST = 1
 
+# Extracted to satisfy S1192.
+_NO_EVIDENCE_MSG = "There's no such evidence."
+
 
 def _resolve_evidence(evidence_id: Any) -> CrimeEvidence | None:
     from world.justice.models import CrimeEvidence  # noqa: PLC0415
@@ -65,7 +68,7 @@ class GatherEvidenceAction(Action):
 
         evidence = _resolve_evidence(kwargs.get("evidence_id"))
         if evidence is None:
-            return ActionResult(success=False, message="There's no such evidence.")
+            return ActionResult(success=False, message=_NO_EVIDENCE_MSG)
         try:
             result = gather_evidence(actor, evidence)
         except EvidenceError as exc:
@@ -107,7 +110,7 @@ class DisposeEvidenceAction(Action):
 
         evidence = _resolve_evidence(kwargs.get("evidence_id"))
         if evidence is None:
-            return ActionResult(success=False, message="There's no such evidence.")
+            return ActionResult(success=False, message=_NO_EVIDENCE_MSG)
         try:
             result = dispose_evidence(actor, evidence)
         except EvidenceError as exc:
@@ -160,7 +163,7 @@ class StartFrameJobAction(Action):
             return ActionResult(success=False, message="Frame them for what? (say the claim)")
         evidence = _resolve_evidence(kwargs.get("evidence_id"))
         if evidence is None:
-            return ActionResult(success=False, message="There's no such evidence.")
+            return ActionResult(success=False, message=_NO_EVIDENCE_MSG)
         target_persona = (
             Persona.objects.filter(pk=kwargs.get("target_persona_id"))
             .select_related("character_sheet")
@@ -266,7 +269,7 @@ class ExamineEvidenceAction(Action):
 
         evidence = _resolve_evidence(kwargs.get("evidence_id"))
         if evidence is None:
-            return ActionResult(success=False, message="There's no such evidence.")
+            return ActionResult(success=False, message=_NO_EVIDENCE_MSG)
         try:
             result = examine_evidence(actor, evidence)
         except EvidenceError as exc:

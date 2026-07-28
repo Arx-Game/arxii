@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from evennia.objects.models import ObjectDB
 
@@ -12,6 +12,9 @@ from actions.constants import ActionCategory
 from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from world.gm.constants import GMLevel
+
+if TYPE_CHECKING:
+    from world.distinctions.models import SheetUpdateRequest
 
 
 def _coerce_positive_int(value: Any) -> int | None:
@@ -79,7 +82,7 @@ class GMAwardDistinctionAction(Action):
     def get_prerequisites(self) -> list[Prerequisite]:
         return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
-    def execute(  # noqa: PLR0911, PLR0912, C901
+    def execute(  # noqa: PLR0911
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -134,32 +137,19 @@ class GMAwardDistinctionAction(Action):
         gm_account = actor.account
 
         if action_str == "remove":  # noqa: STRING_LITERAL
-            char_distinction = CharacterDistinction.objects.filter(
-                character=sheet, distinction=distinction
-            ).first()
-            if char_distinction is None:
-                return ActionResult(
-                    success=False,
-                    message=f"{target.key} does not have {distinction.name}.",
-                )
-            try:
-                req = create_sheet_update_request(
-                    sheet,
-                    SheetUpdateRequestType.DISTINCTION_REMOVE,
-                    justification=f"GM-direct removal by {actor.key}.",
-                    target_character_distinction=char_distinction,
-                    submitted_by=gm_account,
-                    origin=DistinctionOrigin.GM_AWARD,
-                )
-                approve_sheet_update_request(req, gm_account)
-            except SheetUpdateRequestError as exc:
-                return ActionResult(success=False, message=exc.user_message)
-            except DistinctionExclusionError as exc:
-                return ActionResult(success=False, message=exc.user_message)
-
-            return ActionResult(
-                success=True,
-                message=f"Removed {distinction.name} from {target.key}.",
+            return self._execute_remove(
+                sheet=sheet,
+                target=target,
+                distinction=distinction,
+                gm_account=gm_account,
+                actor_key=actor.key,
+                _create_req=create_sheet_update_request,
+                _approve_req=approve_sheet_update_request,
+                _distinction_origin_cls=DistinctionOrigin,
+                _request_type_cls=SheetUpdateRequestType,
+                _character_distinction_cls=CharacterDistinction,
+                _exclusion_error_cls=DistinctionExclusionError,
+                _request_error_cls=SheetUpdateRequestError,
             )
 
         # ADD (default)
@@ -176,22 +166,137 @@ class GMAwardDistinctionAction(Action):
                 message=f"{distinction.name} has a maximum rank of {distinction.max_rank}.",
             )
 
-        try:
-            req = create_sheet_update_request(
-                sheet,
-                SheetUpdateRequestType.DISTINCTION_ADD,
-                justification=f"GM-direct grant by {actor.key}.",
-                target_distinction=distinction,
-                submitted_by=gm_account,
-                origin=DistinctionOrigin.GM_AWARD,
+        return self._execute_add(
+            sheet=sheet,
+            target=target,
+            distinction=distinction,
+            gm_account=gm_account,
+            actor_key=actor.key,
+            _create_req=create_sheet_update_request,
+            _approve_req=approve_sheet_update_request,
+            _distinction_origin_cls=DistinctionOrigin,
+            _request_type_cls=SheetUpdateRequestType,
+            _character_distinction_cls=CharacterDistinction,
+            _exclusion_error_cls=DistinctionExclusionError,
+            _request_error_cls=SheetUpdateRequestError,
+        )
+
+    def _execute_remove(
+        self,
+        *,
+        sheet: Any,
+        target: Any,
+        distinction: Any,
+        gm_account: Any,
+        actor_key: str,
+        _create_req: Any,
+        _approve_req: Any,
+        _distinction_origin_cls: Any,
+        _request_type_cls: Any,
+        _character_distinction_cls: Any,
+        _exclusion_error_cls: Any,
+        _request_error_cls: Any,
+    ) -> ActionResult:
+        """Execute the GM-direct distinction removal path.
+
+        Args:
+            sheet: The target character's ``CharacterSheet``.
+            target: The target ``ObjectDB``.
+            distinction: The ``Distinction`` to remove.
+            gm_account: The GM's ``AccountDB``.
+            actor_key: The GM character's key (for the justification string).
+            _create_req: Injected ``create_sheet_update_request`` callable.
+            _approve_req: Injected ``approve_sheet_update_request`` callable.
+            _distinction_origin_cls: ``DistinctionOrigin`` enum.
+            _request_type_cls: ``SheetUpdateRequestType`` enum.
+            _character_distinction_cls: ``CharacterDistinction`` model class.
+            _exclusion_error_cls: ``DistinctionExclusionError`` exception class.
+            _request_error_cls: ``SheetUpdateRequestError`` exception class.
+
+        Returns:
+            ``ActionResult`` indicating success or failure.
+        """
+        char_distinction = _character_distinction_cls.objects.filter(
+            character=sheet, distinction=distinction
+        ).first()
+        if char_distinction is None:
+            return ActionResult(
+                success=False,
+                message=f"{target.key} does not have {distinction.name}.",
             )
-            approve_sheet_update_request(req, gm_account)
-        except SheetUpdateRequestError as exc:
+        try:
+            req = _create_req(
+                sheet,
+                _request_type_cls.DISTINCTION_REMOVE,
+                justification=f"GM-direct removal by {actor_key}.",
+                target_character_distinction=char_distinction,
+                submitted_by=gm_account,
+                origin=_distinction_origin_cls.GM_AWARD,
+            )
+            _approve_req(req, gm_account)
+        except _request_error_cls as exc:
             return ActionResult(success=False, message=exc.user_message)
-        except DistinctionExclusionError as exc:
+        except _exclusion_error_cls as exc:
             return ActionResult(success=False, message=exc.user_message)
 
-        cd = CharacterDistinction.objects.filter(character=sheet, distinction=distinction).first()
+        return ActionResult(
+            success=True,
+            message=f"Removed {distinction.name} from {target.key}.",
+        )
+
+    def _execute_add(
+        self,
+        *,
+        sheet: Any,
+        target: Any,
+        distinction: Any,
+        gm_account: Any,
+        actor_key: str,
+        _create_req: Any,
+        _approve_req: Any,
+        _distinction_origin_cls: Any,
+        _request_type_cls: Any,
+        _character_distinction_cls: Any,
+        _exclusion_error_cls: Any,
+        _request_error_cls: Any,
+    ) -> ActionResult:
+        """Execute the GM-direct distinction award (add) path.
+
+        Args:
+            sheet: The target character's ``CharacterSheet``.
+            target: The target ``ObjectDB``.
+            distinction: The ``Distinction`` to award.
+            gm_account: The GM's ``AccountDB``.
+            actor_key: The GM character's key (for the justification string).
+            _create_req: Injected ``create_sheet_update_request`` callable.
+            _approve_req: Injected ``approve_sheet_update_request`` callable.
+            _distinction_origin_cls: ``DistinctionOrigin`` enum.
+            _request_type_cls: ``SheetUpdateRequestType`` enum.
+            _character_distinction_cls: ``CharacterDistinction`` model class.
+            _exclusion_error_cls: ``DistinctionExclusionError`` exception class.
+            _request_error_cls: ``SheetUpdateRequestError`` exception class.
+
+        Returns:
+            ``ActionResult`` indicating success or failure.
+        """
+        try:
+            req = _create_req(
+                sheet,
+                _request_type_cls.DISTINCTION_ADD,
+                justification=f"GM-direct grant by {actor_key}.",
+                target_distinction=distinction,
+                submitted_by=gm_account,
+                origin=_distinction_origin_cls.GM_AWARD,
+            )
+            _approve_req(req, gm_account)
+        except _request_error_cls as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        except _exclusion_error_cls as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        cd = _character_distinction_cls.objects.filter(
+            character=sheet, distinction=distinction
+        ).first()
         actual_rank = cd.rank if cd else 1
         return ActionResult(
             success=True,
@@ -223,7 +328,7 @@ class SubmitSheetUpdateRequestAction(Action):
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SELF
 
-    def execute(  # noqa: PLR0911, PLR0912, C901
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -270,62 +375,31 @@ class SubmitSheetUpdateRequestAction(Action):
         account = actor.account
 
         if request_type == SheetUpdateRequestType.DISTINCTION_ADD:
-            distinction_slug = (kwargs.get("distinction_slug") or "").strip()
-            if not distinction_slug:
-                return ActionResult(success=False, message="distinction_slug required for add.")
-            distinction = Distinction.objects.filter(
-                slug__iexact=distinction_slug, is_active=True
-            ).first()
-            if distinction is None:
-                return ActionResult(
-                    success=False,
-                    message=f"No active distinction found with slug '{distinction_slug}'.",
-                )
-            try:
-                req = create_sheet_update_request(
-                    sheet,
-                    request_type,
-                    justification=justification,
-                    target_distinction=distinction,
-                    submitted_by=account,
-                    origin=DistinctionOrigin.UNLOCK_PURCHASE,
-                )
-            except DistinctionExclusionError as exc:
-                return ActionResult(success=False, message=exc.user_message)
-            except SheetUpdateRequestError as exc:
-                return ActionResult(success=False, message=exc.user_message)
+            req = self._submit_add_request(
+                sheet=sheet,
+                kwargs=kwargs,
+                justification=justification,
+                account=account,
+                _distinction_cls=Distinction,
+                _create_req=create_sheet_update_request,
+                _distinction_origin_cls=DistinctionOrigin,
+                _exclusion_error_cls=DistinctionExclusionError,
+                _request_error_cls=SheetUpdateRequestError,
+            )
         else:
-            cd_id = kwargs.get("character_distinction_id")
-            if cd_id is None:
-                return ActionResult(
-                    success=False,
-                    message="character_distinction_id required for remove.",
-                )
-            try:
-                cd_id_int = int(cd_id)
-            except (TypeError, ValueError):
-                return ActionResult(
-                    success=False, message="character_distinction_id must be a number."
-                )
-            char_distinction = CharacterDistinction.objects.filter(
-                pk=cd_id_int, character=sheet
-            ).first()
-            if char_distinction is None:
-                return ActionResult(
-                    success=False,
-                    message=f"CharacterDistinction #{cd_id_int} not found for your character.",
-                )
-            try:
-                req = create_sheet_update_request(
-                    sheet,
-                    request_type,
-                    justification=justification,
-                    target_character_distinction=char_distinction,
-                    submitted_by=account,
-                    origin=DistinctionOrigin.UNLOCK_PURCHASE,
-                )
-            except SheetUpdateRequestError as exc:
-                return ActionResult(success=False, message=exc.user_message)
+            req = self._submit_remove_request(
+                sheet=sheet,
+                kwargs=kwargs,
+                justification=justification,
+                account=account,
+                _character_distinction_cls=CharacterDistinction,
+                _create_req=create_sheet_update_request,
+                _distinction_origin_cls=DistinctionOrigin,
+                _request_error_cls=SheetUpdateRequestError,
+            )
+
+        if isinstance(req, ActionResult):
+            return req
 
         return ActionResult(
             success=True,
@@ -334,6 +408,123 @@ class SubmitSheetUpdateRequestAction(Action):
                 f"XP cost: {req.xp_cost}."
             ),
         )
+
+    def _submit_add_request(
+        self,
+        *,
+        sheet: Any,
+        kwargs: dict,
+        justification: str,
+        account: Any,
+        _distinction_cls: Any,
+        _create_req: Any,
+        _distinction_origin_cls: Any,
+        _exclusion_error_cls: Any,
+        _request_error_cls: Any,
+    ) -> SheetUpdateRequest | ActionResult:
+        """Validate and submit an add-distinction sheet update request.
+
+        Args:
+            sheet: The submitting character's ``CharacterSheet``.
+            kwargs: The raw action kwargs (read for ``distinction_slug``).
+            justification: The player-provided justification text.
+            account: The submitting player's ``AccountDB``.
+            _distinction_cls: ``Distinction`` model class.
+            _create_req: ``create_sheet_update_request`` callable.
+            _distinction_origin_cls: ``DistinctionOrigin`` enum.
+            _exclusion_error_cls: ``DistinctionExclusionError`` exception class.
+            _request_error_cls: ``SheetUpdateRequestError`` exception class.
+
+        Returns:
+            The created ``SheetUpdateRequest`` on success, or an ``ActionResult``
+            (failure) if validation or creation fails.
+        """
+        from world.distinctions.types import SheetUpdateRequestType  # noqa: PLC0415
+
+        distinction_slug = (kwargs.get("distinction_slug") or "").strip()
+        if not distinction_slug:
+            return ActionResult(success=False, message="distinction_slug required for add.")
+        distinction = _distinction_cls.objects.filter(
+            slug__iexact=distinction_slug, is_active=True
+        ).first()
+        if distinction is None:
+            return ActionResult(
+                success=False,
+                message=f"No active distinction found with slug '{distinction_slug}'.",
+            )
+        try:
+            return _create_req(
+                sheet,
+                SheetUpdateRequestType.DISTINCTION_ADD,
+                justification=justification,
+                target_distinction=distinction,
+                submitted_by=account,
+                origin=_distinction_origin_cls.UNLOCK_PURCHASE,
+            )
+        except _exclusion_error_cls as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        except _request_error_cls as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+    def _submit_remove_request(
+        self,
+        *,
+        sheet: Any,
+        kwargs: dict,
+        justification: str,
+        account: Any,
+        _character_distinction_cls: Any,
+        _create_req: Any,
+        _distinction_origin_cls: Any,
+        _request_error_cls: Any,
+    ) -> SheetUpdateRequest | ActionResult:
+        """Validate and submit a remove-distinction sheet update request.
+
+        Args:
+            sheet: The submitting character's ``CharacterSheet``.
+            kwargs: The raw action kwargs (read for ``character_distinction_id``).
+            justification: The player-provided justification text.
+            account: The submitting player's ``AccountDB``.
+            _character_distinction_cls: ``CharacterDistinction`` model class.
+            _create_req: ``create_sheet_update_request`` callable.
+            _distinction_origin_cls: ``DistinctionOrigin`` enum.
+            _request_error_cls: ``SheetUpdateRequestError`` exception class.
+
+        Returns:
+            The created ``SheetUpdateRequest`` on success, or an ``ActionResult``
+            (failure) if validation or creation fails.
+        """
+        from world.distinctions.types import SheetUpdateRequestType  # noqa: PLC0415
+
+        cd_id = kwargs.get("character_distinction_id")
+        if cd_id is None:
+            return ActionResult(
+                success=False,
+                message="character_distinction_id required for remove.",
+            )
+        try:
+            cd_id_int = int(cd_id)
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="character_distinction_id must be a number.")
+        char_distinction = _character_distinction_cls.objects.filter(
+            pk=cd_id_int, character=sheet
+        ).first()
+        if char_distinction is None:
+            return ActionResult(
+                success=False,
+                message=f"CharacterDistinction #{cd_id_int} not found for your character.",
+            )
+        try:
+            return _create_req(
+                sheet,
+                SheetUpdateRequestType.DISTINCTION_REMOVE,
+                justification=justification,
+                target_character_distinction=char_distinction,
+                submitted_by=account,
+                origin=_distinction_origin_cls.UNLOCK_PURCHASE,
+            )
+        except _request_error_cls as exc:
+            return ActionResult(success=False, message=exc.user_message)
 
 
 @dataclass

@@ -28,6 +28,9 @@ from world.species.factories import SpeciesFactory
 
 _TRAIT_SELF_REF = "..trait"
 
+# Lazy factory reference (Django app_label.ModuleName.Factory), extracted to satisfy S1192.
+CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
+
 
 class HeightBandFactory(factory.django.DjangoModelFactory):
     class Meta:
@@ -94,7 +97,7 @@ class CharacterFormFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterForm
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     name = ""
     form_type = FormType.TRUE
     is_player_created = False
@@ -127,7 +130,7 @@ class TemporaryFormChangeFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = TemporaryFormChange
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     trait = factory.SubFactory(FormTraitFactory)
     option = factory.SubFactory(
         FormTraitOptionFactory, trait=factory.SelfAttribute(_TRAIT_SELF_REF)
@@ -196,7 +199,7 @@ class AlternateSelfFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = AlternateSelf
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     form = None
     persona = None
     combat_profile = None
@@ -210,7 +213,7 @@ class ActiveAlternateSelfFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = ActiveAlternateSelf
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     alternate_self = None
     return_form = None
     return_persona = None
