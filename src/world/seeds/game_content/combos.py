@@ -33,7 +33,6 @@ def seed_combo_palette() -> None:
     ``_ensure_resonances`` below). ``ComboDefinition``/``ComboSlot`` are not
     in scope for #2698 and stay unconditional.
     """
-    from world.achievements.factories import AchievementFactory  # noqa: PLC0415
     from world.combat.models import ComboDefinition  # noqa: PLC0415
     from world.magic.models import Gift  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
@@ -129,13 +128,24 @@ def seed_combo_palette() -> None:
         )
 
     # Link discovery achievements for the discoverable combos.
+    from django.utils.text import slugify  # noqa: PLC0415
+
+    from world.achievements.models import Achievement  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
     for combo in [combo_1, combo_2, combo_3, combo_4]:
         if combo.discovery_achievement_id is None:
-            achievement = AchievementFactory(
-                name=f"Discovered: {combo.name}",
-                description=f"First discovered the {combo.name} combo in combat.",
-                hidden=True,
+            achievement = authored_or_sample(
+                Achievement,
+                {
+                    "name": f"Discovered: {combo.name}",
+                    "description": f"First discovered the {combo.name} combo in combat.",
+                    "hidden": True,
+                },
+                slug=slugify(f"discovered-{combo.name}"),
             )
+            if achievement is None:
+                continue
             combo.discovery_achievement = achievement
             combo.save(update_fields=["discovery_achievement"])
 
