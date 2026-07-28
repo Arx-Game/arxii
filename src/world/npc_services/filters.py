@@ -11,6 +11,8 @@ from world.npc_services.models import (
     OfferCooldown,
     PermitOfferDetails,
     RecordedProfile,
+    StaffingProfile,
+    StaffingProfileLine,
 )
 
 
@@ -90,4 +92,20 @@ class NPCReactionLineFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = NPCReactionLine
+        fields: list[str] = []
+
+
+class StaffingProfileFilterSet(django_filters.FilterSet):
+    building_kind = django_filters.NumberFilter(field_name="building_kind_id")
+
+    class Meta:
+        model = StaffingProfile
+        fields: list[str] = []
+
+
+class StaffingProfileLineFilterSet(django_filters.FilterSet):
+    profile = django_filters.NumberFilter(field_name="profile_id")
+
+    class Meta:
+        model = StaffingProfileLine
         fields: list[str] = []

@@ -266,6 +266,19 @@ class Functionary(SharedMemoryModel):
         default=True,
         help_text="Whether this placement is currently present. False hides it without deleting.",
     )
+    persona = models.ForeignKey(
+        _PERSONA_FK,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="functionary_placements",
+        help_text=(
+            "The materialized identity behind this placement (#2827 tier 1). NULL = "
+            "still a faceless slot; set when a player engagement (or staff) makes "
+            "them real. The persona survives the placement — extraction/standing "
+            "promotion clears this link, never the identity."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -284,6 +297,206 @@ class Functionary(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.display_name} @ room {self.room_id}"
+
+
+class PreferenceValence(models.TextChoices):
+    """How an NPC feels about a personality trait's subject (#2827 phase 4)."""
+
+    LIKES = "likes", "Likes"
+    DISLIKES = "dislikes", "Dislikes"
+
+
+class PersonalityTrait(NaturalKeyMixin, SharedMemoryModel):
+    """An authored like/dislike axis for instantiated NPCs (#2827 phase 4).
+
+    Aligned with ADR-0058's durable tier: preferences hang on personas.
+    `eased_check` is the mechanical tooth — approaching an NPC through what
+    they love eases that check against them ("loves flattery" eases
+    Persuasion); a DISLIKE hardens it by the same magnitude.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default="")
+    eased_check = models.ForeignKey(
+        "checks.CheckType",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The check a LIKE of this trait eases (a DISLIKE hardens). NULL = flavor only.",
+    )
+    ease_magnitude = models.PositiveIntegerField(
+        default=5,
+        help_text="Points of check modifier a LIKE grants (a DISLIKE costs).",
+    )
+    is_active = models.BooleanField(default=True)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class NpcPreference(SharedMemoryModel):
+    """One instantiated NPC's stance on one trait — their thin personality."""
+
+    persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.CASCADE,
+        related_name="npc_preferences",
+    )
+    trait = models.ForeignKey(
+        PersonalityTrait,
+        on_delete=models.CASCADE,
+        related_name="holders",
+    )
+    valence = models.CharField(max_length=10, choices=PreferenceValence.choices)
+
+    class Meta:
+        ordering = ["persona", "trait__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["persona", "trait"],
+                name="unique_npc_preference_per_trait",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.persona_id} {self.valence} {self.trait.name}"
+
+
+class NamePart(models.TextChoices):
+    """Which slot of a generated name an entry fills (#2827 phase 2)."""
+
+    GIVEN = "given", "Given name"
+    SURNAME = "surname", "Surname"
+
+
+class NameCulture(NaturalKeyMixin, SharedMemoryModel):
+    """A pool of names reinforcing a region's (or society's) theme (#2827).
+
+    Resolution walks the room's area ancestor chain (nearest authored
+    culture wins), falling back to the global default (area and society
+    both NULL). Family surnames come from `roster.Family.name` directly —
+    generating one of the faceless nobility of a named house needs no
+    culture entry for the surname.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    area = models.ForeignKey(
+        "areas.Area",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="name_cultures",
+        help_text="Rooms under this area use this culture (nearest ancestor wins).",
+    )
+    society = models.ForeignKey(
+        "societies.Society",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="name_cultures",
+        help_text="Authoring hint for society-flavored pools. NULL+NULL area = global default.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class NameCultureEntry(SharedMemoryModel):
+    """One name in a culture's pool, weighted for random draw."""
+
+    culture = models.ForeignKey(
+        NameCulture,
+        on_delete=models.CASCADE,
+        related_name="entries",
+    )
+    part = models.CharField(max_length=10, choices=NamePart.choices)
+    value = models.CharField(max_length=100)
+    weight = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        ordering = ["culture", "part", "value"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["culture", "part", "value"],
+                name="unique_name_culture_entry",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.culture.name}/{self.part}: {self.value}"
+
+
+class StaffingProfile(SharedMemoryModel):
+    """Default staffing for buildings of a kind (#2827 phase 1).
+
+    "This is an inn, so there are workers here" as data: one profile per
+    `BuildingKind`, applied automatically when a building of that kind
+    activates (and re-ensured by the weekly refill sweep). Staff never
+    hand-place the baseline crew; they curate exceptions.
+    """
+
+    building_kind = models.OneToOneField(
+        "buildings.BuildingKind",
+        on_delete=models.CASCADE,
+        related_name="staffing_profile",
+        help_text="Buildings of this kind auto-staff from this profile on activation.",
+    )
+
+    class Meta:
+        verbose_name = "Staffing Profile"
+        verbose_name_plural = "Staffing Profiles"
+
+    def __str__(self) -> str:
+        return f"Staffing for {self.building_kind.name}"
+
+
+class StaffingProfileLine(SharedMemoryModel):
+    """One role the venue keeps staffed.
+
+    One active placement per (role, room) — the Functionary unique
+    constraint — so a line is a *slot*, not a headcount. Want two distinct
+    servers in the common room? Author two roles.
+    """
+
+    profile = models.ForeignKey(
+        StaffingProfile,
+        on_delete=models.CASCADE,
+        related_name="lines",
+    )
+    role = models.ForeignKey(
+        NPCRole,
+        on_delete=models.PROTECT,
+        related_name="staffing_lines",
+    )
+
+    class Meta:
+        ordering = ["profile", "role__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["profile", "role"],
+                name="unique_staffing_line_per_role",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.profile.building_kind.name}: {self.role.name}"
 
 
 class NPCServiceOffer(SharedMemoryModel):

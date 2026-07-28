@@ -602,6 +602,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/assets/{id}/extract/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Pull your recruited agent out of their public job (#2827 phase 3). */
+    post: operations['assets_extract_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/assets/introduce/': {
     parameters: {
       query?: never;
@@ -14105,6 +14122,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/npc-services/lifecycle/candidates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description NPC personas prominent enough to consider for standing tier. */
+    get: operations['npc_services_lifecycle_candidates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/lifecycle/demote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Retire an NPC's body back to a background placement (tier 1). */
+    post: operations['npc_services_lifecycle_demote_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/lifecycle/graduate/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Move an NPC sheet onto the claimable roster (tier 5). */
+    post: operations['npc_services_lifecycle_graduate_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/lifecycle/promote-standing/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Give an NPC persona a body in a room (tier 3). */
+    post: operations['npc_services_lifecycle_promote_standing_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/npc-services/mission-details/': {
     parameters: {
       query?: never;
@@ -14444,6 +14529,82 @@ export interface paths {
     head?: never;
     /** @description Staff CRUD for NPC roles (the kind-of-NPC bundle for offers). */
     patch: operations['npc_services_roles_partial_update'];
+    trace?: never;
+  };
+  '/api/npc-services/staffing-lines/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff authoring CRUD for staffing profile lines (#2827). */
+    get: operations['npc_services_staffing_lines_list'];
+    put?: never;
+    /** @description Staff authoring CRUD for staffing profile lines (#2827). */
+    post: operations['npc_services_staffing_lines_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/staffing-lines/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff authoring CRUD for staffing profile lines (#2827). */
+    get: operations['npc_services_staffing_lines_retrieve'];
+    /** @description Staff authoring CRUD for staffing profile lines (#2827). */
+    put: operations['npc_services_staffing_lines_update'];
+    post?: never;
+    /** @description Staff authoring CRUD for staffing profile lines (#2827). */
+    delete: operations['npc_services_staffing_lines_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff authoring CRUD for staffing profile lines (#2827). */
+    patch: operations['npc_services_staffing_lines_partial_update'];
+    trace?: never;
+  };
+  '/api/npc-services/staffing-profiles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff authoring CRUD for building-kind staffing profiles (#2827). */
+    get: operations['npc_services_staffing_profiles_list'];
+    put?: never;
+    /** @description Staff authoring CRUD for building-kind staffing profiles (#2827). */
+    post: operations['npc_services_staffing_profiles_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/staffing-profiles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff authoring CRUD for building-kind staffing profiles (#2827). */
+    get: operations['npc_services_staffing_profiles_retrieve'];
+    /** @description Staff authoring CRUD for building-kind staffing profiles (#2827). */
+    put: operations['npc_services_staffing_profiles_update'];
+    post?: never;
+    /** @description Staff authoring CRUD for building-kind staffing profiles (#2827). */
+    delete: operations['npc_services_staffing_profiles_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff authoring CRUD for building-kind staffing profiles (#2827). */
+    patch: operations['npc_services_staffing_profiles_partial_update'];
     trace?: never;
   };
   '/api/npc-services/standings/': {
@@ -31077,6 +31238,36 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['SpreadableDeed'][];
     };
+    PaginatedStaffingProfileLineList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StaffingProfileLine'][];
+    };
+    PaginatedStaffingProfileList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StaffingProfile'][];
+    };
     PaginatedStakeContractActivationList: {
       /** @example 123 */
       count: number;
@@ -32645,6 +32836,15 @@ export interface components {
       allowed_tenure?: number;
       /** @description Allowlist is scoped per category. */
       category?: number;
+    };
+    PatchedStaffingProfileLineRequest: {
+      profile?: number;
+      role?: number;
+    };
+    /** @description Staff authoring: a building kind's baseline crew (#2827 phase 1). */
+    PatchedStaffingProfileRequest: {
+      /** @description Buildings of this kind auto-staff from this profile on activation. */
+      building_kind?: number;
     };
     /**
      * @description Full serializer for Stake (#1770 pillar 1).
@@ -36247,6 +36447,29 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
     };
+    /** @description Staff authoring: a building kind's baseline crew (#2827 phase 1). */
+    StaffingProfile: {
+      readonly id: number;
+      /** @description Buildings of this kind auto-staff from this profile on activation. */
+      building_kind: number;
+      readonly building_kind_name: string;
+      readonly lines: components['schemas']['StaffingProfileLine'][];
+    };
+    StaffingProfileLine: {
+      readonly id: number;
+      profile: number;
+      role: number;
+      readonly role_name: string;
+    };
+    StaffingProfileLineRequest: {
+      profile: number;
+      role: number;
+    };
+    /** @description Staff authoring: a building kind's baseline crew (#2827 phase 1). */
+    StaffingProfileRequest: {
+      /** @description Buildings of this kind auto-staff from this profile on activation. */
+      building_kind: number;
+    };
     /** @description Read serializer for StageAdvanceBonusResult payloads (Task 1.7). */
     StageAdvanceBonusResult: {
       offer_id: string;
@@ -39812,6 +40035,28 @@ export interface operations {
     };
   };
   assets_donate_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc asset. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCAsset'];
+        };
+      };
+    };
+  };
+  assets_extract_create: {
     parameters: {
       query?: never;
       header?: never;
@@ -58036,6 +58281,108 @@ export interface operations {
       };
     };
   };
+  npc_services_lifecycle_candidates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  npc_services_lifecycle_demote_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  npc_services_lifecycle_graduate_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  npc_services_lifecycle_promote_standing_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
   npc_services_mission_details_list: {
     parameters: {
       query?: {
@@ -58829,6 +59176,290 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['NPCRole'];
+        };
+      };
+    };
+  };
+  npc_services_staffing_lines_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStaffingProfileLineList'];
+        };
+      };
+    };
+  };
+  npc_services_staffing_lines_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffingProfileLineRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffingProfileLine'];
+        };
+      };
+    };
+  };
+  npc_services_staffing_lines_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this staffing profile line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffingProfileLine'];
+        };
+      };
+    };
+  };
+  npc_services_staffing_lines_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this staffing profile line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffingProfileLineRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffingProfileLine'];
+        };
+      };
+    };
+  };
+  npc_services_staffing_lines_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this staffing profile line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_staffing_lines_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this staffing profile line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStaffingProfileLineRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffingProfileLine'];
+        };
+      };
+    };
+  };
+  npc_services_staffing_profiles_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStaffingProfileList'];
+        };
+      };
+    };
+  };
+  npc_services_staffing_profiles_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffingProfileRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffingProfile'];
+        };
+      };
+    };
+  };
+  npc_services_staffing_profiles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Staffing Profile. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffingProfile'];
+        };
+      };
+    };
+  };
+  npc_services_staffing_profiles_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Staffing Profile. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StaffingProfileRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffingProfile'];
+        };
+      };
+    };
+  };
+  npc_services_staffing_profiles_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Staffing Profile. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_staffing_profiles_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Staffing Profile. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStaffingProfileRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StaffingProfile'];
         };
       };
     };
