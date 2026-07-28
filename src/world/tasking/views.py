@@ -387,6 +387,7 @@ class OrgTaskViewSet(
                 target_org=data.get("target_org"),
                 target_domain=data.get("target_domain"),
                 target_persona=data.get("target_persona"),
+                target_crisis=data.get("target_crisis"),
             )
         except TaskingError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)

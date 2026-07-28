@@ -50,7 +50,7 @@ def _pc_tenure_for_sheet(sheet_id):
     ).first()
 
 
-def _consent_owner_tenures(target_persona, target_org, target_domain) -> list:
+def _consent_owner_tenures(target_persona, target_org, target_domain, target_crisis=None) -> list:
     """PC tenures whose espionage consent gates this target (#2833 addendum).
 
     Persona target: the persona's own player. Org/domain target: the target
@@ -64,6 +64,8 @@ def _consent_owner_tenures(target_persona, target_org, target_domain) -> list:
     org = target_org
     if org is None and target_domain is not None:
         org = target_domain.owner_org
+    if org is None and target_crisis is not None:
+        org = target_crisis.target_org
     if org is None:
         return []
     leaders = OrganizationMembership.objects.filter(
@@ -76,8 +78,8 @@ def _consent_owner_tenures(target_persona, target_org, target_domain) -> list:
     return [t for t in tenures if t is not None]
 
 
-def _assert_target_consent(
-    template, issuer, target_persona, *, target_org=None, target_domain=None
+def _assert_target_consent(  # noqa: PLR0913 - one kwarg per discriminator leg
+    template, issuer, target_persona, *, target_org=None, target_domain=None, target_crisis=None
 ) -> None:
     """#2833: offensive jobs against a PC (or PC-led org/domain) route through
     the espionage consent category AT ISSUE TIME — the task refuses creation,
@@ -89,7 +91,7 @@ def _assert_target_consent(
 
     if not template_is_offensive(template):
         return
-    owner_tenures = _consent_owner_tenures(target_persona, target_org, target_domain)
+    owner_tenures = _consent_owner_tenures(target_persona, target_org, target_domain, target_crisis)
     if not owner_tenures:
         return  # NPC target / NPC-led org: always-on
     issuer_tenure = _pc_tenure_for_sheet(issuer.character_sheet_id)
@@ -112,7 +114,7 @@ def _is_active_member(persona: Persona, org: Organization) -> bool:
     ).exists()
 
 
-def create_task(  # noqa: PLR0913 - the four target kwargs are co-equal discriminator legs
+def create_task(  # noqa: PLR0913 - the five target kwargs are co-equal discriminator legs
     template: TaskTemplate,
     org: Organization,
     issued_by: Persona,
@@ -121,10 +123,16 @@ def create_task(  # noqa: PLR0913 - the four target kwargs are co-equal discrimi
     target_org=None,
     target_domain=None,
     target_persona=None,
+    target_crisis=None,
 ) -> OrgTask:
     """Create an OPEN task instance. Caller (view/action) gates leadership."""
     _assert_target_consent(
-        template, issued_by, target_persona, target_org=target_org, target_domain=target_domain
+        template,
+        issued_by,
+        target_persona,
+        target_org=target_org,
+        target_domain=target_domain,
+        target_crisis=target_crisis,
     )
     task = OrgTask(
         template=template,
@@ -135,6 +143,7 @@ def create_task(  # noqa: PLR0913 - the four target kwargs are co-equal discrimi
         target_org=target_org,
         target_domain=target_domain,
         target_persona=target_persona,
+        target_crisis=target_crisis,
     )
     task.full_clean()
     task.save()

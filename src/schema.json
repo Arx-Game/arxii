@@ -50487,7 +50487,7 @@ components:
           nullable: true
           description: Resolution moment; set at assignment (now + template.duration).
         target_kind:
-          $ref: '#/components/schemas/TargetKind219Enum'
+          $ref: '#/components/schemas/TargetKind7e5Enum'
         target_label:
           type: string
           readOnly: true
@@ -50530,7 +50530,7 @@ components:
           nullable: true
           description: Resolution moment; set at assignment (now + template.duration).
         target_kind:
-          $ref: '#/components/schemas/TargetKind219Enum'
+          $ref: '#/components/schemas/TargetKind7e5Enum'
         resolved_at:
           type: string
           format: date-time
@@ -57672,6 +57672,20 @@ components:
           type: boolean
           description: 'ORG target: assay their strength — the org''s military units
             and active armies. Movements come when positional troop state exists.'
+        reveal_schemes:
+          type: boolean
+          description: 'ORG/DOMAIN target: sweep for still-covert crises (mints CrisisIntel
+            for the issuing org) and, on your own org, active hostile tasks (#2837).'
+        crisis_severity_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'CRISIS target: negative steps the severity down (resolving
+            below trouble); positive inflames it a step (#2837).'
+        exploit_crisis:
+          type: boolean
+          description: 'CRISIS target: resolve the event your way — the issuing org
+            takes the boon (#2837).'
     PatchedTaskTemplateRequest:
       type: object
       description: Staff authoring surface for job templates.
@@ -57698,7 +57712,7 @@ components:
           description: Real time from assignment to resolution by the game clock.
         target_kind:
           allOf:
-          - $ref: '#/components/schemas/TargetKind219Enum'
+          - $ref: '#/components/schemas/TargetKind7e5Enum'
           description: |-
             What kind of target instances of this template point at.
 
@@ -57707,6 +57721,7 @@ components:
             * `org` - Organization
             * `domain` - Domain
             * `persona` - Persona
+            * `crisis` - Crisis
         eligibility_rule:
           description: Predicate tree gating who may issue/fulfill (NPCServiceOffer
             convention).
@@ -66885,13 +66900,14 @@ components:
       - exclude_self
       - in_same_scene
       - must_be_conscious
-    TargetKind219Enum:
+    TargetKind7e5Enum:
       enum:
       - none
       - room
       - org
       - domain
       - persona
+      - crisis
       type: string
       description: |-
         * `none` - None
@@ -66899,6 +66915,7 @@ components:
         * `org` - Organization
         * `domain` - Domain
         * `persona` - Persona
+        * `crisis` - Crisis
     TargetSpec:
       type: object
       description: Read-only serializer for TargetSpec — entity kind + cardinality
@@ -67104,6 +67121,20 @@ components:
           type: boolean
           description: 'ORG target: assay their strength — the org''s military units
             and active armies. Movements come when positional troop state exists.'
+        reveal_schemes:
+          type: boolean
+          description: 'ORG/DOMAIN target: sweep for still-covert crises (mints CrisisIntel
+            for the issuing org) and, on your own org, active hostile tasks (#2837).'
+        crisis_severity_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'CRISIS target: negative steps the severity down (resolving
+            below trouble); positive inflames it a step (#2837).'
+        exploit_crisis:
+          type: boolean
+          description: 'CRISIS target: resolve the event your way — the issuing org
+            takes the boon (#2837).'
       required:
       - id
       - outcome_tier
@@ -67180,6 +67211,20 @@ components:
           type: boolean
           description: 'ORG target: assay their strength — the org''s military units
             and active armies. Movements come when positional troop state exists.'
+        reveal_schemes:
+          type: boolean
+          description: 'ORG/DOMAIN target: sweep for still-covert crises (mints CrisisIntel
+            for the issuing org) and, on your own org, active hostile tasks (#2837).'
+        crisis_severity_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'CRISIS target: negative steps the severity down (resolving
+            below trouble); positive inflames it a step (#2837).'
+        exploit_crisis:
+          type: boolean
+          description: 'CRISIS target: resolve the event your way — the issuing org
+            takes the boon (#2837).'
       required:
       - outcome_tier
       - template
@@ -67211,7 +67256,7 @@ components:
           description: Real time from assignment to resolution by the game clock.
         target_kind:
           allOf:
-          - $ref: '#/components/schemas/TargetKind219Enum'
+          - $ref: '#/components/schemas/TargetKind7e5Enum'
           description: |-
             What kind of target instances of this template point at.
 
@@ -67220,6 +67265,7 @@ components:
             * `org` - Organization
             * `domain` - Domain
             * `persona` - Persona
+            * `crisis` - Crisis
         eligibility_rule:
           description: Predicate tree gating who may issue/fulfill (NPCServiceOffer
             convention).
@@ -67266,7 +67312,7 @@ components:
           description: Real time from assignment to resolution by the game clock.
         target_kind:
           allOf:
-          - $ref: '#/components/schemas/TargetKind219Enum'
+          - $ref: '#/components/schemas/TargetKind7e5Enum'
           description: |-
             What kind of target instances of this template point at.
 
@@ -67275,6 +67321,7 @@ components:
             * `org` - Organization
             * `domain` - Domain
             * `persona` - Persona
+            * `crisis` - Crisis
         eligibility_rule:
           description: Predicate tree gating who may issue/fulfill (NPCServiceOffer
             convention).
@@ -67313,7 +67360,7 @@ components:
           description: Real time from assignment to resolution by the game clock.
         target_kind:
           allOf:
-          - $ref: '#/components/schemas/TargetKind219Enum'
+          - $ref: '#/components/schemas/TargetKind7e5Enum'
           description: |-
             What kind of target instances of this template point at.
 
@@ -67322,6 +67369,7 @@ components:
             * `org` - Organization
             * `domain` - Domain
             * `persona` - Persona
+            * `crisis` - Crisis
       required:
       - duration
       - id
@@ -67343,7 +67391,7 @@ components:
           description: Real time from assignment to resolution by the game clock.
         target_kind:
           allOf:
-          - $ref: '#/components/schemas/TargetKind219Enum'
+          - $ref: '#/components/schemas/TargetKind7e5Enum'
           description: |-
             What kind of target instances of this template point at.
 
@@ -67352,6 +67400,7 @@ components:
             * `org` - Organization
             * `domain` - Domain
             * `persona` - Persona
+            * `crisis` - Crisis
       required:
       - duration
       - name

@@ -252,28 +252,53 @@ def _house_open_crises(organization) -> list[dict]:
     Reads the viewset's prefetched ``domains`` relation; the per-crisis option
     menu comes from ``crisis_options`` (computed PAY costs).
     """
-    from world.societies.houses.crisis_services import crisis_options  # noqa: PLC0415
+    from django.utils import timezone  # noqa: PLC0415
 
-    rows: list[dict] = []
+    from world.societies.houses.crisis_services import crisis_options  # noqa: PLC0415
+    from world.societies.houses.models import CrisisIntel  # noqa: PLC0415
+
+    def _row(crisis, target_name: str) -> dict:
+        return {
+            "id": crisis.pk,
+            "domain_name": target_name,
+            "severity": crisis.severity,
+            "valence": crisis.valence,
+            "type_name": crisis.crisis_type.name if crisis.crisis_type else "",
+            "description": crisis.description,
+            "origin": crisis.origin,
+            "opened_at": crisis.opened_at,
+            "chosen_kind": (crisis.chosen_option.kind if crisis.chosen_option_id else ""),
+            "minted_mission_id": crisis.minted_mission_id,
+            "options": crisis_options(crisis),
+        }
+
+    now = timezone.now()
+    candidates: list[tuple] = []
     for domain in organization.domains.all():
-        for crisis in domain.crises.all():
-            if crisis.resolved_at is not None:
-                continue
-            rows.append(
-                {
-                    "id": crisis.pk,
-                    "domain_name": domain.name,
-                    "severity": crisis.severity,
-                    "type_name": crisis.crisis_type.name if crisis.crisis_type else "",
-                    "description": crisis.description,
-                    "origin": crisis.origin,
-                    "opened_at": crisis.opened_at,
-                    "chosen_kind": (crisis.chosen_option.kind if crisis.chosen_option_id else ""),
-                    "minted_mission_id": crisis.minted_mission_id,
-                    "options": crisis_options(crisis),
-                }
+        candidates.extend(
+            (crisis, domain.name) for crisis in domain.crises.all() if crisis.resolved_at is None
+        )
+    candidates.extend(
+        (crisis, organization.name)
+        for crisis in organization.org_crises.all()
+        if crisis.resolved_at is None
+    )
+    # A still-covert generated crisis is hidden even from its target — a
+    # spymaster's sweep (CrisisIntel) is how you see it early (#2837). One
+    # batched intel query, only when something is actually hidden.
+    hidden = [c for c, _ in candidates if c.surfaces_at is not None and c.surfaces_at > now]
+    known_ids: set[int] = set()
+    if hidden:
+        known_ids = set(
+            CrisisIntel.objects.filter(org=organization, crisis__in=hidden).values_list(
+                "crisis_id", flat=True
             )
-    return rows
+        )
+    return [
+        _row(crisis, name)
+        for crisis, name in candidates
+        if crisis.surfaces_at is None or crisis.surfaces_at <= now or crisis.pk in known_ids
+    ]
 
 
 class CrisisOptionInputSerializer(serializers.Serializer):
@@ -294,8 +319,8 @@ class CrisisOptionInputSerializer(serializers.Serializer):
             .filter(pk=attrs["crisis"])
             .first()
         )
-        if crisis is None or crisis.domain.owner_org_id != organization.pk:
-            msg = "That crisis is not on this house's domains."
+        if crisis is None or crisis.target_org.pk != organization.pk:
+            msg = "That crisis is not this organization's to judge."
             raise serializers.ValidationError({"crisis": msg})
         option = DomainCrisisTypeOption.objects.filter(pk=attrs["option"]).first()
         if option is None:

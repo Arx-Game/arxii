@@ -26,6 +26,30 @@ CRISIS_INCOME_FACTORS: dict[str, float] = {
     "catastrophe": 0.5,
 }
 
+# --- Generated threat/opportunity loop (#2837) — PLACEHOLDER magnitudes ---
+# Generated (non-staff) crises stay covert this long before surfacing on the
+# public feed; spy sweeps buy the reaction time.
+COVERT_WINDOW_DAYS = 7
+# An unseized opportunity closes this long after it opened.
+OPPORTUNITY_LIFETIME_DAYS = 21
+# Weekly ambient spawn chances (percent), rolled by crisis_generation_tick.
+AMBIENT_DOMAIN_THREAT_PCT = 10
+AMBIENT_DOMAIN_OPPORTUNITY_PCT = 8
+AMBIENT_ORG_THREAT_PCT = 8
+AMBIENT_ORG_OPPORTUNITY_PCT = 6
+# Seizing/exploiting an event pays the acting org by magnitude (severity
+# doubles as an opportunity's size). Domain-owner seizure pays prosperity.
+OPPORTUNITY_BOON_COPPERS: dict[str, int] = {
+    "trouble": 5_000,
+    "crisis": 15_000,
+    "catastrophe": 40_000,
+}
+OPPORTUNITY_PROSPERITY_BOON: dict[str, int] = {
+    "trouble": 2,
+    "crisis": 4,
+    "catastrophe": 8,
+}
+
 
 class CrisisOrigin(models.TextChoices):
     """How a DomainCrisis came to exist — drives the auto-mint rule (#2238)."""
@@ -33,6 +57,7 @@ class CrisisOrigin(models.TextChoices):
     IMPROVEMENT = "improvement", "Failed Improvement"
     UNREST = "unrest", "Unrest Boil-over"
     STAFF = "staff", "Staff/GM Crafted"
+    AMBIENT = "ambient", "Ambient Generation"
 
 
 class CrisisResolutionKind(models.TextChoices):
@@ -44,11 +69,14 @@ class CrisisResolutionKind(models.TextChoices):
 
 
 class CrisisResolution(models.TextChoices):
-    """How a resolved crisis ended (#2238)."""
+    """How a resolved crisis ended (#2238; task/exploit/expiry #2837)."""
 
     PAID = "paid", "Paid Off"
     MISSION_COMPLETED = "mission_completed", "Mission Completed"
     SELF_RESOLVED = "self_resolved", "Blew Over"
+    TASK_COMPLETED = "task_completed", "Handled by an Agent"
+    EXPLOITED = "exploited", "Turned by Another Hand"
+    EXPIRED = "expired", "The Window Closed"
 
 
 class TitleTier(models.TextChoices):
@@ -122,6 +150,36 @@ class DomainCrisisSeverity(models.TextChoices):
     TROUBLE = "trouble", "Trouble"
     CRISIS = "crisis", "Crisis"
     CATASTROPHE = "catastrophe", "Catastrophe"
+
+
+class CrisisValence(models.TextChoices):
+    """Whether a generated event hurts or helps its target (#2837).
+
+    Opportunities reuse the whole spawn/option/feed pipeline; severity scales
+    the payoff instead of the income malus, and they expire if not seized.
+    """
+
+    THREAT = "threat", "Threat"
+    OPPORTUNITY = "opportunity", "Opportunity"
+
+
+class CrisisAudience(models.TextChoices):
+    """What kind of target a crisis type can spawn against (#2837).
+
+    CRIMINAL_ORG = an org running a crime kick-up stream or of a covert org
+    type — criminal flavor lives in content, not new mechanics.
+    """
+
+    DOMAIN = "domain", "Domain"
+    ORG = "org", "Any Organization"
+    CRIMINAL_ORG = "criminal_org", "Criminal Organization"
+
+
+class CrisisIntelSource(models.TextChoices):
+    """How an org learned of a still-covert crisis (#2837)."""
+
+    SPY_SWEEP = "spy_sweep", "Spy Sweep"
+    STAFF = "staff", "Staff Grant"
 
 
 class HouseClaimStatus(models.TextChoices):

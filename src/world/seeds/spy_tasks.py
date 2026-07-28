@@ -101,6 +101,40 @@ _TEMPLATES = [
         {"military_report": True},
         {"incriminate_level": 2},
     ),
+    # Threat-loop counterplay (#2837): the overseer verbs — find what is
+    # brewing, quiet it, feed it, or turn it to profit.
+    (
+        "Sweep for Schemes",
+        TaskCategory.SPYCRAFT,
+        TaskTargetKind.ORG,
+        "PLACEHOLDER Walk the shadows around them and learn what is brewing unseen.",
+        {"reveal_schemes": True},
+        {"incriminate_level": 1},
+    ),
+    (
+        "Counter the Scheme",
+        TaskCategory.SPYCRAFT,
+        TaskTargetKind.CRISIS,
+        "PLACEHOLDER Take the trouble apart quietly before it takes root.",
+        {"crisis_severity_delta": -1},
+        {"incriminate_level": 2},
+    ),
+    (
+        "Fan the Flames",
+        TaskCategory.SPYCRAFT,
+        TaskTargetKind.CRISIS,
+        "PLACEHOLDER Their trouble wants only a little kindling to become a fire.",
+        {"crisis_severity_delta": 1},
+        {"incriminate_level": 3},
+    ),
+    (
+        "Seize the Opening",
+        TaskCategory.SPYCRAFT,
+        TaskTargetKind.CRISIS,
+        "PLACEHOLDER The window is open. Be through it before anyone else.",
+        {"exploit_crisis": True},
+        {"incriminate_level": 2},
+    ),
 ]
 
 

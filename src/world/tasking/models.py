@@ -211,6 +211,26 @@ class TaskOutcomeRoute(SharedMemoryModel):
             "active armies. Movements come when positional troop state exists."
         ),
     )
+    reveal_schemes = models.BooleanField(
+        default=False,
+        help_text=(
+            "ORG/DOMAIN target: sweep for still-covert crises (mints CrisisIntel "
+            "for the issuing org) and, on your own org, active hostile tasks (#2837)."
+        ),
+    )
+    crisis_severity_delta = models.SmallIntegerField(
+        default=0,
+        help_text=(
+            "CRISIS target: negative steps the severity down (resolving below "
+            "trouble); positive inflames it a step (#2837)."
+        ),
+    )
+    exploit_crisis = models.BooleanField(
+        default=False,
+        help_text=(
+            "CRISIS target: resolve the event your way — the issuing org takes the boon (#2837)."
+        ),
+    )
 
     class Meta:
         ordering = ["template", "outcome_tier"]
@@ -292,6 +312,14 @@ class OrgTask(SharedMemoryModel, DiscriminatorMixin):
         blank=True,
         related_name="org_tasks_targeting",
     )
+    target_crisis = models.ForeignKey(
+        "societies.DomainCrisis",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="org_tasks_targeting",
+        help_text="A generated threat/opportunity being countered, inflamed, or seized (#2837).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
 
@@ -301,8 +329,15 @@ class OrgTask(SharedMemoryModel, DiscriminatorMixin):
         TaskTargetKind.ORG: "target_org",
         TaskTargetKind.DOMAIN: "target_domain",
         TaskTargetKind.PERSONA: "target_persona",
+        TaskTargetKind.CRISIS: "target_crisis",
     }
-    _TARGET_FIELDS = ("target_room", "target_org", "target_domain", "target_persona")
+    _TARGET_FIELDS = (
+        "target_room",
+        "target_org",
+        "target_domain",
+        "target_persona",
+        "target_crisis",
+    )
 
     def clean(self) -> None:
         """Validate the target discriminator.

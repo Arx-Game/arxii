@@ -241,7 +241,10 @@ class CrisisLifecycleTests(TestCase):
         from world.tidings.services import house_feed_for
 
         _make_type("Protests", DomainCrisisSeverity.TROUBLE, [CrisisResolutionKind.PAY])
-        open_crisis(self.domain, origin=CrisisOrigin.UNREST, rng=_FixedRng())
+        crisis = open_crisis(self.domain, origin=CrisisOrigin.UNREST, rng=_FixedRng())
+        # Generated crises spawn covert (#2837) — surface it for the feed check.
+        crisis.surfaces_at = None
+        crisis.save(update_fields=["surfaces_at"])
         items = house_feed_for(self.org)
         kinds = [item.kind for item in items]
         self.assertIn("crisis", kinds)
@@ -256,7 +259,11 @@ class CrisisLifecycleTests(TestCase):
             DomainCrisisSeverity.TROUBLE,
             [CrisisResolutionKind.PAY, CrisisResolutionKind.WAIT],
         )
-        open_crisis(self.domain, origin=CrisisOrigin.UNREST, rng=_FixedRng())
+        crisis = open_crisis(self.domain, origin=CrisisOrigin.UNREST, rng=_FixedRng())
+        # Covert until surfaced or swept (#2837): hidden even from its target.
+        self.assertEqual(_house_open_crises(self.org), [])
+        crisis.surfaces_at = None
+        crisis.save(update_fields=["surfaces_at"])
         rows = _house_open_crises(self.org)
         self.assertEqual(len(rows), 1)
         row = rows[0]
@@ -280,6 +287,9 @@ class CrisisOptionApiTests(TestCase):
         cls.domain = create_domain(area=cls.area, name="Apivale", owner_org=cls.org)
         _make_type("Protests", DomainCrisisSeverity.TROUBLE, [CrisisResolutionKind.WAIT])
         cls.crisis = open_crisis(cls.domain, origin=CrisisOrigin.UNREST, rng=_FixedRng())
+        # Surface it (#2837): the API card list hides covert crises.
+        cls.crisis.surfaces_at = None
+        cls.crisis.save(update_fields=["surfaces_at"])
 
     def _leader_account(self):
         """An account whose active character's persona leads the org."""
@@ -337,3 +347,171 @@ class CrisisOptionApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.crisis.refresh_from_db()
         self.assertIsNone(self.crisis.chosen_option)
+
+
+class ThreatLoopEngineTests(TestCase):
+    """The generated threat/opportunity loop (#2837)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.org = OrganizationFactory(name="House Loop")
+        cls.area = AreaFactory()
+        cls.domain = create_domain(area=cls.area, name="Loopvale", owner_org=cls.org)
+
+    @staticmethod
+    def _typed(name, *, valence, audience, severity=DomainCrisisSeverity.TROUBLE):
+        from world.societies.houses.constants import CrisisResolutionKind
+
+        ctype = DomainCrisisType.objects.create(
+            name=name, default_severity=severity, valence=valence, audience=audience
+        )
+        DomainCrisisTypeOption.objects.create(
+            crisis_type=ctype, kind=CrisisResolutionKind.WAIT, self_resolve_pct=0, worsen_pct=0
+        )
+        return ctype
+
+    def test_generated_crisis_is_covert_then_intel_reveals(self):
+        from world.societies.houses.constants import CrisisIntelSource
+        from world.societies.houses.crisis_services import grant_crisis_intel, org_knows_of
+        from world.societies.serializers import _house_open_crises
+
+        _make_type("Quiet Trouble", DomainCrisisSeverity.TROUBLE, [CrisisResolutionKind.PAY])
+        crisis = open_crisis(self.domain, origin=CrisisOrigin.UNREST, rng=_FixedRng())
+        self.assertIsNotNone(crisis.surfaces_at)
+        self.assertFalse(crisis.is_surfaced)
+        self.assertFalse(org_knows_of(crisis, self.org))
+        self.assertEqual(_house_open_crises(self.org), [])
+        # And its income malus has not hit the books yet.
+        self.assertEqual(crisis.income_factor, 1.0)
+
+        grant_crisis_intel(crisis, self.org, source=CrisisIntelSource.SPY_SWEEP)
+        self.assertTrue(org_knows_of(crisis, self.org))
+        self.assertEqual(len(_house_open_crises(self.org)), 1)
+
+    def test_threat_and_opportunity_can_coexist_but_not_two_threats(self):
+        from world.societies.houses.constants import CrisisAudience, CrisisValence
+
+        self._typed("Windfall", valence=CrisisValence.OPPORTUNITY, audience=CrisisAudience.DOMAIN)
+        threat = open_crisis(self.domain, origin=CrisisOrigin.STAFF)
+        self.assertIsNotNone(threat)
+        self.assertIsNone(open_crisis(self.domain, origin=CrisisOrigin.STAFF))
+        opportunity = open_crisis(
+            self.domain,
+            origin=CrisisOrigin.AMBIENT,
+            crisis_type=DomainCrisisType.objects.get(name="Windfall"),
+        )
+        self.assertIsNotNone(opportunity)
+
+    def test_opportunity_expires_on_wait_tick(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from world.societies.houses.constants import CrisisAudience, CrisisValence
+
+        ctype = self._typed(
+            "Fading Window", valence=CrisisValence.OPPORTUNITY, audience=CrisisAudience.DOMAIN
+        )
+        crisis = open_crisis(self.domain, origin=CrisisOrigin.AMBIENT, crisis_type=ctype)
+        DomainCrisisType.objects.filter(pk=ctype.pk)  # noop keep-alive
+        crisis.opened_at = timezone.now() - timedelta(days=30)
+        crisis.save(update_fields=["opened_at"])
+        crisis_wait_tick(rng=_FixedRng(0.99))
+        crisis.refresh_from_db()
+        self.assertEqual(crisis.resolution, CrisisResolution.EXPIRED)
+
+    def test_generation_tick_spawns_for_domain_and_eligible_org(self):
+        from world.currency.constants import IncomeStreamKind
+        from world.currency.models import OrgIncomeStream
+        from world.societies.houses.constants import CrisisAudience, CrisisValence
+        from world.societies.houses.crisis_services import crisis_generation_tick
+        from world.societies.houses.models import DomainCrisis
+
+        self._typed("Domain Trouble", valence=CrisisValence.THREAT, audience=CrisisAudience.DOMAIN)
+        self._typed("Org Trouble", valence=CrisisValence.THREAT, audience=CrisisAudience.ORG)
+        self._typed("Org Windfall", valence=CrisisValence.OPPORTUNITY, audience=CrisisAudience.ORG)
+        racket_org = OrganizationFactory(name="The Loop Syndicate")
+        OrgIncomeStream.objects.create(
+            organization=racket_org,
+            name="river toll",
+            kind=IncomeStreamKind.CRIME_KICKUP,
+            gross_amount=400,
+        )
+        opened = crisis_generation_tick(rng=_FixedRng(0.0))
+        self.assertGreaterEqual(opened, 3)
+        self.assertTrue(DomainCrisis.objects.filter(domain=self.domain).exists())
+        self.assertTrue(DomainCrisis.objects.filter(org=racket_org).exists())
+
+    def test_org_threat_skims_stream_accrual_once_surfaced(self):
+        from world.currency.constants import IncomeStreamKind
+        from world.currency.models import OrgIncomeStream
+        from world.currency.services import accrue_income_stream
+        from world.societies.houses.constants import CrisisAudience, CrisisValence
+
+        ctype = self._typed(
+            "Org Squeeze", valence=CrisisValence.THREAT, audience=CrisisAudience.ORG
+        )
+        stream = OrgIncomeStream.objects.create(
+            organization=self.org,
+            name="stall rents",
+            kind=IncomeStreamKind.DOMAIN_TAX,
+            gross_amount=1000,
+        )
+        crisis = open_crisis(org=self.org, origin=CrisisOrigin.AMBIENT, crisis_type=ctype)
+        # Covert: no bite yet.
+        accrue_income_stream(stream)
+        stream.refresh_from_db()
+        self.assertEqual(stream.uncollected_pool, 1000)
+        # Surfaced TROUBLE: 0.9 factor.
+        crisis.surfaces_at = None
+        crisis.save(update_fields=["surfaces_at"])
+        accrue_income_stream(stream)
+        stream.refresh_from_db()
+        self.assertEqual(stream.uncollected_pool, 1900)
+
+    def test_choose_mission_option_mints_the_mission(self):
+        from world.missions.factories import MissionNodeFactory, MissionTemplateFactory
+
+        template = MissionTemplateFactory()
+        MissionNodeFactory(template=template, is_entry=True)
+        ctype = _make_type(
+            "Confrontable",
+            DomainCrisisSeverity.TROUBLE,
+            [CrisisResolutionKind.MISSION, CrisisResolutionKind.WAIT],
+            mission_template=template,
+        )
+        crisis = open_crisis(self.domain, origin=CrisisOrigin.STAFF, crisis_type=ctype)
+        persona = _leader_of(self.org)
+        option = ctype.options.get(kind=CrisisResolutionKind.MISSION)
+        choose_crisis_option(crisis, persona, option)
+        crisis.refresh_from_db()
+        self.assertIsNotNone(crisis.minted_mission_id)
+        resolved = resolve_crisis_for_mission(crisis.minted_mission)
+        self.assertEqual(resolved.resolution, CrisisResolution.MISSION_COMPLETED)
+
+    def test_org_crisis_judged_by_org_leadership(self):
+        from world.societies.houses.constants import CrisisAudience, CrisisValence
+
+        ctype = self._typed("Org Matter", valence=CrisisValence.THREAT, audience=CrisisAudience.ORG)
+        crisis = open_crisis(org=self.org, origin=CrisisOrigin.AMBIENT, crisis_type=ctype)
+        outsider = PersonaFactory()
+        option = ctype.options.first()
+        with self.assertRaises(CrisisServiceError):
+            choose_crisis_option(crisis, outsider, option)
+        leader = _leader_of(self.org)
+        chosen = choose_crisis_option(crisis, leader, option)
+        self.assertIsNotNone(chosen.chosen_at)
+
+
+def _leader_of(org):
+    from world.societies.models import OrganizationRank
+
+    persona = PersonaFactory()
+    rank = OrganizationRank.objects.filter(organization=org, tier=1).first()
+    if rank is None:
+        rank = OrganizationRankFactory(organization=org, tier=1, name="Head")
+    if not rank.can_manage_ranks:
+        rank.can_manage_ranks = True
+        rank.save(update_fields=["can_manage_ranks"])
+    OrganizationMembership.objects.create(organization=org, persona=persona, rank=rank)
+    return persona

@@ -62,6 +62,8 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
             "features__feature",  # noqa: PREFETCH_STRING
             "domains__crises__crisis_type__options",  # noqa: PREFETCH_STRING — crisis cards (#2238)
             "domains__crises__chosen_option",  # noqa: PREFETCH_STRING
+            "org_crises__crisis_type__options",  # noqa: PREFETCH_STRING — org-leg cards (#2837)
+            "org_crises__chosen_option",  # noqa: PREFETCH_STRING
             "fealty__liege",  # noqa: PREFETCH_STRING  — this org's liege edge (get_house)
             "vassal_edges__vassal",  # noqa: PREFETCH_STRING  — its direct vassals
         )
@@ -96,9 +98,9 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
         from world.scenes.models import Persona  # noqa: PLC0415
         from world.societies.houses.crisis_services import (  # noqa: PLC0415
             CrisisServiceError,
+            can_judge_crisis,
             choose_crisis_option,
         )
-        from world.societies.houses.services import can_administer_domain  # noqa: PLC0415
         from world.societies.serializers import (  # noqa: PLC0415
             CrisisOptionInputSerializer,
             _house_open_crises,
@@ -113,12 +115,12 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
         persona = None
         owned = Persona.objects.filter(pk__in=get_account_personas(request))
         for candidate in owned:
-            if can_administer_domain(candidate, crisis.domain):
+            if can_judge_crisis(candidate, crisis):
                 persona = candidate
                 break
         if persona is None:
             return Response(
-                {"detail": "You do not have authority over this domain."},
+                {"detail": "You do not have authority over this."},
                 status=400,
             )
         try:

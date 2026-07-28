@@ -51,6 +51,12 @@ def apply_spy_payouts(
         (route.domain_unrest_delta, lambda: _domain_unrest(task, route.domain_unrest_delta)),
         (route.organization_report, lambda: _organization_report(task)),
         (route.military_report, lambda: _military_report(task)),
+        (route.reveal_schemes, lambda: _reveal_schemes(task)),
+        (
+            route.crisis_severity_delta,
+            lambda: _crisis_delta(task, route.crisis_severity_delta),
+        ),
+        (route.exploit_crisis, lambda: _exploit_crisis(task)),
         (
             route.incriminate_level,
             lambda: _incriminate(task, fulfillment, route.incriminate_level),
@@ -173,6 +179,126 @@ def _military_report(task: OrgTask) -> list[str]:
     if army_count:
         lines.append(f"{army_count} armied formation(s) stand active.")
     return lines
+
+
+def _reveal_schemes(task: OrgTask) -> list[str]:
+    """Overseer sweep (#2837): see through the covert window.
+
+    Mints CrisisIntel for the ISSUING org on every still-covert crisis
+    against the target org/domain. On your own org it also surfaces active
+    hostile tasks aimed at you (counter-intelligence) — issuing orgs named.
+    """
+    from world.societies.houses.constants import (  # noqa: PLC0415
+        CrisisIntelSource,
+        CrisisValence,
+    )
+    from world.societies.houses.crisis_services import grant_crisis_intel  # noqa: PLC0415
+    from world.societies.houses.models import DomainCrisis  # noqa: PLC0415
+    from world.tasking.models import TaskFulfillment  # noqa: PLC0415
+
+    if task.target_org_id is not None:
+        crises = DomainCrisis.objects.filter(
+            models_q_org_or_domains(task.target_org), resolved_at__isnull=True
+        )
+        swept_org_id = task.target_org_id
+    elif task.target_domain_id is not None:
+        crises = DomainCrisis.objects.filter(
+            domain_id=task.target_domain_id, resolved_at__isnull=True
+        )
+        swept_org_id = task.target_domain.owner_org_id
+    else:
+        return ["The sweep had nothing to sweep."]
+
+    lines: list[str] = []
+    for crisis in crises:
+        if crisis.is_surfaced:
+            continue
+        _, fresh = grant_crisis_intel(crisis, task.org, source=CrisisIntelSource.SPY_SWEEP)
+        if fresh:
+            is_threat = crisis.valence == CrisisValence.THREAT
+            label = "brewing trouble" if is_threat else "a ripening opening"
+            lines.append(f"The sweep uncovers {label}: {crisis}.")
+    if task.org_id == swept_org_id:
+        hostiles = (
+            TaskFulfillment.objects.filter(
+                is_active=True,
+                resolved_at__isnull=True,
+                task__resolved_at__isnull=True,
+            )
+            .filter(
+                models_q_hostile_targets(swept_org_id),
+            )
+            .exclude(task__org_id=task.org_id)
+            .select_related("task__org", "task__template")
+        )
+        lines.extend(
+            f"Someone's agent is working '{fulfillment.task.template.name}' "
+            f"against us — the trail runs back to {fulfillment.task.org.name}."
+            for fulfillment in hostiles
+        )
+    if not lines:
+        return ["The sweep turns up nothing moving in the dark."]
+    return lines
+
+
+def models_q_org_or_domains(org):
+    """Crises against the org directly or any of its domains."""
+    from django.db.models import Q  # noqa: PLC0415
+
+    return Q(org=org) | Q(domain__owner_org=org)
+
+
+def models_q_hostile_targets(org_id: int):
+    """Active tasks aimed at this org or its domains."""
+    from django.db.models import Q  # noqa: PLC0415
+
+    return Q(task__target_org_id=org_id) | Q(task__target_domain__owner_org_id=org_id)
+
+
+def _crisis_delta(task: OrgTask, delta: int) -> list[str]:
+    """Counter (negative) or inflame (positive) a crisis one step per job (#2837)."""
+    from world.societies.houses.constants import (  # noqa: PLC0415
+        CrisisResolution,
+        DomainCrisisSeverity,
+    )
+    from world.societies.houses.crisis_services import resolve_crisis  # noqa: PLC0415
+
+    crisis = task.target_crisis
+    if crisis is None or crisis.resolved_at is not None:
+        return ["The trouble had already run its course."]
+    order = [
+        DomainCrisisSeverity.TROUBLE,
+        DomainCrisisSeverity.CRISIS,
+        DomainCrisisSeverity.CATASTROPHE,
+    ]
+    idx = order.index(crisis.severity) + (1 if delta > 0 else -1)
+    if idx < 0:
+        resolve_crisis(crisis, resolution=CrisisResolution.TASK_COMPLETED)
+        return [f"The matter of {crisis.target_label} is settled quietly."]
+    idx = min(idx, len(order) - 1)
+    if order[idx] == crisis.severity:
+        return ["It could not be pushed any further."]
+    crisis.severity = order[idx]
+    crisis.save(update_fields=["severity"])
+    if delta > 0:
+        return [f"The trouble in {crisis.target_label} deepens."]
+    return [f"The trouble in {crisis.target_label} eases."]
+
+
+def _exploit_crisis(task: OrgTask) -> list[str]:
+    """Turn the event to the issuing org's profit and close it (#2837)."""
+    from world.societies.houses.constants import CrisisResolution  # noqa: PLC0415
+    from world.societies.houses.crisis_services import (  # noqa: PLC0415
+        apply_crisis_boon,
+        resolve_crisis,
+    )
+
+    crisis = task.target_crisis
+    if crisis is None or crisis.resolved_at is not None:
+        return ["The opening had already closed."]
+    boon_line = apply_crisis_boon(crisis, task.org)
+    resolve_crisis(crisis, resolution=CrisisResolution.EXPLOITED)
+    return [f"The matter of {crisis.target_label} is turned to our ends.", boon_line]
 
 
 def _movements_report(task: OrgTask) -> list[str]:
@@ -369,11 +495,15 @@ def template_is_offensive(template) -> bool:
         ):
             return True
         if template.target_kind == TaskTargetKind.DOMAIN and (
-            route.domain_report or route.domain_unrest_delta > 0
+            route.domain_report or route.domain_unrest_delta > 0 or route.reveal_schemes
         ):
             return True
         if template.target_kind == TaskTargetKind.ORG and (
-            route.organization_report or route.military_report
+            route.organization_report or route.military_report or route.reveal_schemes
+        ):
+            return True
+        if template.target_kind == TaskTargetKind.CRISIS and (
+            route.crisis_severity_delta > 0 or route.exploit_crisis
         ):
             return True
     return False

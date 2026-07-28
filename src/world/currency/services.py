@@ -460,6 +460,13 @@ def accrue_income_stream(stream: OrgIncomeStream) -> int:
     holding = stream.domain_holding_or_none
     if holding is not None:
         gross = int(gross * holding.domain.income_multiplier)
+    # An open, surfaced org-target threat skims every stream the org runs
+    # (#2837) — the org-leg symmetry of the domain crisis income malus.
+    from world.societies.houses.crisis_services import (  # noqa: PLC0415
+        org_crisis_income_factor,
+    )
+
+    gross = int(gross * org_crisis_income_factor(stream.organization))
     stream.uncollected_pool = stream.uncollected_pool + gross
     stream.save(update_fields=["uncollected_pool"])
     return stream.uncollected_pool

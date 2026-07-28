@@ -15,9 +15,12 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.societies.houses.constants import (
     CRISIS_INCOME_FACTORS,
     DOMAIN_PROSPERITY_BASELINE,
+    CrisisAudience,
+    CrisisIntelSource,
     CrisisOrigin,
     CrisisResolution,
     CrisisResolutionKind,
+    CrisisValence,
     DomainCrisisSeverity,
     HouseClaimStatus,
     PactCommitmentKind,
@@ -405,6 +408,18 @@ class DomainCrisisType(SharedMemoryModel):
     spawn_weight = models.PositiveSmallIntegerField(
         default=10, help_text="Relative weight among same-severity automated types."
     )
+    valence = models.CharField(
+        max_length=20,
+        choices=CrisisValence.choices,
+        default=CrisisValence.THREAT,
+        help_text="Threats bite the target; opportunities pay whoever seizes them (#2837).",
+    )
+    audience = models.CharField(
+        max_length=20,
+        choices=CrisisAudience.choices,
+        default=CrisisAudience.DOMAIN,
+        help_text="What this type spawns against; criminal flavor is content, not code (#2837).",
+    )
 
     class Meta:
         ordering = ["name"]
@@ -482,8 +497,19 @@ class DomainCrisis(SharedMemoryModel):
 
     domain = models.ForeignKey(
         Domain,
+        null=True,
+        blank=True,
         on_delete=models.CASCADE,
         related_name="crises",
+    )
+    # One machinery, two fictions (the CRIME_KICKUP precedent): the same row
+    # is a crisis on a house's lands OR on the organization itself (#2837).
+    org = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="org_crises",
     )
     severity = models.CharField(
         max_length=20,
@@ -529,20 +555,92 @@ class DomainCrisis(SharedMemoryModel):
     )
     opened_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
+    surfaces_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Generated crises stay covert until this moment; null = public from"
+            " the start. Spy sweeps mint CrisisIntel to see through the window (#2837)."
+        ),
+    )
 
     class Meta:
         ordering = ["-opened_at"]
         verbose_name_plural = "Domain crises"
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    (models.Q(domain__isnull=False) & models.Q(org__isnull=True))
+                    | (models.Q(domain__isnull=True) & models.Q(org__isnull=False))
+                ),
+                name="crisis_targets_exactly_one_of_domain_or_org",
+            ),
+        ]
 
     def __str__(self) -> str:
-        return f"{self.get_severity_display()} on {self.domain.name}"
+        return f"{self.get_severity_display()} on {self.target_label}"
+
+    @property
+    def target_label(self) -> str:
+        return self.domain.name if self.domain_id is not None else self.org.name
+
+    @property
+    def target_org(self):
+        """The organization whose problem (or windfall) this is."""
+        return self.domain.owner_org if self.domain_id is not None else self.org
+
+    @property
+    def valence(self) -> str:
+        """Typeless (staff freeform) crises are threats."""
+        return self.crisis_type.valence if self.crisis_type_id is not None else CrisisValence.THREAT
+
+    @property
+    def is_surfaced(self) -> bool:
+        from django.utils import timezone  # noqa: PLC0415
+
+        return self.surfaces_at is None or self.surfaces_at <= timezone.now()
 
     @property
     def income_factor(self) -> float:
-        """Severity-scaled income malus while open (#2238). 1.0 once resolved."""
-        if self.resolved_at is not None:
+        """Severity-scaled income malus while open (#2238). 1.0 once resolved.
+
+        Opportunities never bite (#2837), and a still-covert threat has not
+        yet hit the books.
+        """
+        if self.resolved_at is not None or not self.is_surfaced:
+            return 1.0
+        if self.valence == CrisisValence.OPPORTUNITY:
             return 1.0
         return CRISIS_INCOME_FACTORS.get(self.severity, 1.0)
+
+
+class CrisisIntel(SharedMemoryModel):
+    """An organization's early knowledge of a still-covert crisis (#2837).
+
+    Minted by spy sweeps (or staff). Your own spymaster buys reaction time;
+    sweeping a rival reveals their hidden troubles to exploit. Rows persist
+    after surfacing as a record of who knew first.
+    """
+
+    crisis = models.ForeignKey(DomainCrisis, on_delete=models.CASCADE, related_name="intel")
+    org = models.ForeignKey(
+        "societies.Organization", on_delete=models.CASCADE, related_name="crisis_intel"
+    )
+    source = models.CharField(
+        max_length=20,
+        choices=CrisisIntelSource.choices,
+        default=CrisisIntelSource.SPY_SWEEP,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["crisis", "org"], name="unique_intel_per_crisis_org"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.org.name} knows of {self.crisis}"
 
 
 class MarriagePact(SharedMemoryModel):
