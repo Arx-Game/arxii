@@ -299,6 +299,78 @@ class Functionary(SharedMemoryModel):
         return f"{self.display_name} @ room {self.room_id}"
 
 
+class PreferenceValence(models.TextChoices):
+    """How an NPC feels about a personality trait's subject (#2827 phase 4)."""
+
+    LIKES = "likes", "Likes"
+    DISLIKES = "dislikes", "Dislikes"
+
+
+class PersonalityTrait(NaturalKeyMixin, SharedMemoryModel):
+    """An authored like/dislike axis for instantiated NPCs (#2827 phase 4).
+
+    Aligned with ADR-0058's durable tier: preferences hang on personas.
+    `eased_check` is the mechanical tooth — approaching an NPC through what
+    they love eases that check against them ("loves flattery" eases
+    Persuasion); a DISLIKE hardens it by the same magnitude.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default="")
+    eased_check = models.ForeignKey(
+        "checks.CheckType",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The check a LIKE of this trait eases (a DISLIKE hardens). NULL = flavor only.",
+    )
+    ease_magnitude = models.PositiveIntegerField(
+        default=5,
+        help_text="Points of check modifier a LIKE grants (a DISLIKE costs).",
+    )
+    is_active = models.BooleanField(default=True)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class NpcPreference(SharedMemoryModel):
+    """One instantiated NPC's stance on one trait — their thin personality."""
+
+    persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.CASCADE,
+        related_name="npc_preferences",
+    )
+    trait = models.ForeignKey(
+        PersonalityTrait,
+        on_delete=models.CASCADE,
+        related_name="holders",
+    )
+    valence = models.CharField(max_length=10, choices=PreferenceValence.choices)
+
+    class Meta:
+        ordering = ["persona", "trait__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["persona", "trait"],
+                name="unique_npc_preference_per_trait",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.persona_id} {self.valence} {self.trait.name}"
+
+
 class NamePart(models.TextChoices):
     """Which slot of a generated name an entry fills (#2827 phase 2)."""
 

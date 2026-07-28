@@ -72,8 +72,15 @@ def _promote_functionary(
             message="This offer has no capability check configured. (Authoring error.)",
         )
 
+    # #2827 phase 4 — a materialized NPC's likes/dislikes ease or harden the
+    # cultivation roll (0 for a still-faceless placement).
+    from world.npc_services.personality import preference_modifier  # noqa: PLC0415
+
     check_result = perform_check_with_modifiers(
-        character, offer.check_type, target_difficulty=offer.check_difficulty
+        character,
+        offer.check_type,
+        target_difficulty=offer.check_difficulty,
+        extra_modifiers=preference_modifier(functionary.persona, offer.check_type),
     )
     if check_result.success_level <= 0:
         return EffectResult(kind=offer.kind, message="They're not ready to commit to you yet.")

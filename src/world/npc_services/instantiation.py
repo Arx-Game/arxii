@@ -121,6 +121,9 @@ def materialize_functionary(
         character_sheet=sheet,
         defaults={"roster": _npc_roster()},
     )
+    from world.npc_services.personality import assign_random_personality  # noqa: PLC0415
+
+    assign_random_personality(persona)
     return persona
 
 

@@ -159,8 +159,18 @@ def _sweep_post(post: ListenerPost, now) -> None:
         + LISTENER_BUZZ_PER_SECRET * len(new_secrets)
     )
     if post.check_type_id is not None:
+        from world.tasking.constants import TaskCategory  # noqa: PLC0415
+        from world.tasking.services import APTITUDE_STEP, aptitude_band  # noqa: PLC0415
+
         agent_character = asset.asset_persona.character_sheet.character
-        result = perform_check(agent_character, post.check_type, post.check_difficulty)
+        result = perform_check(
+            agent_character,
+            post.check_type,
+            post.check_difficulty,
+            extra_modifiers=(
+                APTITUDE_STEP * aptitude_band(asset.asset_persona, TaskCategory.SPYCRAFT)
+            ),
+        )
         if result.success_level <= 0:
             accrual = 0
 
