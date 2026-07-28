@@ -2454,17 +2454,21 @@ plus the shared access-change announcement surface that fires discovery ceremoni
 gains a discoverable content item for the first time.
 
 - **Models:** `StatDefinition` (normalized stat key — dot-separated, e.g.
-  `"relationships.total_established"`), `StatTracker` (per-character integer counter),
+  `"relationships.total_established"`; `CONTENT_MODELS` since #2698), `StatTracker` (per-character integer counter),
   `Achievement` (staff-authored; `hidden` default True, `notification_level`, chained via
-  `prerequisite` self-FK, `is_active`), `AchievementRequirement` (stat threshold comparison per
-  achievement), `Discovery` (OneToOne → `Achievement`; records first-ever earner timestamp),
+  `prerequisite` self-FK, `is_active`; natural key `slug`; `CONTENT_MODELS` since #2832),
+  `AchievementRequirement` (stat threshold comparison per
+  achievement; composite natural key `(achievement, stat, threshold, comparison)`; `CONTENT_MODELS` since #2832),
+  `Discovery` (OneToOne → `Achievement`; records first-ever earner timestamp),
   `CharacterAchievement` (earned record; optional `discovery` FK when the earner was a co-discoverer),
   `RewardDefinition` (TITLE / BONUS / COSMETIC / PRESTIGE / DISTINCTION reward catalog;
-  `distinction` nullable FK → `distinctions.Distinction`, mirrors `modifier_target`, #2037),
+  `distinction` nullable FK → `distinctions.Distinction`, mirrors `modifier_target`, #2037;
+  natural key `key`; `CONTENT_MODELS` since #2832),
   `AchievementReward` (per-achievement reward with optional `reward_value` amount, or an
-  explicit rank for DISTINCTION),
+  explicit rank for DISTINCTION; composite natural key `(achievement, reward)`; `CONTENT_MODELS` since #2832),
   `CharacterTitle` (earned display-only title record; FK → TITLE `RewardDefinition`),
-  `ConditionStatRule` (bridge: condition event type → stat increment),
+  `ConditionStatRule` (bridge: condition event type → stat increment; composite natural key
+  `(stat, condition, event_type)`; `CONTENT_MODELS` since #2832),
   **`DiscoverableContent`** (abstract base — adds nullable `discovery_achievement` FK to any
   content model whose instances can be discovered for the first time; inherited by `Technique`
   and `CovenantRole`; null = not discoverable; see ADR-0061)
