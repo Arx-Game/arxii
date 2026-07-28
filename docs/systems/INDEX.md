@@ -2530,6 +2530,10 @@ consumers, not systems.
 - **API:** `/api/tasking/` — staff `templates/`+`routes/`; member `tasks/`
   (create/assign/accept), `roster/`, `posts/` (+collect), `counterplay/`;
   React `OperationsSection` (Roster/Postings/Operations) on `OrgPage`
+- **Actions + telnet:** 11 REGISTRY actions (`actions/definitions/tasking.py`)
+  are the ADR-0001 seam — viewsets dispatch through them; telnet `network`
+  family (`commands/network.py`: board/issue/assign/accept/post/collect/
+  sweep/clear/suppress/flip/plant)
 - **Boundary:** standing "stay until recalled" postings are `NPCAssignment`
   rows, never tasks — every task ends; prose is never a surveillance input
 - **Source:** `src/world/tasking/` · **Doc:** `docs/systems/tasking.md` ·
