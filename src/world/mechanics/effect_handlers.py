@@ -1319,7 +1319,7 @@ def _apply_asset_status(
     character's ACTIVE NPCAssets, and transitions each via
     ``transition_asset_status()``.
     """
-    from world.assets.constants import AssetTransitionReason  # noqa: PLC0415
+    from world.assets.constants import AssetStatus, AssetTransitionReason  # noqa: PLC0415
     from world.assets.services import transition_asset_status  # noqa: PLC0415
     from world.scenes.services import (  # noqa: PLC0415
         MissingPrimaryPersonaError,
@@ -1334,6 +1334,30 @@ def _apply_asset_status(
             description="",
             applied=False,
             skip_reason="ASSET_STATUS effect has no asset_status_target set",
+        )
+
+    # #2820 tasking: a dispatched agent in context narrows the effect to that
+    # single asset — a botched job burns the agent on it, not the handler's
+    # whole roster.
+    if context.npc_asset is not None:
+        if context.npc_asset.status != AssetStatus.ACTIVE:
+            return AppliedEffect(
+                effect_type=EffectType.ASSET_STATUS,
+                description="",
+                applied=False,
+                skip_reason="Context asset is not active",
+            )
+        transition_asset_status(
+            context.npc_asset,
+            target_status,
+            reason=AssetTransitionReason.CONSEQUENCE,
+        )
+        return AppliedEffect(
+            effect_type=EffectType.ASSET_STATUS,
+            description=(
+                f"Transitioned asset to {target_status}: {context.npc_asset.asset_persona}"
+            ),
+            applied=True,
         )
 
     try:

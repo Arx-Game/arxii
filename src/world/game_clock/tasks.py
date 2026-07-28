@@ -482,6 +482,24 @@ def auto_retire_dead_characters() -> None:
         logger.info("Auto-retire: %d dead characters released", count)
 
 
+def _register_tasking_tasks() -> None:
+    """Register the #2820 org-task resolution sweep."""
+    from world.tasking.services import resolve_due_tasks
+
+    register_task(
+        CronDefinition(
+            task_key="tasking.resolve_due_tasks",
+            callable=resolve_due_tasks,
+            interval=timedelta(hours=1),
+            description=(
+                "#2820: resolve ASSIGNED org tasks whose deadline passed — the "
+                "agent's offscreen check, outcome-route payouts, and the "
+                "template's ADR-0092 risk pool."
+            ),
+        )
+    )
+
+
 def register_all_tasks() -> None:
     """Register all periodic tasks with the scheduler."""
     register_task(
@@ -623,6 +641,8 @@ def register_all_tasks() -> None:
             ),
         )
     )
+
+    _register_tasking_tasks()
 
     # #676 Phase A: Renown decay (fame on personas, accumulated on orgs)
     from world.societies.tasks import register_all_tasks as register_renown_tasks
