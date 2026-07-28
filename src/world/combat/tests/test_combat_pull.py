@@ -430,6 +430,44 @@ class CombatPullResolvedEffectCheckConstraintTests(TestCase):
                 granted_capability=self.capability,
             )
 
+    def test_capability_grant_requires_capability_grant_value_db(self) -> None:
+        """CAPABILITY_GRANT without capability_grant_value violates the constraint."""
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CombatPullResolvedEffect.objects.create(
+                **self._base_kwargs(),
+                kind=EffectKind.CAPABILITY_GRANT,
+                granted_capability=self.capability,
+                capability_grant_value=None,
+            )
+
+    def test_flat_bonus_forbids_capability_grant_value_db(self) -> None:
+        """FLAT_BONUS with capability_grant_value set violates the constraint."""
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CombatPullResolvedEffect.objects.create(
+                **self._base_kwargs(),
+                kind=EffectKind.FLAT_BONUS,
+                scaled_value=4,
+                capability_grant_value=3,
+            )
+
+    def test_capability_grant_value_is_frozen_at_commit(self) -> None:
+        """The capability_grant_value snapshot is frozen — later changes to
+        ThreadPullEffect.capability_grant_value or Thread.level don't alter it."""
+        effect = CombatPullResolvedEffect.objects.create(
+            **self._base_kwargs(),
+            kind=EffectKind.CAPABILITY_GRANT,
+            granted_capability=self.capability,
+            capability_grant_value=8,
+            scaled_value=None,
+        )
+        self.assertEqual(effect.capability_grant_value, 8)
+        # The snapshot is immutable — it's a column, not derived.
+        # Changing the thread's level after commit doesn't change it.
+        self.thread.level = 20
+        self.thread.save()
+        effect.refresh_from_db()
+        self.assertEqual(effect.capability_grant_value, 8)
+
 
 class CombatPullFactoryDefaultTests(TestCase):
     """Smoke tests — the default factories produce instances passing full_clean()."""
