@@ -31920,6 +31920,366 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/tasking/routes/:
+    get:
+      operationId: tasking_routes_list
+      description: Staff authoring CRUD for per-tier payout routes.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTaskOutcomeRouteList'
+          description: ''
+    post:
+      operationId: tasking_routes_create
+      description: Staff authoring CRUD for per-tier payout routes.
+      tags:
+      - tasking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskOutcomeRouteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskOutcomeRoute'
+          description: ''
+  /api/tasking/routes/{id}/:
+    get:
+      operationId: tasking_routes_retrieve
+      description: Staff authoring CRUD for per-tier payout routes.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this task outcome route.
+        required: true
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskOutcomeRoute'
+          description: ''
+    put:
+      operationId: tasking_routes_update
+      description: Staff authoring CRUD for per-tier payout routes.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this task outcome route.
+        required: true
+      tags:
+      - tasking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskOutcomeRouteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskOutcomeRoute'
+          description: ''
+    patch:
+      operationId: tasking_routes_partial_update
+      description: Staff authoring CRUD for per-tier payout routes.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this task outcome route.
+        required: true
+      tags:
+      - tasking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTaskOutcomeRouteRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskOutcomeRoute'
+          description: ''
+    delete:
+      operationId: tasking_routes_destroy
+      description: Staff authoring CRUD for per-tier payout routes.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this task outcome route.
+        required: true
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/tasking/tasks/:
+    get:
+      operationId: tasking_tasks_list
+      description: 'The org task board: list/inspect/issue/assign.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrgTaskList'
+          description: ''
+    post:
+      operationId: tasking_tasks_create
+      description: 'The org task board: list/inspect/issue/assign.'
+      tags:
+      - tasking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrgTaskRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgTask'
+          description: ''
+  /api/tasking/tasks/{id}/:
+    get:
+      operationId: tasking_tasks_retrieve
+      description: 'The org task board: list/inspect/issue/assign.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this org task.
+        required: true
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgTask'
+          description: ''
+  /api/tasking/tasks/{id}/assign/:
+    post:
+      operationId: tasking_tasks_assign_create
+      description: Dispatch one of the requester's own agents on this task.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this org task.
+        required: true
+      tags:
+      - tasking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrgTaskRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgTask'
+          description: ''
+  /api/tasking/templates/:
+    get:
+      operationId: tasking_templates_list
+      description: Staff authoring CRUD for job templates.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTaskTemplateList'
+          description: ''
+    post:
+      operationId: tasking_templates_create
+      description: Staff authoring CRUD for job templates.
+      tags:
+      - tasking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskTemplateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskTemplate'
+          description: ''
+  /api/tasking/templates/{id}/:
+    get:
+      operationId: tasking_templates_retrieve
+      description: Staff authoring CRUD for job templates.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this task template.
+        required: true
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskTemplate'
+          description: ''
+    put:
+      operationId: tasking_templates_update
+      description: Staff authoring CRUD for job templates.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this task template.
+        required: true
+      tags:
+      - tasking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskTemplateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskTemplate'
+          description: ''
+    patch:
+      operationId: tasking_templates_partial_update
+      description: Staff authoring CRUD for job templates.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this task template.
+        required: true
+      tags:
+      - tasking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTaskTemplateRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskTemplate'
+          description: ''
+    delete:
+      operationId: tasking_templates_destroy
+      description: Staff authoring CRUD for job templates.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this task template.
+        required: true
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/tidings/feed/:
     get:
       operationId: tidings_feed_list
@@ -35911,6 +36271,20 @@ components:
           type: string
           format: date-time
           nullable: true
+    Category59dEnum:
+      enum:
+      - spycraft
+      - crime
+      - domain
+      - military
+      - general
+      type: string
+      description: |-
+        * `spycraft` - Spycraft
+        * `crime` - Crime
+        * `domain` - Domain
+        * `military` - Military
+        * `general` - General
     CategoryC06Enum:
       enum:
       - harassment
@@ -49731,6 +50105,98 @@ components:
       - spend_rank_max
       - steward_role_id
       - uncollected_total
+    OrgTask:
+      type: object
+      description: 'Board row: a live task with its template summary and fulfillment.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        template:
+          allOf:
+          - $ref: '#/components/schemas/TaskTemplateSummary'
+          readOnly: true
+        org:
+          type: integer
+          description: The issuing organization.
+        issued_by:
+          type: integer
+          description: The persona who issued the task (audit trail).
+        status:
+          $ref: '#/components/schemas/OrgTaskStatusEnum'
+        deadline:
+          type: string
+          format: date-time
+          nullable: true
+          description: Resolution moment; set at assignment (now + template.duration).
+        target_kind:
+          $ref: '#/components/schemas/TargetKind219Enum'
+        target_label:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        fulfillment:
+          allOf:
+          - $ref: '#/components/schemas/TaskFulfillment'
+          nullable: true
+          readOnly: true
+      required:
+      - created_at
+      - fulfillment
+      - id
+      - issued_by
+      - org
+      - target_label
+      - template
+    OrgTaskRequest:
+      type: object
+      description: 'Board row: a live task with its template summary and fulfillment.'
+      properties:
+        org:
+          type: integer
+          description: The issuing organization.
+        issued_by:
+          type: integer
+          description: The persona who issued the task (audit trail).
+        status:
+          $ref: '#/components/schemas/OrgTaskStatusEnum'
+        deadline:
+          type: string
+          format: date-time
+          nullable: true
+          description: Resolution moment; set at assignment (now + template.duration).
+        target_kind:
+          $ref: '#/components/schemas/TargetKind219Enum'
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - issued_by
+      - org
+    OrgTaskStatusEnum:
+      enum:
+      - open
+      - assigned
+      - resolving
+      - completed
+      - failed
+      - expired
+      type: string
+      description: |-
+        * `open` - Open
+        * `assigned` - Assigned
+        * `resolving` - Resolving
+        * `completed` - Completed
+        * `failed` - Failed
+        * `expired` - Expired
     Organization:
       type: object
       properties:
@@ -52453,6 +52919,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OfferSummons'
+    PaginatedOrgTaskList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgTask'
     PaginatedOrganizationList:
       type: object
       required:
@@ -54176,6 +54665,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TableUpdateRequest'
+    PaginatedTaskOutcomeRouteList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskOutcomeRoute'
+    PaginatedTaskTemplateList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskTemplate'
     PaginatedTechniqueList:
       type: object
       required:
@@ -56685,6 +57220,78 @@ components:
       properties:
         status:
           $ref: '#/components/schemas/StatusD66Enum'
+    PatchedTaskOutcomeRouteRequest:
+      type: object
+      description: Staff authoring surface for per-tier payout routes.
+      properties:
+        template:
+          type: integer
+        outcome_tier:
+          type: integer
+          description: The check outcome this route fires on.
+        money_reward:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Coppers delivered to the handler's purse on this tier.
+        clue_pool:
+          type: integer
+          nullable: true
+          description: Weighted clue draw granted to the handler on this tier.
+        report_template:
+          type: string
+          description: Agent report prose; format kwargs {task}, {target}, {agent}.
+            Blank = generic line.
+    PatchedTaskTemplateRequest:
+      type: object
+      description: Staff authoring surface for job templates.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+        category:
+          $ref: '#/components/schemas/Category59dEnum'
+        check_type:
+          type: integer
+          description: Check both the handler (dispatch) and the agent (resolution)
+            roll.
+        check_difficulty:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Target difficulty for both dispatch and resolution rolls.
+        duration:
+          type: string
+          description: Real time from assignment to resolution by the game clock.
+        target_kind:
+          allOf:
+          - $ref: '#/components/schemas/TargetKind219Enum'
+          description: |-
+            What kind of target instances of this template point at.
+
+            * `none` - None
+            * `room` - Room
+            * `org` - Organization
+            * `domain` - Domain
+            * `persona` - Persona
+        eligibility_rule:
+          description: Predicate tree gating who may issue/fulfill (NPCServiceOffer
+            convention).
+        mission_template:
+          type: integer
+          nullable: true
+          description: Set = PCs may fulfill this as a mission (phase 5). Unset =
+            NPC-only.
+        consequence_pool:
+          type: integer
+          nullable: true
+          description: Risk pool applied on resolution (ADR-0092 — sole path to asset
+            status).
+        is_active:
+          type: boolean
     PatchedTechniqueRequest:
       type: object
       description: Serializer for Technique records with intensity and control stats.
@@ -65848,6 +66455,20 @@ components:
       - exclude_self
       - in_same_scene
       - must_be_conscious
+    TargetKind219Enum:
+      enum:
+      - none
+      - room
+      - org
+      - domain
+      - persona
+      type: string
+      description: |-
+        * `none` - None
+        * `room` - Room
+        * `org` - Organization
+        * `domain` - Domain
+        * `persona` - Persona
     TargetSpec:
       type: object
       description: Read-only serializer for TargetSpec — entity kind + cardinality
@@ -65937,6 +66558,273 @@ components:
       - rank
       - surname_reversed
       - surname_upright
+    TaskFulfillment:
+      type: object
+      description: 'Board row detail: who is on the job and, once resolved, the report.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        handler:
+          type: integer
+          description: 'The persona running the job: rolls dispatch, collects results.'
+        handler_name:
+          type: string
+          readOnly: true
+        agent_name:
+          type: string
+          readOnly: true
+        is_active:
+          type: boolean
+        assigned_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        resolved_outcome_name:
+          type: string
+          readOnly: true
+        report:
+          type: string
+          description: The agent's report is readable only once the job resolved.
+          readOnly: true
+      required:
+      - agent_name
+      - assigned_at
+      - handler
+      - handler_name
+      - id
+      - report
+      - resolved_outcome_name
+    TaskOutcomeRoute:
+      type: object
+      description: Staff authoring surface for per-tier payout routes.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        template:
+          type: integer
+        outcome_tier:
+          type: integer
+          description: The check outcome this route fires on.
+        money_reward:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Coppers delivered to the handler's purse on this tier.
+        clue_pool:
+          type: integer
+          nullable: true
+          description: Weighted clue draw granted to the handler on this tier.
+        report_template:
+          type: string
+          description: Agent report prose; format kwargs {task}, {target}, {agent}.
+            Blank = generic line.
+      required:
+      - id
+      - outcome_tier
+      - template
+    TaskOutcomeRouteRequest:
+      type: object
+      description: Staff authoring surface for per-tier payout routes.
+      properties:
+        template:
+          type: integer
+        outcome_tier:
+          type: integer
+          description: The check outcome this route fires on.
+        money_reward:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Coppers delivered to the handler's purse on this tier.
+        clue_pool:
+          type: integer
+          nullable: true
+          description: Weighted clue draw granted to the handler on this tier.
+        report_template:
+          type: string
+          description: Agent report prose; format kwargs {task}, {target}, {agent}.
+            Blank = generic line.
+      required:
+      - outcome_tier
+      - template
+    TaskTemplate:
+      type: object
+      description: Staff authoring surface for job templates.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        category:
+          $ref: '#/components/schemas/Category59dEnum'
+        check_type:
+          type: integer
+          description: Check both the handler (dispatch) and the agent (resolution)
+            roll.
+        check_difficulty:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Target difficulty for both dispatch and resolution rolls.
+        duration:
+          type: string
+          description: Real time from assignment to resolution by the game clock.
+        target_kind:
+          allOf:
+          - $ref: '#/components/schemas/TargetKind219Enum'
+          description: |-
+            What kind of target instances of this template point at.
+
+            * `none` - None
+            * `room` - Room
+            * `org` - Organization
+            * `domain` - Domain
+            * `persona` - Persona
+        eligibility_rule:
+          description: Predicate tree gating who may issue/fulfill (NPCServiceOffer
+            convention).
+        mission_template:
+          type: integer
+          nullable: true
+          description: Set = PCs may fulfill this as a mission (phase 5). Unset =
+            NPC-only.
+        consequence_pool:
+          type: integer
+          nullable: true
+          description: Risk pool applied on resolution (ADR-0092 — sole path to asset
+            status).
+        is_active:
+          type: boolean
+      required:
+      - check_type
+      - duration
+      - id
+      - name
+    TaskTemplateRequest:
+      type: object
+      description: Staff authoring surface for job templates.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+        category:
+          $ref: '#/components/schemas/Category59dEnum'
+        check_type:
+          type: integer
+          description: Check both the handler (dispatch) and the agent (resolution)
+            roll.
+        check_difficulty:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Target difficulty for both dispatch and resolution rolls.
+        duration:
+          type: string
+          description: Real time from assignment to resolution by the game clock.
+        target_kind:
+          allOf:
+          - $ref: '#/components/schemas/TargetKind219Enum'
+          description: |-
+            What kind of target instances of this template point at.
+
+            * `none` - None
+            * `room` - Room
+            * `org` - Organization
+            * `domain` - Domain
+            * `persona` - Persona
+        eligibility_rule:
+          description: Predicate tree gating who may issue/fulfill (NPCServiceOffer
+            convention).
+        mission_template:
+          type: integer
+          nullable: true
+          description: Set = PCs may fulfill this as a mission (phase 5). Unset =
+            NPC-only.
+        consequence_pool:
+          type: integer
+          nullable: true
+          description: Risk pool applied on resolution (ADR-0092 — sole path to asset
+            status).
+        is_active:
+          type: boolean
+      required:
+      - check_type
+      - duration
+      - name
+    TaskTemplateSummary:
+      type: object
+      description: Read-only template summary embedded in board rows.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        category:
+          $ref: '#/components/schemas/Category59dEnum'
+        duration:
+          type: string
+          description: Real time from assignment to resolution by the game clock.
+        target_kind:
+          allOf:
+          - $ref: '#/components/schemas/TargetKind219Enum'
+          description: |-
+            What kind of target instances of this template point at.
+
+            * `none` - None
+            * `room` - Room
+            * `org` - Organization
+            * `domain` - Domain
+            * `persona` - Persona
+      required:
+      - duration
+      - id
+      - name
+    TaskTemplateSummaryRequest:
+      type: object
+      description: Read-only template summary embedded in board rows.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+        category:
+          $ref: '#/components/schemas/Category59dEnum'
+        duration:
+          type: string
+          description: Real time from assignment to resolution by the game clock.
+        target_kind:
+          allOf:
+          - $ref: '#/components/schemas/TargetKind219Enum'
+          description: |-
+            What kind of target instances of this template point at.
+
+            * `none` - None
+            * `room` - Room
+            * `org` - Organization
+            * `domain` - Domain
+            * `persona` - Persona
+      required:
+      - duration
+      - name
     Technique:
       type: object
       description: Serializer for Technique records with intensity and control stats.

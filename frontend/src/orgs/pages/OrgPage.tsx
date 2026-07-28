@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useOrganizationQuery, useHouseFeedQuery, useChooseCrisisOption } from '@/orgs/queries';
+import { OperationsSection } from '@/tasking/components/OperationsSection';
 import type { HouseCrisis, HouseDetail } from '@/orgs/api';
 
 // ---------------------------------------------------------------------------
@@ -271,6 +272,7 @@ export function OrgPageInner({ orgId }: { orgId: number }) {
         </CardContent>
       </Card>
       {org.house && <HouseSection orgId={orgId} house={org.house} />}
+      <OperationsSection orgId={orgId} />
     </div>
   );
 }

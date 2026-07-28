@@ -19441,6 +19441,134 @@ export interface paths {
     patch: operations['table_bulletin_replies_partial_update'];
     trace?: never;
   };
+  '/api/tasking/routes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff authoring CRUD for per-tier payout routes. */
+    get: operations['tasking_routes_list'];
+    put?: never;
+    /** @description Staff authoring CRUD for per-tier payout routes. */
+    post: operations['tasking_routes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/routes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff authoring CRUD for per-tier payout routes. */
+    get: operations['tasking_routes_retrieve'];
+    /** @description Staff authoring CRUD for per-tier payout routes. */
+    put: operations['tasking_routes_update'];
+    post?: never;
+    /** @description Staff authoring CRUD for per-tier payout routes. */
+    delete: operations['tasking_routes_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff authoring CRUD for per-tier payout routes. */
+    patch: operations['tasking_routes_partial_update'];
+    trace?: never;
+  };
+  '/api/tasking/tasks/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The org task board: list/inspect/issue/assign. */
+    get: operations['tasking_tasks_list'];
+    put?: never;
+    /** @description The org task board: list/inspect/issue/assign. */
+    post: operations['tasking_tasks_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/tasks/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The org task board: list/inspect/issue/assign. */
+    get: operations['tasking_tasks_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/tasks/{id}/assign/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Dispatch one of the requester's own agents on this task. */
+    post: operations['tasking_tasks_assign_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff authoring CRUD for job templates. */
+    get: operations['tasking_templates_list'];
+    put?: never;
+    /** @description Staff authoring CRUD for job templates. */
+    post: operations['tasking_templates_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/templates/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff authoring CRUD for job templates. */
+    get: operations['tasking_templates_retrieve'];
+    /** @description Staff authoring CRUD for job templates. */
+    put: operations['tasking_templates_update'];
+    post?: never;
+    /** @description Staff authoring CRUD for job templates. */
+    delete: operations['tasking_templates_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff authoring CRUD for job templates. */
+    patch: operations['tasking_templates_partial_update'];
+    trace?: never;
+  };
   '/api/tidings/feed/': {
     parameters: {
       query?: never;
@@ -21507,6 +21635,15 @@ export interface components {
       /** Format: date-time */
       resolved_at?: string | null;
     };
+    /**
+     * @description * `spycraft` - Spycraft
+     *     * `crime` - Crime
+     *     * `domain` - Domain
+     *     * `military` - Military
+     *     * `general` - General
+     * @enum {string}
+     */
+    Category59dEnum: 'spycraft' | 'crime' | 'domain' | 'military' | 'general';
     /**
      * @description * `harassment` - Harassment
      *     * `ooc_abuse` - OOC Abuse
@@ -28084,6 +28221,54 @@ export interface components {
       contributions: components['schemas']['ContributionRow'][];
       ledger: components['schemas']['LedgerRow'][];
     };
+    /** @description Board row: a live task with its template summary and fulfillment. */
+    OrgTask: {
+      readonly id: number;
+      readonly template: components['schemas']['TaskTemplateSummary'];
+      /** @description The issuing organization. */
+      org: number;
+      /** @description The persona who issued the task (audit trail). */
+      issued_by: number;
+      status?: components['schemas']['OrgTaskStatusEnum'];
+      /**
+       * Format: date-time
+       * @description Resolution moment; set at assignment (now + template.duration).
+       */
+      deadline?: string | null;
+      target_kind?: components['schemas']['TargetKind219Enum'];
+      readonly target_label: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      resolved_at?: string | null;
+      readonly fulfillment: components['schemas']['TaskFulfillment'] | null;
+    };
+    /** @description Board row: a live task with its template summary and fulfillment. */
+    OrgTaskRequest: {
+      /** @description The issuing organization. */
+      org: number;
+      /** @description The persona who issued the task (audit trail). */
+      issued_by: number;
+      status?: components['schemas']['OrgTaskStatusEnum'];
+      /**
+       * Format: date-time
+       * @description Resolution moment; set at assignment (now + template.duration).
+       */
+      deadline?: string | null;
+      target_kind?: components['schemas']['TargetKind219Enum'];
+      /** Format: date-time */
+      resolved_at?: string | null;
+    };
+    /**
+     * @description * `open` - Open
+     *     * `assigned` - Assigned
+     *     * `resolving` - Resolving
+     *     * `completed` - Completed
+     *     * `failed` - Failed
+     *     * `expired` - Expired
+     * @enum {string}
+     */
+    OrgTaskStatusEnum: 'open' | 'assigned' | 'resolving' | 'completed' | 'failed' | 'expired';
     Organization: {
       readonly id: number;
       /** @description The organization's name */
@@ -29733,6 +29918,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['OfferSummons'][];
     };
+    PaginatedOrgTaskList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OrgTask'][];
+    };
     PaginatedOrganizationList: {
       /** @example 123 */
       count: number;
@@ -30843,6 +31043,36 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['TableUpdateRequest'][];
+    };
+    PaginatedTaskOutcomeRouteList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['TaskOutcomeRoute'][];
+    };
+    PaginatedTaskTemplateList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['TaskTemplate'][];
     };
     PaginatedTechniqueList: {
       /** @example 123 */
@@ -32357,6 +32587,47 @@ export interface components {
      */
     PatchedSystemErrorReportDetailRequest: {
       status?: components['schemas']['StatusD66Enum'];
+    };
+    /** @description Staff authoring surface for per-tier payout routes. */
+    PatchedTaskOutcomeRouteRequest: {
+      template?: number;
+      /** @description The check outcome this route fires on. */
+      outcome_tier?: number;
+      /** @description Coppers delivered to the handler's purse on this tier. */
+      money_reward?: number;
+      /** @description Weighted clue draw granted to the handler on this tier. */
+      clue_pool?: number | null;
+      /** @description Agent report prose; format kwargs {task}, {target}, {agent}. Blank = generic line. */
+      report_template?: string;
+    };
+    /** @description Staff authoring surface for job templates. */
+    PatchedTaskTemplateRequest: {
+      name?: string;
+      description?: string;
+      category?: components['schemas']['Category59dEnum'];
+      /** @description Check both the handler (dispatch) and the agent (resolution) roll. */
+      check_type?: number;
+      /** @description Target difficulty for both dispatch and resolution rolls. */
+      check_difficulty?: number;
+      /** @description Real time from assignment to resolution by the game clock. */
+      duration?: string;
+      /**
+       * @description What kind of target instances of this template point at.
+       *
+       *     * `none` - None
+       *     * `room` - Room
+       *     * `org` - Organization
+       *     * `domain` - Domain
+       *     * `persona` - Persona
+       */
+      target_kind?: components['schemas']['TargetKind219Enum'];
+      /** @description Predicate tree gating who may issue/fulfill (NPCServiceOffer convention). */
+      eligibility_rule?: unknown;
+      /** @description Set = PCs may fulfill this as a mission (phase 5). Unset = NPC-only. */
+      mission_template?: number | null;
+      /** @description Risk pool applied on resolution (ADR-0092 — sole path to asset status). */
+      consequence_pool?: number | null;
+      is_active?: boolean;
     };
     /** @description Serializer for Technique records with intensity and control stats. */
     PatchedTechniqueRequest: {
@@ -36848,6 +37119,15 @@ export interface components {
       readonly exclude_self: boolean;
       readonly must_be_conscious: boolean;
     };
+    /**
+     * @description * `none` - None
+     *     * `room` - Room
+     *     * `org` - Organization
+     *     * `domain` - Domain
+     *     * `persona` - Persona
+     * @enum {string}
+     */
+    TargetKind219Enum: 'none' | 'room' | 'org' | 'domain' | 'persona';
     /** @description Read-only serializer for TargetSpec — entity kind + cardinality + filters. */
     TargetSpec: {
       readonly kind: string;
@@ -36898,6 +37178,143 @@ export interface components {
       description_reversed?: string;
       readonly surname_upright: string;
       readonly surname_reversed: string;
+    };
+    /** @description Board row detail: who is on the job and, once resolved, the report. */
+    TaskFulfillment: {
+      readonly id: number;
+      /** @description The persona running the job: rolls dispatch, collects results. */
+      handler: number;
+      readonly handler_name: string;
+      readonly agent_name: string;
+      is_active?: boolean;
+      /** Format: date-time */
+      readonly assigned_at: string;
+      /** Format: date-time */
+      resolved_at?: string | null;
+      readonly resolved_outcome_name: string;
+      /** @description The agent's report is readable only once the job resolved. */
+      readonly report: string;
+    };
+    /** @description Staff authoring surface for per-tier payout routes. */
+    TaskOutcomeRoute: {
+      readonly id: number;
+      template: number;
+      /** @description The check outcome this route fires on. */
+      outcome_tier: number;
+      /** @description Coppers delivered to the handler's purse on this tier. */
+      money_reward?: number;
+      /** @description Weighted clue draw granted to the handler on this tier. */
+      clue_pool?: number | null;
+      /** @description Agent report prose; format kwargs {task}, {target}, {agent}. Blank = generic line. */
+      report_template?: string;
+    };
+    /** @description Staff authoring surface for per-tier payout routes. */
+    TaskOutcomeRouteRequest: {
+      template: number;
+      /** @description The check outcome this route fires on. */
+      outcome_tier: number;
+      /** @description Coppers delivered to the handler's purse on this tier. */
+      money_reward?: number;
+      /** @description Weighted clue draw granted to the handler on this tier. */
+      clue_pool?: number | null;
+      /** @description Agent report prose; format kwargs {task}, {target}, {agent}. Blank = generic line. */
+      report_template?: string;
+    };
+    /** @description Staff authoring surface for job templates. */
+    TaskTemplate: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      category?: components['schemas']['Category59dEnum'];
+      /** @description Check both the handler (dispatch) and the agent (resolution) roll. */
+      check_type: number;
+      /** @description Target difficulty for both dispatch and resolution rolls. */
+      check_difficulty?: number;
+      /** @description Real time from assignment to resolution by the game clock. */
+      duration: string;
+      /**
+       * @description What kind of target instances of this template point at.
+       *
+       *     * `none` - None
+       *     * `room` - Room
+       *     * `org` - Organization
+       *     * `domain` - Domain
+       *     * `persona` - Persona
+       */
+      target_kind?: components['schemas']['TargetKind219Enum'];
+      /** @description Predicate tree gating who may issue/fulfill (NPCServiceOffer convention). */
+      eligibility_rule?: unknown;
+      /** @description Set = PCs may fulfill this as a mission (phase 5). Unset = NPC-only. */
+      mission_template?: number | null;
+      /** @description Risk pool applied on resolution (ADR-0092 — sole path to asset status). */
+      consequence_pool?: number | null;
+      is_active?: boolean;
+    };
+    /** @description Staff authoring surface for job templates. */
+    TaskTemplateRequest: {
+      name: string;
+      description?: string;
+      category?: components['schemas']['Category59dEnum'];
+      /** @description Check both the handler (dispatch) and the agent (resolution) roll. */
+      check_type: number;
+      /** @description Target difficulty for both dispatch and resolution rolls. */
+      check_difficulty?: number;
+      /** @description Real time from assignment to resolution by the game clock. */
+      duration: string;
+      /**
+       * @description What kind of target instances of this template point at.
+       *
+       *     * `none` - None
+       *     * `room` - Room
+       *     * `org` - Organization
+       *     * `domain` - Domain
+       *     * `persona` - Persona
+       */
+      target_kind?: components['schemas']['TargetKind219Enum'];
+      /** @description Predicate tree gating who may issue/fulfill (NPCServiceOffer convention). */
+      eligibility_rule?: unknown;
+      /** @description Set = PCs may fulfill this as a mission (phase 5). Unset = NPC-only. */
+      mission_template?: number | null;
+      /** @description Risk pool applied on resolution (ADR-0092 — sole path to asset status). */
+      consequence_pool?: number | null;
+      is_active?: boolean;
+    };
+    /** @description Read-only template summary embedded in board rows. */
+    TaskTemplateSummary: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      category?: components['schemas']['Category59dEnum'];
+      /** @description Real time from assignment to resolution by the game clock. */
+      duration: string;
+      /**
+       * @description What kind of target instances of this template point at.
+       *
+       *     * `none` - None
+       *     * `room` - Room
+       *     * `org` - Organization
+       *     * `domain` - Domain
+       *     * `persona` - Persona
+       */
+      target_kind?: components['schemas']['TargetKind219Enum'];
+    };
+    /** @description Read-only template summary embedded in board rows. */
+    TaskTemplateSummaryRequest: {
+      name: string;
+      description?: string;
+      category?: components['schemas']['Category59dEnum'];
+      /** @description Real time from assignment to resolution by the game clock. */
+      duration: string;
+      /**
+       * @description What kind of target instances of this template point at.
+       *
+       *     * `none` - None
+       *     * `room` - Room
+       *     * `org` - Organization
+       *     * `domain` - Domain
+       *     * `persona` - Persona
+       */
+      target_kind?: components['schemas']['TargetKind219Enum'];
     };
     /** @description Serializer for Technique records with intensity and control stats. */
     Technique: {
@@ -65610,6 +66027,379 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['UpdateBulletinReplyInput'];
+        };
+      };
+    };
+  };
+  tasking_routes_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedTaskOutcomeRouteList'];
+        };
+      };
+    };
+  };
+  tasking_routes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TaskOutcomeRouteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TaskOutcomeRoute'];
+        };
+      };
+    };
+  };
+  tasking_routes_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this task outcome route. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TaskOutcomeRoute'];
+        };
+      };
+    };
+  };
+  tasking_routes_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this task outcome route. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TaskOutcomeRouteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TaskOutcomeRoute'];
+        };
+      };
+    };
+  };
+  tasking_routes_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this task outcome route. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  tasking_routes_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this task outcome route. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedTaskOutcomeRouteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TaskOutcomeRoute'];
+        };
+      };
+    };
+  };
+  tasking_tasks_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOrgTaskList'];
+        };
+      };
+    };
+  };
+  tasking_tasks_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OrgTaskRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgTask'];
+        };
+      };
+    };
+  };
+  tasking_tasks_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this org task. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgTask'];
+        };
+      };
+    };
+  };
+  tasking_tasks_assign_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this org task. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OrgTaskRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgTask'];
+        };
+      };
+    };
+  };
+  tasking_templates_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedTaskTemplateList'];
+        };
+      };
+    };
+  };
+  tasking_templates_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TaskTemplateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TaskTemplate'];
+        };
+      };
+    };
+  };
+  tasking_templates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this task template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TaskTemplate'];
+        };
+      };
+    };
+  };
+  tasking_templates_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this task template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TaskTemplateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TaskTemplate'];
+        };
+      };
+    };
+  };
+  tasking_templates_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this task template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  tasking_templates_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this task template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedTaskTemplateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TaskTemplate'];
         };
       };
     };

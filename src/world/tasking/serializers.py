@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.tasking.models import OrgTask, TaskFulfillment, TaskOutcomeRoute, TaskTemplate
@@ -112,6 +113,7 @@ class OrgTaskSerializer(serializers.ModelSerializer):
 
         return target_label(obj)
 
+    @extend_schema_field(TaskFulfillmentSerializer(allow_null=True))
     def get_fulfillment(self, obj: OrgTask) -> dict | None:
         by_task = self.context.get("active_fulfillments_by_task")
         if by_task is not None:
