@@ -36,7 +36,7 @@ class CompromiseActType(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["name"]
-        dependencies = ["magic.Resonance"]
+        dependencies = [_RESONANCE_FK]
 
     objects = NaturalKeyManager()
 
@@ -82,7 +82,7 @@ class ResonanceConversion(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["source_resonance", "target_affinity"]
-        dependencies = ["magic.Resonance"]
+        dependencies = [_RESONANCE_FK]
 
     objects = NaturalKeyManager()
 

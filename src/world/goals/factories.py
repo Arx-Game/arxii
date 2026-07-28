@@ -6,6 +6,9 @@ from factory.django import DjangoModelFactory
 from world.goals.models import CharacterGoal, GoalJournal, GoalRevision
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 
+# Lazy factory reference (Django app_label.ModuleName.Factory), extracted to satisfy S1192.
+CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
+
 
 class GoalDomainFactory(ModifierTargetFactory):
     """Factory for creating goal domain ModifierTarget instances.
@@ -26,7 +29,7 @@ class CharacterGoalFactory(DjangoModelFactory):
     class Meta:
         model = CharacterGoal
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     domain = factory.SubFactory(GoalDomainFactory)
     points = 10
     notes = factory.Faker("sentence")
@@ -38,7 +41,7 @@ class GoalJournalFactory(DjangoModelFactory):
     class Meta:
         model = GoalJournal
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     domain = factory.SubFactory(GoalDomainFactory)
     title = factory.Faker("sentence", nb_words=4)
     content = factory.Faker("paragraph")
@@ -52,4 +55,4 @@ class GoalRevisionFactory(DjangoModelFactory):
     class Meta:
         model = GoalRevision
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(CHARACTER_SHEET_FACTORY)

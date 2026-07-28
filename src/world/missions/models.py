@@ -62,6 +62,7 @@ _CONSEQUENCE_FK = "checks.Consequence"
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 OBJECT_DB_MODEL = "objects.ObjectDB"
 ROOM_PROFILE_MODEL = "evennia_extensions.RoomProfile"
+CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 
 # #1035 — the durable (non-transient) ExternalAct members. Mirrors
 # ``world.missions.services.external_acts._DURABLE_ACTS`` — duplicated here
@@ -1466,7 +1467,7 @@ class MissionInstance(SharedMemoryModel):
         ),
     )
     rescue_target = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1507,7 +1508,7 @@ class MissionParticipant(SharedMemoryModel):
         related_name="participants",
     )
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
     )
@@ -1708,7 +1709,7 @@ class MissionDeedRecord(SharedMemoryModel):
         related_name="deeds",
     )
     actor = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The acting participant's character — consequence follows the actor.",
@@ -2151,7 +2152,7 @@ class MissionGiverCooldown(SharedMemoryModel):
     # Keyed on the CharacterSheet to match MissionParticipant.character — the
     # missions app keys runtime participation on the character, not a Persona.
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
     )
@@ -2187,7 +2188,7 @@ class MissionDeedRewardLine(SharedMemoryModel):
         related_name="reward_lines",
     )
     recipient = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
         help_text=(

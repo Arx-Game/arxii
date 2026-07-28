@@ -6,8 +6,11 @@ idempotent execution path all three doors call (funeral finish, executor
 will-reading, deadline sweeper). Spec: issue #1985 body.
 """
 
+from __future__ import annotations
+
 from datetime import timedelta
 import logging
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 from django.utils import timezone
@@ -22,6 +25,9 @@ from world.estates.models import (
     WillExecutor,
     get_estate_config,
 )
+
+if TYPE_CHECKING:
+    from world.estates.models import Bequest
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +67,7 @@ def resolve_intestate_heir(character_sheet: CharacterSheet):
     return _next_of_kin(character_sheet)
 
 
-def _family_org_head(character_sheet: CharacterSheet):
+def _family_org_head(character_sheet: CharacterSheet) -> Any:
     """Head of house: top-ranked active org member who is also family (not vassal).
 
     Qualifying orgs anchor a ``Family`` the deceased holds a live
@@ -123,7 +129,7 @@ def _family_org_head(character_sheet: CharacterSheet):
     return None
 
 
-def _next_of_kin(character_sheet: CharacterSheet):
+def _next_of_kin(character_sheet: CharacterSheet) -> Any:
     """Fixed kin walk (INTESTATE_KIN_ORDER, PLACEHOLDER): wedlock spouse ->
     eldest child -> elder living parent -> eldest sibling. Public record only;
     only sheeted, living kin qualify (NPC name-nodes are skipped)."""
@@ -139,7 +145,7 @@ def _next_of_kin(character_sheet: CharacterSheet):
     if person is None:
         return None
 
-    def eldest_first(people):
+    def eldest_first(people: list) -> list:
         return sorted(people, key=lambda p: (-(p.age or 0), p.pk))
 
     wedlock_spouses = [
@@ -163,7 +169,7 @@ def _next_of_kin(character_sheet: CharacterSheet):
     return None
 
 
-def _living_persona_for(kinsperson):
+def _living_persona_for(kinsperson: Any) -> Any:
     """The canonical (primary) persona of a living, sheeted kinsperson, else None.
 
     Ownership assignment targets the sheet's persistent primary persona — this
@@ -288,7 +294,7 @@ def _apply_estate(settlement: EstateSettlement) -> None:
     _mint_claims(sheet, settlement, bequests, heir_persona, heir_org)
 
 
-def _resolve_estate_heir(sheet: CharacterSheet, residuary):
+def _resolve_estate_heir(sheet: CharacterSheet, residuary: Bequest | None) -> tuple[Any, Any]:
     """The estate-heir chain: valid RESIDUARY recipient -> intestate -> escheat.
 
     Returns ``(persona, organization)`` — exactly one set, or both ``None``
@@ -312,7 +318,7 @@ def _resolve_estate_heir(sheet: CharacterSheet, residuary):
     return None, None
 
 
-def _persona_recipient_is_valid(persona) -> bool:
+def _persona_recipient_is_valid(persona: Any) -> bool:
     """A persona can receive only while its character is alive and unretired."""
     if persona is None:
         return False
@@ -322,7 +328,7 @@ def _persona_recipient_is_valid(persona) -> bool:
     return not is_dead(recipient_sheet) and not is_retired(recipient_sheet)
 
 
-def _persona_can_receive_item(persona, item_instance) -> bool:
+def _persona_can_receive_item(persona: Any, item_instance: Any) -> bool:
     """Validity + the hot-goods consent gate (system delivery: no actor tenure)."""
     if not _persona_recipient_is_valid(persona):
         return False
@@ -369,16 +375,19 @@ def _settle_debts(sheet: CharacterSheet) -> None:
     Pays in row order until the purse runs dry; a partially-payable term gets
     a partial transfer and stays unfulfilled.
     """
-    from world.buildings.models import Building  # noqa: PLC0415
-    from world.currency.constants import ContractFormality, ContractStatus  # noqa: PLC0415
-    from world.currency.models import ContractTerm  # noqa: PLC0415
-    from world.currency.services import (  # noqa: PLC0415
-        get_or_create_purse,
-        get_or_create_treasury,
-        transfer,
-    )
+    from world.currency.services import get_or_create_purse  # noqa: PLC0415
 
     purse = get_or_create_purse(sheet)
+    _settle_contract_terms(sheet, purse)
+    _settle_building_arrears(sheet, purse)
+
+
+def _settle_contract_terms(sheet: CharacterSheet, purse: Any) -> None:
+    """Pay off NOTARIZED one-shot contract terms where the deceased is payer."""
+    from world.currency.constants import ContractFormality, ContractStatus  # noqa: PLC0415
+    from world.currency.models import ContractTerm  # noqa: PLC0415
+    from world.currency.services import transfer  # noqa: PLC0415
+
     terms = (
         ContractTerm.objects.filter(
             contract__formality=ContractFormality.NOTARIZED,
@@ -391,36 +400,13 @@ def _settle_debts(sheet: CharacterSheet) -> None:
     )
     for term in terms:
         contract = term.contract
-        deceased_is_proposer = (
-            contract.proposer_persona is not None
-            and contract.proposer_persona.character_sheet_id == sheet.pk
-        )
-        deceased_is_counterparty = (
-            contract.counterparty_persona is not None
-            and contract.counterparty_persona.character_sheet_id == sheet.pk
-        )
-        payer_is_deceased = (term.payer_is_proposer and deceased_is_proposer) or (
-            not term.payer_is_proposer and deceased_is_counterparty
-        )
-        if not payer_is_deceased:
+        if not _is_deceased_payer(term, contract, sheet):
             continue
         purse.refresh_from_db()
         payable = min(term.amount, purse.balance)
         if payable <= 0:
             continue
-        payee_persona = (
-            contract.counterparty_persona if term.payer_is_proposer else contract.proposer_persona
-        )
-        payee_org = (
-            contract.counterparty_organization
-            if term.payer_is_proposer
-            else contract.proposer_organization
-        )
-        kwargs = {}
-        if payee_persona is not None:
-            kwargs["to_purse"] = get_or_create_purse(payee_persona.character_sheet)
-        elif payee_org is not None:
-            kwargs["to_treasury"] = get_or_create_treasury(payee_org)
+        kwargs = _debt_transfer_kwargs(term, contract)
         transfer(
             amount=payable,
             reason=f"estate debt settlement (contract {contract.pk})",
@@ -430,6 +416,46 @@ def _settle_debts(sheet: CharacterSheet) -> None:
         if payable == term.amount:
             term.fulfilled = True
             term.save(update_fields=["fulfilled"])
+
+
+def _is_deceased_payer(term: Any, contract: Any, sheet: CharacterSheet) -> bool:
+    """Whether the deceased character is the payer for this contract term."""
+    deceased_is_proposer = (
+        contract.proposer_persona is not None
+        and contract.proposer_persona.character_sheet_id == sheet.pk
+    )
+    deceased_is_counterparty = (
+        contract.counterparty_persona is not None
+        and contract.counterparty_persona.character_sheet_id == sheet.pk
+    )
+    return (term.payer_is_proposer and deceased_is_proposer) or (
+        not term.payer_is_proposer and deceased_is_counterparty
+    )
+
+
+def _debt_transfer_kwargs(term: Any, contract: Any) -> dict:
+    """Build the to_purse/to_treasury kwargs for a debt payment transfer."""
+    from world.currency.services import get_or_create_purse, get_or_create_treasury  # noqa: PLC0415
+
+    payee_persona = (
+        contract.counterparty_persona if term.payer_is_proposer else contract.proposer_persona
+    )
+    payee_org = (
+        contract.counterparty_organization
+        if term.payer_is_proposer
+        else contract.proposer_organization
+    )
+    if payee_persona is not None:
+        return {"to_purse": get_or_create_purse(payee_persona.character_sheet)}
+    if payee_org is not None:
+        return {"to_treasury": get_or_create_treasury(payee_org)}
+    return {}
+
+
+def _settle_building_arrears(sheet: CharacterSheet, purse: Any) -> None:
+    """Pay off building upkeep arrears until the purse runs dry."""
+    from world.buildings.models import Building  # noqa: PLC0415
+    from world.currency.services import transfer  # noqa: PLC0415
 
     for building in Building.objects.filter(
         owner_persona__character_sheet=sheet, upkeep_arrears__gt=0
@@ -448,63 +474,98 @@ def _settle_debts(sheet: CharacterSheet) -> None:
 
 
 def _deliver_bequest(  # noqa: PLR0911 - one return per bequest kind, deliberately flat
-    sheet, bequest, heir_persona, heir_org
+    sheet: CharacterSheet,
+    bequest: Bequest,
+    heir_persona: Any,
+    heir_org: Any,
 ) -> int | None:
     """Deliver one line; invalid/refusing recipients fall through the heir chain.
 
     Returns the delivered item id for SPECIFIC_ITEM lines (so the sweep can
     skip it), else None.
     """
-    from world.currency.services import get_or_create_purse  # noqa: PLC0415
-
-    recipient_persona = bequest.recipient_persona
-    recipient_org = bequest.recipient_organization
-
     if bequest.kind == BequestKind.SPECIFIC_ITEM:
-        item = bequest.item
-        if item is None or item.holder_character_sheet_id != sheet.pk:
-            return None  # ademption — the estate no longer owns it
-        target = (
-            recipient_persona
-            if _persona_can_receive_item(recipient_persona, item)
-            else (heir_persona if _persona_can_receive_item(heir_persona, item) else None)
-        )
-        if target is None:
-            _clear_item_ownership(item, sheet)
-        else:
-            _flip_item(item, sheet, target)
-        return item.pk
+        return _deliver_specific_item(sheet, bequest, heir_persona)
 
     if bequest.kind in (BequestKind.COIN_AMOUNT, BequestKind.ALL_COIN):
-        purse = get_or_create_purse(sheet)
-        purse.refresh_from_db()
-        amount = bequest.amount if bequest.kind == BequestKind.COIN_AMOUNT else purse.balance
-        payable = min(amount, purse.balance)
-        if payable <= 0:
-            return None
-        _deliver_coin(sheet, payable, recipient_persona, recipient_org, heir_persona, heir_org)
-        return None
+        return _deliver_coin_bequest(sheet, bequest, heir_persona, heir_org)
 
     if bequest.kind == BequestKind.BUILDING:
         if bequest.building is None:
             return None
         _deliver_building(
-            sheet, bequest.building, recipient_persona, recipient_org, heir_persona, heir_org
+            sheet,
+            bequest.building,
+            bequest.recipient_persona,
+            bequest.recipient_organization,
+            heir_persona,
+            heir_org,
         )
         return None
 
     if bequest.kind == BequestKind.BUSINESS:
         if bequest.business is None:
             return None
-        _deliver_business(sheet, bequest.business, recipient_persona, heir_persona)
+        _deliver_business(sheet, bequest.business, bequest.recipient_persona, heir_persona)
         return None
 
     return None  # RESIDUARY is handled by the sweep
 
 
+def _deliver_specific_item(
+    sheet: CharacterSheet, bequest: Bequest, heir_persona: Any
+) -> int | None:
+    """Deliver a specific item bequest; invalid recipients fall through to heir.
+
+    Returns the item id for the sweep to skip, or None on ademption.
+    """
+    item = bequest.item
+    if item is None or item.holder_character_sheet_id != sheet.pk:
+        return None  # ademption — the estate no longer owns it
+    recipient_persona = bequest.recipient_persona
+    target = (
+        recipient_persona
+        if _persona_can_receive_item(recipient_persona, item)
+        else (heir_persona if _persona_can_receive_item(heir_persona, item) else None)
+    )
+    if target is None:
+        _clear_item_ownership(item, sheet)
+    else:
+        _flip_item(item, sheet, target)
+    return item.pk
+
+
+def _deliver_coin_bequest(
+    sheet: CharacterSheet, bequest: Bequest, heir_persona: Any, heir_org: Any
+) -> None:
+    """Deliver a coin amount or all-coin bequest from the deceased's purse."""
+    from world.currency.services import get_or_create_purse  # noqa: PLC0415
+
+    purse = get_or_create_purse(sheet)
+    purse.refresh_from_db()
+    amount = bequest.amount if bequest.kind == BequestKind.COIN_AMOUNT else purse.balance
+    payable = min(amount, purse.balance)
+    if payable <= 0:
+        return
+    _deliver_coin(
+        sheet,
+        payable,
+        bequest.recipient_persona,
+        bequest.recipient_organization,
+        heir_persona,
+        heir_org,
+    )
+    return
+
+
 def _deliver_coin(  # noqa: PLR0913 - recipient pair + heir pair are co-equal by design
-    sheet, amount, recipient_persona, recipient_org, heir_persona, heir_org
-):
+    sheet: CharacterSheet,
+    amount: int,
+    recipient_persona: Any,
+    recipient_org: Any,
+    heir_persona: Any,
+    heir_org: Any,
+) -> None:
     from world.currency.services import (  # noqa: PLC0415
         get_or_create_purse,
         get_or_create_treasury,
@@ -540,8 +601,13 @@ def _deliver_coin(  # noqa: PLR0913 - recipient pair + heir pair are co-equal by
 
 
 def _deliver_building(  # noqa: PLR0913 - recipient pair + heir pair are co-equal by design
-    sheet, building, recipient_persona, recipient_org, heir_persona, heir_org
-):
+    sheet: CharacterSheet,
+    building: Any,
+    recipient_persona: Any,
+    recipient_org: Any,
+    heir_persona: Any,
+    heir_org: Any,
+) -> None:
     from world.locations.services import transfer_ownership  # noqa: PLC0415
 
     if building.owner_persona is None or building.owner_persona.character_sheet_id != sheet.pk:
@@ -562,7 +628,9 @@ def _deliver_building(  # noqa: PLR0913 - recipient pair + heir pair are co-equa
     )
 
 
-def _deliver_business(sheet, business, recipient_persona, heir_persona):
+def _deliver_business(
+    sheet: CharacterSheet, business: Any, recipient_persona: Any, heir_persona: Any
+) -> None:
     if business.owner_persona.character_sheet_id != sheet.pk:
         return  # ademption
     target = recipient_persona if _persona_recipient_is_valid(recipient_persona) else heir_persona
@@ -575,7 +643,7 @@ def _deliver_business(sheet, business, recipient_persona, heir_persona):
         business.save(update_fields=["active"])
 
 
-def _flip_item(item, sheet, target_persona) -> None:
+def _flip_item(item: Any, sheet: CharacterSheet, target_persona: Any) -> None:
     from world.items.constants import OwnershipEventType  # noqa: PLC0415
     from world.items.models import OwnershipEvent  # noqa: PLC0415
 
@@ -592,7 +660,7 @@ def _flip_item(item, sheet, target_persona) -> None:
     )
 
 
-def _clear_item_ownership(item, sheet) -> None:
+def _clear_item_ownership(item: Any, sheet: CharacterSheet) -> None:
     """Escheat / no valid holder: the record clears — the item is free loot."""
     from world.items.constants import OwnershipEventType  # noqa: PLC0415
     from world.items.models import OwnershipEvent  # noqa: PLC0415
@@ -609,13 +677,37 @@ def _clear_item_ownership(item, sheet) -> None:
     )
 
 
-def _sweep_residuary(sheet, heir_persona, heir_org, delivered_item_ids) -> None:
+def _sweep_residuary(
+    sheet: CharacterSheet, heir_persona: Any, heir_org: Any, delivered_item_ids: set[int]
+) -> None:
     """Everything unbequeathed lands on the estate heir (spec Decision 6/8)."""
     from world.currency.models import Business  # noqa: PLC0415
     from world.currency.services import get_or_create_purse  # noqa: PLC0415
+
+    _sweep_residuary_items(sheet, heir_persona, delivered_item_ids)
+
+    purse = get_or_create_purse(sheet)
+    purse.refresh_from_db()
+    if purse.balance > 0 and (heir_persona is not None or heir_org is not None):
+        _deliver_coin(sheet, purse.balance, heir_persona, heir_org, heir_persona, heir_org)
+
+    _sweep_residuary_locations(sheet, heir_persona, heir_org)
+
+    from world.buildings.models import Building  # noqa: PLC0415
+
+    for building in Building.objects.filter(owner_persona__character_sheet=sheet):
+        building.owner_persona = heir_persona
+        building.save(update_fields=["owner_persona"])
+
+    for business in Business.objects.filter(owner_persona__character_sheet=sheet, active=True):
+        _deliver_business(sheet, business, None, heir_persona)
+
+
+def _sweep_residuary_items(
+    sheet: CharacterSheet, heir_persona: Any, delivered_item_ids: set[int]
+) -> None:
+    """Flip or clear each undelivered item in the estate."""
     from world.items.models import ItemInstance  # noqa: PLC0415
-    from world.locations.models import LocationOwnership  # noqa: PLC0415
-    from world.locations.services import transfer_ownership  # noqa: PLC0415
 
     items = ItemInstance.objects.filter(holder_character_sheet=sheet).exclude(
         pk__in=delivered_item_ids
@@ -627,10 +719,11 @@ def _sweep_residuary(sheet, heir_persona, heir_org, delivered_item_ids) -> None:
             # Org heirs and escheat can't hold items — free loot (Decision 6c).
             _clear_item_ownership(item, sheet)
 
-    purse = get_or_create_purse(sheet)
-    purse.refresh_from_db()
-    if purse.balance > 0 and (heir_persona is not None or heir_org is not None):
-        _deliver_coin(sheet, purse.balance, heir_persona, heir_org, heir_persona, heir_org)
+
+def _sweep_residuary_locations(sheet: CharacterSheet, heir_persona: Any, heir_org: Any) -> None:
+    """Transfer location ownerships to the heir (skipped when there is none)."""
+    from world.locations.models import LocationOwnership  # noqa: PLC0415
+    from world.locations.services import transfer_ownership  # noqa: PLC0415
 
     for ownership in LocationOwnership.objects.filter(
         holder_persona__character_sheet=sheet, ended_at__isnull=True
@@ -645,17 +738,8 @@ def _sweep_residuary(sheet, heir_persona, heir_org, delivered_item_ids) -> None:
             notes="estate transfer (#1985)",
         )
 
-    from world.buildings.models import Building  # noqa: PLC0415
 
-    for building in Building.objects.filter(owner_persona__character_sheet=sheet):
-        building.owner_persona = heir_persona
-        building.save(update_fields=["owner_persona"])
-
-    for business in Business.objects.filter(owner_persona__character_sheet=sheet, active=True):
-        _deliver_business(sheet, business, None, heir_persona)
-
-
-def _substitute_contracts(sheet, heir_persona, heir_org) -> None:
+def _substitute_contracts(sheet: CharacterSheet, heir_persona: Any, heir_org: Any) -> None:
     """Owed-to-the-deceased survives: the heir steps into the contract seat.
 
     NOTARIZED + ACTIVE only (HANDSHAKE is RP-only by #928 design). With no
@@ -688,7 +772,7 @@ def _substitute_contracts(sheet, heir_persona, heir_org) -> None:
             contract.save(update_fields=sorted(set(update_fields)))
 
 
-def _end_residency_and_work(sheet) -> None:
+def _end_residency_and_work(sheet: CharacterSheet) -> None:
     from world.currency.models import CharacterEmployment  # noqa: PLC0415
     from world.locations.models import LocationTenancy  # noqa: PLC0415
     from world.locations.services import end_tenancy  # noqa: PLC0415
@@ -700,7 +784,13 @@ def _end_residency_and_work(sheet) -> None:
     CharacterEmployment.objects.filter(character_sheet=sheet, active=True).update(active=False)
 
 
-def _mint_claims(sheet, settlement, bequests, heir_persona, heir_org) -> None:
+def _mint_claims(
+    sheet: CharacterSheet,
+    settlement: EstateSettlement,
+    bequests: list[Bequest],
+    heir_persona: Any,
+    heir_org: Any,
+) -> None:
     """Items stolen from the deceased, never recovered: the grievance passes on.
 
     A stolen item that was ALSO bequeathed by name sends its claim to the

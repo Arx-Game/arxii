@@ -19,6 +19,9 @@ from world.magic.models.techniques import (
 )
 from world.worship.constants import MiracleTrigger
 
+# Verbose name reused across Meta verbose_name / verbose_name_plural / __str__ (python:S1192).
+CHOSEN_FAVOR_CONFIG_VERBOSE = "Chosen Favor Config"
+
 
 class PatronageValence(models.TextChoices):
     """The nature of a Chosen's bond with their patron (#2550).
@@ -410,8 +413,8 @@ class ChosenFavorConfig(SharedMemoryModel):
     )
 
     class Meta:
-        verbose_name = "Chosen Favor Config"
-        verbose_name_plural = "Chosen Favor Config"
+        verbose_name = CHOSEN_FAVOR_CONFIG_VERBOSE
+        verbose_name_plural = CHOSEN_FAVOR_CONFIG_VERBOSE
 
     def __str__(self) -> str:
-        return "Chosen Favor Config"
+        return CHOSEN_FAVOR_CONFIG_VERBOSE

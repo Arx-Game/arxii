@@ -13,6 +13,9 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.estates.constants import BequestKind, SettlementDoor, SettlementStatus
 
+# Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.
+PERSONA_MODEL = "scenes.Persona"
+
 
 class Will(SharedMemoryModel):
     """A character's unilateral testament — the will member of the agreements family.
@@ -44,7 +47,7 @@ class WillExecutor(SharedMemoryModel):
 
     will = models.ForeignKey(Will, on_delete=models.CASCADE, related_name="executors")
     persona = models.ForeignKey(
-        "scenes.Persona", on_delete=models.PROTECT, related_name="executor_duties"
+        PERSONA_MODEL, on_delete=models.PROTECT, related_name="executor_duties"
     )
 
     class Meta:
@@ -95,7 +98,7 @@ class Bequest(SharedMemoryModel):
         default=0, help_text="Coppers; COIN_AMOUNT bequests only."
     )
     recipient_persona = models.ForeignKey(
-        "scenes.Persona",
+        PERSONA_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -205,7 +208,7 @@ class EstateClaim(SharedMemoryModel):
         "items.ItemInstance", on_delete=models.PROTECT, related_name="estate_claims"
     )
     claimant_persona = models.ForeignKey(
-        "scenes.Persona",
+        PERSONA_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,

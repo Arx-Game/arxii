@@ -175,6 +175,42 @@ _IDENTITY_SELECT_RELATED: tuple[str, ...] = (
 _IDENTITY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (_SHARED_PATH_HISTORY_PREFETCH,)
 
 
+def _presented_bio_fields(bio_profile: Profile | None) -> tuple[str, str, dict]:
+    """Resolve the presented bio + lineage fields from a bio profile.
+
+    Args:
+        bio_profile: The presented face's Profile (the real ``true_profile``
+            for a revealed identity, a cover persona's fabricated profile for
+            an anonymous face, or None).
+
+    Returns:
+        A (concept, quote, lineage) tuple where ``lineage`` is a dict of
+        family / heritage / tarot_card / origin (each None when bio_profile
+        is None).
+    """
+    if bio_profile is None:
+        return (
+            "",
+            "",
+            {
+                "family": None,
+                "heritage": None,
+                "tarot_card": None,
+                "origin": None,
+            },
+        )
+    return (
+        bio_profile.concept,
+        bio_profile.quote,
+        {
+            "family": bio_profile.family,
+            "heritage": _id_name_or_null(bio_profile.heritage),
+            "tarot_card": _id_name_or_null(bio_profile.tarot_card),
+            "origin": _id_name_or_null(bio_profile.origin_realm),
+        },
+    )
+
+
 def _build_identity(
     sheet: CharacterSheet,
     *,
@@ -196,16 +232,8 @@ def _build_identity(
     """
     character = sheet.character
     name = display_name if display_name is not None else character.db_key
-    concept = bio_profile.concept if bio_profile is not None else ""
-    quote = bio_profile.quote if bio_profile is not None else ""
-
-    # Lineage follows the presented bio profile (#1270 slice 3): a revealed viewer gets the real
-    # lineage (bio_profile is true_profile); an outsider viewing a cover gets the cover's
-    # fabricated lineage; an anonymous face with no cover profile gets none.
-    family = bio_profile.family if bio_profile is not None else None
-    heritage = _id_name_or_null(bio_profile.heritage) if bio_profile is not None else None
-    tarot_card = _id_name_or_null(bio_profile.tarot_card) if bio_profile is not None else None
-    origin = _id_name_or_null(bio_profile.origin_realm) if bio_profile is not None else None
+    concept, quote, lineage = _presented_bio_fields(bio_profile)
+    family = lineage["family"]
 
     pronouns = PronounsData(
         subject=sheet.pronoun_subject,
@@ -252,10 +280,10 @@ def _build_identity(
         gender=_id_name_or_null(sheet.gender, name_field="display_name"),
         pronouns=pronouns,
         species=_id_name_or_null(sheet.species),
-        heritage=heritage,
+        heritage=lineage["heritage"],
         family=_id_name_or_null(family),
-        tarot_card=tarot_card,
-        origin=origin,
+        tarot_card=lineage["tarot_card"],
+        origin=lineage["origin"],
         path=path_value,
         worship=worship,
     )
@@ -974,8 +1002,8 @@ _PERSONAS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 
 
 def _resolve_persona_thumbnail(
-    persona,
-    cached_conditions=None,
+    persona: Any,
+    cached_conditions: Any = None,
 ) -> str | None:
     """Resolve a persona's thumbnail dynamically (#2196).
 

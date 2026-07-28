@@ -7,6 +7,7 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.species.models import Species
 
 SCENES_PERSONA_FK = "scenes.Persona"
+CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 
 
 class TraitType(models.TextChoices):
@@ -283,7 +284,7 @@ class CharacterForm(SharedMemoryModel):
     """A saved set of form trait values for a character."""
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="forms",
     )
@@ -370,7 +371,7 @@ class CharacterFormState(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="form_state",
     )
@@ -472,7 +473,7 @@ class AlternateSelf(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="alternate_selves",
     )
@@ -540,7 +541,7 @@ class ActiveAlternateSelf(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="active_alternate_self",
     )
@@ -586,7 +587,7 @@ class TemporaryFormChange(SharedMemoryModel):
     """A temporary override applied on top of the active form."""
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="temporary_form_changes",
     )
@@ -764,7 +765,7 @@ class CharacterKnownStyle(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="known_styles",
     )

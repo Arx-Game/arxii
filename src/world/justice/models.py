@@ -18,6 +18,7 @@ _LEGEND_ENTRY_MODEL = "societies.LegendEntry"
 _SOCIETY_MODEL = "societies.Society"
 _AREA_MODEL = "areas.Area"
 _PERSONA_MODEL = "scenes.Persona"
+SECRET_MODEL = "secrets.Secret"
 
 
 class CrimeKind(SharedMemoryModel):
@@ -220,7 +221,7 @@ class AccusationCrimeClaim(SharedMemoryModel):
     """
 
     secret = models.OneToOneField(
-        "secrets.Secret",
+        SECRET_MODEL,
         on_delete=models.CASCADE,
         related_name="accusation_crime_claim",
     )
@@ -272,13 +273,13 @@ class AccusationNullification(SharedMemoryModel):
     """
 
     secret = models.OneToOneField(
-        "secrets.Secret",
+        SECRET_MODEL,
         on_delete=models.CASCADE,
         related_name="nullification",
         help_text="The ACCUSATION secret that was proven fabricated.",
     )
     authorship_secret = models.OneToOneField(
-        "secrets.Secret",
+        SECRET_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -347,7 +348,7 @@ class DenounceRecord(SharedMemoryModel):
     """
 
     authorship_secret = models.ForeignKey(
-        "secrets.Secret",
+        SECRET_MODEL,
         on_delete=models.CASCADE,
         related_name="denouncements",
     )

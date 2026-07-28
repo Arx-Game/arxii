@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import logging
+from typing import Any
 
 import factory
 
@@ -185,7 +188,7 @@ class RestrictionFactory(factory.django.DjangoModelFactory):
     power_bonus = 10
 
     @factory.post_generation
-    def allowed_effect_types(self, create, extracted, **kwargs):
+    def allowed_effect_types(self, create: bool, extracted: Any, **kwargs):
         """Add allowed effect types to the restriction."""
         if not create:
             return
@@ -336,7 +339,7 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
     description = factory.LazyAttribute(lambda o: f"The {o.name} technique.")
 
     @factory.post_generation
-    def restrictions(self, create, extracted, **kwargs):
+    def restrictions(self, create: bool, extracted: Any, **kwargs):
         """Add restrictions to the technique."""
         if not create:
             return
@@ -345,7 +348,7 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
                 self.restrictions.add(restriction)
 
     @factory.post_generation
-    def damage_profile(self, create, extracted, **kwargs):
+    def damage_profile(self, create: bool, extracted: Any, **kwargs):
         """Auto-seed a damage profile from EffectType.base_power when present.
 
         Pass damage_profile=False to skip. Pass any non-False truthy value
@@ -541,7 +544,7 @@ class DefendPassiveTechniqueFactory(TechniqueFactory):
     combo_opening_probing = None
 
     @factory.post_generation
-    def defend_condition(self, create, extracted, **kwargs):
+    def defend_condition(self, create: bool, extracted: Any, **kwargs):
         if not create:
             return
         from world.conditions.factories import (
@@ -583,7 +586,7 @@ class BuffPassiveTechniqueFactory(TechniqueFactory):
     combo_opening_probing = None
 
     @factory.post_generation
-    def buff_condition(self, create, extracted, **kwargs):
+    def buff_condition(self, create: bool, extracted: Any, **kwargs):
         if not create:
             return
         from world.conditions.factories import (
@@ -620,7 +623,7 @@ class DebuffPassiveTechniqueFactory(TechniqueFactory):
     combo_opening_probing = None
 
     @factory.post_generation
-    def debuff_condition(self, create, extracted, **kwargs):
+    def debuff_condition(self, create: bool, extracted: Any, **kwargs):
         if not create:
             return
         from world.conditions.factories import (
@@ -657,7 +660,7 @@ class ComboOpeningPassiveTechniqueFactory(TechniqueFactory):
     combo_opening_probing = 3
 
     @factory.post_generation
-    def opener_debuff(self, create, extracted, **kwargs):
+    def opener_debuff(self, create: bool, extracted: Any, **kwargs):
         if not create or not extracted:
             return
         from world.conditions.factories import (
@@ -715,7 +718,7 @@ class BraceTechniqueFactory(TechniqueFactory):
     combo_opening_probing = None  # secondary-action eligible: no combo probing
 
     @factory.post_generation
-    def brace_condition(self, create, extracted, **kwargs):
+    def brace_condition(self, create: bool, extracted: Any, **kwargs):
         if not create:
             return
         from world.conditions.constants import DurationType
@@ -1326,11 +1329,11 @@ class ThreadFactory(factory.django.DjangoModelFactory):
     developed_points = 0
 
     @factory.post_generation  # type: ignore[misc]
-    def as_trait_thread(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+    def as_trait_thread(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
         """No-op: TRAIT is already the default kind. Exists for test readability."""
 
     @factory.post_generation  # type: ignore[misc]
-    def _trait_value(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+    def _trait_value(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
         """Set CharacterTraitValue.value for (owner.character, target_trait)."""
         if not create or extracted is None:
             return
@@ -1344,7 +1347,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
 
     @factory.post_generation  # type: ignore[misc]
     def as_technique_thread(
-        self: "Thread", create: bool, extracted: object, **kwargs: object
+        self: Thread, create: bool, extracted: object, **kwargs: object
     ) -> None:
         """Switch to TECHNIQUE kind: create a Technique, clear target_trait."""
         if not create or not extracted:
@@ -1360,7 +1363,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         self.target_trait = None  # type: ignore[assignment]
 
     @factory.post_generation  # type: ignore[misc]
-    def _technique_level(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+    def _technique_level(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
         """Set target_technique.level (after as_technique_thread has run)."""
         if not create or extracted is None:
             return
@@ -1369,7 +1372,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
             self.target_technique.save(update_fields=["level"])
 
     @factory.post_generation  # type: ignore[misc]
-    def as_track_thread(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+    def as_track_thread(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
         """Switch to RELATIONSHIP_TRACK kind: create a RelationshipTrackProgress."""
         if not create or not extracted:
             return
@@ -1386,9 +1389,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         self.target_trait = None  # type: ignore[assignment]
 
     @factory.post_generation  # type: ignore[misc]
-    def _track_tier_index(
-        self: "Thread", create: bool, extracted: object, **kwargs: object
-    ) -> None:
+    def _track_tier_index(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
         """Create a RelationshipTier with tier_number=extracted on the progress track.
 
         Sets developed_points on the progress so that current_tier returns the
@@ -1413,9 +1414,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
 
     # Must be declared after as_track_thread so self.target_relationship_track is populated.
     @factory.post_generation  # type: ignore[misc]
-    def _developed_points(
-        self: "Thread", create: bool, extracted: object, **kwargs: object
-    ) -> None:
+    def _developed_points(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
         """Set developed_points directly on the RelationshipTrackProgress.
 
         Use this param when you need an arbitrary value (e.g. 37) rather than
@@ -1431,9 +1430,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         progress.save(update_fields=["developed_points"])
 
     @factory.post_generation  # type: ignore[misc]
-    def as_capstone_thread(
-        self: "Thread", create: bool, extracted: object, **kwargs: object
-    ) -> None:
+    def as_capstone_thread(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
         """Switch to RELATIONSHIP_CAPSTONE kind: create a RelationshipCapstone."""
         if not create or not extracted:
             return
@@ -1451,7 +1448,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
 
     # Must be declared after as_capstone_thread so self.target_capstone is populated.
     @factory.post_generation  # type: ignore[misc]
-    def _capstone_points(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+    def _capstone_points(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
         """Set points directly on the RelationshipCapstone.
 
         Use this param to override the default points=100 from RelationshipCapstoneFactory
@@ -1466,7 +1463,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         capstone.save(update_fields=["points"])
 
     @factory.post_generation  # type: ignore[misc]
-    def _path_stage(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+    def _path_stage(self: Thread, create: bool, extracted: object, **kwargs: object) -> None:
         """Add a CharacterPathHistory row for thread.owner with a Path of the given stage."""
         if not create or extracted is None:
             return
@@ -1479,7 +1476,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
 
     @factory.post_generation  # type: ignore[misc]
     def as_covenant_role_thread(
-        self: "Thread", create: bool, extracted: object, **kwargs: object
+        self: Thread, create: bool, extracted: object, **kwargs: object
     ) -> None:
         """Switch to COVENANT_ROLE kind: create a CovenantRole."""
         if not create or not extracted:
@@ -1913,7 +1910,7 @@ def ensure_dramatic_entrance_content() -> object:
     )
 
 
-def with_corruption_at_stage(sheet, resonance, stage: int):
+def with_corruption_at_stage(sheet: Any, resonance: Any, stage: int):
     """Test helper: set up a corrupted character at a given stage.
 
     Creates the per-resonance Corruption ConditionTemplate (or reuses one),
@@ -2018,7 +2015,7 @@ def wire_soulfray_aftermath(content: SoulfrayContent) -> None:
 _ABYSSAL_AFFINITY_NAME: str = "abyssal"
 
 
-def _make_magical_endurance_check_type():
+def _make_magical_endurance_check_type() -> Any:
     """Return a 'Magical Endurance' CheckType — factory-owned, not the gated #709 seed (#2698).
 
     ``ensure_magic_check_types()`` is content-repo-gated (``authored_or_sample``) and
@@ -2038,7 +2035,7 @@ def _make_magical_endurance_check_type():
     return CheckTypeFactory(name=MAGICAL_ENDURANCE_CHECK_TYPE_NAME, category=category)
 
 
-def _make_resist_corruption_check_type():
+def _make_resist_corruption_check_type() -> Any:
     """Return a 'Resist Corruption' CheckType — factory-owned, not the gated #709 seed (#2698).
 
     Mirrors ``_make_magical_endurance_check_type``: the seed is content-repo-gated
@@ -3269,6 +3266,54 @@ def wire_ghost_tutor_content() -> object:
     )
 
 
+def _seed_corruption_twists_for_resonance(resonance: Any, twist_category: Any) -> None:
+    """Seed CORRUPTION_TWIST MagicalAlterationTemplate rows for one resonance.
+
+    Creates 2 twist templates per stage (2, 3, 4), each backed by an authored
+    ConditionTemplate, skipping already-existing rows (twist factories create
+    new rows each call, so the pre-check prevents duplication on re-runs).
+
+    Args:
+        resonance: The Resonance to hang twists off of.
+        twist_category: The shared ConditionCategory for twist ConditionTemplates.
+    """
+    from world.conditions.constants import DurationType
+    from world.conditions.models import ConditionTemplate
+    from world.seeds.sample_content import authored_or_sample
+
+    for stage in (2, 3, 4):
+        existing = MagicalAlterationTemplate.objects.filter(
+            kind=AlterationKind.CORRUPTION_TWIST,
+            resonance=resonance,
+            stage_threshold=stage,
+        ).count()
+        for i in range(max(0, 2 - existing)):
+            twist_condition = authored_or_sample(
+                ConditionTemplate,
+                {
+                    "category": twist_category,
+                    "description": "Test condition",
+                    "default_duration_type": DurationType.ROUNDS,
+                    "default_duration_value": 3,
+                    "is_stackable": False,
+                    "max_stacks": 1,
+                    "has_progression": False,
+                    "can_be_dispelled": True,
+                },
+                name=f"{resonance.name} Corruption Twist S{stage}-{i}",
+            )
+            if twist_condition is None:
+                continue
+            CorruptionTwistTemplateFactory(
+                condition_template=twist_condition,
+                origin_resonance=resonance,
+                resonance=resonance,
+                origin_affinity=resonance.affinity,
+                stage_threshold=stage,
+                kind=AlterationKind.CORRUPTION_TWIST,
+            )
+
+
 def author_reference_corruption_content() -> None:
     """Seed 1 Primal + 1 Abyssal reference Corruption content set.
 
@@ -3299,7 +3344,6 @@ def author_reference_corruption_content() -> None:
     ``MagicalAlterationTemplate`` — out of scope for #2698 — has nothing to
     attach to without it).
     """
-    from world.conditions.constants import DurationType
     from world.conditions.models import ConditionCategory, ConditionTemplate
     from world.seeds.sample_content import authored_or_sample, sample_content_enabled
 
@@ -3342,39 +3386,8 @@ def author_reference_corruption_content() -> None:
             )
 
         # CORRUPTION_TWIST templates — 2 per stage 2/3/4
-        if twist_category is None:
-            continue
-        for stage in (2, 3, 4):
-            existing = MagicalAlterationTemplate.objects.filter(
-                kind=AlterationKind.CORRUPTION_TWIST,
-                resonance=resonance,
-                stage_threshold=stage,
-            ).count()
-            for i in range(max(0, 2 - existing)):
-                twist_condition = authored_or_sample(
-                    ConditionTemplate,
-                    {
-                        "category": twist_category,
-                        "description": "Test condition",
-                        "default_duration_type": DurationType.ROUNDS,
-                        "default_duration_value": 3,
-                        "is_stackable": False,
-                        "max_stacks": 1,
-                        "has_progression": False,
-                        "can_be_dispelled": True,
-                    },
-                    name=f"{resonance.name} Corruption Twist S{stage}-{i}",
-                )
-                if twist_condition is None:
-                    continue
-                CorruptionTwistTemplateFactory(
-                    condition_template=twist_condition,
-                    origin_resonance=resonance,
-                    resonance=resonance,
-                    origin_affinity=resonance.affinity,
-                    stage_threshold=stage,
-                    kind=AlterationKind.CORRUPTION_TWIST,
-                )
+        if twist_category is not None:
+            _seed_corruption_twists_for_resonance(resonance, twist_category)
 
 
 class CharacterRitualKnowledgeFactory(factory.django.DjangoModelFactory):
@@ -3871,7 +3884,7 @@ class MagicProgressionMilestoneFactory(factory.django.DjangoModelFactory):
     sort_order = 0
 
 
-def seed_magic_progression(prospect_paths=None):
+def seed_magic_progression(prospect_paths: Any = None):
     """Idempotent seed for the magic progression dashboard.
 
     Authors the codex category/subject, 11 CodexEntry rows, 14

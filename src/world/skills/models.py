@@ -18,6 +18,9 @@ from world.traits.models import Trait, TraitType
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+# Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
+CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+
 
 class Skill(NaturalKeyMixin, SharedMemoryModel):
     """
@@ -132,7 +135,7 @@ class CharacterSkillValue(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="skill_values",
         help_text="The character this skill value belongs to",
@@ -181,7 +184,7 @@ class CharacterSpecializationValue(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="specialization_values",
         help_text="The character this specialization value belongs to",
@@ -329,7 +332,7 @@ class TrainingAllocation(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="training_allocations",
         help_text="The character this training allocation belongs to",

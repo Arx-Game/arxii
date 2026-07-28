@@ -1060,7 +1060,7 @@ class EquippedItem(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
         related_name="equipped_items",
         help_text="The character wearing/wielding this item.",
@@ -1769,7 +1769,7 @@ class MantleLevelClearance(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
         related_name="mantle_clearances",
     )

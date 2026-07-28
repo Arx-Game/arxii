@@ -135,6 +135,36 @@ def forfeit_item_instance(*, item_instance: ItemInstance, note: str = "") -> Ite
     return locked
 
 
+def _apply_on_use_pool(template: ItemTemplate, user: ObjectDB, context: ResolutionContext) -> tuple:
+    """Apply an item's on-use pool, returning ``(check_result, applied)``.
+
+    Deterministic pools (no check type) apply directly; check-gated pools
+    roll a consequence selection first. When the template has no on-use pool,
+    both return values are ``None`` / ``[]``.
+
+    Args:
+        template: The item template whose pool (if any) to apply.
+        user: The acting character's ``ObjectDB``.
+        context: The resolution context for consequence application.
+
+    Returns:
+        A ``(check_result, applied_effects)`` tuple.
+    """
+    if template.on_use_pool_id is None:
+        return None, []
+    if template.on_use_check_type_id is None:
+        applied = apply_pool_deterministically(pool=template.on_use_pool, context=context)
+        return None, applied
+    pending = select_consequence(
+        user,
+        template.on_use_check_type,
+        template.on_use_difficulty,
+        resolve_pool_consequences(template.on_use_pool),
+    )
+    applied = apply_resolution(pending, context)
+    return pending.check_result, applied
+
+
 @transaction.atomic
 def use_item(  # noqa: PLR0913
     *,
@@ -201,20 +231,7 @@ def use_item(  # noqa: PLR0913
             _require_blendable(template)
 
     context = ResolutionContext(character=user, target=target)
-    check_result = None
-    applied: list = []
-    if template.on_use_pool_id is not None:
-        if template.on_use_check_type_id is None:
-            applied = apply_pool_deterministically(pool=template.on_use_pool, context=context)
-        else:
-            pending = select_consequence(
-                user,
-                template.on_use_check_type,
-                template.on_use_difficulty,
-                resolve_pool_consequences(template.on_use_pool),
-            )
-            applied = apply_resolution(pending, context)
-            check_result = pending.check_result
+    check_result, applied = _apply_on_use_pool(template, user, context)
 
     if template.is_consumable:
         consumed = consume_item_charges(item_instance=locked, amount=1)

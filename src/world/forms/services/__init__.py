@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 from django.db.models import Prefetch, QuerySet
@@ -95,7 +95,7 @@ class FormOwnershipError(ValueError):
 _NO_ACTIVE_ALT_SELF_MSG = "No active alternate self to revert"
 
 
-def get_apparent_form(character) -> dict[FormTrait, FormTraitOption]:
+def get_apparent_form(character: Any) -> dict[FormTrait, FormTraitOption]:
     """
     Get the apparent form for a character, combining active form with temporaries.
 
@@ -124,7 +124,7 @@ def get_apparent_form(character) -> dict[FormTrait, FormTraitOption]:
     return base_values
 
 
-def switch_form(character, target_form: CharacterForm) -> None:
+def switch_form(character: Any, target_form: CharacterForm) -> None:
     """
     Switch a character to a different form.
 
@@ -145,7 +145,7 @@ def switch_form(character, target_form: CharacterForm) -> None:
     form_state.save()
 
 
-def revert_to_true_form(character) -> None:
+def revert_to_true_form(character: Any) -> None:
     """
     Revert a character to their true form.
 
@@ -510,7 +510,7 @@ def get_cg_form_options(species: Species) -> dict[FormTrait, list[FormTraitOptio
     return result
 
 
-def create_true_form(character, selections: dict[FormTrait, FormTraitOption]) -> CharacterForm:
+def create_true_form(character: Any, selections: dict[FormTrait, FormTraitOption]) -> CharacterForm:
     """
     Create the true form for a character during character creation.
 
@@ -552,7 +552,7 @@ def create_true_form(character, selections: dict[FormTrait, FormTraitOption]) ->
 # --- Appearance editing & presentation (slice 1) ---
 
 
-def _true_form(character) -> CharacterForm:
+def _true_form(character: Any) -> CharacterForm:
     """The character's real/true form. Raises if character creation never ran."""
     return CharacterForm.objects.get(character_id=character.pk, form_type=FormType.TRUE)
 
@@ -566,23 +566,49 @@ def _blend_component(
     the new color; the value itself moves to the trait's composite option.
     Blending a color already in the mix is a no-op on components.
     """
-    from world.forms.models import FormValueComponent  # noqa: PLC0415
-
     if value.option_id == new_option.id and not value.components.exists():
         return  # blending a color onto itself: nothing to mix
-    if not value.components.exists():
-        # Seed the base: what the hair/eyes were before this blend.
-        FormValueComponent.objects.create(value=value, option=value.option, sort_order=0)
-    if not value.components.filter(option=new_option).exists():
-        next_order = value.components.count()
-        FormValueComponent.objects.create(value=value, option=new_option, sort_order=next_order)
+    _seed_base_component(value)
+    _append_blend_component(value, new_option)
     if value.option_id != trait.composite_option_id:
         value.option = trait.composite_option
         value.save(update_fields=["option"])
 
 
+def _seed_base_component(value: CharacterFormValue) -> None:
+    """Seed the base component for a blend — the option the value held before.
+
+    Creates a ``FormValueComponent`` with sort_order 0 pointing at the value's
+    current option. No-op when components already exist (blend-in-progress).
+
+    Args:
+        value: The ``CharacterFormValue`` being blended.
+    """
+    from world.forms.models import FormValueComponent  # noqa: PLC0415
+
+    if not value.components.exists():
+        FormValueComponent.objects.create(value=value, option=value.option, sort_order=0)
+
+
+def _append_blend_component(value: CharacterFormValue, new_option: FormTraitOption) -> None:
+    """Append a new option as a blend component if not already present.
+
+    Adds a ``FormValueComponent`` at the next sort order. No-op when the option
+    is already in the component mix.
+
+    Args:
+        value: The ``CharacterFormValue`` being blended.
+        new_option: The ``FormTraitOption`` to append.
+    """
+    from world.forms.models import FormValueComponent  # noqa: PLC0415
+
+    if not value.components.filter(option=new_option).exists():
+        next_order = value.components.count()
+        FormValueComponent.objects.create(value=value, option=new_option, sort_order=next_order)
+
+
 def change_appearance(  # noqa: PLR0913
-    character,
+    character: Any,
     trait: FormTrait,
     new_option: FormTraitOption,
     *,
@@ -667,7 +693,7 @@ def change_appearance(  # noqa: PLR0913
 
 
 def reset_trait_to_natural(
-    character,
+    character: Any,
     trait: FormTrait,
     *,
     persona: Persona,
@@ -706,12 +732,12 @@ class NotADisguiseError(ValueError):
 
 
 def apply_disguise(
-    character,
+    character: Any,
     disguise_form: CharacterForm,
     *,
     kind: DisguiseKind = DisguiseKind.MUNDANE,
     concealment_level: ConcealmentLevel = ConcealmentLevel.NONE,
-    kit_instance=None,
+    kit_instance: Any = None,
 ) -> CharacterFormState:
     """Paint a fake overlay over the character's real form (#1110).
 
@@ -743,7 +769,7 @@ def apply_disguise(
     return form_state
 
 
-def remove_disguise(character) -> None:
+def remove_disguise(character: Any) -> None:
     """Drop the active fake overlay — the real form presents again (#1110). Idempotent."""
     try:
         form_state = character.form_state
@@ -757,7 +783,7 @@ def remove_disguise(character) -> None:
     form_state.save(update_fields=["active_fake_overlay", "overlay_kind", "applied_kit_instance"])
 
 
-def _form_to_present(character, *, pierced: bool) -> CharacterForm | None:
+def _form_to_present(character: Any, *, pierced: bool) -> CharacterForm | None:
     """The form a viewer actually sees (#1110).
 
     An active fake overlay is shown until the viewer pierces it (or it's the owner/staff
@@ -773,7 +799,7 @@ def _form_to_present(character, *, pierced: bool) -> CharacterForm | None:
         return None
 
 
-def get_presented_appearance(character, *, pierced: bool = False) -> list[PresentedTrait]:
+def get_presented_appearance(character: Any, *, pierced: bool = False) -> list[PresentedTrait]:
     """Compose what a viewer sees: the presented form's normalized traits overlaid with the
     active persona's descriptors. The single source for telnet and web (replacing the legacy
     Characteristic read and the TRUE-form-only web read).
@@ -893,7 +919,7 @@ def calculate_weight(height_inches: int, build: Build) -> int:
     return raw_weight
 
 
-def get_apparent_height(character) -> tuple[int, HeightBand | None]:
+def get_apparent_height(character: Any) -> tuple[int, HeightBand | None]:
     """
     Get the apparent height for a character including trait modifiers.
 
@@ -921,7 +947,7 @@ def get_apparent_height(character) -> tuple[int, HeightBand | None]:
     return (apparent_height, band)
 
 
-def get_apparent_build(character) -> Build | None:
+def get_apparent_build(character: Any) -> Build | None:
     """
     Get the apparent build for a character.
 
@@ -956,7 +982,7 @@ def get_cg_builds() -> QuerySet[Build]:
 # --- Exotic style knowledge (#2632) ---
 
 
-def knows_style(character_sheet, option: FormTraitOption) -> bool:
+def knows_style(character_sheet: Any, option: FormTraitOption) -> bool:
     """True when the sheet may produce ``option`` (ungated options always may)."""
     from world.forms.models import CharacterKnownStyle  # noqa: PLC0415
 
@@ -967,7 +993,9 @@ def knows_style(character_sheet, option: FormTraitOption) -> bool:
     ).exists()
 
 
-def learn_style(character_sheet, option: FormTraitOption, *, taught_by_label: str = "") -> None:
+def learn_style(
+    character_sheet: Any, option: FormTraitOption, *, taught_by_label: str = ""
+) -> None:
     """Grant knowledge of an exotic option — 'learned by having it done' (#2632).
 
     Idempotent. Ungated options are a no-op (nothing to learn).

@@ -59,6 +59,7 @@ _CHECK_RANKS: tuple[tuple[int, int, str], ...] = (
 
 # CheckOutcome tier name constants — referenced in both _OUTCOMES and the band tuples.
 _OUTCOME_PARTIAL_SUCCESS = "Partial Success"
+_CRITICAL_SUCCESS = "Critical Success"
 
 # --- Outcome catalog (name -> success_level) ---
 # Initial sane defaults aligned with the integration-test setup. "Critical
@@ -70,7 +71,7 @@ _OUTCOMES: tuple[tuple[str, int], ...] = (
     ("Failure", -1),
     (_OUTCOME_PARTIAL_SUCCESS, 0),
     ("Success", 1),
-    ("Critical Success", 2),
+    (_CRITICAL_SUCCESS, 2),
 )
 
 # --- Result charts: rank_difference -> ordered (outcome_name, min_roll, max_roll) ---
@@ -80,7 +81,7 @@ _OUTCOMES: tuple[tuple[str, int], ...] = (
 _EASY_BANDS: tuple[tuple[str, int, int], ...] = (
     ("Failure", 1, 20),
     ("Success", 21, 90),
-    ("Critical Success", 91, 100),
+    (_CRITICAL_SUCCESS, 91, 100),
 )
 _EVEN_BANDS: tuple[tuple[str, int, int], ...] = (
     ("Failure", 1, 40),
@@ -118,11 +119,11 @@ _HOPELESS_BANDS: tuple[tuple[str, int, int], ...] = (
 _DOMINANT_BANDS: tuple[tuple[str, int, int], ...] = (
     ("Failure", 1, 5),
     ("Success", 6, 55),
-    ("Critical Success", 56, 100),
+    (_CRITICAL_SUCCESS, 56, 100),
 )
 _OVERWHELMING_BANDS: tuple[tuple[str, int, int], ...] = (
     ("Success", 1, 30),
-    ("Critical Success", 31, 100),
+    (_CRITICAL_SUCCESS, 31, 100),
 )
 _CHARTS: tuple[tuple[int, tuple[tuple[str, int, int], ...]], ...] = (
     (-6, _HOPELESS_BANDS),

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from world.checks.services import perform_check_with_modifiers
 from world.conditions.services import (
@@ -31,6 +31,69 @@ if TYPE_CHECKING:
     from world.scenes.models import Scene
 
 logger = logging.getLogger(__name__)
+
+
+def _build_bulk_applications_for_row(  # noqa: PLR0913
+    *,
+    row: Any,
+    targets: Iterable[ObjectDB],
+    is_team_lane_row: bool,
+    eff_intensity: int,
+    success_level: int,
+    dest_id: int | None,
+    pos_a_id: int | None,
+    pos_b_id: int | None,
+) -> list[BulkConditionApplication]:
+    """Build BulkConditionApplication objects for one applied-condition row.
+
+    Computes severity and duration per target, using the team-lane pricing path
+    or the row's own formula depending on *is_team_lane_row*.
+
+    Args:
+        row: An applied-condition row (TechniqueAppliedCondition or compatible
+            abstract-base instance) carrying ``condition``, ``compute_severity``,
+            ``compute_duration_rounds``, and ``stack_count``.
+        targets: Iterable of ``ObjectDB`` targets to apply the condition to.
+        is_team_lane_row: Whether this row's condition rides the bounded
+            team-damage-percent lane (uses ``priced_percent_severity`` instead of
+            the row's authored severity formula).
+        eff_intensity: The effective intensity from the cast.
+        success_level: The check success level from the cast.
+        dest_id: Cast-time destination position FK, or ``None``.
+        pos_a_id: Cast-time position-A FK, or ``None``.
+        pos_b_id: Cast-time position-B FK, or ``None``.
+
+    Returns:
+        List of ``BulkConditionApplication`` objects, one per target.
+    """
+    from world.conditions.services import priced_percent_severity  # noqa: PLC0415
+
+    applications: list[BulkConditionApplication] = []
+    for target in targets:
+        if is_team_lane_row:
+            severity = priced_percent_severity(eff_intensity=eff_intensity, target=target)
+        else:
+            severity = row.compute_severity(
+                effective_power=eff_intensity,
+                success_level=success_level,
+            )
+        duration = row.compute_duration_rounds(
+            effective_power=eff_intensity,
+            success_level=success_level,
+        )
+        applications.append(
+            BulkConditionApplication(
+                target=target,
+                template=row.condition,
+                severity=severity,
+                duration_rounds=duration,
+                stack_count=row.stack_count,
+                cast_destination_id=dest_id,
+                cast_position_a_id=pos_a_id,
+                cast_position_b_id=pos_b_id,
+            )
+        )
+    return applications
 
 
 def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-application params
@@ -104,7 +167,6 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
     pos_b_id = (position_params or {}).get("position_b_id")
 
     from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
-    from world.conditions.services import priced_percent_severity  # noqa: PLC0415
     from world.mechanics.constants import TEAM_DAMAGE_PERCENT_TARGET_NAME  # noqa: PLC0415
 
     bulk_applications: list[BulkConditionApplication] = []
@@ -120,30 +182,18 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
             scales_with_severity=True,
         ).exists()
         targets = targets_by_kind.get(row.target_kind, [])
-        for target in targets:
-            if is_team_lane_row:
-                severity = priced_percent_severity(eff_intensity=eff_intensity, target=target)
-            else:
-                severity = row.compute_severity(
-                    effective_power=eff_intensity,
-                    success_level=success_level,
-                )
-            duration = row.compute_duration_rounds(
-                effective_power=eff_intensity,
+        bulk_applications.extend(
+            _build_bulk_applications_for_row(
+                row=row,
+                targets=targets,
+                is_team_lane_row=is_team_lane_row,
+                eff_intensity=eff_intensity,
                 success_level=success_level,
+                dest_id=dest_id,
+                pos_a_id=pos_a_id,
+                pos_b_id=pos_b_id,
             )
-            bulk_applications.append(
-                BulkConditionApplication(
-                    target=target,
-                    template=row.condition,
-                    severity=severity,
-                    duration_rounds=duration,
-                    stack_count=row.stack_count,
-                    cast_destination_id=dest_id,
-                    cast_position_a_id=pos_a_id,
-                    cast_position_b_id=pos_b_id,
-                )
-            )
+        )
 
     if not bulk_applications:
         return []
@@ -239,7 +289,7 @@ def remove_technique_conditions(
 def _attempt_removal(
     *,
     target: ObjectDB,  # noqa: OBJECTDB_PARAM
-    condition,
+    condition: Any,
     remove_all_stacks: bool,
     source_character: ObjectDB,  # noqa: OBJECTDB_PARAM
 ) -> RemovedConditionResult:
@@ -278,7 +328,7 @@ def _attempt_removal(
     )
 
 
-def apply_technique_treatments(  # noqa: C901
+def apply_technique_treatments(
     *,
     technique: Technique,
     success_level: int,
@@ -318,16 +368,7 @@ def apply_technique_treatments(  # noqa: C901
         rows pass the SL gate or no targets carry matching conditions.
     """
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-    from world.conditions.constants import TreatmentTargetKind  # noqa: PLC0415
-    from world.conditions.exceptions import TreatmentError  # noqa: PLC0415
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
-    from world.conditions.services import (  # noqa: PLC0415
-        _condition_matches_treatment,
-        _find_bond_thread,
-        perform_treatment,
-    )
-    from world.magic.constants import PendingAlterationStatus  # noqa: PLC0415
-    from world.magic.models import PendingAlteration, Thread  # noqa: PLC0415
+    from world.magic.models import Thread  # noqa: PLC0415
 
     rows = list(technique.treatments.select_related("treatment_template").all())
     if not rows:
@@ -348,57 +389,149 @@ def apply_technique_treatments(  # noqa: C901
         for target in targets:
             target_sheet = CharacterSheet.objects.get(character=target)
 
-            # Find the matching effect instance on the target.
-            target_effect = None
-            if treatment.target_kind == TreatmentTargetKind.PENDING_ALTERATION:
-                target_effect = PendingAlteration.objects.filter(
-                    character=target_sheet,
-                    status=PendingAlterationStatus.OPEN,
-                ).first()
-            else:
-                instances = ConditionInstance.objects.filter(
-                    target=target,
-                    resolved_at__isnull=True,
-                ).select_related("condition")
-                for inst in instances:
-                    if _condition_matches_treatment(treatment, inst):
-                        target_effect = inst
-                        break
-
+            target_effect = _find_treatment_target_effect(treatment, target, target_sheet)
             if target_effect is None:
                 continue
 
-            # Resolve bond thread if required.
-            bond_thread = None
-            if treatment.requires_bond:
-                bond_thread = _find_bond_thread(candidate_threads, target_sheet)
-                if bond_thread is None:
-                    logger.debug(
-                        "Technique treatment %s skipped for target %s: no bond thread found.",
-                        treatment.name,
-                        target,
-                    )
-                    continue
-
-            try:
-                outcome = perform_treatment(
-                    helper_sheet=caster_sheet,
-                    target_sheet=target_sheet,
-                    scene=scene,
-                    treatment=treatment,
-                    target_effect=target_effect,
-                    bond_thread=bond_thread,
-                    skip_engagement_gate=True,
-                )
-            except TreatmentError as exc:
-                logger.warning(
-                    "Technique treatment %s failed for target %s: %s",
-                    treatment.name,
-                    target,
-                    exc,
-                )
+            bond_thread = _resolve_treatment_bond_thread(
+                treatment, target, target_sheet, candidate_threads
+            )
+            if bond_thread is _BOND_NOT_FOUND:
                 continue
 
-            results.append(outcome)
+            outcome = _perform_treatment_for_target(
+                treatment=treatment,
+                target=target,
+                caster_sheet=caster_sheet,
+                target_sheet=target_sheet,
+                scene=scene,
+                target_effect=target_effect,
+                bond_thread=bond_thread,
+            )
+            if outcome is not None:
+                results.append(outcome)
 
     return results
+
+
+def _find_treatment_target_effect(treatment: Any, target: Any, target_sheet: Any) -> Any:
+    """Find the matching effect instance on the target for a treatment.
+
+    Handles the PENDING_ALTERATION kind (queries ``PendingAlteration``) and
+    the PRIMARY/AFTERMATH kinds (scans unresolved ``ConditionInstance`` rows
+    via ``_condition_matches_treatment``).
+
+    Args:
+        treatment: The ``TechniqueTreatment`` template whose target_kind drives
+            the lookup.
+        target: The ``ObjectDB`` target object.
+        target_sheet: The target's ``CharacterSheet``.
+
+    Returns:
+        The matching ``ConditionInstance`` or ``PendingAlteration``, or ``None``
+        if no match is found.
+    """
+    from world.conditions.constants import TreatmentTargetKind  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.conditions.services import _condition_matches_treatment  # noqa: PLC0415
+    from world.magic.constants import PendingAlterationStatus  # noqa: PLC0415
+    from world.magic.models import PendingAlteration  # noqa: PLC0415
+
+    if treatment.target_kind == TreatmentTargetKind.PENDING_ALTERATION:
+        return PendingAlteration.objects.filter(
+            character=target_sheet,
+            status=PendingAlterationStatus.OPEN,
+        ).first()
+
+    instances = ConditionInstance.objects.filter(
+        target=target,
+        resolved_at__isnull=True,
+    ).select_related("condition")
+    for inst in instances:
+        if _condition_matches_treatment(treatment, inst):
+            return inst
+    return None
+
+
+# Sentinel for "bond required but not found" — distinct from ``None`` (no bond
+# required) so the caller can distinguish "skip this target" from "proceed
+# without a bond".
+_BOND_NOT_FOUND = object()
+
+
+def _resolve_treatment_bond_thread(
+    treatment: Any, target: Any, target_sheet: Any, candidate_threads: Any
+) -> Any:
+    """Resolve the caster's bond thread for a treatment target if required.
+
+    Args:
+        treatment: The ``TechniqueTreatment`` template (may set ``requires_bond``).
+        target: The ``ObjectDB`` target (used for debug logging only).
+        target_sheet: The target's ``CharacterSheet``.
+        candidate_threads: Pre-fetched list of the caster's active ``Thread`` rows.
+
+    Returns:
+        The resolved bond ``Thread``, ``None`` if no bond is required, or
+        ``_BOND_NOT_FOUND`` if a bond is required but none was found.
+    """
+    from world.conditions.services import _find_bond_thread  # noqa: PLC0415
+
+    if not treatment.requires_bond:
+        return None
+    bond_thread = _find_bond_thread(candidate_threads, target_sheet)
+    if bond_thread is None:
+        logger.debug(
+            "Technique treatment %s skipped for target %s: no bond thread found.",
+            treatment.name,
+            target,
+        )
+        return _BOND_NOT_FOUND
+    return bond_thread
+
+
+def _perform_treatment_for_target(
+    *,
+    treatment: Any,
+    target: Any,
+    caster_sheet: Any,
+    target_sheet: Any,
+    scene: Scene | None,
+    target_effect: Any,
+    bond_thread: Any,
+) -> Any:
+    """Perform a single treatment on a target, catching ``TreatmentError``.
+
+    Args:
+        treatment: The ``TechniqueTreatment`` template to perform.
+        target: The ``ObjectDB`` target (used for error logging).
+        caster_sheet: The caster's ``CharacterSheet`` (treatment helper).
+        target_sheet: The target's ``CharacterSheet``.
+        scene: The active ``Scene``.
+        target_effect: The matched ``ConditionInstance`` or ``PendingAlteration``.
+        bond_thread: The resolved bond ``Thread``, or ``None`` if not required.
+
+    Returns:
+        The ``TreatmentOutcome`` on success, or ``None`` if the treatment
+        raised a ``TreatmentError`` (logged as a warning, no re-raise).
+    """
+    from world.conditions.exceptions import TreatmentError  # noqa: PLC0415
+    from world.conditions.services import perform_treatment  # noqa: PLC0415
+
+    try:
+        return perform_treatment(
+            helper_sheet=caster_sheet,
+            target_sheet=target_sheet,
+            scene=scene,
+            treatment=treatment,
+            target_effect=target_effect,
+            bond_thread=bond_thread,
+            skip_engagement_gate=True,
+        )
+    except TreatmentError as exc:
+        logger.warning(
+            "Technique treatment %s failed for target %s: %s",
+            treatment.name,
+            target,
+            exc,
+        )
+        return None

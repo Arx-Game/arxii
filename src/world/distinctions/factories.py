@@ -19,6 +19,9 @@ from world.distinctions.types import (
     SheetUpdateRequestType,
 )
 
+# Lazy factory reference (Django app_label.ModuleName.Factory), extracted to satisfy S1192.
+CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
+
 
 class DistinctionCategoryFactory(DjangoModelFactory):
     """Factory for creating DistinctionCategory instances."""
@@ -88,7 +91,7 @@ class CharacterDistinctionFactory(DjangoModelFactory):
     class Meta:
         model = CharacterDistinction
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     distinction = factory.SubFactory(DistinctionFactory)
     rank = 1
     origin = DistinctionOrigin.CHARACTER_CREATION
@@ -100,7 +103,7 @@ class CharacterDistinctionOtherFactory(DjangoModelFactory):
     class Meta:
         model = CharacterDistinctionOther
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     parent_distinction = factory.SubFactory(DistinctionFactory, allow_other=True)
     freeform_text = factory.Faker("word")
 
@@ -111,7 +114,7 @@ class SheetUpdateRequestFactory(DjangoModelFactory):
     class Meta:
         model = SheetUpdateRequest
 
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character_sheet = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     request_type = SheetUpdateRequestType.DISTINCTION_ADD
     target_distinction = factory.SubFactory(DistinctionFactory)
     justification = factory.Faker("sentence")

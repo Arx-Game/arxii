@@ -60,6 +60,7 @@ COVENANT_MODEL = "covenants.Covenant"
 COVENANT_ROLE_MODEL = "covenants.CovenantRole"
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 CONDITION_TEMPLATE_MODEL = "conditions.ConditionTemplate"
+VOW_SITUATIONAL_PERK_MODEL = "covenants.VowSituationalPerk"
 
 
 class Covenant(SharedMemoryModel):
@@ -2045,7 +2046,7 @@ class VowSituationalPerkSituation(SituationRequirementMixin, NaturalKeyMixin, Sh
     """
 
     perk = models.ForeignKey(
-        "covenants.VowSituationalPerk",
+        VOW_SITUATIONAL_PERK_MODEL,
         on_delete=models.CASCADE,
         related_name="situations",
     )
@@ -2064,7 +2065,7 @@ class VowSituationalPerkSituation(SituationRequirementMixin, NaturalKeyMixin, Sh
 
     class NaturalKeyConfig:
         fields = ["perk", "situation"]
-        dependencies = ["covenants.VowSituationalPerk"]
+        dependencies = [VOW_SITUATIONAL_PERK_MODEL]
 
     def __str__(self) -> str:
         return f"{self.perk.name}: {self.get_situation_display()}"
@@ -2097,7 +2098,7 @@ class VowSituationalPerkRung(SituationRequirementMixin, NaturalKeyMixin, SharedM
     SITUATION_FIELD = "extra_situation"
 
     perk = models.ForeignKey(
-        "covenants.VowSituationalPerk",
+        VOW_SITUATIONAL_PERK_MODEL,
         on_delete=models.CASCADE,
         related_name="rungs",
     )
@@ -2121,7 +2122,7 @@ class VowSituationalPerkRung(SituationRequirementMixin, NaturalKeyMixin, SharedM
 
     class NaturalKeyConfig:
         fields = ["perk", "rung_number"]
-        dependencies = ["covenants.VowSituationalPerk"]
+        dependencies = [VOW_SITUATIONAL_PERK_MODEL]
 
     def clean(self) -> None:
         super().clean()
