@@ -4,7 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchOrgTasks } from './api';
+import { fetchListenerPosts, fetchOrgRoster, fetchOrgTasks } from './api';
 
 /**
  * The org's task board rows. Server-side scoping means a non-member simply
@@ -15,5 +15,22 @@ export function useOrgTasksQuery(orgId: number) {
     queryKey: ['tasking', 'board', orgId],
     queryFn: () => fetchOrgTasks(orgId),
     enabled: orgId > 0,
+  });
+}
+
+/** The org's held agents (Roster panel). Empty for non-members. */
+export function useOrgRosterQuery(orgId: number) {
+  return useQuery({
+    queryKey: ['tasking', 'roster', orgId],
+    queryFn: () => fetchOrgRoster(orgId),
+    enabled: orgId > 0,
+  });
+}
+
+/** Visible listener posts (Postings panel), scoped server-side. */
+export function useListenerPostsQuery() {
+  return useQuery({
+    queryKey: ['tasking', 'posts'],
+    queryFn: () => fetchListenerPosts(),
   });
 }

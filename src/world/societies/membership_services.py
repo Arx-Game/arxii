@@ -142,11 +142,61 @@ def join_organization(
         raise OrganizationMemberBlockError
 
     rank = base_rank_for_organization(organization)
-    return OrganizationMembership.objects.create(
+    membership = OrganizationMembership.objects.create(
         organization=organization,
         persona=persona,
         rank=rank,
     )
+    sync_covert_membership_secret(membership)
+    return membership
+
+
+def sync_covert_membership_secret(membership: OrganizationMembership) -> None:
+    """Mint/level the covert-membership Secret (#2820).
+
+    Covert orgs only. First call mints a subject-anchored, GM-provenance
+    Secret ("X is secretly a member of Y") and back-links it on the
+    membership; later calls (promote/demote) re-level it to the rank tier —
+    the spymaster's identity is a far more dangerous secret than a courier's.
+    Idempotent; the secret survives leaving (having been one stays secret).
+    """
+    from world.secrets.services import author_secret  # noqa: PLC0415
+    from world.societies.constants import (  # noqa: PLC0415
+        COVERT_SECRET_DEFAULT_LEVEL,
+        COVERT_SECRET_LEVEL_BY_TIER,
+    )
+
+    org = membership.organization
+    if not (org.org_type_id and org.org_type.is_covert):
+        return
+    tier = membership.rank.tier if membership.rank_id else None
+    level = COVERT_SECRET_LEVEL_BY_TIER.get(tier, COVERT_SECRET_DEFAULT_LEVEL)
+
+    if membership.covert_secret_id is not None:
+        secret = membership.covert_secret
+        if secret.level != level:
+            secret.level = level
+            secret.save(update_fields=["level"])
+        return
+
+    from world.secrets.constants import SecretProvenance  # noqa: PLC0415
+
+    secret = author_secret(
+        subject_sheet=membership.persona.character_sheet,
+        provenance=SecretProvenance.GM_AUTHORED,
+        level=level,
+        content=(f"PLACEHOLDER {membership.persona.name} is secretly a member of {org.name}."),
+        consequences=(
+            "PLACEHOLDER Exposure ties them to the organization's deeds — and "
+            "marks them for its enemies."
+        ),
+    )
+    # subject_aware: they know they joined. author_secret defaults leave it
+    # False; flip it — this is the one field the service doesn't take.
+    secret.subject_aware = True
+    secret.save(update_fields=["subject_aware"])
+    membership.covert_secret = secret
+    membership.save(update_fields=["covert_secret"])
 
 
 @transaction.atomic
@@ -362,6 +412,7 @@ def promote_member(
 
     target_membership.rank = new_rank
     target_membership.save(update_fields=["rank"])
+    sync_covert_membership_secret(target_membership)
     return target_membership
 
 
@@ -392,6 +443,7 @@ def demote_member(
 
     target_membership.rank = new_rank
     target_membership.save(update_fields=["rank"])
+    sync_covert_membership_secret(target_membership)
     return target_membership
 
 

@@ -8,7 +8,7 @@
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useOrgTasksQuery } from '@/tasking/queries';
+import { useListenerPostsQuery, useOrgRosterQuery, useOrgTasksQuery } from '@/tasking/queries';
 import type { OrgTask } from '@/tasking/api';
 
 const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
@@ -50,22 +50,75 @@ function TaskRow({ task }: { task: OrgTask }) {
   );
 }
 
+function RosterPanel({ orgId }: { orgId: number }) {
+  const { data: agents = [] } = useOrgRosterQuery(orgId);
+  if (agents.length === 0) return null;
+  return (
+    <div>
+      <h3 className="mb-1 font-semibold">Roster</h3>
+      <ul className="space-y-1 text-sm">
+        {agents.map((agent) => (
+          <li key={agent.id} className="flex items-baseline justify-between">
+            <span>{agent.asset_persona_name}</span>
+            <span className="text-muted-foreground">
+              {agent.role_context} · {agent.status_display}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function PostingsPanel() {
+  const { data: posts = [] } = useListenerPostsQuery();
+  if (posts.length === 0) return null;
+  return (
+    <div>
+      <h3 className="mb-1 font-semibold">Postings</h3>
+      <ul className="space-y-1 text-sm">
+        {posts.map((post) => (
+          <li key={post.id} className="flex items-baseline justify-between">
+            <span>
+              {post.agent_name}
+              {post.pending_harvests > 0 && (
+                <Badge variant="default" className="ml-2 text-xs">
+                  {post.pending_harvests} to collect
+                </Badge>
+              )}
+            </span>
+            <span className="text-muted-foreground">
+              buzz {post.buzz}/{post.threshold} · handled by {post.handler_name}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function OperationsSection({ orgId }: { orgId: number }) {
   const { data: tasks = [] } = useOrgTasksQuery(orgId);
+  const { data: agents = [] } = useOrgRosterQuery(orgId);
+  const { data: posts = [] } = useListenerPostsQuery();
 
-  if (tasks.length === 0) return null;
+  if (tasks.length === 0 && agents.length === 0 && posts.length === 0) return null;
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-lg">Operations</CardTitle>
       </CardHeader>
-      <CardContent>
-        <ul className="space-y-2">
-          {tasks.map((task) => (
-            <TaskRow key={task.id} task={task} />
-          ))}
-        </ul>
+      <CardContent className="space-y-4">
+        <RosterPanel orgId={orgId} />
+        <PostingsPanel />
+        {tasks.length > 0 && (
+          <ul className="space-y-2">
+            {tasks.map((task) => (
+              <TaskRow key={task.id} task={task} />
+            ))}
+          </ul>
+        )}
       </CardContent>
     </Card>
   );

@@ -29,6 +29,8 @@ vi.mock('@/orgs/queries', () => ({
 
 vi.mock('@/tasking/queries', () => ({
   useOrgTasksQuery: vi.fn(() => ({ data: [] })),
+  useOrgRosterQuery: vi.fn(() => ({ data: [] })),
+  useListenerPostsQuery: vi.fn(() => ({ data: [] })),
 }));
 
 import { useOrganizationQuery } from '@/orgs/queries';

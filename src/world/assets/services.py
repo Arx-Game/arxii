@@ -308,6 +308,47 @@ def introduce_asset(
     )
 
 
+class OrgTransferError(Exception):
+    """An asset-to-org transfer could not proceed (carries a user-facing message)."""
+
+    def __init__(self, message: str, *, user_message: str | None = None) -> None:
+        super().__init__(message)
+        self.user_message = user_message or message
+
+
+@transaction.atomic
+def transfer_asset_to_org(asset: NPCAsset, organization) -> NPCAsset:
+    """Convert a personally-held asset row into an org-held one (#2820 phase 2).
+
+    The relationship itself moves: the row's holder leg flips from the
+    promoter persona to the organization, so control follows org leadership
+    thereafter (succession needs no transfer). Caller gates that the actor IS
+    the promoter and an active member of ``organization``.
+    """
+    from world.assets.models import NPCAsset  # noqa: PLC0415
+
+    if asset.status != AssetStatus.ACTIVE:
+        msg = "That asset is not available."
+        raise OrgTransferError(msg, user_message=msg)
+    if asset.promoter_persona_id is None:
+        msg = "That asset is already held by an organization."
+        raise OrgTransferError(msg, user_message=msg)
+    already_held = NPCAsset.objects.filter(
+        promoter_org=organization,
+        asset_persona=asset.asset_persona,
+        status=AssetStatus.ACTIVE,
+    ).exists()
+    if already_held:
+        msg = "The organization already holds this asset."
+        raise OrgTransferError(msg, user_message=msg)
+
+    asset.promoter_persona = None
+    asset.promoter_org = organization
+    asset.full_clean()
+    asset.save(update_fields=["promoter_persona", "promoter_org"])
+    return asset
+
+
 # ---------------------------------------------------------------------------
 # Asset compromise/loss lifecycle (#1905)
 # ---------------------------------------------------------------------------

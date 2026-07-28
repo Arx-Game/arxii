@@ -800,7 +800,8 @@
 
 ### NPCAsset
 **Foreign Keys:**
-  - promoter_persona -> scenes.Persona [FK]
+  - promoter_persona -> scenes.Persona [FK] (nullable)
+  - promoter_org -> societies.Organization [FK] (nullable)
   - asset_persona -> scenes.Persona [FK]
   - source_functionary -> npc_services.Functionary [FK] (nullable)
   - source_distinction_grant -> assets.DistinctionAssetGrant [FK] (nullable)
@@ -836,6 +837,7 @@
 - `draw_clue_from_pool(pool: 'CluePool', roster_entry: 'RosterEntry') -> 'Clue | None' — Draw a weighted random clue from the pool, excluding held clues (#2293).`
 - `introduce_asset(*, introducer_persona: 'Persona', ally_persona: 'Persona', asset: 'NPCAsset') -> 'NPCAsset' — Introduce an owned asset to a co-present ally, creating co-ownership (#2295).`
 - `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction') -> 'None' — Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
+- `transfer_asset_to_org(asset: 'NPCAsset', organization) -> 'NPCAsset' — Convert a personally-held asset row into an org-held one (#2820 phase 2).`
 - `transition_asset_status(asset: 'NPCAsset', new_status: 'str', *, reason: 'str' = AssetTransitionReason.CONSEQUENCE) -> 'None' — Transition an NPCAsset's status, enforcing the legal-transition matrix.`
 - `transition_assets_for_dead_character(dead_character) -> 'None' — Transition all ACTIVE assets belonging to a dead character to LOST.`
 
@@ -6413,6 +6415,8 @@
   - npc_asset -> assets.NPCAsset [FK] (nullable)
   - room -> evennia_extensions.RoomProfile [FK]
   - assigned_by -> scenes.Persona [FK]
+**Pointed to by:**
+  - listener_post <- tasking.ListenerPost
 
 ### StylingOfferDetails
 **Foreign Keys:**
@@ -7551,6 +7555,8 @@
   - recorded_profiles <- npc_services.RecordedProfile
   - org_tasks_issued <- tasking.OrgTask
   - org_tasks_targeting <- tasking.OrgTask
+  - listener_posts_handled <- tasking.ListenerPost
+  - flipped_listener_posts <- tasking.ListenerPost
   - task_fulfillments_handled <- tasking.TaskFulfillment
   - owned_buildings <- buildings.Building
   - buildings_constructed <- buildings.Building
@@ -8055,6 +8061,7 @@
 ### Organization
 **Foreign Keys:**
   - family -> roster.Family [FK] (nullable)
+  - parent_org -> societies.Organization [FK] (nullable)
   - tradition -> magic.Tradition [FK] (nullable)
   - default_succession_law -> societies.SuccessionLaw [FK] (nullable)
   - society -> societies.Society [FK] (nullable)
@@ -8063,6 +8070,7 @@
   - durance_cohorts <- progression.DuranceCohort
   - ritualsessionreference_set <- magic.RitualSessionReference
   - anchored_threads <- magic.Thread
+  - child_orgs <- societies.Organization
   - ranks <- societies.OrganizationRank
   - gift_grants <- societies.OrganizationGiftGrant
   - membership_offers <- societies.OrganizationMembershipOffer
@@ -8093,6 +8101,7 @@
   - contracts_proposed <- currency.Contract
   - contracts_received <- currency.Contract
   - contracts_notarized <- currency.Contract
+  - held_assets <- assets.NPCAsset
   - secret_victimhoods <- secrets.SecretVictim
   - capture_consequence_effects <- checks.ConsequenceEffect
   - ownership_records <- locations.LocationOwnership
@@ -8137,6 +8146,7 @@
   - organization -> societies.Organization [FK]
   - persona -> scenes.Persona [FK]
   - rank -> societies.OrganizationRank [FK] (nullable)
+  - covert_secret -> secrets.Secret [FK] (nullable)
 
 ### OrganizationOffice
 **Foreign Keys:**

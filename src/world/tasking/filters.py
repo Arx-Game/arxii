@@ -2,6 +2,7 @@
 
 import django_filters
 
+from world.assets.models import NPCAsset
 from world.tasking.models import OrgTask, TaskOutcomeRoute, TaskTemplate
 
 
@@ -20,6 +21,14 @@ class TaskOutcomeRouteFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = TaskOutcomeRoute
+        fields: list[str] = []
+
+
+class OrgRosterFilterSet(django_filters.FilterSet):
+    org = django_filters.NumberFilter(field_name="promoter_org_id")
+
+    class Meta:
+        model = NPCAsset
         fields: list[str] = []
 
 

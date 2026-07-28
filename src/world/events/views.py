@@ -411,7 +411,9 @@ class OrganizationSearchViewSet(ListModelMixin, GenericViewSet):
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self) -> QuerySet[Organization]:
-        return Organization.objects.all().order_by("name")
+        # Covert orgs (#2820) never surface in public name search — their
+        # existence is discoverable only through play (the secrets pipeline).
+        return Organization.objects.exclude(org_type__is_covert=True).all().order_by("name")
 
 
 class SocietySearchViewSet(ListModelMixin, GenericViewSet):

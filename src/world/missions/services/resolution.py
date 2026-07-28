@@ -542,6 +542,12 @@ def _finish_terminal(
     )
 
     resolve_crisis_for_mission(instance)
+    # Task seam (#2820 phase 5): a run fulfilling an OrgTask grades its
+    # terminal route into the task's outcome-route table. Cheap no-op for
+    # every run without a task fulfillment.
+    from world.tasking.services import resolve_task_for_mission  # noqa: PLC0415
+
+    resolve_task_for_mission(instance, route=route)
 
 
 def resolve_option(  # noqa: PLR0913

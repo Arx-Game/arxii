@@ -31,3 +31,19 @@ root `AGENT_GLOSSARY_MAP.md`.
   persist.
 - **Report** — the prose the handler reads once a task resolves; authored per
   route via `report_template` format kwargs `{task}`/`{target}`/`{agent}`.
+- **Listener** — an agent on a standing LISTENER `NPCAssignment` in a room;
+  one active seat per room. _Avoid_: "spy" (any agent), "informant" (the
+  `AssetRoleContext` value).
+- **Buzz** — the listener's accrued intel pressure, fed ONLY by the room's
+  mechanical residue (scenes, minted secrets — never prose; ADR-0175).
+- **Harvest** — one threshold-crossing's catch awaiting physical collection;
+  real (a caught Secret), empty (quiet week), or planted (a red herring).
+- **Suppress / Flip / Plant** — counterplay verbs: freeze a listener's meter;
+  turn one into a double agent; queue a false catch (ACCUSATION-provenance
+  secret) on a flipped post.
+- **Covert org** — an org whose `OrganizationType.is_covert` is true: hidden
+  from public search, membership mints a Secret. Lives in `societies`; the
+  board here is where its work shows.
+- **Spymaster** — the parent-org oversight office (`SPYMASTER_OFFICE`): READ
+  access over covert children's boards. Not command — that is always the
+  child org's rank 1.

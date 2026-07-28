@@ -174,12 +174,21 @@ class OrganizationType(NaturalKeyMixin, SharedMemoryModel):
     Typical kind names used elsewhere:
     - noble_family, commoner_family, business, guild, secret_society, gang
     - covenant (used by `Covenant.save()` auto-create)
+    - spy_network, enforcement_wing (covert types, #2820)
     """
 
     name = models.CharField(
         max_length=50,
         unique=True,
         help_text="Unique identifier for this organization type (e.g., 'noble', 'covenant')",
+    )
+    is_covert = models.BooleanField(
+        default=False,
+        help_text=(
+            "Orgs of this type are clandestine (#2820): membership is hidden from "
+            "public surfaces, joining mints a subject-anchored Secret, and the org "
+            "is excluded from non-member listings."
+        ),
     )
 
     # Default rank titles - can be overridden per organization
@@ -264,6 +273,19 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
             "The kinship Family this org is rooted in (#1884) — set for noble/"
             "merchant/crime houses; null for non-family orgs. FK on the org side "
             "(specific→general, ADR-0010); membership flows from recognition."
+        ),
+    )
+    parent_org = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="child_orgs",
+        help_text=(
+            "Structural parent (#2820): the org this one is a wing/branch of — a "
+            "house's spy network, a gang's enforcement crew. Distinct from "
+            "FealtyEdge (political fealty between houses). Parent leadership and "
+            "the parent's spymaster office get read access to covert children."
         ),
     )
     tradition = models.ForeignKey(
@@ -715,6 +737,19 @@ class OrganizationMembership(SharedMemoryModel):
         null=True,
         blank=True,
         help_text="When the persona was forcibly removed from the organization",
+    )
+    covert_secret = models.ForeignKey(
+        "secrets.Secret",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "The subject-anchored Secret minted when this membership joined a "
+            "covert org (#2820) — 'who is in the network' is playable through the "
+            "clue→secret machinery. Level tracks rank tier. Survives leaving "
+            "(having been a member remains a secret). NULL for overt orgs."
+        ),
     )
 
     class Meta:

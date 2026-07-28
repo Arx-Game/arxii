@@ -260,6 +260,130 @@ class OrgTask(SharedMemoryModel, DiscriminatorMixin):
         return f"OrgTask(#{self.pk}, {self.template.name}, {self.status})"
 
 
+class ListenerPost(SharedMemoryModel):
+    """The buzz/harvest sidecar on a LISTENER assignment (#2820 phase 3).
+
+    The standing primitive stays `npc_services.NPCAssignment` (postings
+    persist until recalled; tasks always end) — this row carries the spy
+    semantics: the buzz meter, its threshold, and the sweep marker. Buzz
+    accrues ONLY from mechanical residue (scenes, minted secrets) in the
+    posted room; prose is never an input.
+    """
+
+    assignment = models.OneToOneField(
+        "npc_services.NPCAssignment",
+        on_delete=models.CASCADE,
+        related_name="listener_post",
+        help_text="The LISTENER-role assignment this post decorates.",
+    )
+    handler = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.PROTECT,
+        related_name="listener_posts_handled",
+        help_text="The persona who collects — physically, in the room.",
+    )
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The listener's weekly tradecraft roll. NULL = flat accrual.",
+    )
+    check_difficulty = models.IntegerField(default=0)
+    buzz = models.IntegerField(
+        default=0,
+        help_text="Accrued intel pressure. Crossing the threshold yields a harvest.",
+    )
+    threshold = models.PositiveIntegerField(
+        default=100,
+        help_text="Buzz needed per harvest (LISTENER_BUZZ_THRESHOLD default).",
+    )
+    last_sweep_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the weekly sweep last processed this post.",
+    )
+    # --- Counterplay state (#2820 phase 4). NEVER serialized to the handler:
+    # a suppressed or flipped post must be indistinguishable from a quiet one.
+    suppressed_until = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Intimidated into silence until this moment. Hidden from the board.",
+    )
+    flipped_controller = models.ForeignKey(
+        _PERSONA_FK,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="flipped_listener_posts",
+        help_text=(
+            "The rival persona who truly controls this listener (double agent). "
+            "The original handler's board shows nothing. Hidden."
+        ),
+    )
+    pending_plant = models.ForeignKey(
+        "clues.Clue",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "A red-herring clue (accusation-provenance secret) queued by the "
+            "flip controller; the next harvest delivers it. Hidden."
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"ListenerPost(#{self.pk}, room {self.assignment.room_id})"
+
+
+class ListenerHarvest(SharedMemoryModel):
+    """One threshold-crossing's catch, awaiting physical collection.
+
+    ``secret`` present = the post caught a real record (a scene-anchored
+    Secret minted in the room); absent = a quiet-week rumor, flavor only.
+    Collection grants the handler an AUTOMATIC clue targeting the secret.
+    """
+
+    post = models.ForeignKey(
+        ListenerPost,
+        on_delete=models.CASCADE,
+        related_name="harvests",
+    )
+    secret = models.ForeignKey(
+        "secrets.Secret",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The caught record. NULL = nothing real happened that cycle.",
+    )
+    planted_clue = models.ForeignKey(
+        "clues.Clue",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "A flip controller's red herring delivered instead of a real catch "
+            "(#2820 phase 4). Collection grants this clue as if it were real."
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    collected_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"ListenerHarvest(#{self.pk}, post #{self.post_id})"
+
+
 class TaskFulfillment(SharedMemoryModel):
     """Who is doing a task, and how it resolved.
 

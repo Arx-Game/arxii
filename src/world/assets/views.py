@@ -53,6 +53,44 @@ class NPCAssetViewSet(viewsets.ReadOnlyModelViewSet):
             return NPCAsset.objects.none()
         return NPCAsset.objects.filter(promoter_persona=persona).select_related("asset_persona")
 
+    @action(detail=True, methods=["post"])
+    def donate(self, request: Request, pk: str | None = None) -> Response:
+        """Transfer one of your assets to an org you belong to (#2820 phase 2).
+
+        POST /api/assets/{id}/donate/ with org_id. The relationship becomes
+        org-held: control follows org leadership thereafter.
+        """
+        from world.assets.services import OrgTransferError, transfer_asset_to_org  # noqa: PLC0415
+        from world.societies.models import Organization, OrganizationMembership  # noqa: PLC0415
+
+        persona = _active_persona_for_request(request)
+        asset = NPCAsset.objects.filter(pk=pk).first()
+        if persona is None or asset is None or asset.promoter_persona_id != persona.pk:
+            return Response(
+                {"detail": "That is not one of your assets."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        org = Organization.objects.filter(pk=request.data.get("org_id")).first()
+        is_member = (
+            org is not None
+            and OrganizationMembership.objects.filter(
+                organization=org,
+                persona=persona,
+                left_at__isnull=True,
+                exiled_at__isnull=True,
+            ).exists()
+        )
+        if not is_member:
+            return Response(
+                {"detail": "You can only donate to an organization you belong to."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            transfer_asset_to_org(asset, org)
+        except OrgTransferError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": f"{asset.asset_persona} now serves {org.name}."})
+
     @action(detail=False, methods=["post"])
     def introduce(self, request: Request) -> Response:
         """Introduce an owned asset to a co-present ally (#2295).

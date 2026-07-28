@@ -2500,30 +2500,40 @@ gains a discoverable content item for the first time.
 - **Source:** `src/world/achievements/`
 - **Glossary:** `src/world/achievements/AGENT_GLOSSARY.md`
 
-### Tasking
-The dual-fulfillment job primitive (#2820 phase 1): an org issues a discrete,
+### Tasking (covert orgs & spy networks)
+The dual-fulfillment job primitive (#2820, all 5 phases): an org issues a discrete,
 deadline-bearing `OrgTask` against an authored template; an NPC agent resolves it
 offscreen as a double check (handler dispatch margin × agent tradecraft roll) with
-outcome-tier payout routes, or — phase 5 — a PC runs the template's linked mission
-into the same routes. Spy networks, tax runs, crime jobs, and military actions are
+outcome-tier payout routes, or a PC runs the template's linked mission into the
+same routes. Spy networks, tax runs, crime jobs, and military actions are
 consumers, not systems.
 
 - **Models:** `TaskTemplate` (check + duration + `target_kind` + nullable
   `mission_template`/`consequence_pool`), `TaskOutcomeRoute` (per
   `traits.CheckOutcome` tier: money, clue-pool draw, report template; fail closed),
   `OrgTask` (status lifecycle, `DiscriminatorMixin` target), `TaskFulfillment`
-  (`npc_asset` XOR `mission_instance`, stored dispatch check, report)
-- **Services:** `create_task`, `assign_agent` (dispatch check →
-  `handler_margin`), `resolve_task` (agent check; payouts via
-  `deliver_mission_money` + `draw_clue_from_pool`; risk via consequence pool with
-  `ResolutionContext.npc_asset` scoping per ADR-0092), `resolve_due_tasks`
-  (hourly cron `tasking.resolve_due_tasks`)
-- **API:** `/api/tasking/` — staff `templates/`+`routes/`; member `tasks/` board
-  (org-membership-scoped; leader-gated create; member assign), React
-  `OperationsSection` on `OrgPage`
+  (`npc_asset` XOR `mission_instance`, stored dispatch check, report),
+  `ListenerPost` (buzz meter on a LISTENER `NPCAssignment` + hidden counterplay
+  state), `ListenerHarvest` (caught Secret XOR planted red herring)
+- **Services:** `create_task`, `assign_agent` (own or issuing-org agents),
+  `resolve_task` (risk via consequence pool with `ResolutionContext.npc_asset`
+  scoping per ADR-0092), `resolve_due_tasks` (hourly cron), `accept_task` +
+  `resolve_task_for_mission` (PC path, `_finish_terminal` seam),
+  `listener_services` (post/sweep/collect — weekly cron `tasking.listener_sweep`;
+  mechanical residue only, ADR-0175), `counterplay_services`
+  (suppress/flip/plant/detect/clear; `espionage` consent category)
+- **Covert layer (societies/assets):** `OrganizationType.is_covert`,
+  `Organization.parent_org`, `OrganizationMembership.covert_secret`
+  (`sync_covert_membership_secret` — level tracks rank tier),
+  `NPCAsset.promoter_org` XOR `promoter_persona` (`transfer_asset_to_org`),
+  `SPYMASTER_OFFICE` + `can_oversee_org`/`overseen_org_ids` (parent READ access)
+- **API:** `/api/tasking/` — staff `templates/`+`routes/`; member `tasks/`
+  (create/assign/accept), `roster/`, `posts/` (+collect), `counterplay/`;
+  React `OperationsSection` (Roster/Postings/Operations) on `OrgPage`
 - **Boundary:** standing "stay until recalled" postings are `NPCAssignment`
-  rows, never tasks — every task ends
-- **Source:** `src/world/tasking/` · **Doc:** `docs/systems/tasking.md`
+  rows, never tasks — every task ends; prose is never a surveillance input
+- **Source:** `src/world/tasking/` · **Doc:** `docs/systems/tasking.md` ·
+  **ADRs:** 0174, 0175
 - **Glossary:** `src/world/tasking/AGENT_GLOSSARY.md`
 
 ### NPC Services
