@@ -112,6 +112,27 @@ class CharacterCombatPullHandler:
                     total += eff.scaled_value
         return total
 
+    def active_pull_capability_grants(self) -> dict[int, int]:
+        """Best (max) CAPABILITY_GRANT value per CapabilityType across active pulls (#2730).
+
+        Reads the frozen ``capability_grant_value`` snapshot from committed
+        ``CombatPullResolvedEffect`` rows. Folds via MAX, not sum (ADR-0034
+        individuation), matching ``_passive_capability_grants`` and
+        ``_technique_capability_values``. Reuses the prefetched
+        ``resolved_effects_cached`` — zero new queries.
+        """
+        granted: dict[int, int] = {}
+        for pull in self._active:
+            for eff in pull.resolved_effects_cached:
+                if (
+                    eff.kind == EffectKind.CAPABILITY_GRANT
+                    and eff.granted_capability is not None
+                    and eff.capability_grant_value is not None
+                ):
+                    cap_id = eff.granted_capability_id
+                    granted[cap_id] = max(granted.get(cap_id, 0), eff.capability_grant_value)
+        return granted
+
     def invalidate(self) -> None:
         """Clear the cached active-pull list. Called by mutation services."""
         self.__dict__.pop("_active", None)

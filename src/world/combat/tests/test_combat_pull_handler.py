@@ -11,6 +11,7 @@ from world.combat.factories import (
     CombatPullFactory,
     CombatPullResolvedEffectFactory,
 )
+from world.conditions.factories import CapabilityTypeFactory
 from world.magic.constants import EffectKind, VitalBonusTarget
 
 
@@ -101,3 +102,98 @@ class CharacterCombatPullHandlerTests(TestCase):
         # After invalidate, reads must hit the DB again.
         with self.assertNumQueries(1):
             sheet.character.combat_pulls.active()
+
+
+class ActivePullCapabilityGrantsTests(TestCase):
+    """Tests for CharacterCombatPullHandler.active_pull_capability_grants (#2730)."""
+
+    def test_returns_capability_grant_value_for_capability_grant_rows(self) -> None:
+        sheet = CharacterSheetFactory()
+        encounter = CombatEncounterFactory(round_number=1)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        pull = CombatPullFactory(participant=participant, round_number=1)
+        cap = CapabilityTypeFactory()
+        CombatPullResolvedEffectFactory(
+            pull=pull,
+            kind=EffectKind.CAPABILITY_GRANT,
+            granted_capability=cap,
+            capability_grant_value=8,
+            scaled_value=None,
+            authored_value=None,
+            level_multiplier=1,
+        )
+
+        result = sheet.character.combat_pulls.active_pull_capability_grants()
+        self.assertEqual(result, {cap.pk: 8})
+
+    def test_folds_via_max_for_same_capability(self) -> None:
+        sheet = CharacterSheetFactory()
+        encounter = CombatEncounterFactory(round_number=1)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        pull = CombatPullFactory(participant=participant, round_number=1)
+        cap = CapabilityTypeFactory()
+        CombatPullResolvedEffectFactory(
+            pull=pull,
+            kind=EffectKind.CAPABILITY_GRANT,
+            granted_capability=cap,
+            capability_grant_value=5,
+            scaled_value=None,
+            authored_value=None,
+            level_multiplier=1,
+        )
+        CombatPullResolvedEffectFactory(
+            pull=pull,
+            kind=EffectKind.CAPABILITY_GRANT,
+            granted_capability=cap,
+            capability_grant_value=8,
+            scaled_value=None,
+            authored_value=None,
+            level_multiplier=1,
+        )
+
+        result = sheet.character.combat_pulls.active_pull_capability_grants()
+        self.assertEqual(result, {cap.pk: 8})
+
+    def test_ignores_other_kinds(self) -> None:
+        sheet = CharacterSheetFactory()
+        encounter = CombatEncounterFactory(round_number=1)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        pull = CombatPullFactory(participant=participant, round_number=1)
+        cap = CapabilityTypeFactory()
+        # FLAT_BONUS row — should be ignored.
+        CombatPullResolvedEffectFactory(
+            pull=pull,
+            kind=EffectKind.FLAT_BONUS,
+            scaled_value=10,
+            authored_value=10,
+            level_multiplier=1,
+        )
+        # CAPABILITY_GRANT row — should be returned.
+        CombatPullResolvedEffectFactory(
+            pull=pull,
+            kind=EffectKind.CAPABILITY_GRANT,
+            granted_capability=cap,
+            capability_grant_value=3,
+            scaled_value=None,
+            authored_value=None,
+            level_multiplier=1,
+        )
+
+        result = sheet.character.combat_pulls.active_pull_capability_grants()
+        self.assertEqual(result, {cap.pk: 3})
+
+    def test_returns_empty_when_no_capability_grant_rows(self) -> None:
+        sheet = CharacterSheetFactory()
+        encounter = CombatEncounterFactory(round_number=1)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        pull = CombatPullFactory(participant=participant, round_number=1)
+        CombatPullResolvedEffectFactory(
+            pull=pull,
+            kind=EffectKind.FLAT_BONUS,
+            scaled_value=5,
+            authored_value=5,
+            level_multiplier=1,
+        )
+
+        result = sheet.character.combat_pulls.active_pull_capability_grants()
+        self.assertEqual(result, {})
