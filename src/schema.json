@@ -35858,12 +35858,19 @@ components:
           type: integer
           readOnly: true
           description: Display order within the axis.
+        affinity:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Affinity this tag nudges at CG finalize. Set on TONE and TRIGGER
+            tags to apply a small aura adjustment. Null = no affinity nudge.
         suggested_distinctions:
           type: array
           items:
             $ref: '#/components/schemas/CGGlimpseTagSuggestedDistinction'
           readOnly: true
       required:
+      - affinity
       - axis
       - description
       - example

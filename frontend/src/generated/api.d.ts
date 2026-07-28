@@ -21453,6 +21453,8 @@ export interface components {
       readonly example: string;
       /** @description Display order within the axis. */
       readonly sort_order: number;
+      /** @description Affinity this tag nudges at CG finalize. Set on TONE and TRIGGER tags to apply a small aura adjustment. Null = no affinity nudge. */
+      readonly affinity: number | null;
       readonly suggested_distinctions: components['schemas']['CGGlimpseTagSuggestedDistinction'][];
     };
     /** @description Distinction stub embedded in a glimpse tag's suggestion list (#2427). */
