@@ -32878,6 +32878,18 @@ export interface components {
       clue_pool?: number | null;
       /** @description Agent report prose; format kwargs {task}, {target}, {agent}. Blank = generic line. */
       report_template?: string;
+      /** @description PERSONA target: append the target's recent PUBLIC-room appearances (scene records, mechanical residue only — ADR-0175). */
+      movements_report?: boolean;
+      /** @description PERSONA target: mint a PERSONA_LINK clue piercing the target's mask (no-op when they are their true face). */
+      unmask_target?: boolean;
+      /** @description PERSONA target: heat applied to the hottest existing gossip about the target's secrets. Positive = whisper campaign, negative = quash. Never mints new secrets. */
+      gossip_heat_delta?: number;
+      /** @description ROOM target: shift the room's building condition tier (sabotage < 0). */
+      building_condition_delta?: number;
+      /** @description PERSONA target (NPCs only): the issuing org gains a held asset claim on the target — remote cultivation. No-op against player characters. */
+      recruit_target?: boolean;
+      /** @description Residue (#2833): 1-4 mints a Secret about the HANDLER at this level ('they arranged it') plus an investigable hub trail when the target room's region is derivable. Authors put it on sloppy tiers. */
+      incriminate_level?: number;
     };
     /** @description Staff authoring surface for job templates. */
     PatchedTaskTemplateRequest: {
@@ -37486,6 +37498,18 @@ export interface components {
       clue_pool?: number | null;
       /** @description Agent report prose; format kwargs {task}, {target}, {agent}. Blank = generic line. */
       report_template?: string;
+      /** @description PERSONA target: append the target's recent PUBLIC-room appearances (scene records, mechanical residue only — ADR-0175). */
+      movements_report?: boolean;
+      /** @description PERSONA target: mint a PERSONA_LINK clue piercing the target's mask (no-op when they are their true face). */
+      unmask_target?: boolean;
+      /** @description PERSONA target: heat applied to the hottest existing gossip about the target's secrets. Positive = whisper campaign, negative = quash. Never mints new secrets. */
+      gossip_heat_delta?: number;
+      /** @description ROOM target: shift the room's building condition tier (sabotage < 0). */
+      building_condition_delta?: number;
+      /** @description PERSONA target (NPCs only): the issuing org gains a held asset claim on the target — remote cultivation. No-op against player characters. */
+      recruit_target?: boolean;
+      /** @description Residue (#2833): 1-4 mints a Secret about the HANDLER at this level ('they arranged it') plus an investigable hub trail when the target room's region is derivable. Authors put it on sloppy tiers. */
+      incriminate_level?: number;
     };
     /** @description Staff authoring surface for per-tier payout routes. */
     TaskOutcomeRouteRequest: {
@@ -37498,6 +37522,18 @@ export interface components {
       clue_pool?: number | null;
       /** @description Agent report prose; format kwargs {task}, {target}, {agent}. Blank = generic line. */
       report_template?: string;
+      /** @description PERSONA target: append the target's recent PUBLIC-room appearances (scene records, mechanical residue only — ADR-0175). */
+      movements_report?: boolean;
+      /** @description PERSONA target: mint a PERSONA_LINK clue piercing the target's mask (no-op when they are their true face). */
+      unmask_target?: boolean;
+      /** @description PERSONA target: heat applied to the hottest existing gossip about the target's secrets. Positive = whisper campaign, negative = quash. Never mints new secrets. */
+      gossip_heat_delta?: number;
+      /** @description ROOM target: shift the room's building condition tier (sabotage < 0). */
+      building_condition_delta?: number;
+      /** @description PERSONA target (NPCs only): the issuing org gains a held asset claim on the target — remote cultivation. No-op against player characters. */
+      recruit_target?: boolean;
+      /** @description Residue (#2833): 1-4 mints a Secret about the HANDLER at this level ('they arranged it') plus an investigable hub trail when the target room's region is derivable. Authors put it on sloppy tiers. */
+      incriminate_level?: number;
     };
     /** @description Staff authoring surface for job templates. */
     TaskTemplate: {

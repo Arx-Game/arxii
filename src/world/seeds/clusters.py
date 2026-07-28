@@ -198,6 +198,12 @@ def _seed_npc_services() -> None:
     seed_styling_content()
 
 
+def _seed_spy_tasks() -> None:
+    from world.seeds.spy_tasks import ensure_spy_task_templates  # noqa: PLC0415
+
+    ensure_spy_task_templates()
+
+
 def _seed_justice() -> None:
     from world.seeds.justice import seed_crime_kinds  # noqa: PLC0415
 
@@ -454,6 +460,7 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # load_world_content() before any cluster runs (#2474) — not seeded by
     # the "magic" cluster.
     "npc_services": _seed_npc_services,
+    "spy_tasks": _seed_spy_tasks,
     # Justice: the starter CrimeKind vocabulary (#1765). Laws are world data, not seeds.
     "justice": _seed_justice,
     # Governance: Scholarship/Economics + Organization/Stewardship skills and the

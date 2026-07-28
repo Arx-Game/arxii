@@ -32,6 +32,12 @@ class HandlerNotMemberError(TaskAssignmentError):
     user_message = "Only members of the issuing organization can handle its tasks."
 
 
+class TargetConsentError(TaskingError):
+    """Raised when an offensive job's PC target hasn't opted into espionage."""
+
+    user_message = "They are not open to that kind of play."
+
+
 class TaskResolutionError(TaskingError):
     """Raised when a task is not in a resolvable state."""
 
