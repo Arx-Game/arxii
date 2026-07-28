@@ -42,11 +42,15 @@ import type {
   GlimpseTagOption,
 } from './glimpseTypes';
 
+// CHOOSING tags are all path-scoped to the Path of the Chosen, so the step
+// self-hides for other paths (axes with zero catalog tags don't render).
 const AXIS_STEPS: { axis: GlimpseTagOption['axis']; label: string; multi: boolean }[] = [
-  { axis: 'TRIGGER', label: 'Trigger', multi: false },
-  { axis: 'TONE', label: 'Tone', multi: false },
-  { axis: 'CONSEQUENCE', label: 'Consequence', multi: true },
-  { axis: 'WITNESS', label: 'Witness & Secrecy', multi: true },
+  { axis: 'TRIGGER', label: 'Trigger — what was happening?', multi: false },
+  { axis: 'CHOOSING', label: 'The Choosing — how did it claim you?', multi: false },
+  { axis: 'REFLECTION', label: 'The Reflection — what did you see in yourself?', multi: true },
+  { axis: 'TONE', label: 'Tone — how did it feel?', multi: false },
+  { axis: 'CONSEQUENCE', label: 'Consequence — what did it leave behind?', multi: true },
+  { axis: 'WITNESS', label: 'Witness & Secrecy — who saw?', multi: true },
 ];
 
 function DistinctionLinkChips({

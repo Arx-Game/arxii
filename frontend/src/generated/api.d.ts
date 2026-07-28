@@ -21021,9 +21021,18 @@ export interface components {
      *     * `WITNESS` - Witness & Secrecy
      *     * `SENSORY` - Sensory & Discovery
      *     * `TRIGGER` - Trigger
+     *     * `CHOOSING` - The Choosing
+     *     * `REFLECTION` - The Reflection
      * @enum {string}
      */
-    AxisEnum: 'TONE' | 'CONSEQUENCE' | 'WITNESS' | 'SENSORY' | 'TRIGGER';
+    AxisEnum:
+      | 'TONE'
+      | 'CONSEQUENCE'
+      | 'WITNESS'
+      | 'SENSORY'
+      | 'TRIGGER'
+      | 'CHOOSING'
+      | 'REFLECTION';
     /**
      * @description * `standing` - Standing (unit or banner — can rise again)
      *     * `campaign` - Campaign (one-time event — dissolves when done)
@@ -21813,6 +21822,8 @@ export interface components {
        *     * `WITNESS` - Witness & Secrecy
        *     * `SENSORY` - Sensory & Discovery
        *     * `TRIGGER` - Trigger
+       *     * `CHOOSING` - The Choosing
+       *     * `REFLECTION` - The Reflection
        */
       readonly axis: components['schemas']['AxisEnum'];
       /** @description Player-facing tag name. */
@@ -42806,8 +42817,17 @@ export interface operations {
          *     * `WITNESS` - Witness & Secrecy
          *     * `SENSORY` - Sensory & Discovery
          *     * `TRIGGER` - Trigger
+         *     * `CHOOSING` - The Choosing
+         *     * `REFLECTION` - The Reflection
          */
-        axis?: 'CONSEQUENCE' | 'SENSORY' | 'TONE' | 'TRIGGER' | 'WITNESS';
+        axis?:
+          | 'CHOOSING'
+          | 'CONSEQUENCE'
+          | 'REFLECTION'
+          | 'SENSORY'
+          | 'TONE'
+          | 'TRIGGER'
+          | 'WITNESS';
         path_id?: number;
       };
       header?: never;

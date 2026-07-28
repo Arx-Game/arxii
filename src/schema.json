@@ -4141,7 +4141,9 @@ paths:
         schema:
           type: string
           enum:
+          - CHOOSING
           - CONSEQUENCE
+          - REFLECTION
           - SENSORY
           - TONE
           - TRIGGER
@@ -4154,6 +4156,8 @@ paths:
           * `WITNESS` - Witness & Secrecy
           * `SENSORY` - Sensory & Discovery
           * `TRIGGER` - Trigger
+          * `CHOOSING` - The Choosing
+          * `REFLECTION` - The Reflection
       - in: query
         name: path_id
         schema:
@@ -34872,6 +34876,8 @@ components:
       - WITNESS
       - SENSORY
       - TRIGGER
+      - CHOOSING
+      - REFLECTION
       type: string
       description: |-
         * `TONE` - Tone
@@ -34879,6 +34885,8 @@ components:
         * `WITNESS` - Witness & Secrecy
         * `SENSORY` - Sensory & Discovery
         * `TRIGGER` - Trigger
+        * `CHOOSING` - The Choosing
+        * `REFLECTION` - The Reflection
     BattleBindingEnum:
       enum:
       - standing
@@ -36486,6 +36494,8 @@ components:
             * `WITNESS` - Witness & Secrecy
             * `SENSORY` - Sensory & Discovery
             * `TRIGGER` - Trigger
+            * `CHOOSING` - The Choosing
+            * `REFLECTION` - The Reflection
         name:
           type: string
           readOnly: true
