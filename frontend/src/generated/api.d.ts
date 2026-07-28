@@ -19564,13 +19564,7 @@ export interface paths {
      */
     get: operations['tasking_posts_list'];
     put?: never;
-    /**
-     * @description Standing listener posts (#2820 phase 3) — the board's Postings panel.
-     *
-     *     Visibility: your own posts (handler), plus posts whose agent is held by
-     *     an org you belong to or oversee. ``collect`` requires the handler's body
-     *     in the posted room — the visit is the exposure surface.
-     */
+    /** @description Post a listener — through PostListenerAction (ADR-0001). */
     post: operations['tasking_posts_create'];
     delete?: never;
     options?: never;
@@ -19610,7 +19604,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Collect the oldest pending harvest, in person. */
+    /** @description Collect in person — through CollectHarvestAction (ADR-0001). */
     post: operations['tasking_posts_collect_create'];
     delete?: never;
     options?: never;
@@ -19689,7 +19683,7 @@ export interface paths {
     /** @description The org task board: list/inspect/issue/assign. */
     get: operations['tasking_tasks_list'];
     put?: never;
-    /** @description The org task board: list/inspect/issue/assign. */
+    /** @description Issue a task — dispatched through IssueOrgTaskAction (ADR-0001). */
     post: operations['tasking_tasks_create'];
     delete?: never;
     options?: never;
@@ -19740,7 +19734,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Dispatch one of the requester's own agents on this task. */
+    /** @description Dispatch an agent — through AssignTaskAgentAction (ADR-0001). */
     post: operations['tasking_tasks_assign_create'];
     delete?: never;
     options?: never;
