@@ -411,6 +411,26 @@ class EnsureConsiderCheckTypeTest(TestCase):
         ).count()
         self.assertEqual(count, 1)
 
+    def test_creates_bias_direction_modifier_target(self) -> None:
+        """ensure_consider_check_type also creates the bias-direction target."""
+        from world.combat.consider import ensure_consider_check_type
+        from world.mechanics.models import ModifierTarget
+
+        ensure_consider_check_type()
+        target = ModifierTarget.objects.get(name="consider_bias_direction")
+        self.assertTrue(target.is_active)
+        self.assertEqual(target.category.name, "check")
+
+    def test_bias_direction_target_is_idempotent(self) -> None:
+        """Calling ensure_consider_check_type twice does not duplicate the bias target."""
+        from world.combat.consider import ensure_consider_check_type
+        from world.mechanics.models import ModifierTarget
+
+        ensure_consider_check_type()
+        ensure_consider_check_type()
+        count = ModifierTarget.objects.filter(name="consider_bias_direction").count()
+        self.assertEqual(count, 1)
+
 
 class ConsiderEndpointTest(TestCase):
     """GET /api/combat/encounters/<pk>/consider/<opp_pk>/ returns prose only."""
