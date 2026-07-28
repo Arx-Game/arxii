@@ -364,6 +364,7 @@ class CGGlimpseTagSerializer(serializers.ModelSerializer):
             "description",
             "example",
             "sort_order",
+            "affinity",
             "suggested_distinctions",
         ]
         read_only_fields = fields

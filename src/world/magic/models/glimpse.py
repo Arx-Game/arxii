@@ -53,6 +53,17 @@ class GlimpseTag(NaturalKeyMixin, SharedMemoryModel):
         related_name="glimpse_trigger_tags",
         help_text="Restricts this tag to these paths. Empty = available to all paths.",
     )
+    affinity = models.ForeignKey(
+        "magic.Affinity",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="glimpse_tags",
+        help_text=(
+            "Affinity this tag nudges at CG finalize. Set on TONE and TRIGGER "
+            "tags to apply a small aura adjustment. Null = no affinity nudge."
+        ),
+    )
 
     objects = GlimpseTagManager()
 
