@@ -33,24 +33,22 @@ def _promote_functionary(
 
     Resolves the Functionary from the PC's current location + the offer's
     role (place_functionary guarantees at most one active Functionary per
-    (role, room), so this lookup is deterministic — see
-    world.npc_services.functionaries.place_functionary). The lookup is NOT
-    filtered on is_active: a successful promotion deactivates its own source
-    Functionary (see below), so a stale is_active=True filter would make a
-    repeat attempt on the same functionary indistinguishable from one that
-    was never here — the dedup guard needs to see the (now-inactive) row to
-    tell those two cases apart. Rolls offer.check_type/check_difficulty
-    directly (final-action offers don't auto-roll checks — "the effect IS
-    the payoff", per NPCServiceOffer.check_type's own help_text). On
-    success: spawns a Character+CharacterSheet+PRIMARY Persona via
-    create_character_with_sheet, places it in the Functionary's room,
-    creates the NPCAsset row, and deactivates the source Functionary.
+    (role, room), so this lookup is deterministic). Rolls
+    offer.check_type/check_difficulty directly (final-action offers don't
+    auto-roll checks — "the effect IS the payoff").
+
+    #2827 phase 3 — recruitment is **in-place by default**: success
+    materializes the placement's identity (reusing an already-materialized
+    persona — the sheet-spine, never a duplicate mint) and creates the
+    NPCAsset relationship row. The NPC keeps working the venue; what you
+    own is a claim on their loyalty. Pulling them out of the job is a
+    separate, later choice (`extract_asset`) — "quit and come with me"
+    versus "stay here, and listen".
     """
     from world.areas.services import get_room_profile  # noqa: PLC0415
     from world.assets.models import NPCAsset  # noqa: PLC0415
-    from world.character_sheets.services import create_character_with_sheet  # noqa: PLC0415
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
-    from world.npc_services.functionaries import remove_functionary  # noqa: PLC0415
+    from world.npc_services.instantiation import materialize_functionary  # noqa: PLC0415
     from world.npc_services.models import Functionary  # noqa: PLC0415
 
     character = persona.character_sheet.character
@@ -62,16 +60,10 @@ def _promote_functionary(
     if NPCAsset.objects.filter(promoter_persona=persona, source_functionary=functionary).exists():
         return EffectResult(kind=offer.kind, message="You've already cultivated this one.")
 
-    # Re-check active status via a fresh .exists() predicate rather than
-    # functionary.is_active: remove_functionary() bulk-updates via
-    # .filter().update(), which bypasses the SharedMemoryModel identity map,
-    # so an in-process-cached `functionary` instance's attribute can be
-    # stale. .exists() never instantiates a model object, so it always
-    # reflects the true DB row (see world/npc_services/tests/test_functionaries.py's
-    # own use of .exists() for the same reason).
+    # .exists() rather than functionary.is_active: bulk .update() writers
+    # bypass the identity map, so a cached instance's flag can be stale.
+    # Inactive here means staff removal / extraction — the slot is empty.
     if not Functionary.objects.filter(pk=functionary.pk, is_active=True).exists():
-        # Inactive for some other reason (staff removal, role disabled, ...) —
-        # not because this promoter already cultivated it (checked above).
         return EffectResult(kind=offer.kind, message=_FUNCTIONARY_GONE_MESSAGE)
 
     if offer.check_type_id is None:
@@ -86,28 +78,19 @@ def _promote_functionary(
     if check_result.success_level <= 0:
         return EffectResult(kind=offer.kind, message="They're not ready to commit to you yet.")
 
-    name = functionary.display_name
-    _character, _sheet, asset_persona = create_character_with_sheet(
-        character_key=name,
-        primary_persona_name=name,
-        home=functionary.room.objectdb,
-    )
-    _character.location = functionary.room.objectdb
-    _character.save()
-
+    asset_persona = materialize_functionary(functionary)
     asset = NPCAsset.objects.create(
         promoter_persona=persona,
         asset_persona=asset_persona,
         role_context=role_context,
         source_functionary=functionary,
     )
-    remove_functionary(role=functionary.role, room=functionary.room)
 
     return EffectResult(
         kind=offer.kind,
         object_pk=asset.pk,
         object_label=asset_persona.name,
-        message=f"{name} agrees to work for you.",
+        message=f"{asset_persona.name} agrees to work for you.",
         payload={"asset_pk": asset.pk, "asset_persona_pk": asset_persona.pk},
     )
 
