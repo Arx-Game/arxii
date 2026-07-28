@@ -265,20 +265,22 @@ def _resolve_starter_techniques(pairs: tuple[tuple[str, str], ...]) -> dict[str,
     return techniques
 
 
-def ensure_great_archive_self_study_achievement() -> Achievement:
-    """Get-or-create the PLACEHOLDER Achievement gating Archive self-study (#2440).
+def ensure_great_archive_self_study_achievement() -> Achievement | None:
+    """Look up the Achievement gating Archive self-study (#2440).
 
-    Never overwrites a staff-adjusted row (get_or_create). Granting this
-    achievement to a character is the lore-repo quest's job, not this seed's —
-    this function only ensures the row the quest (and the gate) can point at
-    exists on a fresh DB.
+    Content-repo-owned (#2832) — looked up via ``authored_or_sample`` rather
+    than invented. Returns ``None`` when the row is not authored and
+    ``SEED_SAMPLE_CONTENT`` is off; the caller must skip the config that
+    depends on it. Granting this achievement to a character is the lore-repo
+    quest's job, not this seed's.
     """
     from world.achievements.constants import NotificationLevel  # noqa: PLC0415
     from world.achievements.models import Achievement  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    achievement, _ = Achievement.objects.get_or_create(
-        slug=GREAT_ARCHIVE_SELF_STUDY_ACHIEVEMENT_SLUG,
-        defaults={
+    return authored_or_sample(
+        Achievement,
+        {
             "name": "Keeper of the Archive",
             "description": (
                 "PLACEHOLDER: earned by completing a short introductory quest at "
@@ -291,8 +293,8 @@ def ensure_great_archive_self_study_achievement() -> Achievement:
             "notification_level": NotificationLevel.PERSONAL,
             "is_active": True,
         },
+        slug=GREAT_ARCHIVE_SELF_STUDY_ACHIEVEMENT_SLUG,
     )
-    return achievement
 
 
 def ensure_great_archive_librarian_role() -> NPCRole:
@@ -343,6 +345,13 @@ def ensure_great_archive_librarian_role() -> NPCRole:
             "teaches_tradition": None,
         },
     )
+
+    if achievement is None:
+        # Achievement not authored and sampling is off — skip the offers that
+        # depend on it (they gate on the achievement's slug). The role still
+        # exists so it's ready once the achievement is authored (#2832).
+        NPCServiceOffer.objects.filter(role=role, kind=OfferKind.TRAIN).delete()
+        return role
 
     eligibility_rule = {"leaf": "has_achievement", "params": {"slug": achievement.slug}}
     expected_labels: set[str] = set()
