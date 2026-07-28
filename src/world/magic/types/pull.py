@@ -73,6 +73,9 @@ class ResolvedPullEffect:
     target_form: CharacterForm | None = None
     # RESISTANCE only: the damage type this resistance mitigates (null = all types) (#1580).
     resistance_damage_type: DamageType | None = None
+    # CAPABILITY_GRANT only: the frozen curved magnitude (#2730). None for
+    # every other kind. Computed at resolve time via apply_capability_curve.
+    capability_grant_value: int | None = None
 
 
 @dataclass(frozen=True)
