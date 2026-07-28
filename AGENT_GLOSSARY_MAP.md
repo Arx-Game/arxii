@@ -38,6 +38,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
 - [journals](src/world/journals/AGENT_GLOSSARY.md)
 - [npc_services](src/world/npc_services/AGENT_GLOSSARY.md)
+- [tasking](src/world/tasking/AGENT_GLOSSARY.md)
 - [tarot](src/world/tarot/AGENT_GLOSSARY.md)
 - [currency](src/world/currency/AGENT_GLOSSARY.md)
 - [achievements](src/world/achievements/AGENT_GLOSSARY.md)

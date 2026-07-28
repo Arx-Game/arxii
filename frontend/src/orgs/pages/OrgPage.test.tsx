@@ -27,6 +27,10 @@ vi.mock('@/orgs/queries', () => ({
   useHouseFeedQuery: vi.fn(() => ({ data: [] })),
 }));
 
+vi.mock('@/tasking/queries', () => ({
+  useOrgTasksQuery: vi.fn(() => ({ data: [] })),
+}));
+
 import { useOrganizationQuery } from '@/orgs/queries';
 
 const mockedUseOrganizationQuery = vi.mocked(useOrganizationQuery);

@@ -2500,6 +2500,32 @@ gains a discoverable content item for the first time.
 - **Source:** `src/world/achievements/`
 - **Glossary:** `src/world/achievements/AGENT_GLOSSARY.md`
 
+### Tasking
+The dual-fulfillment job primitive (#2820 phase 1): an org issues a discrete,
+deadline-bearing `OrgTask` against an authored template; an NPC agent resolves it
+offscreen as a double check (handler dispatch margin × agent tradecraft roll) with
+outcome-tier payout routes, or — phase 5 — a PC runs the template's linked mission
+into the same routes. Spy networks, tax runs, crime jobs, and military actions are
+consumers, not systems.
+
+- **Models:** `TaskTemplate` (check + duration + `target_kind` + nullable
+  `mission_template`/`consequence_pool`), `TaskOutcomeRoute` (per
+  `traits.CheckOutcome` tier: money, clue-pool draw, report template; fail closed),
+  `OrgTask` (status lifecycle, `DiscriminatorMixin` target), `TaskFulfillment`
+  (`npc_asset` XOR `mission_instance`, stored dispatch check, report)
+- **Services:** `create_task`, `assign_agent` (dispatch check →
+  `handler_margin`), `resolve_task` (agent check; payouts via
+  `deliver_mission_money` + `draw_clue_from_pool`; risk via consequence pool with
+  `ResolutionContext.npc_asset` scoping per ADR-0092), `resolve_due_tasks`
+  (hourly cron `tasking.resolve_due_tasks`)
+- **API:** `/api/tasking/` — staff `templates/`+`routes/`; member `tasks/` board
+  (org-membership-scoped; leader-gated create; member assign), React
+  `OperationsSection` on `OrgPage`
+- **Boundary:** standing "stay until recalled" postings are `NPCAssignment`
+  rows, never tasks — every task ends
+- **Source:** `src/world/tasking/` · **Doc:** `docs/systems/tasking.md`
+- **Glossary:** `src/world/tasking/AGENT_GLOSSARY.md`
+
 ### NPC Services
 Unified "ask NPC for thing" framework: per-NPC-role offer surface, persona-keyed standing,
 per-kind effect handler dispatch. Covers permits today; missions/loans/training/favors

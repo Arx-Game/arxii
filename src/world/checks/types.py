@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
+    from world.assets.models import NPCAsset
     from world.checks.models import CheckType, Consequence
     from world.mechanics.models import ChallengeApproach, ChallengeInstance
     from world.missions.models import MissionInstance
@@ -82,6 +83,10 @@ class ResolutionContext:
     # to do the thing. Effects read it for act-shape: a Stealth approach makes a
     # LEGEND_AWARD deed concealed (the "do it sneakily" declaration surface).
     chosen_approach: ChallengeApproach | None = None
+    # The specific dispatched agent at stake (#2820 tasking). When set,
+    # ASSET_STATUS effects transition THIS asset only, not every active asset
+    # the resolved target character promotes. None on scene/stake paths.
+    npc_asset: NPCAsset | None = None
 
     @property
     def location(self) -> ObjectDB:

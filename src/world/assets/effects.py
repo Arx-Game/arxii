@@ -137,24 +137,10 @@ def promote_as_minor_ally(offer: NPCServiceOffer, persona: Persona) -> EffectRes
 
 
 def _draw_clue_from_pool(pool: CluePool, roster_entry: RosterEntry) -> Clue | None:
-    """Draw a weighted random clue from the pool, excluding held clues (#2293).
+    """Delegate to the shared draw (promoted to services for #2820 tasking)."""
+    from world.assets.services import draw_clue_from_pool  # noqa: PLC0415
 
-    Returns the drawn Clue, or None if the promoter holds every clue in
-    the pool (pool exhausted for this persona).
-    """
-    from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
-    from world.clues.models import CharacterClue  # noqa: PLC0415
-
-    held_clue_ids = set(
-        CharacterClue.objects.filter(roster_entry=roster_entry).values_list("clue_id", flat=True)
-    )
-    available_entries = [
-        e for e in pool.entries.select_related("clue") if e.clue_id not in held_clue_ids
-    ]
-    if not available_entries:
-        return None
-    drawn = select_weighted(available_entries)
-    return drawn.clue
+    return draw_clue_from_pool(pool, roster_entry)
 
 
 @transaction.atomic

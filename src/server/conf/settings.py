@@ -116,6 +116,7 @@ INSTALLED_APPS += [
     "world.missions.apps.MissionsConfig",
     "world.projects.apps.ProjectsConfig",
     "world.npc_services.apps.NPCServicesConfig",
+    "world.tasking.apps.TaskingConfig",
     "world.buildings.apps.BuildingsConfig",
     "world.ships.apps.ShipsConfig",
     "world.travel.apps.TravelConfig",

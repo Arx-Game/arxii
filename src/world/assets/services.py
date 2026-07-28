@@ -18,9 +18,33 @@ from django.db import transaction
 from world.assets.constants import AssetStatus, AssetTransitionReason
 
 if TYPE_CHECKING:
-    from world.assets.models import NPCAsset
+    from world.assets.models import CluePool, NPCAsset
+    from world.clues.models import Clue
     from world.distinctions.models import CharacterDistinction
+    from world.roster.models import RosterEntry
     from world.scenes.models import Persona
+
+
+def draw_clue_from_pool(pool: CluePool, roster_entry: RosterEntry) -> Clue | None:
+    """Draw a weighted random clue from the pool, excluding held clues (#2293).
+
+    Returns the drawn Clue, or None if the character holds every clue in the
+    pool (pool exhausted for them). Shared by asset intel tasking and
+    org-task outcome routes (#2820).
+    """
+    from world.checks.outcome_utils import select_weighted  # noqa: PLC0415
+    from world.clues.models import CharacterClue  # noqa: PLC0415
+
+    held_clue_ids = set(
+        CharacterClue.objects.filter(roster_entry=roster_entry).values_list("clue_id", flat=True)
+    )
+    available_entries = [
+        e for e in pool.entries.select_related("clue") if e.clue_id not in held_clue_ids
+    ]
+    if not available_entries:
+        return None
+    drawn = select_weighted(available_entries)
+    return drawn.clue
 
 
 @transaction.atomic
