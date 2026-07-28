@@ -1,6 +1,6 @@
 # Tasking — the dual-fulfillment job primitive
 
-**App:** `src/world/tasking/` · **Spec:** issue #2820 (phase 1 of 5) · **Since:** 2026-07
+**App:** `src/world/tasking/` · **Spec:** issue #2820 (all 5 phases) · **Since:** 2026-07
 
 An `OrgTask` is a discrete, deadline-bearing job an organization issues against an
 authored `TaskTemplate`. Fulfillment is dual: an **NPC agent** (an `assets.NPCAsset`)
@@ -84,12 +84,70 @@ agent (see `world/mechanics/effect_handlers.py::_apply_asset_status`).
 board panel rendered on `OrgPage`, hidden when empty). Issue/assign UI rides
 later phases.
 
-## Extension points (later phases of #2820)
+## Covert-org layer (phase 2)
 
-- Phase 2: covert-org layer (org-owned `NPCAsset` rows unlock org-roster
-  dispatch in `assign_agent`).
-- Phase 3: listener loop (`NPCAssignment` LISTENER role — standing posts, not
-  tasks).
-- Phase 5: PC pickup — `TaskFulfillment.mission_instance` is already in the
-  schema; acceptance spawns a `MissionInstance` from `template.mission_template`
-  and its outcome tier lands on the same `TaskOutcomeRoute` table.
+- `OrganizationType.is_covert`; `Organization.parent_org` self-FK (structural
+  wings — distinct from `FealtyEdge`). Covert orgs excluded from the public
+  org-name search (`events.OrganizationSearchViewSet`); org detail/rosters
+  were already members-only.
+- **Covert joins mint a Secret**: `sync_covert_membership_secret`
+  (`societies/membership_services.py`) — subject-anchored, GM-provenance,
+  `subject_aware`, back-linked on `OrganizationMembership.covert_secret`.
+  Level tracks rank tier (`COVERT_SECRET_LEVEL_BY_TIER`: tier 1 → level 4)
+  via promote/demote re-sync; the secret survives leaving. "Who runs the
+  network" is playable through the clue→secret machinery.
+- **Org-held agents**: `NPCAsset.promoter_org` XOR `promoter_persona`;
+  `transfer_asset_to_org` + the `donate` endpoint flip a personal row to the
+  org. Succession follows org leadership. `assign_agent` dispatches the
+  issuing org's roster.
+- **Oversight**: `SPYMASTER_OFFICE` slug on the *parent* org
+  (`societies/constants.py`) + parent leadership get READ access to child
+  boards (`office_services.can_oversee_org` / `overseen_org_ids`); command
+  stays with the child org's rank 1. `/api/tasking/roster/` is the board's
+  Roster panel.
+
+## Listener loop (phase 3)
+
+- `AssignmentRole.LISTENER` — a standing `NPCAssignment` (one active per
+  room: prime posts are contested; flip the sitting listener, don't stack).
+- `ListenerPost` sidecar (`listener_services.py`): buzz meter + threshold +
+  optional tradecraft `check_type`. Weekly cron `tasking.listener_sweep`
+  accrues `LISTENER_BUZZ_BASE` + per-scene + per-minted-secret from the
+  room's **mechanical residue only** — prose is structurally invisible
+  (the surveillance-tenet invariant, ADR-0175). Threshold crossings bank a
+  `ListenerHarvest` keyed to a real scene-anchored Secret when one exists.
+- **Collection is physical**: `collect_harvest` requires the handler's body
+  in the room (`POST /api/tasking/posts/{id}/collect/`); a real catch mints
+  an AUTOMATIC clue targeting the caught secret (→ SecretKnowledge). The
+  visit is the exposure surface.
+
+## Counterplay (phase 4, `counterplay_services.py`)
+
+- **suppress** (Intimidation roll): meter silently freezes for two weeks —
+  indistinguishable from bad luck on the board.
+- **flip** (Seduction roll): rival gains a CHARM co-owner `NPCAsset` row
+  (#2295 pattern) + hidden `flipped_controller` on the post. Real catches
+  stop; **plant** queues a red herring (ACCUSATION-provenance secret via
+  `mint_accusation` — contestable through `AccusationRebuttal`) that the
+  next harvest delivers; the original handler collects it as if real.
+- **detect** (Perception roll, consentless): reveals listener agents in the
+  room (names only — who they report to is its own investigation).
+- **clear** (room owner/tenant standing, consentless): retires the room's
+  listener assignments.
+- **Consent boundary**: offensive verbs against PC-run networks route
+  through the `espionage` consent category (seeded under All Antagonism —
+  opt-in by default); the gated owners are the holding persona or the
+  holding org's leadership. NPC networks have no PC owners → always-on.
+- API: `/api/tasking/counterplay/{suppress,flip,plant,detect,clear}/`.
+- Hidden state (`suppressed_until`, `flipped_controller`, `pending_plant`,
+  `ListenerHarvest.planted_clue`) is NEVER serialized.
+
+## PC pickup (phase 5)
+
+`accept_task` (board `accept` endpoint) spawns a `MissionInstance` from
+`template.mission_template` via `staff_assign_mission` (the board-take
+primitive). Missions' `_finish_terminal` calls `resolve_task_for_mission`
+(mirroring the crisis seam): the terminal route's outcome tier grades into
+the SAME `TaskOutcomeRoute` table — one authored payout surface, two
+execution engines. No risk pool on the PC path. Abandoned/expired missions
+fail their task via the hourly sweep.

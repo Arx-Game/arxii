@@ -848,6 +848,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/NPCAsset'
           description: ''
+  /api/assets/{id}/donate/:
+    post:
+      operationId: assets_donate_create
+      description: |-
+        Transfer one of your assets to an org you belong to (#2820 phase 2).
+
+        POST /api/assets/{id}/donate/ with org_id. The relationship becomes
+        org-held: control follows org leadership thereafter.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this npc asset.
+        required: true
+      tags:
+      - assets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCAsset'
+          description: ''
   /api/assets/introduce/:
     post:
       operationId: assets_introduce_create
@@ -31920,6 +31946,226 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/tasking/counterplay/clear/:
+    post:
+      operationId: tasking_counterplay_clear_create
+      description: Expel listener assignments from a room you hold authority over.
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/tasking/counterplay/detect/:
+    post:
+      operationId: tasking_counterplay_detect_create
+      description: Sweep the current room for informants. Consentless (defensive).
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/tasking/counterplay/flip/:
+    post:
+      operationId: tasking_counterplay_flip_create
+      description: Seduce the room's sitting listener into a double allegiance.
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/tasking/counterplay/plant/:
+    post:
+      operationId: tasking_counterplay_plant_create
+      description: Queue a red herring on a listener you've flipped.
+      tags:
+      - tasking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/tasking/counterplay/suppress/:
+    post:
+      operationId: tasking_counterplay_suppress_create
+      description: Intimidate the room's sitting listener into silence.
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/tasking/posts/:
+    get:
+      operationId: tasking_posts_list
+      description: |-
+        Standing listener posts (#2820 phase 3) — the board's Postings panel.
+
+        Visibility: your own posts (handler), plus posts whose agent is held by
+        an org you belong to or oversee. ``collect`` requires the handler's body
+        in the posted room — the visit is the exposure surface.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedListenerPostList'
+          description: ''
+    post:
+      operationId: tasking_posts_create
+      description: |-
+        Standing listener posts (#2820 phase 3) — the board's Postings panel.
+
+        Visibility: your own posts (handler), plus posts whose agent is held by
+        an org you belong to or oversee. ``collect`` requires the handler's body
+        in the posted room — the visit is the exposure surface.
+      tags:
+      - tasking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListenerPostRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListenerPost'
+          description: ''
+  /api/tasking/posts/{id}/:
+    get:
+      operationId: tasking_posts_retrieve
+      description: |-
+        Standing listener posts (#2820 phase 3) — the board's Postings panel.
+
+        Visibility: your own posts (handler), plus posts whose agent is held by
+        an org you belong to or oversee. ``collect`` requires the handler's body
+        in the posted room — the visit is the exposure surface.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this listener post.
+        required: true
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListenerPost'
+          description: ''
+  /api/tasking/posts/{id}/collect/:
+    post:
+      operationId: tasking_posts_collect_create
+      description: Collect the oldest pending harvest, in person.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this listener post.
+        required: true
+      tags:
+      - tasking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListenerPostRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListenerPost'
+          description: ''
+  /api/tasking/roster/:
+    get:
+      operationId: tasking_roster_list
+      description: |-
+        The org's held agents (#2820 phase 2) — the board's Roster panel.
+
+        Visibility mirrors the task board: active members plus parent-org
+        oversight. Non-members simply see an empty list; the ``org`` filter
+        narrows within the allowed set.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNPCAssetList'
+          description: ''
   /api/tasking/routes/:
     get:
       operationId: tasking_routes_list
@@ -32117,6 +32363,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrgTask'
+          description: ''
+  /api/tasking/tasks/{id}/accept/:
+    post:
+      operationId: tasking_tasks_accept_create
+      description: Pick this task up yourself as a mission (#2820 phase 5).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this org task.
+        required: true
+      tags:
+      - tasking
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
           description: ''
   /api/tasking/tasks/{id}/assign/:
     post:
@@ -46790,6 +47059,87 @@ components:
       - origin_affinity_name
       - player_description
       - tier
+    ListenerPost:
+      type: object
+      description: |-
+        Board row for a standing listener post.
+
+        The buzz meter is shown as-is: a suppressed post (phase 4) and an
+        unlucky one render identically — the ambiguity is the design.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        agent_name:
+          type: string
+          readOnly: true
+        room_id:
+          type: integer
+          readOnly: true
+        handler:
+          type: integer
+          description: The persona who collects — physically, in the room.
+        handler_name:
+          type: string
+          readOnly: true
+        buzz:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Accrued intel pressure. Crossing the threshold yields a harvest.
+        threshold:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Buzz needed per harvest (LISTENER_BUZZ_THRESHOLD default).
+        last_sweep_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the weekly sweep last processed this post.
+        pending_harvests:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - agent_name
+      - created_at
+      - handler
+      - handler_name
+      - id
+      - pending_harvests
+      - room_id
+    ListenerPostRequest:
+      type: object
+      description: |-
+        Board row for a standing listener post.
+
+        The buzz meter is shown as-is: a suppressed post (phase 4) and an
+        unlucky one render identically — the ambiguity is the design.
+      properties:
+        handler:
+          type: integer
+          description: The persona who collects — physically, in the room.
+        buzz:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Accrued intel pressure. Crossing the threshold yields a harvest.
+        threshold:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Buzz needed per harvest (LISTENER_BUZZ_THRESHOLD default).
+        last_sweep_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the weekly sweep last processed this post.
+      required:
+      - handler
     LocationModeEnum:
       enum:
       - anywhere
@@ -52413,6 +52763,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LabStationDetails'
+    PaginatedListenerPostList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ListenerPost'
     PaginatedMediaList:
       type: object
       required:

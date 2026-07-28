@@ -580,6 +580,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/assets/{id}/donate/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Transfer one of your assets to an org you belong to (#2820 phase 2).
+     *
+     *     POST /api/assets/{id}/donate/ with org_id. The relationship becomes
+     *     org-held: control follows org leadership thereafter.
+     */
+    post: operations['assets_donate_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/assets/introduce/': {
     parameters: {
       query?: never;
@@ -19441,6 +19463,184 @@ export interface paths {
     patch: operations['table_bulletin_replies_partial_update'];
     trace?: never;
   };
+  '/api/tasking/counterplay/clear/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Expel listener assignments from a room you hold authority over. */
+    post: operations['tasking_counterplay_clear_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/counterplay/detect/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Sweep the current room for informants. Consentless (defensive). */
+    post: operations['tasking_counterplay_detect_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/counterplay/flip/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Seduce the room's sitting listener into a double allegiance. */
+    post: operations['tasking_counterplay_flip_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/counterplay/plant/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Queue a red herring on a listener you've flipped. */
+    post: operations['tasking_counterplay_plant_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/counterplay/suppress/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Intimidate the room's sitting listener into silence. */
+    post: operations['tasking_counterplay_suppress_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/posts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Standing listener posts (#2820 phase 3) — the board's Postings panel.
+     *
+     *     Visibility: your own posts (handler), plus posts whose agent is held by
+     *     an org you belong to or oversee. ``collect`` requires the handler's body
+     *     in the posted room — the visit is the exposure surface.
+     */
+    get: operations['tasking_posts_list'];
+    put?: never;
+    /**
+     * @description Standing listener posts (#2820 phase 3) — the board's Postings panel.
+     *
+     *     Visibility: your own posts (handler), plus posts whose agent is held by
+     *     an org you belong to or oversee. ``collect`` requires the handler's body
+     *     in the posted room — the visit is the exposure surface.
+     */
+    post: operations['tasking_posts_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/posts/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Standing listener posts (#2820 phase 3) — the board's Postings panel.
+     *
+     *     Visibility: your own posts (handler), plus posts whose agent is held by
+     *     an org you belong to or oversee. ``collect`` requires the handler's body
+     *     in the posted room — the visit is the exposure surface.
+     */
+    get: operations['tasking_posts_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/posts/{id}/collect/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Collect the oldest pending harvest, in person. */
+    post: operations['tasking_posts_collect_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/roster/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The org's held agents (#2820 phase 2) — the board's Roster panel.
+     *
+     *     Visibility mirrors the task board: active members plus parent-org
+     *     oversight. Non-members simply see an empty list; the ``org`` filter
+     *     narrows within the allowed set.
+     */
+    get: operations['tasking_roster_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/tasking/routes/': {
     parameters: {
       query?: never;
@@ -19508,6 +19708,23 @@ export interface paths {
     get: operations['tasking_tasks_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tasking/tasks/{id}/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Pick this task up yourself as a mission (#2820 phase 5). */
+    post: operations['tasking_tasks_accept_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -26505,6 +26722,51 @@ export interface components {
       is_visible_at_rest?: boolean;
     };
     /**
+     * @description Board row for a standing listener post.
+     *
+     *     The buzz meter is shown as-is: a suppressed post (phase 4) and an
+     *     unlucky one render identically — the ambiguity is the design.
+     */
+    ListenerPost: {
+      readonly id: number;
+      readonly agent_name: string;
+      readonly room_id: number;
+      /** @description The persona who collects — physically, in the room. */
+      handler: number;
+      readonly handler_name: string;
+      /** @description Accrued intel pressure. Crossing the threshold yields a harvest. */
+      buzz?: number;
+      /** @description Buzz needed per harvest (LISTENER_BUZZ_THRESHOLD default). */
+      threshold?: number;
+      /**
+       * Format: date-time
+       * @description When the weekly sweep last processed this post.
+       */
+      last_sweep_at?: string | null;
+      readonly pending_harvests: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description Board row for a standing listener post.
+     *
+     *     The buzz meter is shown as-is: a suppressed post (phase 4) and an
+     *     unlucky one render identically — the ambiguity is the design.
+     */
+    ListenerPostRequest: {
+      /** @description The persona who collects — physically, in the room. */
+      handler: number;
+      /** @description Accrued intel pressure. Crossing the threshold yields a harvest. */
+      buzz?: number;
+      /** @description Buzz needed per harvest (LISTENER_BUZZ_THRESHOLD default). */
+      threshold?: number;
+      /**
+       * Format: date-time
+       * @description When the weekly sweep last processed this post.
+       */
+      last_sweep_at?: string | null;
+    };
+    /**
      * @description * `anywhere` - Anywhere
      *     * `anchor` - Anchor Room
      *     * `rooms` - Authored Rooms
@@ -29587,6 +29849,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['LabStationDetails'][];
+    };
+    PaginatedListenerPostList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ListenerPost'][];
     };
     PaginatedMediaList: {
       /** @example 123 */
@@ -39517,6 +39794,28 @@ export interface operations {
     };
   };
   assets_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this npc asset. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCAsset'];
+        };
+      };
+    };
+  };
+  assets_donate_create: {
     parameters: {
       query?: never;
       header?: never;
@@ -66031,6 +66330,232 @@ export interface operations {
       };
     };
   };
+  tasking_counterplay_clear_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  tasking_counterplay_detect_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  tasking_counterplay_flip_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  tasking_counterplay_plant_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  tasking_counterplay_suppress_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  tasking_posts_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedListenerPostList'];
+        };
+      };
+    };
+  };
+  tasking_posts_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ListenerPostRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ListenerPost'];
+        };
+      };
+    };
+  };
+  tasking_posts_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this listener post. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ListenerPost'];
+        };
+      };
+    };
+  };
+  tasking_posts_collect_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this listener post. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ListenerPostRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ListenerPost'];
+        };
+      };
+    };
+  };
+  tasking_roster_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedNPCAssetList'];
+        };
+      };
+    };
+  };
   tasking_routes_list: {
     parameters: {
       query?: {
@@ -66234,6 +66759,30 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OrgTask'];
+        };
+      };
+    };
+  };
+  tasking_tasks_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this org task. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
         };
       };
     };
