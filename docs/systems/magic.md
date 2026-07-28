@@ -936,7 +936,7 @@ effects before committing.
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `CombatPull` | Per-round commit envelope for a thread pull | `participant` FK, `encounter` FK, `round_number`, `resonance` FK, `tier` (1/2/3), `threads` M2M, `resonance_spent`, `anima_spent`, `committed_at`. Unique per (participant, round_number); indexed on (encounter, round_number) |
-| `CombatPullResolvedEffect` | Frozen snapshot of one resolved effect at pull commit | `pull` FK, `kind`, `authored_value`, `level_multiplier`, `scaled_value`, `vital_target`, `source_thread` FK, `source_thread_level`, `source_tier`, `granted_capability` FK, `narrative_snippet`. CheckConstraints mirror ThreadPullEffect payload rules |
+| `CombatPullResolvedEffect` | Frozen snapshot of one resolved effect at pull commit | `pull` FK, `kind`, `authored_value`, `level_multiplier`, `scaled_value`, `vital_target`, `source_thread` FK, `source_thread_level`, `source_tier`, `granted_capability` FK, `capability_grant_value` (frozen curved magnitude for CAPABILITY_GRANT, #2730/ADR-0173), `narrative_snippet`. CheckConstraints mirror ThreadPullEffect payload rules |
 
 A CombatPull is considered *active* while `round_number == encounter.round_number`
 (canonical liveness check). `expire_pulls_for_round` (combat services) deletes
