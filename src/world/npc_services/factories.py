@@ -211,3 +211,18 @@ class ProfileRecordingOfferDetailsFactory(DjangoModelFactory):
 
     offer = factory.SubFactory(NPCServiceOfferFactory, kind=OfferKind.PROFILE_RECORDING)
     price_coppers = 500
+
+
+class StaffingProfileFactory(DjangoModelFactory):
+    class Meta:
+        model = "npc_services.StaffingProfile"
+
+    building_kind = factory.SubFactory("world.buildings.factories.BuildingKindFactory")
+
+
+class StaffingProfileLineFactory(DjangoModelFactory):
+    class Meta:
+        model = "npc_services.StaffingProfileLine"
+
+    profile = factory.SubFactory(StaffingProfileFactory)
+    role = factory.SubFactory(NPCRoleFactory)

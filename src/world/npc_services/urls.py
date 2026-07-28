@@ -13,6 +13,8 @@ from world.npc_services.views import (
     OfferSummonsViewSet,
     PermitOfferDetailsViewSet,
     RecordedProfileViewSet,
+    StaffingProfileLineViewSet,
+    StaffingProfileViewSet,
 )
 
 router = DefaultRouter()
@@ -26,5 +28,8 @@ router.register(r"interactions", InteractionViewSet, basename="npc-interaction")
 router.register(r"summons", OfferSummonsViewSet, basename="npc-summons")
 router.register(r"recorded-profiles", RecordedProfileViewSet, basename="npc-recorded-profile")
 router.register(r"reaction-lines", NPCReactionLineViewSet, basename="npc-reaction-line")
+
+router.register(r"staffing-profiles", StaffingProfileViewSet, basename="staffing-profile")
+router.register(r"staffing-lines", StaffingProfileLineViewSet, basename="staffing-profile-line")
 
 urlpatterns = router.urls

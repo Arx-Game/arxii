@@ -34,6 +34,8 @@ from world.npc_services.filters import (
     OfferCooldownFilterSet,
     PermitOfferDetailsFilterSet,
     RecordedProfileFilterSet,
+    StaffingProfileFilterSet,
+    StaffingProfileLineFilterSet,
 )
 from world.npc_services.models import (
     MissionOfferDetails,
@@ -45,6 +47,8 @@ from world.npc_services.models import (
     OfferSummons,
     PermitOfferDetails,
     RecordedProfile,
+    StaffingProfile,
+    StaffingProfileLine,
 )
 from world.npc_services.serializers import (
     InteractionResolveRequestSerializer,
@@ -61,6 +65,8 @@ from world.npc_services.serializers import (
     PermitOfferDetailsSerializer,
     RecordedProfileCompleteSerializer,
     RecordedProfileSerializer,
+    StaffingProfileLineSerializer,
+    StaffingProfileSerializer,
     SummonsRespondSerializer,
 )
 from world.npc_services.services import (
@@ -517,3 +523,23 @@ class NPCReactionLineViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     pagination_class = NPCServicesPagination
     permission_classes = [IsGMOrStaff]
+
+
+class StaffingProfileViewSet(viewsets.ModelViewSet):
+    """Staff authoring CRUD for building-kind staffing profiles (#2827)."""
+
+    queryset = StaffingProfile.objects.all()
+    serializer_class = StaffingProfileSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = NPCServicesPagination
+    filterset_class = StaffingProfileFilterSet
+
+
+class StaffingProfileLineViewSet(viewsets.ModelViewSet):
+    """Staff authoring CRUD for staffing profile lines (#2827)."""
+
+    queryset = StaffingProfileLine.objects.all()
+    serializer_class = StaffingProfileLineSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = NPCServicesPagination
+    filterset_class = StaffingProfileLineFilterSet

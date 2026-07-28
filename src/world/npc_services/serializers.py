@@ -12,6 +12,8 @@ from world.npc_services.models import (
     OfferSummons,
     PermitOfferDetails,
     RecordedProfile,
+    StaffingProfile,
+    StaffingProfileLine,
 )
 
 
@@ -309,3 +311,22 @@ class NPCReactionLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = NPCReactionLine
         fields = ["id", "role", "functionary", "metric", "band_floor", "template"]
+
+
+class StaffingProfileLineSerializer(serializers.ModelSerializer):
+    role_name = serializers.CharField(source="role.name", read_only=True)
+
+    class Meta:
+        model = StaffingProfileLine
+        fields = ["id", "profile", "role", "role_name"]
+
+
+class StaffingProfileSerializer(serializers.ModelSerializer):
+    """Staff authoring: a building kind's baseline crew (#2827 phase 1)."""
+
+    lines = StaffingProfileLineSerializer(many=True, read_only=True)
+    building_kind_name = serializers.CharField(source="building_kind.name", read_only=True)
+
+    class Meta:
+        model = StaffingProfile
+        fields = ["id", "building_kind", "building_kind_name", "lines"]

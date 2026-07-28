@@ -266,6 +266,19 @@ class Functionary(SharedMemoryModel):
         default=True,
         help_text="Whether this placement is currently present. False hides it without deleting.",
     )
+    persona = models.ForeignKey(
+        _PERSONA_FK,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="functionary_placements",
+        help_text=(
+            "The materialized identity behind this placement (#2827 tier 1). NULL = "
+            "still a faceless slot; set when a player engagement (or staff) makes "
+            "them real. The persona survives the placement — extraction/standing "
+            "promotion clears this link, never the identity."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -284,6 +297,62 @@ class Functionary(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.display_name} @ room {self.room_id}"
+
+
+class StaffingProfile(SharedMemoryModel):
+    """Default staffing for buildings of a kind (#2827 phase 1).
+
+    "This is an inn, so there are workers here" as data: one profile per
+    `BuildingKind`, applied automatically when a building of that kind
+    activates (and re-ensured by the weekly refill sweep). Staff never
+    hand-place the baseline crew; they curate exceptions.
+    """
+
+    building_kind = models.OneToOneField(
+        "buildings.BuildingKind",
+        on_delete=models.CASCADE,
+        related_name="staffing_profile",
+        help_text="Buildings of this kind auto-staff from this profile on activation.",
+    )
+
+    class Meta:
+        verbose_name = "Staffing Profile"
+        verbose_name_plural = "Staffing Profiles"
+
+    def __str__(self) -> str:
+        return f"Staffing for {self.building_kind.name}"
+
+
+class StaffingProfileLine(SharedMemoryModel):
+    """One role the venue keeps staffed.
+
+    One active placement per (role, room) — the Functionary unique
+    constraint — so a line is a *slot*, not a headcount. Want two distinct
+    servers in the common room? Author two roles.
+    """
+
+    profile = models.ForeignKey(
+        StaffingProfile,
+        on_delete=models.CASCADE,
+        related_name="lines",
+    )
+    role = models.ForeignKey(
+        NPCRole,
+        on_delete=models.PROTECT,
+        related_name="staffing_lines",
+    )
+
+    class Meta:
+        ordering = ["profile", "role__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["profile", "role"],
+                name="unique_staffing_line_per_role",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.profile.building_kind.name}: {self.role.name}"
 
 
 class NPCServiceOffer(SharedMemoryModel):
