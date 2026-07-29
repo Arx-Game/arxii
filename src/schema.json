@@ -58073,6 +58073,56 @@ components:
           type: string
           description: Agent report prose; format kwargs {task}, {target}, {agent}.
             Blank = generic line.
+        movements_report:
+          type: boolean
+          description: 'PERSONA target: append the target''s recent PUBLIC-room appearances
+            (scene records, mechanical residue only — ADR-0175).'
+        unmask_target:
+          type: boolean
+          description: 'PERSONA target: mint a PERSONA_LINK clue piercing the target''s
+            mask (no-op when they are their true face).'
+        gossip_heat_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'PERSONA target: heat applied to the hottest existing gossip
+            about the target''s secrets. Positive = whisper campaign, negative = quash.
+            Never mints new secrets.'
+        building_condition_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'ROOM target: shift the room''s building condition tier (sabotage
+            < 0).'
+        recruit_target:
+          type: boolean
+          description: 'PERSONA target (NPCs only): the issuing org gains a held asset
+            claim on the target — remote cultivation. No-op against player characters.'
+        incriminate_level:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: 'Residue (#2833): 1-4 mints a Secret about the HANDLER at this
+            level (''they arranged it'') plus an investigable hub trail when the target
+            room''s region is derivable. Authors put it on sloppy tiers.'
+        domain_report:
+          type: boolean
+          description: 'DOMAIN target: report population/prosperity/unrest, holdings,
+            and open crises — what a rival spymaster wants to know.'
+        domain_unrest_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'DOMAIN target: foment (positive) or soothe (negative) unrest,
+            feeding the existing weekly consumption/crisis machinery.'
+        organization_report:
+          type: boolean
+          description: 'ORG target: case the organization — member count, banded treasury,
+            held agents, parent/wings. Never exact coin.'
+        military_report:
+          type: boolean
+          description: 'ORG target: assay their strength — the org''s military units
+            and active armies. Movements come when positional troop state exists.'
     PatchedTaskTemplateRequest:
       type: object
       description: Staff authoring surface for job templates.
@@ -67517,6 +67567,56 @@ components:
           type: string
           description: Agent report prose; format kwargs {task}, {target}, {agent}.
             Blank = generic line.
+        movements_report:
+          type: boolean
+          description: 'PERSONA target: append the target''s recent PUBLIC-room appearances
+            (scene records, mechanical residue only — ADR-0175).'
+        unmask_target:
+          type: boolean
+          description: 'PERSONA target: mint a PERSONA_LINK clue piercing the target''s
+            mask (no-op when they are their true face).'
+        gossip_heat_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'PERSONA target: heat applied to the hottest existing gossip
+            about the target''s secrets. Positive = whisper campaign, negative = quash.
+            Never mints new secrets.'
+        building_condition_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'ROOM target: shift the room''s building condition tier (sabotage
+            < 0).'
+        recruit_target:
+          type: boolean
+          description: 'PERSONA target (NPCs only): the issuing org gains a held asset
+            claim on the target — remote cultivation. No-op against player characters.'
+        incriminate_level:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: 'Residue (#2833): 1-4 mints a Secret about the HANDLER at this
+            level (''they arranged it'') plus an investigable hub trail when the target
+            room''s region is derivable. Authors put it on sloppy tiers.'
+        domain_report:
+          type: boolean
+          description: 'DOMAIN target: report population/prosperity/unrest, holdings,
+            and open crises — what a rival spymaster wants to know.'
+        domain_unrest_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'DOMAIN target: foment (positive) or soothe (negative) unrest,
+            feeding the existing weekly consumption/crisis machinery.'
+        organization_report:
+          type: boolean
+          description: 'ORG target: case the organization — member count, banded treasury,
+            held agents, parent/wings. Never exact coin.'
+        military_report:
+          type: boolean
+          description: 'ORG target: assay their strength — the org''s military units
+            and active armies. Movements come when positional troop state exists.'
       required:
       - id
       - outcome_tier
@@ -67543,6 +67643,56 @@ components:
           type: string
           description: Agent report prose; format kwargs {task}, {target}, {agent}.
             Blank = generic line.
+        movements_report:
+          type: boolean
+          description: 'PERSONA target: append the target''s recent PUBLIC-room appearances
+            (scene records, mechanical residue only — ADR-0175).'
+        unmask_target:
+          type: boolean
+          description: 'PERSONA target: mint a PERSONA_LINK clue piercing the target''s
+            mask (no-op when they are their true face).'
+        gossip_heat_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'PERSONA target: heat applied to the hottest existing gossip
+            about the target''s secrets. Positive = whisper campaign, negative = quash.
+            Never mints new secrets.'
+        building_condition_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'ROOM target: shift the room''s building condition tier (sabotage
+            < 0).'
+        recruit_target:
+          type: boolean
+          description: 'PERSONA target (NPCs only): the issuing org gains a held asset
+            claim on the target — remote cultivation. No-op against player characters.'
+        incriminate_level:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: 'Residue (#2833): 1-4 mints a Secret about the HANDLER at this
+            level (''they arranged it'') plus an investigable hub trail when the target
+            room''s region is derivable. Authors put it on sloppy tiers.'
+        domain_report:
+          type: boolean
+          description: 'DOMAIN target: report population/prosperity/unrest, holdings,
+            and open crises — what a rival spymaster wants to know.'
+        domain_unrest_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: 'DOMAIN target: foment (positive) or soothe (negative) unrest,
+            feeding the existing weekly consumption/crisis machinery.'
+        organization_report:
+          type: boolean
+          description: 'ORG target: case the organization — member count, banded treasury,
+            held agents, parent/wings. Never exact coin.'
+        military_report:
+          type: boolean
+          description: 'ORG target: assay their strength — the org''s military units
+            and active armies. Movements come when positional troop state exists.'
       required:
       - outcome_tier
       - template

@@ -47,6 +47,18 @@ class TaskOutcomeRouteSerializer(serializers.ModelSerializer):
             "money_reward",
             "clue_pool",
             "report_template",
+            # Spy Job Kit payouts (#2833).
+            "movements_report",
+            "unmask_target",
+            "gossip_heat_delta",
+            "building_condition_delta",
+            "recruit_target",
+            "incriminate_level",
+            # Cross-system payouts (#2833 addendum).
+            "domain_report",
+            "domain_unrest_delta",
+            "organization_report",
+            "military_report",
         ]
 
 

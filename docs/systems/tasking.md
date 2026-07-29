@@ -23,8 +23,8 @@ Deliberately NOT here: standing "stay here until recalled" postings — those ar
   nullable `consequence_pool` FK (ADR-0092 risk surface), `is_active`.
 - **`TaskOutcomeRoute`** — per (template, `outcome_tier` FK → `traits.CheckOutcome`)
   payout row: `money_reward`, nullable `clue_pool` FK, `report_template`
-  (`{task}`/`{target}`/`{agent}` format kwargs). No route for a tier ⇒ nothing
-  happens (fail closed).
+  (`{task}`/`{target}`/`{agent}` format kwargs), plus the Spy Job Kit payout
+  fields (below). No route for a tier ⇒ nothing happens (fail closed).
 - **`OrgTask`** — live instance: `template`, `org`, `issued_by` persona, `status`
   (`TaskStatus`: OPEN→ASSIGNED→RESOLVING→COMPLETED/FAILED/EXPIRED), `deadline`
   (set at assignment), target via `DiscriminatorMixin` (`target_kind` selects
@@ -67,6 +67,44 @@ agent's resolution check is the tradecraft; its tier picks the payout route and
 grades the risk pool. Asset compromise/loss flows ONLY through consequence pools
 (ADR-0092); `ResolutionContext.npc_asset` narrows the effect to the dispatched
 agent (see `world/mechanics/effect_handlers.py::_apply_asset_status`).
+
+## Spy Job Kit (`spy_payouts.py`, #2833)
+
+Route-level payout flags applied by `apply_spy_payouts` (called from
+`resolve_task` via `_apply_route_payouts`); each degrades to a report line on a
+missing/mismatched target, never an exception:
+
+- `movements_report` (PERSONA) — where the mark has been seen: scene
+  `Interaction` rows in PUBLIC rooms only, last `MOVEMENTS_REPORT_DAYS` days.
+  Mechanical residue, never prose (ADR-0175).
+- `unmask_target` (PERSONA) — pierce a mask: mints/loads the pair
+  `PERSONA_LINK` clue and grants it to the handler (`PersonaDiscovery`).
+- `gossip_heat_delta` (PERSONA, ±) — amplify or quash the hottest existing
+  `SecretGossip` row about the mark. Never mints dirt — whisper campaigns need
+  something real (or an accusation) to fan.
+- `building_condition_delta` (ROOM, ±) — sabotage/repair via
+  `set_condition_tier` on buildings in the room's area.
+- `recruit_target` (PERSONA) — suborn an NPC into an org-held `NPCAsset`;
+  refuses PCs (tenure check) — PC recruitment stays consensual RP.
+- `incriminate_level` — the residue rule: sloppy-tier routes mint a
+  GM-provenance (TRUE) `Secret` about the **handler** plus an investigable
+  counter-clue trail in the region's hubs. Never confessed in the report.
+- **Cross-system addendum**: `domain_report` (DOMAIN — population, prosperity,
+  unrest, holdings, open crises), `domain_unrest_delta` (DOMAIN, ± clamp
+  0–100 — foment or soothe; feeds the weekly domain tick/crisis machinery),
+  `organization_report` (ORG — member count, treasury *band* never exact coin,
+  own-agent count, parent/wings), `military_report` (ORG — persistent
+  `MilitaryUnit` counts + active armies; troop *movements* wait on positional
+  military state).
+
+Consent: `template_is_offensive` classifies routes; offensive jobs refuse at
+ISSUE time (`TargetConsentError`) when the target is a PC — or a PC-led org /
+domain (owner org's `can_manage_ranks` members' tenures) — who hasn't opted
+into the `espionage` category. Defensive templates (quash-only, soothe-only)
+and NPC targets are ungated.
+
+Seeds: `world/seeds/spy_tasks.py` (`spy_tasks` cluster) — ten PLACEHOLDER
+templates + the "Spywork Exposure" risk pool (ASSET_STATUS COMPROMISED).
 
 ## API (`views.py`, `/api/tasking/`)
 

@@ -203,6 +203,12 @@ def _seed_npc_services() -> None:
     ensure_name_cultures()
 
 
+def _seed_spy_tasks() -> None:
+    from world.seeds.spy_tasks import ensure_spy_task_templates  # noqa: PLC0415
+
+    ensure_spy_task_templates()
+
+
 def _seed_justice() -> None:
     from world.seeds.justice import seed_crime_kinds  # noqa: PLC0415
 
@@ -459,6 +465,7 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # load_world_content() before any cluster runs (#2474) — not seeded by
     # the "magic" cluster.
     "npc_services": _seed_npc_services,
+    "spy_tasks": _seed_spy_tasks,
     # Justice: the starter CrimeKind vocabulary (#1765). Laws are world data, not seeds.
     "justice": _seed_justice,
     # Governance: Scholarship/Economics + Organization/Stewardship skills and the
@@ -626,6 +633,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.societies.houses.models import Title  # noqa: PLC0415
     from world.societies.models import PropagandaCampaignTier  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
+    from world.tasking.models import TaskTemplate  # noqa: PLC0415
     from world.traits.models import ResultChart, Trait  # noqa: PLC0415
     from world.worship.models import WorshippedBeing, WorshipTradition  # noqa: PLC0415
 
@@ -700,6 +708,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # live caller for settle_obligation and the fresh-DB-completable training
         # loop), represented by NPCRole (mirrors "tutorial" above).
         "npc_services": [NPCRole],
+        # Spy Job Kit (#2833): the sample spy TaskTemplates + Spywork Exposure pool.
+        "spy_tasks": [TaskTemplate],
         # Justice: the starter CrimeKind vocabulary (#1765); AreaLaw rows are world data.
         "justice": [CrimeKind],
         # Governance seeds skills/specs + CheckTypes (shared spine rows counted under

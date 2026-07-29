@@ -25,6 +25,7 @@ from world.tasking.exceptions import (
     ForeignAgentError,
     HandlerNotMemberError,
     NoActiveFulfillmentError,
+    TargetConsentError,
     TaskNotOpenError,
     TaskResolutionError,
 )
@@ -60,6 +61,66 @@ def aptitude_band(persona, category: str) -> int:
     return row.band
 
 
+def _pc_tenure_for_sheet(sheet_id):
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    return RosterTenure.objects.filter(
+        roster_entry__character_sheet_id=sheet_id,
+        end_date__isnull=True,
+    ).first()
+
+
+def _consent_owner_tenures(target_persona, target_org, target_domain) -> list:
+    """PC tenures whose espionage consent gates this target (#2833 addendum).
+
+    Persona target: the persona's own player. Org/domain target: the target
+    org's (or the domain's owner org's) PC leadership — an NPC-run org has
+    no PC leadership tenures and is always-on."""
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    if target_persona is not None:
+        tenure = _pc_tenure_for_sheet(target_persona.character_sheet_id)
+        return [tenure] if tenure else []
+    org = target_org
+    if org is None and target_domain is not None:
+        org = target_domain.owner_org
+    if org is None:
+        return []
+    leaders = OrganizationMembership.objects.filter(
+        organization=org,
+        left_at__isnull=True,
+        exiled_at__isnull=True,
+        rank__can_manage_ranks=True,
+    ).select_related("persona")
+    tenures = [_pc_tenure_for_sheet(m.persona.character_sheet_id) for m in leaders]
+    return [t for t in tenures if t is not None]
+
+
+def _assert_target_consent(
+    template, issuer, target_persona, *, target_org=None, target_domain=None
+) -> None:
+    """#2833: offensive jobs against a PC (or PC-led org/domain) route through
+    the espionage consent category AT ISSUE TIME — the task refuses creation,
+    so there is never an offscreen surprise. NPC targets and defensive jobs
+    (quash/soothe-only templates) are ungated."""
+    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
+    from world.consent.services import consent_blocks_targeting  # noqa: PLC0415
+    from world.tasking.spy_payouts import template_is_offensive  # noqa: PLC0415
+
+    if not template_is_offensive(template):
+        return
+    owner_tenures = _consent_owner_tenures(target_persona, target_org, target_domain)
+    if not owner_tenures:
+        return  # NPC target / NPC-led org: always-on
+    issuer_tenure = _pc_tenure_for_sheet(issuer.character_sheet_id)
+    category = SocialConsentCategory.objects.filter(key="espionage").first()
+    for owner_tenure in owner_tenures:
+        if consent_blocks_targeting(
+            owner_tenure=owner_tenure, category=category, actor_tenure=issuer_tenure
+        ):
+            raise TargetConsentError
+
+
 def _is_active_member(persona: Persona, org: Organization) -> bool:
     from world.societies.models import OrganizationMembership  # noqa: PLC0415
 
@@ -82,6 +143,9 @@ def create_task(  # noqa: PLR0913 - the four target kwargs are co-equal discrimi
     target_persona=None,
 ) -> OrgTask:
     """Create an OPEN task instance. Caller (view/action) gates leadership."""
+    _assert_target_consent(
+        template, issued_by, target_persona, target_org=target_org, target_domain=target_domain
+    )
     task = OrgTask(
         template=template,
         org=org,
@@ -167,12 +231,16 @@ def _write_report(
     )
 
 
-def _apply_route_payouts(route: TaskOutcomeRoute, fulfillment: TaskFulfillment) -> None:
-    """Money and clue payouts land on the handler (they collected the result)."""
+def _apply_route_payouts(
+    route: TaskOutcomeRoute, task: OrgTask, fulfillment: TaskFulfillment
+) -> list[str]:
+    """Money/clue payouts land on the handler; spy payouts (#2833) apply per
+    target kind. Returns extra report lines from the spy payouts."""
     from world.assets.services import draw_clue_from_pool  # noqa: PLC0415
     from world.clues.services import acquire_clue  # noqa: PLC0415
     from world.currency.services import deliver_mission_money  # noqa: PLC0415
     from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.tasking.spy_payouts import apply_spy_payouts  # noqa: PLC0415
 
     handler_sheet = fulfillment.handler.character_sheet
     if route.money_reward > 0:
@@ -188,6 +256,7 @@ def _apply_route_payouts(route: TaskOutcomeRoute, fulfillment: TaskFulfillment) 
             drawn = draw_clue_from_pool(route.clue_pool, roster_entry)
             if drawn is not None:
                 acquire_clue(roster_entry, drawn)
+    return apply_spy_payouts(route, task, fulfillment)
 
 
 def _apply_risk_pool(
@@ -246,13 +315,14 @@ def resolve_task(task: OrgTask) -> TaskFulfillment:
     )
 
     route = task.template.outcome_routes.filter(outcome_tier=check_result.outcome).first()
+    spy_lines: list[str] = []
     if route is not None:
-        _apply_route_payouts(route, fulfillment)
+        spy_lines = _apply_route_payouts(route, task, fulfillment)
     _apply_risk_pool(task, fulfillment, agent_character, check_result)
 
     now = timezone.now()
     fulfillment.resolved_outcome = check_result.outcome
-    fulfillment.report = _write_report(route, task, fulfillment)
+    fulfillment.report = "\n".join([_write_report(route, task, fulfillment), *spy_lines])
     fulfillment.resolved_at = now
     fulfillment.save(update_fields=["resolved_outcome", "report", "resolved_at"])
 
@@ -361,10 +431,11 @@ def resolve_task_for_mission(instance, route=None) -> None:
 
     outcome_tier = route.outcome_tier if route is not None else None
     task_route = None
+    spy_lines: list[str] = []
     if outcome_tier is not None:
         task_route = task.template.outcome_routes.filter(outcome_tier=outcome_tier).first()
     if task_route is not None:
-        _apply_route_payouts(task_route, fulfillment)
+        spy_lines = _apply_route_payouts(task_route, task, fulfillment)
 
     # A BRANCH terminal (route=None) or a success-tier route completes the
     # task; a failure-tier terminal fails it.
@@ -379,6 +450,8 @@ def resolve_task_for_mission(instance, route=None) -> None:
         )
     else:
         fulfillment.report = f"{fulfillment.handler} saw to {task.template.name} personally."
+    if spy_lines:
+        fulfillment.report = "\n".join([fulfillment.report, *spy_lines])
     fulfillment.resolved_at = now
     fulfillment.save(update_fields=["resolved_outcome", "report", "resolved_at"])
     task.status = TaskStatus.COMPLETED if succeeded else TaskStatus.FAILED

@@ -2534,6 +2534,13 @@ consumers, not systems.
 - **API:** `/api/tasking/` — staff `templates/`+`routes/`; member `tasks/`
   (create/assign/accept), `roster/`, `posts/` (+collect), `counterplay/`;
   React `OperationsSection` (Roster/Postings/Operations) on `OrgPage`
+- **Spy Job Kit (#2833):** ten route payouts (`spy_payouts.py`) —
+  movements report, unmask (PERSONA_LINK), gossip heat ±, building
+  condition ±, suborn-NPC, the incriminating-residue rule (handler
+  secret + hub trail), plus cross-system payouts: domain report, domain
+  unrest ± (foment/soothe), organization report (treasury banded),
+  military strength assay; issue-time espionage consent gate covers PCs
+  AND PC-led orgs/domains; sample templates in `world/seeds/spy_tasks.py`
 - **Actions + telnet:** 11 REGISTRY actions (`actions/definitions/tasking.py`)
   are the ADR-0001 seam — viewsets dispatch through them; telnet `network`
   family (`commands/network.py`: board/issue/assign/accept/post/collect/
