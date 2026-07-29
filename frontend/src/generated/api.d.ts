@@ -15564,6 +15564,193 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/proclamations/edict-kinds/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/retrieve edict kinds. */
+    get: operations['proclamations_edict_kinds_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/proclamations/edict-kinds/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/retrieve edict kinds. */
+    get: operations['proclamations_edict_kinds_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/proclamations/edicts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/retrieve domain edicts + enact/revoke actions. */
+    get: operations['proclamations_edicts_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/proclamations/edicts/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/retrieve domain edicts + enact/revoke actions. */
+    get: operations['proclamations_edicts_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/proclamations/edicts/enact/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Enact an edict. Expects ``domain`` (id), ``kind`` (name), ``proclamation`` (id). */
+    post: operations['proclamations_edicts_enact_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/proclamations/edicts/revoke/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Revoke the active edict on a domain. Expects ``domain`` (id). */
+    post: operations['proclamations_edicts_revoke_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/proclamations/proclamations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/retrieve proclamations + custom issue action. */
+    get: operations['proclamations_proclamations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/proclamations/proclamations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/retrieve proclamations + custom issue action. */
+    get: operations['proclamations_proclamations_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/proclamations/proclamations/issue/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Issue a proclamation. Expects ``stance`` (name) and optional ``prose``. */
+    post: operations['proclamations_proclamations_issue_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/proclamations/stances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/retrieve stance archetypes. */
+    get: operations['proclamations_stances_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/proclamations/stances/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List/retrieve stance archetypes. */
+    get: operations['proclamations_stances_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/progression/account/': {
     parameters: {
       query?: never;
@@ -24037,6 +24224,27 @@ export interface components {
       /** @description URL-safe identifier for this tag. */
       readonly slug: string;
     };
+    DomainEdict: {
+      readonly id: number;
+      readonly domain_name: string;
+      readonly kind_name: string;
+      /** Format: date-time */
+      enacted_at?: string;
+      /** Format: date-time */
+      revoked_at?: string | null;
+      domain: number;
+      kind: number;
+      proclamation: number;
+    };
+    DomainEdictRequest: {
+      /** Format: date-time */
+      enacted_at?: string;
+      /** Format: date-time */
+      revoked_at?: string | null;
+      domain: number;
+      kind: number;
+      proclamation: number;
+    };
     /**
      * @description * `BEAST` - Beast
      *     * `UNDEAD` - Undead
@@ -24291,6 +24499,18 @@ export interface components {
        *     plain column — no query.
        */
       readonly name: string;
+    };
+    EdictKind: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      /** @description Percentage adjustment to domain gross income while active. */
+      income_gross_pct?: number;
+      /** @description Weekly unrest change applied while this edict is active. */
+      weekly_unrest_delta?: number;
+      /** @description Additional weekly upkeep in coppers while this edict is active. */
+      weekly_upkeep_coppers?: number;
+      stance: number;
     };
     EffectRow: {
       kind: string;
@@ -29478,6 +29698,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['DeedStory'][];
     };
+    PaginatedDomainEdictList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['DomainEdict'][];
+    };
     PaginatedDraftApplicationList: {
       /** @example 123 */
       count: number;
@@ -29537,6 +29772,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['DuelChallenge'][];
+    };
+    PaginatedEdictKindList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['EdictKind'][];
     };
     PaginatedEncounterListList: {
       /** @example 123 */
@@ -30754,6 +31004,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PortalDestination'][];
     };
+    PaginatedProclamationList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Proclamation'][];
+    };
     PaginatedProgressionUnlockItemList: {
       /** @example 123 */
       count: number;
@@ -31353,6 +31618,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['StakeTemplate'][];
+    };
+    PaginatedStanceArchetypeList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StanceArchetype'][];
     };
     PaginatedStoryFeedbackList: {
       /** @example 123 */
@@ -34319,6 +34599,33 @@ export interface components {
      * @enum {string}
      */
     PrivacyModeEnum: 'public' | 'private' | 'ephemeral';
+    Proclamation: {
+      readonly id: number;
+      readonly issuer_name: string;
+      readonly stance_name: string;
+      /** @description Player-authored text shown verbatim on the feed, never parsed. */
+      prose?: string;
+      /** @description Stored CheckOutcome name from the issue roll. */
+      check_outcome?: string;
+      /** Format: date-time */
+      issued_at?: string;
+      issuer: number;
+      /** @description Optional: speaking on behalf of this organization. */
+      org?: number | null;
+      stance: number;
+    };
+    ProclamationRequest: {
+      /** @description Player-authored text shown verbatim on the feed, never parsed. */
+      prose?: string;
+      /** @description Stored CheckOutcome name from the issue roll. */
+      check_outcome?: string;
+      /** Format: date-time */
+      issued_at?: string;
+      issuer: number;
+      /** @description Optional: speaking on behalf of this organization. */
+      org?: number | null;
+      stance: number;
+    };
     /** @description Read payload for PROFILE_TEXT requests (#2631). */
     ProfileTextRequestDetails: {
       /** @description A character_sheets.ProfileTextField value. */
@@ -34465,9 +34772,10 @@ export interface components {
      *     * `pardon` - Pardon
      *     * `crisis` - Crisis
      *     * `birthday` - Birthday
+     *     * `proclamation` - Proclamation
      * @enum {string}
      */
-    PublicFeedItemKindEnum: 'deed' | 'scandal' | 'pardon' | 'crisis' | 'birthday';
+    PublicFeedItemKindEnum: 'deed' | 'scandal' | 'pardon' | 'crisis' | 'birthday' | 'proclamation';
     /**
      * @description Wire shape for the optional ``action_context`` block in a pull preview.
      *
@@ -36905,6 +37213,23 @@ export interface components {
       readonly effective_risk: string;
       readonly is_ready: boolean;
       readonly stakes: components['schemas']['StakeSummary'][];
+    };
+    StanceArchetype: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      /** @description Compassion (+) ↔ Ruthlessness (-) axis contribution. */
+      mercy_delta?: number;
+      /** @description Honor (+) ↔ Cunning (-) axis contribution. */
+      method_delta?: number;
+      /** @description Humility (+) ↔ Ambition (-) axis contribution. */
+      status_delta?: number;
+      /** @description Progress (+) ↔ Tradition (-) axis contribution. */
+      change_delta?: number;
+      /** @description Independence (+) ↔ Loyalty (-) axis contribution. */
+      allegiance_delta?: number;
+      /** @description Equality (+) ↔ Hierarchy (-) axis contribution. */
+      power_delta?: number;
     };
     /** @description Serializer for starting areas with accessibility check. */
     StartingArea: {
@@ -53393,9 +53718,7 @@ export interface operations {
   };
   magic_consequence_pool_catalog_list: {
     parameters: {
-      query?: {
-        action_category?: string;
-      };
+      query?: never;
       header?: never;
       path?: never;
       cookie?: never;
@@ -53417,8 +53740,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Consequence Pool. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -61187,6 +61509,259 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PlayerTrust'];
+        };
+      };
+    };
+  };
+  proclamations_edict_kinds_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedEdictKindList'];
+        };
+      };
+    };
+  };
+  proclamations_edict_kinds_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this edict kind. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EdictKind'];
+        };
+      };
+    };
+  };
+  proclamations_edicts_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedDomainEdictList'];
+        };
+      };
+    };
+  };
+  proclamations_edicts_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this domain edict. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DomainEdict'];
+        };
+      };
+    };
+  };
+  proclamations_edicts_enact_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DomainEdictRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DomainEdict'];
+        };
+      };
+    };
+  };
+  proclamations_edicts_revoke_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DomainEdictRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DomainEdict'];
+        };
+      };
+    };
+  };
+  proclamations_proclamations_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedProclamationList'];
+        };
+      };
+    };
+  };
+  proclamations_proclamations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this proclamation. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Proclamation'];
+        };
+      };
+    };
+  };
+  proclamations_proclamations_issue_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ProclamationRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Proclamation'];
+        };
+      };
+    };
+  };
+  proclamations_stances_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStanceArchetypeList'];
+        };
+      };
+    };
+  };
+  proclamations_stances_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stance archetype. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StanceArchetype'];
         };
       };
     };

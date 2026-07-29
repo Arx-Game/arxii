@@ -16419,11 +16419,6 @@ paths:
         resolve_cast_action_template enforces the same split at submit/finalize
         time. The technique builder's category-agnostic picker keeps the flat
         union by passing no param.
-      parameters:
-      - in: query
-        name: action_category
-        schema:
-          type: string
       tags:
       - magic
       security:
@@ -16455,8 +16450,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Consequence Pool.
+          type: string
         required: true
       tags:
       - magic
@@ -25568,6 +25562,270 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlayerTrust'
+          description: ''
+  /api/proclamations/edict-kinds/:
+    get:
+      operationId: proclamations_edict_kinds_list
+      description: List/retrieve edict kinds.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - proclamations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEdictKindList'
+          description: ''
+  /api/proclamations/edict-kinds/{id}/:
+    get:
+      operationId: proclamations_edict_kinds_retrieve
+      description: List/retrieve edict kinds.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this edict kind.
+        required: true
+      tags:
+      - proclamations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdictKind'
+          description: ''
+  /api/proclamations/edicts/:
+    get:
+      operationId: proclamations_edicts_list
+      description: List/retrieve domain edicts + enact/revoke actions.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - proclamations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDomainEdictList'
+          description: ''
+  /api/proclamations/edicts/{id}/:
+    get:
+      operationId: proclamations_edicts_retrieve
+      description: List/retrieve domain edicts + enact/revoke actions.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this domain edict.
+        required: true
+      tags:
+      - proclamations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainEdict'
+          description: ''
+  /api/proclamations/edicts/enact/:
+    post:
+      operationId: proclamations_edicts_enact_create
+      description: Enact an edict. Expects ``domain`` (id), ``kind`` (name), ``proclamation``
+        (id).
+      tags:
+      - proclamations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DomainEdictRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainEdict'
+          description: ''
+  /api/proclamations/edicts/revoke/:
+    post:
+      operationId: proclamations_edicts_revoke_create
+      description: Revoke the active edict on a domain. Expects ``domain`` (id).
+      tags:
+      - proclamations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DomainEdictRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainEdict'
+          description: ''
+  /api/proclamations/proclamations/:
+    get:
+      operationId: proclamations_proclamations_list
+      description: List/retrieve proclamations + custom issue action.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - proclamations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProclamationList'
+          description: ''
+  /api/proclamations/proclamations/{id}/:
+    get:
+      operationId: proclamations_proclamations_retrieve
+      description: List/retrieve proclamations + custom issue action.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this proclamation.
+        required: true
+      tags:
+      - proclamations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proclamation'
+          description: ''
+  /api/proclamations/proclamations/issue/:
+    post:
+      operationId: proclamations_proclamations_issue_create
+      description: Issue a proclamation. Expects ``stance`` (name) and optional ``prose``.
+      tags:
+      - proclamations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProclamationRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proclamation'
+          description: ''
+  /api/proclamations/stances/:
+    get:
+      operationId: proclamations_stances_list
+      description: List/retrieve stance archetypes.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - proclamations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStanceArchetypeList'
+          description: ''
+  /api/proclamations/stances/{id}/:
+    get:
+      operationId: proclamations_stances_retrieve
+      description: List/retrieve stance archetypes.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stance archetype.
+        required: true
+      tags:
+      - proclamations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StanceArchetype'
           description: ''
   /api/progression/account/:
     get:
@@ -41430,6 +41688,58 @@ components:
       - id
       - name
       - slug
+    DomainEdict:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        domain_name:
+          type: string
+          readOnly: true
+        kind_name:
+          type: string
+          readOnly: true
+        enacted_at:
+          type: string
+          format: date-time
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        domain:
+          type: integer
+        kind:
+          type: integer
+        proclamation:
+          type: integer
+      required:
+      - domain
+      - domain_name
+      - id
+      - kind
+      - kind_name
+      - proclamation
+    DomainEdictRequest:
+      type: object
+      properties:
+        enacted_at:
+          type: string
+          format: date-time
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        domain:
+          type: integer
+        kind:
+          type: integer
+        proclamation:
+          type: integer
+      required:
+      - domain
+      - kind
+      - proclamation
     DomainEnum:
       enum:
       - BEAST
@@ -41978,6 +42288,38 @@ components:
       required:
       - id
       - name
+    EdictKind:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        income_gross_pct:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Percentage adjustment to domain gross income while active.
+        weekly_unrest_delta:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Weekly unrest change applied while this edict is active.
+        weekly_upkeep_coppers:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Additional weekly upkeep in coppers while this edict is active.
+        stance:
+          type: integer
+      required:
+      - id
+      - name
+      - stance
     EffectRow:
       type: object
       properties:
@@ -52294,6 +52636,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeedStory'
+    PaginatedDomainEdictList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DomainEdict'
     PaginatedDraftApplicationList:
       type: object
       required:
@@ -52386,6 +52751,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DuelChallenge'
+    PaginatedEdictKindList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EdictKind'
     PaginatedEncounterListList:
       type: object
       required:
@@ -54308,6 +54696,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PortalDestination'
+    PaginatedProclamationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Proclamation'
     PaginatedProgressionUnlockItemList:
       type: object
       required:
@@ -55228,6 +55639,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StakeTemplate'
+    PaginatedStanceArchetypeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StanceArchetype'
     PaginatedStoryFeedbackList:
       type: object
       required:
@@ -60498,6 +60932,66 @@ components:
         * `public` - Public
         * `private` - Private
         * `ephemeral` - Ephemeral
+    Proclamation:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        issuer_name:
+          type: string
+          readOnly: true
+        stance_name:
+          type: string
+          readOnly: true
+        prose:
+          type: string
+          description: Player-authored text shown verbatim on the feed, never parsed.
+        check_outcome:
+          type: string
+          description: Stored CheckOutcome name from the issue roll.
+          maxLength: 50
+        issued_at:
+          type: string
+          format: date-time
+        issuer:
+          type: integer
+        org:
+          type: integer
+          nullable: true
+          description: 'Optional: speaking on behalf of this organization.'
+        stance:
+          type: integer
+      required:
+      - id
+      - issuer
+      - issuer_name
+      - stance
+      - stance_name
+    ProclamationRequest:
+      type: object
+      properties:
+        prose:
+          type: string
+          description: Player-authored text shown verbatim on the feed, never parsed.
+        check_outcome:
+          type: string
+          description: Stored CheckOutcome name from the issue roll.
+          maxLength: 50
+        issued_at:
+          type: string
+          format: date-time
+        issuer:
+          type: integer
+        org:
+          type: integer
+          nullable: true
+          description: 'Optional: speaking on behalf of this organization.'
+        stance:
+          type: integer
+      required:
+      - issuer
+      - stance
     ProfileTextRequestDetails:
       type: object
       description: Read payload for PROFILE_TEXT requests (#2631).
@@ -60820,6 +61314,7 @@ components:
       - pardon
       - crisis
       - birthday
+      - proclamation
       type: string
       description: |-
         * `deed` - Deed
@@ -60827,6 +61322,7 @@ components:
         * `pardon` - Pardon
         * `crisis` - Crisis
         * `birthday` - Birthday
+        * `proclamation` - Proclamation
     PullActionContextRequest:
       type: object
       description: |-
@@ -65879,6 +66375,50 @@ components:
       - effective_risk
       - is_ready
       - stakes
+    StanceArchetype:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        mercy_delta:
+          type: integer
+          maximum: 5
+          minimum: -5
+          description: Compassion (+) ↔ Ruthlessness (-) axis contribution.
+        method_delta:
+          type: integer
+          maximum: 5
+          minimum: -5
+          description: Honor (+) ↔ Cunning (-) axis contribution.
+        status_delta:
+          type: integer
+          maximum: 5
+          minimum: -5
+          description: Humility (+) ↔ Ambition (-) axis contribution.
+        change_delta:
+          type: integer
+          maximum: 5
+          minimum: -5
+          description: Progress (+) ↔ Tradition (-) axis contribution.
+        allegiance_delta:
+          type: integer
+          maximum: 5
+          minimum: -5
+          description: Independence (+) ↔ Loyalty (-) axis contribution.
+        power_delta:
+          type: integer
+          maximum: 5
+          minimum: -5
+          description: Equality (+) ↔ Hierarchy (-) axis contribution.
+      required:
+      - id
+      - name
     StartingArea:
       type: object
       description: Serializer for starting areas with accessibility check.
