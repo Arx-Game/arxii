@@ -167,7 +167,7 @@ _DURANCE_OFFICIANT_LEVEL = 5
 _DURANCE_OFFICIANT_PATH_NAMES: tuple[str, ...] = (
     "Path of Steel",
     "Path of Whispers",
-    "Path of Voice",
+    "Path of the Voice",
     "Path of the Chosen",
     "Path of Tomes",
 )

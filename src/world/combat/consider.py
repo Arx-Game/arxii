@@ -13,8 +13,6 @@ from typing import TYPE_CHECKING
 from world.traits.constants import PrimaryStat
 
 if TYPE_CHECKING:
-    from evennia.objects.models import ObjectDB
-
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.combat.models import CombatOpponent, CombatParticipant, ConsiderReading
@@ -84,22 +82,6 @@ _HEALTH_HALE = 75
 _HEALTH_WOUNDED = 50
 _HEALTH_BLOODIED = 25
 
-OVERCONFIDENT_SLUG = "overconfident"
-
-
-def _has_overconfident(character: ObjectDB) -> bool:
-    """True if the character holds the Overconfident distinction.
-
-    Uses ``character.id`` which equals the ``CharacterSheet`` pk (primary_key
-    O2O), matching the ``CharacterDistinction.character_id`` FK.
-    """
-    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
-
-    return CharacterDistinction.objects.filter(
-        character_id=character.id,
-        distinction__slug=OVERCONFIDENT_SLUG,
-    ).exists()
-
 
 def skew_for_success_level(success_level: int) -> int:
     """Return the skew magnitude for a given check success level.
@@ -119,35 +101,46 @@ def skew_for_success_level(success_level: int) -> int:
     return 3
 
 
-def bias_direction(true_index: int, skew: int, character: ObjectDB | None) -> int:  # noqa: ARG001
+def bias_direction(true_index: int, skew: int, sheet: CharacterSheet | None) -> int:  # noqa: ARG001
     """Return +1 or -1 — the direction to skew the reported band.
 
-    ``character`` is the ObjectDB resolved from
-    ``participant.character_sheet.character``.
+    ``sheet`` is the CharacterSheet of the assessing character.
 
-    Default: random.choice([-1, +1]).
-    Overconfident distinction: always returns -1 (toward 'weaker than you
-    actually are').
+    Default: random.choice([-1, +1]). A modifier against the
+    "consider_bias_direction" ModifierTarget biases the direction:
+    negative total → -1 (underestimate), positive → +1 (overestimate).
 
     Args:
         true_index: The correct band index.
         skew: The skew magnitude (from ``skew_for_success_level``).
-        character: The assessing character (for distinction lookup).
+        sheet: The assessing character's sheet (for modifier lookup).
 
     Returns:
         +1, -1, or 0 (when skew is 0).
     """
     if skew == 0:
         return 0
-    if character is not None and _has_overconfident(character):
-        return -1
+    if sheet is not None:
+        from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+        from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+        try:
+            bias_target = ModifierTarget.objects.get(name="consider_bias_direction")
+        except ModifierTarget.DoesNotExist:
+            # Target not yet seeded — fall back to random.
+            return random.choice([-1, 1])  # noqa: S311
+        total = get_modifier_total(sheet, bias_target)
+        if total < 0:
+            return -1
+        if total > 0:
+            return 1
     return random.choice([-1, 1])  # noqa: S311
 
 
 def apply_skew(
     true_index: int,
     skew: int,
-    character: ObjectDB | None,
+    sheet: CharacterSheet | None,
     *,
     max_index: int,
 ) -> int:
@@ -156,13 +149,13 @@ def apply_skew(
     Args:
         true_index: The correct band index.
         skew: The skew magnitude.
-        character: The assessing character.
+        sheet: The assessing character's sheet.
         max_index: The maximum valid band index (len(bands) - 1).
 
     Returns:
         The reported (possibly wrong) band index, clamped to [0, max_index].
     """
-    direction = bias_direction(true_index, skew, character)
+    direction = bias_direction(true_index, skew, sheet)
     reported = true_index + direction * skew
     return max(0, min(reported, max_index))
 
@@ -274,6 +267,24 @@ def ensure_consider_check_type() -> CheckType:
         },
     )
 
+    # Create a ModifierTarget for the consider bias direction — the
+    # sign-interpreted directional bias on assessment (#2752). Negative
+    # total → underestimate (-1), positive → overestimate (+1), zero →
+    # random. Any source (distinction, condition, equipment) can bias
+    # direction by writing a CharacterModifier against this target.
+    bias_target, _ = ModifierTarget.objects.get_or_create(
+        name="consider_bias_direction",
+        category=check_category,
+        defaults={
+            "is_active": True,
+            "description": (
+                "Directional bias on consider assessment. "
+                "Negative → underestimate, positive → overestimate, "
+                "zero → random."
+            ),
+        },
+    )
+
     # Wire the Overconfident distinction's check penalty: a -2 per-rank
     # DistinctionEffect targeting the Consider-scoped ModifierTarget. Created
     # programmatically (not via fixture) because the ModifierTarget itself is
@@ -288,6 +299,19 @@ def ensure_consider_check_type() -> CheckType:
                 "value_per_rank": -2,
                 "description": (
                     "Applies a -2 penalty to Consider checks, making threat assessment harder."
+                ),
+            },
+        )
+        # Wire the Overconfident distinction's bias effect: -1 per rank
+        # biases toward underestimating threats (#2752). Same programmatic
+        # DistinctionEffect wiring pattern as the check penalty above.
+        DistinctionEffect.objects.get_or_create(
+            distinction=overconfident,
+            target=bias_target,
+            defaults={
+                "value_per_rank": -1,
+                "description": (
+                    "Biases consider assessment toward underestimating threats (direction -1)."
                 ),
             },
         )
@@ -375,7 +399,7 @@ def consider_opponent(participant: CombatParticipant, opponent: CombatOpponent) 
 
     # Apply skew on failure.
     skew = skew_for_success_level(success_level)
-    reported_index = apply_skew(true_index, skew, character, max_index=max_index)
+    reported_index = apply_skew(true_index, skew, sheet, max_index=max_index)
 
     # Assemble prose.
     band_text = band_prose(reported_index, fine=fine)

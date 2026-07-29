@@ -40,6 +40,26 @@ if TYPE_CHECKING:
 
 _DEFAULT_REPORT = "{agent} reports back on {task}: nothing worth passing along."
 
+# Points of resolution-check modifier per aptitude band (#2827 phase 4).
+APTITUDE_STEP = 5
+_APTITUDE_BAND_RANGE = (-1, 2)
+
+
+def aptitude_band(persona, category: str) -> int:
+    """The agent's band for a job family, minted lazily on first read."""
+    import random  # noqa: PLC0415
+
+    from world.tasking.models import NpcTaskAptitude  # noqa: PLC0415
+
+    row = NpcTaskAptitude.objects.filter(persona=persona, category=category).first()
+    if row is None:
+        # S311/NOSONAR: game RNG for NPC flavor, not crypto.
+        band = random.randint(*_APTITUDE_BAND_RANGE)  # noqa: S311 # NOSONAR
+        row, _ = NpcTaskAptitude.objects.get_or_create(
+            persona=persona, category=category, defaults={"band": band}
+        )
+    return row.band
+
 
 def _pc_tenure_for_sheet(sheet_id):
     from world.roster.models import RosterTenure  # noqa: PLC0415
@@ -282,12 +302,16 @@ def resolve_task(task: OrgTask) -> TaskFulfillment:
     if fulfillment is None:
         raise NoActiveFulfillmentError
 
-    agent_character = fulfillment.npc_asset.asset_persona.character_sheet.character
+    agent_persona = fulfillment.npc_asset.asset_persona
+    agent_character = agent_persona.character_sheet.character
     check_result = perform_check(
         agent_character,
         task.template.check_type,
         task.template.check_difficulty,
-        extra_modifiers=fulfillment.handler_margin,
+        extra_modifiers=(
+            fulfillment.handler_margin
+            + APTITUDE_STEP * aptitude_band(agent_persona, task.template.category)
+        ),
     )
 
     route = task.template.outcome_routes.filter(outcome_tier=check_result.outcome).first()

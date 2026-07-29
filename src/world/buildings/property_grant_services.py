@@ -179,3 +179,8 @@ def complete_building_activation(project, outcome_tier: object | None = None) ->
         set_condition_tier(building, details.target_tier)
         building.property_activated_at = timezone.now()
         building.save(update_fields=["property_activated_at"])
+        # #2827 phase 1: an activating venue staffs itself from its kind's
+        # profile (Town Crier pattern, generalized). No-op without a profile.
+        from world.npc_services.staffing import ensure_staffing_for_building  # noqa: PLC0415
+
+        ensure_staffing_for_building(building)

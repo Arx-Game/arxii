@@ -37,7 +37,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [species](src/world/species/AGENT_GLOSSARY.md)
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
 - [journals](src/world/journals/AGENT_GLOSSARY.md)
-- [npc_services](src/world/npc_services/AGENT_GLOSSARY.md)
+- [npc_services](src/world/npc_services/AGENT_GLOSSARY.md) — incl. the #2827 tier-ladder terms
 - [tasking](src/world/tasking/AGENT_GLOSSARY.md)
 - [tarot](src/world/tarot/AGENT_GLOSSARY.md)
 - [currency](src/world/currency/AGENT_GLOSSARY.md)

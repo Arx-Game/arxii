@@ -196,6 +196,11 @@ def _seed_npc_services() -> None:
     # Depends on the character_creation appearance traits (skips gracefully
     # when absent).
     seed_styling_content()
+    # #2827 phase 2 — regional name pools for NPC instantiation. Links to
+    # region Areas by name when they exist; seeds unlinked otherwise.
+    from world.seeds.name_cultures import ensure_name_cultures  # noqa: PLC0415
+
+    ensure_name_cultures()
 
 
 def _seed_spy_tasks() -> None:

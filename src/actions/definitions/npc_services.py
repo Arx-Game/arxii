@@ -103,6 +103,23 @@ class StartNPCInteractionAction(Action):
                 data={"invariant_breach": True},
             )
 
+        # #2827 phase 2 — engaging a faceless co-located placement makes it
+        # real: the tier-1 instantiation moment (ADR-0058's ephemeral→durable
+        # seam). A room without a placement of this role is untouched (the
+        # staff/tests reach-a-role-from-anywhere path stays nameless).
+        display_name = role.name
+        if npc_persona is None and actor.location is not None:
+            from world.areas.services import get_room_profile  # noqa: PLC0415
+            from world.npc_services.instantiation import (  # noqa: PLC0415
+                materialize_role_in_room,
+            )
+
+            room_profile = get_room_profile(actor.location)
+            if room_profile is not None:
+                npc_persona = materialize_role_in_room(room_profile, role)
+                if npc_persona is not None:
+                    display_name = npc_persona.name
+
         session = start_interaction(
             role=role,
             persona=persona,
@@ -111,7 +128,7 @@ class StartNPCInteractionAction(Action):
         )
         return ActionResult(
             success=True,
-            message=f"You begin speaking with {role.name}.",
+            message=f"You begin speaking with {display_name}.",
             data={"session": session},
         )
 

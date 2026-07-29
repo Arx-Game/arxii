@@ -416,6 +416,19 @@ from actions.definitions.story_builder import (
     StoryRemoveRoomAction,
     StoryUnlinkRoomsAction,
 )
+from actions.definitions.tasking import (
+    AcceptOrgTaskAction,
+    AssignTaskAgentAction,
+    ClearRoomListenersAction,
+    CollectHarvestAction,
+    DetectListenersAction,
+    FlipListenerAction,
+    IssueOrgTaskAction,
+    ListOrgTasksAction,
+    PlantRedHerringAction,
+    PostListenerAction,
+    SuppressListenerAction,
+)
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
 from actions.definitions.traps import DisarmTrapAction
@@ -794,6 +807,18 @@ _ALL_ACTIONS: list[Action] = [
     AssignGuardAction(),
     UnassignGuardAction(),
     ListGuardAssignmentsAction(),
+    # #2820 — org tasking + spy networks (the `network` command family).
+    ListOrgTasksAction(),
+    IssueOrgTaskAction(),
+    AssignTaskAgentAction(),
+    AcceptOrgTaskAction(),
+    PostListenerAction(),
+    CollectHarvestAction(),
+    SuppressListenerAction(),
+    FlipListenerAction(),
+    PlantRedHerringAction(),
+    DetectListenersAction(),
+    ClearRoomListenersAction(),
     # #2287 — death & unconsciousness core slice.
     WakeAction(),
     # #2290 — dream realm.

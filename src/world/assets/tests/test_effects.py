@@ -61,21 +61,21 @@ class PromoteFunctionaryEffectTests(EvenniaTestCase):
         asset = NPCAsset.objects.get(promoter_persona=self.persona)
         self.assertEqual(asset.role_context, AssetRoleContext.INFORMANT)
         self.assertEqual(asset.source_functionary, self.functionary)
-        self.assertEqual(asset.asset_persona.character_sheet.character.location, self.room)
+        # #2827 phase 3 — in-place recruitment: the identity is materialized on
+        # the placement (no body placement; the functionary keeps rendering).
+        self.functionary.refresh_from_db()
+        self.assertEqual(self.functionary.persona, asset.asset_persona)
 
-    def test_success_deactivates_the_source_functionary(self) -> None:
+    def test_success_keeps_the_source_functionary_on_the_job(self) -> None:
         success = CheckOutcomeFactory(name="Forced Promotion Success 2", success_level=3)
         with force_check_outcome(success):
             dispatch_offer_effect(self.offer, self.persona)
-        # remove_functionary() bulk-updates via .filter().update(), bypassing
-        # the SharedMemoryModel identity map — flush before refresh_from_db()
-        # so it re-reads the true DB row instead of returning the stale
-        # cached instance (see world/battles/tests/test_models.py for the
-        # same idiom).
+        # #2827 phase 3 — in-place recruitment: the placement stays active;
+        # pulling them off the job is extract_asset's separate choice.
         self.functionary.flush_from_cache()
         self.functionary.refresh_from_db()
-        self.assertFalse(self.functionary.is_active)
-        self.assertNotIn(self.functionary, functionaries_in_room(self.room_profile))
+        self.assertTrue(self.functionary.is_active)
+        self.assertIn(self.functionary, functionaries_in_room(self.room_profile))
 
     def test_check_failure_creates_no_asset(self) -> None:
         failure = CheckOutcomeFactory(name="Forced Promotion Failure", success_level=0)

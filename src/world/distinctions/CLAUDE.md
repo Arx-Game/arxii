@@ -43,7 +43,9 @@ are the only other writers — no in-play caller re-implements the create/rank-u
 (`EffectType.GRANT_DISTINCTION` on `checks.ConsequenceEffect`), `ENDORSEMENT_THRESHOLD`
 (`DistinctionResonanceRankThreshold` in `world.magic`, fired from sustained-endorsement resonance
 gain), and — as of #2441 Task 8 — `GAMEPLAY` (`world.magic.services.tradition_membership.
-leave_tradition` re-applying the Unbound drawback; previously vestigial/unassigned). Full
+leave_tradition` re-applying the traditionless-default drawback, identified by
+the `traditionless-default` `DistinctionTag` rather than a hardcoded slug, #2752;
+previously vestigial/unassigned). Full
 per-source detail: `docs/systems/distinctions.md` "Post-CG acquisition" section.
 
 **The removal counterpart is `remove_distinction` (#2628/#2631).** It requires an APPROVED

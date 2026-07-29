@@ -10,6 +10,7 @@ Two surfaces:
 """
 
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -34,6 +35,8 @@ from world.npc_services.filters import (
     OfferCooldownFilterSet,
     PermitOfferDetailsFilterSet,
     RecordedProfileFilterSet,
+    StaffingProfileFilterSet,
+    StaffingProfileLineFilterSet,
 )
 from world.npc_services.models import (
     MissionOfferDetails,
@@ -45,6 +48,8 @@ from world.npc_services.models import (
     OfferSummons,
     PermitOfferDetails,
     RecordedProfile,
+    StaffingProfile,
+    StaffingProfileLine,
 )
 from world.npc_services.serializers import (
     InteractionResolveRequestSerializer,
@@ -61,6 +66,8 @@ from world.npc_services.serializers import (
     PermitOfferDetailsSerializer,
     RecordedProfileCompleteSerializer,
     RecordedProfileSerializer,
+    StaffingProfileLineSerializer,
+    StaffingProfileSerializer,
     SummonsRespondSerializer,
 )
 from world.npc_services.services import (
@@ -517,3 +524,92 @@ class NPCReactionLineViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     pagination_class = NPCServicesPagination
     permission_classes = [IsGMOrStaff]
+
+
+class StaffingProfileViewSet(viewsets.ModelViewSet):
+    """Staff authoring CRUD for building-kind staffing profiles (#2827)."""
+
+    queryset = StaffingProfile.objects.all()
+    serializer_class = StaffingProfileSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = NPCServicesPagination
+    filterset_class = StaffingProfileFilterSet
+
+
+class StaffingProfileLineViewSet(viewsets.ModelViewSet):
+    """Staff authoring CRUD for staffing profile lines (#2827)."""
+
+    queryset = StaffingProfileLine.objects.all()
+    serializer_class = StaffingProfileLineSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = NPCServicesPagination
+    filterset_class = StaffingProfileLineFilterSet
+
+
+class NpcLifecycleViewSet(viewsets.ViewSet):
+    """Staff surfaces for the NPC tier ladder (#2827 phase 5)."""
+
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    @extend_schema(request=None, responses=OpenApiTypes.OBJECT)
+    @action(detail=False, methods=["get"])
+    def candidates(self, request) -> Response:
+        """NPC personas prominent enough to consider for standing tier."""
+        from world.npc_services.lifecycle import standing_candidates  # noqa: PLC0415
+
+        rows = [
+            {"persona": p.pk, "name": p.name, "attachments": p.attachment_count}
+            for p in standing_candidates()[:100]
+        ]
+        return Response({"candidates": rows})
+
+    @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
+    @action(detail=False, methods=["post"], url_path="promote-standing")
+    def promote_standing(self, request) -> Response:
+        """Give an NPC persona a body in a room (tier 3)."""
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from world.npc_services.lifecycle import (  # noqa: PLC0415
+            LifecycleError,
+            promote_to_standing,
+        )
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        persona = Persona.objects.filter(pk=request.data.get("persona")).first()
+        room = RoomProfile.objects.filter(pk=request.data.get("room")).first()
+        if persona is None or room is None:
+            return Response({"detail": "Unknown persona or room."}, status=400)
+        try:
+            promote_to_standing(persona, room)
+        except LifecycleError as exc:
+            return Response({"detail": exc.user_message}, status=400)
+        return Response({"detail": f"{persona.name} now stands in the room."})
+
+    @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
+    @action(detail=False, methods=["post"])
+    def demote(self, request) -> Response:
+        """Retire an NPC's body back to a background placement (tier 1)."""
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from world.npc_services.lifecycle import demote_to_instantiated  # noqa: PLC0415
+        from world.npc_services.models import NPCRole  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        persona = Persona.objects.filter(pk=request.data.get("persona")).first()
+        role = NPCRole.objects.filter(pk=request.data.get("role")).first()
+        room = RoomProfile.objects.filter(pk=request.data.get("room")).first()
+        if persona is None or role is None or room is None:
+            return Response({"detail": "Unknown persona, role, or room."}, status=400)
+        demote_to_instantiated(persona, role=role, room=room)
+        return Response({"detail": f"{persona.name} melts back into the crowd."})
+
+    @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
+    @action(detail=False, methods=["post"])
+    def graduate(self, request) -> Response:
+        """Move an NPC sheet onto the claimable roster (tier 5)."""
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.npc_services.lifecycle import graduate_to_roster  # noqa: PLC0415
+
+        sheet = CharacterSheet.objects.filter(pk=request.data.get("sheet")).first()
+        if sheet is None:
+            return Response({"detail": "Unknown sheet."}, status=400)
+        entry = graduate_to_roster(sheet)
+        return Response({"detail": f"{sheet.character} joins the roster.", "entry": entry.pk})
