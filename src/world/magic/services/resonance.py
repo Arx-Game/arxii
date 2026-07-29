@@ -65,6 +65,8 @@ if TYPE_CHECKING:
         SceneEntryEndorsement,
         StylePresentationEndorsement,
     )
+    from world.magic.models.power_config import CapabilityPowerConfig
+    from world.magic.models.threads import ThreadPullEffect
     from world.magic.types import PullActionContext
     from world.missions.models import MissionDeedRewardLine
     from world.projects.models import Project
@@ -716,6 +718,66 @@ def _mantle_worn(
     )
 
 
+def _derive_pull_power(
+    character_sheet: CharacterSheet | None,
+) -> tuple[CapabilityPowerConfig | None, int]:
+    """Fetch the capability power config and context_free_power for a pull (#2730).
+
+    Returns ``(None, 0)`` when ``character_sheet`` is None (the power_terms
+    caller has no sheet — CAPABILITY_GRANT curving is a no-op there). When a
+    config row exists, derives ``context_free_power`` from the character's
+    thread handler (same figure the passive path uses, ADR-0169 D6).
+    """
+    if character_sheet is None:
+        return None, 0
+    from world.magic.services.capability_curve import (  # noqa: PLC0415
+        get_capability_power_config,
+    )
+
+    power_config = get_capability_power_config()
+    if power_config is None:
+        return None, 0
+    try:
+        context_free_power = character_sheet.character.threads.context_free_power
+    except AttributeError:
+        from world.magic.handlers import CharacterThreadHandler  # noqa: PLC0415
+
+        handler = CharacterThreadHandler(character_sheet.character)
+        context_free_power = handler.context_free_power
+    return power_config, context_free_power
+
+
+def _compute_capability_grant_value(
+    row: ThreadPullEffect,
+    *,
+    inactive: bool,
+    multiplier: Decimal,
+    power_config: CapabilityPowerConfig | None,
+    context_free_power: int,
+) -> int | None:
+    """Compute the frozen curved magnitude for a CAPABILITY_GRANT row (#2730).
+
+    Returns ``None`` for non-CAPABILITY_GRANT kinds. For inactive (non-combat)
+    rows, returns 0 (cost still paid). For active rows with a config, curves
+    via ``apply_capability_curve``. Without a config, returns the authored
+    base unchanged (inert invariant, ADR-0169 D2).
+    """
+    if row.effect_kind != EffectKind.CAPABILITY_GRANT:
+        return None
+    if inactive:
+        return 0
+    if power_config is None:
+        return row.capability_grant_value
+    from world.magic.services.capability_curve import apply_capability_curve  # noqa: PLC0415
+
+    return apply_capability_curve(
+        row.capability_grant_value,
+        power=context_free_power,
+        sensitivity=multiplier,
+        config=power_config,
+    )
+
+
 def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; both target (#1831) and beseech (#1718) params are required
     threads: list[Thread],
     tier: int,
@@ -724,6 +786,7 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
     target: ObjectDB | None = None,
     beseech_bonus_thread_id: int | None = None,
     beseech_bonus: int = 0,
+    character_sheet: CharacterSheet | None = None,
 ) -> list[ResolvedPullEffect]:
     """Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.
 
@@ -743,6 +806,12 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
     override, never a persisted fact).
     """
     from world.magic.services.pull_modulation import apply_target_modulation  # noqa: PLC0415
+
+    # #2730: CAPABILITY_GRANT rows are curved at resolve time using the same
+    # apply_capability_curve formula the passive path uses. The power figure
+    # is context_free_power (ADR-0169 D6 — capability standing must not
+    # flicker based on whether combat is running). Fetched once per sweep.
+    power_config, context_free_power = _derive_pull_power(character_sheet)
 
     resolved: list[ResolvedPullEffect] = []
     for t in threads:
@@ -814,12 +883,29 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
                 if has_numeric_payload:
                     base_scaled = apply_target_modulation(t, target, row, base_scaled)
 
-                # VITAL_BONUS and RESISTANCE are combat-only consumers: their snapshot
-                # lives on CombatPullResolvedEffect and is read on the combat damage
-                # path, so ephemeral (RP) pulls flag them inactive (cost still paid).
+                # VITAL_BONUS, RESISTANCE, and CAPABILITY_GRANT are combat-only
+                # consumers: their snapshot lives on CombatPullResolvedEffect and
+                # is read on the combat path, so ephemeral (RP) pulls flag them
+                # inactive (cost still paid).
                 inactive = (
-                    row.effect_kind in (EffectKind.VITAL_BONUS, EffectKind.RESISTANCE)
+                    row.effect_kind
+                    in (
+                        EffectKind.VITAL_BONUS,
+                        EffectKind.RESISTANCE,
+                        EffectKind.CAPABILITY_GRANT,
+                    )
                     and not in_combat
+                )
+                # #2730: compute the frozen curved magnitude for CAPABILITY_GRANT.
+                # Uses the same apply_capability_curve formula as the passive path
+                # (handlers.py:_passive_capability_grants_cache), with
+                # context_free_power as the power figure (ADR-0169 D6).
+                capability_grant_value = _compute_capability_grant_value(
+                    row,
+                    inactive=inactive,
+                    multiplier=multiplier,
+                    power_config=power_config,
+                    context_free_power=context_free_power,
                 )
                 resolved.append(
                     ResolvedPullEffect(
@@ -841,6 +927,7 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
                         inactive_reason=("requires combat context" if inactive else None),
                         target_form=row.target_form,
                         resistance_damage_type=row.resistance_damage_type,
+                        capability_grant_value=capability_grant_value,
                     )
                 )
     return resolved
@@ -1045,7 +1132,9 @@ def preview_resonance_pull(  # noqa: PLR0913
     affordable = balance >= cost.resonance_cost and current_anima >= anima_cost
 
     in_combat = combat_encounter is not None
-    resolved = resolve_pull_effects(threads, tier, in_combat=in_combat, target=target)
+    resolved = resolve_pull_effects(
+        threads, tier, in_combat=in_combat, target=target, character_sheet=character_sheet
+    )
     resolved = _fold_distinction_pull_bonus(
         resolved, character_sheet=character_sheet, resonance=resonance, threads=threads
     )
@@ -1121,6 +1210,7 @@ def _persist_combat_pull(  # noqa: PLR0913
             source_thread_level=r.source_thread_level,
             source_tier=r.source_tier,
             granted_capability=r.granted_capability,
+            capability_grant_value=r.capability_grant_value,
             narrative_snippet=r.narrative_snippet,
             resistance_damage_type=r.resistance_damage_type,
         )
@@ -1248,6 +1338,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         target=action_context.target,
         beseech_bonus_thread_id=beseech_bonus_thread_id,
         beseech_bonus=beseech_bonus,
+        character_sheet=character_sheet,
     )
     resolved = _fold_distinction_pull_bonus(
         resolved, character_sheet=character_sheet, resonance=resonance, threads=threads
