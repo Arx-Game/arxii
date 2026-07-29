@@ -122,6 +122,7 @@ INSTALLED_APPS += [
     "world.travel.apps.TravelConfig",
     "world.room_features.apps.RoomFeaturesConfig",
     "world.tidings.apps.TidingsConfig",
+    "world.proclamations.apps.ProclamationsConfig",
     "behaviors.apps.BehaviorsConfig",
     "drf_spectacular",
     "cloudinary",

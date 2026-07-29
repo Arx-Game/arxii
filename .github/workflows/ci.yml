@@ -154,7 +154,8 @@ jobs:
             split_of: 2
             apps: >-
               world.items world.checks world.gm world.seeds world.fatigue
-              world.assets world.action_points world.tasking core
+              world.assets world.action_points world.tasking world.proclamations
+              core
           # shard-4 (~344s): world.combat half 2 (~178s) + world.covenants (65)
           #   + world.conditions (37) + world.locations (24) + world.justice (15)
           #   + world.game_clock (9) + world.narrative (7) + world.consent (6)

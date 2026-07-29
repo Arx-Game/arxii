@@ -233,6 +233,12 @@ def _seed_scandal_archetypes() -> None:
     seed_scandal_archetypes()
 
 
+def _seed_proclamations() -> None:
+    from world.seeds.proclamations import seed_proclamations  # noqa: PLC0415
+
+    seed_proclamations()
+
+
 def _seed_domain_dev() -> None:
     from world.seeds.domain_dev import ensure_dev_domain  # noqa: PLC0415
 
@@ -486,6 +492,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Scandal vocabulary: the nine authored "X Scandal" archetype categories
     # (#1464/#1806 — Apostate, 2026-07-03). Authoritative on vectors.
     "scandal": _seed_scandal_archetypes,
+    # Proclamations: stance archetypes + edict kinds (#2842). Self-contained;
+    # after "social" so the check spine exists (issue_proclamation looks up a
+    # persuasion/oratory CheckType at call time, not at seed time).
+    "proclamations": _seed_proclamations,
     "domain_dev": _seed_domain_dev,
     # Stealth: the act-time concealment skill + check (#1464). After "checks".
     "stealth": _seed_stealth,

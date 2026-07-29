@@ -110,6 +110,7 @@ def weekly_rollover_task() -> None:
         ("crisis generation", _run_crisis_generation_tick),
         ("social engagement kudos grant", _run_social_engagement_grant),
         ("idle table summary", _run_idle_table_summary),
+        ("edict effects", _run_edict_effects),
     ]
 
     for name, processor in processors:
@@ -155,6 +156,35 @@ def _run_idle_table_summary() -> None:
         return
     names = ", ".join(f"{t.name} (GM: {t.gm.account.username})" for t in tables)
     logger.info("Idle table summary: %d idle table(s): %s", len(tables), names)
+
+
+def _run_edict_effects() -> None:
+    """Apply weekly unrest + upkeep from active domain edicts (#2842)."""
+    from world.proclamations.models import DomainEdict
+
+    active_edicts = DomainEdict.objects.filter(revoked_at__isnull=True).select_related(
+        "kind", "domain"
+    )
+    for edict in active_edicts:
+        domain = edict.domain
+        if edict.kind.weekly_unrest_delta != 0:
+            domain.unrest = max(0, min(100, domain.unrest + edict.kind.weekly_unrest_delta))
+            domain.save(update_fields=["unrest"])
+        if edict.kind.weekly_upkeep_coppers != 0:
+            from world.currency.services import (
+                get_or_create_treasury,
+                transfer,
+            )
+
+            treasury = get_or_create_treasury(domain.owner_org)
+            try:
+                transfer(
+                    amount=edict.kind.weekly_upkeep_coppers,
+                    reason=f"edict upkeep: {edict.kind.name}",
+                    from_treasury=treasury,
+                )
+            except Exception:
+                logger.exception("Edict upkeep transfer failed for domain %s", domain.pk)
 
 
 def _run_social_engagement_grant() -> None:

@@ -1421,6 +1421,9 @@ feed table; the service aggregates two awareness M2Ms other apps already own.
   (`handle_town_crier_progression` → `place_functionary`). Kinds + the crier `NPCRole` seed via
   the `civic_hubs` cluster (`world/seeds/clusters.py`).
 - **Source:** `src/world/tidings/`
+- **Proclamation feed (#2842):** `_proclamation_items()` folds recent
+  `Proclamation` rows into the feed as `FeedItemKind.PROCLAMATION` — shown to
+  societies the issuer has standing with. Headline = stance name + issuer.
 - **Echo (push) vector — staff/GM gemits with reach (#1450), in `world.narrative`:**
   `broadcast_gemit` broadcasts a **hand-authored, verbatim** message (colour codes and all) to a
   `reach` — `GemitReach` ∈ GAME_WIDE / SPECIFIED; SPECIFIED carries any mix of

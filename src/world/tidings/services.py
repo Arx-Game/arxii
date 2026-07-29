@@ -125,10 +125,12 @@ def public_feed_for_societies(
         .distinct()[:limit]
     )
     pardons = _pardon_items(society_ids, limit=limit)
+    proclamations = _proclamation_items(society_ids, limit=limit)
     items = (
         [_deed_item(entry) for entry in deeds]
         + [_scandal_item(secret) for secret in scandals]
         + pardons
+        + proclamations
     )
     items.sort(key=lambda item: item.occurred_at, reverse=True)
     return items[:limit]
@@ -155,6 +157,27 @@ def _pardon_items(society_ids: set[int], *, limit: int) -> list[PublicFeedItem]:
             category="pardon",
         )
         for grant in grants
+    ]
+
+
+def _proclamation_items(society_ids: set[int], *, limit: int) -> list[PublicFeedItem]:
+    """Public proclamations (#2842) — shown to societies the issuer has standing with."""
+    from world.proclamations.models import Proclamation  # noqa: PLC0415
+
+    procs = (
+        Proclamation.objects.filter(issuer__society_reputations__society_id__in=society_ids)
+        .select_related("issuer", "stance")
+        .order_by("-issued_at")
+        .distinct()[:limit]
+    )
+    return [
+        PublicFeedItem(
+            kind=FeedItemKind.PROCLAMATION,
+            headline=f"{proc.stance.name} — {proc.issuer.name}",
+            subject=proc.issuer.name,
+            occurred_at=proc.issued_at,
+        )
+        for proc in procs
     ]
 
 

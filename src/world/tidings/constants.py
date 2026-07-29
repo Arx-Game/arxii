@@ -14,3 +14,4 @@ class FeedItemKind(models.TextChoices):
     PARDON = "pardon", "Pardon"
     CRISIS = "crisis", "Crisis"
     BIRTHDAY = "birthday", "Birthday"
+    PROCLAMATION = "proclamation", "Proclamation"

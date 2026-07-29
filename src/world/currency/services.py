@@ -467,6 +467,17 @@ def accrue_income_stream(stream: OrgIncomeStream) -> int:
     )
 
     gross = int(gross * org_crisis_income_factor(stream.organization))
+    # Active domain edict income adjustment (#2842)
+    if holding is not None:
+        from world.proclamations.models import DomainEdict  # noqa: PLC0415
+
+        active_edict = (
+            DomainEdict.objects.filter(domain=holding.domain, revoked_at__isnull=True)
+            .select_related("kind")
+            .first()
+        )
+        if active_edict is not None and active_edict.kind.income_gross_pct != 0:
+            gross = int(gross * (1 + active_edict.kind.income_gross_pct / 100))
     stream.uncollected_pool = stream.uncollected_pool + gross
     stream.save(update_fields=["uncollected_pool"])
     return stream.uncollected_pool
