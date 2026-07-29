@@ -60,6 +60,11 @@ CONTENT_MODELS: frozenset[str] = frozenset(
     {
         # achievements
         "achievements.statdefinition",
+        "achievements.achievement",
+        "achievements.achievementrequirement",
+        "achievements.achievementreward",
+        "achievements.rewarddefinition",
+        "achievements.conditionstatrule",
         # areas
         "areas.rampartelementprofile",
         "areas.rampartelementresistance",

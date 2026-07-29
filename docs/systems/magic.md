@@ -1979,9 +1979,10 @@ tables (`PathGiftGrant`, `TraditionGiftGrant`, `SpeciesGiftGrant`) key on their 
 owning technique plus their own unique-constraint fields, except `TechniqueOutcomeModifier`,
 a global outcome-tier table with no technique FK — it's a `OneToOneField` to
 `traits.CheckOutcome` and keys on `outcome` alone; `PortalAnchorKind` keys on `name`
-(`achievements.Achievement` also gained a name natural key this branch but is not itself
-in `CONTENT_MODELS`). `load_entries` (`core_management/content_fixtures.py`) upserts by
-natural key. There is no in-repo seed catalog to fall back on: the lore repo is the
+(`achievements.Achievement` keys on `slug` and is now in `CONTENT_MODELS`
+alongside `AchievementRequirement`/`AchievementReward`/`RewardDefinition`/
+`ConditionStatRule` — #2832). `load_entries` (`core_management/content_fixtures.py`)
+upserts by natural key. There is no in-repo seed catalog to fall back on: the lore repo is the
 single source (`seed_starter_gift_catalog()` was retired by #2474 — see "CG Starter
 Gift/Technique Catalog" and "Content-vs-config boundary in the dev seed" above for the
 seed-vs-content sequencing, which seeds the "Technique Cast" `ActionTemplate` config
