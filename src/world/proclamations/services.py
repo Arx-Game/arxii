@@ -177,9 +177,10 @@ def enact_edict(domain, kind: EdictKind, proclamation: Proclamation) -> DomainEd
     Revokes the currently active edict (if any) and creates a new active one.
     The proclamation records the social bill that justified the edict.
     """
-    DomainEdict.objects.filter(domain=domain, revoked_at__isnull=True).update(
-        revoked_at=timezone.now()
-    )
+    now = timezone.now()
+    for existing in DomainEdict.objects.filter(domain=domain, revoked_at__isnull=True):
+        existing.revoked_at = now
+        existing.save(update_fields=["revoked_at"])
     return DomainEdict.objects.create(
         domain=domain,
         kind=kind,
