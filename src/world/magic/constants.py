@@ -574,6 +574,8 @@ class GlimpseTagAxis(models.TextChoices):
     WITNESS = "WITNESS", "Witness & Secrecy"
     SENSORY = "SENSORY", "Sensory & Discovery"
     TRIGGER = "TRIGGER", "Trigger"
+    CHOOSING = "CHOOSING", "The Choosing"
+    REFLECTION = "REFLECTION", "The Reflection"
 
 
 class GlimpseState(models.TextChoices):
@@ -599,10 +601,17 @@ class GlimpseAxisRule:
 #: Axis → arity/rendering config (#2427). TONE is single-select; SENSORY
 #: renders as prose prompts in the writing step rather than hard tags
 #: (authored SENSORY tags remain possible without a migration).
+#: CHOOSING (#2694) is the Chosen-only "how did it claim you?" step — its
+#: tags are all path-scoped, so the axis renders only when the draft's path
+#: matches. REFLECTION (#2694) is the multi-select "what did you see in
+#: yourself?" step: qualities of the aspirational could-be self shown in the
+#: reflective surface.
 GLIMPSE_AXIS_CONFIG: dict[GlimpseTagAxis, GlimpseAxisRule] = {
     GlimpseTagAxis.TONE: GlimpseAxisRule(multi=False, prose_prompt=False),
     GlimpseTagAxis.CONSEQUENCE: GlimpseAxisRule(multi=True, prose_prompt=False),
     GlimpseTagAxis.WITNESS: GlimpseAxisRule(multi=True, prose_prompt=False),
     GlimpseTagAxis.SENSORY: GlimpseAxisRule(multi=True, prose_prompt=True),
     GlimpseTagAxis.TRIGGER: GlimpseAxisRule(multi=False, prose_prompt=False),
+    GlimpseTagAxis.CHOOSING: GlimpseAxisRule(multi=False, prose_prompt=False),
+    GlimpseTagAxis.REFLECTION: GlimpseAxisRule(multi=True, prose_prompt=False),
 }

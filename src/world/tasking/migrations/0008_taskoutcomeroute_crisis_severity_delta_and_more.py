@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("tasking", "0006_orgtask_target_crisis_alter_orgtask_target_kind_and_more"),
+        ("tasking", "0007_orgtask_target_crisis_alter_orgtask_target_kind_and_more"),
     ]
 
     operations = [

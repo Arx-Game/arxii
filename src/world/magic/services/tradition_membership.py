@@ -31,19 +31,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Drawback-distinction slugs that mark a character as traditionless-in-play
-#: (#2441 ruling 4). "orphaned-tradition" is seeded today
-#: (``world.seeds.character_creation.ensure_orphaned_tradition_distinction``, #2428
-#: Task 5); "unbound" is Task 9's addition — this constant tolerates its absence
-#: (see ``_shed_traditionless_drawbacks``). Both are removed on joining a
-#: non-orphaned tradition.
-_SHED_ON_JOIN_SLUGS = ("unbound", "orphaned-tradition")
-
-#: Only "unbound" is re-applied on leave — an ex-Orphaned-Tradition-drawback
-#: character who leaves their (already orphaned) tradition becomes plain Unbound,
-#: not doubly-drawbacked with a stale Orphaned-Tradition row pointing at a
-#: tradition they no longer belong to.
-_REAPPLY_ON_LEAVE_SLUG = "unbound"
+#: DistinctionTag slugs for traditionless categorization (#2752).
+_TRADITIONLESS_DRAWBACK_TAG = "traditionless-drawback"
+_TRADITIONLESS_DEFAULT_TAG = "traditionless-default"
+_ORPHANED_TRADITION_MARKER_TAG = "orphaned-tradition-marker"
 
 
 def _active_tradition_row(sheet: CharacterSheet) -> CharacterTradition | None:
@@ -56,57 +47,55 @@ def _active_tradition_row(sheet: CharacterSheet) -> CharacterTradition | None:
 def _tradition_is_orphaned(tradition: Tradition) -> bool:
     """Whether ``tradition`` currently has no living teachers (#2441).
 
-    Task 5 (#2428) modeled "orphaned" as a CG-selection gate, not a live field on
-    ``Tradition``: a ``BeginningTradition`` row requires the "Orphaned Tradition"
-    drawback distinction (``required_distinction``) before a tradition with no
-    living trainers can be picked at CG (see ``world.seeds.character_creation.
-    ensure_orphaned_tradition_distinction``/``seed_metallic_order_tradition``). That
-    authored gate is the only place "this tradition lacks teachers" is recorded
-    anywhere in the schema, so it doubles as the live-game truth read here — the
-    smallest truthful check available without inventing a parallel field Task 5
-    didn't build (verified: no "orphan"/"is_orphaned" surface exists anywhere in
-    ``world.magic`` or ``world.npc_services``). A lazy import keeps ``magic`` from
-    taking a module-level dependency on ``character_creation`` (documented as a
-    "CG-only concern" on ``BeginningTradition`` itself — this is the one read that
-    deliberately reaches back across that boundary for a live-game answer).
+    Checks whether the tradition's ``BeginningTradition`` row has a
+    ``required_distinction`` tagged ``'orphaned-tradition-marker'`` (#2752 —
+    was a hardcoded slug lookup, now tag-driven). That authored gate is the
+    only place "this tradition lacks teachers" is recorded anywhere in the
+    schema, so it doubles as the live-game truth read here. A lazy import
+    keeps ``magic`` from taking a module-level dependency on
+    ``character_creation`` (documented as a "CG-only concern" on
+    ``BeginningTradition`` itself — this is the one read that deliberately
+    reaches back across that boundary for a live-game answer).
     """
     from world.character_creation.models import BeginningTradition  # noqa: PLC0415
 
     return BeginningTradition.objects.filter(
         tradition=tradition,
-        required_distinction__slug="orphaned-tradition",
+        required_distinction__tags__slug=_ORPHANED_TRADITION_MARKER_TAG,
     ).exists()
 
 
 def _shed_traditionless_drawbacks(sheet: CharacterSheet) -> None:
-    """Delete any held unbound/orphaned-tradition drawback CharacterDistinction rows.
+    """Delete any held traditionless-drawback CharacterDistinction rows.
 
-    Direct queryset delete — ``world.distinctions.services`` has no removal
-    counterpart to ``grant_distinction`` (verified for #2441 Task 8: the only
-    writers of ``CharacterDistinction`` are ``grant_distinction``, CG
-    finalization, and Django admin; nothing in the codebase revokes one). A
-    drawback flag carries no story-significant history worth preserving as a row
-    (contrast ``CharacterTradition`` itself, which is ``left_at``-preserved) — a
-    plain delete mirrors how other short-lived/no-longer-true rows are cleaned up
-    elsewhere in this codebase (e.g. expired offer rows). Tolerates either/both
-    slugs being absent (Task 9 seeds "unbound"; this task only ships
-    "orphaned-tradition").
+    Queries by the ``'traditionless-drawback'`` DistinctionTag instead of
+    hardcoded slugs (#2752). Direct queryset delete —
+    ``world.distinctions.services`` has no removal counterpart to
+    ``grant_distinction`` (verified for #2441 Task 8: the only writers of
+    ``CharacterDistinction`` are ``grant_distinction``, CG finalization, and
+    Django admin; nothing in the codebase revokes one). A drawback flag carries
+    no story-significant history worth preserving as a row (contrast
+    ``CharacterTradition`` itself, which is ``left_at``-preserved) — a plain
+    delete mirrors how other short-lived/no-longer-true rows are cleaned up
+    elsewhere in this codebase (e.g. expired offer rows).
     """
     from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
 
     CharacterDistinction.objects.filter(
         character=sheet,
-        distinction__slug__in=_SHED_ON_JOIN_SLUGS,
+        distinction__tags__slug=_TRADITIONLESS_DRAWBACK_TAG,
     ).delete()
 
 
 def _reapply_unbound_drawback(sheet: CharacterSheet) -> None:
-    """Re-grant the "unbound" drawback distinction on leaving a tradition (#2441 ruling 4).
+    """Re-grant the traditionless-default drawback on leaving a tradition (#2441 ruling 4).
 
-    Defensive skip (logged) if the "unbound" Distinction row doesn't exist yet —
-    Task 9 seeds it, and this task's ``leave_tradition`` must not hard-fail on a
-    DB that hasn't run that seed yet. Catches ``DistinctionExclusionError`` and
-    skips (logs) rather than propagating, per the ``grant_distinction`` seam's
+    Queries by the ``'traditionless-default'`` DistinctionTag instead of
+    the hardcoded ``'unbound'`` slug (#2752).
+
+    Defensive skip (logged) if no distinction carries that tag yet — the
+    seed may not have run. Catches ``DistinctionExclusionError`` and skips
+    (logs) rather than propagating, per the ``grant_distinction`` seam's
     documented contract for non-GM/telnet callers (see
     ``world/distinctions/CLAUDE.md``: "every in-play caller except the GM
     action/telnet path catches it and skips just that grant").
@@ -123,12 +112,14 @@ def _reapply_unbound_drawback(sheet: CharacterSheet) -> None:
     from world.distinctions.services import grant_distinction  # noqa: PLC0415
     from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
 
-    distinction = Distinction.objects.filter(slug=_REAPPLY_ON_LEAVE_SLUG).first()
+    distinction = Distinction.objects.filter(
+        tags__slug=_TRADITIONLESS_DEFAULT_TAG,
+    ).first()
     if distinction is None:
         logger.info(
-            "leave_tradition: %r drawback distinction not seeded yet (#2441 Task 9) "
-            "— skipping re-application for character sheet #%s.",
-            _REAPPLY_ON_LEAVE_SLUG,
+            "leave_tradition: no distinction tagged %r found "
+            "(not seeded yet?) — skipping re-application for character sheet #%s.",
+            _TRADITIONLESS_DEFAULT_TAG,
             sheet.pk,
         )
         return
@@ -142,9 +133,9 @@ def _reapply_unbound_drawback(sheet: CharacterSheet) -> None:
         )
     except DistinctionExclusionError:
         logger.warning(
-            "leave_tradition: re-applying %r blocked by exclusion conflict on "
-            "character sheet #%s — skipping.",
-            _REAPPLY_ON_LEAVE_SLUG,
+            "leave_tradition: re-applying distinction tagged %r blocked by "
+            "exclusion conflict on character sheet #%s — skipping.",
+            _TRADITIONLESS_DEFAULT_TAG,
             sheet.pk,
         )
 

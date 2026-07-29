@@ -367,6 +367,39 @@ class OrgTask(SharedMemoryModel, DiscriminatorMixin):
         return f"OrgTask(#{self.pk}, {self.template.name}, {self.status})"
 
 
+class NpcTaskAptitude(SharedMemoryModel):
+    """An NPC's knack (or lack) for one job family (#2827 phase 4).
+
+    Bands are minted lazily on first dispatch (a stable random draw) and
+    staff-editable thereafter — this one's a natural spy, that one's a
+    bruiser. Consumed as `APTITUDE_STEP * band` on the agent's resolution
+    and listener tradecraft rolls.
+    """
+
+    persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.CASCADE,
+        related_name="task_aptitudes",
+    )
+    category = models.CharField(max_length=20, choices=TaskCategory.choices)
+    band = models.SmallIntegerField(
+        default=0,
+        help_text="-1 hopeless … 0 ordinary … +2 gifted (PLACEHOLDER calibration).",
+    )
+
+    class Meta:
+        ordering = ["persona", "category"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["persona", "category"],
+                name="unique_npc_aptitude_per_category",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.persona_id} {self.category}: {self.band:+d}"
+
+
 class ListenerPost(SharedMemoryModel):
     """The buzz/harvest sidecar on a LISTENER assignment (#2820 phase 3).
 

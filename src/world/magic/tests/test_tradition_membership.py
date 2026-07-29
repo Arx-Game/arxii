@@ -25,6 +25,28 @@ class JoinTraditionTests(TestCase):
         self.unbound = TraditionFactory(name="Unbound")
         self.caretakers = TraditionFactory(name="The Caretakers")
 
+    @staticmethod
+    def _tag_traditionless_distinctions() -> None:
+        """Tag unbound + orphaned-tradition distinctions for tag-based queries (#2752)."""
+        from world.distinctions.models import DistinctionTag
+
+        drawback_tag, _ = DistinctionTag.objects.get_or_create(
+            slug="traditionless-drawback",
+            defaults={"name": "Traditionless Drawback"},
+        )
+        default_tag, _ = DistinctionTag.objects.get_or_create(
+            slug="traditionless-default",
+            defaults={"name": "Traditionless Default"},
+        )
+        marker_tag, _ = DistinctionTag.objects.get_or_create(
+            slug="orphaned-tradition-marker",
+            defaults={"name": "Orphaned Tradition Marker"},
+        )
+        unbound = DistinctionFactory(slug="unbound", cost_per_rank=-2)
+        orphaned = DistinctionFactory(slug="orphaned-tradition", cost_per_rank=-2)
+        unbound.tags.add(drawback_tag, default_tag)
+        orphaned.tags.add(drawback_tag, marker_tag)
+
     def test_first_join_creates_active_row(self) -> None:
         row = join_tradition(self.sheet, self.unbound)
 
@@ -52,9 +74,12 @@ class JoinTraditionTests(TestCase):
             join_tradition(self.sheet, self.unbound)
 
     def test_join_removes_unbound_and_orphaned_drawbacks_for_living_tradition(self) -> None:
+        self._tag_traditionless_distinctions()
+        from world.distinctions.models import Distinction
+
         CharacterTraditionFactory(character=self.sheet, tradition=self.unbound)
-        unbound_drawback = DistinctionFactory(slug="unbound", cost_per_rank=-2)
-        orphaned_drawback = DistinctionFactory(slug="orphaned-tradition", cost_per_rank=-2)
+        unbound_drawback = Distinction.objects.get(slug="unbound")
+        orphaned_drawback = Distinction.objects.get(slug="orphaned-tradition")
         CharacterDistinctionFactory(
             character=self.sheet,
             distinction=unbound_drawback,
@@ -87,7 +112,10 @@ class JoinTraditionTests(TestCase):
         ).exists()
 
     def test_join_orphaned_tradition_keeps_drawback(self) -> None:
-        orphaned_drawback = DistinctionFactory(slug="orphaned-tradition", cost_per_rank=-2)
+        self._tag_traditionless_distinctions()
+        from world.distinctions.models import Distinction
+
+        orphaned_drawback = Distinction.objects.get(slug="orphaned-tradition")
         metallic_order = TraditionFactory(name="Metallic Order")
         BeginningTraditionFactory(
             tradition=metallic_order,
@@ -104,6 +132,27 @@ class JoinTraditionTests(TestCase):
 
         assert CharacterDistinction.objects.filter(
             character=self.sheet, distinction=orphaned_drawback
+        ).exists()
+
+    def test_join_sheds_third_tagged_drawback(self) -> None:
+        """A third distinction tagged 'traditionless-drawback' is also shed (#2752)."""
+        from world.distinctions.models import DistinctionTag
+
+        self._tag_traditionless_distinctions()
+        drawback_tag = DistinctionTag.objects.get(slug="traditionless-drawback")
+        third = DistinctionFactory(slug="some-new-drawback", cost_per_rank=-2)
+        third.tags.add(drawback_tag)
+        CharacterDistinctionFactory(
+            character=self.sheet,
+            distinction=third,
+            origin=DistinctionOrigin.CHARACTER_CREATION,
+        )
+        CharacterTraditionFactory(character=self.sheet, tradition=self.unbound)
+
+        join_tradition(self.sheet, self.caretakers)
+
+        assert not CharacterDistinction.objects.filter(
+            character=self.sheet, distinction=third
         ).exists()
 
     def test_learned_techniques_untouched_on_join(self) -> None:
@@ -134,13 +183,20 @@ class LeaveTraditionTests(TestCase):
             leave_tradition(self.sheet)
 
     def test_leave_reapplies_unbound_when_seeded(self) -> None:
-        DistinctionFactory(slug="unbound", cost_per_rank=-2)
+        from world.distinctions.models import DistinctionTag
+
+        unbound = DistinctionFactory(slug="unbound", cost_per_rank=-2)
+        default_tag, _ = DistinctionTag.objects.get_or_create(
+            slug="traditionless-default",
+            defaults={"name": "Traditionless Default"},
+        )
+        unbound.tags.add(default_tag)
         CharacterTraditionFactory(character=self.sheet, tradition=self.tradition)
 
         leave_tradition(self.sheet)
 
         grant = CharacterDistinction.objects.filter(
-            character=self.sheet, distinction__slug="unbound"
+            character=self.sheet, distinction=unbound
         ).first()
         assert grant is not None
         assert grant.origin == DistinctionOrigin.GAMEPLAY

@@ -79,7 +79,7 @@ _STUB_PATHS: list[tuple[str, str, str]] = [
         "SOCIAL",
     ),
     (
-        "Path of Voice",
+        "Path of the Voice",
         "Performers whose magic resonates through song, story, and presence.",
         "SOCIAL",
     ),
@@ -110,7 +110,7 @@ _STUB_STYLES: list[tuple[str, str, str]] = [
     (
         "Performance",
         "Magic amplified through art — voice, gesture, and presence as conduit.",
-        "Path of Voice",
+        "Path of the Voice",
     ),
     (
         "Prayer",

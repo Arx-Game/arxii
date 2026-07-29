@@ -130,3 +130,26 @@ metrics resolve via `reactions.METRIC_RESOLVERS` — one function per metric, ne
 per-NPC code). `<name>` interpolates the presented name. Builders author rows via
 `/api/npc-services/reaction-lines/`.
 _Avoid_: custom NPC scripts, per-NPC handlers.
+
+## Tier ladder (#2827)
+
+- **Sheet-spine** — the identity rule (ADR-0176): the CharacterSheet is the
+  person; personas are faces. NPC tiers are layers on the spine.
+- **Materialize / instantiate** — mint a faceless placement's identity
+  (sheet + PRIMARY persona + generated name + NPC-roster shelf entry).
+  Happens automatically at first engagement (`npc_start`). _Avoid_:
+  "spawn" (creates bodies, not identities).
+- **Staffing profile / slot** — a BuildingKind's baseline crew; a line is a
+  (role, room) slot, not a headcount. Vacated slots refill weekly with a
+  fresh faceless hire.
+- **Name culture** — an area/society-keyed weighted name pool; Family.name
+  supplies noble surnames.
+- **In-place recruitment vs extraction** — promotion keeps the NPC on the
+  job (default); `extract_asset` is the "quit and come with me" choice.
+- **Standing candidate** — an NPC persona with enough active asset claims
+  to surface in the staff review queue for a body. Never auto-promoted.
+- **Graduation / rostering door** — moving the NPC shelf entry to the
+  claimable AVAILABLE roster; the persona's history rides along.
+- **Melt back / retire to the ether** — layer retirement (placement
+  inactive, body unplaced). Never deletion; history keeps the identity
+  resurrectable.

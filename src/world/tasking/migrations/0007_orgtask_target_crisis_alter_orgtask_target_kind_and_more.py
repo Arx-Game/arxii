@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("societies", "0035_crisisintel_domaincrisis_org_and_more"),
-        ("tasking", "0005_taskoutcomeroute_domain_report_and_more"),
+        ("tasking", "0006_taskoutcomeroute_domain_report_and_more"),
     ]
 
     operations = [

@@ -454,6 +454,18 @@ class ActionRegistryTests(TestCase):
             "assign_guard",
             "unassign_guard",
             "list_guard_assignments",
+            # #2820 — org tasking + spy networks.
+            "list_org_tasks",
+            "issue_org_task",
+            "assign_task_agent",
+            "accept_org_task",
+            "post_listener",
+            "collect_harvest",
+            "suppress_listener",
+            "flip_listener",
+            "plant_red_herring",
+            "detect_listeners",
+            "clear_room_listeners",
             # #2287 — death & unconsciousness core slice.
             "wake",
             "retire",

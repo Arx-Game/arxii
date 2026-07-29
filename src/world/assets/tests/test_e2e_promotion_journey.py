@@ -75,19 +75,23 @@ class PromotionJourneyTests(EvenniaTestCase):
         self.assertTrue(resolve_result.success, resolve_result.message)
 
         asset = NPCAsset.objects.get(source_functionary=self.functionary)
-        self.assertEqual(asset.asset_persona.character_sheet.character.location, self.room)
-        # remove_functionary() bulk-updates via .filter().update(), which bypasses the
-        # SharedMemoryModel identity map (see world/assets/effects.py's own note on this) —
-        # flush the idmapper cache before refresh_from_db() so it doesn't just re-copy the
-        # same stale cached instance onto itself.
+        # #2827 phase 3 — in-place recruitment: the barkeep keeps the job; the
+        # identity is materialized onto the placement instead of a body spawn.
         self.functionary.flush_from_cache(force=True)
         self.functionary.refresh_from_db()
-        self.assertFalse(self.functionary.is_active)
+        self.assertTrue(self.functionary.is_active)
+        self.assertEqual(self.functionary.persona, asset.asset_persona)
 
         # A fresh interaction with the newly-named NPC tracks NPCStanding normally.
+        # #2827 phase 2: the engagement hook materialized the barkeep at the very
+        # first hire, so rapport has been accruing durably since — assert the
+        # follow-up's delta, not an absolute (the ephemeral era is over).
         from world.npc_services.models import NPCStanding
         from world.npc_services.services import end_interaction, start_interaction
 
+        before = NPCStanding.objects.get(
+            persona=asset.promoter_persona, npc_persona=asset.asset_persona
+        ).affection
         follow_up = start_interaction(
             role=self.role,
             persona=asset.promoter_persona,
@@ -99,7 +103,7 @@ class PromotionJourneyTests(EvenniaTestCase):
         standing = NPCStanding.objects.get(
             persona=asset.promoter_persona, npc_persona=asset.asset_persona
         )
-        self.assertEqual(standing.affection, 5)
+        self.assertEqual(standing.affection, before + 5)
 
     def test_guard_promotion_journey(self) -> None:
         """#1907 — a GUARD-variant cultivation through the full action seam."""

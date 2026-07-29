@@ -127,14 +127,19 @@ def _check_type_or_raise(name: str):
     return check_type
 
 
-def _roll(actor: Persona, check_name: str, difficulty: int):
+def _roll(actor: Persona, check_name: str, difficulty: int, *, target_persona=None):
+    """The actor's counterplay roll — eased/hardened by the target NPC's
+    personality (#2827 phase 4): a venal listener is easier to buy."""
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.npc_services.personality import preference_modifier  # noqa: PLC0415
 
     character = actor.character_sheet.character
+    check_type = _check_type_or_raise(check_name)
     return perform_check_with_modifiers(
         character,
-        _check_type_or_raise(check_name),
+        check_type,
         target_difficulty=difficulty,
+        extra_modifiers=preference_modifier(target_persona, check_type),
     )
 
 
@@ -149,7 +154,13 @@ def suppress_listener(actor: Persona, post: ListenerPost) -> bool:
         raise CounterplayError
     _assert_colocated(actor, post)
     _assert_consent(actor, post)
-    result = _roll(actor, SUPPRESS_CHECK_NAME, SUPPRESS_BASE_DIFFICULTY + post.check_difficulty)
+    target = post.assignment.npc_asset.asset_persona if post.assignment.npc_asset else None
+    result = _roll(
+        actor,
+        SUPPRESS_CHECK_NAME,
+        SUPPRESS_BASE_DIFFICULTY + post.check_difficulty,
+        target_persona=target,
+    )
     if result.success_level <= 0:
         return False
     post.suppressed_until = timezone.now() + SUPPRESS_DURATION
@@ -172,7 +183,13 @@ def flip_listener(actor: Persona, post: ListenerPost) -> bool:
         raise CounterplayError
     _assert_colocated(actor, post)
     _assert_consent(actor, post)
-    result = _roll(actor, FLIP_CHECK_NAME, FLIP_BASE_DIFFICULTY + post.check_difficulty)
+    target = post.assignment.npc_asset.asset_persona if post.assignment.npc_asset else None
+    result = _roll(
+        actor,
+        FLIP_CHECK_NAME,
+        FLIP_BASE_DIFFICULTY + post.check_difficulty,
+        target_persona=target,
+    )
     if result.success_level <= 0:
         return False
 

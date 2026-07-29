@@ -54,6 +54,26 @@ class NPCAssetViewSet(viewsets.ReadOnlyModelViewSet):
         return NPCAsset.objects.filter(promoter_persona=persona).select_related("asset_persona")
 
     @action(detail=True, methods=["post"])
+    def extract(self, request: Request, pk: str | None = None) -> Response:
+        """Pull your recruited agent out of their public job (#2827 phase 3)."""
+        from world.assets.services import ExtractionError, extract_asset  # noqa: PLC0415
+
+        persona = _active_persona_for_request(request)
+        asset = NPCAsset.objects.filter(pk=pk).first()
+        if persona is None or asset is None:
+            return Response({"detail": "No such agent."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            vacated = extract_asset(asset, persona)
+        except ExtractionError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        detail = (
+            f"{asset.asset_persona} quits their post and answers to you alone."
+            if vacated
+            else f"{asset.asset_persona} held no public post to leave."
+        )
+        return Response({"detail": detail, "vacated": vacated})
+
+    @action(detail=True, methods=["post"])
     def donate(self, request: Request, pk: str | None = None) -> Response:
         """Transfer one of your assets to an org you belong to (#2820 phase 2).
 

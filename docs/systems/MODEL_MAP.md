@@ -673,6 +673,7 @@
   - city_defense_projects <- battles.CityDefenseDetails
   - story_ownership <- gm.StoryArea
   - ambient_emote_lines <- narrative.AmbientEmoteLine
+  - name_cultures <- npc_services.NameCulture
   - default_permits_offered <- npc_services.PermitOfferDetails
   - property_grant_profiles <- buildings.PropertyGrantProfile
   - building_profile <- buildings.Building
@@ -835,6 +836,7 @@
 - `charm_into_asset(*, charmer_persona: 'Persona', target_persona: 'Persona', role_context: 'str') -> 'NPCAsset' — Extract a charmed NPC as a CHARM ``NPCAsset`` (#2502).`
 - `coerce_into_asset(*, coercer_persona: 'Persona', target_persona: 'Persona', role_context: 'str') -> 'NPCAsset' — Extract a blackmailed NPC as a COERCION ``NPCAsset`` (#1680).`
 - `draw_clue_from_pool(pool: 'CluePool', roster_entry: 'RosterEntry') -> 'Clue | None' — Draw a weighted random clue from the pool, excluding held clues (#2293).`
+- `extract_asset(asset: 'NPCAsset', extractor) -> 'int' — Pull a recruited NPC out of their public job (#2827 phase 3).`
 - `introduce_asset(*, introducer_persona: 'Persona', ally_persona: 'Persona', asset: 'NPCAsset') -> 'NPCAsset' — Introduce an owned asset to a co-present ally, creating co-ownership (#2295).`
 - `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction') -> 'None' — Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
 - `transfer_asset_to_org(asset: 'NPCAsset', organization) -> 'NPCAsset' — Convert a personally-held asset row into an org-held one (#2820 phase 2).`
@@ -1094,6 +1096,7 @@
 ### BuildingKind
 **Pointed to by:**
   - allowed_in_wards <- areas.Area
+  - staffing_profile <- npc_services.StaffingProfile
   - offered_by <- npc_services.PermitOfferDetails
   - property_grant_profiles <- buildings.PropertyGrantProfile
   - buildings <- buildings.Building
@@ -3480,12 +3483,12 @@
 ### EstateConfig
 
 ### Service Functions
-- `execute_settlement(character_sheet: world.character_sheets.models.CharacterSheet, *, via: str) -> world.estates.models.EstateSettlement | None — The ONE execution path (spec Decision 2) — idempotent, first door wins.`
+- `execute_settlement(character_sheet: 'CharacterSheet', *, via: 'str') -> 'EstateSettlement | None' — The ONE execution path (spec Decision 2) — idempotent, first door wins.`
 - `get_estate_config() -> world.estates.models.EstateConfig — Get-or-create the first EstateConfig row (singleton-by-convention).`
-- `open_settlement(character_sheet: world.character_sheets.models.CharacterSheet) -> world.estates.models.EstateSettlement — Open the settlement window at death; idempotent per sheet.`
-- `resolve_escheat_org(character_sheet: world.character_sheets.models.CharacterSheet) — The regional controlling org: primary-home region's Domain owner, else`
-- `resolve_intestate_heir(character_sheet: world.character_sheets.models.CharacterSheet) — The Decision-6 cascade: family-org head, then public-record next of kin.`
-- `will_is_frozen(character_sheet: world.character_sheets.models.CharacterSheet) -> bool — True once a settlement window exists — the will can no longer be edited.`
+- `open_settlement(character_sheet: 'CharacterSheet') -> 'EstateSettlement' — Open the settlement window at death; idempotent per sheet.`
+- `resolve_escheat_org(character_sheet: 'CharacterSheet') — The regional controlling org: primary-home region's Domain owner, else`
+- `resolve_intestate_heir(character_sheet: 'CharacterSheet') — The Decision-6 cascade: family-org head, then public-record next of kin.`
+- `will_is_frozen(character_sheet: 'CharacterSheet') -> 'bool' — True once a settlement window exists — the will can no longer be edited.`
 
 
 ## world.events
@@ -3704,26 +3707,26 @@
   - option -> forms.FormTraitOption [FK]
 
 ### Service Functions
-- `apply_disguise(character, disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE, concealment_level: 'ConcealmentLevel' = ConcealmentLevel.NONE, kit_instance=None) -> 'CharacterFormState' — Paint a fake overlay over the character's real form (#1110).`
+- `apply_disguise(character: 'Any', disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE, concealment_level: 'ConcealmentLevel' = ConcealmentLevel.NONE, kit_instance: 'Any' = None) -> 'CharacterFormState' — Paint a fake overlay over the character's real form (#1110).`
 - `assume_alternate_self(sheet: 'CharacterSheet', alt: 'AlternateSelf', instance_value: 'float' = 1.0) -> 'ActiveAlternateSelf' — Assume an alternate self — swap in form/persona facets, create the`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' — Calculate weight in pounds from height and build.`
-- `change_appearance(character, trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None, blend: 'bool' = False) -> 'CharacterFormValue' — Cosmetically edit one trait of the character's real form (hair dye, restyle).`
-- `create_true_form(character, selections: 'dict[FormTrait, FormTraitOption]') -> 'CharacterForm' — Create the true form for a character during character creation.`
-- `get_apparent_build(character) -> 'Build | None' — Get the apparent build for a character.`
-- `get_apparent_form(character) -> 'dict[FormTrait, FormTraitOption]' — Get the apparent form for a character, combining active form with temporaries.`
-- `get_apparent_height(character) -> 'tuple[int, HeightBand | None]' — Get the apparent height for a character including trait modifiers.`
+- `change_appearance(character: 'Any', trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None, blend: 'bool' = False) -> 'CharacterFormValue' — Cosmetically edit one trait of the character's real form (hair dye, restyle).`
+- `create_true_form(character: 'Any', selections: 'dict[FormTrait, FormTraitOption]') -> 'CharacterForm' — Create the true form for a character during character creation.`
+- `get_apparent_build(character: 'Any') -> 'Build | None' — Get the apparent build for a character.`
+- `get_apparent_form(character: 'Any') -> 'dict[FormTrait, FormTraitOption]' — Get the apparent form for a character, combining active form with temporaries.`
+- `get_apparent_height(character: 'Any') -> 'tuple[int, HeightBand | None]' — Get the apparent height for a character including trait modifiers.`
 - `get_cg_builds() -> 'QuerySet[Build]' — Get builds available in character creation.`
 - `get_cg_form_options(species: 'Species') -> 'dict[FormTrait, list[FormTraitOption]]' — Get available form trait options for character creation.`
 - `get_cg_height_bands() -> 'QuerySet[HeightBand]' — Get height bands available in character creation.`
 - `get_height_band(height_inches: 'int') -> 'HeightBand | None' — Get the HeightBand for a given height in inches.`
-- `get_presented_appearance(character, *, pierced: 'bool' = False) -> 'list[PresentedTrait]' — Compose what a viewer sees: the presented form's normalized traits overlaid with the`
-- `knows_style(character_sheet, option: 'FormTraitOption') -> 'bool' — True when the sheet may produce ``option`` (ungated options always may).`
-- `learn_style(character_sheet, option: 'FormTraitOption', *, taught_by_label: 'str' = '') -> 'None' — Grant knowledge of an exotic option — 'learned by having it done' (#2632).`
-- `remove_disguise(character) -> 'None' — Drop the active fake overlay — the real form presents again (#1110). Idempotent.`
-- `reset_trait_to_natural(character, trait: 'FormTrait', *, persona: 'Persona', actor_persona: 'Persona | None' = None, note: 'str' = '') -> 'CharacterFormValue' — Restore one trait to its natural (origin) value — "wash out the dye.`
+- `get_presented_appearance(character: 'Any', *, pierced: 'bool' = False) -> 'list[PresentedTrait]' — Compose what a viewer sees: the presented form's normalized traits overlaid with the`
+- `knows_style(character_sheet: 'Any', option: 'FormTraitOption') -> 'bool' — True when the sheet may produce ``option`` (ungated options always may).`
+- `learn_style(character_sheet: 'Any', option: 'FormTraitOption', *, taught_by_label: 'str' = '') -> 'None' — Grant knowledge of an exotic option — 'learned by having it done' (#2632).`
+- `remove_disguise(character: 'Any') -> 'None' — Drop the active fake overlay — the real form presents again (#1110). Idempotent.`
+- `reset_trait_to_natural(character: 'Any', trait: 'FormTrait', *, persona: 'Persona', actor_persona: 'Persona | None' = None, note: 'str' = '') -> 'CharacterFormValue' — Restore one trait to its natural (origin) value — "wash out the dye.`
 - `revert_alternate_self(sheet: 'CharacterSheet') -> 'None' — Revert the active alternate self — restore return anchors, delete the`
-- `revert_to_true_form(character) -> 'None' — Revert a character to their true form.`
-- `switch_form(character, target_form: 'CharacterForm') -> 'None' — Switch a character to a different form.`
+- `revert_to_true_form(character: 'Any') -> 'None' — Revert a character to their true form.`
+- `switch_form(character: 'Any', target_form: 'CharacterForm') -> 'None' — Switch a character to a different form.`
 
 
 ## world.game_clock
@@ -4641,6 +4644,7 @@
   - resonances <- magic.Resonance
   - alteration_templates <- magic.MagicalAlterationTemplate
   - pending_alteration_origins <- magic.PendingAlteration
+  - glimpse_tags <- magic.GlimpseTag
   - interactions_as_source <- magic.AffinityInteraction
   - interactions_as_environment <- magic.AffinityInteraction
   - modifier_target <- mechanics.ModifierTarget
@@ -5138,6 +5142,7 @@
 
 ### GlimpseTag
 **Foreign Keys:**
+  - affinity -> magic.Affinity [FK] (nullable)
   - paths -> classes.Path [M2M]
 **Pointed to by:**
   - character_rows <- magic.CharacterGlimpseTag
@@ -6308,6 +6313,7 @@
   - distinction_grants <- assets.DistinctionAssetGrant
   - missions_reported_to <- missions.MissionTemplate
   - functionaries <- npc_services.Functionary
+  - staffing_lines <- npc_services.StaffingProfileLine
   - offers <- npc_services.NPCServiceOffer
   - role_cooldowns <- npc_services.NPCRoleCooldown
   - reaction_lines <- npc_services.NPCReactionLine
@@ -6317,11 +6323,45 @@
 **Foreign Keys:**
   - role -> npc_services.NPCRole [FK]
   - room -> evennia_extensions.RoomProfile [FK]
+  - persona -> scenes.Persona [FK] (nullable)
 **Pointed to by:**
   - kinspeople <- roster.Kinsperson
   - promotions <- assets.NPCAsset
   - assignments <- npc_services.NPCAssignment
   - reaction_lines <- npc_services.NPCReactionLine
+
+### PersonalityTrait
+**Foreign Keys:**
+  - eased_check -> checks.CheckType [FK] (nullable)
+**Pointed to by:**
+  - holders <- npc_services.NpcPreference
+
+### NpcPreference
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - trait -> npc_services.PersonalityTrait [FK]
+
+### NameCulture
+**Foreign Keys:**
+  - area -> areas.Area [FK] (nullable)
+  - society -> societies.Society [FK] (nullable)
+**Pointed to by:**
+  - entries <- npc_services.NameCultureEntry
+
+### NameCultureEntry
+**Foreign Keys:**
+  - culture -> npc_services.NameCulture [FK]
+
+### StaffingProfile
+**Foreign Keys:**
+  - building_kind -> buildings.BuildingKind [OneToOne]
+**Pointed to by:**
+  - lines <- npc_services.StaffingProfileLine
+
+### StaffingProfileLine
+**Foreign Keys:**
+  - profile -> npc_services.StaffingProfile [FK]
+  - role -> npc_services.NPCRole [FK]
 
 ### NPCServiceOffer
 **Foreign Keys:**
@@ -7545,6 +7585,8 @@
   - project_contributions <- projects.Contribution
   - npc_standings <- npc_services.NPCStanding
   - standings_held_by <- npc_services.NPCStanding
+  - functionary_placements <- npc_services.Functionary
+  - npc_preferences <- npc_services.NpcPreference
   - offer_cooldowns <- npc_services.OfferCooldown
   - role_cooldowns <- npc_services.NPCRoleCooldown
   - regards_held <- npc_services.NpcRegard
@@ -7555,6 +7597,7 @@
   - recorded_profiles <- npc_services.RecordedProfile
   - org_tasks_issued <- tasking.OrgTask
   - org_tasks_targeting <- tasking.OrgTask
+  - task_aptitudes <- tasking.NpcTaskAptitude
   - listener_posts_handled <- tasking.ListenerPost
   - flipped_listener_posts <- tasking.ListenerPost
   - task_fulfillments_handled <- tasking.TaskFulfillment
@@ -8052,6 +8095,7 @@
   - hosted_events <- events.Event
   - event_invitations <- events.EventInvitation
   - gemits <- narrative.Gemit
+  - name_cultures <- npc_services.NameCulture
   - regards_as_target <- npc_services.NpcRegard
 
 ### OrganizationType

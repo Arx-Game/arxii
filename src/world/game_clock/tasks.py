@@ -519,6 +519,19 @@ def _register_tasking_tasks() -> None:
             ),
         )
     )
+    from world.npc_services.staffing import refill_staffing_sweep
+
+    register_task(
+        CronDefinition(
+            task_key="staffing.weekly_refill",
+            callable=refill_staffing_sweep,
+            interval=timedelta(days=7),
+            description=(
+                "#2827 phase 1: re-ensure venue baseline crews — vacated slots "
+                "(extracted workers) refill with fresh faceless hires."
+            ),
+        )
+    )
 
 
 def register_all_tasks() -> None:

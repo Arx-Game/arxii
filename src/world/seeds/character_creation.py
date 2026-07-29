@@ -420,6 +420,11 @@ _ORPHANED_TRADITION_DISTINCTION_SLUG = "orphaned-tradition"
 #: keep in sync if this ever changes.
 _UNBOUND_DRAWBACK_DISTINCTION_SLUG = UNBOUND_DRAWBACK_DISTINCTION_SLUG
 
+#: DistinctionTag slugs for traditionless categorization (#2752).
+_TRADITIONLESS_DRAWBACK_TAG = "traditionless-drawback"
+_TRADITIONLESS_DEFAULT_TAG = "traditionless-default"
+_ORPHANED_TRADITION_MARKER_TAG = "orphaned-tradition-marker"
+
 #: Name for the one example orphaned Arx tradition seeded alongside the
 #: drawback (#2428 Task 5). Richer lore ("ancient Traditions for the Metallic
 #: Order and the Fractals of the Abyss" per the #2428 vision) is a lore-repo
@@ -547,6 +552,20 @@ def ensure_unbound_drawback_distinction():
             distinction=distinction,
             target=target,
         )
+    # Attach traditionless tags so tradition_membership can identify this
+    # distinction by tag instead of hardcoded slug (#2752).
+    if distinction is not None:
+        from world.distinctions.models import DistinctionTag  # noqa: PLC0415
+
+        drawback_tag, _ = DistinctionTag.objects.get_or_create(
+            slug=_TRADITIONLESS_DRAWBACK_TAG,
+            defaults={"name": "Traditionless Drawback"},
+        )
+        default_tag, _ = DistinctionTag.objects.get_or_create(
+            slug=_TRADITIONLESS_DEFAULT_TAG,
+            defaults={"name": "Traditionless Default"},
+        )
+        distinction.tags.add(drawback_tag, default_tag)
     return distinction
 
 
@@ -761,7 +780,7 @@ def ensure_orphaned_tradition_distinction():
     )
     if category is None:
         return None
-    return authored_or_sample(
+    distinction = authored_or_sample(
         Distinction,
         {
             "name": "Orphaned Tradition",
@@ -777,6 +796,21 @@ def ensure_orphaned_tradition_distinction():
         },
         slug=_ORPHANED_TRADITION_DISTINCTION_SLUG,
     )
+    # Attach traditionless tags so tradition_membership can identify this
+    # distinction by tag instead of hardcoded slug (#2752).
+    if distinction is not None:
+        from world.distinctions.models import DistinctionTag  # noqa: PLC0415
+
+        drawback_tag, _ = DistinctionTag.objects.get_or_create(
+            slug=_TRADITIONLESS_DRAWBACK_TAG,
+            defaults={"name": "Traditionless Drawback"},
+        )
+        marker_tag, _ = DistinctionTag.objects.get_or_create(
+            slug=_ORPHANED_TRADITION_MARKER_TAG,
+            defaults={"name": "Orphaned Tradition Marker"},
+        )
+        distinction.tags.add(drawback_tag, marker_tag)
+    return distinction
 
 
 def seed_metallic_order_tradition():

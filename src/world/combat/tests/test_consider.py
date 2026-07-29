@@ -80,15 +80,15 @@ class BiasDirectionTest(TestCase):
     @patch("world.combat.consider.random.choice")
     def test_default_returns_plus_or_minus_one(self, mock_choice) -> None:
         mock_choice.return_value = 1
-        self.assertEqual(bias_direction(2, 1, character=None), 1)
+        self.assertEqual(bias_direction(2, 1, sheet=None), 1)
 
     @patch("world.combat.consider.random.choice")
     def test_default_can_return_negative(self, mock_choice) -> None:
         mock_choice.return_value = -1
-        self.assertEqual(bias_direction(2, 1, character=None), -1)
+        self.assertEqual(bias_direction(2, 1, sheet=None), -1)
 
     def test_zero_skew_returns_zero(self) -> None:
-        self.assertEqual(bias_direction(2, 0, character=None), 0)
+        self.assertEqual(bias_direction(2, 0, sheet=None), 0)
 
 
 class OverconfidentBiasDirectionTest(TestCase):
@@ -96,11 +96,13 @@ class OverconfidentBiasDirectionTest(TestCase):
 
     def test_overconfident_always_underestimates(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.consider import ensure_consider_check_type
         from world.distinctions.factories import (
             CharacterDistinctionFactory,
             DistinctionCategoryFactory,
             DistinctionFactory,
         )
+        from world.mechanics.services import create_distinction_modifiers
 
         sheet = CharacterSheetFactory()
         category = DistinctionCategoryFactory(slug="personality")
@@ -109,21 +111,26 @@ class OverconfidentBiasDirectionTest(TestCase):
             category=category,
             cost_per_rank=-10,
         )
-        CharacterDistinctionFactory(
+        # Wire the bias DistinctionEffect now that the distinction exists.
+        ensure_consider_check_type()
+        cd = CharacterDistinctionFactory(
             character=sheet,
             distinction=distinction,
         )
+        create_distinction_modifiers(cd)
         # skew > 0, should always return -1 (underestimate)
-        result = bias_direction(2, 1, character=sheet.character)
+        result = bias_direction(2, 1, sheet=sheet)
         self.assertEqual(result, -1)
 
     def test_overconfident_with_higher_skew(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.consider import ensure_consider_check_type
         from world.distinctions.factories import (
             CharacterDistinctionFactory,
             DistinctionCategoryFactory,
             DistinctionFactory,
         )
+        from world.mechanics.services import create_distinction_modifiers
 
         sheet = CharacterSheetFactory()
         category = DistinctionCategoryFactory(slug="personality")
@@ -131,31 +138,37 @@ class OverconfidentBiasDirectionTest(TestCase):
             slug="overconfident",
             category=category,
         )
-        CharacterDistinctionFactory(
+        ensure_consider_check_type()
+        cd = CharacterDistinctionFactory(
             character=sheet,
             distinction=distinction,
         )
+        create_distinction_modifiers(cd)
         # skew = 3 (crit fail), should still return -1
-        result = bias_direction(2, 3, character=sheet.character)
+        result = bias_direction(2, 3, sheet=sheet)
         self.assertEqual(result, -1)
 
     def test_non_overconfident_uses_random(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.consider import ensure_consider_check_type
 
+        ensure_consider_check_type()
         sheet = CharacterSheetFactory()
         # No distinction — should fall through to random.choice
         with patch("world.combat.consider.random.choice") as mock_choice:
             mock_choice.return_value = 1
-            result = bias_direction(2, 1, character=sheet.character)
+            result = bias_direction(2, 1, sheet=sheet)
             self.assertEqual(result, 1)
 
     def test_overconfident_zero_skew_returns_zero(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.consider import ensure_consider_check_type
         from world.distinctions.factories import (
             CharacterDistinctionFactory,
             DistinctionCategoryFactory,
             DistinctionFactory,
         )
+        from world.mechanics.services import create_distinction_modifiers
 
         sheet = CharacterSheetFactory()
         category = DistinctionCategoryFactory(slug="personality")
@@ -163,40 +176,97 @@ class OverconfidentBiasDirectionTest(TestCase):
             slug="overconfident",
             category=category,
         )
-        CharacterDistinctionFactory(
+        ensure_consider_check_type()
+        cd = CharacterDistinctionFactory(
             character=sheet,
             distinction=distinction,
         )
+        create_distinction_modifiers(cd)
         # skew == 0 always returns 0, even with the distinction
-        result = bias_direction(2, 0, character=sheet.character)
+        result = bias_direction(2, 0, sheet=sheet)
         self.assertEqual(result, 0)
+
+
+class BiasDirectionModifierTest(TestCase):
+    """bias_direction reads get_modifier_total and interprets the sign."""
+
+    def setUp(self) -> None:
+        from world.combat.consider import ensure_consider_check_type
+
+        ensure_consider_check_type()
+
+    def test_direct_negative_modifier_biases_underestimate(self) -> None:
+        """A CharacterModifier directly against the bias target (not via
+        a distinction) also biases direction — proves multi-source principle."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.mechanics.models import (
+            CharacterModifier,
+            ModifierSource,
+            ModifierTarget,
+        )
+
+        sheet = CharacterSheetFactory()
+        target = ModifierTarget.objects.get(name="consider_bias_direction")
+        # achievement_reward=True marks the source as a recognized non-distinction
+        # source so get_modifier_breakdown includes it in other_mods (#909).
+        source = ModifierSource.objects.create(achievement_reward=True)
+        CharacterModifier.objects.create(
+            character=sheet,
+            target=target,
+            value=-1,
+            source=source,
+        )
+        result = bias_direction(2, 1, sheet=sheet)
+        self.assertEqual(result, -1)
+
+    def test_positive_modifier_biases_overestimate(self) -> None:
+        """A positive modifier returns +1 (overestimate) — proves sign
+        interpretation works both ways."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.mechanics.models import (
+            CharacterModifier,
+            ModifierSource,
+            ModifierTarget,
+        )
+
+        sheet = CharacterSheetFactory()
+        target = ModifierTarget.objects.get(name="consider_bias_direction")
+        source = ModifierSource.objects.create(achievement_reward=True)
+        CharacterModifier.objects.create(
+            character=sheet,
+            target=target,
+            value=1,
+            source=source,
+        )
+        result = bias_direction(2, 1, sheet=sheet)
+        self.assertEqual(result, 1)
 
 
 class ApplySkewTest(TestCase):
     """Skewed band indices clamp to valid range."""
 
     def test_no_skew_returns_true_index(self) -> None:
-        self.assertEqual(apply_skew(2, 0, character=None, max_index=4), 2)
+        self.assertEqual(apply_skew(2, 0, sheet=None, max_index=4), 2)
 
     @patch("world.combat.consider.random.choice")
     def test_skew_up(self, mock_choice) -> None:
         mock_choice.return_value = 1
-        self.assertEqual(apply_skew(2, 1, character=None, max_index=4), 3)
+        self.assertEqual(apply_skew(2, 1, sheet=None, max_index=4), 3)
 
     @patch("world.combat.consider.random.choice")
     def test_skew_down(self, mock_choice) -> None:
         mock_choice.return_value = -1
-        self.assertEqual(apply_skew(2, 1, character=None, max_index=4), 1)
+        self.assertEqual(apply_skew(2, 1, sheet=None, max_index=4), 1)
 
     @patch("world.combat.consider.random.choice")
     def test_clamp_at_max(self, mock_choice) -> None:
         mock_choice.return_value = 1
-        self.assertEqual(apply_skew(4, 2, character=None, max_index=4), 4)
+        self.assertEqual(apply_skew(4, 2, sheet=None, max_index=4), 4)
 
     @patch("world.combat.consider.random.choice")
     def test_clamp_at_zero(self, mock_choice) -> None:
         mock_choice.return_value = -1
-        self.assertEqual(apply_skew(0, 2, character=None, max_index=4), 0)
+        self.assertEqual(apply_skew(0, 2, sheet=None, max_index=4), 0)
 
 
 class HealthBandTest(TestCase):
@@ -409,6 +479,26 @@ class EnsureConsiderCheckTypeTest(TestCase):
         count = ModifierTarget.objects.filter(
             target_check_type__name="Consider",
         ).count()
+        self.assertEqual(count, 1)
+
+    def test_creates_bias_direction_modifier_target(self) -> None:
+        """ensure_consider_check_type also creates the bias-direction target."""
+        from world.combat.consider import ensure_consider_check_type
+        from world.mechanics.models import ModifierTarget
+
+        ensure_consider_check_type()
+        target = ModifierTarget.objects.get(name="consider_bias_direction")
+        self.assertTrue(target.is_active)
+        self.assertEqual(target.category.name, "check")
+
+    def test_bias_direction_target_is_idempotent(self) -> None:
+        """Calling ensure_consider_check_type twice does not duplicate the bias target."""
+        from world.combat.consider import ensure_consider_check_type
+        from world.mechanics.models import ModifierTarget
+
+        ensure_consider_check_type()
+        ensure_consider_check_type()
+        count = ModifierTarget.objects.filter(name="consider_bias_direction").count()
         self.assertEqual(count, 1)
 
 

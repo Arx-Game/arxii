@@ -19,7 +19,6 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
-from world.tasking.exceptions import TaskingError
 from world.tasking.filters import (
     OrgRosterFilterSet,
     OrgTaskFilterSet,
@@ -35,7 +34,6 @@ from world.tasking.serializers import (
     TaskOutcomeRouteSerializer,
     TaskTemplateSerializer,
 )
-from world.tasking.services import assign_agent, create_task
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -148,10 +146,9 @@ class ListenerPostViewSet(
         )
 
     def create(self, request: Request, *args, **kwargs) -> Response:
-        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
-        from world.assets.models import NPCAsset  # noqa: PLC0415
-        from world.checks.models import CheckType  # noqa: PLC0415
-        from world.tasking.listener_services import create_listener_post  # noqa: PLC0415
+        """Post a listener — through PostListenerAction (ADR-0001)."""
+        from actions.registry import get_action  # noqa: PLC0415
+        from world.tasking.models import ListenerPost  # noqa: PLC0415
         from world.tasking.serializers import ListenerPostCreateSerializer  # noqa: PLC0415
 
         persona = active_persona_for_request(request)
@@ -160,46 +157,34 @@ class ListenerPostViewSet(
         payload = ListenerPostCreateSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
         data = payload.validated_data
-        npc_asset = NPCAsset.objects.filter(pk=data["npc_asset"]).first()
-        room = RoomProfile.objects.filter(pk=data["room"]).first()
-        if npc_asset is None or room is None:
-            return Response(
-                {"detail": "Unknown agent or room."}, status=status.HTTP_400_BAD_REQUEST
-            )
-        check_type = None
-        if data.get("check_type"):
-            check_type = CheckType.objects.filter(pk=data["check_type"]).first()
-        try:
-            post = create_listener_post(
-                npc_asset,
-                room,
-                persona,
-                check_type=check_type,
-                check_difficulty=data.get("check_difficulty", 0),
-            )
-        except TaskingError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        result = get_action("post_listener").run(
+            persona.character_sheet.character,
+            npc_asset_id=data["npc_asset"],
+            room_id=data["room"],
+            check_type_id=data.get("check_type"),
+            check_difficulty=data.get("check_difficulty", 0),
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        post = ListenerPost.objects.get(pk=result.data["post_id"])
         serializer = self.get_serializer(post)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"])
     def collect(self, request: Request, pk: str | None = None) -> Response:
-        """Collect the oldest pending harvest, in person."""
-        from world.tasking.listener_services import collect_harvest  # noqa: PLC0415
+        """Collect in person — through CollectHarvestAction (ADR-0001)."""
+        from actions.registry import get_action  # noqa: PLC0415
 
         post = self.get_object()
         persona = active_persona_for_request(request)
         if persona is None:
             return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            clue = collect_harvest(post, persona)
-        except TaskingError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        if clue is None:
-            detail = "Your agent has little of substance — talk, but nothing solid."
-        else:
-            detail = f"Your agent leans close: {clue.name}."
-        return Response({"detail": detail, "clue": clue.pk if clue else None})
+        result = get_action("collect_harvest").run(
+            persona.character_sheet.character, post_id=post.pk
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": result.message})
 
 
 class CounterplayViewSet(viewsets.ViewSet):
@@ -213,112 +198,58 @@ class CounterplayViewSet(viewsets.ViewSet):
 
     permission_classes = [IsAuthenticated]
 
-    def _room_and_persona(self, request: Request):
-        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    def _dispatch(self, request: Request, action_key: str, **kwargs) -> Response:
+        """Run a counterplay action as the requester's character (ADR-0001)."""
+        from actions.registry import get_action  # noqa: PLC0415
 
         persona = active_persona_for_request(request)
         if persona is None:
-            return None, None
-        character = persona.character_sheet.character
-        room = RoomProfile.objects.filter(pk=character.db_location_id).first()
-        return room, persona
-
-    def _sitting_post(self, room):
-        from world.tasking.models import ListenerPost  # noqa: PLC0415
-
-        return ListenerPost.objects.filter(
-            assignment__room_id=room.pk,
-            assignment__is_active=True,
-        ).first()
-
-    def _verb(self, request: Request, service) -> Response:
-        room, persona = self._room_and_persona(request)
-        if room is None:
             return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
-        post = self._sitting_post(room)
-        if post is None:
-            return Response(
-                {"detail": "No one here seems to be listening."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        try:
-            success = service(persona, post)
-        except TaskingError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"success": success})
+        result = get_action(action_key).run(persona.character_sheet.character, **kwargs)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": result.message, **(result.data or {})})
 
     @extend_schema(request=None, responses=OpenApiTypes.OBJECT)
     @action(detail=False, methods=["post"])
     def suppress(self, request: Request) -> Response:
         """Intimidate the room's sitting listener into silence."""
-        from world.tasking.counterplay_services import suppress_listener  # noqa: PLC0415
-
-        return self._verb(request, suppress_listener)
+        return self._dispatch(request, "suppress_listener")
 
     @extend_schema(request=None, responses=OpenApiTypes.OBJECT)
     @action(detail=False, methods=["post"])
     def flip(self, request: Request) -> Response:
         """Seduce the room's sitting listener into a double allegiance."""
-        from world.tasking.counterplay_services import flip_listener  # noqa: PLC0415
-
-        return self._verb(request, flip_listener)
+        return self._dispatch(request, "flip_listener")
 
     @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
     @action(detail=False, methods=["post"])
     def plant(self, request: Request) -> Response:
         """Queue a red herring on a listener you've flipped."""
-        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-        from world.tasking.counterplay_services import plant_red_herring  # noqa: PLC0415
-        from world.tasking.models import ListenerPost  # noqa: PLC0415
         from world.tasking.serializers import PlantRedHerringSerializer  # noqa: PLC0415
 
-        persona = active_persona_for_request(request)
-        if persona is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
         payload = PlantRedHerringSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
         data = payload.validated_data
-        post = ListenerPost.objects.filter(pk=data["post"]).first()
-        subject = CharacterSheet.objects.filter(pk=data["subject_sheet"]).first()
-        if post is None or subject is None:
-            return Response(
-                {"detail": "Unknown post or subject."}, status=status.HTTP_400_BAD_REQUEST
-            )
-        try:
-            plant_red_herring(persona, post, subject_sheet=subject, content=data["content"])
-        except TaskingError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"success": True})
+        return self._dispatch(
+            request,
+            "plant_red_herring",
+            post_id=data["post"],
+            subject_sheet_id=data["subject_sheet"],
+            content=data["content"],
+        )
 
     @extend_schema(request=None, responses=OpenApiTypes.OBJECT)
     @action(detail=False, methods=["post"])
     def detect(self, request: Request) -> Response:
         """Sweep the current room for informants. Consentless (defensive)."""
-        from world.tasking.counterplay_services import detect_listeners  # noqa: PLC0415
-
-        room, persona = self._room_and_persona(request)
-        if room is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            revealed = detect_listeners(persona, room)
-        except TaskingError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"revealed": revealed})
+        return self._dispatch(request, "detect_listeners")
 
     @extend_schema(request=None, responses=OpenApiTypes.OBJECT)
     @action(detail=False, methods=["post"])
     def clear(self, request: Request) -> Response:
         """Expel listener assignments from a room you hold authority over."""
-        from world.tasking.counterplay_services import clear_room_listeners  # noqa: PLC0415
-
-        room, persona = self._room_and_persona(request)
-        if room is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            count = clear_room_listeners(persona, room)
-        except TaskingError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"cleared": count})
+        return self._dispatch(request, "clear_room_listeners")
 
 
 class OrgTaskViewSet(
@@ -374,23 +305,30 @@ class OrgTaskViewSet(
         return Response(serializer.data)
 
     def create(self, request: Request, *args, **kwargs) -> Response:
+        """Issue a task — dispatched through IssueOrgTaskAction (ADR-0001)."""
+        from actions.registry import get_action  # noqa: PLC0415
+
         persona = active_persona_for_request(request)
         payload = OrgTaskCreateSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
         data = payload.validated_data
-        try:
-            task = create_task(
-                data["template"],
-                data["org"],
-                persona,
-                target_room=data.get("target_room"),
-                target_org=data.get("target_org"),
-                target_domain=data.get("target_domain"),
-                target_persona=data.get("target_persona"),
-                target_crisis=data.get("target_crisis"),
-            )
-        except TaskingError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        result = get_action("issue_org_task").run(
+            persona.character_sheet.character,
+            template_id=data["template"].pk,
+            org_id=data["org"].pk,
+            target_room_id=data.get("target_room").pk if data.get("target_room") else None,
+            target_org_id=data.get("target_org").pk if data.get("target_org") else None,
+            target_domain_id=data.get("target_domain").pk if data.get("target_domain") else None,
+            target_persona_id=(
+                data.get("target_persona").pk if data.get("target_persona") else None
+            ),
+            target_crisis_id=(
+                data.get("target_crisis").pk if data.get("target_crisis") else None
+            ),
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        task = OrgTask.objects.get(pk=result.data["task_id"])
         serializer = self.get_serializer(task)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -398,25 +336,27 @@ class OrgTaskViewSet(
     @action(detail=True, methods=["post"])
     def accept(self, request: Request, pk: str | None = None) -> Response:
         """Pick this task up yourself as a mission (#2820 phase 5)."""
-        from world.tasking.services import accept_task  # noqa: PLC0415
+
+        from actions.registry import get_action  # noqa: PLC0415
 
         task = self.get_object()
         persona = active_persona_for_request(request)
         if persona is None:
             return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            fulfillment = accept_task(task, persona)
-        except TaskingError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        result = get_action("accept_org_task").run(
+            persona.character_sheet.character, task_id=task.pk
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         task.refresh_from_db()
         data = self.get_serializer(task).data
-        data["mission_instance"] = fulfillment.mission_instance_id
+        data["mission_instance"] = result.data["mission_instance_id"]
         return Response(data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
     def assign(self, request: Request, pk: str | None = None) -> Response:
-        """Dispatch one of the requester's own agents on this task."""
-        from world.assets.models import NPCAsset  # noqa: PLC0415
+        """Dispatch an agent — through AssignTaskAgentAction (ADR-0001)."""
+        from actions.registry import get_action  # noqa: PLC0415
 
         task = self.get_object()
         persona = active_persona_for_request(request)
@@ -427,12 +367,12 @@ class OrgTaskViewSet(
             )
         payload = TaskAssignSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
-        npc_asset = NPCAsset.objects.filter(pk=payload.validated_data["npc_asset"]).first()
-        if npc_asset is None:
-            return Response({"detail": "Unknown agent."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            assign_agent(task, npc_asset, persona)
-        except TaskingError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        result = get_action("assign_task_agent").run(
+            persona.character_sheet.character,
+            task_id=task.pk,
+            npc_asset_id=payload.validated_data["npc_asset"],
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         task.refresh_from_db()
         return Response(self.get_serializer(task).data, status=status.HTTP_200_OK)

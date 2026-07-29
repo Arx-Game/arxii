@@ -316,6 +316,50 @@ class OrgTransferError(Exception):
         self.user_message = user_message or message
 
 
+class ExtractionError(Exception):
+    """An asset extraction could not proceed (carries a user-facing message)."""
+
+    def __init__(self, message: str, *, user_message: str | None = None) -> None:
+        super().__init__(message)
+        self.user_message = user_message or message
+
+
+@transaction.atomic
+def extract_asset(asset: NPCAsset, extractor) -> int:
+    """Pull a recruited NPC out of their public job (#2827 phase 3).
+
+    The "quit and come with me" half of dual-mode recruitment: retires
+    every active placement carrying the asset's persona (the venue slot
+    vacates; the weekly staffing refill eventually hires a fresh nobody).
+    The identity — sheet, persona, asset rows, secrets, rapport — is
+    untouched. Gated to the asset's own promoter (or an active member of
+    the holding org). Returns the number of placements vacated.
+    """
+    from world.npc_services.models import Functionary  # noqa: PLC0415
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    extractor_pk = extractor.pk if extractor is not None else None
+    controls = asset.promoter_persona_id == extractor_pk
+    if not controls and asset.promoter_org_id is not None:
+        controls = OrganizationMembership.objects.filter(
+            organization_id=asset.promoter_org_id,
+            persona=extractor,
+            left_at__isnull=True,
+            exiled_at__isnull=True,
+        ).exists()
+    if not controls:
+        msg = "That is not your agent to extract."
+        raise ExtractionError(msg, user_message=msg)
+    if asset.status != AssetStatus.ACTIVE:
+        msg = "That agent is not available."
+        raise ExtractionError(msg, user_message=msg)
+
+    return Functionary.objects.filter(
+        persona_id=asset.asset_persona_id,
+        is_active=True,
+    ).update(is_active=False)
+
+
 @transaction.atomic
 def transfer_asset_to_org(asset: NPCAsset, organization) -> NPCAsset:
     """Convert a personally-held asset row into an org-held one (#2820 phase 2).

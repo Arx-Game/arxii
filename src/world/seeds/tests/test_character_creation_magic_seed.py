@@ -230,6 +230,16 @@ class EnsureUnboundDrawbackDistinctionTests(TestCase):
         db_value = Distinction.objects.filter(slug="unbound").values("description").get()
         self.assertEqual(db_value["description"], "staff-edited description")
 
+    def test_unbound_distinction_has_traditionless_tags(self) -> None:
+        """The Unbound distinction carries both traditionless tags (#2752)."""
+        from world.distinctions.models import Distinction
+
+        ensure_unbound_drawback_distinction()
+        distinction = Distinction.objects.get(slug="unbound")
+        tag_slugs = set(distinction.tags.values_list("slug", flat=True))
+        self.assertIn("traditionless-drawback", tag_slugs)
+        self.assertIn("traditionless-default", tag_slugs)
+
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedBeginningTraditionsTests(TestCase):
@@ -429,6 +439,16 @@ class EnsureOrphanedTraditionDistinctionTests(TestCase):
 
         db_value = Distinction.objects.filter(slug="orphaned-tradition").values("description").get()
         self.assertEqual(db_value["description"], "staff-edited description")
+
+    def test_orphaned_tradition_distinction_has_traditionless_tags(self) -> None:
+        """The Orphaned Tradition distinction carries the drawback + marker tags (#2752)."""
+        from world.distinctions.models import Distinction
+
+        ensure_orphaned_tradition_distinction()
+        distinction = Distinction.objects.get(slug="orphaned-tradition")
+        tag_slugs = set(distinction.tags.values_list("slug", flat=True))
+        self.assertIn("traditionless-drawback", tag_slugs)
+        self.assertIn("orphaned-tradition-marker", tag_slugs)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)

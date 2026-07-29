@@ -129,9 +129,24 @@ COMPROMISED). The crisis catalog itself is the `crisis_types` cluster
 
 ## Frontend
 
-`frontend/src/tasking/` — API client, queries, and `OperationsSection` (read-only
-board panel rendered on `OrgPage`, hidden when empty). Issue/assign UI rides
-later phases.
+`frontend/src/tasking/` — API client, queries, and `OperationsSection`
+(Roster/Postings/Operations panels rendered on `OrgPage`, hidden when empty).
+
+## Actions layer + telnet (`network` family)
+
+Eleven REGISTRY actions in `actions/definitions/tasking.py` are the shared
+seam (ADR-0001): `list_org_tasks`, `issue_org_task`, `assign_task_agent`,
+`accept_org_task`, `post_listener`, `collect_harvest`, `suppress_listener`,
+`flip_listener`, `plant_red_herring`, `detect_listeners`,
+`clear_room_listeners`. The tasking viewsets dispatch through them (the web
+no longer calls the services directly for mutations), and telnet reaches the
+same actions via `CmdNetwork` (`network`, alias `spynet`,
+`commands/network.py`): `network` (board), `issue <template> org=<org>`,
+`assign <task-id> = <agent>`, `accept <task-id>`, `post <agent>`, `collect`,
+`sweep`, `clear`, `suppress`, `flip`, `plant <post-id> <char> = <lie>`.
+Location-contextual verbs act where the caller stands (the web passes
+explicit `room_id`/`post_id` anchors); name→pk resolution is the only work
+in the command.
 
 ## Covert-org layer (phase 2)
 

@@ -874,6 +874,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/NPCAsset'
           description: ''
+  /api/assets/{id}/extract/:
+    post:
+      operationId: assets_extract_create
+      description: Pull your recruited agent out of their public job (#2827 phase
+        3).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this npc asset.
+        required: true
+      tags:
+      - assets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCAsset'
+          description: ''
   /api/assets/introduce/:
     post:
       operationId: assets_introduce_create
@@ -4118,7 +4141,9 @@ paths:
         schema:
           type: string
           enum:
+          - CHOOSING
           - CONSEQUENCE
+          - REFLECTION
           - SENSORY
           - TONE
           - TRIGGER
@@ -4131,6 +4156,8 @@ paths:
           * `WITNESS` - Witness & Secrecy
           * `SENSORY` - Sensory & Discovery
           * `TRIGGER` - Trigger
+          * `CHOOSING` - The Choosing
+          * `REFLECTION` - The Reflection
       - in: query
         name: path_id
         schema:
@@ -22242,6 +22269,88 @@ paths:
           description: An interaction is already in flight.
         '500':
           description: Character sheet invariant breach (missing primary persona).
+  /api/npc-services/lifecycle/candidates/:
+    get:
+      operationId: npc_services_lifecycle_candidates_retrieve
+      description: NPC personas prominent enough to consider for standing tier.
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/npc-services/lifecycle/demote/:
+    post:
+      operationId: npc_services_lifecycle_demote_create
+      description: Retire an NPC's body back to a background placement (tier 1).
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/npc-services/lifecycle/graduate/:
+    post:
+      operationId: npc_services_lifecycle_graduate_create
+      description: Move an NPC sheet onto the claimable roster (tier 5).
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/npc-services/lifecycle/promote-standing/:
+    post:
+      operationId: npc_services_lifecycle_promote_standing_create
+      description: Give an NPC persona a body in a room (tier 3).
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
   /api/npc-services/mission-details/:
     get:
       operationId: npc_services_mission_details_list
@@ -23159,6 +23268,286 @@ paths:
         schema:
           type: integer
         description: A unique integer value identifying this npc role.
+        required: true
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/npc-services/staffing-lines/:
+    get:
+      operationId: npc_services_staffing_lines_list
+      description: Staff authoring CRUD for staffing profile lines (#2827).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStaffingProfileLineList'
+          description: ''
+    post:
+      operationId: npc_services_staffing_lines_create
+      description: Staff authoring CRUD for staffing profile lines (#2827).
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffingProfileLineRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffingProfileLine'
+          description: ''
+  /api/npc-services/staffing-lines/{id}/:
+    get:
+      operationId: npc_services_staffing_lines_retrieve
+      description: Staff authoring CRUD for staffing profile lines (#2827).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this staffing profile line.
+        required: true
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffingProfileLine'
+          description: ''
+    put:
+      operationId: npc_services_staffing_lines_update
+      description: Staff authoring CRUD for staffing profile lines (#2827).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this staffing profile line.
+        required: true
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffingProfileLineRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffingProfileLine'
+          description: ''
+    patch:
+      operationId: npc_services_staffing_lines_partial_update
+      description: Staff authoring CRUD for staffing profile lines (#2827).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this staffing profile line.
+        required: true
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffingProfileLineRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffingProfileLine'
+          description: ''
+    delete:
+      operationId: npc_services_staffing_lines_destroy
+      description: Staff authoring CRUD for staffing profile lines (#2827).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this staffing profile line.
+        required: true
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/npc-services/staffing-profiles/:
+    get:
+      operationId: npc_services_staffing_profiles_list
+      description: Staff authoring CRUD for building-kind staffing profiles (#2827).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStaffingProfileList'
+          description: ''
+    post:
+      operationId: npc_services_staffing_profiles_create
+      description: Staff authoring CRUD for building-kind staffing profiles (#2827).
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffingProfileRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffingProfile'
+          description: ''
+  /api/npc-services/staffing-profiles/{id}/:
+    get:
+      operationId: npc_services_staffing_profiles_retrieve
+      description: Staff authoring CRUD for building-kind staffing profiles (#2827).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Staffing Profile.
+        required: true
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffingProfile'
+          description: ''
+    put:
+      operationId: npc_services_staffing_profiles_update
+      description: Staff authoring CRUD for building-kind staffing profiles (#2827).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Staffing Profile.
+        required: true
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffingProfileRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffingProfile'
+          description: ''
+    patch:
+      operationId: npc_services_staffing_profiles_partial_update
+      description: Staff authoring CRUD for building-kind staffing profiles (#2827).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Staffing Profile.
+        required: true
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaffingProfileRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffingProfile'
+          description: ''
+    delete:
+      operationId: npc_services_staffing_profiles_destroy
+      description: Staff authoring CRUD for building-kind staffing profiles (#2827).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Staffing Profile.
         required: true
       tags:
       - npc-services
@@ -32061,12 +32450,7 @@ paths:
           description: ''
     post:
       operationId: tasking_posts_create
-      description: |-
-        Standing listener posts (#2820 phase 3) — the board's Postings panel.
-
-        Visibility: your own posts (handler), plus posts whose agent is held by
-        an org you belong to or oversee. ``collect`` requires the handler's body
-        in the posted room — the visit is the exposure surface.
+      description: Post a listener — through PostListenerAction (ADR-0001).
       tags:
       - tasking
       requestBody:
@@ -32114,7 +32498,7 @@ paths:
   /api/tasking/posts/{id}/collect/:
     post:
       operationId: tasking_posts_collect_create
-      description: Collect the oldest pending harvest, in person.
+      description: Collect in person — through CollectHarvestAction (ADR-0001).
       parameters:
       - in: path
         name: id
@@ -32324,7 +32708,7 @@ paths:
           description: ''
     post:
       operationId: tasking_tasks_create
-      description: 'The org task board: list/inspect/issue/assign.'
+      description: Issue a task — dispatched through IssueOrgTaskAction (ADR-0001).
       tags:
       - tasking
       requestBody:
@@ -32390,7 +32774,7 @@ paths:
   /api/tasking/tasks/{id}/assign/:
     post:
       operationId: tasking_tasks_assign_create
-      description: Dispatch one of the requester's own agents on this task.
+      description: Dispatch an agent — through AssignTaskAgentAction (ADR-0001).
       parameters:
       - in: path
         name: id
@@ -34492,6 +34876,8 @@ components:
       - WITNESS
       - SENSORY
       - TRIGGER
+      - CHOOSING
+      - REFLECTION
       type: string
       description: |-
         * `TONE` - Tone
@@ -34499,6 +34885,8 @@ components:
         * `WITNESS` - Witness & Secrecy
         * `SENSORY` - Sensory & Discovery
         * `TRIGGER` - Trigger
+        * `CHOOSING` - The Choosing
+        * `REFLECTION` - The Reflection
     BattleBindingEnum:
       enum:
       - standing
@@ -36106,6 +36494,8 @@ components:
             * `WITNESS` - Witness & Secrecy
             * `SENSORY` - Sensory & Discovery
             * `TRIGGER` - Trigger
+            * `CHOOSING` - The Choosing
+            * `REFLECTION` - The Reflection
         name:
           type: string
           readOnly: true
@@ -54677,6 +55067,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SpreadableDeed'
+    PaginatedStaffingProfileLineList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffingProfileLine'
+    PaginatedStaffingProfileList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffingProfile'
     PaginatedStakeContractActivationList:
       type: object
       required:
@@ -57270,6 +57706,21 @@ components:
         category:
           type: integer
           description: Allowlist is scoped per category.
+    PatchedStaffingProfileLineRequest:
+      type: object
+      properties:
+        profile:
+          type: integer
+        role:
+          type: integer
+    PatchedStaffingProfileRequest:
+      type: object
+      description: 'Staff authoring: a building kind''s baseline crew (#2827 phase
+        1).'
+      properties:
+        building_kind:
+          type: integer
+          description: Buildings of this kind auto-staff from this profile on activation.
     PatchedStakeRequest:
       type: object
       description: |-
@@ -64652,6 +65103,68 @@ components:
       - created_at
       - id
       - title
+    StaffingProfile:
+      type: object
+      description: 'Staff authoring: a building kind''s baseline crew (#2827 phase
+        1).'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        building_kind:
+          type: integer
+          description: Buildings of this kind auto-staff from this profile on activation.
+        building_kind_name:
+          type: string
+          readOnly: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffingProfileLine'
+          readOnly: true
+      required:
+      - building_kind
+      - building_kind_name
+      - id
+      - lines
+    StaffingProfileLine:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        profile:
+          type: integer
+        role:
+          type: integer
+        role_name:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - profile
+      - role
+      - role_name
+    StaffingProfileLineRequest:
+      type: object
+      properties:
+        profile:
+          type: integer
+        role:
+          type: integer
+      required:
+      - profile
+      - role
+    StaffingProfileRequest:
+      type: object
+      description: 'Staff authoring: a building kind''s baseline crew (#2827 phase
+        1).'
+      properties:
+        building_kind:
+          type: integer
+          description: Buildings of this kind auto-staff from this profile on activation.
+      required:
+      - building_kind
     StageAdvanceBonusResult:
       type: object
       description: Read serializer for StageAdvanceBonusResult payloads (Task 1.7).

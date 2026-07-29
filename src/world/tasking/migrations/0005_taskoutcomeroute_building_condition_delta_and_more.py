@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("tasking", "0003_listenerharvest_planted_clue_and_more"),
+        ("tasking", "0004_npctaskaptitude"),
     ]
 
     operations = [
